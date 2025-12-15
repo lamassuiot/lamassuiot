@@ -64,11 +64,16 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 	}
 
 	// Validate hash function
-	if !hashFunc.Available() {
-		return nil, fmt.Errorf("hash function %v is not available", hashFunc)
-	}
+	var hashSize int
+	if kmsKeyAlg == x509.MLDSA.String() || kmsKeyAlg == x509.Ed25519.String() {
+		hashSize = 0	
+	} else {
+		if !hashFunc.Available() {
+			return nil, fmt.Errorf("hash function %v is not available", hashFunc)
+		}
 
-	hashSize := hashFunc.Size() * 8
+		hashSize = hashFunc.Size() * 8
+	}
 
 	// Determine signature algorithm based on key type
 	var signAlg string
@@ -98,10 +103,12 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 			// RSA PKCS#1 v1.5 signature scheme (default)
 			signAlg = fmt.Sprintf("RSASSA_PKCS1_V1_5_SHA_%d", hashSize)
 		}
+	case x509.MLDSA.String():
+		signAlg = fmt.Sprintf("MLDSA_%d_PURE", s.key.Size)
 
-	// case x509.Ed25519.String():
-	// 	// Ed25519 uses its own hash internally, doesn't need external hash specification
-	// 	signAlg = "Ed25519"
+	case x509.Ed25519.String():
+		// Ed25519 uses its own hash internally, doesn't need external hash specification
+		signAlg = "Ed25519_PURE"
 
 	default:
 		return nil, fmt.Errorf("unsupported key algorithm: %s", kmsKeyAlg)

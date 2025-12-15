@@ -2,12 +2,8 @@ package ca
 
 import (
 	"context"
-<<<<<<< HEAD:backend/pkg/assemblers/ca_test.go
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-=======
->>>>>>> main:backend/pkg/assemblers/tests/ca/ca_main_test.go
+	// "crypto"
+	// "crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -36,56 +32,6 @@ import (
 const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
-<<<<<<< HEAD:backend/pkg/assemblers/ca_test.go
-func TestCryptoEngines(t *testing.T) {
-	//serverTest, err := StartCAServiceTestServer(t, false)
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithVault().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-	caTest := serverTest.CA
-
-	var testcases = []struct {
-		name        string
-		resultCheck func(engines []*models.CryptoEngineProvider, err error) error
-	}{
-		{
-			name: "OK/Got-2-Engines",
-			resultCheck: func(engines []*models.CryptoEngineProvider, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've got no error, but got one: %s", err)
-				}
-
-				if len(engines) != 2 {
-					return fmt.Errorf("should've got two engines, but got %d", len(engines))
-				}
-
-				return nil
-			},
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
-			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
-			}
-
-			err = tc.resultCheck(caTest.Service.GetCryptoEngineProvider(context.Background()))
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
-			}
-
-		})
-	}
-}
-
-=======
->>>>>>> main:backend/pkg/assemblers/tests/ca/ca_main_test.go
 func TestCreateCA(t *testing.T) {
 	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
@@ -162,6 +108,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/KeyType-MLDSA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
@@ -182,6 +129,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/KeyType-Ed25519",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
@@ -340,7 +288,7 @@ func TestCreateCA(t *testing.T) {
 }
 
 func TestCreateHybridCA(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -615,7 +563,7 @@ func TestCreateHybridCA(t *testing.T) {
 
 				// Check the base metadata
 				checkMetadata(t, metadata["base"].(map[string]any), &createdCA.Certificate)
-					
+
 				// Reconstruct the delta certificate and check the delta metadata.
 				// TODO -> find a way to test akid and skid
 				x509DeltaCert, err := x509.ReconstructDeltaCertificate((*x509.Certificate)(createdCA.Certificate.Certificate))
@@ -3681,11 +3629,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CAMLDSAKey:    (key).(crypto.Signer),
-					KeyType:       models.KeyType(x509.MLDSA),
+					Key:           key,
 				})
 				return importedCA, err
 			},
@@ -3717,11 +3663,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CAEd25519Key:  (key).(ed25519.PrivateKey),
-					KeyType:       models.KeyType(x509.Ed25519),
+					Key:           key,
 				})
 				return importedCA, err
 			},

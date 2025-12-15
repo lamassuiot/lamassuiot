@@ -38,11 +38,7 @@ func AssembleAWSIoTManagerService(conf ConnectorServiceConfig, caService service
 	serviceID := fmt.Sprintf("aws-connector-%s", strings.ReplaceAll(conf.ConnectorID, "aws.", "-"))
 	eventHandlers := NewAWSIoTEventHandler(lMessaging, awsConnectorSvc)
 
-<<<<<<< HEAD
-	publisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, serviceID, lMessaging)
-=======
 	dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
->>>>>>> main
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Publisher: %s", err)
 		return nil, err
@@ -54,11 +50,7 @@ func AssembleAWSIoTManagerService(conf ConnectorServiceConfig, caService service
 		return nil, err
 	}
 
-<<<<<<< HEAD
-	routerHandler, err := ceventbus.NewEventBusMessageHandler("AWSConnector-DEFAULT", []string{"#"}, publisher, subscriber, lMessaging, *eventHandlers)
-=======
 	routerHandler, err := ceventbus.NewEventBusMessageHandler("AWSConnector-DEFAULT", []string{"#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
->>>>>>> main
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
 	}

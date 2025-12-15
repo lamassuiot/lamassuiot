@@ -32,26 +32,6 @@ func (s *certSignerImpl) Public() crypto.PublicKey {
 	return s.cert.PublicKey
 }
 
-<<<<<<< HEAD
-func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	signAlg := "RSASSA_PKCS1_V1_5_SHA_256"
-	caKeyAlg := s.ca.Certificate.Certificate.PublicKeyAlgorithm
-	caHashFunc := opts.HashFunc()
-
-	// Take into account that caHashFunc can be 0
-	var caHashSize int
-	if caHashFunc != 0 {
-		caHashSize = caHashFunc.Size() * 8
-	}
-
-	switch caKeyAlg {
-	case x509.ECDSA:
-		signAlg = fmt.Sprintf("ECDSA_SHA_%d", caHashSize)
-	case x509.RSA:
-		signAlg = fmt.Sprintf("RSASSA_PKCS1_V1_5_SHA_%d", caHashSize)
-	default:
-		logrus.Warnf("using default %s sign alg for client. '%s' no match", signAlg, caKeyAlg)
-=======
 func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	l := logrus.New()
 	l.SetOutput(io.Discard)
@@ -59,7 +39,6 @@ func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerO
 	ski, err := helpers.GetSubjectKeyID(logrus.NewEntry(l), s.cert)
 	if err != nil {
 		return nil, err
->>>>>>> main
 	}
 
 	key, err := s.sdk.GetKey(s.ctx, services.GetKeyInput{

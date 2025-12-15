@@ -100,7 +100,6 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		409: {
 			errs.ErrCAAlreadyExists,
 		},
-<<<<<<< HEAD
 		500: {
 			errs.ErrCAIncompatibleValidity,
 		},
@@ -143,34 +142,6 @@ func (cli *httpCAClient) CreateHybridCA(ctx context.Context, input services.Crea
 	return response, nil
 }
 
-func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.RequestCAInput) (*models.CACertificateRequest, error) {
-	response, err := Post[*models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/request", resources.CreateCABody{
-		ID:          input.ID,
-		Subject:     input.Subject,
-		KeyMetadata: input.KeyMetadata,
-		EngineID:    input.EngineID,
-		Metadata:    input.Metadata,
-	}, map[int][]error{
-		400: {
-			errs.ErrCAIncompatibleValidity,
-			errs.ErrCAIssuanceExpiration,
-		},
-		409: {
-			errs.ErrCAAlreadyExists,
-		},
-		500: {
-			errs.ErrCAIncompatibleValidity,
-		},
-=======
->>>>>>> main
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
 func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
 	if input.Key != nil {
@@ -189,31 +160,6 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		default:
 			return nil, fmt.Errorf("unsupported private key type: %T", input.Key)
 		}
-<<<<<<< HEAD
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "EC PRIVATE KEY",
-			Bytes: ecBytes,
-		}))
-	} else if input.KeyType == models.KeyType(x509.MLDSA) {
-		mldsaBytes, err := x509.MarshalPKCS8PrivateKey(input.CAMLDSAKey)
-		if err != nil {
-			return nil, err
-		}
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "MLDSA PRIVATE KEY",
-			Bytes: mldsaBytes,
-		}))
-	} else if input.KeyType == models.KeyType(x509.Ed25519) {
-		ed25519Bytes, err := x509.MarshalPKCS8PrivateKey(input.CAEd25519Key)
-		if err != nil {
-			return nil, err
-		}
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "Ed25519 PRIVATE KEY",
-			Bytes: ed25519Bytes,
-		}))
-=======
->>>>>>> main
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{

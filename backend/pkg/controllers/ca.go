@@ -1,16 +1,6 @@
 package controllers
 
 import (
-<<<<<<< HEAD
-	"cloudflare/circl/sign/mldsa/mldsa44"
-	"cloudflare/circl/sign/mldsa/mldsa65"
-	"cloudflare/circl/sign/mldsa/mldsa87"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rsa"
-=======
->>>>>>> main
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
@@ -204,39 +194,11 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		}
 	}
 
-<<<<<<< HEAD
-	var keyType models.KeyType
-	var rsaKey *rsa.PrivateKey
-	var ecKey *ecdsa.PrivateKey
-	var mldsaKey crypto.Signer
-	var ed25519Key ed25519.PrivateKey
-
-	switch key := key.(type) {
-	case *rsa.PrivateKey:
-		rsaKey = key
-	case *ecdsa.PrivateKey:
-		ecKey = key
-	case *mldsa44.PrivateKey, *mldsa65.PrivateKey, *mldsa87.PrivateKey:
-		mldsaKey = (key).(crypto.Signer)
-	case ed25519.PrivateKey:
-		ed25519Key = key
-	}
-
-=======
->>>>>>> main
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
 		CACertificate: requestBody.CACertificate,
-<<<<<<< HEAD
-		KeyType:       keyType,
-		CARSAKey:      rsaKey,
-		CAECKey:       ecKey,
-		CAMLDSAKey:    mldsaKey,
-		CAEd25519Key:  ed25519Key,
-=======
 		Key:           key,
->>>>>>> main
 		EngineID:      requestBody.EngineID,
 		CARequestID:   requestBody.CARequestID,
 	})

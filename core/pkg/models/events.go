@@ -29,9 +29,6 @@ const (
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
 
-<<<<<<< HEAD
-	EventCreateHybridCAKey EventType = "ca.create.hybrid"
-=======
 	EventCreateKMSKey          EventType = "kms.create"
 	EventImportKMSKey          EventType = "kms.import"
 	EventUpdateKMSKeyMetadata  EventType = "kms.metadata.update"
@@ -41,7 +38,8 @@ const (
 	EventDeleteKMSKey          EventType = "kms.delete"
 	EventSignMessageKMSKey     EventType = "kms.sign"
 	EventVerifySignatureKMSKey EventType = "kms.verify"
->>>>>>> main
+
+	EventCreateHybridCAKey EventType = "ca.create.hybrid"
 
 	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
 	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"

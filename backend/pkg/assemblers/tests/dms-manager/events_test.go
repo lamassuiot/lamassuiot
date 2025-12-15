@@ -500,11 +500,7 @@ func TestBindIDEvent(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			publisher, err := eventbus.NewEventBusPublisher(
-<<<<<<< HEAD:backend/pkg/assemblers/dms-manager_events_test.go
-				testServers.EventBus.config,
-=======
 				testServers.EventBus.Config,
->>>>>>> main:backend/pkg/assemblers/tests/dms-manager/events_test.go
 				uuid.NewString(),
 				chelpers.SetupLogger(cconfig.Trace, "Test Case", "pub"),
 			)

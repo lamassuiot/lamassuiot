@@ -129,31 +129,12 @@ func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (ser
 func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLServiceBackend) error {
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
 
-<<<<<<< HEAD
-	publisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, serviceID, lMessaging)
-	if err != nil {
-		return fmt.Errorf("could not create Event Bus publisher: %s", err)
-	}
-
-	subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
-	if err != nil {
-		lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-		return err
-	}
-
-	eventHandlers := handlers.NewVAEventHandler(lMessaging, crlSvc)
-	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", []string{"ca.#", "certificate.#"}, publisher, subscriber, lMessaging, *eventHandlers)
-	if err != nil {
-		return fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
-	}
-=======
 	if conf.SubscriberEventBus.Enabled && !conf.SubscriberDLQEventBus.Enabled {
 		lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
 	}
 
 	if conf.SubscriberEventBus.Enabled && conf.SubscriberDLQEventBus.Enabled {
 		lMessaging.Infof("Subscriber Event Bus is enabled")
->>>>>>> main
 
 		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
 		if err != nil {

@@ -15,14 +15,8 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-<<<<<<< HEAD
 	gocloud.dev v0.40.0
 	golang.org/x/crypto v0.33.0
-=======
-	gocloud.dev v0.42.0
-	golang.org/x/crypto v0.39.0
-	gorm.io/gorm v1.25.12
->>>>>>> main
 )
 
 require (

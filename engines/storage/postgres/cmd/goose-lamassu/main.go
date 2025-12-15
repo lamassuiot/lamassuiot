@@ -116,8 +116,8 @@ func main() {
 func extractDBName(connStr string) string {
 	// Parse connection string for dbname parameter
 	// Format: "key=value key2=value2 ..."
-	parts := strings.FieldsSeq(connStr)
-	for part := range parts {
+	parts := strings.Fields(connStr)
+	for _, part := range parts {
 		if after, ok := strings.CutPrefix(part, "dbname="); ok {
 			return after
 		}

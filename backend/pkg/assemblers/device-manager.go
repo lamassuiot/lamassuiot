@@ -3,7 +3,7 @@ package assemblers
 import (
 	"fmt"
 
-	"github.com/ThreeDotsLabs/watermill/message"
+	// "github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -61,14 +61,8 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
 	lMessaging.Infof("Publisher Event Bus is enabled")
 
-<<<<<<< HEAD
-	var pub message.Publisher
-	if conf.PublisherEventBus.Enabled {
-		pub, err = eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
-=======
 	if conf.PublisherEventBus.Enabled {
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
->>>>>>> main
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
@@ -95,19 +89,11 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
 			lMessaging.Infof("Subscriber Event Bus is enabled")
 
-<<<<<<< HEAD
-		eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, pub, subscriber, lMessaging, *eventHandlers)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
-		}
-=======
 			subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
 			if err != nil {
 				lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
 				return nil, err
 			}
->>>>>>> main
 
 			eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
 			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
