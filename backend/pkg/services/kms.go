@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
@@ -168,6 +169,8 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 	case "ECDSA_SHA_512":
 		isRSA = false
 		hash = crypto.SHA512
+	case "MLDSA_44_PURE", "MLDSA_65_PURE", "MLDSA_87_PURE", "Ed25519_PURE":
+		isRSA = false
 	default:
 		err = errors.New("unsupported algorithm")
 	}
@@ -459,6 +462,14 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 			lFunc.Errorf("error creating ECDSA private key: %s", err)
 			return nil, err
 		}
+	case "ML-DSA":
+		if input.Size != 44 && input.Size != 65 && input.Size != 87 {
+			lFunc.Error("invalid MLDSA key size")
+			return nil, errors.New("invalid MLDSA key size")
+		}
+		keyID, signer, err = engineInstance.CreateMLDSAPrivateKey(input.Size)
+	case "Ed25519":
+		keyID, signer, err = engineInstance.CreateEd25519PrivateKey()
 	default:
 		lFunc.Errorf("unsupported algorithm: %s", input.Algorithm)
 		return nil, errors.New("unknown or unsupported algorithm")
@@ -562,6 +573,10 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		}
 
 		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(k)
+	case ed25519.PrivateKey:
+		size = 256
+		algorithm = "Ed25519"
+		keyID, signer, err = engineInstance.ImportEd25519PrivateKey(k)
 	default:
 		lFunc.Errorf("unsupported private key type")
 		return nil, errors.New("unsupported private key type")
@@ -825,7 +840,12 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		return nil, err
 	}
 
-	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	var digest []byte
+	if strings.Contains(input.Algorithm, "PURE") {
+		digest = input.Message
+	} else {
+		digest, err = calculateDigest(setup.Hash, input.MessageType, input.Message)
+	}
 	if err != nil {
 		lFunc.Errorf("calculate digest error: %s", err)
 		return nil, err
@@ -880,7 +900,12 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 
 	publicKey := setup.Signer.Public()
 
-	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	var digest []byte
+	if strings.Contains(input.Algorithm, "PURE") {
+		digest = input.Message
+	} else {
+		digest, err = calculateDigest(setup.Hash, input.MessageType, input.Message)
+	}
 	if err != nil {
 		lFunc.Errorf("calculate digest error: %s", err)
 		return nil, err
@@ -916,11 +941,18 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 			}, nil
 		}
 	} else {
-		pub, ok := publicKey.(*ecdsa.PublicKey)
-		if !ok {
-			return nil, errors.New("key is not ECDSA key")
+		var valid bool
+		switch pub := publicKey.(type) {
+		case *ecdsa.PublicKey:
+			valid = ecdsa.VerifyASN1(pub, digest, input.Signature)
+		case ed25519.PublicKey:
+			valid = ed25519.Verify(pub, digest, input.Signature)
+		default:
+			lFunc.Errorf("unsupported key type")
+			return nil, errors.New("unsupported key type")
 		}
-		if !ecdsa.VerifyASN1(pub, digest, input.Signature) {
+
+		if !valid {
 			return &models.MessageValidation{
 				Valid: false,
 			}, nil
