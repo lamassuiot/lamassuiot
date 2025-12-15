@@ -1394,7 +1394,7 @@ func TestCreateHybridCA(t *testing.T) {
 
 				// Check the base metadata
 				checkMetadata(t, metadata["base"].(map[string]any), &createdCA.Certificate)
-					
+
 				// Reconstruct the delta certificate and check the delta metadata.
 				// TODO -> find a way to test akid and skid
 				x509DeltaCert, err := x509.ReconstructDeltaCertificate((*x509.Certificate)(createdCA.Certificate.Certificate))
