@@ -139,38 +139,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 }
 
 func (engine X509Engine) SignChameleonCertificateRequest(ctx context.Context, deltaCsr, baseCsr *x509.CertificateRequest, ca *x509.Certificate, deltaCaSigner, baseCaSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-
-	// Create the delta certificcate template
-	deltaCa, err := x509.ReconstructDeltaCertificate(ca)
-	if err != nil {
-		return nil, err
-	}
-	deltaTemplate, err := engine.createCertificateTemplateFromCSR(lFunc, deltaCsr, deltaCa, profile)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the base certificate template
-	baseTemplate, err := engine.createCertificateTemplateFromCSR(lFunc, baseCsr, ca, profile)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the hybrid certificate
-	certificateBytes, err := x509.CreateChameleonCertificate(rand.Reader, deltaTemplate, baseTemplate, deltaCa, ca, deltaCaSigner.Public(), baseCaSigner.Public(), deltaCaSigner, baseCaSigner)
-	if err != nil {
-		lFunc.Errorf("could not sign certificate: %s", err)
-		return nil, err
-	}
-
-	certificate, err := x509.ParseCertificate(certificateBytes)
-	if err != nil {
-		lFunc.Errorf("could not parse signed certificate %s", err)
-		return nil, err
-	}
-
-	return certificate, nil
+	return nil, fmt.Errorf("SignChameleonCertificateRequest: requires PQC-enabled Go build")
 }
 
 func (engine X509Engine) createCertificateTemplateFromCSR(lFunc *logrus.Entry, csr *x509.CertificateRequest, ca *x509.Certificate, profile models.IssuanceProfile) (*x509.Certificate, error) {
