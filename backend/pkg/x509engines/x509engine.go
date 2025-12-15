@@ -1,113 +1,13 @@
-package x509engines
-
-import (
-	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/asn1"
-	"encoding/hex"
-	"fmt"
-	"math/big"
-	"slices"
-	"time"
-
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
-	"github.com/sirupsen/logrus"
-)
-
-type X509Engine struct {
-	logger           *logrus.Entry
-	vaDomains        []string
-	softCryptoEngine *software.SoftwareCryptoEngine
-	kmsSDK           services.KMSService
-}
 
 func NewX509Engine(logger *logrus.Entry, vaDomains []string, kmsSDK services.KMSService) X509Engine {
 	return X509Engine{
 		vaDomains:        vaDomains,
 		logger:           logger,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(logger),
-<<<<<<< HEAD
 		kmsSDK:           kmsSDK,
-=======
 	}
 }
 
-func (engine X509Engine) GetEngineConfig() models.CryptoEngineInfo {
-	return engine.cryptoEngine.GetEngineConfig()
-}
-
-func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models.KeyMetadata) (string, crypto.Signer, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-
-	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
-		lFunc.Debugf("requesting cryptoengine instance for RSA key generation")
-
-		keyID, signer, err := engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits)
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating RSA key: %s", err)
-			return "", nil, err
-		}
-		lFunc.Debugf("cryptoengine successfully generated RSA key")
-		return keyID, signer, nil
-	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.ECDSA) {
-		var curve elliptic.Curve
-		switch keyMetadata.Bits {
-		case 224:
-			curve = elliptic.P224()
-		case 256:
-			curve = elliptic.P256()
-		case 384:
-			curve = elliptic.P384()
-		case 521:
-			curve = elliptic.P521()
-		default:
-			return "", nil, errors.New("unsupported key size for ECDSA key")
-		}
-
-		lFunc.Debugf("requesting cryptoengine instance for ECDSA key generation")
-		keyID, signer, err := engine.cryptoEngine.CreateECDSAPrivateKey(curve)
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating ECDSA key: %s", err)
-			return "", nil, err
-		}
-
-		lFunc.Debugf("cryptoengine successfully generated ECDSA key")
-		return keyID, signer, nil
-	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.MLDSA) {
-		lFunc.Debugf("requesting cryptoengine instance for MLDSA key generation")
-		keyID, signer, err := engine.cryptoEngine.CreateMLDSAPrivateKey(keyMetadata.Bits)
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating MLDSA key: %s", err)
-			return "", nil, err
-		}
-
-		lFunc.Debugf("cryptoengine successfully generated MLDSA key")
-		return keyID, signer, nil
-	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.Ed25519) {
-		lFunc.Debugf("requesting cryptoengine instance for Ed25519 key generation")
-		keyID, signer, err := engine.cryptoEngine.CreateEd25519PrivateKey()
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating Ed25519 key: %s", err)
-			return "", nil, err
-		}
-
-		lFunc.Debugf("cryptoengine successfully generated MLDSA key")
-		return keyID, signer, nil
-	} else {
-		lFunc.Errorf("unsupported key type requested: %s", keyMetadata.Type)
-		return "", nil, errors.New("unsupported key type requested")
->>>>>>> 86cfc918 (CA: added support for the creation of pure PQC CA Roots using ML-DSA (44, 65 and 87))
-	}
-}
 
 func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
@@ -423,8 +323,6 @@ func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validi
 		ExtendedKeyUsages: []models.X509ExtKeyUsage{},
 	}
 }
-<<<<<<< HEAD
-=======
 
 func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
@@ -599,4 +497,3 @@ func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certifi
 		return false, fmt.Errorf("CA has unsupported public key algorithm: %s", caCertificate.PublicKeyAlgorithm)
 	}
 }
->>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)

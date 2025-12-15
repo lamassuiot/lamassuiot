@@ -41,8 +41,6 @@ func (mw CAAuditEventPublisher) CreateCA(ctx context.Context, input services.Cre
 	return mw.next.CreateCA(ctx, input)
 }
 
-<<<<<<< HEAD
-=======
 func (mw CAAuditEventPublisher) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateHybridCAKey, input, err, output)
@@ -51,15 +49,6 @@ func (mw CAAuditEventPublisher) CreateHybridCA(ctx context.Context, input servic
 	return mw.next.CreateHybridCA(ctx, input)
 }
 
-func (mw CAAuditEventPublisher) RequestCACSR(ctx context.Context, input services.RequestCAInput) (output *models.CACertificateRequest, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventRequestCAKey, input, err, output)
-	}()
-
-	return mw.next.RequestCACSR(ctx, input)
-}
-
->>>>>>> 72943761 (Added support for Chameleon Root CA Creation)
 func (mw CAAuditEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		input.Key = nil // Remove private key from audit logs

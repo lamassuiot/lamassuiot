@@ -2,13 +2,6 @@ package services
 
 import (
 	"context"
-<<<<<<< HEAD
-=======
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rsa"
->>>>>>> 0841445c (Added more tests for MLDSA CA creation. Modified the CryptoEngine interface to add the ImportMLDSAPrivateKey operation and added the required changes in the different engines.)
 	"crypto/x509"
 	"time"
 
@@ -104,15 +97,7 @@ type ImportCAInput struct {
 	ProfileID     string
 	CACertificate *models.X509Certificate   `validate:"required"`
 	CAChain       []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
-<<<<<<< HEAD
 	Key           any
-=======
-	CARSAKey      *rsa.PrivateKey
-	CAECKey       *ecdsa.PrivateKey
-	CAMLDSAKey    crypto.Signer
-	CAEd25519Key  ed25519.PrivateKey
-	KeyType       models.KeyType
->>>>>>> 0841445c (Added more tests for MLDSA CA creation. Modified the CryptoEngine interface to add the ImportMLDSAPrivateKey operation and added the required changes in the different engines.)
 	EngineID      string
 	CARequestID   string
 }

@@ -3,7 +3,7 @@ package assemblers
 import (
 	"fmt"
 
-	"github.com/ThreeDotsLabs/watermill/message"
+	// "github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -63,13 +63,6 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	if conf.PublisherEventBus.Enabled {
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
-		}
-
-	var pub message.Publisher
-	if conf.PublisherEventBus.Enabled {
-		pub, err = eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
