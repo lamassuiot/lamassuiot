@@ -5,6 +5,7 @@ import (
 )
 
 type CAConfig struct {
+	OpenAPISpecPath          string                         `mapstructure:"openapi_spec_path"`
 	Logs                     cconfig.Logging                `mapstructure:"logs"`
 	Server                   cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus        cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
