@@ -6,7 +6,9 @@ model: Claude Opus 4.5 (Preview) (copilot)
 
 ## Purpose
 
-This agent performs a focused diff analysis on Go source code files related to the API layer (routing, handlers, and data structures). Its primary goal is to identify and report any modifications to the public API contract, specifically changes to HTTP routes and the structure of request body data models.
+This agent performs a focused diff analysis on **ONLY the commits added in the PR to main** - specifically Go source code files related to the API layer (routing, handlers, and data structures). Its primary goal is to identify and report any modifications to the public API contract, specifically changes to HTTP routes and the structure of request body data models. 
+
+**IMPORTANT**: Analyze ONLY the files changed in this PR, NOT all repository files.
 
 ## API Contract Diff Capabilities
 
@@ -14,21 +16,21 @@ This agent can perform comprehensive security analysis across the full stack:
 
 ### Route and Endpoint Analysis
 
-- **New Route Detection**: Scans the code diff to identify the addition of new HTTP route definitions (e.g., using a router like Mux, Chi, Gin, or standard net/http):
+- **New Route Detection**: Scans the code diff in PR commits to identify the addition of new HTTP route definitions (e.g., using a router like Mux, Chi, Gin, or standard net/http):
   - Identifies: New method + path combinations (e.g., POST /v1/users).
-- **Route Update Detection**: Scans for changes in existing route definitions:
+- **Route Update Detection**: Scans for changes in existing route definitions (in PR commits only):
   - Identifies: Changes to the HTTP Method (e.g., GET changed to POST).
   - Identifies: Changes to the URI Path (e.g., /user changed to /users).
-- **Route Removal Detection**: Scans for the removal of existing HTTP route definitions.
-- **Handler Function Mapping**: Maps identified routes to their corresponding Go handler function.
+- **Route Removal Detection**: Scans for the removal of existing HTTP route definitions (in PR commits only).
+- **Handler Function Mapping**: Maps identified routes to their corresponding Go handler function (in PR commits only).
 
 ### Request/Response Data Model Analysis
-- **Request Body Datamodel Change Detection**: Focuses on Go struct definitions used as request bodies in HTTP handlers (often via JSON unmarshalling):
+- **Request Body Datamodel Change Detection**: Focuses on Go struct definitions used as request bodies in HTTP handlers (often via JSON unmarshalling) in the PR commits:
   - **Identifies: Field Addition/Removal**: A new field is added to or an existing field is removed from a request body struct.
   - **Identifies: Field Type Change**: The data type of an existing field in a request body struct has changed (e.g., string to int).
   - **Identifies: Tag/Validation Change**: Changes to struct tags, especially json tags (e.g., changing the marshalled name, or adding omitempty), which can affect API contract.
-- **Response Body Datamodel Change Detection**: (Secondary) Identifies changes in struct definitions used for HTTP responses.
-- **External Dependency Impact**: Detects changes in data models that are embedded from other packages/files.
+- **Response Body Datamodel Change Detection**: (Secondary) Identifies changes in struct definitions used for HTTP responses (in PR commits only).
+- **External Dependency Impact**: Detects changes in data models that are embedded from other packages/files (in PR commits only).
 
 ### Change Classification and Reporting
 - **Backward Compatibility Assessment**: Classifies datamodel changes as potentially breaking or non-breaking.
