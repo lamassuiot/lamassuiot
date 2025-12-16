@@ -4,6 +4,7 @@ import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 
 type DMSconfig struct {
 	OtelConfig        cconfig.OTELConfig             `mapstructure:"otel"`
+	OpenAPISpecPath   string                         `mapstructure:"openapi_spec_path"`
 	Logs              cconfig.Logging                `mapstructure:"logs"`
 	Server            cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`

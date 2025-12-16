@@ -52,7 +52,7 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	return router
 }
 
-func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCfg cconfig.HttpServer, apiInfo models.APIServiceInfo) (int, error) {
+func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCfg cconfig.HttpServer, apiInfo models.APIServiceInfo, openApiContent []byte) (int, error) {
 	hCheckRoute := controllers.NewHealthCheckRoute(apiInfo)
 	mainLogger := logger
 	if !httpServerCfg.HealthCheckLogging {
@@ -68,6 +68,14 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	mainEngine := http.NewServeMux()
 	mainEngine.Handle("/", routerEngine)
 	mainEngine.Handle("/health", healthEngine)
+
+	if openApiContent != nil {
+		openApiEngine := NewGinEngine(mainLogger)
+		openApiEngine.GET("/openapi", func(ctx *gin.Context) {
+			ctx.Data(http.StatusOK, "application/yaml", openApiContent)
+		})
+		mainEngine.Handle("/openapi", openApiEngine)
+	}
 
 	addr := fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port)
 

@@ -1,0 +1,76 @@
+name: Api Diff Agent Workflow
+
+on:
+  push:
+    branches: ["main"]
+
+  pull_request:
+
+jobs:
+  assessment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 1. Install the Intelligence
+      - name: Install GitHub Copilot CLI
+        run: npm i -g @github/copilot
+
+      # 2. Run the Agent
+      - name: Run API Diff Agent via Copilot CLI
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Construct the Prompt
+          # We combine the System Prompt (Agent definition) with Dynamic Context
+          AGENT_PROMPT=$(cat .github/agents/api-diff.agent.md)
+          PROMPT="$AGENT_PROMPT"
+          PROMPT+=$'\n\nContext:\n'
+          PROMPT+="- Repository: $GITHUB_REPOSITORY"
+          PROMPT+=$'\n\nTask:\n'
+          PROMPT+=$"\n- Execute the instructions on the full codebase"
+          PROMPT+=$'\n- Generate the api diff report at /api-diff/assessment-report.md'
+
+          # Execute Copilot
+          # We use < /dev/null to prevent the CLI from waiting for interactive input
+          copilot --prompt "$PROMPT" --allow-all-tools --allow-all-paths < /dev/null
+
+      # 3. Save the Report (Artifacts are forever!)
+      - name: Upload api diff report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-diff-report-${{ github.run_id }}
+          path: api-diff/assessment-report.md
+          retention-days: 30
+
+      # 4. The Logic Check (The "Smart Fail")
+      - name: Check for critical kill switch in the report
+        if: always()
+        run: |
+          set -euo pipefail
+          REPORT_PATH="api-diff/assessment-report.md"
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "No report found. Something went wrong."
+            exit 1
+          fi
+
+          # The Grep Trap: Looking for the Kill Switch
+          if grep -q "THIS ASSESSMENT CONTAINS A BREAKING API CHANGE" "$REPORT_PATH"; then
+            echo "❌ BREAKING CHANGE DETECTED - Workflow failed"
+            echo "The API diff assessment found breaking changes that must be addressed."
+            exit 1 # This breaks the build!
+          else
+            echo "✅ No breaking API changes detected"
+          fi
