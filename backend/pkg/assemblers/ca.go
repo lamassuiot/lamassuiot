@@ -2,6 +2,7 @@ package assemblers
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
@@ -30,7 +31,13 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewCAHTTPLayer(httpGrp, *caService)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	openApiContent, err := os.ReadFile(conf.OpenAPISpecPath)
+	if err != nil {
+		lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)
 	}

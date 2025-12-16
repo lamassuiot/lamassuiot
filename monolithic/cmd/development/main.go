@@ -84,6 +84,7 @@ const (
 func main() {
 	standardDockerPorts := flag.Bool("standard-docker-ports", true, "use standard docker ports for services (RabbitMQ, Postgres, Vault, etc.)")
 
+	docsDir := flag.String("docs-dir", "", "path to the docs directory")
 	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
 
 	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")
@@ -406,6 +407,7 @@ func main() {
 	pluglableStorageConfig := &postgresStorageConfig
 
 	conf := pkg.MonolithicConfig{
+		DocsDir:               *docsDir,
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
