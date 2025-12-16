@@ -27,6 +27,7 @@ import (
 
 var oidExtKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 15}
 var oidExtExtendedKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 37}
+var OidExtSubjectAltName = asn1.ObjectIdentifier{2, 5, 29, 17}
 
 var oidExtKeyUsageAny = asn1.ObjectIdentifier{2, 5, 29, 37, 0}
 var oidExtKeyUsageServerAuth = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 1}
