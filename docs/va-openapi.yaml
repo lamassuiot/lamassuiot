@@ -35,6 +35,7 @@ paths:
         Verifies the status of a certificate using OCSP request via HTTP GET method.
         The OCSP request should be base64 encoded and URL-safe.
       operationId: verifyOcspGet
+      security: []
       parameters:
         - name: ocsp_request
           in: path
@@ -74,6 +75,7 @@ paths:
         Verifies the status of a certificate using OCSP request via HTTP POST method.
         The OCSP request should be sent in the request body as binary data.
       operationId: verifyOcspPost
+      security: []
       requestBody:
         required: true
         content:
@@ -113,6 +115,7 @@ paths:
         Retrieves the Certificate Revocation List (CRL) for a specific Certificate Authority
         identified by its Subject Key Identifier (SKI).
       operationId: getCrl
+      security: []
       parameters:
         - name: ca-ski
           in: path
@@ -351,12 +354,6 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: JWT token authentication
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: API key authentication
 
 security:
   - BearerAuth: []
-  - ApiKeyAuth: []

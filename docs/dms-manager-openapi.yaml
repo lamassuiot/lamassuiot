@@ -196,6 +196,7 @@ paths:
       tags: [EST]
       summary: Retrieve CA certificates for EST enrollment
       operationId: estCacerts
+      security: []
       responses:
         '200':
           description: CA certificates bundle
@@ -213,6 +214,7 @@ paths:
       operationId: estApsCacerts
       parameters:
         - $ref: '#/components/parameters/Aps'
+      security: []
       responses:
         '200':
           description: CA certificates bundle
@@ -228,6 +230,8 @@ paths:
       tags: [EST]
       summary: EST simple enroll
       operationId: estSimpleEnroll
+      security:
+        - ClientCertificate: []
       requestBody:
         required: true
         content:
@@ -252,6 +256,8 @@ paths:
       operationId: estApsSimpleEnroll
       parameters:
         - $ref: '#/components/parameters/Aps'
+      security:
+        - ClientCertificate: []
       requestBody:
         required: true
         content:
@@ -274,6 +280,8 @@ paths:
       tags: [EST]
       summary: EST simple reenroll
       operationId: estSimpleReenroll
+      security:
+        - ClientCertificate: []
       requestBody:
         required: true
         content:
@@ -298,6 +306,8 @@ paths:
       operationId: estApsSimpleReenroll
       parameters:
         - $ref: '#/components/parameters/Aps'
+      security:
+        - ClientCertificate: []
       requestBody:
         required: true
         content:
@@ -320,6 +330,8 @@ paths:
       tags: [EST]
       summary: EST server key generation enrollment
       operationId: estServerKeyGen
+      security:
+        - ClientCertificate: []
       requestBody:
         required: true
         content:
@@ -344,6 +356,8 @@ paths:
       operationId: estApsServerKeyGen
       parameters:
         - $ref: '#/components/parameters/Aps'
+      security:
+        - ClientCertificate: []
       requestBody:
         required: true
         content:
@@ -650,3 +664,16 @@ components:
       properties:
         err:
           type: string
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+    ClientCertificate:
+      type: mutualTLS
+      description: Client certificate authentication for EST operations
+
+security:
+  - BearerAuth: []
