@@ -29,6 +29,7 @@ services:
     command:
       - "--config"
       - "/etc/jaeger/jaeger.yaml"
+    restart: always
 
   prometheus:
     image: prom/prometheus:latest
@@ -46,6 +47,7 @@ services:
       - ./prometheus.yaml:/etc/prometheus.yaml
     ports:
       - "9090:9090"
+    restart: always
 
   grafana:
     image: grafana/grafana:11.6.0
@@ -61,6 +63,7 @@ services:
       - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
     ports:
       - 3000:3000/tcp
+    restart: always
 
 networks:
   backend:
