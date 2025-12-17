@@ -23,8 +23,8 @@ func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
 	spanCtx := trace.SpanFromContext(ctx).SpanContext()
 	if spanCtx.HasTraceID() {
 		event.SetID(fmt.Sprintf("%s-%s", spanCtx.TraceID().String(), spanCtx.SpanID().String()))
-		event.SetExtension("trace-id", spanCtx.TraceID().String())
-		event.SetExtension("span-id", spanCtx.SpanID().String())
+		event.SetExtension("traceid", spanCtx.TraceID().String())
+		event.SetExtension("spanid", spanCtx.SpanID().String())
 	} else {
 		event.SetID("unknown")
 	}
