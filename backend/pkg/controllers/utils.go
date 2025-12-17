@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -124,6 +125,11 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 								filterOperand = resources.EnumEqual
 							case "ne", "notequal":
 								filterOperand = resources.EnumNotEqual
+							}
+						case resources.JsonFilterFieldType:
+							if operand == "jsonpath" {
+								filterOperand = resources.JsonPathExpression
+								arg, _ = url.QueryUnescape(arg)
 							}
 						}
 						if exists {

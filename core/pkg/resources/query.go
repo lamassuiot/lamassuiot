@@ -43,6 +43,7 @@ const (
 	DateFilterFieldType
 	NumberFilterFieldType
 	EnumFilterFieldType
+	JsonFilterFieldType
 )
 
 type FilterOperation int
@@ -75,6 +76,8 @@ const (
 
 	EnumEqual
 	EnumNotEqual
+
+	JsonPathExpression
 )
 
 type ListInput[E any] struct {

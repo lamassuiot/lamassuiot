@@ -213,4 +213,64 @@ func TestDeviceManagerMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20250925120000_remove_serial_hyphens")
 	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_DeviceManager_20251217120000_metadata_text_to_jsonb(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20251217120000_metadata_text_to_jsonb")
+	}
+}
+
+func MigrationTest_DeviceManager_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert test devices with text metadata before migration
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-with-metadata', '{}', 'ACTIVE', 'device', '#FF0000', '2024-11-25 11:45:48.620', '{"device_key":"device_value","count":42}', 'test-dms', '{}', '{}', '{}');
+	`)
+
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-empty-metadata', '{}', 'ACTIVE', 'device', '#FF0000', '2024-11-25 11:45:48.620', '', 'test-dms', '{}', '{}', '{}');
+	`)
+
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-null-metadata', '{}', 'ACTIVE', 'device', '#FF0000', '2024-11-25 11:45:48.620', NULL, 'test-dms', '{}', '{}', '{}');
+	`)
+
+	// Apply migration
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+
+	// Verify device with metadata
+	var metadata1 string
+	tx := con.Table("devices").Where("id = 'device-with-metadata'").Select("metadata").Find(&metadata1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select devices row: %v", tx.Error)
+	}
+	assert.Equal(t, `{"count": 42, "device_key": "device_value"}`, metadata1)
+
+	// Verify device with empty metadata becomes empty object
+	var metadata2 string
+	tx = con.Table("devices").Where("id = 'device-empty-metadata'").Select("metadata").Find(&metadata2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select devices row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, metadata2)
+
+	// Verify device with NULL metadata becomes empty object
+	var metadata3 string
+	tx = con.Table("devices").Where("id = 'device-null-metadata'").Select("metadata").Find(&metadata3)
+	if tx.Error != nil {
+		t.Fatalf("failed to select devices row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, metadata3)
+
+	// Verify that the column type is jsonb by trying to use jsonb operators
+	var keyValue string
+	tx = con.Raw("SELECT metadata->>'device_key' FROM devices WHERE id = 'device-with-metadata'").Scan(&keyValue)
+	if tx.Error != nil {
+		t.Fatalf("failed to query jsonb column: %v", tx.Error)
+	}
+	assert.Equal(t, "device_value", keyValue)
 }

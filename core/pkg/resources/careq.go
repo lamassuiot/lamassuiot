@@ -33,6 +33,7 @@ var KMSFilterableFields = map[string]FilterFieldType{
 	"creation_ts":     DateFilterFieldType,
 	"name":            StringFilterFieldType,
 	"tags":            StringArrayFilterFieldType,
+	"metadata":        JsonFilterFieldType,
 }
 
 var IssuanceProfileFiltrableFields = map[string]FilterFieldType{

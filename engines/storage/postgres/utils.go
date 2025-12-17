@@ -473,6 +473,8 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.EnumNotEqual:
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.JsonPathExpression:
+		return tx.Where(fmt.Sprintf("%s @@ ?::jsonpath", filter.Field), filter.Value)
 	default:
 		return tx
 	}
