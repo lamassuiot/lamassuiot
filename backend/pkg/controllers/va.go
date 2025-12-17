@@ -86,7 +86,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 		return
 	}
 
-	response, err := r.ocsp.Verify(ctx, ocsp)
+	response, err := r.ocsp.Verify(ctx.Request.Context(), ocsp)
 	if err != nil {
 		r.logger.Errorf("something went wrong while verifying ocsp request: %s", err)
 		ctx.AbortWithError(http.StatusInternalServerError, err)
@@ -107,7 +107,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 		return
 	}
 
-	crl, err := r.crl.GetCRL(ctx, services.GetCRLInput{
+	crl, err := r.crl.GetCRL(ctx.Request.Context(), services.GetCRLInput{
 		CRLVersion:     big.NewInt(0),
 		CASubjectKeyID: params.CASubjectKeyID,
 	})
@@ -131,7 +131,7 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 		return
 	}
 
-	role, err := r.crl.GetVARole(ctx, services.GetVARoleInput{
+	role, err := r.crl.GetVARole(ctx.Request.Context(), services.GetVARoleInput{
 		CASubjectKeyID: params.CASubjectKeyID,
 	})
 	if err != nil {
@@ -160,7 +160,7 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 		return
 	}
 
-	role, err := r.crl.UpdateVARole(ctx, services.UpdateVARoleInput{
+	role, err := r.crl.UpdateVARole(ctx.Request.Context(), services.UpdateVARoleInput{
 		CASubjectKeyID: params.CASubjectKeyID,
 		CRLRole:        requestBody.VACRLRole,
 	})

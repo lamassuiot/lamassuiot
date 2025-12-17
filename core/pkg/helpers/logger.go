@@ -8,16 +8,16 @@ import (
 	"runtime"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
-	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"src", "auth-mode", "auth-id", "req-id", "service", "subsystem", "subsystem-provider"},
+	FieldsOrder:     []string{"src", "auth-mode", "auth-id", "trace-id", "span-id", "service", "subsystem", "subsystem-provider"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -94,16 +94,18 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 		return logger
 	}
 
-	reqCtx := ctx.Value(core.LamassuContextKeyRequestID)
-	if reqID, ok := reqCtx.(string); ok {
-		return logger.WithField("req-id", reqID)
+	spanCtx := trace.SpanFromContext(ctx).SpanContext()
+	if spanCtx.HasTraceID() {
+		return logger.WithField("trace-id", spanCtx.TraceID().String())
 	}
 
-	return logger.WithField("req-id", fmt.Sprintf("unset.%s", goid.NewV4UUID()))
+	if spanCtx.HasSpanID() {
+		return logger.WithField("span-id", spanCtx.SpanID().String())
+	}
+
+	return logger
 }
 
 func InitContext() context.Context {
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, core.LamassuContextKeyRequestID, fmt.Sprintf("internal.%s", goid.NewV4UUID()))
-	return ctx
+	return context.Background()
 }
