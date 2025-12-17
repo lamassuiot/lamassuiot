@@ -132,7 +132,7 @@ func TestCreateCA(t *testing.T) {
 				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
-					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 					ProfileID:    profile.ID,
@@ -299,13 +299,16 @@ func TestCreateHybridCA(t *testing.T) {
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
-	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
-		},
-	})
-	if err != nil {
-		t.Fatalf("failed creating issuance profile: %s", err)
+	createProfile := func(t *testing.T) *models.IssuanceProfile {
+		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed creating issuance profile: %s", err)
+		}
+		return profile
 	}
 
 	// Parent CA for subordinate creation tests
@@ -321,11 +324,11 @@ func TestCreateHybridCA(t *testing.T) {
 			name:   "OK/Chameleon-Ed25519>MLDSA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-
+				profile := createProfile(t)
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
-						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 						Subject:      models.Subject{CommonName: "TestCA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
@@ -346,6 +349,7 @@ func TestCreateHybridCA(t *testing.T) {
 			name:   "OK/Chameleon-MLDSA>Ed25519",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
@@ -354,7 +358,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -390,7 +394,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Time, Time: tCA},
 						ProfileID:    profile2.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -409,6 +413,7 @@ func TestCreateHybridCA(t *testing.T) {
 		{
 			name: "Error/Duplicate-CA-ID",
 			before: func(svc services.CAService) error {
+				profile := createProfile(t)
 				_, err := svc.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
@@ -417,7 +422,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 				if err != nil {
@@ -426,6 +431,7 @@ func TestCreateHybridCA(t *testing.T) {
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
@@ -434,7 +440,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -453,6 +459,7 @@ func TestCreateHybridCA(t *testing.T) {
 		{
 			name: "OK/SubordinateChameleonCA",
 			before: func(svc services.CAService) error {
+				profile := createProfile(t)
 				parentCA, err = svc.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           "1111-2222-3333",
@@ -461,13 +468,14 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 
 				return err
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				_, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
 					CAID: parentCA.ID,
 				})
@@ -483,7 +491,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -523,6 +531,7 @@ func TestCreateHybridCA(t *testing.T) {
 			name:   "OK/Metadata",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
@@ -531,7 +540,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},

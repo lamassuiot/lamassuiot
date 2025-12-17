@@ -172,7 +172,7 @@ func (engine X509Engine) SignChameleonCertificateRequest(ctx context.Context, de
 	}
 
 	// Create the hybrid certificate
-	certificateBytes, err := x509.CreateChameleonCertificate(rand.Reader, deltaTemplate, baseTemplate, deltaCa, ca, deltaCaSigner.Public(), baseCaSigner.Public(), deltaCaSigner, baseCaSigner)
+	certificateBytes, err := x509.CreateChameleonCertificate(rand.Reader, deltaTemplate, baseTemplate, deltaCa, ca, deltaCsr.PublicKey, baseCsr.PublicKey, deltaCaSigner, baseCaSigner)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate: %s", err)
 		return nil, err
