@@ -26,7 +26,12 @@ test_backend:
 	go test $(TEST_FLAGS) ./backend/pkg/helpers/slices/
 	go test $(TEST_FLAGS) ./backend/pkg/helpers/
 	go test $(TEST_FLAGS) ./backend/pkg/x509engines/
-	go test $(TEST_FLAGS) ./backend/pkg/assemblers/
+	go test $(TEST_FLAGS) ./backend/pkg/assemblers/tests/ca/
+	go test $(TEST_FLAGS) ./backend/pkg/assemblers/tests/va/
+	go test $(TEST_FLAGS) ./backend/pkg/assemblers/tests/kms/
+	go test $(TEST_FLAGS) ./backend/pkg/assemblers/tests/alerts/
+	go test $(TEST_FLAGS) ./backend/pkg/assemblers/tests/dms-manager/
+	go test $(TEST_FLAGS) ./backend/pkg/assemblers/tests/device-manager/
 	go test $(TEST_FLAGS) ./backend/pkg/storage/builder/
 	go test $(TEST_FLAGS) ./backend/pkg/middlewares/eventpub/
 
