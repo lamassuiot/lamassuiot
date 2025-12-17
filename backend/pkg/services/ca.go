@@ -616,14 +616,13 @@ func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input servic
 		return nil, err
 	}
 
+	baseSigner := NewKMSCryptoSigner(ctx, *baseKey, svc.kmsService)
+	deltaSigner := NewKMSCryptoSigner(ctx, *deltaKey, svc.kmsService)
+	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
 
 	var ca *x509.Certificate
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
-
-	baseSigner := NewKMSCryptoSigner(ctx, *baseKey, svc.kmsService)
-	deltaSigner := NewKMSCryptoSigner(ctx, *deltaKey, svc.kmsService)
-	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
 
 	var baseAkid, baseSkid string
 	var deltaAkid, deltaSkid string
@@ -656,9 +655,9 @@ func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input servic
 		}
 
 		baseAkid = baseParentCA.Certificate.SubjectKeyID
-		deltaAkid = baseParentCA.Metadata["delta_skid"].(string)
-		deltaSkid = deltaKey.KeyID
+		deltaAkid = baseParentCA.Metadata["lamassu.io/certificate/chameleon"].(map[string]any)["delta"].(map[string]any)["skid"].(string)
 		baseSkid = baseKey.KeyID
+		deltaSkid = deltaKey.KeyID
 
 		// Generate a new KeyPair and CSR for the delta Certificate
 		// NOTE -> maybe both Inner and Outer CA should have the same Id
@@ -775,11 +774,19 @@ func (svc *CAServiceBackend) validateCreateCAInput(ctx context.Context, input *s
 	}
 
 	var err error
-	caValidator.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
+	caValidator.RegisterStructValidation(createCAValidation, services.CreateHybridCAInput{})
 	err = caValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("CreateCAInput struct validation error: %s", err)
 		return "", errs.ErrValidateBadRequest
+	}
+
+	// Validate IssuanceProfileID exists
+	_, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		ProfileID: input.ProfileID,
+	})
+	if err != nil {
+		return "", err
 	}
 
 	// Check if CA already exists
@@ -1466,6 +1473,16 @@ func (svc *CAServiceBackend) SignChameleonCertificate(ctx context.Context, input
 	if err != nil {
 		return nil, err
 	}
+		
+	// Update the Subject Key ID of the delta certificate using the saved metadata, so as to 
+	// ensure that signing ocurs with the correct key
+	// TODO: check if it makes sense to extract this to a function.
+	rawDeltaCaSkid, err := hex.DecodeString(ca.Metadata["lamassu.io/certificate/chameleon"].(map[string]any)["delta"].(map[string]any)["akid"].(string))
+	if err != nil {
+		return nil, err
+	}
+	deltaCaCert.SubjectKeyId = rawDeltaCaSkid
+
 	deltaCsr := (*x509.CertificateRequest)(input.DeltaCertRequest)
 
 	baseCaCertSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
@@ -1475,6 +1492,9 @@ func (svc *CAServiceBackend) SignChameleonCertificate(ctx context.Context, input
 
 	// Give preference to the embedded IssuanceProfile if it's present
 	profile, err := svc.getCaIssuanceProfile(ctx, &input.IssuanceProfile, input.IssuanceProfileID, ca.ProfileID)
+	if err != nil {
+		return nil, err
+	}
 
 	lFunc.Debugf("sign certificate request with %s CA", input.CAID)
 	x509Cert, err := engine.SignChameleonCertificateRequest(ctx, deltaCsr, baseCsr, baseCaCert, deltaCaCertSigner, baseCaCertSigner, *profile)
