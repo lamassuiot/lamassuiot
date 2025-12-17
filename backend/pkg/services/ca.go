@@ -845,10 +845,6 @@ func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input servic
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
-	baseSigner := NewKMSCryptoSigner(ctx, *baseKey, svc.kmsService)
-	deltaSigner := NewKMSCryptoSigner(ctx, *deltaKey, svc.kmsService)
-	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
-
 	var baseAkid, baseSkid string
 	var deltaAkid, deltaSkid string
 	var baseEngineID string
