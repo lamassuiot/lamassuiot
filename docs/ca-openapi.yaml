@@ -331,6 +331,48 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /cas/{id}/reissue:
+    post:
+      tags: [Certificate Authorities]
+      summary: Reissue a certificate authority
+      description: |
+        Reissues an existing CA certificate with a new validity period.
+        The CA must be in a valid state (not expired or revoked).
+      operationId: reissueCA
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReissueCABody'
+      responses:
+        '200':
+          description: CA reissued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400':
+          description: Invalid request (CA expired, revoked, or validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: CA not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /cas/{id}/certificates:
     get:
       tags: [Certificates]
@@ -977,6 +1019,16 @@ components:
       properties:
         profile_id:
           type: string
+
+    ReissueCABody:
+      type: object
+      properties:
+        profile:
+          $ref: '#/components/schemas/IssuanceProfile'
+          description: Complete issuance profile specification (alternative to profile_id)
+        profile_id:
+          type: string
+          description: ID of existing issuance profile to use (alternative to profile)
 
     UpdateCertificateMetadataBody:
       type: object
