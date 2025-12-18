@@ -1,6 +1,7 @@
 package assemblers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -15,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -38,6 +40,8 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 }
 
 func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, error) {
+	sdk.InitOtelSDK(context.Background(), "Alerts Service", conf.OtelConfig)
+
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "Alerts", "Service")
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Alerts", "Event Bus")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Alerts", "Storage")

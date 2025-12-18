@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -28,14 +29,14 @@ var (
 	otelInitErr      error
 )
 
-func InitOtelSDK(ctx context.Context, svcName string) (func(context.Context) error, error) {
+func InitOtelSDK(ctx context.Context, svcName string, config config.OTELConfig) (func(context.Context) error, error) {
 	otelInitOnce.Do(func() {
-		otelShutdownFunc, otelInitErr = initOtelSDKInternal(ctx, svcName)
+		otelShutdownFunc, otelInitErr = initOtelSDKInternal(ctx, svcName, config)
 	})
 	return otelShutdownFunc, otelInitErr
 }
 
-func initOtelSDKInternal(ctx context.Context, svcName string) (func(context.Context) error, error) {
+func initOtelSDKInternal(ctx context.Context, svcName string, config config.OTELConfig) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
 	var err error
 
@@ -68,16 +69,20 @@ func initOtelSDKInternal(ctx context.Context, svcName string) (func(context.Cont
 		return shutdown, err
 	}
 
-	err = setupTracerProvider(ctx, resources)
-	if err != nil {
-		log.Fatal(err)
-		return nil, err
+	if config.Traces.Enabled {
+		err = setupTracerProvider(ctx, config.Traces, resources)
+		if err != nil {
+			log.Fatal(err)
+			return nil, err
+		}
 	}
 
-	err = setupMeterProvider(ctx, resources)
-	if err != nil {
-		log.Fatal(err)
-		return nil, err
+	if config.Metrics.Enabled {
+		err = setupMeterProvider(ctx, config.Metrics, resources)
+		if err != nil {
+			log.Fatal(err)
+			return nil, err
+		}
 	}
 
 	// Set up the text map propagator to inject trace headers into HTTP requests
@@ -89,13 +94,19 @@ func initOtelSDKInternal(ctx context.Context, svcName string) (func(context.Cont
 	return shutdown, err
 }
 
-func setupTracerProvider(ctx context.Context, resources *resource.Resource) error {
+func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, resources *resource.Resource) error {
+	options := []otlptracehttp.Option{
+		otlptracehttp.WithEndpoint(fmt.Sprintf("%s:%d", config.Hostname, config.Port)),
+	}
+
+	if config.Scheme == "http" {
+		options = append(options, otlptracehttp.WithInsecure())
+	}
+
 	exporter, err := otlptrace.New(
 		ctx,
 		otlptracehttp.NewClient(
-			// NOTE: it might be better to configure it as an Environment Variable
-			otlptracehttp.WithEndpoint("localhost:4318"),
-			otlptracehttp.WithInsecure(),
+			options...,
 		),
 	)
 	if err != nil {
@@ -114,21 +125,29 @@ func setupTracerProvider(ctx context.Context, resources *resource.Resource) erro
 	return nil
 }
 
-func setupMeterProvider(ctx context.Context, resources *resource.Resource) error {
+func setupMeterProvider(ctx context.Context, config config.OTELMetricsConfig, resources *resource.Resource) error {
+	options := []otlpmetrichttp.Option{
+		otlpmetrichttp.WithEndpoint(fmt.Sprintf("%s:%d", config.Hostname, config.Port)),
+	}
+
+	if config.Scheme == "http" {
+		options = append(options, otlpmetrichttp.WithInsecure())
+	}
+
 	exporter, err := otlpmetrichttp.New(
 		ctx,
-		otlpmetrichttp.WithEndpoint("localhost:4318"),
-		otlpmetrichttp.WithInsecure(),
+		options...,
 	)
 
 	if err != nil {
 		return err
 	}
 
-	// Register the exporter with an SDK via a periodic reader.
-	mp := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exporter, metric.WithInterval(100*time.Millisecond))), metric.WithResource(resources))
+	interval, _ := time.ParseDuration(fmt.Sprintf("%dms", config.IntervalInMillis))
 
-	log.Print("Starting host instrumentation:")
+	// Register the exporter with an SDK via a periodic reader.
+	mp := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exporter, metric.WithInterval(interval))), metric.WithResource(resources))
+
 	err = host.Start(host.WithMeterProvider(mp))
 	if err != nil {
 		log.Fatal(err)

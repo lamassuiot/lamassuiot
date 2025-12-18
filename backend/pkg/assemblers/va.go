@@ -45,7 +45,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 }
 
 func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsService services.KMSService) (*services.CRLService, *services.OCSPService, error) {
-	sdk.InitOtelSDK(context.Background(), "VA Service")
+	sdk.InitOtelSDK(context.Background(), "VA Service", conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")

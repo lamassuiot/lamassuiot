@@ -42,7 +42,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 }
 
 func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*services.CAService, *jobs.JobScheduler, error) {
-	sdk.InitOtelSDK(context.Background(), "CA Service")
+	sdk.InitOtelSDK(context.Background(), "CA Service", conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
