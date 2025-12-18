@@ -448,6 +448,58 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	return cert, err
 }
 
+// resolveCAIssuanceProfile resolves the CA issuance profile with the following priority:
+// 1. Use inline profile if provided
+// 2. Resolve profile by reference ID
+// 3. Use hard-coded default
+// The resolved profile is validated to ensure SignAsCA=true for CA operations.
+func (svc *CAServiceBackend) resolveCAIssuanceProfile(ctx context.Context, lFunc *logrus.Entry, inlineProfile *models.IssuanceProfile, profileID string, defaultValidity *models.Validity) (*models.IssuanceProfile, error) {
+	if inlineProfile != nil {
+		// Priority 1: Use inline profile if provided
+		lFunc.Debugf("using inline CA issuance profile for CA certificate creation")
+
+		// Validate that inline profile has SignAsCA=true for CA creation
+		if !inlineProfile.SignAsCA {
+			lFunc.Errorf("inline CA issuance profile must have SignAsCA=true")
+			return nil, errs.ErrValidateBadRequest
+		}
+
+		return inlineProfile, nil
+	}
+
+	if profileID != "" {
+		// Priority 2: Resolve profile by reference ID
+		profile, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: profileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get CA issuance profile %s: %s", profileID, err)
+			return nil, err
+		}
+
+		lFunc.Debugf("using referenced CA issuance profile %s for CA certificate creation", profileID)
+
+		// Validate that profile is suitable for CA creation
+		if !profile.SignAsCA {
+			lFunc.Errorf("CA issuance profile %s must have SignAsCA=true", profileID)
+			return nil, errs.ErrValidateBadRequest
+		}
+
+		return profile, nil
+	}
+
+	if defaultValidity == nil {
+		lFunc.Errorf("default validity must be provided when no inline or referenced profile is provided")
+		return nil, errs.ErrValidateBadRequest
+	}
+	// Priority 3: Use hard-coded default
+	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
+	caIssuanceProfile := engine.GetDefaultCAIssuanceProfile(ctx, *defaultValidity)
+	lFunc.Debugf("using default CA issuance profile for CA certificate creation")
+
+	return &caIssuanceProfile, nil
+}
+
 func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 	if input.Metadata == nil {
@@ -471,39 +523,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	}
 
 	// Resolve CA Issuance Profile (for the CA certificate itself)
-	var caIssuanceProfile models.IssuanceProfile
-	if input.CAIssuanceProfile != nil {
-		// Priority 1: Use inline profile if provided
-		caIssuanceProfile = *input.CAIssuanceProfile
-		lFunc.Debugf("using inline CA issuance profile for CA certificate creation")
-
-		// Validate that inline profile has SignAsCA=true for CA creation
-		if !caIssuanceProfile.SignAsCA {
-			lFunc.Errorf("inline CA issuance profile must have SignAsCA=true")
-			return nil, errs.ErrValidateBadRequest
-		}
-	} else if input.CAIssuanceProfileID != "" {
-		// Priority 2: Resolve profile by reference ID
-		profile, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: input.CAIssuanceProfileID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get CA issuance profile %s: %s", input.CAIssuanceProfileID, err)
-			return nil, err
-		}
-		caIssuanceProfile = *profile
-		lFunc.Debugf("using referenced CA issuance profile %s for CA certificate creation", input.CAIssuanceProfileID)
-
-		// Validate that profile is suitable for CA creation
-		if !caIssuanceProfile.SignAsCA {
-			lFunc.Errorf("CA issuance profile %s must have SignAsCA=true", input.CAIssuanceProfileID)
-			return nil, errs.ErrValidateBadRequest
-		}
-	} else {
-		// Priority 3: Use hard-coded default
-		engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
-		caIssuanceProfile = engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration)
-		lFunc.Debugf("using default CA issuance profile for CA certificate creation")
+	caIssuanceProfile, err := svc.resolveCAIssuanceProfile(ctx, lFunc, input.CAIssuanceProfile, input.CAIssuanceProfileID, &input.CAExpiration)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check if CA already exists
@@ -563,7 +585,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		akid = key.KeyID
 
 		// Root CA. Root CAs can be generate directly
-		ca, err = engine.CreateRootCA(ctx, signer, key.KeyID, input.Subject, input.CAExpiration, caIssuanceProfile)
+		ca, err = engine.CreateRootCA(ctx, signer, key.KeyID, input.Subject, input.CAExpiration, *caIssuanceProfile)
 		if err != nil {
 			lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -625,7 +647,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:            input.ParentID,
 			CertRequest:     (*models.X509CertificateRequest)(csr),
-			IssuanceProfile: &caIssuanceProfile,
+			IssuanceProfile: caIssuanceProfile,
 		})
 		if err != nil {
 			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
@@ -1159,11 +1181,8 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	// Validate CA status
 	if ca.Certificate.Status == models.StatusRevoked {
-		if int(ca.Certificate.RevocationReason) != ocsp.KeyCompromise && int(ca.Certificate.RevocationReason) != ocsp.CACompromise {
-			lFunc.Errorf("CA %s is revoked with reason %s and cannot be reissued", input.CAID, ca.Certificate.RevocationReason.String())
-			return nil, errs.ErrCAAlreadyRevoked
-		}
-		lFunc.Warnf("CA %s is revoked with reason %s and reissued is allowed", input.CAID, ca.Certificate.RevocationReason.String())
+		lFunc.Errorf("CA %s is revoked with reason %s and cannot be reissued", input.CAID, ca.Certificate.RevocationReason.String())
+		return nil, errs.ErrCAAlreadyRevoked
 	}
 
 	lFunc.Debugf("reissuing CA certificate for %s", input.CAID)
@@ -1180,36 +1199,22 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	}
 
 	// Resolve issuance profile with priority: inline -> by ID -> CA default
-	var profile *models.IssuanceProfile
+	//var profile *models.IssuanceProfile
 
-	if input.IssuanceProfile != nil {
-		// Priority 1: Embedded IssuanceProfile (highest priority)
-		profile = input.IssuanceProfile
-	} else if input.IssuanceProfileID != "" {
-		// Priority 2: Fetch by ProfileID
-		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: input.IssuanceProfileID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
-			return nil, err
-		}
-	} else {
-		// Priority 3: Use CA's default profile
-		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: ca.ProfileID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get default ca issuance profile %s: %s", ca.ProfileID, err)
-			return nil, err
-		}
+	profile, err := svc.resolveCAIssuanceProfile(ctx, lFunc, input.IssuanceProfile, input.IssuanceProfileID, &validity)
+	if err != nil {
+		return nil, err
 	}
 
 	profileCopy := *profile
 	profile = &profileCopy
 
 	// Ensure the profile enforces isCA flag for CA reissuance
-	profile.SignAsCA = true
+	if !profile.SignAsCA {
+		lFunc.Errorf("issuance profile must have SignAsCA=true for CA reissuance")
+		return nil, errs.ErrValidateBadRequest
+	}
+
 	// Override validity to preserve the original CA's validity duration only if not set
 	if profile.Validity.Type == "" {
 		profile.Validity = validity
