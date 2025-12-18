@@ -1,71 +1,18 @@
 services:
-  loki:
-    image: grafana/loki:3.4.2
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
     ports:
-      - "3100:3100"
-    volumes:
-      - ./loki.yaml:/etc/loki/local-config.yaml
-    command: -config.file=/etc/loki/local-config.yaml
-
-  jaeger:
-    image: cr.jaegertracing.io/jaegertracing/jaeger:2.11.0
-    networks:
-      backend:
-        aliases:
-          - spm_metrics_source   # Host name used for prometheus scrape configuration
-    ports:
-      - "16686:16686"   # Jaeger UI
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
-      - "5778:5778"
-      - "8888:8888"     # Prometheus metrics exporter
-      - "8889:8889"     # Prometheus tracer exporter
-      - "9411:9411"     # zipkin
-    volumes:
-      - "./jaeger-ui.json:/etc/jaeger/jaeger-ui.json"
-      - "./jaeger.yaml:/etc/jaeger/jaeger.yaml"
-    environment:
-      - OTEL_ENABLED=true
-    command:
-      - "--config"
-      - "/etc/jaeger/jaeger.yaml"
-    restart: always
-
-  prometheus:
-    image: prom/prometheus:latest
-    networks:
-      backend:
-        aliases:
-          - prometheus
-    command:
-      - --config.file=/etc/prometheus.yaml
-      - --web.enable-otlp-receiver
-      - --web.enable-remote-write-receiver
-      - --enable-feature=exemplar-storage
-      - --enable-feature=native-histograms
-    volumes:
-      - ./prometheus.yaml:/etc/prometheus.yaml
-    ports:
-      - "9090:9090"
-    restart: always
-
-  grafana:
-    image: grafana/grafana:11.6.0
-    networks:
-      - backend
+      - "3000:3000"   # Grafana
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "3100:3100"   # Loki
+      - "9090:9090"   # Mimir (Prometheus-compatible)
+      - "3200:3200"   # Tempo
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_BASIC_ENABLED=false
-      - GF_FEATURE_TOGGLES_ENABLE=grafanaManagedRecordingRules traceqlEditor metricsSummary
-      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-exploretraces-app/grafana-exploretraces-app-latest.zip;grafana-traces-app
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor metricsSummary traceToMetrics
     volumes:
-      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
-    ports:
-      - 3000:3000/tcp
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: always
-
-networks:
-  backend:
-    external: false
-
