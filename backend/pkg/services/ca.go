@@ -1205,8 +1205,6 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	}
 
 	// Resolve issuance profile with priority: inline -> by ID -> CA default
-	//var profile *models.IssuanceProfile
-
 	profile, err := svc.resolveCAIssuanceProfile(ctx, lFunc, input.IssuanceProfile, input.IssuanceProfileID, &validity)
 	if err != nil {
 		return nil, err
@@ -1215,17 +1213,11 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	profileCopy := *profile
 	profile = &profileCopy
 
-	// Ensure the profile enforces isCA flag for CA reissuance
-	if !profile.SignAsCA {
-		lFunc.Errorf("issuance profile must have SignAsCA=true for CA reissuance")
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	// Override validity to preserve the original CA's validity duration only if not set
 	if profile.Validity.Type == "" {
 		profile.Validity = validity
+		lFunc.Debugf("Duration is not provided. Preserved current CA validity duration")
 	}
-	lFunc.Debugf("enforcing SignAsCA=true for CA reissuance with preserved validity duration")
 
 	var newCert *x509.Certificate
 	var newAKID, newSKID string

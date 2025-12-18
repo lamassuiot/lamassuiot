@@ -71,7 +71,7 @@ func TestReissueCAService(t *testing.T) {
 			name: "ERR/ReissueCA_RevokedCA",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create a CA
-				ca, err := createTestCA(caSDK, "RevokedCA")
+				ca, err := createTestCA(caSDK, "RevokedCA", false)
 				if err != nil {
 					return "", err
 				}
@@ -106,10 +106,12 @@ func TestReissueCAService(t *testing.T) {
 			name: "ERR/ReissueCA_ExpiredCA",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create a CA
-				ca, err := createTestCA(caSDK, "ExpiredCA")
+				ca, err := createTestCA(caSDK, "ExpiredCA", true)
 				if err != nil {
 					return "", err
 				}
+
+				time.Sleep(time.Second)
 
 				// Mark the CA as expired
 				_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
@@ -130,6 +132,7 @@ func TestReissueCAService(t *testing.T) {
 							Type:     models.Duration,
 							Duration: models.TimeDuration(time.Hour * 24 * 365),
 						},
+						SignAsCA: true,
 					},
 				})
 			},
@@ -147,7 +150,7 @@ func TestReissueCAService(t *testing.T) {
 			name: "OK/ReissueRootCA",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create a root CA
-				ca, err := createTestCA(caSDK, "RootCA-Reissue")
+				ca, err := createTestCA(caSDK, "RootCA-Reissue", false)
 				if err != nil {
 					return "", err
 				}
@@ -249,7 +252,7 @@ func TestReissueCAService(t *testing.T) {
 			name: "OK/ReissueSubordinateCA",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create root CA
-				rootCA, err := createTestCA(caSDK, "RootCA-Parent")
+				rootCA, err := createTestCA(caSDK, "RootCA-Parent", false)
 				if err != nil {
 					return "", err
 				}
@@ -318,7 +321,7 @@ func TestReissueCAService(t *testing.T) {
 			name: "OK/ReissueCA_VerifyCRLAndOCSPURLs",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create a CA
-				ca, err := createTestCA(caSDK, "CA-CRL-OCSP-Test")
+				ca, err := createTestCA(caSDK, "CA-CRL-OCSP-Test", false)
 				if err != nil {
 					return "", err
 				}
@@ -380,7 +383,7 @@ func TestReissueCAService(t *testing.T) {
 			name: "OK/ReissueRootCA_WithInlineProfile",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create a root CA
-				ca, err := createTestCA(caSDK, "RootCA-InlineProfile")
+				ca, err := createTestCA(caSDK, "RootCA-InlineProfile", false)
 				if err != nil {
 					return "", err
 				}
@@ -424,7 +427,7 @@ func TestReissueCAService(t *testing.T) {
 			name: "OK/ReissueRootCA_WithProfileID",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create a root CA
-				ca, err := createTestCA(caSDK, "RootCA-ProfileID")
+				ca, err := createTestCA(caSDK, "RootCA-ProfileID", false)
 				if err != nil {
 					return "", err
 				}
@@ -476,7 +479,7 @@ func TestReissueCAService(t *testing.T) {
 			name: "OK/ReissueCA_WithSANs",
 			before: func(caSDK services.CAService) (string, error) {
 				// Create a root CA
-				ca, err := createTestCA(caSDK, "RootCA-WithSANs")
+				ca, err := createTestCA(caSDK, "RootCA-WithSANs", false)
 				if err != nil {
 					return "", err
 				}
@@ -625,7 +628,7 @@ func TestReissueCASDK(t *testing.T) {
 		{
 			name: "OK/ReissueCA_ViaHTTPSDK",
 			before: func(caSDK services.CAService) (string, error) {
-				ca, err := createTestCA(caSDK, "SDK-Reissue-Test")
+				ca, err := createTestCA(caSDK, "SDK-Reissue-Test", false)
 				if err != nil {
 					return "", err
 				}
@@ -710,8 +713,14 @@ func TestReissueCASDK(t *testing.T) {
 }
 
 // Helper function to create a test CA
-func createTestCA(caSDK services.CAService, commonName string) (*models.CACertificate, error) {
-	caDur := models.TimeDuration(time.Hour * 24 * 365)       // 1 year
+func createTestCA(caSDK services.CAService, commonName string, toExpire bool) (*models.CACertificate, error) {
+	var caDur models.TimeDuration
+	if toExpire {
+		caDur = models.TimeDuration(time.Second) // 1 second
+	} else {
+		caDur = models.TimeDuration(time.Hour * 24 * 365) // 1 year
+	}
+
 	issuanceDur := models.TimeDuration(time.Hour * 24 * 180) // 6 months
 
 	// Create issuance profile
