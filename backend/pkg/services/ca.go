@@ -1185,6 +1185,12 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		return nil, errs.ErrCAAlreadyRevoked
 	}
 
+	// Check expiration by date in case the status field is not up-to-date
+	if ca.Certificate.ValidTo.Before(time.Now()) {
+		lFunc.Errorf("CA %s is expired and cannot be reissued", input.CAID)
+		return nil, errs.ErrCAExpired
+	}
+
 	lFunc.Debugf("reissuing CA certificate for %s", input.CAID)
 
 	//Create a Certificate Signer for the existing CA
