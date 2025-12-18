@@ -9,15 +9,16 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	webhookclient "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers/webhook-client"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -426,16 +427,18 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 		lFunc.Infof("verifying enrollment using external webhook: %s. Calling webhook %s", webhookConf.Name, webhookConf.Url)
 
-		//get gin context http headers
-		ginCtx, ok := ctx.(*gin.Context)
+		// Get HTTP request from context
 		webhookRequestBodyHeaders := make(map[string]string)
-		if ok {
-			headers := ginCtx.Request.Header
+		requestURL := ""
+
+		if httpReq, ok := ctx.Value(core.LamassuContextKeyHTTPRequest).(*http.Request); ok && httpReq != nil {
+			headers := httpReq.Header
 			for key, values := range headers {
 				if len(values) > 0 {
 					webhookRequestBodyHeaders[key] = values[0] // Take the first value
 				}
 			}
+			requestURL = httpReq.URL.String()
 		}
 
 		pemCsr := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
@@ -447,7 +450,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			"device_cn": csr.Subject.CommonName,
 			"http_request": map[string]interface{}{
 				"headers": webhookRequestBodyHeaders,
-				"url":     ginCtx.Request.URL.String(),
+				"url":     requestURL,
 			},
 		}
 

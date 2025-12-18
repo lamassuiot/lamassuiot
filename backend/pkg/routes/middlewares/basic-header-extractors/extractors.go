@@ -10,7 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func updateContextWithRequestWithSource(ctx *gin.Context, headers http.Header) {
+func updateContextWithSource(ctx *gin.Context, headers http.Header) {
 	sourceHeader := headers.Get(models.HttpSourceHeader)
 	if sourceHeader != "" {
 		// Store in gin.Context for backward compatibility
@@ -24,7 +24,12 @@ func updateContextWithRequestWithSource(ctx *gin.Context, headers http.Header) {
 func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		updateContextWithRequestWithSource(c, c.Request.Header)
+		updateContextWithSource(c, c.Request.Header)
+
+		// Store the HTTP request in context for services that need access to headers/URL
+		reqCtx := context.WithValue(c.Request.Context(), core.LamassuContextKeyHTTPRequest, c.Request)
+		c.Request = c.Request.WithContext(reqCtx)
+
 		c.Next()
 	}
 }
