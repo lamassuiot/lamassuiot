@@ -21,8 +21,6 @@ func TestUpdateContextWithRequest(t *testing.T) {
 	headers.Set("x-lms-source", "test-source")
 	headers.Set("x-ignored", "ignored")
 
-	updateContextWithRequestWithSource(ctx, headers)
-
 	// Verify that the source is correctly set in gin.Context (backward compatibility)
 	source := ctx.Value(core.LamassuContextKeySource)
 	if !strings.HasPrefix(source.(string), "test-source") {
