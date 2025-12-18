@@ -148,7 +148,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 
 	// Pre-populate allowed extensions from CSR
 	allowedExtOIDs := []asn1.ObjectIdentifier{
-		chelpers.OidExtSubjectAltName,
+		chelpers.OidExtensionSubjectAltName,
 	}
 
 	for _, csrExt := range csr.Extensions {
@@ -353,7 +353,7 @@ func (engine X509Engine) applyIssuanceProfileToTemplate(
 	if profile.HonorExtensions {
 		// Filter to only allowed extensions
 		allowedExtOIDs := []asn1.ObjectIdentifier{
-			chelpers.OidExtSubjectAltName,
+			chelpers.OidExtensionSubjectAltName,
 		}
 
 		filteredExts := []pkix.Extension{}
