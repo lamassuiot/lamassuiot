@@ -5,18 +5,22 @@ go 1.24.0
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 
 require (
+	github.com/ThreeDotsLabs/watermill v1.4.6
 	github.com/fatih/color v1.18.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/lamassuiot/lamassuiot/backend/v3 v3.6.3
 	github.com/lamassuiot/lamassuiot/connectors/awsiot/v3 v3.6.3
 	github.com/lamassuiot/lamassuiot/core/v3 v3.6.3
+	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.6.3
 	github.com/lamassuiot/lamassuiot/sdk/v3 v3.6.3
 	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.6.3
 	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.6.3
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.6.3
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/sirupsen/logrus v1.9.3
+	gorm.io/driver/sqlite v1.6.0
+	gorm.io/gorm v1.30.0
 )
 
 require (
@@ -54,7 +58,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
-	github.com/ThreeDotsLabs/watermill v1.4.6 // indirect
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3 // indirect
 	github.com/ThreeDotsLabs/watermill-aws v1.0.0 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
@@ -138,9 +141,9 @@ require (
 	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 v3.6.3 // indirect
 	github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3 v3.6.3 // indirect
 	github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3 v3.6.3 // indirect
-	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.6.3 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/miekg/pkcs11 v1.1.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -195,5 +198,4 @@ require (
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
-	gorm.io/gorm v1.25.12 // indirect
 )

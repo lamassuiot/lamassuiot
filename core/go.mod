@@ -15,7 +15,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	gocloud.dev v0.42.0
 	golang.org/x/crypto v0.45.0
-	gorm.io/gorm v1.25.12
+	gorm.io/gorm v1.30.0
 )
 
 require (
