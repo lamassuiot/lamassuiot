@@ -9,7 +9,6 @@ type OTELConfig struct {
 type OTELMetricsConfig struct {
 	Enabled          bool   `mapstructure:"enabled"`
 	IntervalInMillis int    `mapstructure:"interval_in_millis"`
-	Endpoint         string `mapstructure:"endpoint"`
 	Hostname         string `mapstructure:"hostname"`
 	Port             int    `mapstructure:"port"`
 	Scheme           string `mapstructure:"scheme"`
