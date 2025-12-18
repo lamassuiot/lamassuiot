@@ -16,6 +16,7 @@ const (
 )
 
 type MonolithicConfig struct {
+	OtelConfig            cconfig.OTELConfig             `mapstructure:"otel"`
 	Logs                  cconfig.Logging                `mapstructure:"logs"`
 	PublisherEventBus     cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`

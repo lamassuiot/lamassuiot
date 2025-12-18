@@ -1,6 +1,7 @@
 package identityextractors
 
 import (
+	"context"
 	"crypto/x509"
 	"net/http"
 
@@ -47,9 +48,15 @@ func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 	callerID := ""
 	var authCtx map[string]interface{}
 
+	// Get the request context to add values that will be accessible to services
+	reqCtx := ctx.Request.Context()
+
 	jwtAny, hasValue := ctx.Get(string(IdentityExtractorJWT))
 	if hasValue {
 		token := jwtAny.(*jwt.Token)
+		// Store JWT token in request context for service access
+		reqCtx = context.WithValue(reqCtx, string(IdentityExtractorJWT), token)
+
 		// Access the claims
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if ok {
@@ -66,6 +73,9 @@ func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 	clientCertAny, hasValue := ctx.Get(string(IdentityExtractorClientCertificate))
 	if hasValue {
 		clientCert := clientCertAny.(*x509.Certificate)
+		// Store client certificate in request context for service access
+		reqCtx = context.WithValue(reqCtx, string(IdentityExtractorClientCertificate), clientCert)
+
 		authMode = "crt"
 		callerID = clientCert.Subject.CommonName
 
@@ -77,13 +87,19 @@ func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 
 	if authMode != "" {
 		ctx.Set(core.LamassuContextKeyAuthType, authMode)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, authMode)
 	}
 
 	if callerID != "" {
 		ctx.Set(core.LamassuContextKeyAuthID, callerID)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthID, callerID)
 	}
 
 	if authCtx != nil {
 		ctx.Set(core.LamassuContextKeyAuthContext, authCtx)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, authCtx)
 	}
+
+	// Update the request with the new context
+	ctx.Request = ctx.Request.WithContext(reqCtx)
 }

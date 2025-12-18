@@ -44,7 +44,7 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 }
 
 func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
-	sdk.InitOtelSDK(context.Background(), "KMS Service")
+	sdk.InitOtelSDK(context.Background(), "KMS Service", conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "KMS", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "KMS", "Event Bus")
