@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -596,11 +597,10 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/GetDevicesStats_StatusFilterIgnoredInCountByStatus",
+			name: "Err/GetDevicesStats_StatusFilterNotAllowed",
 			run: func() (*models.DevicesStats, error) {
-				// This test verifies that status filters in QueryParameters are properly
-				// ignored when counting by specific status to avoid SQL conflicts.
-				// The explicit status parameter should take precedence.
+				// This test verifies that status filters in QueryParameters are rejected
+				// with a 400 Bad Request error
 				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
 					QueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{
@@ -612,28 +612,51 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 							{
 								Field:           "status",
 								FilterOperation: resources.EnumEqual,
-								Value:           "ACTIVE", // This should be ignored in per-status counts
+								Value:           "ACTIVE", // This should cause a 400 error
 							},
 						},
 					},
 				})
 			},
 			resultCheck: func(stats *models.DevicesStats, err error) {
-				if err != nil {
-					t.Fatalf("unexpected error: %s", err)
+				if err == nil {
+					t.Fatalf("expected error when status filter is provided, got nil")
 				}
-				if stats == nil {
-					t.Fatalf("stats should not be nil")
+				if stats != nil {
+					t.Fatalf("stats should be nil when error occurs")
 				}
-				// Should return 2 total devices from dms-production (status filter is applied to total)
-				// but the status distribution should show proper counts (status filter is ignored per-status)
-				// All 2 devices in dms-production are NO_IDENTITY status
-				if stats.DevicesStatus[models.DeviceNoIdentity] != 2 {
-					t.Fatalf("expected 2 NO_IDENTITY devices, got %d (status filter should be ignored in per-status counts)", stats.DevicesStatus[models.DeviceNoIdentity])
+				// Check that the error is a validation error (400 Bad Request)
+				if !strings.Contains(err.Error(), "400") && !strings.Contains(err.Error(), "validation") {
+					t.Fatalf("expected 400 Bad Request error, got: %s", err)
 				}
-				// Other statuses should be 0
-				if stats.DevicesStatus[models.DeviceActive] != 0 {
-					t.Fatalf("expected 0 ACTIVE devices, got %d", stats.DevicesStatus[models.DeviceActive])
+			},
+		},
+		{
+			name: "Err/GetDevicesStats_StatusFilterOnly",
+			run: func() (*models.DevicesStats, error) {
+				// Test with only status filter (no other filters)
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "status",
+								FilterOperation: resources.EnumEqual,
+								Value:           "NO_IDENTITY",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err == nil {
+					t.Fatalf("expected error when status filter is provided, got nil")
+				}
+				if stats != nil {
+					t.Fatalf("stats should be nil when error occurs")
+				}
+				// Check that the error is a validation error (400 Bad Request)
+				if !strings.Contains(err.Error(), "400") && !strings.Contains(err.Error(), "validation") {
+					t.Fatalf("expected 400 Bad Request error, got: %s", err)
 				}
 			},
 		},

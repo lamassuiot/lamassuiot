@@ -52,6 +52,16 @@ func (svc *DeviceManagerServiceBackend) SetService(service services.DeviceManage
 func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
+	// Validate that status filters are not provided
+	if input.QueryParameters != nil {
+		for _, filter := range input.QueryParameters.Filters {
+			if filter.Field == "status" {
+				lFunc.Errorf("status filter is not allowed in GetDevicesStats")
+				return nil, errs.ErrValidateBadRequest
+			}
+		}
+	}
+
 	stats := models.DevicesStats{
 		TotalDevices:  -1,
 		DevicesStatus: map[models.DeviceStatus]int{},

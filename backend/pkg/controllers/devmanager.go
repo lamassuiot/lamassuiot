@@ -26,7 +26,12 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, err)
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
 		return
 	}
 
