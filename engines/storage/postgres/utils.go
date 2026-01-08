@@ -206,6 +206,24 @@ func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtra
 	return int(count), nil
 }
 
+func (db *postgresDBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.FilterOption, extraOpts []gormExtraOps) (int, error) {
+	var count int64
+	tx := db.Table(db.tableName).WithContext(ctx)
+
+	for _, filter := range filters {
+		tx = FilterOperandToWhereClause(filter, tx)
+	}
+
+	tx = applyExtraOpts(tx, extraOpts)
+
+	tx.Count(&count)
+	if err := tx.Error; err != nil {
+		return -1, err
+	}
+
+	return int(count), nil
+}
+
 func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 	tx := db.Table(db.tableName)
