@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -27,16 +28,12 @@ func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.Devi
 	}, nil
 }
 
-func (db *PostgresDeviceManagerStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
-}
-
-func (db *PostgresDeviceManagerStore) CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{
-		{
-			query: "status = ?", additionalWhere: []any{status},
-		},
-	})
+func (db *PostgresDeviceManagerStore) Count(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
+	extraOpts := []gormExtraOps{}
+	if queryParams != nil {
+		extraOpts = append(extraOpts, buildGormExtraOpsFromFilters(queryParams.Filters)...)
+	}
+	return db.querier.Count(ctx, extraOpts)
 }
 
 func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
@@ -64,4 +61,77 @@ func (db *PostgresDeviceManagerStore) Insert(ctx context.Context, device *models
 
 func (db *PostgresDeviceManagerStore) Delete(ctx context.Context, ID string) error {
 	return db.querier.Delete(ctx, ID)
+}
+
+// buildGormExtraOpsFromFilters converts QueryParameters filters to gormExtraOps format
+// This helper function reuses the existing FilterOperandToWhereClause logic but adapts it
+// to work with the gormExtraOps structure used for Count operations
+func buildGormExtraOpsFromFilters(filters []resources.FilterOption) []gormExtraOps {
+	extraOps := []gormExtraOps{}
+
+	for _, filter := range filters {
+		// Build the WHERE clause using existing filter logic
+		// We need to construct the same query that FilterOperandToWhereClause would create
+		whereClause, args := buildWhereClauseFromFilter(filter)
+		if whereClause != "" {
+			extraOps = append(extraOps, gormExtraOps{
+				query:           whereClause,
+				additionalWhere: args,
+			})
+		}
+	}
+
+	return extraOps
+}
+
+// buildWhereClauseFromFilter constructs WHERE clause and arguments from a FilterOption
+func buildWhereClauseFromFilter(filter resources.FilterOption) (string, []any) {
+	field := filter.Field
+
+	switch filter.FilterOperation {
+	case resources.StringEqual:
+		return fmt.Sprintf("%s = ?", field), []any{filter.Value}
+	case resources.StringEqualIgnoreCase:
+		return fmt.Sprintf("%s ILIKE ?", field), []any{filter.Value}
+	case resources.StringNotEqual:
+		return fmt.Sprintf("%s <> ?", field), []any{filter.Value}
+	case resources.StringNotEqualIgnoreCase:
+		return fmt.Sprintf("%s NOT ILIKE ?", field), []any{filter.Value}
+	case resources.StringContains:
+		return fmt.Sprintf("%s LIKE ?", field), []any{fmt.Sprintf("%%%s%%", filter.Value)}
+	case resources.StringContainsIgnoreCase:
+		return fmt.Sprintf("%s ILIKE ?", field), []any{fmt.Sprintf("%%%s%%", filter.Value)}
+	case resources.StringArrayContains:
+		return fmt.Sprintf("%s LIKE ?", field), []any{fmt.Sprintf("%%%s%%", filter.Value)}
+	case resources.StringArrayContainsIgnoreCase:
+		return fmt.Sprintf("%s ILIKE ?", field), []any{fmt.Sprintf("%%%s%%", filter.Value)}
+	case resources.StringNotContains:
+		return fmt.Sprintf("%s NOT LIKE ?", field), []any{fmt.Sprintf("%%%s%%", filter.Value)}
+	case resources.StringNotContainsIgnoreCase:
+		return fmt.Sprintf("%s NOT ILIKE ?", field), []any{fmt.Sprintf("%%%s%%", filter.Value)}
+	case resources.DateEqual:
+		return fmt.Sprintf("%s = ?", field), []any{filter.Value}
+	case resources.DateBefore:
+		return fmt.Sprintf("%s < ?", field), []any{filter.Value}
+	case resources.DateAfter:
+		return fmt.Sprintf("%s > ?", field), []any{filter.Value}
+	case resources.NumberEqual:
+		return fmt.Sprintf("%s = ?", field), []any{filter.Value}
+	case resources.NumberNotEqual:
+		return fmt.Sprintf("%s <> ?", field), []any{filter.Value}
+	case resources.NumberLessThan:
+		return fmt.Sprintf("%s < ?", field), []any{filter.Value}
+	case resources.NumberLessOrEqualThan:
+		return fmt.Sprintf("%s <= ?", field), []any{filter.Value}
+	case resources.NumberGreaterThan:
+		return fmt.Sprintf("%s > ?", field), []any{filter.Value}
+	case resources.NumberGreaterOrEqualThan:
+		return fmt.Sprintf("%s >= ?", field), []any{filter.Value}
+	case resources.EnumEqual:
+		return fmt.Sprintf("%s = ?", field), []any{filter.Value}
+	case resources.EnumNotEqual:
+		return fmt.Sprintf("%s <> ?", field), []any{filter.Value}
+	default:
+		return "", nil
+	}
 }

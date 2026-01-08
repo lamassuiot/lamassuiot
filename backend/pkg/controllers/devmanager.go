@@ -19,7 +19,11 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 }
 
 func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
-	stats, err := r.svc.GetDevicesStats(ctx, services.GetDevicesStatsInput{})
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+
+	stats, err := r.svc.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+		QueryParameters: queryParams,
+	})
 
 	if err != nil {
 		ctx.JSON(500, err)

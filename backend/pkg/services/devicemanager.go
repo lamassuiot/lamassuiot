@@ -10,6 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
@@ -67,7 +68,9 @@ func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, inp
 	}
 
 	for _, status := range allStatus {
-		nmbr, err := svc.devicesStorage.CountByStatus(ctx, status)
+		// Build query parameters with status filter added
+		statusQueryParams := addStatusFilter(input.QueryParameters, status)
+		nmbr, err := svc.devicesStorage.Count(ctx, statusQueryParams)
 		if err != nil {
 			lFunc.Errorf("could not count devices in %s status: %s", status, err)
 			stats.DevicesStatus[status] = -1
@@ -76,7 +79,7 @@ func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, inp
 		}
 	}
 
-	nmbr, err := svc.devicesStorage.Count(ctx)
+	nmbr, err := svc.devicesStorage.Count(ctx, input.QueryParameters)
 	if err != nil {
 		lFunc.Errorf("could not count devices: %s", err)
 		stats.TotalDevices = -1
@@ -85,6 +88,47 @@ func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, inp
 	}
 
 	return &stats, nil
+}
+
+// addStatusFilter creates a new QueryParameters with the status filter added.
+// This is used to count devices by status while preserving other filters.
+func addStatusFilter(queryParams *resources.QueryParameters, status models.DeviceStatus) *resources.QueryParameters {
+	// If queryParams is nil, create a new one with just the status filter
+	if queryParams == nil {
+		return &resources.QueryParameters{
+			Filters: []resources.FilterOption{
+				{
+					Field:           "status",
+					FilterOperation: resources.EnumEqual,
+					Value:           string(status),
+				},
+			},
+		}
+	}
+
+	// Create a copy of the existing query parameters
+	statusQueryParams := &resources.QueryParameters{
+		Sort:         queryParams.Sort,
+		PageSize:     queryParams.PageSize,
+		NextBookmark: queryParams.NextBookmark,
+		Filters:      make([]resources.FilterOption, 0, len(queryParams.Filters)+1),
+	}
+
+	// Copy existing filters, removing any existing status filters to avoid conflicts
+	for _, filter := range queryParams.Filters {
+		if filter.Field != "status" {
+			statusQueryParams.Filters = append(statusQueryParams.Filters, filter)
+		}
+	}
+
+	// Add the new status filter
+	statusQueryParams.Filters = append(statusQueryParams.Filters, resources.FilterOption{
+		Field:           "status",
+		FilterOperation: resources.EnumEqual,
+		Value:           string(status),
+	})
+
+	return statusQueryParams
 }
 
 func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (*models.Device, error) {

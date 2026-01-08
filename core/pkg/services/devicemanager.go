@@ -20,6 +20,7 @@ type DeviceManagerService interface {
 }
 
 type GetDevicesStatsInput struct {
+	QueryParameters *resources.QueryParameters
 }
 
 type CreateDeviceInput struct {
