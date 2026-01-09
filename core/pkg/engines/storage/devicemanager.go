@@ -8,8 +8,7 @@ import (
 )
 
 type DeviceManagerRepo interface {
-	Count(ctx context.Context) (int, error)
-	CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error)
+	Count(ctx context.Context, queryParams *resources.QueryParameters) (int, error)
 	SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 	SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 	SelectExists(ctx context.Context, ID string) (bool, *models.Device, error)

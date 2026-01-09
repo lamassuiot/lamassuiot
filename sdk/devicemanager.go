@@ -24,7 +24,7 @@ func NewHttpDeviceManagerClient(client *http.Client, url string) services.Device
 }
 
 func (cli *deviceManagerClient) GetDevicesStats(ctx context.Context, input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
-	response, err := Get[models.DevicesStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
+	response, err := Get[models.DevicesStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", input.QueryParameters, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}

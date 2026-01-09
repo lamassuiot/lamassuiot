@@ -27,16 +27,12 @@ func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.Devi
 	}, nil
 }
 
-func (db *PostgresDeviceManagerStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
-}
-
-func (db *PostgresDeviceManagerStore) CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{
-		{
-			query: "status = ?", additionalWhere: []any{status},
-		},
-	})
+func (db *PostgresDeviceManagerStore) Count(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
+	filters := []resources.FilterOption{}
+	if queryParams != nil {
+		filters = queryParams.Filters
+	}
+	return db.querier.CountFiltered(ctx, filters, []gormExtraOps{})
 }
 
 func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
