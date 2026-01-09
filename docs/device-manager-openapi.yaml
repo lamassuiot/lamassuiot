@@ -28,7 +28,8 @@ paths:
       summary: Get device statistics
       description: |
         Retrieve device statistics including total count and count per status.
-        Supports filtering by DMS, tags, metadata, status, creation time, and other device fields.
+        Supports filtering by DMS, tags, metadata, creation time, and other device fields. 
+        Filtering by status is not permitted as the endpoint always returns the status distribution for the matching devices.
         When no filters are provided, returns statistics for all devices.
       operationId: getDeviceStats
       parameters:
@@ -53,30 +54,12 @@ paths:
                       EXPIRED: 8
                       REVOKED: 7
                       DECOMMISSIONED: 5
-                filtered-by-dms:
-                  summary: Statistics filtered by DMS
-                  value:
-                    total: 45
-                    status_distribution:
-                      NO_IDENTITY: 3
-                      ACTIVE: 35
-                      RENEWAL_WINDOW: 4
-                      ABOUT_TO_EXPIRE: 2
-                      EXPIRED: 0
-                      REVOKED: 1
-                      DECOMMISSIONED: 0
-                filtered-by-tags:
-                  summary: Statistics filtered by tags
-                  value:
-                    total: 30
-                    status_distribution:
-                      NO_IDENTITY: 0
-                      ACTIVE: 28
-                      RENEWAL_WINDOW: 2
-                      ABOUT_TO_EXPIRE: 0
-                      EXPIRED: 0
-                      REVOKED: 0
-                      DECOMMISSIONED: 0
+        '400':
+          description: Bad request - invalid filter or parameters (e.g., invalid status filter)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
           content:
