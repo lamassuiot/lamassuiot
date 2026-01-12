@@ -470,6 +470,84 @@ func MigrationTest_CA_20251001120000_update_issuer_meta_serial_numbers(t *testin
 	assert.Equal(t, "bbccddeeff11223344556677889900aa", requestResult["issuer_meta_serial_number"])
 }
 
+func MigrationTest_CA_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert test data with text metadata before migration
+	// First insert certificates (ca_certificates has FK to certificates)
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id, is_ca)
+		VALUES('aa-bb-cc-dd-ee-ff-00-11', '{"key":"value","num":123}', 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test-CA', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id', true);
+	`)
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id, is_ca)
+		VALUES('bb-cc-dd-ee-ff-00-11-22', '', 'bb-cc-dd-ee-ff-00-11-22', 'test-ca-id-2', 0, 'ACTIVE', 'test-cert-2', 'RSA', 4096, 'HIGH', 'Test-CA-2', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id-2', true);
+	`)
+
+	// Then insert ca_certificates
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level")
+		VALUES('aa-bb-cc-dd-ee-ff-00-11', '{"key":"value","num":123}', 'test-ca-id', '2024-11-25 11:45:48.620', 0);
+	`)
+
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level")
+		VALUES('bb-cc-dd-ee-ff-00-11-22', '', 'test-ca-id-2', '2024-11-25 11:45:48.620', 0);
+	`)
+
+	// Insert additional regular certificates
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id)
+		VALUES('cc-dd-ee-ff-00-11-22-33', '{"cert_key":"cert_value"}', 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test-Cert', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id-3');
+	`)
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id)
+		VALUES('dd-ee-ff-00-11-22-33-44', NULL, 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert-2', 'RSA', 4096, 'HIGH', 'Test-Cert-2', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id-4');
+	`)
+
+	// Apply migration (this applies ALL migrations, including the serial number normalization)
+	ApplyMigration(t, logger, con, CADBName)
+
+	// After migration, serial numbers have dashes removed, so we query with normalized serial numbers
+	// Verify ca_certificates metadata is now jsonb
+	var caMetadata1 string
+	tx := con.Raw("SELECT metadata FROM ca_certificates WHERE serial_number = 'aa-bb-cc-dd-ee-ff-00-11'").Scan(&caMetadata1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select ca_certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{"key": "value", "num": 123}`, caMetadata1)
+
+	var caMetadata2 string
+	tx = con.Raw("SELECT metadata FROM ca_certificates WHERE serial_number = 'bb-cc-dd-ee-ff-00-11-22'").Scan(&caMetadata2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select ca_certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, caMetadata2)
+
+	// Verify certificates metadata is now jsonb
+	var certMetadata1 string
+	tx = con.Raw("SELECT metadata FROM certificates WHERE serial_number = 'cc-dd-ee-ff-00-11-22-33'").Scan(&certMetadata1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{"cert_key": "cert_value"}`, certMetadata1)
+
+	var certMetadata2 string
+	tx = con.Raw("SELECT metadata FROM certificates WHERE serial_number = 'dd-ee-ff-00-11-22-33-44'").Scan(&certMetadata2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, certMetadata2)
+
+	// Verify that the column type is jsonb by trying to use jsonb operators
+	var keyValue string
+	tx = con.Raw("SELECT metadata->>'key' FROM ca_certificates WHERE serial_number = 'aa-bb-cc-dd-ee-ff-00-11'").Scan(&keyValue)
+	if tx.Error != nil {
+		t.Fatalf("failed to query jsonb column: %v", tx.Error)
+	}
+	assert.Equal(t, "value", keyValue)
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -561,68 +639,4 @@ func TestMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20251217120000_metadata_text_to_jsonb")
 	}
-}
-
-func MigrationTest_CA_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
-	// Insert test data with text metadata before migration
-	con.Exec(`INSERT INTO ca_certificates
-		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_strength_meta_type, key_strength_meta_bits, key_strength_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, id, issuance_expiration_ref, creation_ts, "level")
-		VALUES('aa-bb-cc-dd-ee-ff-00-11', '{"key":"value","num":123}', 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert', 1, 4096, 'HIGH', 'Test-CA', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 0, 'MANAGED', 'filesystem-1', 'test-ca-id', '{}', '2024-11-25 11:45:48.620', 0);
-	`)
-
-	con.Exec(`INSERT INTO ca_certificates
-		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_strength_meta_type, key_strength_meta_bits, key_strength_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, id, issuance_expiration_ref, creation_ts, "level")
-		VALUES('bb-cc-dd-ee-ff-00-11-22', '', 'bb-cc-dd-ee-ff-00-11-22', 'test-ca-id-2', 0, 'ACTIVE', 'test-cert-2', 1, 4096, 'HIGH', 'Test-CA-2', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 0, 'MANAGED', 'filesystem-1', 'test-ca-id-2', '{}', '2024-11-25 11:45:48.620', 0);
-	`)
-
-	con.Exec(`INSERT INTO certificates
-		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, key_id)
-		VALUES('cc-dd-ee-ff-00-11-22-33', '{"cert_key":"cert_value"}', 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test-Cert', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id');
-	`)
-
-	con.Exec(`INSERT INTO certificates
-		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, key_id)
-		VALUES('dd-ee-ff-00-11-22-33-44', NULL, 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert-2', 'RSA', 4096, 'HIGH', 'Test-Cert-2', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id-2');
-	`)
-
-	// Apply migration
-	ApplyMigration(t, logger, con, CADBName)
-
-	// Verify ca_certificates metadata is now jsonb
-	var caMetadata1 string
-	tx := con.Table("ca_certificates").Where("serial_number = 'aa-bb-cc-dd-ee-ff-00-11'").Select("metadata").Find(&caMetadata1)
-	if tx.Error != nil {
-		t.Fatalf("failed to select ca_certificates row: %v", tx.Error)
-	}
-	assert.Equal(t, `{"key": "value", "num": 123}`, caMetadata1)
-
-	var caMetadata2 string
-	tx = con.Table("ca_certificates").Where("serial_number = 'bb-cc-dd-ee-ff-00-11-22'").Select("metadata").Find(&caMetadata2)
-	if tx.Error != nil {
-		t.Fatalf("failed to select ca_certificates row: %v", tx.Error)
-	}
-	assert.Equal(t, `{}`, caMetadata2)
-
-	// Verify certificates metadata is now jsonb
-	var certMetadata1 string
-	tx = con.Table("certificates").Where("serial_number = 'cc-dd-ee-ff-00-11-22-33'").Select("metadata").Find(&certMetadata1)
-	if tx.Error != nil {
-		t.Fatalf("failed to select certificates row: %v", tx.Error)
-	}
-	assert.Equal(t, `{"cert_key": "cert_value"}`, certMetadata1)
-
-	var certMetadata2 string
-	tx = con.Table("certificates").Where("serial_number = 'dd-ee-ff-00-11-22-33-44'").Select("metadata").Find(&certMetadata2)
-	if tx.Error != nil {
-		t.Fatalf("failed to select certificates row: %v", tx.Error)
-	}
-	assert.Equal(t, `{}`, certMetadata2)
-
-	// Verify that the column type is jsonb by trying to use jsonb operators
-	var keyValue string
-	tx = con.Raw("SELECT metadata->>'key' FROM ca_certificates WHERE serial_number = 'aa-bb-cc-dd-ee-ff-00-11'").Scan(&keyValue)
-	if tx.Error != nil {
-		t.Fatalf("failed to query jsonb column: %v", tx.Error)
-	}
-	assert.Equal(t, "value", keyValue)
 }
