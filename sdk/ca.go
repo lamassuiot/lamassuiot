@@ -237,6 +237,24 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 	return response, nil
 }
 
+func (cli *httpCAClient) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
+	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/reissue", nil, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+		400: {
+			errs.ErrCAAlreadyRevoked,
+			errs.ErrCAExpired,
+			errs.ErrValidateBadRequest,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
 	url := cli.baseUrl + "/v1/cas/" + input.CAID
 

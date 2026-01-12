@@ -78,18 +78,6 @@ func TestCAEventPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateCertificate with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
-			},
-		},
-		{
-			name: "CreateCertificate without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
-			},
-		},
-		{
 			name: "ImportCertificate with errors - Not fire event",
 			test: func(t *testing.T) {
 				caWithErrors(t, "ImportCertificate", services.ImportCertificateInput{}, models.EventImportCACertificateKey, &models.Certificate{})
@@ -222,6 +210,24 @@ func TestCAEventPublisher(t *testing.T) {
 			name: "UpdateCAProfile without errors - fire event",
 			test: func(t *testing.T) {
 				caWithoutErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
+					func(mockCAService *svcmock.MockCAService) {
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
+					})
+			},
+		},
+		{
+			name: "ReissueCA with errors - Not fire event",
+			test: func(t *testing.T) {
+				caWithErrors(t, "ReissueCA", services.ReissueCAInput{}, models.EventReissueCAKey, &models.CACertificate{},
+					func(mockCAService *svcmock.MockCAService) {
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
+					})
+			},
+		},
+		{
+			name: "ReissueCA without errors - fire event",
+			test: func(t *testing.T) {
+				caWithoutErrors(t, "ReissueCA", services.ReissueCAInput{}, models.EventReissueCAKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})

@@ -86,6 +86,14 @@ func (mw CAAuditEventPublisher) UpdateCAMetadata(ctx context.Context, input serv
 	return mw.next.UpdateCAMetadata(ctx, input)
 }
 
+func (mw CAAuditEventPublisher) ReissueCA(ctx context.Context, input services.ReissueCAInput) (output *models.CACertificate, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventReissueCAKey, input, err, output)
+	}()
+
+	return mw.next.ReissueCA(ctx, input)
+}
+
 func (mw CAAuditEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteCAKey, input, err, map[string]any{})
@@ -99,14 +107,6 @@ func (mw CAAuditEventPublisher) SignCertificate(ctx context.Context, input servi
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventSignCertificateKey, input, err, output)
 	}()
 	return mw.next.SignCertificate(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateCertificateKey, input, err, output)
-	}()
-
-	return mw.next.CreateCertificate(ctx, input)
 }
 
 func (mw CAAuditEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
