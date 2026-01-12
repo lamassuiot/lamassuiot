@@ -63,3 +63,134 @@ func TestFilterQuery_DMSCreationDate(t *testing.T) {
 		t.Fatalf("expected operation DateAfter, got %v", f.FilterOperation)
 	}
 }
+
+func TestFilterQuery_JsonFilter_SimpleJsonPath(t *testing.T) {
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	q.Add("filter", "metadata[jsonpath]$.environment")
+	req.URL.RawQuery = q.Encode()
+
+	qp := FilterQuery(req, resources.KMSFilterableFields)
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	if len(qp.Filters) != 1 {
+		t.Fatalf("expected 1 filter, got %d", len(qp.Filters))
+	}
+
+	f := qp.Filters[0]
+	if f.Field != "metadata" {
+		t.Fatalf("expected field 'metadata', got '%s'", f.Field)
+	}
+	if f.Value != "$.environment" {
+		t.Fatalf("expected value '$.environment', got '%s'", f.Value)
+	}
+	if f.FilterOperation != resources.JsonPathExpression {
+		t.Fatalf("expected operation JsonPathExpression, got %v", f.FilterOperation)
+	}
+}
+
+func TestFilterQuery_JsonFilter_ComplexJsonPathWithURLEncoding(t *testing.T) {
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	// JSONPath expression: $.tags[?(@.key == "production")]
+	// URL-encoded: %24.tags%5B%3F%28%40.key%20%3D%3D%20%22production%22%29%5D
+	q.Add("filter", "metadata[jsonpath]%24.tags%5B%3F%28%40.key%20%3D%3D%20%22production%22%29%5D")
+	req.URL.RawQuery = q.Encode()
+
+	qp := FilterQuery(req, resources.KMSFilterableFields)
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	if len(qp.Filters) != 1 {
+		t.Fatalf("expected 1 filter, got %d", len(qp.Filters))
+	}
+
+	f := qp.Filters[0]
+	if f.Field != "metadata" {
+		t.Fatalf("expected field 'metadata', got '%s'", f.Field)
+	}
+	expectedValue := `$.tags[?(@.key == "production")]`
+	if f.Value != expectedValue {
+		t.Fatalf("expected value '%s', got '%s'", expectedValue, f.Value)
+	}
+	if f.FilterOperation != resources.JsonPathExpression {
+		t.Fatalf("expected operation JsonPathExpression, got %v", f.FilterOperation)
+	}
+}
+
+func TestFilterQuery_JsonFilter_InvalidOperand(t *testing.T) {
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	// Use an invalid operand (not "jsonpath")
+	q.Add("filter", "metadata[eq]somevalue")
+	req.URL.RawQuery = q.Encode()
+
+	qp := FilterQuery(req, resources.KMSFilterableFields)
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	// Filter is added even with invalid operand, but with UnspecifiedFilter operation
+	if len(qp.Filters) != 1 {
+		t.Fatalf("expected 1 filter, got %d", len(qp.Filters))
+	}
+
+	f := qp.Filters[0]
+	if f.Field != "metadata" {
+		t.Fatalf("expected field 'metadata', got '%s'", f.Field)
+	}
+	if f.Value != "somevalue" {
+		t.Fatalf("expected value 'somevalue', got '%s'", f.Value)
+	}
+	if f.FilterOperation != resources.UnspecifiedFilter {
+		t.Fatalf("expected operation UnspecifiedFilter (0), got %v", f.FilterOperation)
+	}
+}
+
+func TestFilterQuery_JsonFilter_MultipleJsonPaths(t *testing.T) {
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	q.Add("filter", "metadata[jsonpath]$.environment")
+	q.Add("filter", "metadata[jsonpath]$.region")
+	req.URL.RawQuery = q.Encode()
+
+	qp := FilterQuery(req, resources.KMSFilterableFields)
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	if len(qp.Filters) != 2 {
+		t.Fatalf("expected 2 filters, got %d", len(qp.Filters))
+	}
+
+	// Check first filter
+	f1 := qp.Filters[0]
+	if f1.Field != "metadata" {
+		t.Fatalf("expected field 'metadata', got '%s'", f1.Field)
+	}
+	if f1.Value != "$.environment" {
+		t.Fatalf("expected value '$.environment', got '%s'", f1.Value)
+	}
+	if f1.FilterOperation != resources.JsonPathExpression {
+		t.Fatalf("expected operation JsonPathExpression, got %v", f1.FilterOperation)
+	}
+
+	// Check second filter
+	f2 := qp.Filters[1]
+	if f2.Field != "metadata" {
+		t.Fatalf("expected field 'metadata', got '%s'", f2.Field)
+	}
+	if f2.Value != "$.region" {
+		t.Fatalf("expected value '$.region', got '%s'", f2.Value)
+	}
+	if f2.FilterOperation != resources.JsonPathExpression {
+		t.Fatalf("expected operation JsonPathExpression, got %v", f2.FilterOperation)
+	}
+}
