@@ -1149,9 +1149,10 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	idSlot := device.IdentitySlot
 	if idSlot == nil {
 		idSlot = &models.Slot[string]{
-			Status:        models.SlotActive,
-			ActiveVersion: 0,
-			SecretType:    models.X509SlotProfileType,
+			Status:         models.SlotActive,
+			ActiveVersion:  0,
+			SecretType:     models.X509SlotProfileType,
+			ExpirationDate: &crt.ValidTo,
 			Secrets: map[int]string{
 				0: crt.SerialNumber,
 			},
@@ -1164,6 +1165,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	} else {
 		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
 		idSlot.Status = models.SlotActive
+		idSlot.ExpirationDate = &crt.ValidTo
 		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
 
 		idSlot.Events[time.Now()] = models.DeviceEvent{
