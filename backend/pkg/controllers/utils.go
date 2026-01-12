@@ -16,6 +16,8 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 		PageSize:     25,
 	}
 
+	var err error
+
 	if len(r.URL.RawQuery) > 0 {
 		values := r.URL.Query()
 		for k, v := range values {
@@ -129,8 +131,13 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 						case resources.JsonFilterFieldType:
 							if operand == "jsonpath" {
 								filterOperand = resources.JsonPathExpression
-								arg, _ = url.QueryUnescape(arg)
+								arg, err = url.QueryUnescape(arg)
+								if err != nil {
+									continue
+								}
 							}
+						default:
+							continue
 						}
 						if exists {
 							queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
