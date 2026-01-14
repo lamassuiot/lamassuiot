@@ -150,4 +150,64 @@ func TestDMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20250612100530_relational_dms")
 	}
+
+	CleanAllTables(t, logger, con)
+
+	migrationTest_DMS_20251217120000_metadata_text_to_jsonb(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20251217120000_metadata_text_to_jsonb")
+	}
+}
+
+func migrationTest_DMS_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert test DMS entries with text metadata before migration
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-with-metadata', 'DMS With Metadata', '{"dms_key":"dms_value","priority":1}', '2024-11-25 10:46:28.914', '{}');
+	`)
+
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-empty-metadata', 'DMS Empty Metadata', '', '2024-11-25 10:46:28.914', '{}');
+	`)
+
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-null-metadata', 'DMS Null Metadata', NULL, '2024-11-25 10:46:28.914', '{}');
+	`)
+
+	// Apply migration
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	// Verify DMS with metadata
+	var metadata1 string
+	tx := con.Table("dms").Where("id = 'dms-with-metadata'").Select("metadata").Find(&metadata1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select dms row: %v", tx.Error)
+	}
+	assert.Equal(t, `{"dms_key": "dms_value", "priority": 1}`, metadata1)
+
+	// Verify DMS with empty metadata becomes empty object
+	var metadata2 string
+	tx = con.Table("dms").Where("id = 'dms-empty-metadata'").Select("metadata").Find(&metadata2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select dms row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, metadata2)
+
+	// Verify DMS with NULL metadata becomes empty object
+	var metadata3 string
+	tx = con.Table("dms").Where("id = 'dms-null-metadata'").Select("metadata").Find(&metadata3)
+	if tx.Error != nil {
+		t.Fatalf("failed to select dms row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, metadata3)
+
+	// Verify that the column type is jsonb by trying to use jsonb operators
+	var keyValue string
+	tx = con.Raw("SELECT metadata->>'dms_key' FROM dms WHERE id = 'dms-with-metadata'").Scan(&keyValue)
+	if tx.Error != nil {
+		t.Fatalf("failed to query jsonb column: %v", tx.Error)
+	}
+	assert.Equal(t, "dms_value", keyValue)
 }

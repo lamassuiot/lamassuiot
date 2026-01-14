@@ -407,6 +407,8 @@ func encodeQueryParams(query url.Values, queryParams *resources.QueryParameters)
 			op = "eq"
 		case resources.EnumNotEqual:
 			op = "ne"
+		case resources.JsonPathExpression:
+			op = "jsonpath"
 		default:
 			continue // skip unsupported operations
 		}
