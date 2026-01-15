@@ -15,7 +15,7 @@ type DeviceManagerRepo interface {
 	Update(ctx context.Context, device *models.Device) (*models.Device, error)
 	Insert(ctx context.Context, device *models.Device) (*models.Device, error)
 	Delete(ctx context.Context, ID string) error
-	
+
 	// DeviceGroups returns the device groups repository
 	DeviceGroups() DeviceGroupsRepo
 }
