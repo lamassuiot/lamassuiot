@@ -478,15 +478,15 @@ func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, in
 		}
 	}
 
-	// Check for circular parent references
+	// Verify parent exists and check for circular references
 	if input.ParentID != nil {
-		err := svc.validateNoCircularReference(ctx, input.ID, *input.ParentID)
-		if err != nil {
-			lFunc.Errorf("circular reference validation failed: %s", err)
-			return nil, err
+		// First check for self-reference (circular reference to itself)
+		if *input.ParentID == input.ID {
+			lFunc.Errorf("device group cannot be its own parent")
+			return nil, errs.ErrDeviceGroupCircularReference
 		}
 
-		// Verify parent exists
+		// Then verify parent exists
 		exists, _, err := svc.devicesStorage.DeviceGroups().SelectByID(ctx, *input.ParentID)
 		if err != nil {
 			lFunc.Errorf("could not verify parent group existence: %s", err)
@@ -495,6 +495,13 @@ func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, in
 		if !exists {
 			lFunc.Errorf("parent group with ID '%s' does not exist", *input.ParentID)
 			return nil, errs.ErrDeviceGroupNotFound
+		}
+
+		// Finally check for circular parent references in the hierarchy
+		err = svc.validateNoCircularReference(ctx, input.ID, *input.ParentID)
+		if err != nil {
+			lFunc.Errorf("circular reference validation failed: %s", err)
+			return nil, err
 		}
 	}
 
