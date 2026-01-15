@@ -182,12 +182,43 @@ func (db *postgresDBQuerier[E]) baseQuery(ctx context.Context) *gorm.DB {
 
 *   **Impact**: The system is now technically capable of multi-tenancy. If an administrator manually creates records with `tenant_id='tenant-b'` in the DB and sends a request with `X-Lamassu-Tenant-ID: tenant-b`, they will see isolated data.
 
-### 5.3 Agent Prompt
+### 5.3 Event Bus Propagation
+The system relies heavily on asynchronous events (CloudEvents). We must ensure the `tenant_id` context is preserved across the event bus boundaries. To support scalable event routing, we will utilize the **CloudEvents Partitioning Extension**.
+
+1.  **Event Publishing**:
+    *   Modify `core/pkg/helpers/events.go:BuildCloudEvent` to check for `TenantID` in the context.
+    *   If present, map it to the `partitionkey` extension: `event.SetExtension("partitionkey", tid)`.
+
+2.  **Event Handling**:
+    *   Modify `core/pkg/services/eventhandling/handler.go:HandleMessage`.
+    *   After parsing the CloudEvent, extract the `partitionkey` extension.
+    *   Inject it back into the `context.Context` (as `TenantID`) passed to the specific event handlers.
+    *   This ensures that background jobs triggered by events (e.g. CRL generation) operate in the correct tenant context.
+
+### 5.4 Background Jobs Impact
+Background jobs like `CryptoMonitor` (checking certificate expiration) and `VACrlMonitor` (checking CRL validity) run autonomously with a background context.
+*   **Problem**: `helpers.InitContext()` creates a context without a `tenant_id`. In Phase 2, this would resolve to "default" (or fail strict checks in Phase 4), causing the job to ignore all other tenants.
+*   **Solution**: Update jobs to iterate over all active tenants.
+    *   Since we lack a dedicated `tenants` table in this phase, the job will query distinct `tenant_id`s from the relevant table (e.g., `ca_certificates`).
+    *   The job execution loop will become:
+        ```go
+        tenants := svc.getAllTenantIDs()
+        for _, tid := range tenants {
+            ctx := context.WithValue(baseCtx, TenantIDKey, tid)
+            // perform scan for this tenant
+        }
+        ```
+
+### 5.5 Agent Prompt
 > **Task**: Implement Phase 2 (Context Propagation)
 >
 > 1.  **Middleware**: Create `backend/pkg/middlewares/tenant.go`. Implement `TenantMiddleware` that checks for header `X-Lamassu-Tenant-ID` and sets it in context. Default to "default".
 > 2.  **Storage Update**: Modify `engines/storage/postgres/utils.go` to retrieve `tenant_id` from `context.Context` instead of using the hardcoded constant from Phase 1.
-> 3.  **Service Context**: Ensure all service interfaces in `backend/pkg/services` are correctly passing `ctx` down to the repository layer (this should already be the case).
+> 3.  **Event Bus**: 
+>     *   Update `core/pkg/helpers/events.go` to set `partitionkey` extension (with tenant_id value) in `BuildCloudEvent`.
+>     *   Update `core/pkg/services/eventhandling/handler.go` to extract `partitionkey` from event and put it into context as `TenantID`.
+> 4.  **Jobs**: Update `backend/pkg/jobs/` (`CryptoMonitor`, `VACrlMonitor`) to discover all tenants (e.g. distinct query) and loop through them, setting the Tenant ID in the context for each iteration.
+> 5.  **Service Context**: Ensure all service interfaces in `backend/pkg/services` are correctly passing `ctx` down to the repository layer.
 
 ---
 
@@ -341,19 +372,56 @@ With multiple tenants active, we may now need to revisit database constraints.
 
 ---
 
-## 8. Verification Plan
+## 9. Phase 5: Tenant Management Service
+
+In the final phase, we introduce a dedicated service to manage the lifecycle of tenants, moving away from ad-hoc tenant creation via unique constraints or distinct queries.
+
+### 9.1 Tenant Manager Service (`/backend/cmd/tenant-manager`)
+A new microservice responsible for:
+*   **Tenant Registry**: storing metadata (name, status, technical contacts, quotas) for each tenant.
+*   **Onboarding**: Automating the provisioning of initial resources (e.g., default CA, Key aliases) when a new tenant is created.
+*   **Offboarding**: Handling cleanup/archival of tenant data.
+
+### 9.2 Architecture Update
+*   **Database**: A new `tenants` database or table (global scope).
+*   **Integration**: Background jobs (from Phase 2) will now query this service (or shared DB) to get the authoritative list of active tenants, replacing the `SELECT DISTINCT tenant_id` workaround.
+
+### 9.3 API Definition
+Exposed under `/v2/sys/tenants`:
+*   `POST /tenants`: Create new tenant.
+*   `GET /tenants`: List all tenants.
+*   `GET /tenants/:id`: Get details.
+*   `PUT /tenants/:id/status`: Suspend/Activate.
+
+### 9.4 Agent Prompt
+> **Task**: Implement Phase 5 (Tenant Management)
+>
+> 1.  **Service**: Scaffold a new microservice `tenant-manager` in `backend/cmd` and `backend/pkg/services`.
+> 2.  **Model**: Define `Tenant` model in `core/pkg/models`.
+> 3.  **API**: Implement CRUD endpoints.
+> 4.  **Integration**: Update `CryptoMonitor` and `VACrlMonitor` to fetch the tenant list from this new source of truth.
+
+---
+
+## 10. Verification Plan
 
 1.  **Migration Test**: Run existing migration tests. Verify `tenant_id` column exists and is populated with "default".
 2.  **Regression Test**: Run the full suite of integration tests (`backend/test/...`). The system should behave exactly as before.
 3.  **Data Persistence**: Manually inspect the database after running the application to ensure new records have `tenant_id='default'`.
 
-## 9. Rollback Strategy
+## 10. Verification Plan
+
+1.  **Migration Test**: Run existing migration tests. Verify `tenant_id` column exists and is populated with "default".
+2.  **Regression Test**: Run the full suite of integration tests (`backend/test/...`). The system should behave exactly as before.
+3.  **Data Persistence**: Manually inspect the database after running the application to ensure new records have `tenant_id='default'`.
+
+## 11. Rollback Strategy
 
 Since we use `DEFAULT 'default'`, the column addition is non-destructive.
 *   **Down Migration**: Drop the `tenant_id` column.
 *   **Code Revert**: Revert git changes.
 
-## 10. Next Steps
+## 12. Next Steps
 
 Once Phase 1 is merged and deployed:
 1.  Start Phase 2: Create a `TenantContext` middleware.
