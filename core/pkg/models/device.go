@@ -70,3 +70,21 @@ type DevicesStats struct {
 	TotalDevices  int                  `json:"total"`
 	DevicesStatus map[DeviceStatus]int `json:"status_distribution"`
 }
+
+// DeviceGroupFilterOption represents a filter criterion for dynamic device group membership.
+// This is a copy of resources.FilterOption to avoid circular dependencies.
+type DeviceGroupFilterOption struct {
+	Field           string `json:"Field"`
+	FilterOperation int    `json:"FilterOperation"`
+	Value           string `json:"Value"`
+}
+
+type DeviceGroup struct {
+	ID          string                    `json:"id" gorm:"primaryKey"`
+	Name        string                    `json:"name" gorm:"uniqueIndex"`
+	Description string                    `json:"description"`
+	ParentID    *string                   `json:"parent_id,omitempty" gorm:"column:parent_id"`
+	Criteria    []DeviceGroupFilterOption `json:"criteria" gorm:"serializer:json"`
+	CreatedAt   time.Time                 `json:"created_at"`
+	UpdatedAt   time.Time                 `json:"updated_at"`
+}
