@@ -82,8 +82,8 @@ type DeleteDeviceInput struct {
 // Device Group Input/Output Structs
 
 type CreateDeviceGroupInput struct {
-	ID          string                            `validate:"required"`
-	Name        string                            `validate:"required"`
+	ID          string `validate:"required"`
+	Name        string `validate:"required"`
 	Description string
 	ParentID    *string
 	Criteria    []models.DeviceGroupFilterOption `validate:"required"`
