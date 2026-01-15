@@ -114,3 +114,85 @@ func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services
 		400: {errs.ErrValidateBadRequest},
 	})
 }
+
+// ============================================================================
+// Device Group Operations
+// ============================================================================
+
+func (cli *deviceManagerClient) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (*models.DeviceGroup, error) {
+	response, err := Post[*models.DeviceGroup](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups", resources.CreateDeviceGroupBody{
+		ID:          input.ID,
+		Name:        input.Name,
+		Description: input.Description,
+		ParentID:    input.ParentID,
+		Criteria:    input.Criteria,
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest, errs.ErrDeviceGroupCircularReference},
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *deviceManagerClient) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (*models.DeviceGroup, error) {
+	response, err := Put[*models.DeviceGroup](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, resources.UpdateDeviceGroupBody{
+		Name:        input.Name,
+		Description: input.Description,
+		ParentID:    input.ParentID,
+		Criteria:    input.Criteria,
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest, errs.ErrDeviceGroupCircularReference},
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *deviceManagerClient) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) error {
+	return Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+		400: {errs.ErrValidateBadRequest},
+	})
+}
+
+func (cli *deviceManagerClient) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
+	response, err := Get[models.DeviceGroup](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, nil, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+func (cli *deviceManagerClient) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
+	url := cli.baseUrl + "/v1/device-groups"
+
+	return IterGet[models.DeviceGroup, *resources.GetDeviceGroupsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+func (cli *deviceManagerClient) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
+	url := cli.baseUrl + "/v1/device-groups/" + input.GroupID + "/devices"
+
+	return IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+}
+
+func (cli *deviceManagerClient) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
+	response, err := Get[models.DevicesStats](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.GroupID+"/stats", nil, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
