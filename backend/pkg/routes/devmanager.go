@@ -29,7 +29,7 @@ func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManag
 		deviceGroupsRoutes.GET("/:id", routes.GetDeviceGroupByID)
 		deviceGroupsRoutes.PUT("/:id", routes.UpdateDeviceGroup)
 		deviceGroupsRoutes.DELETE("/:id", routes.DeleteDeviceGroup)
-		deviceGroupsRoutes.GET("/:group_id/devices", routes.GetDevicesByGroup)
-		deviceGroupsRoutes.GET("/:group_id/stats", routes.GetDeviceGroupStats)
+		deviceGroupsRoutes.GET("/:id/devices", routes.GetDevicesByGroup)
+		deviceGroupsRoutes.GET("/:id/stats", routes.GetDeviceGroupStats)
 	}
 }

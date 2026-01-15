@@ -436,7 +436,7 @@ func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {
 
 func (r *devManagerHttpRoutes) GetDevicesByGroup(ctx *gin.Context) {
 	type uriParams struct {
-		GroupID string `uri:"group_id" binding:"required"`
+		GroupID string `uri:"id" binding:"required"`
 	}
 
 	var params uriParams
@@ -479,7 +479,7 @@ func (r *devManagerHttpRoutes) GetDevicesByGroup(ctx *gin.Context) {
 
 func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 	type uriParams struct {
-		GroupID string `uri:"group_id" binding:"required"`
+		GroupID string `uri:"id" binding:"required"`
 	}
 
 	var params uriParams
