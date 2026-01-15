@@ -17,6 +17,15 @@ type DeviceManagerService interface {
 	UpdateDeviceIdentitySlot(ctx context.Context, input UpdateDeviceIdentitySlotInput) (*models.Device, error)
 	UpdateDeviceMetadata(ctx context.Context, input UpdateDeviceMetadataInput) (*models.Device, error)
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) error
+
+	// Device Group operations
+	CreateDeviceGroup(ctx context.Context, input CreateDeviceGroupInput) (*models.DeviceGroup, error)
+	UpdateDeviceGroup(ctx context.Context, input UpdateDeviceGroupInput) (*models.DeviceGroup, error)
+	DeleteDeviceGroup(ctx context.Context, input DeleteDeviceGroupInput) error
+	GetDeviceGroupByID(ctx context.Context, input GetDeviceGroupByIDInput) (*models.DeviceGroup, error)
+	GetDeviceGroups(ctx context.Context, input GetDeviceGroupsInput) (string, error)
+	GetDevicesByGroup(ctx context.Context, input GetDevicesByGroupInput) (string, error)
+	GetDeviceGroupStats(ctx context.Context, input GetDeviceGroupStatsInput) (*models.DevicesStats, error)
 }
 
 type GetDevicesStatsInput struct {
@@ -68,4 +77,43 @@ type UpdateDeviceIdentitySlotInput struct {
 
 type DeleteDeviceInput struct {
 	ID string `validate:"required"`
+}
+
+// Device Group Input/Output Structs
+
+type CreateDeviceGroupInput struct {
+	ID          string                            `validate:"required"`
+	Name        string                            `validate:"required"`
+	Description string
+	ParentID    *string
+	Criteria    []models.DeviceGroupFilterOption `validate:"required"`
+}
+
+type UpdateDeviceGroupInput struct {
+	ID          string `validate:"required"`
+	Name        string
+	Description string
+	ParentID    *string
+	Criteria    []models.DeviceGroupFilterOption
+}
+
+type DeleteDeviceGroupInput struct {
+	ID string `validate:"required"`
+}
+
+type GetDeviceGroupByIDInput struct {
+	ID string `validate:"required"`
+}
+
+type GetDeviceGroupsInput struct {
+	resources.ListInput[models.DeviceGroup]
+}
+
+type GetDevicesByGroupInput struct {
+	GroupID string `validate:"required"`
+	resources.ListInput[models.Device]
+}
+
+type GetDeviceGroupStatsInput struct {
+	GroupID string `validate:"required"`
 }
