@@ -79,3 +79,44 @@ func (mw *DeviceAuditEventPublisher) DeleteDevice(ctx context.Context, input ser
 	}()
 	return mw.next.DeleteDevice(ctx, input)
 }
+
+// ============================================================================
+// Device Group Operations
+// ============================================================================
+
+func (mw *DeviceAuditEventPublisher) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (output *models.DeviceGroup, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateDeviceGroupKey, input, err, output)
+	}()
+	return mw.next.CreateDeviceGroup(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (output *models.DeviceGroup, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateDeviceGroupKey, input, err, output)
+	}()
+	return mw.next.UpdateDeviceGroup(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) (err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteDeviceGroupKey, input, err, nil)
+	}()
+	return mw.next.DeleteDeviceGroup(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
+	return mw.next.GetDeviceGroupByID(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
+	return mw.next.GetDeviceGroups(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
+	return mw.next.GetDevicesByGroup(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
+	return mw.next.GetDeviceGroupStats(ctx, input)
+}
