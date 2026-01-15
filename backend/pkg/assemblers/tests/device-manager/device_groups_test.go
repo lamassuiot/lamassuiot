@@ -68,7 +68,7 @@ func TestCreateDeviceGroup(t *testing.T) {
 				ID:          uuid.NewString(),
 				Name:        "Self Reference Group",
 				Description: "Group referencing itself",
-				ParentID:    stringPtr(""),  // Will be set to ID below
+				ParentID:    stringPtr(""), // Will be set to ID below
 				Criteria:    []models.DeviceGroupFilterOption{},
 			},
 			expectError: true,

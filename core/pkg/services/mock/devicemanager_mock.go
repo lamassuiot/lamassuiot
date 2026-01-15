@@ -56,3 +56,40 @@ func (dm *MockDeviceManagerService) DeleteDevice(ctx context.Context, input serv
 	args := dm.Called(ctx, input)
 	return args.Error(0)
 }
+
+// Device Group Methods
+
+func (dm *MockDeviceManagerService) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (*models.DeviceGroup, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.DeviceGroup), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (*models.DeviceGroup, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.DeviceGroup), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) error {
+	args := dm.Called(ctx, input)
+	return args.Error(0)
+}
+
+func (dm *MockDeviceManagerService) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.DeviceGroup), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
+	args := dm.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
+	args := dm.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.DevicesStats), args.Error(1)
+}
