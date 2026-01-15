@@ -11,8 +11,8 @@ import (
 )
 
 type PostgresDeviceManagerStore struct {
-	db             *gorm.DB
-	querier        *postgresDBQuerier[models.Device]
+	db               *gorm.DB
+	querier          *postgresDBQuerier[models.Device]
 	deviceGroupsRepo storage.DeviceGroupsRepo
 }
 
