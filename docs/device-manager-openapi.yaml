@@ -18,6 +18,8 @@ servers:
 tags:
   - name: Devices
     description: Device lifecycle operations
+  - name: Device Groups
+    description: Dynamic device grouping with hierarchical filtering
   - name: Stats
     description: Device statistics
 
@@ -242,6 +244,301 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /device-groups:
+    get:
+      tags: [Device Groups]
+      summary: List device groups
+      description: |
+        Retrieve all device groups with optional pagination, sorting, and filtering.
+        Device groups can be organized hierarchically with parent-child relationships.
+      operationId: getDeviceGroups
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/DeviceGroupFilter'
+      responses:
+        '200':
+          description: Device groups list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDeviceGroupsResponse'
+              examples:
+                groups-list:
+                  summary: List of device groups
+                  value:
+                    next: ""
+                    list:
+                      - id: "550e8400-e29b-41d4-a716-446655440000"
+                        name: "Production Devices"
+                        description: "All production environment devices"
+                        parent_id: null
+                        criteria:
+                          - field: "tags"
+                            filter_operation: 9
+                            value: "production"
+                        created_at: "2026-01-15T10:00:00Z"
+                        updated_at: "2026-01-15T10:00:00Z"
+                      - id: "660e8400-e29b-41d4-a716-446655440001"
+                        name: "Production Sensors"
+                        description: "Production sensors only"
+                        parent_id: "550e8400-e29b-41d4-a716-446655440000"
+                        criteria:
+                          - field: "tags"
+                            filter_operation: 9
+                            value: "sensor"
+                        created_at: "2026-01-15T11:00:00Z"
+                        updated_at: "2026-01-15T11:00:00Z"
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Device Groups]
+      summary: Create device group
+      description: |
+        Create a new device group with optional parent and filter criteria.
+        Criteria are filter expressions that determine group membership.
+        Groups can form hierarchies by specifying a parent_id.
+      operationId: createDeviceGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceGroupBody'
+            examples:
+              root-group:
+                summary: Root group with tag filter
+                value:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  name: "Production Devices"
+                  description: "All production environment devices"
+                  criteria:
+                    - field: "tags"
+                      filter_operation: 9
+                      value: "production"
+              nested-group:
+                summary: Nested group with multiple criteria
+                value:
+                  id: "660e8400-e29b-41d4-a716-446655440001"
+                  name: "Active Production Sensors"
+                  description: "Active sensors in production"
+                  parent_id: "550e8400-e29b-41d4-a716-446655440000"
+                  criteria:
+                    - field: "tags"
+                      filter_operation: 9
+                      value: "sensor"
+                    - field: "status"
+                      filter_operation: 20
+                      value: "ACTIVE"
+      responses:
+        '201':
+          description: Device group created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceGroup'
+        '400':
+          description: Bad request - invalid criteria, circular reference, or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid-field:
+                  summary: Invalid filter field
+                  value:
+                    err: "invalid filter field 'invalid_field' in criteria"
+                circular-ref:
+                  summary: Circular reference detected
+                  value:
+                    err: "circular parent reference detected"
+        '404':
+          description: Parent group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /device-groups/{id}:
+    get:
+      tags: [Device Groups]
+      summary: Get device group by ID
+      description: Retrieve a specific device group by its identifier.
+      operationId: getDeviceGroupByID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Device group identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Device group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceGroup'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Device Groups]
+      summary: Update device group
+      description: |
+        Update an existing device group's properties.
+        Cannot change the group ID. Parent changes are validated for circular references.
+      operationId: updateDeviceGroup
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Device group identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeviceGroupBody'
+            examples:
+              update-criteria:
+                summary: Update group criteria
+                value:
+                  name: "Production Devices (Updated)"
+                  description: "Updated description"
+                  criteria:
+                    - field: "tags"
+                      filter_operation: 9
+                      value: "production"
+                    - field: "status"
+                      filter_operation: 20
+                      value: "ACTIVE"
+      responses:
+        '200':
+          description: Device group updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceGroup'
+        '400':
+          description: Bad request - invalid criteria or circular reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Device Groups]
+      summary: Delete device group
+      description: |
+        Delete a device group. Child groups are not automatically deleted.
+        If a group has children, consider reassigning or deleting them first.
+      operationId: deleteDeviceGroup
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Device group identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204': { description: Device group deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /device-groups/{id}/devices:
+    get:
+      tags: [Device Groups]
+      summary: Get devices in group
+      description: |
+        Retrieve all devices matching the group's filter criteria.
+        Criteria are inherited and composed from parent groups in the hierarchy.
+        Supports additional filtering, pagination, and sorting.
+      operationId: getDevicesByGroup
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Device group identifier
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Devices matching group criteria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDevicesResponse'
+              examples:
+                filtered-devices:
+                  summary: Devices in production sensors group
+                  value:
+                    next: ""
+                    list:
+                      - id: "dev-001"
+                        tags: ["production", "sensor", "temperature"]
+                        status: "ACTIVE"
+                        icon: "thermometer"
+                        icon_color: "#FF5733"
+                        creation_timestamp: "2026-01-10T08:00:00Z"
+                        metadata: { "location": "warehouse-a" }
+                        dms_owner: "dms-prod"
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /device-groups/{id}/stats:
+    get:
+      tags: [Device Groups]
+      summary: Get device group statistics
+      description: |
+        Retrieve statistics for devices matching the group's filter criteria.
+        Returns total device count and distribution across all status types.
+        Criteria are inherited from parent groups in the hierarchy.
+      operationId: getDeviceGroupStats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Device group identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Device group statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceGroupStats'
+              examples:
+                group-stats:
+                  summary: Statistics for production sensors
+                  value:
+                    total_devices: 150
+                    devices_status:
+                      NO_IDENTITY: 10
+                      ACTIVE: 100
+                      RENEWAL_WINDOW: 15
+                      ABOUT_TO_EXPIRE: 5
+                      EXPIRED: 8
+                      REVOKED: 7
+                      DECOMMISSIONED: 5
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
 components:
   parameters:
     DeviceId:
@@ -325,6 +622,27 @@ components:
         - Multiple filters: `filter=dms_owner[eq]:dms-prod&filter=tags[contains]:server`
         - Date range: `filter=creation_timestamp[af]:2024-01-01T00:00:00Z`
 
+    DeviceGroupFilter:
+      name: filter
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Filter expression for device group search. Supports filtering by group properties.
+        
+        **Supported Fields:**
+        - `id` (string): Group identifier
+        - `name` (string): Group name
+        - `parent_id` (string): Parent group identifier
+        - `created_at` (date): Group creation time
+        - `updated_at` (date): Group last update time
+        
+        Uses the same operators as device filters. Examples:
+        - Filter by name: `filter=name[eq_ic]:production`
+        - Filter root groups: `filter=parent_id[is_null]:true`
+        - Filter by parent: `filter=parent_id[eq]:550e8400-e29b-41d4-a716-446655440000`
+
   responses:
     BadRequest:
       description: Invalid request
@@ -397,6 +715,175 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Device'
+
+    CreateDeviceGroupBody:
+      type: object
+      required:
+        - id
+        - name
+        - criteria
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the device group
+        name:
+          type: string
+          description: Human-readable name for the group
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          description: Optional description of the group's purpose
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent group ID for hierarchical organization
+        criteria:
+          type: array
+          description: Filter criteria to determine group membership
+          items:
+            $ref: '#/components/schemas/DeviceGroupFilterOption'
+      example:
+        id: "550e8400-e29b-41d4-a716-446655440000"
+        name: "Production Devices"
+        description: "All production environment devices"
+        criteria:
+          - field: "tags"
+            filter_operation: 9
+            value: "production"
+
+    UpdateDeviceGroupBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Updated name for the group
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          description: Updated description
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Updated parent group ID (validated for circular references)
+        criteria:
+          type: array
+          description: Updated filter criteria
+          items:
+            $ref: '#/components/schemas/DeviceGroupFilterOption'
+      example:
+        name: "Production Devices (Updated)"
+        description: "Updated description"
+        criteria:
+          - field: "tags"
+            filter_operation: 9
+            value: "production"
+
+    DeviceGroupFilterOption:
+      type: object
+      required:
+        - field
+        - filter_operation
+        - value
+      properties:
+        field:
+          type: string
+          description: Device field to filter on (must be a valid DeviceFilterableField)
+          enum:
+            - id
+            - dms_owner
+            - status
+            - tags
+            - creation_timestamp
+          example: "tags"
+        filter_operation:
+          type: integer
+          description: |
+            Filter operation type:
+            - 1: StringEqual - Exact string match
+            - 9: StringArrayContains - Array contains value
+            - 20: EnumEqual - Enum value match (for status)
+            - 22: JsonPathExpression - JSON path query (for metadata)
+          enum: [1, 9, 20, 22]
+          example: 9
+        value:
+          type: string
+          description: Value to compare against
+          example: "production"
+
+    DeviceGroup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceGroupFilterOption'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: "550e8400-e29b-41d4-a716-446655440000"
+        name: "Production Devices"
+        description: "All production environment devices"
+        parent_id: null
+        criteria:
+          - field: "tags"
+            filter_operation: 9
+            value: "production"
+        created_at: "2026-01-15T10:00:00Z"
+        updated_at: "2026-01-15T10:00:00Z"
+
+    GetDeviceGroupsResponse:
+      type: object
+      properties:
+        next:
+          type: string
+          description: Pagination bookmark for next page
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceGroup'
+
+    DeviceGroupStats:
+      type: object
+      properties:
+        total_devices:
+          type: integer
+          description: Total number of devices matching group criteria
+        devices_status:
+          type: object
+          description: Device count per status type
+          additionalProperties:
+            type: integer
+      example:
+        total_devices: 150
+        devices_status:
+          NO_IDENTITY: 10
+          ACTIVE: 100
+          RENEWAL_WINDOW: 15
+          ABOUT_TO_EXPIRE: 5
+          EXPIRED: 8
+          REVOKED: 7
+          DECOMMISSIONED: 5
+
 
     Device:
       type: object
