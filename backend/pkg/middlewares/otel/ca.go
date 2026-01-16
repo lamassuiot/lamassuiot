@@ -105,18 +105,18 @@ func (mw CAOTelTracer) DeleteCA(ctx context.Context, input services.DeleteCAInpu
 	return mw.next.DeleteCA(ctx, input)
 }
 
+func (mw CAOTelTracer) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.ReissueCA(ctx, input)
+}
+
 func (mw CAOTelTracer) SignCertificate(ctx context.Context, input services.SignCertificateInput) (output *models.Certificate, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 
 	return mw.next.SignCertificate(ctx, input)
-}
-
-func (mw CAOTelTracer) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
-	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
-	defer span.End()
-
-	return mw.next.CreateCertificate(ctx, input)
 }
 
 func (mw CAOTelTracer) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
