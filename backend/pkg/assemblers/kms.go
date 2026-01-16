@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
@@ -33,7 +34,13 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewKMSHTTPLayer(httpGrp, *kmsService)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	openApiContent, err := os.ReadFile(conf.OpenAPISpecPath)
+	if err != nil {
+		lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run KMS Service http server: %s", err)
 	}
