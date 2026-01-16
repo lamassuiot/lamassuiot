@@ -8,9 +8,9 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
@@ -18,7 +18,17 @@ func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
 
 	event.SetSpecVersion("1.0")
 	event.SetTime(time.Now())
-	event.SetID(goid.NewV4UUID().String())
+
+	// Use OTEL trace ID as event ID
+	spanCtx := trace.SpanFromContext(ctx).SpanContext()
+	if spanCtx.HasTraceID() {
+		event.SetID(fmt.Sprintf("%s-%s", spanCtx.TraceID().String(), spanCtx.SpanID().String()))
+		event.SetExtension("traceid", spanCtx.TraceID().String())
+		event.SetExtension("spanid", spanCtx.SpanID().String())
+	} else {
+		event.SetID("unknown")
+	}
+
 	event.SetData(cloudevents.ApplicationJSON, payload)
 
 	eventSource, ok := ctx.Value(core.LamassuContextKeySource).(string)

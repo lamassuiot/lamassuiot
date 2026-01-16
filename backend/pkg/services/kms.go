@@ -5,7 +5,6 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -23,6 +22,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -373,7 +373,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 	switch input.Algorithm {
 	case "RSA":
 		bits := input.Size
-		keyID, signer, err = engineInstance.CreateRSAPrivateKey(bits)
+		keyID, signer, err = engineInstance.CreateRSAPrivateKey(ctx, bits)
 		if err != nil {
 			lFunc.Errorf("error creating RSA private key: %s", err)
 			return nil, errors.New("failed to create RSA private key")
@@ -393,7 +393,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 			lFunc.Error("invalid ECDSA key size")
 			return nil, errors.New("invalid ECDSA key size")
 		}
-		keyID, signer, err = engineInstance.CreateECDSAPrivateKey(curve)
+		keyID, signer, err = engineInstance.CreateECDSAPrivateKey(ctx, curve)
 		if err != nil {
 			lFunc.Errorf("error creating ECDSA private key: %s", err)
 			return nil, err
@@ -770,6 +770,8 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		return nil, err
 	}
 
+	entropy := software.NewLamassuEntropy(ctx)
+
 	var signature []byte
 	if setup.IsRSA {
 		if digest == nil {
@@ -777,13 +779,13 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		}
 		if setup.IsPSS {
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: setup.Hash}
-			signature, err = setup.Signer.Sign(rand.Reader, digest, opts)
+			signature, err = setup.Signer.Sign(entropy, digest, opts)
 			if err != nil {
 				lFunc.Errorf("RSA-PSS Sign error: %s", err)
 				return nil, err
 			}
 		} else {
-			signature, err = setup.Signer.Sign(rand.Reader, digest, setup.Hash)
+			signature, err = setup.Signer.Sign(entropy, digest, setup.Hash)
 			if err != nil {
 				lFunc.Errorf("RSA Sign error: %s", err)
 				return nil, err
@@ -794,7 +796,7 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 			return nil, errors.New("digest is nil")
 		}
 
-		signature, err = setup.Signer.Sign(rand.Reader, digest, setup.Hash)
+		signature, err = setup.Signer.Sign(entropy, digest, setup.Hash)
 		if err != nil {
 			lFunc.Errorf("ECDSA Sign error: %s", err)
 			return nil, err

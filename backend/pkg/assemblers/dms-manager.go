@@ -1,6 +1,7 @@
 package assemblers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -14,6 +15,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -37,6 +39,8 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 }
 
 func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
+	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", conf.OtelConfig)
+
 	lSvc := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
 	lMessaging := chelpers.SetupLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")
 	lStorage := chelpers.SetupLogger(conf.Storage.LogLevel, "DMS Manager", "Storage")
