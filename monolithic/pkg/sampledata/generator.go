@@ -1011,6 +1011,15 @@ func PopulateSampleData(
 		}
 	}
 
+	// Enroll 10 devices by issuing certificates for them
+	if importedCAID != "" && deviceProfile != nil {
+		logger.Info("Enrolling 10 sample devices with certificates...")
+		err = enrollSampleDevices(ctx, logger, caService, dmsService, importedCAID, deviceProfile.ID, sampleDevices[:10])
+		if err != nil {
+			logger.Warnf("Could not enroll sample devices: %v", err)
+		}
+	}
+
 	logger.Info("Sample data population completed")
 	return nil
 }
@@ -1180,6 +1189,75 @@ func issueSampleCertificates(ctx context.Context, logger *logrus.Entry, caServic
 		}
 
 		logger.Infof("Successfully issued certificate: %s (Serial: %s)", certSpec.commonName, signedCert.SerialNumber)
+	}
+
+	return nil
+}
+
+// enrollSampleDevices enrolls devices by issuing certificates and binding them to the devices
+func enrollSampleDevices(ctx context.Context, logger *logrus.Entry, caService services.CAService, dmsService services.DMSManagerService, caID, profileID string, devices []struct {
+	id        string
+	tags      []string
+	icon      string
+	iconColor string
+	metadata  map[string]interface{}
+}) error {
+	for _, device := range devices {
+		logger.Infof("Enrolling device: %s", device.id)
+
+		// Generate a private key for the device certificate
+		privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			logger.Warnf("Failed to generate private key for device %s: %v", device.id, err)
+			continue
+		}
+
+		// Create a CSR for the device
+		csrTemplate := &x509.CertificateRequest{
+			Subject: pkix.Name{
+				CommonName:   device.id,
+				Organization: []string{"LamassuIoT Sample Devices"},
+			},
+		}
+
+		csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privKey)
+		if err != nil {
+			logger.Warnf("Failed to create CSR for device %s: %v", device.id, err)
+			continue
+		}
+
+		csr, err := x509.ParseCertificateRequest(csrDER)
+		if err != nil {
+			logger.Warnf("Failed to parse CSR for device %s: %v", device.id, err)
+			continue
+		}
+
+		// Convert to models.X509CertificateRequest
+		x509CSR := models.X509CertificateRequest(*csr)
+
+		// Sign the certificate
+		signedCert, err := caService.SignCertificate(ctx, services.SignCertificateInput{
+			CAID:              caID,
+			CertRequest:       &x509CSR,
+			IssuanceProfileID: profileID,
+		})
+		if err != nil {
+			logger.Warnf("Could not sign certificate for device %s: %v", device.id, err)
+			continue
+		}
+
+		// Bind the certificate to the device
+		_, err = dmsService.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
+			DeviceID:                device.id,
+			CertificateSerialNumber: signedCert.SerialNumber,
+			BindMode:                models.DeviceEventTypeProvisioned,
+		})
+		if err != nil {
+			logger.Warnf("Could not bind certificate to device %s: %v", device.id, err)
+			continue
+		}
+
+		logger.Infof("Successfully enrolled device %s with certificate (Serial: %s)", device.id, signedCert.SerialNumber)
 	}
 
 	return nil
