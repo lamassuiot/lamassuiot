@@ -277,7 +277,7 @@ paths:
                         parent_id: null
                         criteria:
                           - field: "tags"
-                            filter_operation: 9
+                            operand: "contains"
                             value: "production"
                         created_at: "2026-01-15T10:00:00Z"
                         updated_at: "2026-01-15T10:00:00Z"
@@ -287,7 +287,7 @@ paths:
                         parent_id: "550e8400-e29b-41d4-a716-446655440000"
                         criteria:
                           - field: "tags"
-                            filter_operation: 9
+                            operand: "contains"
                             value: "sensor"
                         created_at: "2026-01-15T11:00:00Z"
                         updated_at: "2026-01-15T11:00:00Z"
@@ -299,6 +299,12 @@ paths:
         Create a new device group with optional parent and filter criteria.
         Criteria are filter expressions that determine group membership.
         Groups can form hierarchies by specifying a parent_id.
+        
+        The response includes:
+        - `criteria`: The filters specified in the request for this group
+        - `inherited_criteria`: All filters from ancestor groups (parent, grandparent, etc.) composed from root to parent
+        
+        Filter operands are returned as human-readable names (e.g., "contains", "eq").
       operationId: createDeviceGroup
       requestBody:
         required: true
@@ -315,7 +321,7 @@ paths:
                   description: "All production environment devices"
                   criteria:
                     - field: "tags"
-                      filter_operation: 9
+                      operand: "contains"
                       value: "production"
               nested-group:
                 summary: Nested group with multiple criteria
@@ -326,10 +332,10 @@ paths:
                   parent_id: "550e8400-e29b-41d4-a716-446655440000"
                   criteria:
                     - field: "tags"
-                      filter_operation: 9
+                      operand: "contains"
                       value: "sensor"
                     - field: "status"
-                      filter_operation: 20
+                      operand: "eq"
                       value: "ACTIVE"
       responses:
         '201':
@@ -365,7 +371,14 @@ paths:
     get:
       tags: [Device Groups]
       summary: Get device group by ID
-      description: Retrieve a specific device group by its identifier.
+      description: |
+        Retrieve a specific device group by its identifier.
+        
+        The response includes:
+        - `criteria`: The filters defined specifically for this group
+        - `inherited_criteria`: All filters from ancestor groups (parent, grandparent, etc.) composed from root to parent
+        
+        Filter operands are returned as human-readable names (e.g., "contains", "eq").
       operationId: getDeviceGroupByID
       parameters:
         - name: id
@@ -388,8 +401,14 @@ paths:
       tags: [Device Groups]
       summary: Update device group
       description: |
-        Update an existing device group's properties.
-        Cannot change the group ID. Parent changes are validated for circular references.
+        Update an existing de:
+        - `criteria`: The group's own filters (updated if provided in request)
+        - `inherited_criteria`: All filters from ancestor groups (parent, grandparent, etc.) composed from root to parent
+        es.
+        
+        The response includes all filters from the entire hierarchy (parent, grandparent, etc.)
+        composed in the criteria field, not just the filters specified in the request.
+        Filter operands are returned as human-readable names (e.g., "contains", "eq").
       operationId: updateDeviceGroup
       parameters:
         - name: id
@@ -413,10 +432,10 @@ paths:
                   description: "Updated description"
                   criteria:
                     - field: "tags"
-                      filter_operation: 9
+                      operand: "contains"
                       value: "production"
                     - field: "status"
-                      filter_operation: 20
+                      operand: "eq"
                       value: "ACTIVE"
       responses:
         '200':
@@ -751,7 +770,7 @@ components:
         description: "All production environment devices"
         criteria:
           - field: "tags"
-            filter_operation: 9
+            operand: "contains"
             value: "production"
 
     UpdateDeviceGroupBody:
@@ -780,14 +799,14 @@ components:
         description: "Updated description"
         criteria:
           - field: "tags"
-            filter_operation: 9
+            operand: "contains"
             value: "production"
 
     DeviceGroupFilterOption:
       type: object
       required:
         - field
-        - filter_operation
+        - operand
         - value
       properties:
         field:
@@ -799,17 +818,61 @@ components:
             - status
             - tags
             - creation_timestamp
+            - metadata
           example: "tags"
-        filter_operation:
-          type: integer
+        operand:
+          type: string
           description: |
-            Filter operation type:
-            - 1: StringEqual - Exact string match
-            - 9: StringArrayContains - Array contains value
-            - 20: EnumEqual - Enum value match (for status)
-            - 22: JsonPathExpression - JSON path query (for metadata)
-          enum: [1, 9, 20, 22]
-          example: 9
+            Filter operation name. Allowed operands depend on the field type:
+            
+            **String fields (id, dms_owner):**
+            - `eq`, `equal` - Exact match (case-sensitive)
+            - `eq_ic`, `equal_ignorecase` - Exact match (case-insensitive)
+            - `ne`, `notequal` - Not equal (case-sensitive)
+            - `ne_ic`, `notequal_ignorecase` - Not equal (case-insensitive)
+            - `ct`, `contains` - Contains substring (case-sensitive)
+            - `ct_ic`, `contains_ignorecase` - Contains substring (case-insensitive)
+            - `nc`, `notcontains` - Does not contain (case-sensitive)
+            - `nc_ic`, `notcontains_ignorecase` - Does not contain (case-insensitive)
+            
+            **String array fields (tags):**
+            - `contains` - Array contains value (case-sensitive)
+            - `contains_ignorecase` - Array contains value (case-insensitive)
+            
+            **Date fields (creation_timestamp):**
+            - `eq`, `equal` - Exact date match
+            - `bf`, `before` - Before date
+            - `af`, `after` - After date
+            
+            **Enum fields (status):**
+            - `eq`, `equal` - Exact enum value match
+            - `ne`, `notequal` - Not equal to enum value
+            
+            **JSON fields (metadata):**
+            - `jsonpath` - JSONPath expression
+          enum:
+            - eq
+            - equal
+            - eq_ic
+            - equal_ignorecase
+            - ne
+            - notequal
+            - ne_ic
+            - notequal_ignorecase
+            - ct
+            - contains
+            - ct_ic
+            - contains_ignorecase
+            - nc
+            - notcontains
+            - nc_ic
+            - notcontains_ignorecase
+            - bf
+            - before
+            - af
+            - after
+            - jsonpath
+          example: "contains"
         value:
           type: string
           description: Value to compare against
@@ -829,8 +892,21 @@ components:
           type: string
           format: uuid
           nullable: true
+          description: Parent group ID for hierarchical organization
         criteria:
           type: array
+          description: |
+            Filter criteria defined for this specific group.
+            These are the filters that were explicitly set when creating/updating this group.
+          items:
+            $ref: '#/components/schemas/DeviceGroupFilterOption'
+        inherited_criteria:
+          type: array
+          description: |
+            Filter criteria inherited from all ancestor groups in the hierarchy.
+            Composed from root to immediate parent, in order.
+            This field allows distinguishing the group's own filters from inherited ones.
+            When querying devices in this group, both inherited_criteria and criteria are applied.
           items:
             $ref: '#/components/schemas/DeviceGroupFilterOption'
         created_at:
@@ -846,8 +922,9 @@ components:
         parent_id: null
         criteria:
           - field: "tags"
-            filter_operation: 9
+            operand: "contains"
             value: "production"
+        inherited_criteria: []
         created_at: "2026-01-15T10:00:00Z"
         updated_at: "2026-01-15T10:00:00Z"
 

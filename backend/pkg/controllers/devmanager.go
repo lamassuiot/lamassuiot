@@ -282,12 +282,19 @@ func (r *devManagerHttpRoutes) CreateDeviceGroup(ctx *gin.Context) {
 		return
 	}
 
+	// Convert API request criteria (with operand names) to model criteria (with FilterOperation enums)
+	modelCriteria, err := ConvertDeviceGroupCriteria(requestBody.Criteria, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
 	group, err := r.svc.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          requestBody.ID,
 		Name:        requestBody.Name,
 		Description: requestBody.Description,
 		ParentID:    requestBody.ParentID,
-		Criteria:    requestBody.Criteria,
+		Criteria:    modelCriteria,
 	})
 
 	if err != nil {
@@ -304,7 +311,10 @@ func (r *devManagerHttpRoutes) CreateDeviceGroup(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(201, group)
+	// Convert operands from integers to names for API response
+	responseGroup := ConvertDeviceGroupToResponse(group, group.OwnCriteriaCount)
+
+	ctx.JSON(201, responseGroup)
 }
 
 func (r *devManagerHttpRoutes) UpdateDeviceGroup(ctx *gin.Context) {
@@ -324,12 +334,19 @@ func (r *devManagerHttpRoutes) UpdateDeviceGroup(ctx *gin.Context) {
 		return
 	}
 
+	// Convert API request criteria (with operand names) to model criteria (with FilterOperation enums)
+	modelCriteria, err := ConvertDeviceGroupCriteria(requestBody.Criteria, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
 	group, err := r.svc.UpdateDeviceGroup(ctx, services.UpdateDeviceGroupInput{
 		ID:          params.ID,
 		Name:        requestBody.Name,
 		Description: requestBody.Description,
 		ParentID:    requestBody.ParentID,
-		Criteria:    requestBody.Criteria,
+		Criteria:    modelCriteria,
 	})
 
 	if err != nil {
@@ -346,7 +363,10 @@ func (r *devManagerHttpRoutes) UpdateDeviceGroup(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(200, group)
+	// Convert operands from integers to names for API response
+	responseGroup := ConvertDeviceGroupToResponse(group, group.OwnCriteriaCount)
+
+	ctx.JSON(200, responseGroup)
 }
 
 func (r *devManagerHttpRoutes) DeleteDeviceGroup(ctx *gin.Context) {
@@ -404,7 +424,10 @@ func (r *devManagerHttpRoutes) GetDeviceGroupByID(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(200, group)
+	// Convert operands from integers to names for API response
+	responseGroup := ConvertDeviceGroupToResponse(group, group.OwnCriteriaCount)
+
+	ctx.JSON(200, responseGroup)
 }
 
 func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {

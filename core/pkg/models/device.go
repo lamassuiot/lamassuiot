@@ -74,9 +74,9 @@ type DevicesStats struct {
 // DeviceGroupFilterOption represents a filter criterion for dynamic device group membership.
 // This is a copy of resources.FilterOption to avoid circular dependencies.
 type DeviceGroupFilterOption struct {
-	Field           string `json:"Field"`
-	FilterOperation int    `json:"FilterOperation"`
-	Value           string `json:"Value"`
+	Field           string `json:"field"`
+	FilterOperation int    `json:"operand"`
+	Value           string `json:"value"`
 }
 
 type DeviceGroup struct {
@@ -87,4 +87,7 @@ type DeviceGroup struct {
 	Criteria    []DeviceGroupFilterOption `json:"criteria" gorm:"serializer:json"`
 	CreatedAt   time.Time                 `json:"created_at"`
 	UpdatedAt   time.Time                 `json:"updated_at"`
+
+	// Transient field for API response generation - not stored in DB
+	OwnCriteriaCount int `json:"-" gorm:"-"`
 }

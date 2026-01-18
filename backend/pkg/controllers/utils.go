@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
@@ -282,4 +283,199 @@ func isSimpleJsonPath(jsonPath string) bool {
 	}
 
 	return true
+}
+
+// ConvertDeviceGroupCriteria converts API request criteria (with operand names) to model criteria (with FilterOperation enums).
+// This strictly validates all criteria fields and operands, returning errors for invalid values.
+func ConvertDeviceGroupCriteria(requestCriteria []resources.DeviceGroupFilterOptionRequest, filterFieldMap map[string]resources.FilterFieldType) ([]models.DeviceGroupFilterOption, error) {
+	if len(requestCriteria) == 0 {
+		return []models.DeviceGroupFilterOption{}, nil
+	}
+
+	modelCriteria := make([]models.DeviceGroupFilterOption, 0, len(requestCriteria))
+
+	for i, criteria := range requestCriteria {
+		// Strictly validate that the field is allowed
+		fieldType, exists := filterFieldMap[criteria.Field]
+		if !exists {
+			return nil, &InvalidFilterFieldError{Field: criteria.Field, Index: i}
+		}
+
+		// Parse the operand name to FilterOperation
+		filterOp := resources.ParseOperandName(criteria.Operand, fieldType)
+		if filterOp == resources.UnspecifiedFilter {
+			return nil, &InvalidOperandError{Field: criteria.Field, Operand: criteria.Operand, FieldType: fieldType, Index: i}
+		}
+
+		modelCriteria = append(modelCriteria, models.DeviceGroupFilterOption{
+			Field:           criteria.Field,
+			FilterOperation: int(filterOp),
+			Value:           criteria.Value,
+		})
+	}
+
+	return modelCriteria, nil
+}
+
+// InvalidFilterFieldError indicates that a filter field is not allowed for device filtering.
+type InvalidFilterFieldError struct {
+	Field string
+	Index int
+}
+
+func (e *InvalidFilterFieldError) Error() string {
+	return "invalid filter field '" + e.Field + "' at criteria index " + strconv.Itoa(e.Index)
+}
+
+// InvalidOperandError indicates that an operand is not valid for the given field type.
+type InvalidOperandError struct {
+	Field     string
+	Operand   string
+	FieldType resources.FilterFieldType
+	Index     int
+}
+
+func (e *InvalidOperandError) Error() string {
+	return "invalid operand '" + e.Operand + "' for field '" + e.Field + "' at criteria index " + strconv.Itoa(e.Index)
+}
+
+// ConvertDeviceGroupToResponse converts a device group model (with FilterOperation integers) to an API response format (with operand names).
+// The group model is expected to have all criteria (inherited + own) in the Criteria field.
+// This function separates them into inherited_criteria and criteria fields for the API response.
+func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount int) map[string]interface{} {
+	if group == nil {
+		return nil
+	}
+
+	// Separate inherited criteria from own criteria
+	totalCriteria := len(group.Criteria)
+	inheritedCount := totalCriteria - ownCriteriaCount
+	if inheritedCount < 0 {
+		inheritedCount = 0
+	}
+
+	// Convert inherited criteria
+	inheritedCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, inheritedCount)
+	for i := 0; i < inheritedCount; i++ {
+		criterion := group.Criteria[i]
+		fieldType, exists := resources.DeviceFilterableFields[criterion.Field]
+		if !exists {
+			continue
+		}
+		operand := filterOperationToOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType)
+		inheritedCriteria = append(inheritedCriteria, resources.DeviceGroupFilterOptionRequest{
+			Field:   criterion.Field,
+			Operand: operand,
+			Value:   criterion.Value,
+		})
+	}
+
+	// Convert own criteria
+	ownCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, ownCriteriaCount)
+	for i := inheritedCount; i < totalCriteria; i++ {
+		criterion := group.Criteria[i]
+		fieldType, exists := resources.DeviceFilterableFields[criterion.Field]
+		if !exists {
+			continue
+		}
+		operand := filterOperationToOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType)
+		ownCriteria = append(ownCriteria, resources.DeviceGroupFilterOptionRequest{
+			Field:   criterion.Field,
+			Operand: operand,
+			Value:   criterion.Value,
+		})
+	}
+
+	// Build response map with separated criteria
+	response := map[string]interface{}{
+		"id":                 group.ID,
+		"name":               group.Name,
+		"description":        group.Description,
+		"criteria":           ownCriteria,
+		"inherited_criteria": inheritedCriteria,
+		"created_at":         group.CreatedAt,
+		"updated_at":         group.UpdatedAt,
+	}
+
+	// Include parent_id if set
+	if group.ParentID != nil {
+		response["parent_id"] = *group.ParentID
+	}
+
+	return response
+}
+
+// filterOperationToOperandName converts a FilterOperation enum to its operand name string.
+// This is the reverse of ParseOperandName.
+func filterOperationToOperandName(filterOp resources.FilterOperation, fieldType resources.FilterFieldType) string {
+	switch fieldType {
+	case resources.StringFilterFieldType:
+		switch filterOp {
+		case resources.StringEqual:
+			return "eq"
+		case resources.StringEqualIgnoreCase:
+			return "eq_ic"
+		case resources.StringNotEqual:
+			return "ne"
+		case resources.StringNotEqualIgnoreCase:
+			return "ne_ic"
+		case resources.StringContains:
+			return "ct"
+		case resources.StringContainsIgnoreCase:
+			return "ct_ic"
+		case resources.StringNotContains:
+			return "nc"
+		case resources.StringNotContainsIgnoreCase:
+			return "nc_ic"
+		}
+
+	case resources.StringArrayFilterFieldType:
+		switch filterOp {
+		case resources.StringArrayContains:
+			return "contains"
+		case resources.StringArrayContainsIgnoreCase:
+			return "contains_ignorecase"
+		}
+
+	case resources.DateFilterFieldType:
+		switch filterOp {
+		case resources.DateBefore:
+			return "bf"
+		case resources.DateEqual:
+			return "eq"
+		case resources.DateAfter:
+			return "af"
+		}
+
+	case resources.NumberFilterFieldType:
+		switch filterOp {
+		case resources.NumberEqual:
+			return "eq"
+		case resources.NumberNotEqual:
+			return "ne"
+		case resources.NumberLessThan:
+			return "lt"
+		case resources.NumberLessOrEqualThan:
+			return "le"
+		case resources.NumberGreaterThan:
+			return "gt"
+		case resources.NumberGreaterOrEqualThan:
+			return "ge"
+		}
+
+	case resources.EnumFilterFieldType:
+		switch filterOp {
+		case resources.EnumEqual:
+			return "eq"
+		case resources.EnumNotEqual:
+			return "ne"
+		}
+
+	case resources.JsonFilterFieldType:
+		if filterOp == resources.JsonPathExpression {
+			return "jsonpath"
+		}
+	}
+
+	return "unknown"
 }

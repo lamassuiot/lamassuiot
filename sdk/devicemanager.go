@@ -125,7 +125,7 @@ func (cli *deviceManagerClient) CreateDeviceGroup(ctx context.Context, input ser
 		Name:        input.Name,
 		Description: input.Description,
 		ParentID:    input.ParentID,
-		Criteria:    input.Criteria,
+		Criteria:    convertCriteriaToRequest(input.Criteria),
 	}, map[int][]error{
 		400: {errs.ErrValidateBadRequest, errs.ErrDeviceGroupCircularReference},
 		404: {errs.ErrDeviceGroupNotFound},
@@ -142,7 +142,7 @@ func (cli *deviceManagerClient) UpdateDeviceGroup(ctx context.Context, input ser
 		Name:        input.Name,
 		Description: input.Description,
 		ParentID:    input.ParentID,
-		Criteria:    input.Criteria,
+		Criteria:    convertCriteriaToRequest(input.Criteria),
 	}, map[int][]error{
 		400: {errs.ErrValidateBadRequest, errs.ErrDeviceGroupCircularReference},
 		404: {errs.ErrDeviceGroupNotFound},
@@ -195,4 +195,101 @@ func (cli *deviceManagerClient) GetDeviceGroupStats(ctx context.Context, input s
 	}
 
 	return &response, nil
+}
+
+// convertCriteriaToRequest converts model criteria (with FilterOperation integers) to API request criteria (with operand names).
+func convertCriteriaToRequest(modelCriteria []models.DeviceGroupFilterOption) []resources.DeviceGroupFilterOptionRequest {
+	if len(modelCriteria) == 0 {
+		return []resources.DeviceGroupFilterOptionRequest{}
+	}
+
+	requestCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, len(modelCriteria))
+
+	for _, criteria := range modelCriteria {
+		// Convert FilterOperation integer back to operand name
+		operand := filterOperationToOperandName(resources.FilterOperation(criteria.FilterOperation), resources.DeviceFilterableFields[criteria.Field])
+
+		requestCriteria = append(requestCriteria, resources.DeviceGroupFilterOptionRequest{
+			Field:   criteria.Field,
+			Operand: operand,
+			Value:   criteria.Value,
+		})
+	}
+
+	return requestCriteria
+}
+
+// filterOperationToOperandName converts a FilterOperation enum back to its operand name.
+// This is the reverse of ParseOperandName.
+func filterOperationToOperandName(filterOp resources.FilterOperation, fieldType resources.FilterFieldType) string {
+	switch fieldType {
+	case resources.StringFilterFieldType:
+		switch filterOp {
+		case resources.StringEqual:
+			return "eq"
+		case resources.StringEqualIgnoreCase:
+			return "eq_ic"
+		case resources.StringNotEqual:
+			return "ne"
+		case resources.StringNotEqualIgnoreCase:
+			return "ne_ic"
+		case resources.StringContains:
+			return "ct"
+		case resources.StringContainsIgnoreCase:
+			return "ct_ic"
+		case resources.StringNotContains:
+			return "nc"
+		case resources.StringNotContainsIgnoreCase:
+			return "nc_ic"
+		}
+
+	case resources.StringArrayFilterFieldType:
+		switch filterOp {
+		case resources.StringArrayContains:
+			return "contains"
+		case resources.StringArrayContainsIgnoreCase:
+			return "contains_ignorecase"
+		}
+
+	case resources.DateFilterFieldType:
+		switch filterOp {
+		case resources.DateBefore:
+			return "bf"
+		case resources.DateEqual:
+			return "eq"
+		case resources.DateAfter:
+			return "af"
+		}
+
+	case resources.NumberFilterFieldType:
+		switch filterOp {
+		case resources.NumberEqual:
+			return "eq"
+		case resources.NumberNotEqual:
+			return "ne"
+		case resources.NumberLessThan:
+			return "lt"
+		case resources.NumberLessOrEqualThan:
+			return "le"
+		case resources.NumberGreaterThan:
+			return "gt"
+		case resources.NumberGreaterOrEqualThan:
+			return "ge"
+		}
+
+	case resources.EnumFilterFieldType:
+		switch filterOp {
+		case resources.EnumEqual:
+			return "eq"
+		case resources.EnumNotEqual:
+			return "ne"
+		}
+
+	case resources.JsonFilterFieldType:
+		if filterOp == resources.JsonPathExpression {
+			return "jsonpath"
+		}
+	}
+
+	return "unknown"
 }

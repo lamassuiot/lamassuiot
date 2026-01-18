@@ -534,6 +534,39 @@ func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, in
 	}
 
 	lFunc.Infof("device group '%s' created successfully", input.ID)
+
+	// Store the count of this group's own criteria before composing with ancestors
+	ownCriteriaCount := len(group.Criteria)
+
+	// Get all ancestors to include parent filters in response
+	lFunc.Debugf("fetching ancestors for device group '%s'", input.ID)
+	ancestors, err := svc.devicesStorage.DeviceGroups().SelectAncestors(ctx, input.ID)
+	if err != nil {
+		lFunc.Errorf("could not get ancestors for device group '%s': %s", input.ID, err)
+		return nil, err
+	}
+
+	// Separate own criteria from ancestor criteria
+	// ancestors includes the group itself as the last element, so we need to separate them
+	ownCriteria := group.Criteria
+	inheritedCriteria := make([]models.DeviceGroupFilterOption, 0)
+
+	// Collect criteria from all ancestors except the current group
+	for _, ancestor := range ancestors {
+		if ancestor.ID != input.ID {
+			inheritedCriteria = append(inheritedCriteria, ancestor.Criteria...)
+		}
+	}
+
+	// Compose: inherited first, then own
+	allCriteria := make([]models.DeviceGroupFilterOption, 0, len(inheritedCriteria)+len(ownCriteria))
+	allCriteria = append(allCriteria, inheritedCriteria...)
+	allCriteria = append(allCriteria, ownCriteria...)
+
+	// Set the composed criteria and track the own criteria count
+	group.Criteria = allCriteria
+	group.OwnCriteriaCount = ownCriteriaCount
+
 	return group, nil
 }
 
@@ -620,6 +653,38 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceGroup(ctx context.Context, in
 	}
 
 	lFunc.Infof("device group '%s' updated successfully", input.ID)
+
+	// Store the count of this group's own criteria before composing with ancestors
+	ownCriteriaCount := len(group.Criteria)
+
+	// Get all ancestors to include parent filters in response
+	lFunc.Debugf("fetching ancestors for device group '%s'", input.ID)
+	ancestors, err := svc.devicesStorage.DeviceGroups().SelectAncestors(ctx, input.ID)
+	if err != nil {
+		lFunc.Errorf("could not get ancestors for device group '%s': %s", input.ID, err)
+		return nil, err
+	}
+
+	// Separate own criteria from ancestor criteria
+	ownCriteria := group.Criteria
+	inheritedCriteria := make([]models.DeviceGroupFilterOption, 0)
+
+	// Collect criteria from all ancestors except the current group
+	for _, ancestor := range ancestors {
+		if ancestor.ID != input.ID {
+			inheritedCriteria = append(inheritedCriteria, ancestor.Criteria...)
+		}
+	}
+
+	// Compose: inherited first, then own
+	allCriteria := make([]models.DeviceGroupFilterOption, 0, len(inheritedCriteria)+len(ownCriteria))
+	allCriteria = append(allCriteria, inheritedCriteria...)
+	allCriteria = append(allCriteria, ownCriteria...)
+
+	// Set the composed criteria and track the own criteria count
+	group.Criteria = allCriteria
+	group.OwnCriteriaCount = ownCriteriaCount
+
 	return group, nil
 }
 
@@ -673,6 +738,37 @@ func (svc DeviceManagerServiceBackend) GetDeviceGroupByID(ctx context.Context, i
 		lFunc.Errorf("device group '%s' does not exist", input.ID)
 		return nil, errs.ErrDeviceGroupNotFound
 	}
+
+	// Get all ancestors to include parent filters
+	lFunc.Debugf("fetching ancestors for device group '%s'", input.ID)
+	ancestors, err := svc.devicesStorage.DeviceGroups().SelectAncestors(ctx, input.ID)
+	if err != nil {
+		lFunc.Errorf("could not get ancestors for device group '%s': %s", input.ID, err)
+		return nil, err
+	}
+
+	// Store the count of this group's own criteria before composing
+	ownCriteriaCount := len(group.Criteria)
+
+	// Separate own criteria from ancestor criteria
+	ownCriteria := group.Criteria
+	inheritedCriteria := make([]models.DeviceGroupFilterOption, 0)
+
+	// Collect criteria from all ancestors except the current group
+	for _, ancestor := range ancestors {
+		if ancestor.ID != input.ID {
+			inheritedCriteria = append(inheritedCriteria, ancestor.Criteria...)
+		}
+	}
+
+	// Compose: inherited first, then own
+	allCriteria := make([]models.DeviceGroupFilterOption, 0, len(inheritedCriteria)+len(ownCriteria))
+	allCriteria = append(allCriteria, inheritedCriteria...)
+	allCriteria = append(allCriteria, ownCriteria...)
+
+	// Set the composed criteria and track the own criteria count
+	group.Criteria = allCriteria
+	group.OwnCriteriaCount = ownCriteriaCount
 
 	return group, nil
 }
