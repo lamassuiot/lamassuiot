@@ -178,13 +178,16 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 	}
 
 	event := models.DeviceEvent{
-		DeviceID:        input.ID,
-		Type:            string(models.DeviceEventTypeLifecycleStatusUpdated),
-		Message:         "device created",
-		Timestamp:       now,
-		SlotID:          "",
-		Source:          models.DeviceManagerSource,
-		StructuredField: nil,
+		DeviceID:  input.ID,
+		Type:      string(models.DeviceEventTypeLifecycleStatusUpdated),
+		Message:   "device created",
+		Timestamp: now,
+		SlotID:    "",
+		Source:    models.DeviceManagerSource,
+		StructuredField: map[string]string{
+			"previous_status": string(""),
+			"new_status":      string(device.Status),
+		},
 	}
 
 	status := models.DeviceStatus{
@@ -274,13 +277,16 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	}
 
 	newEvent := models.DeviceEvent{
-		DeviceID:        input.ID,
-		Type:            string(models.DeviceEventTypeLifecycleStatusUpdated),
-		Message:         fmt.Sprintf("device status updated from '%s' to '%s'", device.Status, input.NewStatus),
-		Timestamp:       time.Now(),
-		SlotID:          "",
-		Source:          models.DeviceManagerSource,
-		StructuredField: nil,
+		DeviceID:  input.ID,
+		Type:      string(models.DeviceEventTypeLifecycleStatusUpdated),
+		Message:   fmt.Sprintf("device status updated from '%s' to '%s'", device.Status, input.NewStatus),
+		Timestamp: time.Now(),
+		SlotID:    "",
+		Source:    models.DeviceManagerSource,
+		StructuredField: map[string]string{
+			"previous_status": string(device.Status),
+			"new_status":      string(input.NewStatus),
+		},
 	}
 
 	newStatus := models.DeviceStatus{
