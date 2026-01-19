@@ -401,14 +401,11 @@ paths:
       tags: [Device Groups]
       summary: Update device group
       description: |
-        Update an existing de:
-        - `criteria`: The group's own filters (updated if provided in request)
-        - `inherited_criteria`: All filters from ancestor groups (parent, grandparent, etc.) composed from root to parent
-        es.
-        
+        Update an existing device group. Supports updating name, description, parent, and criteria.      
         The response includes all filters from the entire hierarchy (parent, grandparent, etc.)
         composed in the criteria field, not just the filters specified in the request.
         Filter operands are returned as human-readable names (e.g., "contains", "eq").
+
       operationId: updateDeviceGroup
       parameters:
         - name: id
