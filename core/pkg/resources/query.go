@@ -18,8 +18,9 @@ func ParseSortMode(t string) SortMode {
 }
 
 type SortOptions struct {
-	SortMode  SortMode
-	SortField string
+	SortMode     SortMode
+	SortField    string
+	JsonPathExpr string // Optional: JSONPath expression for JSON fields
 }
 
 type FilterOption struct {

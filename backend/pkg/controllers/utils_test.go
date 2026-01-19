@@ -194,3 +194,27 @@ func TestFilterQuery_JsonFilter_MultipleJsonPaths(t *testing.T) {
 		t.Fatalf("expected operation JsonPathExpression, got %v", f2.FilterOperation)
 	}
 }
+
+func TestFilterQuery_JsonPathSort(t *testing.T) {
+req := &http.Request{}
+req.URL = &url.URL{}
+q := req.URL.Query()
+q.Add("sort_by", "metadata[jsonpath]$.env")
+req.URL.RawQuery = q.Encode()
+
+filterFieldMap := map[string]resources.FilterFieldType{
+"metadata": resources.JsonFilterFieldType,
+}
+
+qp := FilterQuery(req, filterFieldMap)
+if qp == nil {
+t.Fatalf("expected QueryParameters, got nil")
+}
+
+if qp.Sort.SortField != "metadata" {
+t.Errorf("expected sort field 'metadata', got '%s'", qp.Sort.SortField)
+}
+if qp.Sort.JsonPathExpr != "$.env" {
+t.Errorf("expected json path '$.env', got '%s'", qp.Sort.JsonPathExpr)
+}
+}

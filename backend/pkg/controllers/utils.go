@@ -27,9 +27,19 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				sortQueryParam := value
 				sortField := strings.Trim(sortQueryParam, " ")
 
-				_, exists := filterFieldMap[sortField]
-				if exists {
-					queryParams.Sort.SortField = sortField
+				if idx := strings.Index(sortField, "[jsonpath]"); idx != -1 {
+					fieldName := sortField[:idx]
+					jsonPathExpr := sortField[idx+len("[jsonpath]"):]
+
+					if fieldType, exists := filterFieldMap[fieldName]; exists && fieldType == resources.JsonFilterFieldType {
+						queryParams.Sort.SortField = fieldName
+						queryParams.Sort.JsonPathExpr = jsonPathExpr
+					}
+				} else {
+					_, exists := filterFieldMap[sortField]
+					if exists {
+						queryParams.Sort.SortField = sortField
+					}
 				}
 
 			case "sort_mode":

@@ -233,6 +233,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 	var sortMode string
 	var sortBy string
+	var jsonPathExpr string
 
 	nextBookmark := ""
 
@@ -251,9 +252,23 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", limit+offset, limit)
 
 			if queryParams.Sort.SortField != "" {
-				sortBy = strings.ReplaceAll(queryParams.Sort.SortField, ".", "_")
-				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
-				tx = tx.Order(sortBy + " " + sortMode)
+				if queryParams.Sort.JsonPathExpr != "" {
+					orderClause := buildJsonPathOrderClause(queryParams.Sort.SortField, queryParams.Sort.JsonPathExpr, "")
+					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortJP:%s;sortB:%s;", sortMode, base64.StdEncoding.EncodeToString([]byte(queryParams.Sort.JsonPathExpr)), queryParams.Sort.SortField)
+					if sortMode == "desc" {
+						tx = tx.Clauses(clause.OrderBy{
+							Expression: gorm.Expr(orderClause + " DESC NULLS LAST"),
+						})
+					} else {
+						tx = tx.Clauses(clause.OrderBy{
+							Expression: gorm.Expr(orderClause + " ASC NULLS FIRST"),
+						})
+					}
+				} else {
+					sortBy = strings.ReplaceAll(queryParams.Sort.SortField, ".", "_")
+					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
+					tx = tx.Order(sortBy + " " + sortMode)
+				}
 			}
 
 			for _, filter := range queryParams.Filters {
@@ -288,6 +303,12 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
 					}
+				case "sortJP":
+					jp, err := base64.StdEncoding.DecodeString(queryPart[1])
+					if err != nil {
+						return "", fmt.Errorf("not a valid bookmark")
+					}
+					jsonPathExpr = string(jp)
 				case "sortB":
 					sortBy = strings.ReplaceAll(queryPart[1], ".", "_")
 					if err != nil {
@@ -324,13 +345,30 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 					}
 				}
 				if sortMode != "" && sortBy != "" {
-					tx = tx.Order(sortBy + " " + sortMode)
+					if jsonPathExpr != "" {
+						orderClause := buildJsonPathOrderClause(sortBy, jsonPathExpr, "")
+						if sortMode == "desc" {
+							tx = tx.Clauses(clause.OrderBy{
+								Expression: gorm.Expr(orderClause + " DESC NULLS LAST"),
+							})
+						} else {
+							tx = tx.Clauses(clause.OrderBy{
+								Expression: gorm.Expr(orderClause + " ASC NULLS FIRST"),
+							})
+						}
+					} else {
+						tx = tx.Order(sortBy + " " + sortMode)
+					}
 				}
 			}
 			nextBookmark = nextBookmark + fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
-				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
+				if queryParams.Sort.JsonPathExpr != "" {
+					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortJP:%s;sortB:%s;", sortMode, base64.StdEncoding.EncodeToString([]byte(queryParams.Sort.JsonPathExpr)), sortBy)
+				} else {
+					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
+				}
 			}
 		}
 	}
@@ -552,4 +590,53 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		le.Tracef("Took: %s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), sql, rows)
 	}
 
+}
+
+// convertJsonPathToPostgresPath converts a JSONPath expression (e.g., "$.foo.bar")
+// to PostgreSQL JSONB path format (e.g., "{foo,bar}")
+func convertJsonPathToPostgresPath(jsonPath string) string {
+	// Remove leading "$." if present
+	jsonPath = strings.TrimPrefix(jsonPath, "$.")
+	// Split by "." and join with ","
+	parts := strings.Split(jsonPath, ".")
+	return "{" + strings.Join(parts, ",") + "}"
+}
+
+// buildJsonPathOrderClause generates a PostgreSQL ORDER BY clause for JSONB fields
+// that handles numeric, date/timestamp, and text values correctly
+func buildJsonPathOrderClause(field, jsonPath, sortMode string) string {
+	pgPath := convertJsonPathToPostgresPath(jsonPath)
+	// Extract the last element for the -> operator
+	parts := strings.Split(strings.Trim(pgPath, "{}"), ",")
+	var operatorPath string
+	if len(parts) > 1 {
+		// For nested paths like {env,config}, use -> for intermediate and ->> for last
+		operatorPath = field
+		for i := 0; i < len(parts)-1; i++ {
+			operatorPath += " -> '" + parts[i] + "'"
+		}
+		operatorPath += " -> '" + parts[len(parts)-1] + "'"
+	} else {
+		// For simple paths like {priority}
+		operatorPath = field + " -> '" + parts[0] + "'"
+	}
+
+	textPath := fmt.Sprintf("%s #>> '%s'", field, pgPath)
+
+	// Build CASE expression that handles:
+	// 1. Numbers - pad for proper text sorting
+	// 2. Dates/timestamps - cast to timestamp for proper chronological sorting
+	// 3. Text - use as-is
+	return fmt.Sprintf(
+		"CASE "+
+			"WHEN jsonb_typeof(%s) = 'number' THEN lpad(((%s)::numeric)::text, 20, '0') "+
+			"WHEN %s ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN to_char((%s)::timestamp, 'YYYY-MM-DD HH24:MI:SS.US') "+
+			"ELSE %s "+
+			"END",
+		operatorPath,
+		operatorPath,
+		textPath,
+		textPath,
+		textPath,
+	)
 }
