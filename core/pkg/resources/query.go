@@ -165,3 +165,78 @@ func ParseOperandName(operand string, fieldType FilterFieldType) FilterOperation
 
 	return UnspecifiedFilter
 }
+
+// FormatOperandName converts a FilterOperation enum to its operand name string.
+// This is the reverse of ParseOperandName, used for converting model criteria back to API responses.
+func FormatOperandName(filterOp FilterOperation, fieldType FilterFieldType) string {
+	switch fieldType {
+	case StringFilterFieldType:
+		switch filterOp {
+		case StringEqual:
+			return "eq"
+		case StringEqualIgnoreCase:
+			return "eq_ic"
+		case StringNotEqual:
+			return "ne"
+		case StringNotEqualIgnoreCase:
+			return "ne_ic"
+		case StringContains:
+			return "ct"
+		case StringContainsIgnoreCase:
+			return "ct_ic"
+		case StringNotContains:
+			return "nc"
+		case StringNotContainsIgnoreCase:
+			return "nc_ic"
+		}
+
+	case StringArrayFilterFieldType:
+		switch filterOp {
+		case StringArrayContains:
+			return "contains"
+		case StringArrayContainsIgnoreCase:
+			return "contains_ignorecase"
+		}
+
+	case DateFilterFieldType:
+		switch filterOp {
+		case DateBefore:
+			return "bf"
+		case DateEqual:
+			return "eq"
+		case DateAfter:
+			return "af"
+		}
+
+	case NumberFilterFieldType:
+		switch filterOp {
+		case NumberEqual:
+			return "eq"
+		case NumberNotEqual:
+			return "ne"
+		case NumberLessThan:
+			return "lt"
+		case NumberLessOrEqualThan:
+			return "le"
+		case NumberGreaterThan:
+			return "gt"
+		case NumberGreaterOrEqualThan:
+			return "ge"
+		}
+
+	case EnumFilterFieldType:
+		switch filterOp {
+		case EnumEqual:
+			return "eq"
+		case EnumNotEqual:
+			return "ne"
+		}
+
+	case JsonFilterFieldType:
+		if filterOp == JsonPathExpression {
+			return "jsonpath"
+		}
+	}
+
+	return "unknown"
+}

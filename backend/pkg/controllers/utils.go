@@ -362,7 +362,7 @@ func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount in
 		if !exists {
 			continue
 		}
-		operand := filterOperationToOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType)
+		operand := resources.FormatOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType)
 		inheritedCriteria = append(inheritedCriteria, resources.DeviceGroupFilterOptionRequest{
 			Field:   criterion.Field,
 			Operand: operand,
@@ -378,7 +378,7 @@ func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount in
 		if !exists {
 			continue
 		}
-		operand := filterOperationToOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType)
+		operand := resources.FormatOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType)
 		ownCriteria = append(ownCriteria, resources.DeviceGroupFilterOptionRequest{
 			Field:   criterion.Field,
 			Operand: operand,
@@ -403,79 +403,4 @@ func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount in
 	}
 
 	return response
-}
-
-// filterOperationToOperandName converts a FilterOperation enum to its operand name string.
-// This is the reverse of ParseOperandName.
-func filterOperationToOperandName(filterOp resources.FilterOperation, fieldType resources.FilterFieldType) string {
-	switch fieldType {
-	case resources.StringFilterFieldType:
-		switch filterOp {
-		case resources.StringEqual:
-			return "eq"
-		case resources.StringEqualIgnoreCase:
-			return "eq_ic"
-		case resources.StringNotEqual:
-			return "ne"
-		case resources.StringNotEqualIgnoreCase:
-			return "ne_ic"
-		case resources.StringContains:
-			return "ct"
-		case resources.StringContainsIgnoreCase:
-			return "ct_ic"
-		case resources.StringNotContains:
-			return "nc"
-		case resources.StringNotContainsIgnoreCase:
-			return "nc_ic"
-		}
-
-	case resources.StringArrayFilterFieldType:
-		switch filterOp {
-		case resources.StringArrayContains:
-			return "contains"
-		case resources.StringArrayContainsIgnoreCase:
-			return "contains_ignorecase"
-		}
-
-	case resources.DateFilterFieldType:
-		switch filterOp {
-		case resources.DateBefore:
-			return "bf"
-		case resources.DateEqual:
-			return "eq"
-		case resources.DateAfter:
-			return "af"
-		}
-
-	case resources.NumberFilterFieldType:
-		switch filterOp {
-		case resources.NumberEqual:
-			return "eq"
-		case resources.NumberNotEqual:
-			return "ne"
-		case resources.NumberLessThan:
-			return "lt"
-		case resources.NumberLessOrEqualThan:
-			return "le"
-		case resources.NumberGreaterThan:
-			return "gt"
-		case resources.NumberGreaterOrEqualThan:
-			return "ge"
-		}
-
-	case resources.EnumFilterFieldType:
-		switch filterOp {
-		case resources.EnumEqual:
-			return "eq"
-		case resources.EnumNotEqual:
-			return "ne"
-		}
-
-	case resources.JsonFilterFieldType:
-		if filterOp == resources.JsonPathExpression {
-			return "jsonpath"
-		}
-	}
-
-	return "unknown"
 }
