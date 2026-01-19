@@ -47,9 +47,9 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	return db, err
 }
 
-func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
+func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumns []string, model E) (*postgresDBQuerier[E], error) {
 	schema.RegisterSerializer("text", TextSerializer{})
-	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
+	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumns)
 	return &querier, nil
 }
 
@@ -160,15 +160,15 @@ func (migrator *migrator) MigrateToLatest() {
 
 type postgresDBQuerier[E any] struct {
 	*gorm.DB
-	tableName        string
-	primaryKeyColumn string
+	tableName         string
+	primaryKeyColumns []string
 }
 
-func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) postgresDBQuerier[E] {
+func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumns []string) postgresDBQuerier[E] {
 	return postgresDBQuerier[E]{
-		DB:               db,
-		tableName:        tableName,
-		primaryKeyColumn: primaryKeyColumn,
+		DB:                db,
+		tableName:         tableName,
+		primaryKeyColumns: primaryKeyColumns,
 	}
 }
 
@@ -385,16 +385,22 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 	}
 }
 
-// Selects first element from DB. if queryCol is empty or nil, the primary key column
-// defined in the creation process, is used.
-func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryCol *string) (bool, *E, error) {
-	searchCol := db.primaryKeyColumn
-	if queryCol != nil && *queryCol != "" {
-		searchCol = *queryCol
+// Selects first element from DB. queryValues is a map of column:value pairs.
+// If queryValues is nil or empty, uses all primary key columns with values from elemID (comma-separated for composite keys).
+func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryValues map[string]string) (bool, *E, error) {
+	var elem E
+	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1)
+
+	if len(queryValues) == 0 {
+		return false, nil, fmt.Errorf("queryValues cannot be empty")
 	}
 
-	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	// Build WHERE clause for each column:value pair
+	for col, val := range queryValues {
+		tx = tx.Where(fmt.Sprintf("%s = ?", col), val)
+	}
+
+	tx = tx.Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -406,7 +412,7 @@ func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string
 	return true, &elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
+func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E) (*E, error) {
 	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -415,8 +421,19 @@ func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID stri
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
+func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, primaryKeyValues map[string]string) (*E, error) {
+	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx)
+
+	if len(primaryKeyValues) == 0 {
+		return nil, fmt.Errorf("primaryKeyValues cannot be empty")
+	}
+
+	// Build WHERE clause for all primary key columns
+	for col, val := range primaryKeyValues {
+		tx = tx.Where(fmt.Sprintf("%s = ?", col), val)
+	}
+
+	tx = tx.Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -428,8 +445,19 @@ func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID stri
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Delete(ctx context.Context, elemID string) error {
-	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
+func (db *postgresDBQuerier[E]) Delete(ctx context.Context, primaryKeyValues map[string]string) error {
+	tx := db.Table(db.tableName).WithContext(ctx)
+
+	if len(primaryKeyValues) == 0 {
+		return fmt.Errorf("primaryKeyValues cannot be empty")
+	}
+
+	// Build WHERE clause for all primary key columns
+	for col, val := range primaryKeyValues {
+		tx = tx.Where(fmt.Sprintf("%s = ?", col), val)
+	}
+
+	tx = tx.Delete(nil)
 	if err := tx.Error; err != nil {
 		return err
 	}

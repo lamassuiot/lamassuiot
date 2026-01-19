@@ -16,7 +16,7 @@ type PostgresSubscriptionsStore struct {
 }
 
 func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.SubscriptionsRepository, error) {
-	querier, err := TableQuery(logger, db, "subscriptions", "id", models.Subscription{})
+	querier, err := TableQuery(logger, db, "subscriptions", []string{"id"}, models.Subscription{})
 	if err != nil {
 		return nil, err
 	}
@@ -35,11 +35,11 @@ func (db *PostgresSubscriptionsStore) GetSubscriptions(ctx context.Context, user
 }
 
 func (db *PostgresSubscriptionsStore) Subscribe(ctx context.Context, sub *models.Subscription) (*models.Subscription, error) {
-	return db.querier.Insert(ctx, sub, sub.ID)
+	return db.querier.Insert(ctx, sub)
 }
 
 func (db *PostgresSubscriptionsStore) Unsubscribe(ctx context.Context, subscriptionID string) error {
-	return db.querier.Delete(ctx, subscriptionID)
+	return db.querier.Delete(ctx, map[string]string{"id": subscriptionID})
 }
 
 func (db *PostgresSubscriptionsStore) GetSubscriptionsByEventType(ctx context.Context, eventType string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {

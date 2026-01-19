@@ -18,7 +18,7 @@ type PostgresCAStore struct {
 }
 
 func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
-	querier, err := TableQuery(log, db, caDBName, "id", models.CACertificate{})
+	querier, err := TableQuery(log, db, caDBName, []string{"id"}, models.CACertificate{})
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +77,7 @@ func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName st
 }
 
 func (db *PostgresCAStore) SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error) {
-	queryCol := "serial_number"
-	return db.querier.SelectExists(ctx, serialNumber, &queryCol)
+	return db.querier.SelectExists(ctx, map[string]string{"serial_number": serialNumber})
 }
 
 func (db *PostgresCAStore) SelectByParentCA(ctx context.Context, parentCAID string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
@@ -132,17 +131,17 @@ func (db *PostgresCAStore) SelectByIssuerAndAuthorityKeyID(ctx context.Context, 
 }
 
 func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error) {
-	return db.querier.SelectExists(ctx, id, nil)
+	return db.querier.SelectExists(ctx, map[string]string{"id": id})
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	return db.querier.Insert(ctx, caCertificate)
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(ctx, caCertificate, caCertificate.ID)
+	return db.querier.Update(ctx, caCertificate, map[string]string{"id": caCertificate.ID})
 }
 
 func (db *PostgresCAStore) Delete(ctx context.Context, id string) error {
-	return db.querier.Delete(ctx, id)
+	return db.querier.Delete(ctx, map[string]string{"id": id})
 }

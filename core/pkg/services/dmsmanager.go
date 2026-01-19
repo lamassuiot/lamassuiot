@@ -53,5 +53,5 @@ type UpdateDMSMetadataInput struct {
 type BindIdentityToDeviceInput struct {
 	DeviceID                string
 	CertificateSerialNumber string
-	BindMode                models.DeviceEventType
+	BindMode                models.DeviceEventTypeIDSlotStates
 }

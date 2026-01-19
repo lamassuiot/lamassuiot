@@ -114,3 +114,27 @@ func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services
 		400: {errs.ErrValidateBadRequest},
 	})
 }
+
+func (cli *deviceManagerClient) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	response, err := Post[*models.DeviceEvent](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.Event.DeviceID+"/events", resources.CreateDeviceEventBody{
+		DeviceEvent: models.DeviceEvent{
+			Timestamp:       input.Event.Timestamp,
+			DeviceID:        input.Event.DeviceID,
+			Type:            input.Event.Type,
+			Message:         input.Event.Message,
+			Source:          input.Event.Source,
+			SlotID:          input.Event.SlotID,
+			StructuredField: input.Event.StructuredField,
+		},
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *deviceManagerClient) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	url := cli.baseUrl + "/v1/devices/" + input.DeviceID + "/events"
+	return IterGet[models.DeviceEvent, *resources.GetDeviceEventsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}

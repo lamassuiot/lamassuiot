@@ -8,6 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -22,6 +23,8 @@ type DeviceMiddleware func(services.DeviceManagerService) services.DeviceManager
 
 type DeviceManagerServiceBackend struct {
 	devicesStorage storage.DeviceManagerRepo
+	eventStore     storage.DeviceEventsRepo
+	statusStore    storage.DeviceStatusRepo
 	caClient       services.CAService
 	service        services.DeviceManagerService
 	logger         *logrus.Entry
@@ -31,6 +34,8 @@ type DeviceManagerBuilder struct {
 	Logger         *logrus.Entry
 	CAClient       services.CAService
 	DevicesStorage storage.DeviceManagerRepo
+	EventsStorage  storage.DeviceEventsRepo
+	StatusStorage  storage.DeviceStatusRepo
 }
 
 func NewDeviceManagerService(builder DeviceManagerBuilder) services.DeviceManagerService {
@@ -38,6 +43,8 @@ func NewDeviceManagerService(builder DeviceManagerBuilder) services.DeviceManage
 	svc := &DeviceManagerServiceBackend{
 		caClient:       builder.CAClient,
 		devicesStorage: builder.DevicesStorage,
+		eventStore:     builder.EventsStorage,
+		statusStore:    builder.StatusStorage,
 		logger:         builder.Logger,
 	}
 
@@ -64,17 +71,14 @@ func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, inp
 
 	stats := models.DevicesStats{
 		TotalDevices:  -1,
-		DevicesStatus: map[models.DeviceStatus]int{},
+		DevicesStatus: map[models.DeviceStatusType]int{},
 	}
 
-	allStatus := []models.DeviceStatus{
-		models.DeviceNoIdentity,
-		models.DeviceActive,
-		models.DeviceRenewalWindow,
-		models.DeviceAboutToExpire,
-		models.DeviceExpired,
-		models.DeviceRevoked,
-		models.DeviceDecommissioned,
+	allStatus := []models.DeviceStatusType{
+		models.DeviceStatusOK,
+		models.DeviceStatusWarn,
+		models.DeviceStatusError,
+		models.DeviceStatusDecommissioned,
 	}
 
 	for _, status := range allStatus {
@@ -102,7 +106,7 @@ func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, inp
 
 // addStatusFilter creates a new QueryParameters with the status filter added.
 // This is used to count devices by status while preserving other filters.
-func addStatusFilter(queryParams *resources.QueryParameters, status models.DeviceStatus) *resources.QueryParameters {
+func addStatusFilter(queryParams *resources.QueryParameters, status models.DeviceStatusType) *resources.QueryParameters {
 	// If queryParams is nil, create a new one with just the status filter
 	if queryParams == nil {
 		return &resources.QueryParameters{
@@ -163,8 +167,7 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 
 	device := &models.Device{
 		ID:                input.ID,
-		IdentitySlot:      nil,
-		Status:            models.DeviceNoIdentity,
+		Status:            models.DeviceStatusOK,
 		ExtraSlots:        map[string]*models.Slot[any]{},
 		Tags:              input.Tags,
 		Metadata:          input.Metadata,
@@ -172,12 +175,22 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 		IconColor:         input.IconColor,
 		DMSOwner:          input.DMSID,
 		CreationTimestamp: now,
-		Events: map[time.Time]models.DeviceEvent{
-			now: {
-				EvenType:          models.DeviceEventTypeCreated,
-				EventDescriptions: "",
-			},
-		},
+	}
+
+	event := models.DeviceEvent{
+		DeviceID:        input.ID,
+		Type:            string(models.DeviceEventTypeLifecycleStatusUpdated),
+		Message:         "device created",
+		Timestamp:       now,
+		SlotID:          "",
+		Source:          models.DeviceManagerSource,
+		StructuredField: nil,
+	}
+
+	status := models.DeviceStatus{
+		DeviceID:   input.ID,
+		Status:     device.Status,
+		UpdateTime: now,
 	}
 
 	dev, err := svc.devicesStorage.Insert(ctx, device)
@@ -185,6 +198,17 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 		lFunc.Errorf("could not insert device %s in storage engine: %s", input.ID, err)
 		return nil, err
 	}
+
+	_, err = svc.eventStore.Insert(ctx, &event)
+	if err != nil {
+		lFunc.Warnf("could not insert device event for device %s: %s", input.ID, err)
+	}
+
+	_, err = svc.statusStore.Insert(ctx, &status)
+	if err != nil {
+		lFunc.Warnf("could not insert device status for device %s: %s", input.ID, err)
+	}
+
 	return dev, nil
 }
 
@@ -244,26 +268,37 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	if device.Status == input.NewStatus {
 		lFunc.Warnf("skipping update. Device already in %s status", input.NewStatus)
 		return device, nil
-	} else if device.Status == models.DeviceDecommissioned {
+	} else if device.Status == models.DeviceStatusDecommissioned {
 		lFunc.Warnf("skipping update. Device decommissioned")
 		return device, nil
 	}
 
-	if input.NewStatus == models.DeviceDecommissioned {
+	newEvent := models.DeviceEvent{
+		DeviceID:        input.ID,
+		Type:            string(models.DeviceEventTypeLifecycleStatusUpdated),
+		Message:         fmt.Sprintf("device status updated from '%s' to '%s'", device.Status, input.NewStatus),
+		Timestamp:       time.Now(),
+		SlotID:          "",
+		Source:          models.DeviceManagerSource,
+		StructuredField: nil,
+	}
 
-		device.Events[time.Now()] = models.DeviceEvent{
-			EvenType: models.DeviceEventTypeStatusDecommissioned,
-		}
+	newStatus := models.DeviceStatus{
+		DeviceID:   input.ID,
+		Status:     input.NewStatus,
+		UpdateTime: time.Now(),
+	}
 
+	if input.NewStatus == models.DeviceStatusDecommissioned {
 		idSlot := device.IdentitySlot
 		if idSlot != nil {
-			if idSlot.Status == models.SlotExpired {
+			if idSlot.Status == string(models.SlotX509StatusExpired) {
 				lFunc.Debugf("skipping slot update. Identity slot already expired")
-			} else if idSlot.Status == models.SlotRevoke {
+			} else if idSlot.Status == string(models.SlotX509StatusRevoked) {
 				lFunc.Debugf("skipping slot update. Identity slot already revoked")
 			} else {
 
-				idSlot.Status = models.SlotRevoke
+				idSlot.Status = string(models.SlotX509StatusRevoked)
 				defer func() {
 					certSN := idSlot.Secrets[idSlot.ActiveVersion]
 					//don't revoke IdSlot, this will be handled by revoking the attached certificate
@@ -280,11 +315,6 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 				}()
 			}
 		}
-	} else {
-		device.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeStatusUpdated,
-			EventDescriptions: fmt.Sprintf("Status updated from '%s' to '%s'", device.Status, input.NewStatus),
-		}
 	}
 
 	device.Status = input.NewStatus
@@ -293,6 +323,16 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	if err != nil {
 		lFunc.Errorf("error while updating %s device status. could not update DB: %s", device.ID, err)
 		return nil, err
+	}
+
+	_, err = svc.eventStore.Insert(ctx, &newEvent)
+	if err != nil {
+		lFunc.Warnf("error while inserting device event for device %s: %s", device.ID, err)
+	}
+
+	_, err = svc.statusStore.Insert(ctx, &newStatus)
+	if err != nil {
+		lFunc.Warnf("error while inserting device status for device %s: %s", device.ID, err)
 	}
 
 	lFunc.Debugf("device %s status updated. new status: %s", input.ID, input.NewStatus)
@@ -351,15 +391,17 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 		return nil, errs.ErrDeviceNotFound
 	}
 
-	if device.Status == models.DeviceDecommissioned {
+	if device.Status == models.DeviceStatusDecommissioned {
 		lFunc.Warnf("device %s is decommissioned", input.ID)
 		return device, nil
 	}
 
 	newSlot := input.Slot
-	var newDevStatus models.DeviceStatus
+
+	var newDevStatus models.DeviceStatusType
+
 	switch input.Slot.Status {
-	case models.SlotRevoke:
+	case string(models.SlotX509StatusRevoked):
 		sn := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
 		crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 			SerialNumber: sn,
@@ -381,23 +423,51 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 			}
 
 		}
-		newDevStatus = models.DeviceRevoked
-	case models.SlotActive:
-		newDevStatus = models.DeviceActive
-	case models.SlotRenewalWindow:
-		newDevStatus = models.DeviceRenewalWindow
-	case models.SlotAboutToExpire:
-		newDevStatus = models.DeviceAboutToExpire
-	case models.SlotExpired:
-		newDevStatus = models.DeviceExpired
+
+		newDevStatus = models.DeviceStatusError
+
+	case string(models.SlotX509StatusActive):
+		newDevStatus = models.DeviceStatusOK
+
+	case string(models.SlotX509StatusRenewalWindow):
+		newDevStatus = models.DeviceStatusWarn
+
+	case string(models.SlotX509StatusAboutToExpire):
+		newDevStatus = models.DeviceStatusWarn
+
+	case string(models.SlotX509StatusExpired):
+		newDevStatus = models.DeviceStatusError
 	}
 
 	if device.IdentitySlot != nil && newSlot.Status != device.IdentitySlot.Status {
-		newSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeStatusUpdated,
-			EventDescriptions: fmt.Sprintf("Identity Slot Status updated from '%s' to '%s'", device.Status, newSlot.Status),
+		newEvent := models.DeviceEvent{
+			DeviceID:        input.ID,
+			Type:            string(models.DeviceEventTypeIDSlotStatusUpdated),
+			Message:         fmt.Sprintf("identity slot status updated from '%s' to '%s'", device.IdentitySlot.Status, newSlot.Status),
+			Timestamp:       time.Now(),
+			SlotID:          "idslot",
+			Source:          models.DeviceManagerSource,
+			StructuredField: nil,
+		}
+
+		_, err := svc.eventStore.Insert(ctx, &newEvent)
+		if err != nil {
+			lFunc.Errorf("could not insert device event for device %s: %s", input.ID, err)
+			return nil, err
+		}
+
+		if newDevStatus != device.Status {
+			_, err := svc.service.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
+				ID:        input.ID,
+				NewStatus: newDevStatus,
+			})
+			if err != nil {
+				lFunc.Errorf("could not update device %s status to %s: %s", input.ID, newDevStatus, err)
+				return nil, err
+			}
 		}
 	}
+
 	device.IdentitySlot = &newSlot
 
 	lFunc.Debugf("updating %s device identity slot. New device status %s. ID slot status %s", input.ID, device.Status, device.IdentitySlot.Status)
@@ -441,7 +511,7 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 	}
 
 	// Only allow deletion of decommissioned devices
-	if device.Status != models.DeviceDecommissioned {
+	if device.Status != models.DeviceStatusDecommissioned {
 		lFunc.Errorf("cannot delete device '%s': device must be decommissioned first. Current status: %s", id, device.Status)
 		return errs.ErrDeviceInvalidStatus
 	}
@@ -455,4 +525,23 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 
 	lFunc.Infof("device '%s' deleted successfully", id)
 	return nil
+}
+
+func (svc DeviceManagerServiceBackend) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	ev, err := svc.eventStore.Insert(ctx, &input.Event)
+	if err != nil {
+		lFunc.Errorf("could not insert device event for device %s: %s", input.Event.DeviceID, err)
+		return nil, err
+	}
+
+	return ev, nil
+}
+
+func (svc DeviceManagerServiceBackend) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Debugf("getting all events for device %s", input.DeviceID)
+	return svc.eventStore.Select(ctx, input.DeviceID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }

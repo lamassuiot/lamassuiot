@@ -56,3 +56,13 @@ func (dm *MockDeviceManagerService) DeleteDevice(ctx context.Context, input serv
 	args := dm.Called(ctx, input)
 	return args.Error(0)
 }
+
+func (dm *MockDeviceManagerService) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (output *models.DeviceEvent, err error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.DeviceEvent), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	args := dm.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}

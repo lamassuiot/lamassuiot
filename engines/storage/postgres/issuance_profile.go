@@ -15,7 +15,7 @@ type PostgresIssuanceStorage struct {
 }
 
 func NewIssuanceProfileRepository(logger *logrus.Entry, db *gorm.DB) (storage.IssuanceProfileRepo, error) {
-	querier, err := TableQuery(logger, db, "issuance_profiles", "id", models.IssuanceProfile{})
+	querier, err := TableQuery(logger, db, "issuance_profiles", []string{"id"}, models.IssuanceProfile{})
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func (db *PostgresIssuanceStorage) SelectAll(ctx context.Context, req storage.St
 }
 
 func (db *PostgresIssuanceStorage) SelectByID(ctx context.Context, id string) (bool, *models.IssuanceProfile, error) {
-	exists, profile, err := db.querier.SelectExists(ctx, id, nil)
+	exists, profile, err := db.querier.SelectExists(ctx, map[string]string{"id": id})
 	if err != nil {
 		return false, nil, err
 	}
@@ -48,7 +48,7 @@ func (db *PostgresIssuanceStorage) SelectByID(ctx context.Context, id string) (b
 }
 
 func (db *PostgresIssuanceStorage) Insert(ctx context.Context, issuanceProfile *models.IssuanceProfile) (*models.IssuanceProfile, error) {
-	profile, err := db.querier.Insert(ctx, issuanceProfile, issuanceProfile.ID)
+	profile, err := db.querier.Insert(ctx, issuanceProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (db *PostgresIssuanceStorage) Insert(ctx context.Context, issuanceProfile *
 }
 
 func (db *PostgresIssuanceStorage) Update(ctx context.Context, issuanceProfile *models.IssuanceProfile) (*models.IssuanceProfile, error) {
-	profile, err := db.querier.Update(ctx, issuanceProfile, issuanceProfile.ID)
+	profile, err := db.querier.Update(ctx, issuanceProfile, map[string]string{"id": issuanceProfile.ID})
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (db *PostgresIssuanceStorage) Update(ctx context.Context, issuanceProfile *
 }
 
 func (db *PostgresIssuanceStorage) Delete(ctx context.Context, id string) error {
-	err := db.querier.Delete(ctx, id)
+	err := db.querier.Delete(ctx, map[string]string{"id": id})
 	if err != nil {
 		return err
 	}

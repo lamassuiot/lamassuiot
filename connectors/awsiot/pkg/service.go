@@ -606,10 +606,10 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		return err
 	}
 
-	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
-		EvenType:          models.DeviceEventTypeShadowUpdated,
-		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
-	}
+	// device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
+	// 	EvenType:          models.DeviceEventTypeShadowUpdated,
+	// 	EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
+	// }
 
 	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 		ID:   input.DeviceID,

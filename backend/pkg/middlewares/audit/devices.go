@@ -79,3 +79,14 @@ func (mw *DeviceAuditEventPublisher) DeleteDevice(ctx context.Context, input ser
 	}()
 	return mw.next.DeleteDevice(ctx, input)
 }
+
+func (mw *DeviceAuditEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (output *models.DeviceEvent, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateDeviceEventKey, input, err, nil)
+	}()
+	return mw.next.CreateDeviceEvent(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
+}

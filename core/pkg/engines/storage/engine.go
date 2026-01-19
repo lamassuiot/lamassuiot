@@ -10,6 +10,8 @@ type CommonStorageEngine struct {
 	Cert            CertificatesRepo
 	IssuanceProfile IssuanceProfileRepo
 	Device          DeviceManagerRepo
+	DeviceStatus    DeviceStatusRepo
+	DeviceEvents    DeviceEventsRepo
 	DMS             DMSRepo
 	VA              VARepo
 	Events          EventRepository
@@ -23,6 +25,8 @@ type StorageEngine interface {
 	GetCertStorage() (CertificatesRepo, error)
 	GetIssuanceProfileStorage() (IssuanceProfileRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)
+	GetDeviceStatusStorage() (DeviceStatusRepo, error)
+	GetDeviceEventStorage() (DeviceEventsRepo, error)
 	GetVARoleStorage() (VARepo, error)
 	GetDMSStorage() (DMSRepo, error)
 	GetEnventsStorage() (EventRepository, error)

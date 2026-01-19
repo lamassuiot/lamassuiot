@@ -591,11 +591,11 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		return nil, err
 	}
 
-	bindMode := models.DeviceEventTypeProvisioned
+	bindMode := models.DeviceEventTypeIDSlotStatusStateProvisioned
 	if device.IdentitySlot == nil {
-		bindMode = models.DeviceEventTypeProvisioned
+		bindMode = models.DeviceEventTypeIDSlotStatusStateProvisioned
 	} else {
-		bindMode = models.DeviceEventTypeReProvisioned
+		bindMode = models.DeviceEventTypeIDSlotStatusStateReProvisioned
 	}
 
 	lFunc.Infof("assigning certificate to device")
@@ -915,7 +915,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	_, err = svc.service.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
 		DeviceID:                device.ID,
 		CertificateSerialNumber: crt.SerialNumber,
-		BindMode:                models.DeviceEventTypeRenewed,
+		BindMode:                models.DeviceEventTypeIDSlotStatusStateRenewed,
 	})
 	if err != nil {
 		return nil, err
@@ -1146,32 +1146,32 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
+	newEvent := models.DeviceEvent{
+		DeviceID:        input.DeviceID,
+		Type:            string(models.DeviceEventTypeIDSlotStatusUpdated),
+		Message:         "id slot got updated with new certificate",
+		Timestamp:       time.Now(),
+		SlotID:          "idslot",
+		Source:          models.DMSManagerSource,
+		StructuredField: nil,
+	}
+
 	idSlot := device.IdentitySlot
 	if idSlot == nil {
 		idSlot = &models.Slot[string]{
-			Status:         models.SlotActive,
+			Status:         string(models.SlotX509StatusActive),
 			ActiveVersion:  0,
 			SecretType:     models.X509SlotProfileType,
 			ExpirationDate: &crt.ValidTo,
 			Secrets: map[int]string{
 				0: crt.SerialNumber,
 			},
-			Events: map[time.Time]models.DeviceEvent{
-				time.Now(): {
-					EvenType: models.DeviceEventTypeProvisioned,
-				},
-			},
 		}
 	} else {
 		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
-		idSlot.Status = models.SlotActive
+		idSlot.Status = string(models.SlotX509StatusActive)
 		idSlot.ExpirationDate = &crt.ValidTo
 		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-
-		idSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          input.BindMode,
-			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
-		}
 	}
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 		ID:   crt.Subject.CommonName,
@@ -1179,6 +1179,14 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	})
 	if err != nil {
 		lFunc.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
+		return nil, err
+	}
+
+	_, err = svc.deviceManagerCli.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		Event: newEvent,
+	})
+	if err != nil {
+		lFunc.Errorf("could not create device event for device '%s': %s", device.ID, err)
 		return nil, err
 	}
 

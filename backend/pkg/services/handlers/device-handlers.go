@@ -63,18 +63,18 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 	updated := false
 	if cert.Updated.Status == models.StatusExpired {
 		updated = true
-		dev.IdentitySlot.Status = models.SlotExpired
+		dev.IdentitySlot.Status = string(models.SlotX509StatusExpired)
 	}
 
 	if cert.Updated.Status == models.StatusRevoked {
 		updated = true
-		dev.IdentitySlot.Status = models.SlotRevoke
+		dev.IdentitySlot.Status = string(models.SlotX509StatusRevoked)
 	}
 
 	//This should be the case when the certificate is un-revoked/reinstated (from the OnHold revocation reason)
 	if cert.Updated.Status == models.StatusActive {
 		updated = true
-		dev.IdentitySlot.Status = models.SlotActive
+		dev.IdentitySlot.Status = string(models.SlotX509StatusActive)
 	}
 
 	if updated {
@@ -141,7 +141,7 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		prevCriticalTriggered := checkIfTriggered(certUpdate.Previous, "Critical")
 		if !prevCriticalTriggered {
 			//no update
-			dev.IdentitySlot.Status = models.SlotAboutToExpire
+			dev.IdentitySlot.Status = string(models.SlotX509StatusAboutToExpire)
 			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 				ID:   deviceID,
 				Slot: *dev.IdentitySlot,
@@ -159,7 +159,7 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		prevPreventiveTriggered := checkIfTriggered(certUpdate.Previous, "Preventive")
 		if !prevPreventiveTriggered {
 			//no update
-			dev.IdentitySlot.Status = models.SlotRenewalWindow
+			dev.IdentitySlot.Status = string(models.SlotX509StatusRenewalWindow)
 			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 				ID:   deviceID,
 				Slot: *dev.IdentitySlot,

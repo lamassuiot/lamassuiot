@@ -30,6 +30,14 @@ func (m *MockStorageEngine) GetDeviceStorage() (DeviceManagerRepo, error) {
 	return nil, nil
 }
 
+func (m *MockStorageEngine) GetDeviceStatusStorage() (DeviceStatusRepo, error) {
+	return nil, nil
+}
+
+func (m *MockStorageEngine) GetDeviceEventStorage() (DeviceEventsRepo, error) {
+	return nil, nil
+}
+
 func (m *MockStorageEngine) GetDMSStorage() (DMSRepo, error) {
 	return nil, nil
 }

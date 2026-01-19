@@ -16,7 +16,7 @@ type PostgresDeviceManagerStore struct {
 }
 
 func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceManagerRepo, error) {
-	querier, err := TableQuery(logger, db, "devices", "id", models.Device{})
+	querier, err := TableQuery(logger, db, "devices", []string{"id"}, models.Device{})
 	if err != nil {
 		return nil, err
 	}
@@ -47,17 +47,17 @@ func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID str
 }
 
 func (db *PostgresDeviceManagerStore) SelectExists(ctx context.Context, ID string) (bool, *models.Device, error) {
-	return db.querier.SelectExists(ctx, ID, nil)
+	return db.querier.SelectExists(ctx, map[string]string{"id": ID})
 }
 
 func (db *PostgresDeviceManagerStore) Update(ctx context.Context, device *models.Device) (*models.Device, error) {
-	return db.querier.Update(ctx, device, device.ID)
+	return db.querier.Update(ctx, device, map[string]string{"id": device.ID})
 }
 
 func (db *PostgresDeviceManagerStore) Insert(ctx context.Context, device *models.Device) (*models.Device, error) {
-	return db.querier.Insert(ctx, device, device.ID)
+	return db.querier.Insert(ctx, device)
 }
 
 func (db *PostgresDeviceManagerStore) Delete(ctx context.Context, ID string) error {
-	return db.querier.Delete(ctx, ID)
+	return db.querier.Delete(ctx, map[string]string{"id": ID})
 }

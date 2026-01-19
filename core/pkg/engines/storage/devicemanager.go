@@ -16,3 +16,13 @@ type DeviceManagerRepo interface {
 	Insert(ctx context.Context, device *models.Device) (*models.Device, error)
 	Delete(ctx context.Context, ID string) error
 }
+
+type DeviceEventsRepo interface {
+	Select(ctx context.Context, deviceID string, exhaustiveRun bool, applyFunc func(models.DeviceEvent), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
+	Insert(ctx context.Context, device *models.DeviceEvent) (*models.DeviceEvent, error)
+}
+
+type DeviceStatusRepo interface {
+	Select(ctx context.Context, deviceID string, exhaustiveRun bool, applyFunc func(models.DeviceStatus), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
+	Insert(ctx context.Context, device *models.DeviceStatus) (*models.DeviceStatus, error)
+}

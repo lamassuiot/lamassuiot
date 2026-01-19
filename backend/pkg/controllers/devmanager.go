@@ -228,7 +228,7 @@ func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
 
 	dev, err := r.svc.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
 		ID:        params.ID,
-		NewStatus: models.DeviceDecommissioned,
+		NewStatus: models.DeviceStatusDecommissioned,
 	})
 
 	if err != nil {
@@ -269,4 +269,70 @@ func (r *devManagerHttpRoutes) DeleteDevice(ctx *gin.Context) {
 	}
 
 	ctx.Status(204) // No Content for successful deletion
+}
+
+func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	events := []models.DeviceEvent{}
+	nextBookmark, err := r.svc.GetDeviceEvents(ctx, services.GetDeviceEventsInput{
+		DeviceID: params.ID,
+		ListInput: resources.ListInput[models.DeviceEvent]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(event models.DeviceEvent) {
+				events = append(events, event)
+			},
+		},
+	})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, resources.GetDeviceEventsResponse{
+		IterableList: resources.IterableList[models.DeviceEvent]{
+			NextBookmark: nextBookmark,
+			List:         events,
+		},
+	})
+}
+
+func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.CreateDeviceEventBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	event, err := r.svc.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		Event: requestBody.DeviceEvent,
+	})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(201, event)
 }

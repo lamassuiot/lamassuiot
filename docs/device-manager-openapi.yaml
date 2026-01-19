@@ -47,12 +47,9 @@ paths:
                   value:
                     total: 150
                     status_distribution:
-                      NO_IDENTITY: 10
-                      ACTIVE: 100
-                      RENEWAL_WINDOW: 15
-                      ABOUT_TO_EXPIRE: 5
-                      EXPIRED: 8
-                      REVOKED: 7
+                      OK: 100
+                      WARN: 20
+                      ERROR: 25
                       DECOMMISSIONED: 5
         '400':
           description: Bad request - invalid filter or parameters (e.g., invalid status filter)
@@ -242,6 +239,50 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /devices/{id}/events:
+    get:
+      tags: [Devices]
+      summary: Get device events
+      operationId: getDeviceEvents
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Device events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDeviceEventsResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Devices]
+      summary: Create device event
+      operationId: createDeviceEvent
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceEventBody'
+      responses:
+        '201':
+          description: Created event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceEvent'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
 components:
   parameters:
     DeviceId:
@@ -289,7 +330,7 @@ components:
         **Supported Fields:**
         - `id` (string): Device identifier
         - `dms_owner` (string): DMS identifier
-        - `status` (enum): Device status (NO_IDENTITY, ACTIVE, RENEWAL_WINDOW, ABOUT_TO_EXPIRE, EXPIRED, REVOKED, DECOMMISSIONED)
+        - `status` (enum): Device status (OK, WARN, ERROR, DECOMMISSIONED)
         - `tags` (array): Device tags
         - `creation_timestamp` (date): Device creation time
         
@@ -398,6 +439,39 @@ components:
           items:
             $ref: '#/components/schemas/Device'
 
+    GetDeviceEventsResponse:
+      type: object
+      properties:
+        next:
+          type: string
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceEvent'
+
+    CreateDeviceEventBody:
+      type: object
+      required:
+        - timestamp
+        - type
+        - message
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          type: string
+          description: Event type (e.g., lamassu.io/device-event/idslot/shadow/update, lamassu.io/device-event/lifecycle/status/update)
+        message:
+          type: string
+        slot_id:
+          type: string
+        source:
+          type: string
+        structured_field:
+          type: object
+          additionalProperties: true
+
     Device:
       type: object
       properties:
@@ -409,6 +483,8 @@ components:
             type: string
         status:
           type: string
+          enum: [OK, WARN, ERROR, DECOMMISSIONED]
+          description: Device operational status
         icon:
           type: string
         icon_color:
@@ -422,14 +498,61 @@ components:
         dms_owner:
           type: string
         identity:
-          type: object
-          description: Active identity slot
+          $ref: '#/components/schemas/Slot'
         slots:
           type: object
           additionalProperties: true
-        events:
+
+    Slot:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [NOT_SET, ACTIVE, RENEWAL_PENDING, EXPIRING_SOON, EXPIRED, REVOKED]
+          description: Slot status
+        active_version:
+          type: integer
+        type:
+          type: string
+          enum: [x509, TOKEN, SSH_KEY, OTHER]
+        versions:
           type: object
           additionalProperties: true
+        expiration_date:
+          type: string
+          format: date-time
+
+    DeviceEvent:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        device_id:
+          type: string
+        type:
+          type: string
+        message:
+          type: string
+        slot_id:
+          type: string
+        source:
+          type: string
+        structured_field:
+          type: object
+          additionalProperties: true
+
+    DeviceStatus:
+      type: object
+      properties:
+        device_id:
+          type: string
+        status:
+          type: string
+          enum: [OK, WARN, ERROR, DECOMMISSIONED]
+        update_time:
+          type: string
+          format: date-time
 
     DevicesStats:
       type: object

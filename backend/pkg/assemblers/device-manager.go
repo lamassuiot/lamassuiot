@@ -44,7 +44,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "Device Manager", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Device Manager", "Storage")
 
-	devStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
+	devStorage, devStatusStorage, devEventsStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create device storage: %s", err)
 	}
@@ -52,6 +52,8 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	svc := lservices.NewDeviceManagerService(lservices.DeviceManagerBuilder{
 		Logger:         lSvc,
 		DevicesStorage: devStorage,
+		StatusStorage:  devStatusStorage,
+		EventsStorage:  devEventsStorage,
 		CAClient:       caService,
 	})
 
@@ -110,14 +112,31 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	return &svc, nil
 }
 
-func createDevicesStorageInstance(logger *logrus.Entry, conf cconfig.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {
+func createDevicesStorageInstance(logger *logrus.Entry, conf cconfig.PluggableStorageEngine) (
+	storage.DeviceManagerRepo,
+	storage.DeviceStatusRepo,
+	storage.DeviceEventsRepo,
+	error,
+) {
 	storage, err := builder.BuildStorageEngine(logger, conf)
 	if err != nil {
-		return nil, fmt.Errorf("could not create storage engine: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
+
 	deviceStorage, err := storage.GetDeviceStorage()
 	if err != nil {
-		return nil, fmt.Errorf("could not get device storage: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not get device storage: %s", err)
 	}
-	return deviceStorage, nil
+
+	deviceStatusStorage, err := storage.GetDeviceStatusStorage()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("could not get device status storage: %s", err)
+	}
+
+	deviceEventsStorage, err := storage.GetDeviceEventStorage()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("could not get device events storage: %s", err)
+	}
+
+	return deviceStorage, deviceStatusStorage, deviceEventsStorage, nil
 }

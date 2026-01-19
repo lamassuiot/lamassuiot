@@ -16,7 +16,7 @@ type PostgresDMSManagerStore struct {
 }
 
 func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DMSRepo, error) {
-	querier, err := TableQuery(logger, db, "dms", "id", models.DMS{})
+	querier, err := TableQuery(logger, db, "dms", []string{"id"}, models.DMS{})
 	if err != nil {
 		return nil, err
 	}
@@ -36,17 +36,17 @@ func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun 
 }
 
 func (db *PostgresDMSManagerStore) SelectExists(ctx context.Context, ID string) (bool, *models.DMS, error) {
-	return db.querier.SelectExists(ctx, ID, nil)
+	return db.querier.SelectExists(ctx, map[string]string{"id": ID})
 }
 
 func (db *PostgresDMSManagerStore) Update(ctx context.Context, DMS *models.DMS) (*models.DMS, error) {
-	return db.querier.Update(ctx, DMS, DMS.ID)
+	return db.querier.Update(ctx, DMS, map[string]string{"id": DMS.ID})
 }
 
 func (db *PostgresDMSManagerStore) Insert(ctx context.Context, DMS *models.DMS) (*models.DMS, error) {
-	return db.querier.Insert(ctx, DMS, DMS.ID)
+	return db.querier.Insert(ctx, DMS)
 }
 
 func (db *PostgresDMSManagerStore) Delete(ctx context.Context, ID string) error {
-	return db.querier.Delete(ctx, ID)
+	return db.querier.Delete(ctx, map[string]string{"id": ID})
 }

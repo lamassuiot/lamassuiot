@@ -15,7 +15,7 @@ type PostgresVAStore struct {
 }
 
 func NewVARepository(logger *logrus.Entry, db *gorm.DB) (storage.VARepo, error) {
-	querier, err := TableQuery(logger, db, "va_role", "ca_ski", models.VARole{})
+	querier, err := TableQuery(logger, db, "va_role", []string{"ca_ski"}, models.VARole{})
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func NewVARepository(logger *logrus.Entry, db *gorm.DB) (storage.VARepo, error) 
 }
 
 func (db *PostgresVAStore) Get(ctx context.Context, caSki string) (bool, *models.VARole, error) {
-	return db.querier.SelectExists(ctx, caSki, nil)
+	return db.querier.SelectExists(ctx, map[string]string{"ca_ski": caSki})
 }
 
 func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRequest[models.VARole]) (string, error) {
@@ -35,9 +35,9 @@ func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRe
 }
 
 func (db *PostgresVAStore) Update(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Update(ctx, role, role.CASubjectKeyID)
+	return db.querier.Update(ctx, role, map[string]string{"ca_ski": role.CASubjectKeyID})
 }
 
 func (db *PostgresVAStore) Insert(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Insert(ctx, role, role.CASubjectKeyID)
+	return db.querier.Insert(ctx, role)
 }

@@ -463,9 +463,15 @@ components:
 
     BindIdentityToDeviceBody:
       type: object
+      required:
+        - bind_mode
+        - device_id
+        - certificate_serial_number
       properties:
         bind_mode:
           type: string
+          enum: [PROVISIONED, RE-PROVISIONED, RENEWED]
+          description: Binding mode for identity attachment
         device_id:
           type: string
         certificate_serial_number:

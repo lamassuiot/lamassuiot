@@ -18,7 +18,7 @@ type PostgresKMSStore struct {
 }
 
 func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRepo, error) {
-	querier, err := TableQuery(log, db, kmsTableName, "key_id", models.Key{})
+	querier, err := TableQuery(log, db, kmsTableName, []string{"key_id"}, models.Key{})
 	if err != nil {
 		return nil, err
 	}
@@ -39,12 +39,11 @@ func (db *PostgresKMSStore) SelectAll(ctx context.Context, req storage.StorageLi
 }
 
 func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, id string) (bool, *models.Key, error) {
-	return db.querier.SelectExists(ctx, id, nil)
+	return db.querier.SelectExists(ctx, map[string]string{"key_id": id})
 }
 
 func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string) (bool, *models.Key, error) {
-	col := "name"
-	return db.querier.SelectExists(ctx, name, &col)
+	return db.querier.SelectExists(ctx, map[string]string{"name": name})
 }
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
@@ -62,13 +61,13 @@ func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias strin
 }
 
 func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	return db.querier.Insert(ctx, kmsKey, kmsKey.KeyID)
+	return db.querier.Insert(ctx, kmsKey)
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	return db.querier.Update(ctx, kmsKey, kmsKey.KeyID)
+	return db.querier.Update(ctx, kmsKey, map[string]string{"key_id": kmsKey.KeyID})
 }
 
 func (db *PostgresKMSStore) Delete(ctx context.Context, id string) error {
-	return db.querier.Delete(ctx, id)
+	return db.querier.Delete(ctx, map[string]string{"key_id": id})
 }
