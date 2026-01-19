@@ -59,56 +59,16 @@ func PopulateSampleData(
 	logger.Info("Creating CA issuance profiles...")
 
 	// Create imported root CA profile
-	importedRootCAProfile, err := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Name:        "Imported Root CA Profile",
-			Description: "Profile for the imported root CA",
-			Validity: models.Validity{
-				Type:     models.Duration,
-				Duration: models.TimeDuration(3650 * 24 * time.Hour), // 10 years
-			},
-			SignAsCA:      true,
-			HonorKeyUsage: false,
-			KeyUsage: models.X509KeyUsage(
-				x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
-			),
-			HonorExtendedKeyUsages: false,
-			ExtendedKeyUsages:      []models.X509ExtKeyUsage{},
-			HonorSubject:           true,
-			Subject:                models.Subject{},
-		},
-	})
+	importedRootCAProfile, err := createCAProfile(ctx, logger, caService, "Imported Root CA Profile", "Profile for the imported root CA")
 	if err != nil {
-		logger.Warnf("Could not create imported root CA profile: %v", err)
 		return err
 	}
-	logger.Infof("Created CA issuance profile: %s (ID: %s)", importedRootCAProfile.Name, importedRootCAProfile.ID)
 
 	// Create generated root CA profile
-	generatedRootCAProfile, err := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Name:        "Generated Root CA Profile",
-			Description: "Profile for the generated root CA",
-			Validity: models.Validity{
-				Type:     models.Duration,
-				Duration: models.TimeDuration(3650 * 24 * time.Hour), // 10 years
-			},
-			SignAsCA:      true,
-			HonorKeyUsage: false,
-			KeyUsage: models.X509KeyUsage(
-				x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
-			),
-			HonorExtendedKeyUsages: false,
-			ExtendedKeyUsages:      []models.X509ExtKeyUsage{},
-			HonorSubject:           true,
-			Subject:                models.Subject{},
-		},
-	})
+	generatedRootCAProfile, err := createCAProfile(ctx, logger, caService, "Generated Root CA Profile", "Profile for the generated root CA")
 	if err != nil {
-		logger.Warnf("Could not create generated root CA profile: %v", err)
 		return err
 	}
-	logger.Infof("Created CA issuance profile: %s (ID: %s)", generatedRootCAProfile.Name, generatedRootCAProfile.ID)
 
 	// Step 2: Import the private key into KMS and create CA using the imported key
 	logger.Info("Importing private key into KMS and creating Root CA...")
@@ -158,90 +118,38 @@ func PopulateSampleData(
 	// First create certificate issuance profiles
 	logger.Info("Creating certificate issuance profiles...")
 
-	// Create server profile
-	serverProfile, err := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Name:        "Server Certificates",
-			Description: "Profile for issuing server certificates",
-			Validity: models.Validity{
-				Type:     models.Duration,
-				Duration: models.TimeDuration(365 * 24 * time.Hour), // 365 days = 1 year
-			},
-			SignAsCA:      false,
-			HonorKeyUsage: false,
-			KeyUsage: models.X509KeyUsage(
-				x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-			),
-			HonorExtendedKeyUsages: false,
-			ExtendedKeyUsages: []models.X509ExtKeyUsage{
-				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-			},
-			HonorSubject: true,
-			Subject:      models.Subject{},
+	profiles := map[string]*certificateProfileConfig{
+		"server": {
+			name:        "Server Certificates",
+			description: "Profile for issuing server certificates",
+			keyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+			extKeyUsage: []models.X509ExtKeyUsage{models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth)},
 		},
-	})
-	if err != nil {
-		logger.Warnf("Could not create server profile: %v", err)
-	} else {
-		logger.Infof("Created issuance profile: %s (ID: %s)", serverProfile.Name, serverProfile.ID)
-	}
-
-	// Create client profile
-	clientProfile, err := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Name:        "Client Certificates",
-			Description: "Profile for issuing client certificates",
-			Validity: models.Validity{
-				Type:     models.Duration,
-				Duration: models.TimeDuration(365 * 24 * time.Hour), // 365 days = 1 year
-			},
-			SignAsCA:      false,
-			HonorKeyUsage: false,
-			KeyUsage: models.X509KeyUsage(
-				x509.KeyUsageDigitalSignature,
-			),
-			HonorExtendedKeyUsages: false,
-			ExtendedKeyUsages: []models.X509ExtKeyUsage{
-				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-			},
-			HonorSubject: true,
-			Subject:      models.Subject{},
+		"client": {
+			name:        "Client Certificates",
+			description: "Profile for issuing client certificates",
+			keyUsage:    x509.KeyUsageDigitalSignature,
+			extKeyUsage: []models.X509ExtKeyUsage{models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth)},
 		},
-	})
-	if err != nil {
-		logger.Warnf("Could not create client profile: %v", err)
-	} else {
-		logger.Infof("Created issuance profile: %s (ID: %s)", clientProfile.Name, clientProfile.ID)
-	}
-
-	// Create device profile
-	deviceProfile, err := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Name:        "Device Certificates",
-			Description: "Profile for issuing device certificates",
-			Validity: models.Validity{
-				Type:     models.Duration,
-				Duration: models.TimeDuration(365 * 24 * time.Hour), // 365 days = 1 year
-			},
-			SignAsCA:      false,
-			HonorKeyUsage: false,
-			KeyUsage: models.X509KeyUsage(
-				x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-			),
-			HonorExtendedKeyUsages: false,
-			ExtendedKeyUsages: []models.X509ExtKeyUsage{
+		"device": {
+			name:        "Device Certificates",
+			description: "Profile for issuing device certificates",
+			keyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+			extKeyUsage: []models.X509ExtKeyUsage{
 				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
 				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
 			},
-			HonorSubject: true,
-			Subject:      models.Subject{},
 		},
-	})
-	if err != nil {
-		logger.Warnf("Could not create device profile: %v", err)
-	} else {
-		logger.Infof("Created issuance profile: %s (ID: %s)", deviceProfile.Name, deviceProfile.ID)
 	}
+
+	createdProfiles, err := createCertificateProfiles(ctx, logger, caService, profiles)
+	if err != nil {
+		logger.Warnf("Some certificate profiles could not be created: %v", err)
+	}
+
+	serverProfile := createdProfiles["server"]
+	clientProfile := createdProfiles["client"]
+	deviceProfile := createdProfiles["device"]
 
 	// Now issue certificates using the actual profile IDs
 	if importedCAID != "" && serverProfile != nil && clientProfile != nil && deviceProfile != nil {
@@ -1024,6 +932,117 @@ func PopulateSampleData(
 	return nil
 }
 
+// certificateProfileConfig holds configuration for creating a certificate issuance profile
+type certificateProfileConfig struct {
+	name        string
+	description string
+	keyUsage    x509.KeyUsage
+	extKeyUsage []models.X509ExtKeyUsage
+}
+
+// createCAProfile creates a CA issuance profile with standard settings
+func createCAProfile(ctx context.Context, logger *logrus.Entry, caService services.CAService, name, description string) (*models.IssuanceProfile, error) {
+	profile, err := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:        name,
+			Description: description,
+			Validity: models.Validity{
+				Type:     models.Duration,
+				Duration: models.TimeDuration(3650 * 24 * time.Hour), // 10 years
+			},
+			SignAsCA:      true,
+			HonorKeyUsage: false,
+			KeyUsage: models.X509KeyUsage(
+				x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+			),
+			HonorExtendedKeyUsages: false,
+			ExtendedKeyUsages:      []models.X509ExtKeyUsage{},
+			HonorSubject:           true,
+			Subject:                models.Subject{},
+		},
+	})
+	if err != nil {
+		logger.Warnf("Could not create CA profile %s: %v", name, err)
+		return nil, err
+	}
+	logger.Infof("Created CA issuance profile: %s (ID: %s)", profile.Name, profile.ID)
+	return profile, nil
+}
+
+// createCertificateProfiles creates multiple certificate issuance profiles from configuration
+func createCertificateProfiles(ctx context.Context, logger *logrus.Entry, caService services.CAService, configs map[string]*certificateProfileConfig) (map[string]*models.IssuanceProfile, error) {
+	result := make(map[string]*models.IssuanceProfile)
+	for key, config := range configs {
+		profile, err := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Name:        config.name,
+				Description: config.description,
+				Validity: models.Validity{
+					Type:     models.Duration,
+					Duration: models.TimeDuration(365 * 24 * time.Hour), // 1 year
+				},
+				SignAsCA:               false,
+				HonorKeyUsage:          false,
+				KeyUsage:               models.X509KeyUsage(config.keyUsage),
+				HonorExtendedKeyUsages: false,
+				ExtendedKeyUsages:      config.extKeyUsage,
+				HonorSubject:           true,
+				Subject:                models.Subject{},
+			},
+		})
+		if err != nil {
+			logger.Warnf("Could not create profile %s: %v", config.name, err)
+		} else {
+			logger.Infof("Created issuance profile: %s (ID: %s)", profile.Name, profile.ID)
+			result[key] = profile
+		}
+	}
+	return result, nil
+}
+
+// generateAndSignCertificate generates a CSR and signs it with the specified CA
+func generateAndSignCertificate(ctx context.Context, caService services.CAService, caID, commonName string, dnsNames []string, organization, profileID string) (*models.Certificate, error) {
+	// Generate a private key
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
+	}
+
+	// Create a CSR
+	csrTemplate := &x509.CertificateRequest{
+		Subject: pkix.Name{
+			CommonName:   commonName,
+			Organization: []string{organization},
+		},
+		DNSNames: dnsNames,
+	}
+
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CSR: %w", err)
+	}
+
+	csr, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse CSR: %w", err)
+	}
+
+	// Convert to models.X509CertificateRequest
+	x509CSR := models.X509CertificateRequest(*csr)
+
+	// Sign the certificate
+	signedCert, err := caService.SignCertificate(ctx, services.SignCertificateInput{
+		CAID:              caID,
+		CertRequest:       &x509CSR,
+		IssuanceProfileID: profileID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign certificate: %w", err)
+	}
+
+	return signedCert, nil
+}
+
 // extractBaseURL extracts the base URL without the path
 // converts "http://127.0.0.1:8080/api/devmanager" to "http://127.0.0.1:8080/api/dmsmanager"
 func extractBaseURL(serviceURL string) string {
@@ -1142,34 +1161,6 @@ func issueSampleCertificates(ctx context.Context, logger *logrus.Entry, caServic
 	for _, certSpec := range sampleCerts {
 		logger.Infof("Issuing certificate: %s from CA: %s", certSpec.commonName, caID)
 
-		// Generate a private key for the certificate
-		privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			return fmt.Errorf("failed to generate private key for %s: %w", certSpec.commonName, err)
-		}
-
-		// Create a CSR
-		csrTemplate := &x509.CertificateRequest{
-			Subject: pkix.Name{
-				CommonName:   certSpec.commonName,
-				Organization: []string{"LamassuIoT Sample"},
-			},
-			DNSNames: certSpec.dnsNames,
-		}
-
-		csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privKey)
-		if err != nil {
-			return fmt.Errorf("failed to create CSR for %s: %w", certSpec.commonName, err)
-		}
-
-		csr, err := x509.ParseCertificateRequest(csrDER)
-		if err != nil {
-			return fmt.Errorf("failed to parse CSR for %s: %w", certSpec.commonName, err)
-		}
-
-		// Convert to models.X509CertificateRequest
-		x509CSR := models.X509CertificateRequest(*csr)
-
 		// Get the profile ID for this certificate type
 		profileID, ok := profileIDs[certSpec.certType]
 		if !ok {
@@ -1177,14 +1168,10 @@ func issueSampleCertificates(ctx context.Context, logger *logrus.Entry, caServic
 			continue
 		}
 
-		// Sign the certificate
-		signedCert, err := caService.SignCertificate(ctx, services.SignCertificateInput{
-			CAID:              caID,
-			CertRequest:       &x509CSR,
-			IssuanceProfileID: profileID,
-		})
+		// Generate CSR and sign certificate
+		signedCert, err := generateAndSignCertificate(ctx, caService, caID, certSpec.commonName, certSpec.dnsNames, "LamassuIoT Sample", profileID)
 		if err != nil {
-			logger.Warnf("Could not sign certificate %s (may have issues): %v", certSpec.commonName, err)
+			logger.Warnf("Could not sign certificate %s: %v", certSpec.commonName, err)
 			continue
 		}
 
@@ -1205,42 +1192,8 @@ func enrollSampleDevices(ctx context.Context, logger *logrus.Entry, caService se
 	for _, device := range devices {
 		logger.Infof("Enrolling device: %s", device.id)
 
-		// Generate a private key for the device certificate
-		privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			logger.Warnf("Failed to generate private key for device %s: %v", device.id, err)
-			continue
-		}
-
-		// Create a CSR for the device
-		csrTemplate := &x509.CertificateRequest{
-			Subject: pkix.Name{
-				CommonName:   device.id,
-				Organization: []string{"LamassuIoT Sample Devices"},
-			},
-		}
-
-		csrDER, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, privKey)
-		if err != nil {
-			logger.Warnf("Failed to create CSR for device %s: %v", device.id, err)
-			continue
-		}
-
-		csr, err := x509.ParseCertificateRequest(csrDER)
-		if err != nil {
-			logger.Warnf("Failed to parse CSR for device %s: %v", device.id, err)
-			continue
-		}
-
-		// Convert to models.X509CertificateRequest
-		x509CSR := models.X509CertificateRequest(*csr)
-
-		// Sign the certificate
-		signedCert, err := caService.SignCertificate(ctx, services.SignCertificateInput{
-			CAID:              caID,
-			CertRequest:       &x509CSR,
-			IssuanceProfileID: profileID,
-		})
+		// Generate CSR and sign certificate
+		signedCert, err := generateAndSignCertificate(ctx, caService, caID, device.id, []string{}, "LamassuIoT Sample Devices", profileID)
 		if err != nil {
 			logger.Warnf("Could not sign certificate for device %s: %v", device.id, err)
 			continue
