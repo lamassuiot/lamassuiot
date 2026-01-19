@@ -129,8 +129,7 @@ func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services
 	return mw.next.DeleteDevice(ctx, input)
 }
 
-// ============================================================================
-// Device Group Operations
+// =====================================================================// Device Group Operations
 // ============================================================================
 
 func (mw *deviceEventPublisher) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (output *models.DeviceGroup, err error) {
@@ -193,4 +192,18 @@ func (mw *deviceEventPublisher) GetDevicesByGroup(ctx context.Context, input ser
 
 func (mw *deviceEventPublisher) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
 	return mw.next.GetDeviceGroupStats(ctx, input)
+=======
+func (mw *deviceEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (output *models.DeviceEvent, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteDeviceKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.Event.DeviceID))
+
+	defer func() {
+		mw.eventMWPub.PublishCloudEvent(ctx, input)
+	}()
+
+	return mw.next.CreateDeviceEvent(ctx, input)
+}
+
+func (mw *deviceEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
 }

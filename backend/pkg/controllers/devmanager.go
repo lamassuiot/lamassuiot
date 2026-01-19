@@ -240,7 +240,7 @@ func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
 
 	dev, err := r.svc.UpdateDeviceStatus(ctx.Request.Context(), services.UpdateDeviceStatusInput{
 		ID:        params.ID,
-		NewStatus: models.DeviceDecommissioned,
+		NewStatus: models.DeviceStatusDecommissioned,
 	})
 
 	if err != nil {
@@ -283,8 +283,7 @@ func (r *devManagerHttpRoutes) DeleteDevice(ctx *gin.Context) {
 	ctx.Status(204) // No Content for successful deletion
 }
 
-// ============================================================================
-// Device Group Operations
+// =====================================================================// Device Group Operations
 // ============================================================================
 
 func (r *devManagerHttpRoutes) CreateDeviceGroup(ctx *gin.Context) {
@@ -330,6 +329,8 @@ func (r *devManagerHttpRoutes) CreateDeviceGroup(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) UpdateDeviceGroup(ctx *gin.Context) {
+=======
+func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -456,6 +457,19 @@ func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {
 			ExhaustiveRun:   false,
 			ApplyFunc: func(group models.DeviceGroup) {
 				groups = append(groups, group)
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+	events := []models.DeviceEvent{}
+	nextBookmark, err := r.svc.GetDeviceEvents(ctx, services.GetDeviceEventsInput{
+		DeviceID: params.ID,
+		ListInput: resources.ListInput[models.DeviceEvent]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(event models.DeviceEvent) {
+				events = append(events, event)
 			},
 		},
 	})
@@ -520,6 +534,14 @@ func (r *devManagerHttpRoutes) GetDevicesByGroup(ctx *gin.Context) {
 		IterableList: resources.IterableList[models.Device]{
 			NextBookmark: nextBookmark,
 			List:         devices,
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, resources.GetDeviceEventsResponse{
+		IterableList: resources.IterableList[models.DeviceEvent]{
+			NextBookmark: nextBookmark,
+			List:         events,
 		},
 	})
 }
@@ -527,6 +549,9 @@ func (r *devManagerHttpRoutes) GetDevicesByGroup(ctx *gin.Context) {
 func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 	type uriParams struct {
 		GroupID string `uri:"id" binding:"required"`
+func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
 	}
 
 	var params uriParams
@@ -550,4 +575,20 @@ func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, stats)
+	var requestBody resources.CreateDeviceEventBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	event, err := r.svc.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		Event: requestBody.DeviceEvent,
+	})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(201, event)
 }

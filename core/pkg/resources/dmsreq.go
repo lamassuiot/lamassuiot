@@ -12,9 +12,9 @@ type CreateDMSBody struct {
 }
 
 type BindIdentityToDeviceBody struct {
-	BindMode                models.DeviceEventType `json:"bind_mode"`
-	DeviceID                string                 `json:"device_id"`
-	CertificateSerialNumber string                 `json:"certificate_serial_number"`
+	BindMode                models.DeviceEventTypeIDSlotStates `json:"bind_mode"`
+	DeviceID                string                             `json:"device_id"`
+	CertificateSerialNumber string                             `json:"certificate_serial_number"`
 }
 
 type UpdateDMSMetadataBody struct {

@@ -26,6 +26,8 @@ type DeviceManagerService interface {
 	GetDeviceGroups(ctx context.Context, input GetDeviceGroupsInput) (string, error)
 	GetDevicesByGroup(ctx context.Context, input GetDevicesByGroupInput) (string, error)
 	GetDeviceGroupStats(ctx context.Context, input GetDeviceGroupStatsInput) (*models.DevicesStats, error)
+	GetDeviceEvents(ctx context.Context, input GetDeviceEventsInput) (string, error)
+	CreateDeviceEvent(ctx context.Context, input CreateDeviceEventInput) (*models.DeviceEvent, error)
 }
 
 type GetDevicesStatsInput struct {
@@ -61,8 +63,8 @@ type GetDeviceByIDInput struct {
 }
 
 type UpdateDeviceStatusInput struct {
-	ID        string              `validate:"required"`
-	NewStatus models.DeviceStatus `validate:"required"`
+	ID        string                  `validate:"required"`
+	NewStatus models.DeviceStatusType `validate:"required"`
 }
 
 type UpdateDeviceMetadataInput struct {
@@ -116,4 +118,11 @@ type GetDevicesByGroupInput struct {
 
 type GetDeviceGroupStatsInput struct {
 	GroupID string `validate:"required"`
+type GetDeviceEventsInput struct {
+	resources.ListInput[models.DeviceEvent]
+	DeviceID string
+}
+
+type CreateDeviceEventInput struct {
+	Event models.DeviceEvent
 }

@@ -117,8 +117,7 @@ func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services
 	})
 }
 
-// ============================================================================
-// Device Group Operations
+// =====================================================================// Device Group Operations
 // ============================================================================
 
 func (cli *deviceManagerClient) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (*models.DeviceGroup, error) {
@@ -132,6 +131,19 @@ func (cli *deviceManagerClient) CreateDeviceGroup(ctx context.Context, input ser
 		400: {errs.ErrValidateBadRequest, errs.ErrDeviceGroupCircularReference},
 		404: {errs.ErrDeviceGroupNotFound},
 	})
+=======
+func (cli *deviceManagerClient) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	response, err := Post[*models.DeviceEvent](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.Event.DeviceID+"/events", resources.CreateDeviceEventBody{
+		DeviceEvent: models.DeviceEvent{
+			Timestamp:       input.Event.Timestamp,
+			DeviceID:        input.Event.DeviceID,
+			Type:            input.Event.Type,
+			Message:         input.Event.Message,
+			Source:          input.Event.Source,
+			SlotID:          input.Event.SlotID,
+			StructuredField: input.Event.StructuredField,
+		},
+	}, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -303,4 +315,10 @@ func convertResponseToDeviceGroup(responseMap *map[string]interface{}) (*models.
 		CreatedAt:        response.CreatedAt,
 		UpdatedAt:        response.UpdatedAt,
 	}, nil
+	return response, nil
+}
+
+func (cli *deviceManagerClient) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	url := cli.baseUrl + "/v1/devices/" + input.DeviceID + "/events"
+	return IterGet[models.DeviceEvent, *resources.GetDeviceEventsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }

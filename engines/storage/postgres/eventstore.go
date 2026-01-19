@@ -16,7 +16,7 @@ type PostgresEventsStore struct {
 }
 
 func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.EventRepository, error) {
-	querier, err := TableQuery(logger, db, "events", "event_type", models.AlertLatestEvent{})
+	querier, err := TableQuery(logger, db, "events", []string{"event_type"}, models.AlertLatestEvent{})
 	if err != nil {
 		return nil, err
 	}
@@ -28,18 +28,18 @@ func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.Eve
 }
 
 func (db *PostgresEventsStore) InsertUpdateEvent(ctx context.Context, ev *models.AlertLatestEvent) (*models.AlertLatestEvent, error) {
-	event, err := db.querier.Update(ctx, ev, string(ev.EventType))
+	event, err := db.querier.Update(ctx, ev, map[string]string{"event_type": string(ev.EventType)})
 	if err == nil {
 		return event, nil
 	}
 	if err == gorm.ErrRecordNotFound {
-		return db.querier.Insert(ctx, ev, string(ev.EventType))
+		return db.querier.Insert(ctx, ev)
 	}
 	return nil, err
 }
 
 func (db *PostgresEventsStore) GetLatestEventByEventType(ctx context.Context, eventType models.EventType) (bool, *models.AlertLatestEvent, error) {
-	return db.querier.SelectExists(ctx, string(eventType), nil)
+	return db.querier.SelectExists(ctx, map[string]string{"event_type": string(eventType)})
 }
 
 func (db *PostgresEventsStore) GetLatestEvents(ctx context.Context) ([]*models.AlertLatestEvent, error) {

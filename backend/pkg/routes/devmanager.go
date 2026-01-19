@@ -32,4 +32,7 @@ func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManag
 		deviceGroupsRoutes.GET("/:id/devices", routes.GetDevicesByGroup)
 		deviceGroupsRoutes.GET("/:id/stats", routes.GetDeviceGroupStats)
 	}
+	rv1.GET("/devices/:id/events", routes.GetDeviceEvents)
+	// rv1.GET("/devices/:id/events/stream", stream.SSEConnMiddleware(), routes.GetDeviceEventsInStream)
+	rv1.POST("/devices/:id/events", routes.CreateDeviceEvent)
 }

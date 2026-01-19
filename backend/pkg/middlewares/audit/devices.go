@@ -80,8 +80,7 @@ func (mw *DeviceAuditEventPublisher) DeleteDevice(ctx context.Context, input ser
 	return mw.next.DeleteDevice(ctx, input)
 }
 
-// ============================================================================
-// Device Group Operations
+// =====================================================================// Device Group Operations
 // ============================================================================
 
 func (mw *DeviceAuditEventPublisher) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (output *models.DeviceGroup, err error) {
@@ -119,4 +118,14 @@ func (mw *DeviceAuditEventPublisher) GetDevicesByGroup(ctx context.Context, inpu
 
 func (mw *DeviceAuditEventPublisher) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
 	return mw.next.GetDeviceGroupStats(ctx, input)
+=======
+func (mw *DeviceAuditEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (output *models.DeviceEvent, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateDeviceEventKey, input, err, nil)
+	}()
+	return mw.next.CreateDeviceEvent(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
 }

@@ -67,6 +67,7 @@ const (
 	EventCreateDeviceGroupKey EventType = "device-group.create"
 	EventUpdateDeviceGroupKey EventType = "device-group.update"
 	EventDeleteDeviceGroupKey EventType = "device-group.delete"
+	EventCreateDeviceEventKey EventType = "device.event.create"
 
 	EventUpdateVARole EventType = "va.role.update"
 	EventInitCRLRole  EventType = "va.role.crl.init"

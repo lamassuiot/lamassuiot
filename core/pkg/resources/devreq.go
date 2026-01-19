@@ -45,4 +45,6 @@ type UpdateDeviceGroupBody struct {
 	Description string                           `json:"description"`
 	ParentID    *string                          `json:"parent_id,omitempty"`
 	Criteria    []DeviceGroupFilterOptionRequest `json:"criteria"`
+type CreateDeviceEventBody struct {
+	models.DeviceEvent
 }
