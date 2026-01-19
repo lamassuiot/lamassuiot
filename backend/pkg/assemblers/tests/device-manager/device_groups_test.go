@@ -3,6 +3,7 @@ package devicemanager
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +19,9 @@ func TestCreateDeviceGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
+
+	// Use HTTP SDK to test through HTTP layer
+	client := dmgr.HttpDeviceManagerSDK
 
 	testCases := []struct {
 		name        string
@@ -59,7 +63,10 @@ func TestCreateDeviceGroup(t *testing.T) {
 			},
 			expectError: true,
 			errorCheck: func(err error) bool {
-				return errors.Is(err, errs.ErrValidateBadRequest)
+				// When testing through HTTP SDK, error messages may be more specific
+				// Check if error message contains indication of invalid filter field
+				return err != nil && (errors.Is(err, errs.ErrValidateBadRequest) ||
+					strings.Contains(err.Error(), "invalid filter field"))
 			},
 		},
 		{
@@ -99,7 +106,7 @@ func TestCreateDeviceGroup(t *testing.T) {
 				tc.input.ParentID = &tc.input.ID
 			}
 
-			group, err := dmgr.Service.CreateDeviceGroup(ctx, tc.input)
+			group, err := client.CreateDeviceGroup(ctx, tc.input)
 
 			if tc.expectError {
 				if err == nil {
@@ -130,9 +137,12 @@ func TestNestedDeviceGroups(t *testing.T) {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
+	// Use HTTP SDK to test through HTTP layer
+	client := dmgr.HttpDeviceManagerSDK
+
 	// Create root group
 	rootGroupID := uuid.NewString()
-	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          rootGroupID,
 		Name:        "All Sensors",
 		Description: "Root group for all sensors",
@@ -151,7 +161,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 
 	// Create child group
 	childGroupID := uuid.NewString()
-	childGroup, err := dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	childGroup, err := client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          childGroupID,
 		Name:        "Active Sensors",
 		Description: "Child group for active sensors",
@@ -175,7 +185,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 
 	// Create grandchild group
 	grandchildGroupID := uuid.NewString()
-	grandchildGroup, err := dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	grandchildGroup, err := client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          grandchildGroupID,
 		Name:        "High Temp Active Sensors",
 		Description: "Grandchild group for high temp active sensors",
@@ -194,7 +204,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 
 	// Test circular reference prevention
 	// Try to make root group a child of grandchild (should fail)
-	_, err = dmgr.Service.UpdateDeviceGroup(ctx, services.UpdateDeviceGroupInput{
+	_, err = client.UpdateDeviceGroup(ctx, services.UpdateDeviceGroupInput{
 		ID:       rootGroupID,
 		ParentID: &grandchildGroupID,
 	})
@@ -218,9 +228,12 @@ func TestGetDevicesByGroup(t *testing.T) {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
+	// Use HTTP SDK to test through HTTP layer
+	client := dmgr.HttpDeviceManagerSDK
+
 	// Create test devices
 	device1ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device1ID,
 		Tags:      []string{"sensor", "production"},
 		DMSID:     "test-dms",
@@ -232,7 +245,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 	}
 
 	device2ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device2ID,
 		Tags:      []string{"sensor", "development"},
 		DMSID:     "test-dms",
@@ -244,7 +257,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 	}
 
 	device3ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device3ID,
 		Tags:      []string{"actuator", "production"},
 		DMSID:     "test-dms",
@@ -276,7 +289,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 
 	// Create nested group for production sensors
 	prodSensorGroupID := uuid.NewString()
-	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          prodSensorGroupID,
 		Name:        "Production Sensors",
 		Description: "Production sensor devices",
@@ -295,7 +308,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 
 	// Test getting devices from root group (should return 2 sensors)
 	sensorDevices := []models.Device{}
-	_, err = dmgr.Service.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
+	_, err = client.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
 		GroupID: sensorGroupID,
 		ListInput: resources.ListInput[models.Device]{
 			ExhaustiveRun: false,
@@ -313,7 +326,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 
 	// Test getting devices from nested group (should return 1 production sensor)
 	prodSensorDevices := []models.Device{}
-	_, err = dmgr.Service.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
+	_, err = client.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
 		GroupID: prodSensorGroupID,
 		ListInput: resources.ListInput[models.Device]{
 			ExhaustiveRun: false,
@@ -340,9 +353,12 @@ func TestGetDeviceGroupStats(t *testing.T) {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
+	// Use HTTP SDK to test through HTTP layer
+	client := dmgr.HttpDeviceManagerSDK
+
 	// Create test devices with different statuses
 	device1ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device1ID,
 		Tags:      []string{"sensor"},
 		DMSID:     "test-dms",
@@ -354,7 +370,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 	}
 
 	device2ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device2ID,
 		Tags:      []string{"sensor"},
 		DMSID:     "test-dms",
@@ -366,7 +382,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 	}
 
 	device3ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device3ID,
 		Tags:      []string{"actuator"},
 		DMSID:     "test-dms",
@@ -379,7 +395,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 
 	// Create device group for sensors
 	sensorGroupID := uuid.NewString()
-	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          sensorGroupID,
 		Name:        "Sensor Devices",
 		Description: "All sensor devices",
@@ -397,7 +413,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 	}
 
 	// Get stats for sensor group
-	stats, err := dmgr.Service.GetDeviceGroupStats(ctx, services.GetDeviceGroupStatsInput{
+	stats, err := client.GetDeviceGroupStats(ctx, services.GetDeviceGroupStatsInput{
 		GroupID: sensorGroupID,
 	})
 	if err != nil {
@@ -415,7 +431,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 	}
 
 	// Test non-existent group
-	_, err = dmgr.Service.GetDeviceGroupStats(ctx, services.GetDeviceGroupStatsInput{
+	_, err = client.GetDeviceGroupStats(ctx, services.GetDeviceGroupStatsInput{
 		GroupID: uuid.NewString(), // Use valid UUID for non-existent group
 	})
 	if err == nil {
@@ -436,9 +452,12 @@ func TestUpdateDeviceGroup(t *testing.T) {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
+	// Use HTTP SDK to test through HTTP layer
+	client := dmgr.HttpDeviceManagerSDK
+
 	// Create initial group
 	groupID := uuid.NewString()
-	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          groupID,
 		Name:        "Original Name",
 		Description: "Original Description",
@@ -456,7 +475,7 @@ func TestUpdateDeviceGroup(t *testing.T) {
 	}
 
 	// Update group
-	updatedGroup, err := dmgr.Service.UpdateDeviceGroup(ctx, services.UpdateDeviceGroupInput{
+	updatedGroup, err := client.UpdateDeviceGroup(ctx, services.UpdateDeviceGroupInput{
 		ID:          groupID,
 		Name:        "Updated Name",
 		Description: "Updated Description",
@@ -487,9 +506,12 @@ func TestDeleteDeviceGroup(t *testing.T) {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
+	// Use HTTP SDK to test through HTTP layer
+	client := dmgr.HttpDeviceManagerSDK
+
 	// Create group
 	groupID := uuid.NewString()
-	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          groupID,
 		Name:        "Test Group",
 		Description: "Group to be deleted",
@@ -501,7 +523,7 @@ func TestDeleteDeviceGroup(t *testing.T) {
 	}
 
 	// Delete group
-	err = dmgr.Service.DeleteDeviceGroup(ctx, services.DeleteDeviceGroupInput{
+	err = client.DeleteDeviceGroup(ctx, services.DeleteDeviceGroupInput{
 		ID: groupID,
 	})
 	if err != nil {
@@ -509,7 +531,7 @@ func TestDeleteDeviceGroup(t *testing.T) {
 	}
 
 	// Verify group is deleted
-	_, err = dmgr.Service.GetDeviceGroupByID(ctx, services.GetDeviceGroupByIDInput{
+	_, err = client.GetDeviceGroupByID(ctx, services.GetDeviceGroupByIDInput{
 		ID: groupID,
 	})
 	if err == nil {
@@ -527,9 +549,12 @@ func TestGetDeviceGroups(t *testing.T) {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
+	// Use HTTP SDK to test through HTTP layer
+	client := dmgr.HttpDeviceManagerSDK
+
 	// Create multiple groups
 	group1ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          group1ID,
 		Name:        "Group 1",
 		Description: "First group",
@@ -541,7 +566,7 @@ func TestGetDeviceGroups(t *testing.T) {
 	}
 
 	group2ID := uuid.NewString()
-	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          group2ID,
 		Name:        "Group 2",
 		Description: "Second group",
@@ -554,7 +579,7 @@ func TestGetDeviceGroups(t *testing.T) {
 
 	// Get all groups
 	groups := []models.DeviceGroup{}
-	_, err = dmgr.Service.GetDeviceGroups(ctx, services.GetDeviceGroupsInput{
+	_, err = client.GetDeviceGroups(ctx, services.GetDeviceGroupsInput{
 		ListInput: resources.ListInput[models.DeviceGroup]{
 			ExhaustiveRun: false,
 			ApplyFunc: func(group models.DeviceGroup) {
