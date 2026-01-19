@@ -449,11 +449,15 @@ func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(200, resources.GetDeviceGroupsResponse{
-		IterableList: resources.IterableList[models.DeviceGroup]{
-			NextBookmark: nextBookmark,
-			List:         groups,
-		},
+	// Convert groups to response format with operand names
+	responseGroups := make([]map[string]interface{}, len(groups))
+	for i, group := range groups {
+		responseGroups[i] = ConvertDeviceGroupToResponse(&group, group.OwnCriteriaCount)
+	}
+
+	ctx.JSON(200, gin.H{
+		"next_bookmark": nextBookmark,
+		"list":          responseGroups,
 	})
 }
 
