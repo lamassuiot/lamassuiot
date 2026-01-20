@@ -15,6 +15,7 @@ var DeviceFilterableFields = map[string]FilterFieldType{
 	"status":             EnumFilterFieldType,
 	"tags":               StringArrayFilterFieldType,
 	"metadata":           JsonFilterFieldType,
+	"identity_slot":      JsonFilterFieldType,
 }
 
 var CertificateFilterableFields = map[string]FilterFieldType{

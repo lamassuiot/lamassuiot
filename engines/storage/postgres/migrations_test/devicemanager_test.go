@@ -220,6 +220,13 @@ func TestDeviceManagerMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20251217120000_metadata_text_to_jsonb")
 	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_DeviceManager_20260120114735_idslot_text_to_jsonb(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260120114735_idslot_text_to_jsonb")
+	}
 }
 
 func MigrationTest_DeviceManager_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -273,4 +280,71 @@ func MigrationTest_DeviceManager_20251217120000_metadata_text_to_jsonb(t *testin
 		t.Fatalf("failed to query jsonb column: %v", tx.Error)
 	}
 	assert.Equal(t, "device_value", keyValue)
+}
+
+func MigrationTest_DeviceManager_20260120114735_idslot_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert test devices with text identity_slot before migration
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-with-identity', '{}', 'ACTIVE', 'device', '#FF0000', '2024-11-25 11:45:48.620', '{}', 'test-dms', '{"status":"ACTIVE","active_version":1,"type":"x509","versions":{"0":"cert-serial-1","1":"cert-serial-2"},"events":{}}', '{}', '{}');
+	`)
+
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-empty-identity', '{}', 'ACTIVE', 'device', '#FF0000', '2024-11-25 11:45:48.620', '{}', 'test-dms', '', '{}', '{}');
+	`)
+
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-null-identity', '{}', 'ACTIVE', 'device', '#FF0000', '2024-11-25 11:45:48.620', '{}', 'test-dms', NULL, '{}', '{}');
+	`)
+
+	// Apply migration
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+
+	// Verify device with identity_slot
+	var identity1 *string
+	tx := con.Table("devices").Where("id = 'device-with-identity'").Select("identity_slot").Find(&identity1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select devices row: %v", tx.Error)
+	}
+	assert.NotNil(t, identity1)
+	// Parse and verify JSON structure
+	var identityJSON map[string]any
+	err := json.Unmarshal([]byte(*identity1), &identityJSON)
+	assert.NoError(t, err, "Identity slot should be valid JSON")
+	assert.Equal(t, "ACTIVE", identityJSON["status"])
+	assert.Equal(t, float64(1), identityJSON["active_version"])
+
+	// Verify device with empty identity_slot becomes NULL
+	var identity2 *string
+	tx = con.Table("devices").Where("id = 'device-empty-identity'").Select("identity_slot").Find(&identity2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select devices row: %v", tx.Error)
+	}
+	assert.Nil(t, identity2, "Empty string should become NULL")
+
+	// Verify device with NULL identity_slot remains NULL
+	var identity3 *string
+	tx = con.Table("devices").Where("id = 'device-null-identity'").Select("identity_slot").Find(&identity3)
+	if tx.Error != nil {
+		t.Fatalf("failed to select devices row: %v", tx.Error)
+	}
+	assert.Nil(t, identity3, "NULL should remain NULL")
+
+	// Verify that the column type is jsonb by trying to use jsonb operators
+	var status string
+	tx = con.Raw("SELECT identity_slot->>'status' FROM devices WHERE id = 'device-with-identity'").Scan(&status)
+	if tx.Error != nil {
+		t.Fatalf("failed to query jsonb column: %v", tx.Error)
+	}
+	assert.Equal(t, "ACTIVE", status)
+
+	// Test JSONPath query (RFC requirement)
+	var count int64
+	tx = con.Raw("SELECT COUNT(*) FROM devices WHERE identity_slot @@ '$.status == \"ACTIVE\"'::jsonpath").Scan(&count)
+	if tx.Error != nil {
+		t.Fatalf("failed to query with jsonpath: %v", tx.Error)
+	}
+	assert.Equal(t, int64(1), count, "Should find one device with ACTIVE status")
 }
