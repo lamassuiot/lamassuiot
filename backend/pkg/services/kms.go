@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -196,6 +197,7 @@ type kmsOperationSetup struct {
 	IsPSS  bool
 	Signer crypto.Signer
 	Engine *cryptoengines.CryptoEngine
+	Key    *models.Key
 }
 
 func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
@@ -764,6 +766,41 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		return nil, err
 	}
 
+	// Check context for output format (set by controller based on Accept header)
+	outputFormat := ""
+	if format, ok := ctx.Value("output_format").(string); ok {
+		outputFormat = format
+	}
+
+	// If PKCS7 format is requested, handle it separately
+	if outputFormat == "pkcs7" {
+		// Certificate is required for PKCS7 format
+		if input.Certificate == "" {
+			lFunc.Error("certificate is required for PKCS7 signature format")
+			return nil, errors.New("certificate is required for PKCS7 signature format")
+		}
+
+		// Parse the provided certificate
+		signerCert, err := helpers.ParseCertificatePEM(input.Certificate)
+		if err != nil {
+			lFunc.Errorf("failed to parse provided certificate: %s", err)
+			return nil, fmt.Errorf("failed to parse certificate: %w", err)
+		}
+		lFunc.Debugf("using provided certificate for PKCS7 signature: %s", signerCert.Subject.CommonName)
+
+		// Create the PKCS#7 detached signature
+		pkcs7Signature, err := helpers.CreateDetachedPKCS7Signature(input.Message, setup.Signer, signerCert)
+		if err != nil {
+			lFunc.Errorf("failed to create PKCS#7 signature: %s", err)
+			return nil, err
+		}
+
+		return &models.MessageSignature{
+			Signature: pkcs7Signature,
+		}, nil
+	}
+
+	// Default: Raw signature
 	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
 	if err != nil {
 		lFunc.Errorf("calculate digest error: %s", err)

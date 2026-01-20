@@ -21,8 +21,6 @@ type DeviceManagerService interface {
 	UpdateWFXStatus(ctx context.Context, input UpdateWFXStatusInput) (*models.Device, error)
 }
 
-
-
 type GetDevicesStatsInput struct {
 }
 
@@ -78,6 +76,6 @@ type UpdateEventInput struct {
 	EventData string `validate:"required,json"`
 }
 type UpdateWFXStatusInput struct {
-	ID        string         `validate:"required"`
-	WFXStatus string         `validate:"required,json"`
+	ID        string `validate:"required"`
+	WFXStatus string `validate:"required,json"`
 }

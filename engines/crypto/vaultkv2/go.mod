@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3
 
-go 1.24.0
+go 1.23
 
 require (
 	github.com/hashicorp/vault/api v1.16.0

@@ -273,7 +273,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 		return nil, err
 	}
 
-		device.Metadata = *updatedMetadata
+	device.Metadata = *updatedMetadata
 
 	lFunc.Debugf("updating %s device metadata", input.ID)
 	return svc.devicesStorage.Update(ctx, device)
@@ -430,22 +430,21 @@ func (svc DeviceManagerServiceBackend) DeviceEventUpdate(ctx context.Context, in
 		lFunc.Warnf("device %s is not active, event update", input.ID)
 	}
 
-
 	now := time.Now()
 	device.Events[now] = models.DeviceEvent{
-		EventType:         models.DeviceEventTypeStatusUpdated,
+		EventType:         models.DeviceEventType(input.EventType),
 		EventDescriptions: input.EventData, // keep the JSON string
 	}
 
-	 // Summarize large payloads to avoid printing big JSON blobs in logs
-	 summary := input.EventData
-	 if len(summary) > 256 {
-		 summary = summary[:256] + "..."
-	 }
-	 lFunc.Debugf("updating device %s event with data: %s", input.ID, summary)
+	// Summarize large payloads to avoid printing big JSON blobs in logs
+	summary := input.EventData
+	if len(summary) > 128 {
+		summary = summary[:128] + "..."
+	}
+	lFunc.Debugf("updating device %s event with data: %s", input.ID, summary)
 
 	// Persist
-	 return svc.devicesStorage.Update(ctx, device)
+	return svc.devicesStorage.Update(ctx, device)
 }
 
 func (svc DeviceManagerServiceBackend) UpdateWFXStatus(
@@ -492,4 +491,3 @@ func (svc DeviceManagerServiceBackend) UpdateWFXStatus(
 	// Persist
 	return svc.devicesStorage.Update(ctx, device)
 }
- 

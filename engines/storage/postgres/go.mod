@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3
 
-go 1.24.0
+go 1.23
 
 require (
 	github.com/jakehl/goid v1.1.0

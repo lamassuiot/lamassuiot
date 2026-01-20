@@ -1,0 +1,9 @@
+# Query: updating device
+# ContextLines: 1
+
+1 result - 1 file
+
+backend/pkg/services/devicemanager.go:
+  441  
+  442: 	lFunc.Debugf("updating device %s event with data: %s", input.ID)
+  443  

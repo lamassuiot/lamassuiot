@@ -120,18 +120,10 @@ func (cli *deviceManagerClient) UpdateWFXStatus(ctx context.Context, input servi
 
 	return response, nil
 }
-	}, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
 
 func (cli *deviceManagerClient) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (*models.Device, error) {
 	var eventData map[string]interface{}
 
-	
 	if err := json.Unmarshal([]byte(input.EventData), &eventData); err != nil {
 		return nil, fmt.Errorf("invalid event data: %w", err)
 	}

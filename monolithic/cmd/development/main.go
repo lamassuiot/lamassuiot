@@ -17,6 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
@@ -384,15 +385,20 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[Filesystem]; ok {
 		engineId := "filesystem-test-1"
+		// Use a persistent directory instead of /tmp to keep keys across restarts
+		persistentKeyDir := os.Getenv("HOME") + "/.lamassu/dev/crypto-keys"
+		os.MkdirAll(persistentKeyDir, 0755)
+
 		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngineConfig{
 			ID:       engineId,
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.FilesystemProvider,
 			Config: map[string]interface{}{
-				"storage_directory": "/tmp/gotest",
+				"storage_directory": persistentKeyDir,
 			},
 		})
 		cryptoEnginesConfig.DefaultEngine = engineId
+		fmt.Printf("Using persistent crypto key storage at: %s\n", persistentKeyDir)
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
@@ -462,6 +468,40 @@ func main() {
 		fmt.Println(engine.ID)
 	}
 	fmt.Println("========================================================================")
+
+	// Create test CA, ecs_dms DMS and device_1 to 4
+	dmsSDK := sdk.NewHttpDMSManagerClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/dmsmanager", conf.GatewayPortHttps))
+	devSDK := sdk.NewHttpDeviceManagerClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/devmanager", conf.GatewayPortHttps))
+
+	fmt.Println("3. Creating DMS ecs_DMS...")
+	_, err = dmsSDK.CreateDMS(context.Background(), services.CreateDMSInput{
+		ID:   "ecs_DMS",
+		Name: "ECS DMS",
+	})
+	if err != nil {
+		fmt.Printf("FAILED to create DMS: %s\n", err)
+	} else {
+		fmt.Println("DONE: DMS created")
+	}
+
+	fmt.Println("4. Creating devices...")
+	for i := 1; i <= 4; i++ {
+		deviceID := fmt.Sprintf("device_%d", i)
+		fmt.Printf(" - Creating %s...\n", deviceID)
+		_, err = devSDK.CreateDevice(context.Background(), services.CreateDeviceInput{
+			ID:        deviceID,
+			DMSID:     "ecs_DMS",
+			Icon:      "router",
+			IconColor: "blue",
+		})
+		if err != nil {
+			fmt.Printf("FAILED to create %s: %s\n", deviceID, err)
+		}
+	}
+	fmt.Println("DONE: Devices created")
+
+	// Create Code Signing Profile and Certificate for SWUpdate firmware signing
+	fmt.Println("5. Creating Code Signing Profile and Certificate for SWUpdate...")
 
 	forever := make(chan struct{})
 	<-forever

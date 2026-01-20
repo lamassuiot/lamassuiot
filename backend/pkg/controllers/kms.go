@@ -1,11 +1,14 @@
 package controllers
 
 import (
+	"context"
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+
+	//chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -366,11 +369,18 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		return
 	}
 
-	signature, err := r.svc.SignMessage(ctx, services.SignMessageInput{
+	// Check Accept header for PKCS7 format request and set in context
+	serviceCtx := ctx.Request.Context()
+	if ctx.Request.Header.Get("Accept") == "application/pkcs7-mime" || ctx.Request.Header.Get("Accept") == "application/pkcs7-signature" {
+		serviceCtx = context.WithValue(serviceCtx, "output_format", "pkcs7")
+	}
+
+	signature, err := r.svc.SignMessage(serviceCtx, services.SignMessageInput{
 		Identifier:  params.ID,
 		Algorithm:   requestBody.Algorithm,
 		Message:     requestBody.Message,
 		MessageType: requestBody.MessageType,
+		Certificate: requestBody.Certificate,
 	})
 	if err != nil {
 		switch err {
@@ -383,6 +393,19 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		}
 		return
 	}
+
+	// Return format based on Accept header
+	if ctx.Request.Header.Get("Accept") == "application/pkcs7-mime" || ctx.Request.Header.Get("Accept") == "application/pkcs7-signature" {
+		ctx.Writer.Header().Set("Content-Type", "application/pkcs7-signature")
+		ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
+
+		// Return the PKCS7/CMS signature as base64-encoded DER
+		encoded := base64.StdEncoding.EncodeToString(signature.Signature)
+		ctx.Writer.Write([]byte(encoded))
+		return
+	}
+
+	// Default JSON response
 	ctx.JSON(200, signature)
 }
 

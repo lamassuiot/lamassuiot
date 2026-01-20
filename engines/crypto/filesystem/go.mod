@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3
 
-go 1.24.0
+go 1.23
 
 require (
 	github.com/sirupsen/logrus v1.9.3

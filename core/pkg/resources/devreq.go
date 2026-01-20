@@ -25,3 +25,7 @@ type UpdateDeviceMetadataBody struct {
 type UpdateEventBody struct {
 	EventData string `json:"event_data"`
 }
+
+type UpdateWFXStatusBody struct {
+	WFXStatus string `json:"wfx_status"`
+}

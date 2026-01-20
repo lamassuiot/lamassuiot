@@ -3,6 +3,7 @@ package eventpub
 import (
 	"context"
 	"fmt"
+	"time"
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3"
@@ -117,7 +118,7 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 	return mw.next.UpdateDeviceMetadata(ctx, input)
 }
 
-	func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) (err error) {
+func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) (err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteDeviceKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
 
@@ -129,11 +130,10 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 	return mw.next.DeleteDevice(ctx, input)
 }
 
-	func (mw *deviceEventPublisher) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (output *models.Device, err error) {
+func (mw *deviceEventPublisher) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (output *models.Device, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDeviceEventsKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
 
-   
 	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.ID,
 	})
@@ -143,40 +143,54 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 
 	defer func() {
 		if err == nil {
-			   mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
-				   Updated:  *output,
-				   Previous: *prev,
-			   })
-			)
+			// Create a copy of the device to avoid modifying the return value
+			updatedEventDevice := *output
+			// Make a shallow copy of the events map so we don't modify the original map
+			updatedEventDevice.Events = make(map[time.Time]models.DeviceEvent)
+			for k, v := range output.Events {
+				desc := v.EventDescriptions
+				if len(desc) > 128 {
+					desc = desc[:128] + "..."
+				}
+				updatedEventDevice.Events[k] = models.DeviceEvent{
+					EventType:         v.EventType,
+					EventDescriptions: desc,
+				}
+			}
+
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
+				Updated:  updatedEventDevice,
+				Previous: *prev,
+			})
 		}
 	}()
 
-   return mw.next.DeviceEventUpdate(ctx, input)
+	return mw.next.DeviceEventUpdate(ctx, input)
 }
 
 func (mw *deviceEventPublisher) UpdateWFXStatus(
-       ctx context.Context,
-       input services.UpdateWFXStatusInput,
+	ctx context.Context,
+	input services.UpdateWFXStatusInput,
 ) (output *models.Device, err error) {
 
-       ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateWFXStatus)
-       ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateWFXStatus)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
 
-       prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
-	       ID: input.ID,
-       })
-       if err != nil {
-	       return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
-       }
+	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+		ID: input.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
+	}
 
-       defer func() {
-	       if err == nil {
-		       mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
-			       Updated:  *output,
-			       Previous: *prev,
-		       })
-	       }
-       }()
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
+				Updated:  *output,
+				Previous: *prev,
+			})
+		}
+	}()
 
-       return mw.next.UpdateWFXStatus(ctx, input)
+	return mw.next.UpdateWFXStatus(ctx, input)
 }

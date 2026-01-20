@@ -51,6 +51,9 @@ type SignMessageInput struct {
 	Algorithm   string                 `validate:"required"`
 	Message     []byte                 `validate:"required"`
 	MessageType models.SignMessageType `validate:"required"`
+	// Certificate is a PEM or base64-encoded certificate required for PKCS7/CMS signatures.
+	// This field is mandatory when Accept: application/pkcs7-signature header is used.
+	Certificate string
 }
 
 type VerifySignInput struct {

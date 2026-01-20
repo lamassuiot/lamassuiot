@@ -2,6 +2,7 @@ package eventhandling
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -22,13 +23,16 @@ type CloudEventHandler struct {
 }
 
 func (h CloudEventHandler) HandleMessage(m *message.Message) error {
-	h.Logger.Infof("Received event: %s", m.Payload)
+	// Parse event first to extract useful info for logging
 	event, err := helpers.ParseCloudEvent(m.Payload)
 	if err != nil {
 		err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
 		h.Logger.Error(err)
 		return err
 	}
+
+	// Log condensed event info instead of full payload
+	h.Logger.Infof("Received event: Type=%s Subject=%s%s", event.Type(), event.Subject(), extractStateTransition(m.Payload))
 
 	handler, ok := h.DispatchMap[event.Type()]
 	if !ok {
@@ -74,4 +78,33 @@ func getContextFromMessage(m *message.Message) context.Context {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthType, "system")
 
 	return ctx
+}
+
+// extractStateTransition attempts to extract WFX state transition info from the event payload
+func extractStateTransition(payload []byte) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal(payload, &data); err != nil {
+		return ""
+	}
+
+	// Try to get the "data" field from CloudEvent
+	eventData, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	// Look for wfx_status which contains state transition info
+	wfxStatus, ok := eventData["wfx_status"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	// Extract current state from workflow definition
+	if workflow, ok := wfxStatus["workflow"].(map[string]interface{}); ok {
+		if currentState, ok := workflow["state"].(string); ok {
+			return fmt.Sprintf(" [WFX State: %s]", currentState)
+		}
+	}
+
+	return ""
 }
