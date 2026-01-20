@@ -349,7 +349,12 @@ func encodeQueryParams(query url.Values, queryParams *resources.QueryParameters)
 	}
 
 	if queryParams.Sort.SortField != "" {
-		query.Add("sort_by", queryParams.Sort.SortField)
+		sortByValue := queryParams.Sort.SortField
+		// If JsonPathExpr is provided, append [jsonpath]expression syntax
+		if queryParams.Sort.JsonPathExpr != "" {
+			sortByValue += "[jsonpath]" + queryParams.Sort.JsonPathExpr
+		}
+		query.Add("sort_by", sortByValue)
 	}
 
 	if queryParams.Sort.SortMode != resources.SortModeAsc {

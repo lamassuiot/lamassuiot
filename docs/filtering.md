@@ -2,7 +2,7 @@
 
 ## Overview
 
-The API supports flexible server-side filtering on list endpoints using query parameters. Filters can operate on simple scalar fields (string, number, date, enum), arrays, and JSON fields. For JSON fields (`metadata`, `settings`, ...), you can use PostgreSQL JSONPath expressions for advanced queries.
+The API supports flexible server-side filtering and sorting on list endpoints using query parameters. Filters can operate on simple scalar fields (string, number, date, enum), arrays, and JSON fields. For JSON fields (`metadata`, `settings`, ...), you can use PostgreSQL JSONPath expressions for advanced queries and sorting.
 
 ---
 
@@ -115,6 +115,156 @@ qp := &resources.QueryParameters{
     }},
 }
 ```
+
+---
+
+## Sorting ✅
+
+### Basic Sorting
+
+Sort results using `sort_by` and `sort_mode` query parameters:
+
+- `?sort_by=<field>` — field to sort by
+- `?sort_mode=asc|desc` — sort direction (default: `asc`)
+
+**Examples:**
+
+```http
+# Sort devices by status ascending
+GET /api/devmanager/v1/devices?sort_by=status&sort_mode=asc
+
+# Sort certificates by creation date descending
+GET /api/ca/v1/cas/{id}/certificates?sort_by=creation_ts&sort_mode=desc
+```
+
+### JSONPath Sorting
+
+**New in 2026:** Sort by nested properties within JSON fields using JSONPath expressions.
+
+**Syntax:** `?sort_by=<field>[jsonpath]<expression>&sort_mode=asc|desc`
+
+**Examples:**
+
+```http
+# Sort devices by metadata.environment (alphabetically)
+GET /api/devmanager/v1/devices?sort_by=metadata[jsonpath]$.environment&sort_mode=asc
+
+# Sort devices by metadata.priority (numeric descending)
+GET /api/devmanager/v1/devices?sort_by=metadata[jsonpath]$.priority&sort_mode=desc
+
+# Sort by nested property (region within location)
+GET /api/devmanager/v1/devices?sort_by=metadata[jsonpath]$.location.region&sort_mode=asc
+
+# Sort by timestamp (chronological)
+GET /api/devmanager/v1/devices?sort_by=metadata[jsonpath]$.created_at&sort_mode=asc
+```
+
+**URL-encoded format:**
+```http
+GET /api/devmanager/v1/devices?sort_by=metadata%5Bjsonpath%5D$.environment&sort_mode=asc
+```
+
+### Type-Aware Sorting
+
+The system automatically detects and handles different data types in JSON fields:
+
+| Type | Behavior | Example |
+|---|---|---|
+| **String** | Alphabetical sorting | `dev` → `prod` → `stage` |
+| **Number** | Numeric sorting (not lexicographic) | `5` → `10` → `20` (not `10` → `20` → `5`) |
+| **Date** | Chronological sorting (ISO 8601) | `2025-01-10` → `2025-06-20` → `2026-01-15` |
+| **NULL/Missing** | ASC: last, DESC: first | Configurable with `NULLS FIRST/LAST` |
+
+**Implementation:** Uses PostgreSQL CASE expressions to detect type and apply appropriate conversion:
+- Numbers: Zero-padded to 20 digits for lexicographic comparison
+- Dates: Detected by `YYYY-MM-DD` pattern, converted to sortable timestamp format
+- Text: Direct string comparison
+
+### SDK Usage (Go)
+
+**Traditional sorting:**
+```go
+qp := &resources.QueryParameters{
+    Sort: resources.SortOptions{
+        SortMode:  resources.SortModeAsc,
+        SortField: "status",
+    },
+}
+```
+
+**JSONPath sorting:**
+```go
+// Sort by string field
+qp := &resources.QueryParameters{
+    Sort: resources.SortOptions{
+        SortMode:     resources.SortModeAsc,
+        SortField:    "metadata",
+        JsonPathExpr: "$.environment",
+    },
+}
+
+// Sort by numeric field
+qp := &resources.QueryParameters{
+    Sort: resources.SortOptions{
+        SortMode:     resources.SortModeDesc,
+        SortField:    "metadata",
+        JsonPathExpr: "$.priority",
+    },
+}
+
+// Sort by nested property
+qp := &resources.QueryParameters{
+    Sort: resources.SortOptions{
+        SortMode:     resources.SortModeAsc,
+        SortField:    "metadata",
+        JsonPathExpr: "$.location.region",
+    },
+}
+```
+
+### Combining Filters and Sorting
+
+You can combine filtering and sorting in a single request:
+
+```http
+# Filter active devices and sort by priority
+GET /api/devmanager/v1/devices?filter=status[eq]=ACTIVE&sort_by=metadata[jsonpath]$.priority&sort_mode=desc
+
+# Filter by region and sort by environment
+GET /api/devmanager/v1/devices?filter=metadata[jsonpath]$.region%20==%20%22us-west%22&sort_by=metadata[jsonpath]$.environment&sort_mode=asc
+```
+
+```go
+qp := &resources.QueryParameters{
+    Filters: []resources.FilterOption{
+        {
+            Field:           "status",
+            Value:           "ACTIVE",
+            FilterOperation: resources.EnumEqual,
+        },
+    },
+    Sort: resources.SortOptions{
+        SortMode:     resources.SortModeDesc,
+        SortField:    "metadata",
+        JsonPathExpr: "$.priority",
+    },
+}
+```
+
+### Pagination with Sorting
+
+Sorting is preserved across pagination requests. The bookmark encodes the sort parameters:
+
+```http
+# First page
+GET /api/devmanager/v1/devices?sort_by=metadata[jsonpath]$.priority&sort_mode=asc&page_size=10
+
+# Response includes: next_bookmark=...
+# Second page (bookmark maintains sort order)
+GET /api/devmanager/v1/devices?bookmark=<encoded_bookmark>
+```
+
+The system ensures consistent ordering across all pages of results.
 
 ---
 
