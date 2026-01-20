@@ -224,33 +224,48 @@ func TestIsValidJsonPath(t *testing.T) {
 		jsonPath string
 		valid    bool
 	}{
-		// Valid paths
+		// Valid simple paths
 		{"simple property", "$.environment", true},
 		{"nested property", "$.location.region", true},
 		{"with numbers", "$.config123.value456", true},
 		{"with underscores", "$.my_field.sub_field", true},
 		{"deep nesting", "$.a.b.c.d.e.f", true},
 
+		// Valid PostgreSQL JSONPath expressions
+		{"array access", "$.tags[0]", true},
+		{"array wildcard", "$.tags[*]", true},
+		{"array last", "$.tags[last]", true},
+		{"array filter", "$.tags[*] ? (@ == \"production\")", true},
+		{"comparison", "$.version > 1", true},
+		{"equality", "$.environment == \"production\"", true},
+		{"logical and", "$.active == true && $.version > 1", true},
+		{"logical or", "$.status == \"active\" || $.status == \"pending\"", true},
+		{"exists in path", "$.config.database", true},
+		{"nested array filter", "$.users[*] ? (@.role == \"admin\")", true},
+		{"with hyphens", "$.field-name.sub-field", true},
+		{"with spaces in filter", "$.field ? (@ == \"value with spaces\")", true},
+
 		// Invalid paths - SQL injection attempts
-		{"single quote", "$.field'; DROP TABLE devices; --", false},
-		{"double quote", `$.field"; DROP TABLE devices; --`, false},
-		{"semicolon", "$.field;DELETE FROM devices", false},
-		{"comment", "$.field--", false},
+		{"single quote SQL injection", "$.field'; DROP TABLE devices; --", false},
+		{"double quote SQL injection", `$.field"; DROP TABLE devices; --`, false},
+		{"semicolon attack", "$.field;DELETE FROM devices", false},
+		{"SQL comment", "$.field-- DROP TABLE", false},
 		{"union attack", "$.field' UNION SELECT * FROM users--", false},
-		{"parentheses", "$.field()", false},
-		{"brackets", "$.field[]", false},
-		{"spaces", "$.field name", false},
-		{"hyphen", "$.field-name", false},
-		{"asterisk", "$.field*", false},
-		{"backslash", "$.field\\escape", false},
+		{"delete keyword", "$.field DELETE FROM users", false},
+		{"drop keyword", "$.field DROP TABLE devices", false},
+		{"insert keyword", "$.field INSERT INTO users", false},
+		{"update keyword", "$.field UPDATE users SET", false},
+		{"exec keyword", "$.field EXEC sp_help", false},
+		{"script tag", "$.field<script>alert(1)</script>", false},
+		{"backslash escape", "$.field\\escape", false},
 
 		// Invalid structure
 		{"no prefix", "environment", false},
-		{"double dots", "$.field..nested", false},
-		{"trailing dot", "$.field.", false},
-		{"leading dot after prefix", "$..field", false},
+		{"unbalanced brackets", "$.field[", false},
+		{"unbalanced parens", "$.field(", false},
+		{"excessive operators", "$.field===value", false},
 		{"empty", "", false},
-		{"too long", "$." + string(make([]byte, 250)), false},
+		{"too long", "$." + string(make([]byte, 500)), false},
 	}
 
 	for _, tt := range tests {
@@ -258,6 +273,48 @@ func TestIsValidJsonPath(t *testing.T) {
 			result := isValidJsonPath(tt.jsonPath)
 			if result != tt.valid {
 				t.Errorf("isValidJsonPath(%q) = %v, want %v", tt.jsonPath, result, tt.valid)
+			}
+		})
+	}
+}
+
+func TestIsSimpleJsonPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		jsonPath string
+		simple   bool
+	}{
+		// Simple paths (suitable for sorting)
+		{"simple property", "$.environment", true},
+		{"nested property", "$.location.region", true},
+		{"with numbers", "$.config123.value456", true},
+		{"with underscores", "$.my_field.sub_field", true},
+		{"with hyphens", "$.field-name", true},
+		{"array index", "$.tags[0]", true},
+		{"array last", "$.tags[last]", true},
+		{"array bracket", "$[0]", true},
+
+		// Complex paths (not suitable for sorting)
+		{"array wildcard", "$.tags[*]", false},
+		{"array filter", "$.tags[*] ? (@ == \"production\")", false},
+		{"comparison", "$.version > 1", false},
+		{"equality", "$.environment == \"production\"", false},
+		{"logical and", "$.active == true && $.version > 1", false},
+		{"logical or", "$.status == \"active\" || $.status == \"pending\"", false},
+		{"with quotes", "$.field ? (@ == \"value\")", false},
+		{"with spaces", "$.field name", false},
+		{"with at symbol", "$.field ? (@.value)", false},
+
+		// Invalid
+		{"no prefix", "environment", false},
+		{"empty", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isSimpleJsonPath(tt.jsonPath)
+			if result != tt.simple {
+				t.Errorf("isSimpleJsonPath(%q) = %v, want %v", tt.jsonPath, result, tt.simple)
 			}
 		})
 	}

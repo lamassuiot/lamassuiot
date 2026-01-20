@@ -254,7 +254,9 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			if queryParams.Sort.SortField != "" {
 				// JSONPath Sorting Security:
 				// - Field name validated against whitelist in controller layer
-				// - JsonPathExpr validated with isValidJsonPath() in controller layer
+				// - JsonPathExpr validated with isValidJsonPath() and isSimpleJsonPath() in controller layer
+				// - Only simple dot-separated paths allowed for sorting (complex expressions rejected)
+				// - Field name re-validated in buildJsonPathOrderClause() for extra safety
 				// - Single quotes escaped by convertJsonPathToPostgresPath()
 				// - No user input directly concatenated into SQL
 				if queryParams.Sort.JsonPathExpr != "" {
@@ -548,6 +550,11 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 	case resources.EnumNotEqual:
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
 	case resources.JsonPathExpression:
+		// JSONPath Filtering Security:
+		// - Field name validated against whitelist in controller layer
+		// - JsonPathExpr (filter.Value) validated with isValidJsonPath() in controller layer
+		// - Uses parameterized query (?) which prevents SQL injection
+		// - PostgreSQL's @@ operator safely evaluates the jsonpath expression
 		return tx.Where(fmt.Sprintf("%s @@ ?::jsonpath", filter.Field), filter.Value)
 	default:
 		return tx
@@ -597,16 +604,25 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 
 }
 
-// convertJsonPathToPostgresPath converts a JSONPath expression (e.g., "$.foo.bar")
+// convertJsonPathToPostgresPath converts a simple JSONPath expression (e.g., "$.foo.bar")
 // to PostgreSQL JSONB path format (e.g., "{foo,bar}")
-// Note: Input should already be validated by controller layer
+// Note: This function only handles simple dot-separated paths, not complex expressions
+// Input should already be validated by controller layer
 func convertJsonPathToPostgresPath(jsonPath string) string {
 	// Remove leading "$." if present
 	jsonPath = strings.TrimPrefix(jsonPath, "$.")
+	// Remove leading "$[" if present (for array access)
+	jsonPath = strings.TrimPrefix(jsonPath, "$[")
+	// Remove trailing "]" if present
+	jsonPath = strings.TrimSuffix(jsonPath, "]")
+
 	// Split by "." and sanitize each part
 	parts := strings.Split(jsonPath, ".")
 	// Escape single quotes in each part to prevent SQL injection
 	for i, part := range parts {
+		// Remove any remaining brackets for simple array access like $.tags[0]
+		part = strings.TrimSuffix(part, "[0]")
+		part = strings.TrimSuffix(part, "[last]")
 		parts[i] = strings.ReplaceAll(part, "'", "''")
 	}
 	return "{" + strings.Join(parts, ",") + "}"
@@ -615,7 +631,22 @@ func convertJsonPathToPostgresPath(jsonPath string) string {
 // buildJsonPathOrderClause generates a PostgreSQL ORDER BY clause for JSONB fields
 // that handles numeric, date/timestamp, and text values correctly
 // Note: Input validation should be performed at controller layer before calling this
+// This function only supports simple dot-separated paths for sorting
 func buildJsonPathOrderClause(field, jsonPath, sortMode string) string {
+	// Security: Validate that field name contains only safe characters
+	// Field names should be validated by controller layer, but double-check here
+	// Allow only alphanumeric, underscore, and hyphen
+	for _, char := range field {
+		if !((char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '_' || char == '-') {
+			// If field name contains unsafe characters, return empty string
+			// This will cause a SQL error rather than injection
+			return ""
+		}
+	}
+
 	pgPath := convertJsonPathToPostgresPath(jsonPath)
 	// Extract the last element for the -> operator
 	parts := strings.Split(strings.Trim(pgPath, "{}"), ",")

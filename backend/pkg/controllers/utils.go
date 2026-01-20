@@ -35,8 +35,12 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 						// Validate JSONPath expression to prevent SQL injection
 						// If invalid, silently ignore the sort parameter (security measure)
 						if isValidJsonPath(jsonPathExpr) {
-							queryParams.Sort.SortField = fieldName
-							queryParams.Sort.JsonPathExpr = jsonPathExpr
+							// Additional check for sorting: Only allow simple dot-separated paths
+							// Complex expressions with filters, comparisons, etc. are not supported for sorting
+							if isSimpleJsonPath(jsonPathExpr) {
+								queryParams.Sort.SortField = fieldName
+								queryParams.Sort.JsonPathExpr = jsonPathExpr
+							}
 						}
 					}
 				} else {
@@ -171,37 +175,109 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 }
 
 // isValidJsonPath validates a JSONPath expression to prevent SQL injection
-// Allows only: letters, numbers, underscores, dots, and $. prefix
-// Rejects: quotes, semicolons, hyphens, parentheses, and other SQL metacharacters
+// Supports PostgreSQL JSONPath syntax including:
+// - Simple paths: $.field, $.field.nested
+// - Array operations: $[0], $[*], $.array[*], $.array[last]
+// - Filters: $.array[*] ? (@ == "value")
+// - Comparisons: ==, !=, <, >, <=, >=
+// - Logical operators: &&, ||
+// - Functions: exists()
+// Rejects: SQL keywords, comments, semicolons, and other dangerous patterns
 func isValidJsonPath(jsonPath string) bool {
-	// JSONPath must start with $. or $[
-	if !strings.HasPrefix(jsonPath, "$.") && !strings.HasPrefix(jsonPath, "$[") {
+	// JSONPath must start with $
+	if !strings.HasPrefix(jsonPath, "$") {
 		return false
 	}
 
-	// Remove the $. or $[ prefix
-	jsonPath = strings.TrimPrefix(jsonPath, "$.")
-	jsonPath = strings.TrimPrefix(jsonPath, "$[")
-
-	// Maximum depth to prevent DoS
-	if len(jsonPath) > 200 {
+	// Maximum length to prevent DoS
+	if len(jsonPath) > 500 {
 		return false
 	}
 
-	// Only allow alphanumeric, underscore, and dots
-	// This prevents SQL injection via quotes, semicolons, etc.
-	for _, char := range jsonPath {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char == '_' ||
-			char == '.') {
+	// Reject SQL keywords and dangerous patterns (case-insensitive)
+	dangerousPatterns := []string{
+		"--", "/*", "*/", ";",
+		"drop ", "delete ", "insert ", "update ", "alter ",
+		"create ", "exec", "execute", "union ", "script",
+		"<script", "javascript:", "xp_", "sp_",
+	}
+	lowerPath := strings.ToLower(jsonPath)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(lowerPath, pattern) {
 			return false
 		}
 	}
 
-	// Check for valid structure (no consecutive dots, no leading/trailing dots)
-	if strings.Contains(jsonPath, "..") || strings.HasPrefix(jsonPath, ".") || strings.HasSuffix(jsonPath, ".") {
+	// Allowed characters for PostgreSQL JSONPath:
+	// - Alphanumeric, underscore, dot, hyphen
+	// - Brackets: [], parentheses: ()
+	// - Operators: ?, @, !, =, <, >, &, |, +, -, *, /
+	// - Whitespace
+	// - Quotes: " (for string literals in filters)
+	allowedChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.[]()$?@!=<>&| \t\n\"'-+*/:"
+	for _, char := range jsonPath {
+		if !strings.ContainsRune(allowedChars, char) {
+			return false
+		}
+	}
+
+	// Additional safety checks:
+	// 1. Balanced brackets and parentheses
+	bracketCount := 0
+	parenCount := 0
+	for _, char := range jsonPath {
+		switch char {
+		case '[':
+			bracketCount++
+		case ']':
+			bracketCount--
+		case '(':
+			parenCount++
+		case ')':
+			parenCount--
+		}
+		// Reject if brackets/parens become negative (closing without opening)
+		if bracketCount < 0 || parenCount < 0 {
+			return false
+		}
+	}
+	// Final check: all brackets and parens should be balanced
+	if bracketCount != 0 || parenCount != 0 {
+		return false
+	}
+
+	// 2. No excessive consecutive operators to prevent malformed expressions
+	if strings.Contains(jsonPath, "...") || strings.Contains(jsonPath, "===") ||
+		strings.Contains(jsonPath, "&&&") || strings.Contains(jsonPath, "|||") {
+		return false
+	}
+
+	return true
+}
+
+// isSimpleJsonPath checks if a JSONPath expression is a simple dot-separated path
+// suitable for sorting (e.g., $.field, $.field.nested)
+// Complex expressions with filters, comparisons, etc. are not supported for sorting
+func isSimpleJsonPath(jsonPath string) bool {
+	// Must start with $. or $[
+	if !strings.HasPrefix(jsonPath, "$.") && !strings.HasPrefix(jsonPath, "$[") {
+		return false
+	}
+
+	// Remove the $ prefix
+	jsonPath = strings.TrimPrefix(jsonPath, "$")
+
+	// Check for characters that indicate complex expressions
+	// Simple paths should only contain: letters, numbers, underscore, dot, hyphen, and basic array access
+	complexChars := "?@!=<>&|()\" "
+	for _, complexChar := range complexChars {
+		if strings.ContainsRune(jsonPath, complexChar) {
+			return false
+		}
+	}
+
+	// Allow only simple array access like [0], [1], [last], but not [*] or filters
+	if strings.Contains(jsonPath, "[*]") {
 		return false
 	}
 
