@@ -39,14 +39,16 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.CreateCA(ctx, services.CreateCAInput{
-		ParentID:     requestBody.ParentID,
-		ID:           requestBody.ID,
-		KeyMetadata:  requestBody.KeyMetadata,
-		Subject:      requestBody.Subject,
-		CAExpiration: requestBody.CAExpiration,
-		ProfileID:    requestBody.ProfileID,
-		EngineID:     requestBody.EngineID,
-		Metadata:     requestBody.Metadata,
+		ParentID:            requestBody.ParentID,
+		ID:                  requestBody.ID,
+		KeyMetadata:         requestBody.KeyMetadata,
+		Subject:             requestBody.Subject,
+		CAExpiration:        requestBody.CAExpiration,
+		ProfileID:           requestBody.ProfileID,
+		EngineID:            requestBody.EngineID,
+		Metadata:            requestBody.Metadata,
+		CAIssuanceProfileID: requestBody.CAIssuanceProfileID,
+		CAIssuanceProfile:   requestBody.CAIssuanceProfile,
 	})
 	if err != nil {
 		switch err {
@@ -465,6 +467,49 @@ func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
 		case errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, ca)
+}
+
+func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.ReissueCACertificateBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	ca, err := r.svc.ReissueCA(ctx, services.ReissueCAInput{
+		CAID:              params.ID,
+		IssuanceProfile:   requestBody.Profile,
+		IssuanceProfileID: requestBody.ProfileID,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrCAAlreadyRevoked:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCAExpired:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})

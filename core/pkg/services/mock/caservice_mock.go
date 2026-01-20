@@ -76,6 +76,10 @@ func (m *MockCAService) UpdateCAMetadata(ctx context.Context, input services.Upd
 	return args.Get(0).(*models.CACertificate), args.Error(1)
 
 }
+func (m *MockCAService) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CACertificate), args.Error(1)
+}
 func (m *MockCAService) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
 	args := m.Called(ctx, input)
 	return args.Error(0)

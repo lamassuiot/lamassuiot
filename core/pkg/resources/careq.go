@@ -33,6 +33,7 @@ var KMSFilterableFields = map[string]FilterFieldType{
 	"creation_ts":     DateFilterFieldType,
 	"name":            StringFilterFieldType,
 	"tags":            StringArrayFilterFieldType,
+	"metadata":        JsonFilterFieldType,
 }
 
 var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
@@ -41,14 +42,16 @@ var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
 }
 
 type CreateCABody struct {
-	ID           string             `json:"id"`
-	ParentID     string             `json:"parent_id"`
-	Subject      models.Subject     `json:"subject"`
-	KeyMetadata  models.KeyMetadata `json:"key_metadata"`
-	CAExpiration models.Validity    `json:"ca_expiration"`
-	ProfileID    string             `json:"profile_id"`
-	EngineID     string             `json:"engine_id"`
-	Metadata     map[string]any     `json:"metadata"`
+	ID                  string                  `json:"id"`
+	ParentID            string                  `json:"parent_id"`
+	Subject             models.Subject          `json:"subject"`
+	KeyMetadata         models.KeyMetadata      `json:"key_metadata"`
+	CAExpiration        models.Validity         `json:"ca_expiration"`
+	ProfileID           string                  `json:"profile_id"`
+	EngineID            string                  `json:"engine_id"`
+	Metadata            map[string]any          `json:"metadata"`
+	CAIssuanceProfileID string                  `json:"ca_issuance_profile_id,omitempty"`
+	CAIssuanceProfile   *models.IssuanceProfile `json:"ca_issuance_profile,omitempty"`
 }
 
 type RequestCABody struct {
@@ -79,6 +82,11 @@ type SignCertificateBody struct {
 	CertRequest *models.X509CertificateRequest `json:"csr"`
 	Profile     *models.IssuanceProfile        `json:"profile"`
 	ProfileID   string                         `json:"profile_id"`
+}
+
+type ReissueCACertificateBody struct {
+	Profile   *models.IssuanceProfile `json:"profile"`
+	ProfileID string                  `json:"profile_id"`
 }
 
 type SignatureSignBody struct {

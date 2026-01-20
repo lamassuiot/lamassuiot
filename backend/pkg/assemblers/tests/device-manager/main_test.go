@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -277,6 +278,386 @@ func TestGetDeviceStats(t *testing.T) {
 					t.Fatalf("not expected error. Got an error")
 				}
 
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
+}
+
+func TestGetDeviceStatsFiltered(t *testing.T) {
+	// t.Parallel()
+	ctx := context.Background()
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+
+	// Create devices with different DMSs, tags, and metadata for filtering tests
+	deviceDMS1 := services.CreateDeviceInput{
+		ID:        "dev-dms1-1",
+		Alias:     "Device DMS1-1",
+		Tags:      []string{"production", "server"},
+		Metadata:  map[string]interface{}{"location": "datacenter-1", "rack": "A1"},
+		DMSID:     "dms-production",
+		Icon:      "server",
+		IconColor: "#FF0000",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceDMS1)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	deviceDMS1_2 := services.CreateDeviceInput{
+		ID:        "dev-dms1-2",
+		Alias:     "Device DMS1-2",
+		Tags:      []string{"production", "iot"},
+		Metadata:  map[string]interface{}{"location": "datacenter-1", "rack": "B2"},
+		DMSID:     "dms-production",
+		Icon:      "sensor",
+		IconColor: "#00FF00",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceDMS1_2)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	deviceDMS2 := services.CreateDeviceInput{
+		ID:        "dev-dms2-1",
+		Alias:     "Device DMS2-1",
+		Tags:      []string{"staging", "server"},
+		Metadata:  map[string]interface{}{"location": "datacenter-2", "rack": "C1"},
+		DMSID:     "dms-staging",
+		Icon:      "server",
+		IconColor: "#0000FF",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceDMS2)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	deviceDMS2_2 := services.CreateDeviceInput{
+		ID:        "dev-dms2-2",
+		Alias:     "Device DMS2-2",
+		Tags:      []string{"staging", "iot"},
+		Metadata:  map[string]interface{}{"location": "datacenter-2", "rack": "D2"},
+		DMSID:     "dms-staging",
+		Icon:      "sensor",
+		IconColor: "#FFFF00",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceDMS2_2)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		run         func() (*models.DevicesStats, error)
+		resultCheck func(*models.DevicesStats, error)
+	}{
+		{
+			name: "OK/GetDevicesStats_NoFilter_BackwardCompatibility",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// All 4 devices should be counted
+				if stats.TotalDevices != 4 {
+					t.Fatalf("expected 4 total devices, got %d", stats.TotalDevices)
+				}
+				// All devices should be in NO_IDENTITY status
+				if stats.DevicesStatus[models.DeviceNoIdentity] != 4 {
+					t.Fatalf("expected 4 devices in NO_IDENTITY status, got %d", stats.DevicesStatus[models.DeviceNoIdentity])
+				}
+			},
+		},
+		{
+			name: "OK/GetDevicesStats_FilterByDMS_Production",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "dms_owner",
+								FilterOperation: resources.StringEqual,
+								Value:           "dms-production",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// Only 2 devices in dms-production
+				if stats.TotalDevices != 2 {
+					t.Fatalf("expected 2 total devices in dms-production, got %d", stats.TotalDevices)
+				}
+				if stats.DevicesStatus[models.DeviceNoIdentity] != 2 {
+					t.Fatalf("expected 2 devices in NO_IDENTITY status for dms-production, got %d", stats.DevicesStatus[models.DeviceNoIdentity])
+				}
+			},
+		},
+		{
+			name: "OK/GetDevicesStats_FilterByDMS_Staging",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "dms_owner",
+								FilterOperation: resources.StringEqual,
+								Value:           "dms-staging",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// Only 2 devices in dms-staging
+				if stats.TotalDevices != 2 {
+					t.Fatalf("expected 2 total devices in dms-staging, got %d", stats.TotalDevices)
+				}
+				if stats.DevicesStatus[models.DeviceNoIdentity] != 2 {
+					t.Fatalf("expected 2 devices in NO_IDENTITY status for dms-staging, got %d", stats.DevicesStatus[models.DeviceNoIdentity])
+				}
+			},
+		},
+		{
+			name: "OK/GetDevicesStats_FilterByTags_Production",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "tags",
+								FilterOperation: resources.StringArrayContains,
+								Value:           "production",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// 2 devices have "production" tag
+				if stats.TotalDevices != 2 {
+					t.Fatalf("expected 2 devices with production tag, got %d", stats.TotalDevices)
+				}
+			},
+		},
+		{
+			name: "OK/GetDevicesStats_FilterByTags_Server",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "tags",
+								FilterOperation: resources.StringArrayContains,
+								Value:           "server",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// 2 devices have "server" tag (one from each DMS)
+				if stats.TotalDevices != 2 {
+					t.Fatalf("expected 2 devices with server tag, got %d", stats.TotalDevices)
+				}
+			},
+		},
+		{
+			name: "OK/GetDevicesStats_MultipleFilters_DMSAndTags",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "dms_owner",
+								FilterOperation: resources.StringEqual,
+								Value:           "dms-production",
+							},
+							{
+								Field:           "tags",
+								FilterOperation: resources.StringArrayContains,
+								Value:           "iot",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// Only 1 device matches both: dms-production AND iot tag
+				if stats.TotalDevices != 1 {
+					t.Fatalf("expected 1 device with dms-production and iot tag, got %d", stats.TotalDevices)
+				}
+			},
+		},
+		{
+			name: "OK/GetDevicesStats_FilterByID_Single",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "id",
+								FilterOperation: resources.StringEqual,
+								Value:           "dev-dms1-1",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// Only 1 device with this specific ID
+				if stats.TotalDevices != 1 {
+					t.Fatalf("expected 1 device with ID dev-dms1-1, got %d", stats.TotalDevices)
+				}
+			},
+		},
+		{
+			name: "OK/GetDevicesStats_FilterNoMatch",
+			run: func() (*models.DevicesStats, error) {
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "dms_owner",
+								FilterOperation: resources.StringEqual,
+								Value:           "dms-nonexistent",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats == nil {
+					t.Fatalf("stats should not be nil")
+				}
+				// No devices match this filter
+				if stats.TotalDevices != 0 {
+					t.Fatalf("expected 0 devices for nonexistent DMS, got %d", stats.TotalDevices)
+				}
+				// All status counts should be 0
+				for status, count := range stats.DevicesStatus {
+					if count != 0 {
+						t.Fatalf("expected 0 devices for status %s, got %d", status, count)
+					}
+				}
+			},
+		},
+		{
+			name: "Err/GetDevicesStats_StatusFilterNotAllowed",
+			run: func() (*models.DevicesStats, error) {
+				// This test verifies that status filters in QueryParameters are rejected
+				// with a 400 Bad Request error
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "dms_owner",
+								FilterOperation: resources.StringEqual,
+								Value:           "dms-production",
+							},
+							{
+								Field:           "status",
+								FilterOperation: resources.EnumEqual,
+								Value:           "ACTIVE", // This should cause a 400 error
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err == nil {
+					t.Fatalf("expected error when status filter is provided, got nil")
+				}
+				if stats != nil {
+					t.Fatalf("stats should be nil when error occurs")
+				}
+				// Check that the error is a validation error (400 Bad Request)
+				if !strings.Contains(err.Error(), "400") && !strings.Contains(err.Error(), "validation") {
+					t.Fatalf("expected 400 Bad Request error, got: %s", err)
+				}
+			},
+		},
+		{
+			name: "Err/GetDevicesStats_StatusFilterOnly",
+			run: func() (*models.DevicesStats, error) {
+				// Test with only status filter (no other filters)
+				return dmgr.HttpDeviceManagerSDK.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+					QueryParameters: &resources.QueryParameters{
+						Filters: []resources.FilterOption{
+							{
+								Field:           "status",
+								FilterOperation: resources.EnumEqual,
+								Value:           "NO_IDENTITY",
+							},
+						},
+					},
+				})
+			},
+			resultCheck: func(stats *models.DevicesStats, err error) {
+				if err == nil {
+					t.Fatalf("expected error when status filter is provided, got nil")
+				}
+				if stats != nil {
+					t.Fatalf("stats should be nil when error occurs")
+				}
+				// Check that the error is a validation error (400 Bad Request)
+				if !strings.Contains(err.Error(), "400") && !strings.Contains(err.Error(), "validation") {
+					t.Fatalf("expected 400 Bad Request error, got: %s", err)
+				}
 			},
 		},
 	}

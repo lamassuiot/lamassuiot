@@ -79,14 +79,16 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
-		ID:           input.ID,
-		Subject:      input.Subject,
-		KeyMetadata:  input.KeyMetadata,
-		ProfileID:    input.ProfileID,
-		CAExpiration: input.CAExpiration,
-		EngineID:     input.EngineID,
-		ParentID:     input.ParentID,
-		Metadata:     input.Metadata,
+		ID:                  input.ID,
+		Subject:             input.Subject,
+		KeyMetadata:         input.KeyMetadata,
+		ProfileID:           input.ProfileID,
+		CAExpiration:        input.CAExpiration,
+		EngineID:            input.EngineID,
+		ParentID:            input.ParentID,
+		Metadata:            input.Metadata,
+		CAIssuanceProfileID: input.CAIssuanceProfileID,
+		CAIssuanceProfile:   input.CAIssuanceProfile,
 	}, map[int][]error{
 		400: {
 			errs.ErrValidateBadRequest,
@@ -226,6 +228,24 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
+	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/reissue", nil, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+		400: {
+			errs.ErrCAAlreadyRevoked,
+			errs.ErrCAExpired,
+			errs.ErrValidateBadRequest,
 		},
 	})
 	if err != nil {

@@ -19,6 +19,8 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/storage/sqlite"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
@@ -97,7 +99,9 @@ func main() {
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
+	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
+	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -208,22 +212,44 @@ func main() {
 	}()
 
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
-	fmt.Println("Storage Engine")
-	var postgresStorageConfig cconfig.PluggableStorageEngine
 
-	fmt.Println(">> launching docker: Postgres ...")
-	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
-	backend, err := posgresSubsystem.Run(*standardDockerPorts)
-	if err != nil {
-		log.Fatalf("could not launch Postgres: %s", err)
+	// Register monolithic-specific engines
+	if *useSqlite {
+		sqlite.Register()
+	}
+	if *useInMemoryEventbus {
+		inmemory.Register()
 	}
 
-	postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine)
+	fmt.Println("Storage Engine")
+	var storageConfig cconfig.PluggableStorageEngine
+	var err error
 
-	fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Config["port"].(int))
-	fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Config["username"].(string))
-	fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Config["password"].(cconfig.Password))
+	if *useSqlite {
+		fmt.Println(">> using SQLite ...")
+		sqlite.Register()
+		storageConfig = cconfig.PluggableStorageEngine{
+			LogLevel: cconfig.Info,
+			Provider: cconfig.SQLite,
+			Config: map[string]interface{}{
+				"path": "file::memory:?cache=shared",
+			},
+		}
+	} else {
+		fmt.Println(">> launching docker: Postgres ...")
+		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
+		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
+		backend, err := posgresSubsystem.Run(*standardDockerPorts)
+		if err != nil {
+			log.Fatalf("could not launch Postgres: %s", err)
+		}
+
+		storageConfig = backend.Config.(cconfig.PluggableStorageEngine)
+
+		fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Config["port"].(int))
+		fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Config["username"].(string))
+		fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
+	}
 
 	fmt.Println("Crypto Engines")
 
@@ -284,7 +310,20 @@ func main() {
 
 	dlqEventBus := eventBus
 
-	if !*disableEventbus && !*useAwsEventbus {
+	if !*disableEventbus && *useInMemoryEventbus {
+		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
+		eventBus = cconfig.EventBusEngine{
+			LogLevel: cconfig.Trace,
+			Enabled:  true,
+			Provider: "inmemory", // Custom provider for monolithic
+			Config:   make(map[string]interface{}),
+		}
+
+		dlqEventBus = eventBus
+		dlqEventBus.Config = make(map[string]interface{})
+
+		fmt.Println(" 	-- inmemory eventbus: ephemeral GoChannel pub/sub")
+	} else if !*disableEventbus && !*useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
 		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(*standardDockerPorts)
 		if err != nil {
@@ -305,9 +344,7 @@ func main() {
 		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
 		fmt.Printf(" 	-- rabbitmq user: %s\n", basicAuth["username"].(string))
 		fmt.Printf(" 	-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
-	}
-
-	if !*disableEventbus && *useAwsEventbus {
+	} else if !*disableEventbus && *useAwsEventbus {
 		fmt.Println(">> using AWS Eventbus")
 		internalConfig := awsBaseCryptoEngine.Config
 
@@ -409,7 +446,7 @@ func main() {
 
 	cryptoEnginesConfig.CryptoEngines = cryptoEngines
 
-	pluglableStorageConfig := &postgresStorageConfig
+	pluglableStorageConfig := &storageConfig
 
 	conf := pkg.MonolithicConfig{
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},

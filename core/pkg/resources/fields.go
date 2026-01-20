@@ -4,6 +4,8 @@ var DMSFilterableFields = map[string]FilterFieldType{
 	"id":            StringFilterFieldType,
 	"name":          StringFilterFieldType,
 	"creation_date": DateFilterFieldType,
+	"metadata":      JsonFilterFieldType,
+	"settings":      JsonFilterFieldType,
 }
 
 var DeviceFilterableFields = map[string]FilterFieldType{
@@ -12,6 +14,7 @@ var DeviceFilterableFields = map[string]FilterFieldType{
 	"creation_timestamp": DateFilterFieldType,
 	"status":             EnumFilterFieldType,
 	"tags":               StringArrayFilterFieldType,
+	"metadata":           JsonFilterFieldType,
 }
 
 var CertificateFilterableFields = map[string]FilterFieldType{
@@ -26,4 +29,5 @@ var CertificateFilterableFields = map[string]FilterFieldType{
 	"valid_from":           DateFilterFieldType,
 	"revocation_timestamp": DateFilterFieldType,
 	"revocation_reason":    EnumFilterFieldType,
+	"metadata":             JsonFilterFieldType,
 }

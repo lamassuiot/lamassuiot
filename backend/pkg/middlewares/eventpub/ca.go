@@ -134,6 +134,28 @@ func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.
 	return mw.Next.UpdateCAMetadata(ctx, input)
 }
 
+func (mw CAEventPublisher) ReissueCA(ctx context.Context, input services.ReissueCAInput) (output *models.CACertificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventReissueCAKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
+
+	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
+		CAID: input.CAID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.CACertificate]{
+				Updated:  *output,
+				Previous: *prev,
+			})
+		}
+	}()
+	return mw.Next.ReissueCA(ctx, input)
+}
+
 func (mw CAEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteCAKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
@@ -148,26 +170,14 @@ func (mw CAEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCA
 
 func (mw CAEventPublisher) SignCertificate(ctx context.Context, input services.SignCertificateInput) (output *models.Certificate, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventSignCertificateKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID)) //@jjrodrig is this a CA entitiy or Certificate entity?
 
 	defer func() {
 		if err == nil {
+			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", output.SerialNumber))
 			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.SignCertificate(ctx, input)
-}
-
-func (mw CAEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCertificateKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.Subject.CommonName)) //@jjrodrig dont know if this ID is correct
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.CreateCertificate(ctx, input)
 }
 
 func (mw CAEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {

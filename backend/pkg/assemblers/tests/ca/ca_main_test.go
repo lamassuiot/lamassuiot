@@ -2,6 +2,7 @@ package ca
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -216,6 +217,821 @@ func TestCreateCA(t *testing.T) {
 
 				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
 					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/CAIssuanceProfile-Inline",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA with inline CA issuance profile
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:          true,
+					HonorSubject:      true,
+					KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature),
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+				}
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "TestCA-Inline-Profile"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         defaultProfile.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA certificate has the expected key usage
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected KeyUsage %d, got %d", expectedKeyUsage, cert.KeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/CAIssuanceProfile-ByReference",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create a specific CA issuance profile
+				caIssuanceProfile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:              "CA-Specific-Profile",
+						Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+						SignAsCA:          true,
+						HonorSubject:      true,
+						KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{models.X509ExtKeyUsage(x509.ExtKeyUsageOCSPSigning)},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating CA issuance profile: %s", err)
+				}
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                  caID,
+					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:             models.Subject{CommonName: "TestCA-Profile-Ref"},
+					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:           defaultProfile.ID,
+					CAIssuanceProfileID: caIssuanceProfile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA certificate has the expected key usage
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected KeyUsage %d, got %d", expectedKeyUsage, cert.KeyUsage)
+				}
+
+				// Verify extended key usage
+				if len(cert.ExtKeyUsage) != 1 || cert.ExtKeyUsage[0] != x509.ExtKeyUsageOCSPSigning {
+					return fmt.Errorf("expected ExtKeyUsage OCSPSigning, got %v", cert.ExtKeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/CAIssuanceProfile-Default",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA without specifying CA issuance profile - should use default
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA-Default-Profile"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    defaultProfile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA certificate has default key usage
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected default KeyUsage %d, got %d", expectedKeyUsage, cert.KeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/CAIssuanceProfile-NotSignAsCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA with inline profile that has SignAsCA=false
+				invalidCAProfile := models.IssuanceProfile{
+					Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:          false, // Invalid for CA creation
+					HonorSubject:      true,
+					KeyUsage:          models.X509KeyUsage(x509.KeyUsageDigitalSignature),
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+				}
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "TestCA-Invalid"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         defaultProfile.ID,
+					CAIssuanceProfile: &invalidCAProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for SignAsCA=false. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrValidateBadRequest) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrValidateBadRequest, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/CAIssuanceProfile-InvalidReference",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                  caID,
+					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:             models.Subject{CommonName: "TestCA-Invalid-Ref"},
+					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:           defaultProfile.ID,
+					CAIssuanceProfileID: "non-existent-ca-profile-id",
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for invalid profile reference. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/CAIssuanceProfile-ReferencedProfileNotSignAsCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create a CA issuance profile with SignAsCA=false
+				invalidCAProfile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:              "Invalid-CA-Profile-Ref",
+						Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+						SignAsCA:          false, // Invalid for CA creation
+						HonorSubject:      true,
+						KeyUsage:          models.X509KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating invalid CA issuance profile: %s", err)
+				}
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                  caID,
+					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:             models.Subject{CommonName: "TestCA-Invalid-Ref"},
+					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:           defaultProfile.ID,
+					CAIssuanceProfileID: invalidCAProfile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for referenced profile with SignAsCA=false. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrValidateBadRequest) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrValidateBadRequest, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/CAIssuanceProfile-InlinePriorityOverReference",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create a referenced profile
+				refProfile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:              "Reference-Profile",
+						Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+						SignAsCA:          true,
+						HonorSubject:      true,
+						KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign),
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating reference profile: %s", err)
+				}
+
+				// Create inline profile with different key usage
+				inlineProfile := models.IssuanceProfile{
+					Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:          true,
+					HonorSubject:      true,
+					KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature),
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+				}
+
+				// Provide both - inline should take priority
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                  caID,
+					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:             models.Subject{CommonName: "TestCA-Priority"},
+					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:           defaultProfile.ID,
+					CAIssuanceProfileID: refProfile.ID,
+					CAIssuanceProfile:   &inlineProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify inline profile was used (has DigitalSignature)
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected inline profile KeyUsage %d, got %d (reference profile would have been %d)",
+						expectedKeyUsage, cert.KeyUsage, x509.KeyUsageCertSign)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/BackwardCompatibility-NoProfileProvided",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA without any CAIssuanceProfile information (backward compatibility)
+				// This simulates older API calls that don't include CA-specific profile information
+				// Only the default ProfileID is provided, no CAIssuanceProfile or CAIssuanceProfileID
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA-NoProfile"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    defaultProfile.ID,
+					// No CAIssuanceProfileID or CAIssuanceProfile fields provided
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error for backward compatibility, but got error: %s", err)
+				}
+
+				// Verify CA was created successfully
+				if createdCA == nil {
+					return fmt.Errorf("created CA should not be nil")
+				}
+
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+
+				if cert.Subject.CommonName != "TestCA-NoProfile" {
+					return fmt.Errorf("expected CommonName 'TestCA-NoProfile', got '%s'", cert.Subject.CommonName)
+				}
+
+				// Verify default CA behavior is applied (IsCA should be true)
+				if !cert.IsCA {
+					return fmt.Errorf("certificate should have IsCA=true")
+				}
+
+				// Verify CA has appropriate key usage for a CA (at minimum CertSign)
+				if cert.KeyUsage&x509.KeyUsageCertSign == 0 {
+					return fmt.Errorf("certificate should have KeyUsageCertSign, got KeyUsage: %d", cert.KeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/RootCA-CryptoEnforcement-RSANotAllowed",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that disallows RSA
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:              true,
+							AllowRSAKeys:         false,
+							AllowECDSAKeys:       true,
+							AllowedECDSAKeySizes: []int{256, 384},
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:              true,
+						AllowRSAKeys:         false,
+						AllowECDSAKeys:       true,
+						AllowedECDSAKeySizes: []int{256, 384},
+					},
+				}
+
+				// Try to create CA with RSA key but profile disallows it
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "TestCA-RSA-NotAllowed"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for RSA key when RSA not allowed. Got none")
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Error/RootCA-CryptoEnforcement-ECDSANotAllowed",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that disallows ECDSA
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:            true,
+							AllowRSAKeys:       true,
+							AllowedRSAKeySizes: []int{2048, 4096},
+							AllowECDSAKeys:     false,
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:            true,
+						AllowRSAKeys:       true,
+						AllowedRSAKeySizes: []int{2048, 4096},
+						AllowECDSAKeys:     false,
+					},
+				}
+
+				// Try to create CA with ECDSA key but profile disallows it
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+					Subject:           models.Subject{CommonName: "TestCA-ECDSA-NotAllowed"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for ECDSA key when ECDSA not allowed. Got none")
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Error/RootCA-CryptoEnforcement-InvalidRSAKeySize",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that only allows specific RSA key sizes
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:            true,
+							AllowRSAKeys:       true,
+							AllowedRSAKeySizes: []int{4096}, // Only allow 4096-bit RSA
+							AllowECDSAKeys:     false,
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:            true,
+						AllowRSAKeys:       true,
+						AllowedRSAKeySizes: []int{4096},
+						AllowECDSAKeys:     false,
+					},
+				}
+
+				// Try to create CA with 2048-bit RSA key but profile only allows 4096
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "TestCA-RSA-InvalidSize"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for invalid RSA key size. Got none")
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Error/RootCA-CryptoEnforcement-InvalidECDSAKeySize",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that only allows specific ECDSA key sizes
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:              true,
+							AllowRSAKeys:         false,
+							AllowECDSAKeys:       true,
+							AllowedECDSAKeySizes: []int{384, 521}, // Only allow 384 and 521-bit ECDSA
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:              true,
+						AllowRSAKeys:         false,
+						AllowECDSAKeys:       true,
+						AllowedECDSAKeySizes: []int{384, 521},
+					},
+				}
+
+				// Try to create CA with 256-bit ECDSA key but profile only allows 384 and 521
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+					Subject:           models.Subject{CommonName: "TestCA-ECDSA-InvalidSize"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for invalid ECDSA key size. Got none")
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/RootCA-CryptoEnforcement-ValidRSAKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that allows RSA with specific sizes
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:            true,
+							AllowRSAKeys:       true,
+							AllowedRSAKeySizes: []int{2048, 4096},
+							AllowECDSAKeys:     false,
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:            true,
+						AllowRSAKeys:       true,
+						AllowedRSAKeySizes: []int{2048, 4096},
+						AllowECDSAKeys:     false,
+					},
+				}
+
+				// Create CA with 2048-bit RSA key (allowed)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "TestCA-RSA-Valid"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA was created with RSA 2048
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				if cert.PublicKeyAlgorithm != x509.RSA {
+					return fmt.Errorf("expected RSA key algorithm, got %v", cert.PublicKeyAlgorithm)
+				}
+
+				rsaPubKey, ok := cert.PublicKey.(*rsa.PublicKey)
+				if !ok {
+					return fmt.Errorf("could not cast public key to RSA")
+				}
+
+				if rsaPubKey.N.BitLen() != 2048 {
+					return fmt.Errorf("expected 2048-bit RSA key, got %d bits", rsaPubKey.N.BitLen())
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/RootCA-CryptoEnforcement-ValidECDSAKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that allows ECDSA with specific sizes
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:              true,
+							AllowRSAKeys:         false,
+							AllowECDSAKeys:       true,
+							AllowedECDSAKeySizes: []int{256, 384, 521},
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:              true,
+						AllowRSAKeys:         false,
+						AllowECDSAKeys:       true,
+						AllowedECDSAKeySizes: []int{256, 384, 521},
+					},
+				}
+
+				// Create CA with 256-bit ECDSA key (allowed)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+					Subject:           models.Subject{CommonName: "TestCA-ECDSA-Valid"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA was created with ECDSA 256
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				if cert.PublicKeyAlgorithm != x509.ECDSA {
+					return fmt.Errorf("expected ECDSA key algorithm, got %v", cert.PublicKeyAlgorithm)
+				}
+
+				ecdsaPubKey, ok := cert.PublicKey.(*ecdsa.PublicKey)
+				if !ok {
+					return fmt.Errorf("could not cast public key to ECDSA")
+				}
+
+				if ecdsaPubKey.Params().BitSize != 256 {
+					return fmt.Errorf("expected 256-bit ECDSA key, got %d bits", ecdsaPubKey.Params().BitSize)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "Error/SubordinateCA-CryptoEnforcement-InvalidRSAKeySize",
+			before: func(svc services.CAService) error {
+				// Create root CA first
+				profile := createProfile(t)
+				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "root-ca-for-sub-test",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 4096},
+					Subject:      models.Subject{CommonName: "Root CA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+				return err
+			},
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that only allows 4096-bit RSA
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:            true,
+							AllowRSAKeys:       true,
+							AllowedRSAKeySizes: []int{4096},
+							AllowECDSAKeys:     false,
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:            true,
+						AllowRSAKeys:       true,
+						AllowedRSAKeySizes: []int{4096},
+						AllowECDSAKeys:     false,
+					},
+				}
+
+				// Try to create subordinate CA with 2048-bit RSA key (not allowed)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					ParentID:          "root-ca-for-sub-test",
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "SubCA-RSA-InvalidSize"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for invalid RSA key size in subordinate CA. Got none")
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SubordinateCA-CryptoEnforcement-ValidKey",
+			before: func(svc services.CAService) error {
+				// Create root CA first
+				profile := createProfile(t)
+				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "root-ca-for-valid-sub",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 4096},
+					Subject:      models.Subject{CommonName: "Root CA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+				return err
+			},
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				// Create profile with crypto enforcement that allows 4096-bit RSA
+				profileWithEnforcement, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:              true,
+							AllowRSAKeys:         true,
+							AllowedRSAKeySizes:   []int{2048, 4096},
+							AllowECDSAKeys:       true,
+							AllowedECDSAKeySizes: []int{256, 384},
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating profile with crypto enforcement: %s", err)
+				}
+
+				// Create CA issuance profile with crypto enforcement
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:     models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:     true,
+					HonorSubject: true,
+					KeyUsage:     models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+					CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+						Enabled:              true,
+						AllowRSAKeys:         true,
+						AllowedRSAKeySizes:   []int{2048, 4096},
+						AllowECDSAKeys:       true,
+						AllowedECDSAKeySizes: []int{256, 384},
+					},
+				}
+
+				// Create subordinate CA with 4096-bit RSA key (allowed)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					ParentID:          "root-ca-for-valid-sub",
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 4096},
+					Subject:           models.Subject{CommonName: "SubCA-RSA-Valid"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         profileWithEnforcement.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created subordinate CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA was created with RSA 4096
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				if cert.PublicKeyAlgorithm != x509.RSA {
+					return fmt.Errorf("expected RSA key algorithm, got %v", cert.PublicKeyAlgorithm)
+				}
+
+				rsaPubKey, ok := cert.PublicKey.(*rsa.PublicKey)
+				if !ok {
+					return fmt.Errorf("could not cast public key to RSA")
+				}
+
+				if rsaPubKey.N.BitLen() != 4096 {
+					return fmt.Errorf("expected 4096-bit RSA key, got %d bits", rsaPubKey.N.BitLen())
+				}
+
+				// Verify it's a subordinate CA (level > 0)
+				if createdCA.Level != 1 {
+					return fmt.Errorf("expected subordinate CA at level 1, got level %d", createdCA.Level)
 				}
 
 				return nil

@@ -41,11 +41,12 @@ type Device struct {
 }
 
 type Slot[E any] struct {
-	Status        SlotStatus                `json:"status"`
-	ActiveVersion int                       `json:"active_version"`
-	SecretType    CryptoSecretType          `json:"type"`
-	Secrets       map[int]E                 `json:"versions"` // version -> secret
-	Events        map[time.Time]DeviceEvent `json:"events" gorm:"serializer:json"`
+	Status         SlotStatus                `json:"status"`
+	ActiveVersion  int                       `json:"active_version"`
+	SecretType     CryptoSecretType          `json:"type"`
+	Secrets        map[int]E                 `json:"versions"` // version -> secret
+	ExpirationDate *time.Time                `json:"expiration_date,omitempty"`
+	Events         map[time.Time]DeviceEvent `json:"events" gorm:"serializer:json"`
 }
 
 type DeviceEventType string
