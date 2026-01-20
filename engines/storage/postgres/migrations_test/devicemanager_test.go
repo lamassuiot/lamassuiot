@@ -303,22 +303,21 @@ func MigrationTest_DeviceManager_20260120114735_idslot_text_to_jsonb(t *testing.
 	ApplyMigration(t, logger, con, DeviceManagerDBName)
 
 	// Verify device with identity_slot
-	var identity1 *string
-	tx := con.Table("devices").Where("id = 'device-with-identity'").Select("identity_slot").Find(&identity1)
+	var identity1 string
+	tx := con.Table("devices").Where("id = 'device-with-identity'").Select("identity_slot").Scan(&identity1)
 	if tx.Error != nil {
 		t.Fatalf("failed to select devices row: %v", tx.Error)
 	}
-	assert.NotNil(t, identity1)
 	// Parse and verify JSON structure
 	var identityJSON map[string]any
-	err := json.Unmarshal([]byte(*identity1), &identityJSON)
+	err := json.Unmarshal([]byte(identity1), &identityJSON)
 	assert.NoError(t, err, "Identity slot should be valid JSON")
 	assert.Equal(t, "ACTIVE", identityJSON["status"])
 	assert.Equal(t, float64(1), identityJSON["active_version"])
 
 	// Verify device with empty identity_slot becomes NULL
 	var identity2 *string
-	tx = con.Table("devices").Where("id = 'device-empty-identity'").Select("identity_slot").Find(&identity2)
+	tx = con.Raw("SELECT identity_slot FROM devices WHERE id = 'device-empty-identity'").Scan(&identity2)
 	if tx.Error != nil {
 		t.Fatalf("failed to select devices row: %v", tx.Error)
 	}
@@ -326,7 +325,7 @@ func MigrationTest_DeviceManager_20260120114735_idslot_text_to_jsonb(t *testing.
 
 	// Verify device with NULL identity_slot remains NULL
 	var identity3 *string
-	tx = con.Table("devices").Where("id = 'device-null-identity'").Select("identity_slot").Find(&identity3)
+	tx = con.Raw("SELECT identity_slot FROM devices WHERE id = 'device-null-identity'").Scan(&identity3)
 	if tx.Error != nil {
 		t.Fatalf("failed to select devices row: %v", tx.Error)
 	}
