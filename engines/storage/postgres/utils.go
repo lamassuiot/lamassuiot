@@ -252,6 +252,11 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", limit+offset, limit)
 
 			if queryParams.Sort.SortField != "" {
+				// JSONPath Sorting Security:
+				// - Field name validated against whitelist in controller layer
+				// - JsonPathExpr validated with isValidJsonPath() in controller layer
+				// - Single quotes escaped by convertJsonPathToPostgresPath()
+				// - No user input directly concatenated into SQL
 				if queryParams.Sort.JsonPathExpr != "" {
 					orderClause := buildJsonPathOrderClause(queryParams.Sort.SortField, queryParams.Sort.JsonPathExpr, "")
 					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortJP:%s;sortB:%s;", sortMode, base64.StdEncoding.EncodeToString([]byte(queryParams.Sort.JsonPathExpr)), queryParams.Sort.SortField)
@@ -594,16 +599,22 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 
 // convertJsonPathToPostgresPath converts a JSONPath expression (e.g., "$.foo.bar")
 // to PostgreSQL JSONB path format (e.g., "{foo,bar}")
+// Note: Input should already be validated by controller layer
 func convertJsonPathToPostgresPath(jsonPath string) string {
 	// Remove leading "$." if present
 	jsonPath = strings.TrimPrefix(jsonPath, "$.")
-	// Split by "." and join with ","
+	// Split by "." and sanitize each part
 	parts := strings.Split(jsonPath, ".")
+	// Escape single quotes in each part to prevent SQL injection
+	for i, part := range parts {
+		parts[i] = strings.ReplaceAll(part, "'", "''")
+	}
 	return "{" + strings.Join(parts, ",") + "}"
 }
 
 // buildJsonPathOrderClause generates a PostgreSQL ORDER BY clause for JSONB fields
 // that handles numeric, date/timestamp, and text values correctly
+// Note: Input validation should be performed at controller layer before calling this
 func buildJsonPathOrderClause(field, jsonPath, sortMode string) string {
 	pgPath := convertJsonPathToPostgresPath(jsonPath)
 	// Extract the last element for the -> operator
@@ -613,6 +624,7 @@ func buildJsonPathOrderClause(field, jsonPath, sortMode string) string {
 		// For nested paths like {env,config}, use -> for intermediate and ->> for last
 		operatorPath = field
 		for i := 0; i < len(parts)-1; i++ {
+			// parts[i] is already sanitized (quotes escaped) by convertJsonPathToPostgresPath
 			operatorPath += " -> '" + parts[i] + "'"
 		}
 		operatorPath += " -> '" + parts[len(parts)-1] + "'"

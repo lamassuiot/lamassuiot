@@ -32,8 +32,12 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 					jsonPathExpr := sortField[idx+len("[jsonpath]"):]
 
 					if fieldType, exists := filterFieldMap[fieldName]; exists && fieldType == resources.JsonFilterFieldType {
-						queryParams.Sort.SortField = fieldName
-						queryParams.Sort.JsonPathExpr = jsonPathExpr
+						// Validate JSONPath expression to prevent SQL injection
+						// If invalid, silently ignore the sort parameter (security measure)
+						if isValidJsonPath(jsonPathExpr) {
+							queryParams.Sort.SortField = fieldName
+							queryParams.Sort.JsonPathExpr = jsonPathExpr
+						}
 					}
 				} else {
 					_, exists := filterFieldMap[sortField]
@@ -164,4 +168,42 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 	}
 
 	return &queryParams
+}
+
+// isValidJsonPath validates a JSONPath expression to prevent SQL injection
+// Allows only: letters, numbers, underscores, dots, and $. prefix
+// Rejects: quotes, semicolons, hyphens, parentheses, and other SQL metacharacters
+func isValidJsonPath(jsonPath string) bool {
+	// JSONPath must start with $. or $[
+	if !strings.HasPrefix(jsonPath, "$.") && !strings.HasPrefix(jsonPath, "$[") {
+		return false
+	}
+
+	// Remove the $. or $[ prefix
+	jsonPath = strings.TrimPrefix(jsonPath, "$.")
+	jsonPath = strings.TrimPrefix(jsonPath, "$[")
+
+	// Maximum depth to prevent DoS
+	if len(jsonPath) > 200 {
+		return false
+	}
+
+	// Only allow alphanumeric, underscore, and dots
+	// This prevents SQL injection via quotes, semicolons, etc.
+	for _, char := range jsonPath {
+		if !((char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '_' ||
+			char == '.') {
+			return false
+		}
+	}
+
+	// Check for valid structure (no consecutive dots, no leading/trailing dots)
+	if strings.Contains(jsonPath, "..") || strings.HasPrefix(jsonPath, ".") || strings.HasSuffix(jsonPath, ".") {
+		return false
+	}
+
+	return true
 }

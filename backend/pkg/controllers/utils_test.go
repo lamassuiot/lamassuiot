@@ -196,25 +196,97 @@ func TestFilterQuery_JsonFilter_MultipleJsonPaths(t *testing.T) {
 }
 
 func TestFilterQuery_JsonPathSort(t *testing.T) {
-req := &http.Request{}
-req.URL = &url.URL{}
-q := req.URL.Query()
-q.Add("sort_by", "metadata[jsonpath]$.env")
-req.URL.RawQuery = q.Encode()
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	q.Add("sort_by", "metadata[jsonpath]$.env")
+	req.URL.RawQuery = q.Encode()
 
-filterFieldMap := map[string]resources.FilterFieldType{
-"metadata": resources.JsonFilterFieldType,
+	filterFieldMap := map[string]resources.FilterFieldType{
+		"metadata": resources.JsonFilterFieldType,
+	}
+
+	qp := FilterQuery(req, filterFieldMap)
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	if qp.Sort.SortField != "metadata" {
+		t.Errorf("expected sort field 'metadata', got '%s'", qp.Sort.SortField)
+	}
+	if qp.Sort.JsonPathExpr != "$.env" {
+		t.Errorf("expected json path '$.env', got '%s'", qp.Sort.JsonPathExpr)
+	}
+}
+func TestIsValidJsonPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		jsonPath string
+		valid    bool
+	}{
+		// Valid paths
+		{"simple property", "$.environment", true},
+		{"nested property", "$.location.region", true},
+		{"with numbers", "$.config123.value456", true},
+		{"with underscores", "$.my_field.sub_field", true},
+		{"deep nesting", "$.a.b.c.d.e.f", true},
+
+		// Invalid paths - SQL injection attempts
+		{"single quote", "$.field'; DROP TABLE devices; --", false},
+		{"double quote", `$.field"; DROP TABLE devices; --`, false},
+		{"semicolon", "$.field;DELETE FROM devices", false},
+		{"comment", "$.field--", false},
+		{"union attack", "$.field' UNION SELECT * FROM users--", false},
+		{"parentheses", "$.field()", false},
+		{"brackets", "$.field[]", false},
+		{"spaces", "$.field name", false},
+		{"hyphen", "$.field-name", false},
+		{"asterisk", "$.field*", false},
+		{"backslash", "$.field\\escape", false},
+
+		// Invalid structure
+		{"no prefix", "environment", false},
+		{"double dots", "$.field..nested", false},
+		{"trailing dot", "$.field.", false},
+		{"leading dot after prefix", "$..field", false},
+		{"empty", "", false},
+		{"too long", "$." + string(make([]byte, 250)), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isValidJsonPath(tt.jsonPath)
+			if result != tt.valid {
+				t.Errorf("isValidJsonPath(%q) = %v, want %v", tt.jsonPath, result, tt.valid)
+			}
+		})
+	}
 }
 
-qp := FilterQuery(req, filterFieldMap)
-if qp == nil {
-t.Fatalf("expected QueryParameters, got nil")
-}
+func TestFilterQuery_JsonPathSort_SQLInjection(t *testing.T) {
+	// Test that SQL injection attempts are rejected
+	maliciousInputs := []string{
+		"metadata[jsonpath]$.field'; DROP TABLE devices; --",
+		"metadata[jsonpath]$.field\"; DELETE FROM devices; --",
+		"metadata[jsonpath]$.field' UNION SELECT * FROM users--",
+		"metadata[jsonpath]$.field(); ",
+	}
 
-if qp.Sort.SortField != "metadata" {
-t.Errorf("expected sort field 'metadata', got '%s'", qp.Sort.SortField)
-}
-if qp.Sort.JsonPathExpr != "$.env" {
-t.Errorf("expected json path '$.env', got '%s'", qp.Sort.JsonPathExpr)
-}
+	filterFieldMap := map[string]resources.FilterFieldType{
+		"metadata": resources.JsonFilterFieldType,
+	}
+
+	for _, input := range maliciousInputs {
+		req := &http.Request{}
+		req.URL = &url.URL{}
+		q := req.URL.Query()
+		q.Add("sort_by", input)
+		req.URL.RawQuery = q.Encode()
+
+		qp := FilterQuery(req, filterFieldMap)
+		if qp.Sort.JsonPathExpr != "" {
+			t.Errorf("SQL injection attempt should be rejected: %s", input)
+			t.Errorf("Got JsonPathExpr: %s", qp.Sort.JsonPathExpr)
+		}
+	}
 }
