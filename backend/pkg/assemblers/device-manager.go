@@ -32,9 +32,12 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 	httpGrp := httpEngine.Group("/")
 	routes.NewDeviceManagerHTTPLayer(httpGrp, *service)
 
-	openApiContent, err := os.ReadFile(conf.OpenAPISpecPath)
-	if err != nil {
-		lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent, err = os.ReadFile(conf.OpenAPI.SpecFilePath)
+		if err != nil {
+			lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
+		}
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

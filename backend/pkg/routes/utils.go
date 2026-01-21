@@ -67,7 +67,7 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	mainEngine.Handle("/", routerEngine)
 	mainEngine.Handle("/health", healthEngine)
 
-	if openApiContent != nil {
+	if len(openApiContent) > 0 {
 		openApiEngine := NewGinEngine(mainLogger)
 		openApiEngine.GET("/openapi", func(ctx *gin.Context) {
 			ctx.Data(http.StatusOK, "application/yaml", openApiContent)
