@@ -24,6 +24,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 func NewGinEngine(logger *logrus.Entry) *gin.Engine {
@@ -68,11 +69,16 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	mainEngine.Handle("/health", healthEngine)
 
 	if len(openApiContent) > 0 {
+		// Inject the service version into the OpenAPI spec
+		openApiContent = InjectVersionIntoOpenAPI(openApiContent, apiInfo.Version)
+
 		openApiEngine := NewGinEngine(mainLogger)
 		openApiEngine.GET("/openapi", func(ctx *gin.Context) {
 			ctx.Data(http.StatusOK, "application/yaml", openApiContent)
 		})
 		mainEngine.Handle("/openapi", openApiEngine)
+	} else {
+		logger.Warn("OpenAPI spec content is empty. Skipping /openapi endpoint creation")
 	}
 
 	addr := fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port)
@@ -219,4 +225,36 @@ func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
 			c.Request.URL.Path,
 		)
 	}
+}
+
+// InjectVersionIntoOpenAPI dynamically replaces the version field in the OpenAPI spec
+// with the actual service version from APIServiceInfo using proper YAML parsing
+func InjectVersionIntoOpenAPI(openApiContent []byte, version string) []byte {
+	if len(openApiContent) == 0 || version == "" {
+		return openApiContent
+	}
+
+	// Parse the YAML content
+	var spec map[string]interface{}
+	if err := yaml.Unmarshal(openApiContent, &spec); err != nil {
+		// If parsing fails, return the original content
+		return openApiContent
+	}
+
+	// Navigate to info.version and update it
+	if info, ok := spec["info"].(map[string]interface{}); ok {
+		info["version"] = version
+	} else {
+		// If info section doesn't exist, return original content
+		return openApiContent
+	}
+
+	// Marshal back to YAML
+	modifiedContent, err := yaml.Marshal(spec)
+	if err != nil {
+		// If marshaling fails, return the original content
+		return openApiContent
+	}
+
+	return modifiedContent
 }

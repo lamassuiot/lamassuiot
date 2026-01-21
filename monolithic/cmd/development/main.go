@@ -86,7 +86,7 @@ const (
 func main() {
 	standardDockerPorts := flag.Bool("standard-docker-ports", true, "use standard docker ports for services (RabbitMQ, Postgres, Vault, etc.)")
 
-	docsDir := flag.String("docs-dir", "", "path to the docs directory")
+	docsDir := flag.String("docs-dir", "", "path to the docs directory. This is used to load the OpenAPI specs for the services")
 	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
 
 	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")
