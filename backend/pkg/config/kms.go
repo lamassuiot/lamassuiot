@@ -5,6 +5,7 @@ import (
 )
 
 type KMSConfig struct {
+	OpenAPI            cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs               cconfig.Logging                `mapstructure:"logs"`
 	Server             cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus  cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`

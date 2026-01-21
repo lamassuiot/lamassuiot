@@ -2,6 +2,7 @@ package assemblers
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
@@ -28,7 +29,16 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent, err = os.ReadFile(conf.OpenAPI.SpecFilePath)
+		if err != nil {
+			lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
+		}
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run DMS Manager http server: %s", err)
 	}

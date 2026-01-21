@@ -16,6 +16,7 @@ const (
 )
 
 type MonolithicConfig struct {
+	DocsDir               string                         `mapstructure:"docs_dir"`
 	Logs                  cconfig.Logging                `mapstructure:"logs"`
 	PublisherEventBus     cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`

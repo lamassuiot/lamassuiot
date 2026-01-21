@@ -3,6 +3,7 @@ package config
 import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 
 type AlertsConfig struct {
+	OpenAPI               cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs                  cconfig.Logging                `mapstructure:"logs"`
 	Server                cconfig.HttpServer             `mapstructure:"server"`
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
