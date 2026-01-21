@@ -95,9 +95,12 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		// --- service assembly ---
 
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
-			OpenAPISpecPath: conf.DocsDir + "/kms-openapi.yaml",
-			Logs:            svcLogs,
-			Server:          svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{
+				SpecFilePath: conf.DocsDir + "/kms-openapi.yaml",
+				Enabled:      true,
+			},
+			Logs:   svcLogs,
+			Server: svcServer,
 			CryptoEngineConfig: config.CryptoEngines{
 				LogLevel:      cconfig.Info,
 				DefaultEngine: conf.CryptoEngines[0].ID,
@@ -116,9 +119,12 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			OpenAPISpecPath:          conf.DocsDir + "/ca-openapi.yaml",
-			Logs:                     svcLogs,
-			Server:                   svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{
+				SpecFilePath: conf.DocsDir + "/ca-openapi.yaml",
+				Enabled:      true,
+			},
+			Logs:   svcLogs,
+			Server: svcServer,
 			PublisherEventBus:        conf.PublisherEventBus,
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
@@ -134,9 +140,12 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
-			OpenAPISpecPath: conf.DocsDir + "/va-openapi.yaml",
-			Logs:            svcLogs,
-			Server:          svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{
+				SpecFilePath: conf.DocsDir + "/va-openapi.yaml",
+				Enabled:      true,
+			},
+			Logs:   svcLogs,
+			Server: svcServer,
 			FilesystemStorage: cconfig.FSStorageConfig{
 				ID:   "fs",
 				Type: cconfig.LocalFilesystem,
@@ -156,9 +165,20 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-			OpenAPISpecPath:       conf.DocsDir + "/device-manager-openapi.yaml",
-			Logs:                  svcLogs,
-			Server:                svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{
+				SpecFilePath: conf.DocsDir + "/device-manager-openapi.yaml",
+				Enabled:      true,
+			},
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
 			PublisherEventBus:     conf.PublisherEventBus,
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
@@ -175,9 +195,20 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			OpenAPISpecPath:           conf.DocsDir + "/dms-manager-openapi.yaml",
-			Logs:                      svcLogs,
-			Server:                    svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{
+				SpecFilePath: conf.DocsDir + "/dms-manager-openapi.yaml",
+				Enabled:      true,
+			},
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
@@ -192,9 +223,20 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
-			OpenAPISpecPath:       conf.DocsDir + "/alerts-openapi.yaml",
-			Logs:                  svcLogs,
-			Server:                svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{
+				SpecFilePath: conf.DocsDir + "/alerts-openapi.yaml",
+				Enabled:      true,
+			},
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,
