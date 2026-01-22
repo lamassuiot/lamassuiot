@@ -4,9 +4,21 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// mockSpan implements trace.Span for testing
+type mockSpan struct {
+	trace.Span
+	spanContext trace.SpanContext
+}
+
+func (m *mockSpan) SpanContext() trace.SpanContext {
+	return m.spanContext
+}
+
+func (m *mockSpan) End(...trace.SpanEndOption) {}
 
 func TestConfigureLoggerWithRequestID(t *testing.T) {
 	// Test case 1: Logger level is not TraceLevel or DebugLevel
@@ -21,47 +33,47 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 		t.Error("ConfigureLoggerWithRequestID returned a different logger when level is not TraceLevel DebugLevel")
 	}
 
+	// Test case 2: Logger level is TraceLevel with no trace ID
 	logger = logrus.NewEntry(logrus.New())
 	logger.Logger.Level = logrus.TraceLevel
 
 	result = configureLoggerWithRequestID(ctx, logger)
 
-	// Verify that the returned logger is not the same as the input logger
-	if result == logger {
-		t.Error("ConfigureLoggerWithRequestID returned a different logger when level is not TraceLevel or DebugLevel")
+	// Verify that the returned logger is the same as input (no trace ID in context)
+	if result != logger {
+		t.Error("ConfigureLoggerWithRequestID returned a different logger when no trace ID exists")
 	}
 
-	// Test case 2: Request ID exists in the context
-	reqID := "12345"
-	ctx = context.WithValue(ctx, core.LamassuContextKeyRequestID, reqID)
+	// Test case 3: Trace ID exists in the context
+	logger = logrus.NewEntry(logrus.New())
+	logger.Logger.Level = logrus.DebugLevel
+
+	// Create a mock span with a valid trace ID
+	traceID, _ := trace.TraceIDFromHex("1234567890abcdef1234567890abcdef")
+	spanID, _ := trace.SpanIDFromHex("1234567890abcdef")
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: trace.FlagsSampled,
+	})
+
+	mockSpan := &mockSpan{spanContext: spanContext}
+	ctx = trace.ContextWithSpan(context.Background(), mockSpan)
 
 	result = configureLoggerWithRequestID(ctx, logger)
 
-	// Verify that the returned logger has the correct request ID field
-	if result.Data["req-id"] != reqID {
-		t.Errorf("ConfigureLoggerWithRequestID returned logger with incorrect request ID field. Expected: %s, Got: %v", reqID, result.Data["req-id"])
+	// Verify that the returned logger has the trace-id field
+	if _, ok := result.Data["trace-id"]; !ok {
+		t.Error("ConfigureLoggerWithRequestID returned logger without trace-id field")
 	}
 
-	// Test case 3: Request ID does not exist in the context
-	ctx = context.Background()
-
-	result = configureLoggerWithRequestID(ctx, logger)
-
-	// Verify that the returned logger has a generated request ID field
-	if _, ok := result.Data["req-id"]; !ok {
-		t.Error("ConfigureLoggerWithRequestID returned logger without request ID field")
-	}
-
-	// Verify that the generated request ID field starts with "unset."
-	if reqID, ok := result.Data["req-id"].(string); ok {
-		if !startsWith(reqID, "unset.") {
-			t.Errorf("ConfigureLoggerWithRequestID returned logger with incorrect generated request ID field. Expected: %s, Got: %s", "unset.", reqID)
+	// Verify that the trace-id field is a valid string
+	if traceIDStr, ok := result.Data["trace-id"].(string); ok {
+		expectedTraceID := traceID.String()
+		if traceIDStr != expectedTraceID {
+			t.Errorf("ConfigureLoggerWithRequestID returned logger with incorrect trace ID. Expected: %s, Got: %s", expectedTraceID, traceIDStr)
 		}
 	} else {
-		t.Error("ConfigureLoggerWithRequestID returned logger with incorrect generated request ID field type")
+		t.Error("ConfigureLoggerWithRequestID returned logger with incorrect trace-id field type")
 	}
-}
-
-func startsWith(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }

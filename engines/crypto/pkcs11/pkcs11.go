@@ -4,6 +4,7 @@
 package pkcs11
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -203,7 +204,7 @@ func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs() ([]string, error) {
 	return keyIDs, nil
 }
 
-func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	tmpKeyID := uuid.New().String()
 	hsmContext.logger.Debugf("creating RSA %d key", keySize)
 	newSigner, err := hsmContext.api.GenerateRSAKeyPair([]byte(tmpKeyID), keySize)
@@ -227,7 +228,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string,
 	return keyID, newSigner, nil
 }
 
-func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
 	tmpKeyID := uuid.New().String()
 	hsmContext.logger.Debugf("creating ECDSA %d key", curve.Params().BitSize)
 	newSigner, err := hsmContext.api.GenerateECDSAKeyPair([]byte(tmpKeyID), curve)

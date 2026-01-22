@@ -53,7 +53,7 @@ func (h CloudEventHandler) HandleMessage(m *message.Message) error {
 }
 
 func getContextFromMessage(m *message.Message) context.Context {
-	ctx := context.Background()
+	ctx := m.Context()
 
 	//Set source in context from metadata
 	ebSource := m.Metadata.Get(core.LamassuContextKeySource)

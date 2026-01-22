@@ -1,6 +1,7 @@
 package assemblers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -16,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -40,6 +42,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, error) {
 	serviceID := "device-manager"
+	sdk.InitOtelSDK(context.Background(), "Device Manager Service", conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "Device Manager", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Device Manager", "Storage")

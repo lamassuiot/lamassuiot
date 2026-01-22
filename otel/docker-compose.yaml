@@ -1,0 +1,18 @@
+services:
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    ports:
+      - "3000:3000"   # Grafana
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "3100:3100"   # Loki
+      - "9090:9090"   # Mimir (Prometheus-compatible)
+      - "3200:3200"   # Tempo
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor metricsSummary traceToMetrics
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always

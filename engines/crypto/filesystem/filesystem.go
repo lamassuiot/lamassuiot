@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -38,7 +39,7 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 		return nil, err
 	}
 
-	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
+	meta := helpers.MergeMaps(&defaultMeta, &conf.Metadata)
 	return &FilesystemCryptoEngine{
 		logger:           lGo,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(lGo),
@@ -57,6 +58,8 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 						2048,
 						3072,
 						4096,
+						7680,
+						15360,
 					},
 				},
 				{
@@ -121,10 +124,10 @@ func (engine *FilesystemCryptoEngine) RenameKey(oldID, newID string) error {
 	return nil
 }
 
-func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
-	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(keySize)
+	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(ctx, keySize)
 	if err != nil {
 		engine.logger.Errorf("could not create RSA private key: %s", err)
 		return "", nil, err
@@ -134,10 +137,10 @@ func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (string, 
 	return engine.importKey(key)
 }
 
-func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating ECDSA private key")
 
-	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(curve)
+	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(ctx, curve)
 	if err != nil {
 		engine.logger.Errorf("could not create ECDSA private key: %s", err)
 		return "", nil, err

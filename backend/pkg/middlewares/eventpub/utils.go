@@ -30,7 +30,11 @@ func (cemp *CloudEventPublisher) PublishCloudEvent(ctx context.Context, payload 
 	}
 
 	cemp.Logger.Tracef("publishing event: Type=%s Source=%s \n%s", event.Type(), event.Source(), string(eventBytes))
-	cemp.Publisher.Publish(event.Type(), message.NewMessage(event.ID(), eventBytes))
+
+	msg := message.NewMessage(event.ID(), eventBytes)
+	msg.SetContext(ctx) // Pass context to publisher decorator for OTEL trace propagation
+
+	cemp.Publisher.Publish(event.Type(), msg)
 }
 
 type EventPublisherWithSourceMiddleware struct {

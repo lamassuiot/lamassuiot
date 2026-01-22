@@ -53,7 +53,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 		return
 	}
 
-	cacerts, err := r.svc.CACerts(ctx, params.APS)
+	cacerts, err := r.svc.CACerts(ctx.Request.Context(), params.APS)
 	if err != nil {
 		ctx.JSON(500, err)
 	}
@@ -109,9 +109,9 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 
 	var signedCrt *x509.Certificate
 	if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
-		signedCrt, err = r.svc.Reenroll(ctx, csr, params.APS)
+		signedCrt, err = r.svc.Reenroll(ctx.Request.Context(), csr, params.APS)
 	} else {
-		signedCrt, err = r.svc.Enroll(ctx, csr, params.APS)
+		signedCrt, err = r.svc.Enroll(ctx.Request.Context(), csr, params.APS)
 	}
 	if err != nil {
 		ctx.JSON(500, gin.H{"err": err.Error()})
@@ -177,7 +177,7 @@ func (r *estHttpRoutes) ServerKeyGen(ctx *gin.Context) {
 		return
 	}
 
-	crt, key, err := r.svc.ServerKeyGen(ctx, csr, params.APS)
+	crt, key, err := r.svc.ServerKeyGen(ctx.Request.Context(), csr, params.APS)
 	if err != nil {
 		ctx.JSON(500, gin.H{"err": err.Error()})
 		return

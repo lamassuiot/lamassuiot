@@ -131,10 +131,10 @@ func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]string, erro
 	return keys, nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
-	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(keySize)
+	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(ctx, keySize)
 	if err != nil {
 		engine.logger.Errorf("could not create RSA private key: %s", err)
 		return "", nil, err
@@ -144,10 +144,10 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (s
 	return engine.importKey(key)
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating ECDSA private key")
 
-	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(curve)
+	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(ctx, curve)
 	if err != nil {
 		engine.logger.Errorf("could not create ECDSA private key: %s", err)
 		return "", nil, err

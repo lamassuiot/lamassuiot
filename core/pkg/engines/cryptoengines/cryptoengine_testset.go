@@ -1,6 +1,7 @@
 package cryptoengines
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -13,7 +14,7 @@ import (
 )
 
 func SharedTestCreateRSAPrivateKey(t *testing.T, engine CryptoEngine) {
-	keyID, signer, err := engine.CreateRSAPrivateKey(2048)
+	keyID, signer, err := engine.CreateRSAPrivateKey(context.Background(), 2048)
 	assert.NoError(t, err)
 	signer2, err := engine.GetPrivateKeyByID(keyID)
 	assert.NoError(t, err)
@@ -22,7 +23,7 @@ func SharedTestCreateRSAPrivateKey(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestCreateECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
-	keyID, signer, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	keyID, signer, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 	assert.NoError(t, err)
 
 	signer2, err := engine.GetPrivateKeyByID(keyID)
@@ -32,7 +33,7 @@ func SharedTestCreateECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestDeleteKey(t *testing.T, engine CryptoEngine) {
-	keyID, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	keyID, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 	assert.NoError(t, err)
 
 	_, err = engine.GetPrivateKeyByID(keyID)
@@ -43,7 +44,7 @@ func SharedTestDeleteKey(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedGetKey(t *testing.T, engine CryptoEngine) {
-	keyID, key, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	keyID, key, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 	assert.NoError(t, err)
 
 	signer, err := engine.GetPrivateKeyByID(keyID)
@@ -58,10 +59,10 @@ func SharedListKeys(t *testing.T, engine CryptoEngine) {
 	assert.NoError(t, err)
 	assert.Len(t, keys, 0)
 
-	keyID1, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	keyID1, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 	assert.NoError(t, err)
 
-	keyID2, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	keyID2, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 	assert.NoError(t, err)
 
 	keys, err = engine.ListPrivateKeyIDs()
@@ -74,7 +75,7 @@ func SharedListKeys(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedRenameKey(t *testing.T, engine CryptoEngine) {
-	keyID, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	keyID, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 	assert.NoError(t, err)
 
 	err = engine.RenameKey(keyID, "new-key-id")
@@ -94,7 +95,7 @@ func SharedGetKeyNotFound(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestRSAPSSSignature(t *testing.T, engine CryptoEngine) {
-	keyID, signer, err := engine.CreateRSAPrivateKey(2048)
+	keyID, signer, err := engine.CreateRSAPrivateKey(context.Background(), 2048)
 	assert.NoError(t, err)
 
 	h := sha256.New()
@@ -123,7 +124,7 @@ func SharedTestRSAPSSSignature(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestRSAPKCS1v15Signature(t *testing.T, engine CryptoEngine) {
-	keyID, signer, err := engine.CreateRSAPrivateKey(2048)
+	keyID, signer, err := engine.CreateRSAPrivateKey(context.Background(), 2048)
 	assert.NoError(t, err)
 
 	h := sha256.New()
@@ -145,7 +146,7 @@ func SharedTestRSAPKCS1v15Signature(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestECDSASignature(t *testing.T, engine CryptoEngine) {
-	keyID, signer, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	keyID, signer, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 	assert.NoError(t, err)
 
 	h := sha256.New()

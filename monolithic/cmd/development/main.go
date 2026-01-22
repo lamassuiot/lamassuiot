@@ -443,6 +443,11 @@ func main() {
 	pluglableStorageConfig := &storageConfig
 
 	conf := pkg.MonolithicConfig{
+		OtelConfig: cconfig.OTELConfig{
+			Metrics: cconfig.OTELMetricsConfig{Enabled: false},
+			Traces:  cconfig.OTELTracesConfig{Enabled: false},
+			Logging: cconfig.OTELLoggingConfig{Enabled: false},
+		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",

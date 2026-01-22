@@ -47,7 +47,7 @@ func logRequest(logger *logrus.Entry) gin.HandlerFunc {
 	formatter := loggingWithReqBodyLog
 
 	return func(c *gin.Context) {
-		lReq := helpers.ConfigureLogger(c, logger)
+		lReq := helpers.ConfigureLogger(c.Request.Context(), logger)
 		out := &traceRequestWriter{logger: lReq}
 
 		// Start timer

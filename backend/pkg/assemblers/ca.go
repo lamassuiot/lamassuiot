@@ -1,6 +1,7 @@
 package assemblers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -8,6 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
+	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
@@ -16,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,6 +42,8 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 }
 
 func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*services.CAService, *jobs.JobScheduler, error) {
+	sdk.InitOtelSDK(context.Background(), "CA Service", conf.OtelConfig)
+
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
 	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Audit Bus")
@@ -65,6 +70,10 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 	}
 
 	caSvc := svc.(*lservices.CAServiceBackend)
+
+	// Add OTel middleware
+	svc = otel.NewCAOTelTracer()(svc)
+	caSvc.SetService(svc)
 
 	if conf.PublisherEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
