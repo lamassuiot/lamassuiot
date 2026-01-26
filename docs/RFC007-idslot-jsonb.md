@@ -4,11 +4,11 @@
 Proposed
 
 ## Abstract
-This RFC proposes converting the `devices.identity_slot` database column from `text` to `jsonb` in the PostgreSQL schema. This change will enable efficient indexing and querying capabilities. Furthermore, it explicitly adds the `identity` field to the allowed filtering options for the Device API, enabling clients to filter devices based on identity properties (e.g., status, active version) using JSONPath expressions.
+This RFC proposes converting the `devices.identity_slot` database column from `text` to `jsonb` in the PostgreSQL schema. This change will enable efficient indexing and querying capabilities. Furthermore, it explicitly adds the `identity_slot` field to the allowed filtering options for the Device API, enabling clients to filter devices based on identity properties (e.g., status, active version) using JSONPath expressions.
 
 ## Motivation
 Currently, the `identity_slot` field in the `devices` table is stored as a `text` column, serializing the JSON representation of the identity slot. This approach limits the database's ability to:
-1.  Efficiently query devices based on specific fields within the identity structure (e.g., `identity.status`).
+1.  Efficiently query devices based on specific fields within the identity structure (e.g., `identity_slot.status`).
 2.  Index specific paths within the JSON document for performance.
 
 Clients need the ability to filter devices based on their identity status (e.g., "Show me all devices with a REVOKED identity"). Without a native `jsonb` type and exposed filtering, this requires fetching all devices and filtering client-side, which is inefficient.
@@ -33,23 +33,23 @@ Clients need the ability to filter devices based on their identity status (e.g.,
         "id":                 StringFilterFieldType,
         // ... existing fields
         "metadata":           JsonFilterFieldType,
-        "identity":           JsonFilterFieldType, // New addition
+        "identity_slot":      JsonFilterFieldType, // New addition
     }
     ```
 
 ### API Usage Example
-Once implemented, clients can query the API using JSONPath filters on the `identity` field:
+Once implemented, clients can query the API using JSONPath filters on the `identity_slot` field:
 
 *   **Filter by Status**:
-    `GET /v1/devices?filter=identity[jsonpath]$.status == "ACTIVE"`
+    `GET /v1/devices?filter=identity_slot[jsonpath]$.status == "ACTIVE"`
 
 *   **Filter by Active Version**:
-    `GET /v1/devices?filter=identity[jsonpath]$.active_version > 1`
+    `GET /v1/devices?filter=identity_slot[jsonpath]$.active_version > 1`
 
 ## Implementation Steps
 1.  Generate a new SQL migration file in `engines/storage/postgres/migrations/devicemanager/` (e.g., `<timestamp>_idslot_text_to_jsonb.sql`).
 2.  Apply the migration to the local environment.
-3.  Modify `core/pkg/resources/fields.go` to add the `identity` field.
+3.  Modify `core/pkg/resources/fields.go` to add the `identity_slot` field.
 4.  Verify that existing tests pass and added new integration tests for filtering by identity.
 
 ## Risks and Mitigation
