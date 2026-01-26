@@ -456,3 +456,410 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 	lFunc.Infof("device '%s' deleted successfully", id)
 	return nil
 }
+
+// ============================================================================
+// Device Group Operations
+// ============================================================================
+
+func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (*models.DeviceGroup, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Validate criteria fields
+	if err := svc.validateCriteriaFields(lFunc, input.Criteria); err != nil {
+		return nil, err
+	}
+
+	// Validate parent reference
+	if err := svc.validateParentReference(ctx, lFunc, input.ID, input.ParentID); err != nil {
+		return nil, err
+	}
+
+	// Convert criteria to model format
+	criteria := convertInputCriteria(input.Criteria)
+
+	now := time.Now()
+	group := &models.DeviceGroup{
+		ID:          input.ID,
+		Name:        input.Name,
+		Description: input.Description,
+		ParentID:    input.ParentID,
+		Criteria:    criteria,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	lFunc.Debugf("creating device group '%s'", input.ID)
+	group, err = svc.devicesStorage.DeviceGroups().Insert(ctx, group)
+	if err != nil {
+		lFunc.Errorf("could not insert device group '%s' in storage engine: %s", input.ID, err)
+		return nil, err
+	}
+
+	lFunc.Infof("device group '%s' created successfully", input.ID)
+
+	// Enrich with ancestor criteria
+	if err := svc.enrichGroupWithAncestorCriteria(ctx, lFunc, group); err != nil {
+		return nil, err
+	}
+
+	return group, nil
+}
+
+func (svc DeviceManagerServiceBackend) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (*models.DeviceGroup, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Verify group exists
+	group, err := svc.verifyGroupExists(ctx, lFunc, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update fields if provided
+	if input.Name != "" {
+		group.Name = input.Name
+	}
+	if input.Description != "" {
+		group.Description = input.Description
+	}
+
+	// Update ParentID if provided
+	if input.ParentID != nil {
+		if err := svc.validateParentReference(ctx, lFunc, input.ID, input.ParentID); err != nil {
+			return nil, err
+		}
+		group.ParentID = input.ParentID
+	}
+
+	// Update Criteria if provided
+	if len(input.Criteria) > 0 {
+		if err := svc.validateCriteriaFields(lFunc, input.Criteria); err != nil {
+			return nil, err
+		}
+		group.Criteria = convertInputCriteria(input.Criteria)
+	}
+
+	group.UpdatedAt = time.Now()
+
+	lFunc.Debugf("updating device group '%s'", input.ID)
+	group, err = svc.devicesStorage.DeviceGroups().Update(ctx, group)
+	if err != nil {
+		lFunc.Errorf("could not update device group '%s' in storage engine: %s", input.ID, err)
+		return nil, err
+	}
+
+	lFunc.Infof("device group '%s' updated successfully", input.ID)
+
+	// Enrich with ancestor criteria
+	if err := svc.enrichGroupWithAncestorCriteria(ctx, lFunc, group); err != nil {
+		return nil, err
+	}
+
+	return group, nil
+}
+
+func (svc DeviceManagerServiceBackend) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return errs.ErrValidateBadRequest
+	}
+
+	// Verify group exists
+	if _, err := svc.verifyGroupExists(ctx, lFunc, input.ID); err != nil {
+		return err
+	}
+
+	lFunc.Debugf("deleting device group '%s'", input.ID)
+	err = svc.devicesStorage.DeviceGroups().Delete(ctx, input.ID)
+	if err != nil {
+		lFunc.Errorf("could not delete device group '%s' from storage engine: %s", input.ID, err)
+		return err
+	}
+
+	lFunc.Infof("device group '%s' deleted successfully", input.ID)
+	return nil
+}
+
+func (svc DeviceManagerServiceBackend) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Get device group
+	lFunc.Debugf("getting device group '%s'", input.ID)
+	group, err := svc.verifyGroupExists(ctx, lFunc, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enrich with ancestor criteria
+	if err := svc.enrichGroupWithAncestorCriteria(ctx, lFunc, group); err != nil {
+		return nil, err
+	}
+
+	return group, nil
+}
+
+func (svc DeviceManagerServiceBackend) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Debugf("getting all device groups")
+	return svc.devicesStorage.DeviceGroups().SelectAll(ctx, storage.StorageListRequest[models.DeviceGroup]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
+}
+
+func (svc DeviceManagerServiceBackend) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return "", errs.ErrValidateBadRequest
+	}
+
+	// Verify group exists
+	lFunc.Debugf("fetching device group '%s'", input.GroupID)
+	if _, err := svc.verifyGroupExists(ctx, lFunc, input.GroupID); err != nil {
+		return "", err
+	}
+
+	// Get the parent chain (ancestors) including the group itself
+	lFunc.Debugf("resolving hierarchy for device group '%s'", input.GroupID)
+	ancestors, err := svc.devicesStorage.DeviceGroups().SelectAncestors(ctx, input.GroupID)
+	if err != nil {
+		lFunc.Errorf("could not get ancestors for device group '%s': %s", input.GroupID, err)
+		return "", err
+	}
+
+	// Compose merged filters from all groups' criteria
+	composedFilters := svc.composeFiltersFromHierarchy(ancestors, input.QueryParameters)
+
+	// Call existing GetDevices with composed filters
+	lFunc.Debugf("fetching devices for group '%s' with %d composed filters", input.GroupID, len(composedFilters.Filters))
+	return svc.service.GetDevices(ctx, services.GetDevicesInput{
+		ListInput: resources.ListInput[models.Device]{
+			ExhaustiveRun:   input.ExhaustiveRun,
+			ApplyFunc:       input.ApplyFunc,
+			QueryParameters: composedFilters,
+		},
+	})
+}
+
+func (svc DeviceManagerServiceBackend) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Verify group exists
+	lFunc.Debugf("fetching device group '%s'", input.GroupID)
+	if _, err := svc.verifyGroupExists(ctx, lFunc, input.GroupID); err != nil {
+		return nil, err
+	}
+
+	// Get the parent chain (ancestors) including the group itself
+	lFunc.Debugf("resolving hierarchy for device group '%s'", input.GroupID)
+	ancestors, err := svc.devicesStorage.DeviceGroups().SelectAncestors(ctx, input.GroupID)
+	if err != nil {
+		lFunc.Errorf("could not get ancestors for device group '%s': %s", input.GroupID, err)
+		return nil, err
+	}
+
+	// Compose merged filters from all groups' criteria
+	composedFilters := svc.composeFiltersFromHierarchy(ancestors, nil)
+
+	// Call existing GetDevicesStats with composed filters
+	lFunc.Debugf("calculating stats for group '%s' with %d composed filters", input.GroupID, len(composedFilters.Filters))
+	return svc.service.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+		QueryParameters: composedFilters,
+	})
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+// validateNoCircularReference checks if setting parentID would create a circular reference
+func (svc DeviceManagerServiceBackend) validateNoCircularReference(ctx context.Context, groupID string, parentID string) error {
+	// Cannot set self as parent
+	if groupID == parentID {
+		return errs.ErrDeviceGroupCircularReference
+	}
+
+	// Check if the proposed parent is a descendant of this group
+	// by checking if groupID appears in the ancestor chain of parentID
+	ancestors, err := svc.devicesStorage.DeviceGroups().SelectAncestors(ctx, parentID)
+	if err != nil {
+		return err
+	}
+
+	for _, ancestor := range ancestors {
+		if ancestor.ID == groupID {
+			return errs.ErrDeviceGroupCircularReference
+		}
+	}
+
+	return nil
+}
+
+// composeFiltersFromHierarchy merges all criteria from ancestor groups
+// The result is an implicit AND of all filters in the hierarchy
+func (svc DeviceManagerServiceBackend) composeFiltersFromHierarchy(ancestors []*models.DeviceGroup, baseParams *resources.QueryParameters) *resources.QueryParameters {
+	// Start with base parameters or create new
+	var composedParams *resources.QueryParameters
+	if baseParams != nil {
+		// Create a copy to avoid modifying the input
+		composedParams = &resources.QueryParameters{
+			Sort:         baseParams.Sort,
+			PageSize:     baseParams.PageSize,
+			NextBookmark: baseParams.NextBookmark,
+			Filters:      make([]resources.FilterOption, len(baseParams.Filters)),
+		}
+		copy(composedParams.Filters, baseParams.Filters)
+	} else {
+		composedParams = &resources.QueryParameters{
+			Filters: make([]resources.FilterOption, 0),
+		}
+	}
+
+	// Append all criteria from ancestors (root to leaf order)
+	for _, group := range ancestors {
+		for _, criterion := range group.Criteria {
+			composedParams.Filters = append(composedParams.Filters, resources.FilterOption{
+				Field:           criterion.Field,
+				FilterOperation: resources.FilterOperation(criterion.FilterOperation),
+				Value:           criterion.Value,
+			})
+		}
+	}
+
+	return composedParams
+}
+
+// validateCriteriaFields validates that all criteria fields are valid DeviceFilterableFields
+func (svc DeviceManagerServiceBackend) validateCriteriaFields(lFunc *logrus.Entry, criteria []models.DeviceGroupFilterOption) error {
+	for _, criterion := range criteria {
+		if _, exists := resources.DeviceFilterableFields[criterion.Field]; !exists {
+			lFunc.Errorf("invalid filter field '%s' in criteria. Must be a valid DeviceFilterableField", criterion.Field)
+			return errs.ErrValidateBadRequest
+		}
+	}
+	return nil
+}
+
+// convertInputCriteria converts input criteria to models.DeviceGroupFilterOption (currently a no-op as types match)
+func convertInputCriteria(criteria []models.DeviceGroupFilterOption) []models.DeviceGroupFilterOption {
+	// Since input already uses models.DeviceGroupFilterOption, just return a copy
+	result := make([]models.DeviceGroupFilterOption, len(criteria))
+	copy(result, criteria)
+	return result
+}
+
+// verifyGroupExists checks if a device group exists and returns it
+func (svc DeviceManagerServiceBackend) verifyGroupExists(ctx context.Context, lFunc *logrus.Entry, groupID string) (*models.DeviceGroup, error) {
+	lFunc.Debugf("checking if device group '%s' exists", groupID)
+	exists, group, err := svc.devicesStorage.DeviceGroups().SelectByID(ctx, groupID)
+	if err != nil {
+		lFunc.Errorf("could not verify device group existence: %s", err)
+		return nil, err
+	}
+	if !exists {
+		lFunc.Errorf("device group '%s' does not exist", groupID)
+		return nil, errs.ErrDeviceGroupNotFound
+	}
+	return group, nil
+}
+
+// validateParentReference validates parent ID and checks for circular references
+func (svc DeviceManagerServiceBackend) validateParentReference(ctx context.Context, lFunc *logrus.Entry, groupID string, parentID *string) error {
+	if parentID == nil {
+		return nil
+	}
+
+	// Check for self-reference
+	if *parentID == groupID {
+		lFunc.Errorf("device group cannot be its own parent")
+		return errs.ErrDeviceGroupCircularReference
+	}
+
+	// Verify parent exists
+	exists, _, err := svc.devicesStorage.DeviceGroups().SelectByID(ctx, *parentID)
+	if err != nil {
+		lFunc.Errorf("could not verify parent group existence: %s", err)
+		return err
+	}
+	if !exists {
+		lFunc.Errorf("parent group with ID '%s' does not exist", *parentID)
+		return errs.ErrDeviceGroupNotFound
+	}
+
+	// Check for circular parent references in the hierarchy
+	err = svc.validateNoCircularReference(ctx, groupID, *parentID)
+	if err != nil {
+		lFunc.Errorf("circular reference validation failed: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+// enrichGroupWithAncestorCriteria fetches ancestors and composes criteria with inheritance
+func (svc DeviceManagerServiceBackend) enrichGroupWithAncestorCriteria(ctx context.Context, lFunc *logrus.Entry, group *models.DeviceGroup) error {
+	// Store the count of this group's own criteria before composing with ancestors
+	ownCriteriaCount := len(group.Criteria)
+
+	// Get all ancestors to include parent filters in response
+	lFunc.Debugf("fetching ancestors for device group '%s'", group.ID)
+	ancestors, err := svc.devicesStorage.DeviceGroups().SelectAncestors(ctx, group.ID)
+	if err != nil {
+		lFunc.Errorf("could not get ancestors for device group '%s': %s", group.ID, err)
+		return err
+	}
+
+	// Separate own criteria from ancestor criteria
+	ownCriteria := group.Criteria
+	inheritedCriteria := make([]models.DeviceGroupFilterOption, 0)
+
+	// Collect criteria from all ancestors except the current group
+	for _, ancestor := range ancestors {
+		if ancestor.ID != group.ID {
+			inheritedCriteria = append(inheritedCriteria, ancestor.Criteria...)
+		}
+	}
+
+	// Compose: inherited first, then own
+	allCriteria := make([]models.DeviceGroupFilterOption, 0, len(inheritedCriteria)+len(ownCriteria))
+	allCriteria = append(allCriteria, inheritedCriteria...)
+	allCriteria = append(allCriteria, ownCriteria...)
+
+	// Set the composed criteria and track the own criteria count
+	group.Criteria = allCriteria
+	group.OwnCriteriaCount = ownCriteriaCount
+
+	return nil
+}

@@ -64,6 +64,10 @@ const (
 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
 	EventDeleteDeviceKey         EventType = "device.delete"
 
+	EventCreateDeviceGroupKey EventType = "device-group.create"
+	EventUpdateDeviceGroupKey EventType = "device-group.update"
+	EventDeleteDeviceGroupKey EventType = "device-group.delete"
+
 	EventUpdateVARole EventType = "va.role.update"
 	EventInitCRLRole  EventType = "va.role.crl.init"
 	EventCreateCRL    EventType = "va.role.crl.create"
