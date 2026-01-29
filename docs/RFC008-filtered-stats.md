@@ -593,6 +593,8 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 
 **Phase 1 Complete Verification**: Run `go test ./...` in `engines/storage/postgres` module. All tests pass. Run `go build ./...` in workspace root—all modules compile.
 
+**Note**: Comprehensive assembler-level tests will be added in subsequent phases to validate the storage layer integration end-to-end.
+
 ---
 
 ### Phase 2: DMS Manager Filtered Stats (Simplest Service)
@@ -656,6 +658,21 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 - Write SDK test: call `GetDMSStats` with filter params, verify correct query string generated.
 
 **Phase 2 Complete Verification**: Run full integration test suite for DMS Manager. All tests pass. Filtered stats endpoint works end-to-end.
+
+#### Phase 2 Testing Requirements
+
+**Assembler Layer Tests** (`backend/pkg/assemblers/tests/dms-manager/filtered_stats_test.go`):
+
+1. **Test end-to-end without filters**: Create DMSs, call stats endpoint, verify total count.
+2. **Test name filtering**: Create DMSs with specific names, filter by name substring, verify count.
+3. **Test metadata filtering**: Create DMSs with metadata, apply JSONPath filter, verify count.
+4. **Test multiple filters**: Apply name + metadata filters, verify AND logic.
+5. **Test zero results**: Apply non-matching filter, verify count = 0.
+6. **Test via SDK**: Use HTTP SDK client to call stats endpoint with filters, verify correct results.
+
+**Test File**: `backend/pkg/assemblers/tests/dms-manager/filtered_stats_test.go`
+
+**Test Execution**: All DMS Manager assembler tests must pass. Manual verification via monolithic mode recommended.
 
 ---
 
@@ -776,6 +793,23 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 - Integration test via SDK: verify end-to-end functionality.
 
 **Phase 3 Complete Verification**: Run full integration test suite for KMS. Stats endpoint works end-to-end with filtering. All other KMS functionality unaffected.
+
+#### Phase 3 Testing Requirements
+
+**Assembler Layer Tests** (`backend/pkg/assemblers/tests/kms/stats_test.go`):
+
+1. **Test end-to-end without filters**: Create keys across engines/algorithms, verify totals and distributions.
+2. **Test engine filtering**: Filter by specific engine, verify distribution shows only that engine.
+3. **Test algorithm filtering**: Filter by algorithm, verify distribution.
+4. **Test metadata filtering**: Create keys with metadata, apply JSONPath filter, verify count.
+5. **Test combined filters**: Apply multiple filters, verify AND logic.
+6. **Test via SDK**: Use HTTP SDK to call stats endpoint, verify results.
+7. **Test engine distribution**: Verify keys are counted per engine correctly with and without filters.
+8. **Test algorithm distribution**: Verify keys are counted per algorithm correctly with and without filters.
+
+**Test File**: `backend/pkg/assemblers/tests/kms/stats_test.go`
+
+**Test Execution**: All KMS assembler tests pass. Stats endpoint accessible via monolithic mode. Verify no regressions in existing KMS functionality.
 
 ---
 
@@ -902,6 +936,27 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 
 **Phase 4 Complete Verification**: Run full integration test suite for CA Service. Filtered stats work for both endpoints. All other CA functionality unaffected. Backward compatibility maintained.
 
+#### Phase 4 Testing Requirements
+
+**Assembler Layer Tests** (`backend/pkg/assemblers/tests/ca/ca_stats_filtered_test.go`):
+
+1. **Test global stats without filters**: Create CAs and certificates, verify totals and distributions.
+2. **Test CA filtering by engine**: Create CAs across engines, filter by engine, verify counts.
+3. **Test CA filtering by metadata**: Create CAs with metadata, apply JSONPath filter, verify.
+4. **Test certificate filtering**: Create certificates with different properties, apply filters, verify counts.
+5. **Test certificate filtering by metadata**: Apply JSONPath filter to certificates.
+6. **Test dual filtering**: Apply CA filter + certificate filter, verify both applied independently.
+7. **Test per-CA stats without filters**: Call GetStatsByCAID, verify certificate counts.
+8. **Test per-CA stats with certificate filters**: Filter certificates within specific CA.
+9. **Test via SDK**: Use HTTP SDK for both endpoints with various filters.
+10. **Test status filter rejection**: Verify both endpoints reject status filters with HTTP 400.
+11. **Test engine distribution**: Verify CA counts per engine with and without filters.
+12. **Test status distribution**: Verify CA and certificate status distributions with filters.
+
+**Test File**: `backend/pkg/assemblers/tests/ca/ca_stats_filtered_test.go`
+
+**Test Execution**: All CA Service assembler tests pass. Both stats endpoints work with filters via monolithic mode. Verify backward compatibility by running existing CA tests without modification.
+
 ---
 
 ### Phase 5: Final Validation and Documentation
@@ -936,6 +991,34 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 **Verification**: All manual tests pass. No errors in logs.
 
 **Implementation Complete**: All filtered statistics functionality implemented, tested, and documented.
+
+#### Phase 5 Testing Requirements
+
+**Cross-Service Validation**: Run assembler tests for all services to ensure consistency:
+
+1. **Run DMS Manager tests**: `cd backend/pkg/assemblers/tests/dms-manager && go test -v -run TestGetDMSStatsFiltered`
+2. **Run KMS tests**: `cd backend/pkg/assemblers/tests/kms && go test -v -run TestGetKeyStatsFiltered` (or equivalent)
+3. **Run CA tests**: `cd backend/pkg/assemblers/tests/ca && go test -v -run TestCAStatsFiltered` (or equivalent)
+4. **Run Device Manager tests**: Verify existing filtered stats tests still pass
+
+**Regression Testing**:
+
+1. **Run full test suite**: Execute `go test ./...` from workspace root
+2. **Backward compatibility**: Verify all existing tests pass without modification
+3. **Manual smoke test**: Start monolithic mode and verify each endpoint works
+
+**Manual Testing Checklist**:
+
+- [ ] Start monolithic mode: `go run ./monolithic/cmd/development/main.go`
+- [ ] Test DMS Manager: `curl "http://localhost:8080/api/dmsmanager/v1/stats?filter=name[contains]test"`
+- [ ] Test KMS: `curl "http://localhost:8080/api/kms/v1/stats?filter=engine_id[eq]golang"`
+- [ ] Test CA Service: `curl "http://localhost:8080/api/ca/v1/stats?ca_filter=engine_id[eq]golang"`
+- [ ] Test CA Service dual filter: `curl "http://localhost:8080/api/ca/v1/stats?ca_filter=...&cert_filter=..."`
+- [ ] Verify invalid filter returns 400
+- [ ] Verify status filter returns 400 (CA, Device Manager)
+- [ ] Check logs for errors
+
+**Phase 5 Complete Verification**: All assembler tests pass. All services behave consistently. Manual testing confirms functionality. No regressions detected.
 
 ---
 
