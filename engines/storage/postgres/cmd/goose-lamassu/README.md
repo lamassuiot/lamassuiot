@@ -126,7 +126,7 @@ The Docker image is built from the **repository root** using the Dockerfile in t
 
 ```bash
 cd /path/to/lamassuiot
-docker build -f ci/goose-lamassu.dockerfile -t lamassu/lamassu-db-migration:latest .
+docker build -f ci/lamassu-db-migration.dockerfile -t lamassu/lamassu-db-migration:latest .
 ```
 
 ### Run with Docker
