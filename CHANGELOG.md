@@ -4,10 +4,12 @@
 
 ### Bug Fixes
 
+* Fix: update service name to lamassu-db-migration in docker image work… ([#385](https://github.com/lamassuiot/lamassuiot/issues/385))
 * Fix: ca:  Root CA Extended Key Usages ([#370](https://github.com/lamassuiot/lamassuiot/issues/370))
 
 ### Chores
 
+* Chore: release: prepare release 3.7.0 ([#384](https://github.com/lamassuiot/lamassuiot/issues/384))
 * Chore: Add JSON Patch support documentation (RFC 6902) ([#379](https://github.com/lamassuiot/lamassuiot/issues/379))
 * Chore: openapi -  standardize authentication schemes  ([#372](https://github.com/lamassuiot/lamassuiot/issues/372))
 * Chore: Go dependency cleanup ([#364](https://github.com/lamassuiot/lamassuiot/issues/364))
