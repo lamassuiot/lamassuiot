@@ -49,6 +49,18 @@ func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput
 	return &response, nil
 }
 
+func (cli *httpKMSClient) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
+	url := cli.baseUrl + "/v1/stats"
+
+	queryParams := input.QueryParameters
+	response, err := Get[models.KeyStats](ctx, cli.httpClient, url, queryParams, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
 func (cli *httpKMSClient) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
 	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys", resources.CreateKeyBody{
 		Algorithm: input.Algorithm,

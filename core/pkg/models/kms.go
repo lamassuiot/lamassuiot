@@ -58,3 +58,9 @@ type MessageValidation struct {
 	Valid bool   `json:"valid"`
 	Error string `json:"error,omitempty"`
 }
+
+type KeyStats struct {
+	TotalKeys                    int            `json:"total_keys"`
+	KeysDistributionPerEngine    map[string]int `json:"keys_distribution_per_engine"`
+	KeysDistributionPerAlgorithm map[string]int `json:"keys_distribution_per_algorithm"`
+}

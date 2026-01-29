@@ -37,6 +37,10 @@ func (mw KMSAuditEventPublisher) GetKey(ctx context.Context, input services.GetK
 	return mw.next.GetKey(ctx, input)
 }
 
+func (mw KMSAuditEventPublisher) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
+	return mw.next.GetKeyStats(ctx, input)
+}
+
 func (mw KMSAuditEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateKMSKey, input, err, output)
