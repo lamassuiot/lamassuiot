@@ -126,14 +126,14 @@ The Docker image is built from the **repository root** using the Dockerfile in t
 
 ```bash
 cd /path/to/lamassuiot
-docker build -f ci/goose-lamassu.dockerfile -t lamassu/goose-lamassu:latest .
+docker build -f ci/lamassu-db-migration.dockerfile -t lamassu/lamassu-db-migration:latest .
 ```
 
 ### Run with Docker
 
 ```bash
 docker run --rm \
-  lamassu/goose-lamassu:latest \
+  lamassu/lamassu-db-migration:latest \
   "host=postgres-host user=postgres password=secret dbname=ca port=5432 sslmode=disable" \
   up
 ```
@@ -144,7 +144,7 @@ docker run --rm \
 version: '3.8'
 services:
   migrate:
-    image: lamassu/goose-lamassu:latest
+    image: lamassu/lamassu-db-migration:latest
     command: >
       "host=postgres user=postgres password=secret dbname=ca port=5432 sslmode=disable"
       up
