@@ -9,6 +9,7 @@ import (
 
 type DMSRepo interface {
 	Count(ctx context.Context) (int, error)
+	CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error)
 	SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error)
 	SelectExists(ctx context.Context, ID string) (bool, *models.DMS, error)
 	Update(ctx context.Context, dms *models.DMS) (*models.DMS, error)

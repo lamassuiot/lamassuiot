@@ -6,6 +6,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -31,6 +32,26 @@ func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRe
 
 func (db *PostgresKMSStore) Count(ctx context.Context) (int, error) {
 	return db.querier.Count(ctx, []gormExtraOps{})
+}
+
+func (db *PostgresKMSStore) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
+	if queryParams == nil {
+		return db.Count(ctx)
+	}
+
+	return db.querier.CountFiltered(ctx, queryParams.Filters, []gormExtraOps{})
+}
+
+func (db *PostgresKMSStore) CountByEngineWithFilters(ctx context.Context, engineID string, queryParams *resources.QueryParameters) (int, error) {
+	opts := []gormExtraOps{
+		{query: "engine_id = ?", additionalWhere: []any{engineID}},
+	}
+
+	if queryParams == nil {
+		return db.querier.Count(ctx, opts)
+	}
+
+	return db.querier.CountFiltered(ctx, queryParams.Filters, opts)
 }
 
 func (db *PostgresKMSStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Key]) (string, error) {
