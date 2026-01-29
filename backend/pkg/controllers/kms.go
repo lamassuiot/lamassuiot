@@ -423,3 +423,22 @@ func (r *kmsHttpRoutes) VerifySignature(ctx *gin.Context) {
 	}
 	ctx.JSON(200, valid)
 }
+
+func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
+	queryParams := FilterQuery(ctx.Request, resources.KMSFilterableFields)
+
+	stats, err := r.svc.GetKeyStats(ctx.Request.Context(), services.GetKeyStatsInput{
+		QueryParameters: queryParams,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
