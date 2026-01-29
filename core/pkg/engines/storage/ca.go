@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
 type CertificatesRepo interface {
@@ -16,6 +17,8 @@ type CertificatesRepo interface {
 	SelectByStatus(ctx context.Context, status models.CertificateStatus, req StorageListRequest[models.Certificate]) (string, error)
 
 	Count(ctx context.Context) (int, error)
+	CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error)
+	CountByCAIDWithFilters(ctx context.Context, caID string, queryParams *resources.QueryParameters) (int, error)
 	SelectAll(ctx context.Context, req StorageListRequest[models.Certificate]) (string, error)
 	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
@@ -26,7 +29,9 @@ type CertificatesRepo interface {
 type CACertificatesRepo interface {
 	SelectByType(ctx context.Context, CAType models.CertificateType, req StorageListRequest[models.CACertificate]) (string, error)
 	Count(ctx context.Context) (int, error)
+	CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error)
 	CountByEngine(ctx context.Context, engineID string) (int, error)
+	CountByEngineWithFilters(ctx context.Context, engineID string, queryParams *resources.QueryParameters) (int, error)
 	CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error)
 	SelectAll(ctx context.Context, req StorageListRequest[models.CACertificate]) (string, error)
 
