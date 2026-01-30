@@ -394,3 +394,339 @@ Below are the main list endpoints that accept `filter` query parameters. Paths a
 > - `GET /api/ca/v1/cas?filter=status[eq]=ACTIVE`
 > - `GET /api/devmanager/v1/devices?filter=metadata[jsonpath]$.region%20==%20%22us-west-1%22`
 
+---
+
+## Filtered Statistics Endpoints 📊
+
+**New in 2026:** Statistics endpoints now support filtering to provide aggregate counts and distributions for specific subsets of resources. This enables dashboard widgets, compliance reporting, and segmented monitoring use cases.
+
+### Overview
+
+Statistics endpoints return aggregate data (totals, status distributions, engine distributions) for the filtered subset of resources. Filtering works the same way as list endpoints, but instead of returning individual resources, you get counts and distributions.
+
+### Key Characteristics
+
+1. **Backward Compatible**: Calling stats endpoints without filters returns global statistics (all resources)
+2. **Status Distribution Always Computed**: The `status` field cannot be used as a filter because status distribution is always computed for the matching set
+3. **Consistent Syntax**: Use the same filter operators and syntax as list endpoints
+4. **Independent Filters**: Services with multiple resource types (e.g., CA service) allow independent filtering per resource type
+
+### Services with Filtered Stats
+
+| Service | Endpoint | Filter Parameters | What's Computed |
+|---------|----------|------------------|-----------------|
+| **CA Service** | `GET /api/ca/v1/stats` | `ca_filter`, `cert_filter` | CA counts, CA status distribution, CA engine distribution, certificate counts, certificate status distribution, certificates per CA |
+| | `GET /api/ca/v1/stats/{id}` | `cert_filter` | Certificate counts and status distribution for specific CA |
+| **KMS** | `GET /api/kms/v1/stats` | `filter` | Key counts, keys per engine, keys per algorithm |
+| **DMS Manager** | `GET /api/dmsmanager/v1/stats` | `filter` | DMS instance counts |
+| **Device Manager** | `GET /api/devmanager/v1/stats` | `filter` | Device counts, device status distribution |
+
+### CA Service Statistics (Dual Filtering)
+
+The CA service statistics endpoint accepts two independent filter parameters:
+- `ca_filter` — filters CAs (affects CA totals and distributions)
+- `cert_filter` — filters certificates (affects certificate totals and distributions)
+
+**Examples:**
+
+```http
+# Get stats for CAs in a specific engine
+GET /api/ca/v1/stats?ca_filter=engine_id[eq]aws-kms-prod
+
+# Get stats for certificates issued after a date
+GET /api/ca/v1/stats?cert_filter=valid_from[af]2026-01-01T00:00:00Z
+
+# Get stats for production CAs and recently issued certificates
+GET /api/ca/v1/stats?ca_filter=metadata[jsonpath]$.environment%20==%20%22production%22&cert_filter=valid_from[af]2025-12-01T00:00:00Z
+
+# Get certificate stats for a specific CA with metadata filter
+GET /api/ca/v1/stats/my-ca-id?cert_filter=metadata[jsonpath]$.purpose%20==%20%22signing%22
+```
+
+**Response Structure:**
+```json
+{
+  "ca_certificates_stats": {
+    "total_cas": 5,
+    "cas_distribution_per_engine": {
+      "aws-kms-prod": 3,
+      "filesystem-1": 2
+    },
+    "cas_status": {
+      "ACTIVE": 4,
+      "EXPIRED": 1
+    }
+  },
+  "certificates_stats": {
+    "total_certificates": 1234,
+    "certificate_status": {
+      "ACTIVE": 1100,
+      "EXPIRED": 100,
+      "REVOKED": 34
+    },
+    "certificate_distribution_per_ca": {
+      "ca-1": 500,
+      "ca-2": 734
+    }
+  }
+}
+```
+
+### KMS Statistics
+
+**Examples:**
+
+```http
+# Get stats for all keys
+GET /api/kms/v1/stats
+
+# Get stats for keys in a specific engine
+GET /api/kms/v1/stats?filter=engine_id[eq]aws-kms-prod
+
+# Get stats for RSA keys
+GET /api/kms/v1/stats?filter=algorithm[ct]RSA
+
+# Get stats for keys with specific metadata
+GET /api/kms/v1/stats?filter=metadata[jsonpath]$.purpose%20==%20%22signing%22
+
+# Get stats for recently created keys
+GET /api/kms/v1/stats?filter=creation_ts[af]2026-01-01T00:00:00Z
+```
+
+**Response Structure:**
+```json
+{
+  "total_keys": 150,
+  "keys_distribution_per_engine": {
+    "aws-kms-prod": 100,
+    "golang": 50
+  },
+  "keys_distribution_per_algorithm": {
+    "RSA": 100,
+    "ECDSA": 45,
+    "Ed25519": 5
+  }
+}
+```
+
+### DMS Manager Statistics
+
+**Examples:**
+
+```http
+# Get stats for all DMS instances
+GET /api/dmsmanager/v1/stats
+
+# Get stats for DMS instances with specific name pattern
+GET /api/dmsmanager/v1/stats?filter=name[ct]production
+
+# Get stats for DMS instances in a region
+GET /api/dmsmanager/v1/stats?filter=metadata[jsonpath]$.region%20==%20%22eu-west-1%22
+```
+
+**Response Structure:**
+```json
+{
+  "total_dmss": 25
+}
+```
+
+### Device Manager Statistics
+
+**Examples:**
+
+```http
+# Get stats for all devices
+GET /api/devmanager/v1/stats
+
+# Get stats for devices owned by a specific DMS
+GET /api/devmanager/v1/stats?filter=dms_owner[eq]my-dms-id
+
+# Get stats for devices with specific tags
+GET /api/devmanager/v1/stats?filter=tags[ct]production
+
+# Get stats for devices with metadata
+GET /api/devmanager/v1/stats?filter=metadata[jsonpath]$.location%20==%20%22datacenter-1%22
+```
+
+**Response Structure:**
+```json
+{
+  "total_devices": 5000,
+  "devices_status": {
+    "ACTIVE": 4500,
+    "DECOMMISSIONED": 400,
+    "PROVISIONED": 100
+  }
+}
+```
+
+### Status Filter Restriction ⚠️
+
+**Important:** The `status` field **cannot** be used as a filter on statistics endpoints for CA, Certificate, and Device resources. This is because the status distribution is always computed and returned as part of the statistics response.
+
+**This will fail:**
+```http
+GET /api/ca/v1/stats?ca_filter=status[eq]=ACTIVE
+GET /api/devmanager/v1/stats?filter=status[eq]=ACTIVE
+```
+
+**Error response:**
+```json
+{
+  "code": 400,
+  "message": "status field cannot be filtered; status distribution is computed for all matching resources"
+}
+```
+
+**Why?** The purpose of statistics endpoints is to show the breakdown of resources by status. Filtering by status would defeat this purpose. To filter resources by status, use the list endpoints instead.
+
+### SDK Usage (Go)
+
+**CA Service:**
+```go
+// Global stats without filters
+stats, err := caClient.GetStats(ctx, services.GetStatsInput{})
+
+// Filter CAs by engine
+stats, err := caClient.GetStats(ctx, services.GetStatsInput{
+    CAQueryParameters: &resources.QueryParameters{
+        Filters: []resources.FilterOption{
+            {
+                Field:           "engine_id",
+                FilterOperation: resources.StringEqual,
+                Value:           "aws-kms-prod",
+            },
+        },
+    },
+})
+
+// Filter certificates by metadata
+stats, err := caClient.GetStats(ctx, services.GetStatsInput{
+    CertificateQueryParameters: &resources.QueryParameters{
+        Filters: []resources.FilterOption{
+            {
+                Field:           "metadata",
+                FilterOperation: resources.JsonPathExpression,
+                Value:           `$.purpose == "signing"`,
+            },
+        },
+    },
+})
+
+// Filter both CAs and certificates independently
+stats, err := caClient.GetStats(ctx, services.GetStatsInput{
+    CAQueryParameters: &resources.QueryParameters{
+        Filters: []resources.FilterOption{{
+            Field:           "metadata",
+            FilterOperation: resources.JsonPathExpression,
+            Value:           `$.environment == "production"`,
+        }},
+    },
+    CertificateQueryParameters: &resources.QueryParameters{
+        Filters: []resources.FilterOption{{
+            Field:           "valid_from",
+            FilterOperation: resources.DateAfter,
+            Value:           "2026-01-01T00:00:00Z",
+        }},
+    },
+})
+```
+
+**KMS:**
+```go
+// Global stats
+stats, err := kmsClient.GetKeyStats(ctx, services.GetKeyStatsInput{})
+
+// Filter by algorithm
+stats, err := kmsClient.GetKeyStats(ctx, services.GetKeyStatsInput{
+    QueryParameters: &resources.QueryParameters{
+        Filters: []resources.FilterOption{
+            {
+                Field:           "algorithm",
+                FilterOperation: resources.StringContains,
+                Value:           "RSA",
+            },
+        },
+    },
+})
+```
+
+**DMS Manager:**
+```go
+// Global stats
+stats, err := dmsClient.GetDMSStats(ctx, services.GetDMSStatsInput{})
+
+// Filter by name
+stats, err := dmsClient.GetDMSStats(ctx, services.GetDMSStatsInput{
+    QueryParameters: &resources.QueryParameters{
+        Filters: []resources.FilterOption{
+            {
+                Field:           "name",
+                FilterOperation: resources.StringContains,
+                Value:           "production",
+            },
+        },
+    },
+})
+```
+
+**Device Manager:**
+```go
+// Global stats
+stats, err := deviceClient.GetDevicesStats(ctx, services.GetDevicesStatsInput{})
+
+// Filter by DMS owner
+stats, err := deviceClient.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+    QueryParameters: &resources.QueryParameters{
+        Filters: []resources.FilterOption{
+            {
+                Field:           "dms_owner",
+                FilterOperation: resources.StringEqual,
+                Value:           "my-dms-id",
+            },
+        },
+    },
+})
+```
+
+### Common Use Cases
+
+#### Compliance Reporting
+```http
+# Count certificates expiring in the next 30 days
+GET /api/ca/v1/stats?cert_filter=valid_to[bf]2026-03-01T00:00:00Z
+
+# Count production CAs
+GET /api/ca/v1/stats?ca_filter=metadata[jsonpath]$.environment%20==%20%22production%22
+```
+
+#### Dashboard Widgets
+```http
+# Show device status distribution for a specific DMS
+GET /api/devmanager/v1/stats?filter=dms_owner[eq]my-dms-id
+
+# Show key counts by engine
+GET /api/kms/v1/stats
+```
+
+#### Fleet Analytics
+```http
+# Count devices by region
+GET /api/devmanager/v1/stats?filter=metadata[jsonpath]$.region%20==%20%22us-east-1%22
+
+# Count DMS instances by environment
+GET /api/dmsmanager/v1/stats?filter=metadata[jsonpath]$.environment%20==%20%22production%22
+```
+
+### Error Handling
+
+| Scenario | HTTP Status | Error Message |
+|----------|-------------|---------------|
+| Invalid field name | 400 Bad Request | "field 'invalid_field' is not filterable; valid fields: [...]" |
+| Status filter on CA/Device stats | 400 Bad Request | "status field cannot be filtered; status distribution is computed" |
+| Malformed filter expression | 400 Bad Request | "invalid filter expression: [details]" |
+| Invalid JSONPath | 400 Bad Request | "invalid JSONPath expression: [details]" |
+
+---
+
