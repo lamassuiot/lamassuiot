@@ -286,9 +286,8 @@ func parseFilterValue(value string, filterFieldMap map[string]resources.FilterFi
 	}
 
 	filterOperand := parseFilterOperand(operand, fieldType)
-	if filterOperand == resources.UnspecifiedFilter {
-		return nil
-	}
+	// Note: We still create a FilterOption even if operand is UnspecifiedFilter
+	// This allows the caller to detect and handle invalid operands
 
 	// Handle URL decoding for JSONPath expressions
 	if fieldType == resources.JsonFilterFieldType && filterOperand == resources.JsonPathExpression {
