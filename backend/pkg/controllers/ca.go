@@ -73,9 +73,18 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
-	stats, err := r.svc.GetStats(ctx.Request.Context())
+	// Parse ca_filter and cert_filter query parameters separately
+	caQueryParams := FilterQueryWithPrefix(ctx.Request, resources.CAFilterableFields, "ca_filter")
+	certQueryParams := FilterQueryWithPrefix(ctx.Request, resources.CertificateFilterableFields, "cert_filter")
+
+	stats, err := r.svc.GetStats(ctx.Request.Context(), services.GetStatsInput{
+		CAQueryParameters:          caQueryParams,
+		CertificateQueryParameters: certQueryParams,
+	})
 	if err != nil {
 		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
@@ -97,12 +106,18 @@ func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 		return
 	}
 
+	// Parse cert_filter query parameter
+	certQueryParams := FilterQueryWithPrefix(ctx.Request, resources.CertificateFilterableFields, "cert_filter")
+
 	stats, err := r.svc.GetStatsByCAID(ctx.Request.Context(), services.GetStatsByCAIDInput{
-		CAID: params.ID,
+		CAID:                       params.ID,
+		CertificateQueryParameters: certQueryParams,
 	})
 
 	if err != nil {
 		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}

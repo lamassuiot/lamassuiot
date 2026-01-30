@@ -28,11 +28,11 @@ func NewCAOTelTracer() lservices.CAMiddleware {
 	}
 }
 
-func (mw CAOTelTracer) GetStats(ctx context.Context) (*models.CAStats, error) {
+func (mw CAOTelTracer) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 
-	return mw.next.GetStats(ctx)
+	return mw.next.GetStats(ctx, input)
 }
 
 func (mw CAOTelTracer) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {

@@ -25,8 +25,8 @@ func NewCAAuditEventBusPublisher(audit AuditPublisher) lservices.CAMiddleware {
 	}
 }
 
-func (mw CAAuditEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
-	return mw.next.GetStats(ctx)
+func (mw CAAuditEventPublisher) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
+	return mw.next.GetStats(ctx, input)
 }
 
 func (mw CAAuditEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
