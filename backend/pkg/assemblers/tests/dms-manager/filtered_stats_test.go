@@ -95,6 +95,7 @@ func setupTestData(t *testing.T, ctx context.Context, dmsMgr *tests.DMSManagerTe
 			metadata: map[string]any{
 				"environment": "production",
 				"type":        "server",
+				"critical":    true,
 			},
 		},
 		{
