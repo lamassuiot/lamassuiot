@@ -36,6 +36,10 @@ func (mw KMSEventPublisher) GetKey(ctx context.Context, input services.GetKeyInp
 	return mw.Next.GetKey(ctx, input)
 }
 
+func (mw KMSEventPublisher) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
+	return mw.Next.GetKeyStats(ctx, input)
+}
+
 func (mw KMSEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateKMSKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, "kms/unknown")

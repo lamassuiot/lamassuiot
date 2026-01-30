@@ -12,6 +12,7 @@ type KMSService interface {
 
 	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
 	GetKey(ctx context.Context, input GetKeyInput) (*models.Key, error)
+	GetKeyStats(ctx context.Context, input GetKeyStatsInput) (*models.KeyStats, error)
 
 	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
 	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
@@ -92,4 +93,8 @@ type UpdateKeyTagsInput struct {
 type UpdateKeyIDInput struct {
 	CurrentID string `validate:"required"`
 	NewID     string `validate:"required"`
+}
+
+type GetKeyStatsInput struct {
+	QueryParameters *resources.QueryParameters
 }

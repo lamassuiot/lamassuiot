@@ -20,7 +20,9 @@ type DMSManagerService interface {
 	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
 }
 
-type GetDMSStatsInput struct{}
+type GetDMSStatsInput struct {
+	QueryParameters *resources.QueryParameters
+}
 
 type CreateDMSInput struct {
 	ID       string `validate:"required"`

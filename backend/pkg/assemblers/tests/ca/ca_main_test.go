@@ -3381,7 +3381,7 @@ func TestGetStats(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
 				//cas := []*models.CACertificate{}
-				res, err := caSDK.GetStats(context.Background())
+				res, err := caSDK.GetStats(context.Background(), services.GetStatsInput{})
 				return res, err
 			},
 			resultCheck: func(cas *models.CAStats, err error) error {

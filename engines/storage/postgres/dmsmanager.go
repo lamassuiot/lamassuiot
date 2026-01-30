@@ -31,6 +31,14 @@ func (db *PostgresDMSManagerStore) Count(ctx context.Context) (int, error) {
 	return db.querier.Count(ctx, []gormExtraOps{})
 }
 
+func (db *PostgresDMSManagerStore) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
+	if queryParams == nil {
+		return db.Count(ctx)
+	}
+
+	return db.querier.CountFiltered(ctx, queryParams.Filters, []gormExtraOps{})
+}
+
 func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, exhaustiveRun, applyFunc)
 }

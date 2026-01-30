@@ -26,8 +26,8 @@ func (m *MockCAService) DeleteCertificate(ctx context.Context, input services.De
 	return args.Error(0)
 }
 
-func (m *MockCAService) GetStats(ctx context.Context) (*models.CAStats, error) {
-	args := m.Called(ctx)
+func (m *MockCAService) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
+	args := m.Called(ctx, input)
 	return args.Get(0).(*models.CAStats), args.Error(1)
 }
 

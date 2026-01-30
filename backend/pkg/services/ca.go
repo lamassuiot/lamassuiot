@@ -79,8 +79,26 @@ func (svc *CAServiceBackend) SetService(service services.CAService) {
 	svc.service = service
 }
 
-func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, error) {
+func (svc *CAServiceBackend) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	// Validate that status filters are not provided for CA or Certificate query parameters
+	if input.CAQueryParameters != nil {
+		for _, filter := range input.CAQueryParameters.Filters {
+			if filter.Field == "status" {
+				lFunc.Errorf("status filter is not allowed in GetStats for CA query parameters")
+				return nil, errs.ErrValidateBadRequest
+			}
+		}
+	}
+	if input.CertificateQueryParameters != nil {
+		for _, filter := range input.CertificateQueryParameters.Filters {
+			if filter.Field == "status" {
+				lFunc.Errorf("status filter is not allowed in GetStats for Certificate query parameters")
+				return nil, errs.ErrValidateBadRequest
+			}
+		}
+	}
 
 	engines, err := svc.kmsService.GetCryptoEngineProvider(ctx)
 	if err != nil {
@@ -93,7 +111,7 @@ func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, err
 	casDistributionPerEngine := map[string]int{}
 	for _, engine := range engines {
 		lFunc.Debugf("counting CAs controlled by %s engines", engine.ID)
-		ctr, err := svc.caStorage.CountByEngine(ctx, engine.ID)
+		ctr, err := svc.caStorage.CountByEngineWithFilters(ctx, engine.ID, input.CAQueryParameters)
 		if err != nil {
 			lFunc.Errorf("could not get CAs for engine %s: %s", engine.ID, err)
 			return nil, err
@@ -104,29 +122,47 @@ func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, err
 
 	casStatus := map[models.CertificateStatus]int{}
 	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
-		lFunc.Debugf("counting certificates in %s status", status)
-		ctr, err := svc.caStorage.CountByStatus(ctx, status)
+		lFunc.Debugf("counting CAs in %s status", status)
+		// Add status filter to CA query parameters
+		statusQueryParams := addStatusFilterToQueryParams(input.CAQueryParameters, status)
+		ctr, err := svc.caStorage.CountWithFilters(ctx, statusQueryParams)
 		if err != nil {
-			lFunc.Errorf("could not count certificates in %s status: %s", status, err)
+			lFunc.Errorf("could not count CAs in %s status: %s", status, err)
 			return nil, err
 		}
-		lFunc.Debugf("got %d certificates", ctr)
+		lFunc.Debugf("got %d CAs", ctr)
 
 		casStatus[status] = ctr
 	}
 
 	lFunc.Debugf("counting total number of CAs")
-	totalCAs, err := svc.caStorage.Count(ctx)
+	totalCAs, err := svc.caStorage.CountWithFilters(ctx, input.CAQueryParameters)
 	if err != nil {
 		lFunc.Errorf("could not count total number of CAs: %s", err)
 		return nil, err
 	}
 
 	lFunc.Debugf("counting total number of certificates")
-	totalCerts, err := svc.certStorage.Count(ctx)
+	totalCerts, err := svc.certStorage.CountWithFilters(ctx, input.CertificateQueryParameters)
 	if err != nil {
 		lFunc.Errorf("could not count total number of certificates: %s", err)
 		return nil, err
+	}
+
+	// Count certificates by status
+	certStatus := map[models.CertificateStatus]int{}
+	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
+		lFunc.Debugf("counting certificates in %s status", status)
+		// Add status filter to Certificate query parameters
+		statusQueryParams := addStatusFilterToQueryParams(input.CertificateQueryParameters, status)
+		ctr, err := svc.certStorage.CountWithFilters(ctx, statusQueryParams)
+		if err != nil {
+			lFunc.Errorf("could not count certificates in %s status: %s", status, err)
+			return nil, err
+		}
+		lFunc.Debugf("got %d certificates", ctr)
+
+		certStatus[status] = ctr
 	}
 
 	return &models.CAStats{
@@ -138,18 +174,67 @@ func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, err
 		CertificatesStats: models.CertificatesStats{
 			TotalCertificates:            totalCerts,
 			CertificateDistributionPerCA: map[string]int{},
-			CertificateStatus:            map[models.CertificateStatus]int{},
+			CertificateStatus:            certStatus,
 		},
 	}, nil
+}
+
+// addStatusFilterToQueryParams creates a new QueryParameters with the status filter added.
+// This is used to count resources by status while preserving other filters.
+func addStatusFilterToQueryParams(queryParams *resources.QueryParameters, status models.CertificateStatus) *resources.QueryParameters {
+	// If queryParams is nil, create a new one with just the status filter
+	if queryParams == nil {
+		return &resources.QueryParameters{
+			Filters: []resources.FilterOption{
+				{
+					Field:           "status",
+					FilterOperation: resources.EnumEqual,
+					Value:           string(status),
+				},
+			},
+		}
+	}
+
+	// Create a copy of the existing query parameters
+	statusQueryParams := &resources.QueryParameters{
+		Filters:      make([]resources.FilterOption, len(queryParams.Filters)+1),
+		Sort:         queryParams.Sort,
+		PageSize:     queryParams.PageSize,
+		NextBookmark: queryParams.NextBookmark,
+	}
+
+	// Copy existing filters
+	copy(statusQueryParams.Filters, queryParams.Filters)
+
+	// Add the status filter at the end
+	statusQueryParams.Filters[len(queryParams.Filters)] = resources.FilterOption{
+		Field:           "status",
+		FilterOperation: resources.EnumEqual,
+		Value:           string(status),
+	}
+
+	return statusQueryParams
 }
 
 func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
+	// Validate that status filter is not provided in certificate query parameters
+	if input.CertificateQueryParameters != nil {
+		for _, filter := range input.CertificateQueryParameters.Filters {
+			if filter.Field == "status" {
+				lFunc.Errorf("status filter is not allowed in GetStatsByCAID")
+				return nil, errs.ErrValidateBadRequest
+			}
+		}
+	}
+
 	stats := map[models.CertificateStatus]int{}
 	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
 		lFunc.Debugf("counting certificates in %s status", status)
-		ctr, err := svc.certStorage.CountByCAIDAndStatus(ctx, input.CAID, status)
+		// Add status filter to certificate query parameters
+		statusQueryParams := addStatusFilterToQueryParams(input.CertificateQueryParameters, status)
+		ctr, err := svc.certStorage.CountByCAIDWithFilters(ctx, input.CAID, statusQueryParams)
 		if err != nil {
 			lFunc.Errorf("could not count certificates in %s status: %s", status, err)
 			return nil, err

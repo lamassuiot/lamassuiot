@@ -72,7 +72,7 @@ func (svc *DMSManagerServiceBackend) SetService(service services.DMSManagerServi
 func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	total, err := svc.dmsStorage.Count(ctx)
+	total, err := svc.dmsStorage.CountWithFilters(ctx, input.QueryParameters)
 	if err != nil {
 		lFunc.Errorf("could not count dmss: %s", err)
 		return &models.DMSStats{

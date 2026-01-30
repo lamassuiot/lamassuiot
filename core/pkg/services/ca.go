@@ -10,7 +10,7 @@ import (
 )
 
 type CAService interface {
-	GetStats(ctx context.Context) (*models.CAStats, error)
+	GetStats(ctx context.Context, input GetStatsInput) (*models.CAStats, error)
 	GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error)
 
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
@@ -50,8 +50,14 @@ type CAService interface {
 	DeleteIssuanceProfile(ctx context.Context, input DeleteIssuanceProfileInput) error
 }
 
+type GetStatsInput struct {
+	CAQueryParameters          *resources.QueryParameters
+	CertificateQueryParameters *resources.QueryParameters
+}
+
 type GetStatsByCAIDInput struct {
-	CAID string
+	CAID                       string
+	CertificateQueryParameters *resources.QueryParameters
 }
 
 type SignInput struct {

@@ -21,6 +21,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
@@ -324,6 +325,66 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 
 		return key, nil
 	}
+}
+
+func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	stats := &models.KeyStats{
+		KeysDistributionPerEngine:    make(map[string]int),
+		KeysDistributionPerAlgorithm: make(map[string]int),
+	}
+
+	// Get total count
+	totalCount, err := svc.kmsStorage.CountWithFilters(ctx, input.QueryParameters)
+	if err != nil {
+		lFunc.Errorf("failed to count total keys: %s", err)
+		return nil, err
+	}
+	stats.TotalKeys = totalCount
+
+	// Count keys per engine
+	for engineID := range svc.cryptoEngines {
+		count, err := svc.kmsStorage.CountByEngineWithFilters(ctx, engineID, input.QueryParameters)
+		if err != nil {
+			lFunc.Errorf("failed to count keys for engine %s: %s", engineID, err)
+			stats.KeysDistributionPerEngine[engineID] = -1
+		} else {
+			stats.KeysDistributionPerEngine[engineID] = count
+		}
+	}
+
+	// Count keys per algorithm
+	algorithms := []string{"RSA", "ECDSA", "Ed25519"}
+	for _, algorithm := range algorithms {
+		// Create a combined filter with algorithm
+		combinedParams := &resources.QueryParameters{}
+
+		// Copy existing filters
+		if input.QueryParameters != nil {
+			combinedParams.Filters = append([]resources.FilterOption{}, input.QueryParameters.Filters...)
+			combinedParams.Sort = input.QueryParameters.Sort
+			combinedParams.PageSize = input.QueryParameters.PageSize
+			combinedParams.NextBookmark = input.QueryParameters.NextBookmark
+		}
+
+		// Add algorithm filter
+		combinedParams.Filters = append(combinedParams.Filters, resources.FilterOption{
+			Field:           "algorithm",
+			FilterOperation: resources.StringContains,
+			Value:           algorithm,
+		})
+
+		count, err := svc.kmsStorage.CountWithFilters(ctx, combinedParams)
+		if err != nil {
+			lFunc.Errorf("failed to count keys for algorithm %s: %s", algorithm, err)
+			stats.KeysDistributionPerAlgorithm[algorithm] = -1
+		} else {
+			stats.KeysDistributionPerAlgorithm[algorithm] = count
+		}
+	}
+
+	return stats, nil
 }
 
 func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {

@@ -347,6 +347,58 @@ func nonOKResponseToError(resStatusCode int, resBody []byte, knownErrors map[int
 	return fmt.Errorf("unexpected status code %d. No expected error matching found: %s", resStatusCode, string(resBody))
 }
 
+// filterOperationToOperand converts a FilterOperation enum to its operand string representation
+func filterOperationToOperand(op resources.FilterOperation) string {
+	switch op {
+	case resources.StringEqual:
+		return "eq"
+	case resources.StringEqualIgnoreCase:
+		return "eq_ic"
+	case resources.StringNotEqual:
+		return "ne"
+	case resources.StringNotEqualIgnoreCase:
+		return "ne_ic"
+	case resources.StringContains:
+		return "ct"
+	case resources.StringContainsIgnoreCase:
+		return "ct_ic"
+	case resources.StringNotContains:
+		return "nc"
+	case resources.StringNotContainsIgnoreCase:
+		return "nc_ic"
+	case resources.StringArrayContains:
+		return "ct"
+	case resources.StringArrayContainsIgnoreCase:
+		return "ct_ic"
+	case resources.DateBefore:
+		return "bf"
+	case resources.DateEqual:
+		return "eq"
+	case resources.DateAfter:
+		return "af"
+	case resources.NumberEqual:
+		return "eq"
+	case resources.NumberNotEqual:
+		return "ne"
+	case resources.NumberLessThan:
+		return "lt"
+	case resources.NumberLessOrEqualThan:
+		return "le"
+	case resources.NumberGreaterThan:
+		return "gt"
+	case resources.NumberGreaterOrEqualThan:
+		return "ge"
+	case resources.EnumEqual:
+		return "eq"
+	case resources.EnumNotEqual:
+		return "ne"
+	case resources.JsonPathExpression:
+		return "jsonpath"
+	default:
+		return "" // unsupported operation
+	}
+}
+
 func encodeQueryParams(query url.Values, queryParams *resources.QueryParameters) url.Values {
 	if queryParams.NextBookmark != "" {
 		query.Add("bookmark", queryParams.NextBookmark)
@@ -372,57 +424,29 @@ func encodeQueryParams(query url.Values, queryParams *resources.QueryParameters)
 	}
 
 	for _, filter := range queryParams.Filters {
-		var op string
-		switch filter.FilterOperation {
-		case resources.StringEqual:
-			op = "eq"
-		case resources.StringEqualIgnoreCase:
-			op = "eq_ic"
-		case resources.StringNotEqual:
-			op = "ne"
-		case resources.StringNotEqualIgnoreCase:
-			op = "ne_ic"
-		case resources.StringContains:
-			op = "ct"
-		case resources.StringContainsIgnoreCase:
-			op = "ct_ic"
-		case resources.StringNotContains:
-			op = "nc"
-		case resources.StringNotContainsIgnoreCase:
-			op = "nc_ic"
-		case resources.StringArrayContains:
-			op = "ct"
-		case resources.StringArrayContainsIgnoreCase:
-			op = "ct_ic"
-		case resources.DateBefore:
-			op = "bf"
-		case resources.DateEqual:
-			op = "eq"
-		case resources.DateAfter:
-			op = "af"
-		case resources.NumberEqual:
-			op = "eq"
-		case resources.NumberNotEqual:
-			op = "ne"
-		case resources.NumberLessThan:
-			op = "lt"
-		case resources.NumberLessOrEqualThan:
-			op = "le"
-		case resources.NumberGreaterThan:
-			op = "gt"
-		case resources.NumberGreaterOrEqualThan:
-			op = "ge"
-		case resources.EnumEqual:
-			op = "eq"
-		case resources.EnumNotEqual:
-			op = "ne"
-		case resources.JsonPathExpression:
-			op = "jsonpath"
-		default:
+		op := filterOperationToOperand(filter.FilterOperation)
+		if op == "" {
 			continue // skip unsupported operations
 		}
-
 		query.Add("filter", filter.Field+"["+op+"]"+filter.Value)
+	}
+
+	return query
+}
+
+// encodeQueryParamsWithPrefix encodes query parameters with a custom filter prefix.
+// This is used for endpoints that accept multiple filter sets (e.g., ca_filter and cert_filter).
+func encodeQueryParamsWithPrefix(query url.Values, queryParams *resources.QueryParameters, filterPrefix string) url.Values {
+	if queryParams == nil {
+		return query
+	}
+
+	for _, filter := range queryParams.Filters {
+		op := filterOperationToOperand(filter.FilterOperation)
+		if op == "" {
+			continue // skip unsupported operations
+		}
+		query.Add(filterPrefix, filter.Field+"["+op+"]"+filter.Value)
 	}
 
 	return query

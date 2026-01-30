@@ -26,6 +26,65 @@ tags:
     description: Sign and verify operations
 
 paths:
+  /stats:
+    get:
+      tags:
+        - Statistics
+      summary: Get key statistics
+      description: Retrieves statistics about keys including total count and distributions by engine and algorithm. Supports optional filtering.
+      operationId: getKeyStats
+      parameters:
+        - name: filter
+          in: query
+          description: Filter expression for keys (e.g., engine_id[eq]aws-kms-prod, algorithm[contains]RSA)
+          schema:
+            type: string
+          example: "engine_id[eq]golang"
+      responses:
+        '200':
+          description: Key statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyStats'
+              examples:
+                noFilter:
+                  summary: Statistics without filters
+                  value:
+                    total_keys: 150
+                    keys_distribution_per_engine:
+                      golang: 50
+                      aws-kms-prod: 75
+                      vault-prod: 25
+                    keys_distribution_per_algorithm:
+                      RSA: 100
+                      ECDSA: 45
+                      Ed25519: 5
+                withFilter:
+                  summary: Statistics with engine filter
+                  value:
+                    total_keys: 75
+                    keys_distribution_per_engine:
+                      golang: 0
+                      aws-kms-prod: 75
+                      vault-prod: 0
+                    keys_distribution_per_algorithm:
+                      RSA: 50
+                      ECDSA: 20
+                      Ed25519: 5
+        '400':
+          description: Bad request - Invalid filter expression
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /engines:
     get:
       tags:
@@ -582,6 +641,33 @@ components:
           example:
             department: "security"
             owner: "admin"
+
+    KeyStats:
+      type: object
+      description: Statistics about keys including total count and distributions
+      properties:
+        total_keys:
+          type: integer
+          description: Total number of keys matching the filter
+          example: 150
+        keys_distribution_per_engine:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of keys per crypto engine ID
+          example:
+            golang: 50
+            aws-kms-prod: 75
+            vault-prod: 25
+        keys_distribution_per_algorithm:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of keys per cryptographic algorithm
+          example:
+            RSA: 100
+            ECDSA: 45
+            Ed25519: 5
 
     CreateKeyBody:
       type: object

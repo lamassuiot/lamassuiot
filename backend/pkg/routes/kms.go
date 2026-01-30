@@ -12,6 +12,7 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")
 
+	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 
 	// KMS

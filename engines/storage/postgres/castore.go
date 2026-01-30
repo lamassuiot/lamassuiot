@@ -5,6 +5,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -33,10 +34,33 @@ func (db *PostgresCAStore) Count(ctx context.Context) (int, error) {
 	return db.querier.Count(ctx, []gormExtraOps{})
 }
 
+func (db *PostgresCAStore) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
+	if queryParams == nil {
+		return db.Count(ctx)
+	}
+
+	opts := []gormExtraOps{
+		{joins: []string{caJoinCaCertificatesAndCertificates}},
+	}
+	return db.querier.CountFiltered(ctx, queryParams.Filters, opts)
+}
+
 func (db *PostgresCAStore) CountByEngine(ctx context.Context, engineID string) (int, error) {
 	return db.querier.Count(ctx, []gormExtraOps{
 		{query: "certificates.engine_id = ? ", additionalWhere: []any{engineID}, joins: []string{caJoinCaCertificatesAndCertificates}},
 	})
+}
+
+func (db *PostgresCAStore) CountByEngineWithFilters(ctx context.Context, engineID string, queryParams *resources.QueryParameters) (int, error) {
+	opts := []gormExtraOps{
+		{query: "certificates.engine_id = ? ", additionalWhere: []any{engineID}, joins: []string{caJoinCaCertificatesAndCertificates}},
+	}
+
+	if queryParams == nil {
+		return db.querier.Count(ctx, opts)
+	}
+
+	return db.querier.CountFiltered(ctx, queryParams.Filters, opts)
 }
 
 func (db *PostgresCAStore) CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {

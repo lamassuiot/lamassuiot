@@ -49,6 +49,13 @@ func (mw KMSOTelTracer) GetKey(ctx context.Context, input services.GetKeyInput) 
 	return mw.next.GetKey(ctx, input)
 }
 
+func (mw KMSOTelTracer) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.GetKeyStats(ctx, input)
+}
+
 func (mw KMSOTelTracer) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
