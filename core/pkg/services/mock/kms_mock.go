@@ -18,6 +18,12 @@ func (m *MockKMSService) GetCryptoEngineProvider(ctx context.Context) ([]*models
 	return args.Get(0).([]*models.CryptoEngineProvider), args.Error(1)
 }
 
+// GetKeyStats returns key statistics with optional filtering
+func (m *MockKMSService) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.KeyStats), args.Error(1)
+}
+
 // GetKeys returns a paginated list of keys
 func (m *MockKMSService) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
 	args := m.Called(ctx, input)
