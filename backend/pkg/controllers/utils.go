@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -9,7 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
-func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) *resources.QueryParameters {
+func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) (*resources.QueryParameters, error) {
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
@@ -72,7 +73,11 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 
 			case "filter":
 				for _, value := range v {
-					if filter := parseFilterValue(value, filterFieldMap); filter != nil {
+					filter, err := parseFilterValue(value, filterFieldMap)
+					if err != nil {
+						return nil, err
+					}
+					if filter != nil {
 						queryParams.Filters = append(queryParams.Filters, *filter)
 					}
 				}
@@ -80,7 +85,7 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 		}
 	}
 
-	return &queryParams
+	return &queryParams, nil
 }
 
 // isValidJsonPath validates a JSONPath expression to prevent SQL injection
@@ -270,11 +275,12 @@ func parseFilterOperand(operand string, fieldType resources.FilterFieldType) res
 
 // parseFilterValue parses a single filter value string and returns a FilterOption.
 // Returns nil if the filter is invalid or the field doesn't exist in filterFieldMap.
-func parseFilterValue(value string, filterFieldMap map[string]resources.FilterFieldType) *resources.FilterOption {
+// Returns an error if the filter operand is not recognized for the field type.
+func parseFilterValue(value string, filterFieldMap map[string]resources.FilterFieldType) (*resources.FilterOption, error) {
 	bs := strings.Index(value, "[")
 	es := strings.Index(value, "]")
 	if bs == -1 || es == -1 || bs >= es {
-		return nil
+		return nil, nil
 	}
 
 	field, rest, _ := strings.Cut(value, "[")
@@ -282,12 +288,13 @@ func parseFilterValue(value string, filterFieldMap map[string]resources.FilterFi
 
 	fieldType, exists := filterFieldMap[field]
 	if !exists {
-		return nil
+		return nil, nil
 	}
 
 	filterOperand := parseFilterOperand(operand, fieldType)
-	// Note: We still create a FilterOption even if operand is UnspecifiedFilter
-	// This allows the caller to detect and handle invalid operands
+	if filterOperand == resources.UnspecifiedFilter {
+		return nil, fmt.Errorf("invalid filter operand '%s' for field '%s' of type %v", operand, field, fieldType)
+	}
 
 	// Handle URL decoding for JSONPath expressions
 	if fieldType == resources.JsonFilterFieldType && filterOperand == resources.JsonPathExpression {
@@ -301,21 +308,21 @@ func parseFilterValue(value string, filterFieldMap map[string]resources.FilterFi
 		Field:           field,
 		FilterOperation: filterOperand,
 		Value:           arg,
-	}
+	}, nil
 }
 
 // FilterQueryWithPrefix parses filter query parameters with a specific key prefix.
 // For example, with prefix "ca_filter", it looks for query parameters named "ca_filter"
 // instead of the default "filter" parameter name.
-func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.FilterFieldType, prefix string) *resources.QueryParameters {
+func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.FilterFieldType, prefix string) (*resources.QueryParameters, error) {
 	if len(r.URL.RawQuery) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	values := r.URL.Query()
 	filterValues, exists := values[prefix]
 	if !exists || len(filterValues) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	queryParams := resources.QueryParameters{
@@ -325,14 +332,18 @@ func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.
 	}
 
 	for _, value := range filterValues {
-		if filter := parseFilterValue(value, filterFieldMap); filter != nil {
+		filter, err := parseFilterValue(value, filterFieldMap)
+		if err != nil {
+			return nil, err
+		}
+		if filter != nil {
 			queryParams.Filters = append(queryParams.Filters, *filter)
 		}
 	}
 
 	if len(queryParams.Filters) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	return &queryParams
+	return &queryParams, nil
 }
