@@ -347,6 +347,8 @@ func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.
 	}
 
 	return &queryParams, nil
+}
+
 // ConvertDeviceGroupCriteria converts API request criteria (with operand names) to model criteria (with FilterOperation enums).
 // This strictly validates all criteria fields and operands, returning errors for invalid values.
 func ConvertDeviceGroupCriteria(requestCriteria []resources.DeviceGroupFilterOptionRequest, filterFieldMap map[string]resources.FilterFieldType) ([]models.DeviceGroupFilterOption, error) {
