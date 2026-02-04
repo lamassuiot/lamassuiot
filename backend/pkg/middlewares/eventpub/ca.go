@@ -24,8 +24,8 @@ func NewCAEventBusPublisher(eventMWPub ICloudEventPublisher) lservices.CAMiddlew
 	}
 }
 
-func (mw CAEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
-	return mw.Next.GetStats(ctx)
+func (mw CAEventPublisher) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
+	return mw.Next.GetStats(ctx, input)
 }
 func (mw CAEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	return mw.Next.GetStatsByCAID(ctx, input)

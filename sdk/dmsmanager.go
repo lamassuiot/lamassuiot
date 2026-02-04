@@ -27,7 +27,7 @@ func NewHttpDMSManagerClient(client *http.Client, url string) services.DMSManage
 
 func (cli *dmsManagerClient) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
 	url := cli.baseUrl + "/v1/stats"
-	resp, err := Get[models.DMSStats](ctx, cli.httpClient, url, nil, map[int][]error{})
+	resp, err := Get[models.DMSStats](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 	return &resp, err
 }
 

@@ -19,7 +19,11 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 }
 
 func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
 
 	stats, err := r.svc.GetDevicesStats(ctx, services.GetDevicesStatsInput{
 		QueryParameters: queryParams,
@@ -39,7 +43,11 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(ctx.Request.Context(), services.GetDevicesInput{
@@ -66,7 +74,11 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
 	type uriParams struct {
 		DMSID string `uri:"id" binding:"required"`
 	}
@@ -431,7 +443,11 @@ func (r *devManagerHttpRoutes) GetDeviceGroupByID(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
 
 	groups := []models.DeviceGroup{}
 	nextBookmark, err := r.svc.GetDeviceGroups(ctx, services.GetDeviceGroupsInput{
@@ -472,7 +488,11 @@ func (r *devManagerHttpRoutes) GetDevicesByGroup(ctx *gin.Context) {
 		return
 	}
 
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{

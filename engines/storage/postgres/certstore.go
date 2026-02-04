@@ -6,6 +6,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -29,6 +30,26 @@ func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB) (storage.Certif
 
 func (db *PostgresCertificateStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count(ctx, []gormExtraOps{})
+}
+
+func (db *PostgresCertificateStorage) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
+	if queryParams == nil {
+		return db.Count(ctx)
+	}
+
+	return db.querier.CountFiltered(ctx, queryParams.Filters, []gormExtraOps{})
+}
+
+func (db *PostgresCertificateStorage) CountByCAIDWithFilters(ctx context.Context, caID string, queryParams *resources.QueryParameters) (int, error) {
+	opts := []gormExtraOps{
+		{query: "issuer_meta_id = ?", additionalWhere: []any{caID}},
+	}
+
+	if queryParams == nil {
+		return db.querier.Count(ctx, opts)
+	}
+
+	return db.querier.CountFiltered(ctx, queryParams.Filters, opts)
 }
 
 func (db *PostgresCertificateStorage) CountByCAIDAndStatus(ctx context.Context, caID string, status models.CertificateStatus) (int, error) {

@@ -26,7 +26,12 @@ paths:
     get:
       tags: [DMS]
       summary: Get DMS statistics
+      description: |
+        Retrieve statistics about DMS instances. Supports filtering to get statistics
+        for a specific subset of DMS instances based on fields like name, metadata, etc.
       operationId: getDmsStats
+      parameters:
+        - $ref: '#/components/parameters/Filter'
       responses:
         '200':
           description: Statistics for DMS fleet
@@ -34,6 +39,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DMSStats'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/dms:

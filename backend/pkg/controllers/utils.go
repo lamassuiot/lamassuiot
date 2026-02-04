@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,14 +11,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
-func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) *resources.QueryParameters {
+func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) (*resources.QueryParameters, error) {
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
 		PageSize:     25,
 	}
-
-	var err error
 
 	if len(r.URL.RawQuery) > 0 {
 		values := r.URL.Query()
@@ -75,104 +74,19 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 
 			case "filter":
 				for _, value := range v {
-					bs := strings.Index(value, "[")
-					es := strings.Index(value, "]")
-					if bs != -1 && es != -1 && bs < es {
-						field, rest, _ := strings.Cut(value, "[")
-						operand, arg, _ := strings.Cut(rest, "]")
-						operand = strings.ToLower(operand)
-
-						fieldOperandType, exists := filterFieldMap[field]
-						if !exists {
-							continue
-						}
-
-						var filterOperand resources.FilterOperation
-						switch fieldOperandType {
-						case resources.StringFilterFieldType:
-							switch operand {
-							case "eq", "equal":
-								filterOperand = resources.StringEqual
-							case "eq_ic", "equal_ignorecase":
-								filterOperand = resources.StringEqualIgnoreCase
-							case "ne", "notequal":
-								filterOperand = resources.StringNotEqual
-							case "ne_ic", "notequal_ignorecase":
-								filterOperand = resources.StringNotEqualIgnoreCase
-							case "ct", "contains":
-								filterOperand = resources.StringContains
-							case "ct_ic", "contains_ignorecase":
-								filterOperand = resources.StringContainsIgnoreCase
-							case "nc", "notcontains":
-								filterOperand = resources.StringNotContains
-							case "nc_ic", "notcontains_ignorecase":
-								filterOperand = resources.StringNotContainsIgnoreCase
-							}
-
-						case resources.StringArrayFilterFieldType:
-							if strings.Contains(operand, "ignorecase") {
-								filterOperand = resources.StringArrayContainsIgnoreCase
-							} else {
-								filterOperand = resources.StringArrayContains
-							}
-
-						case resources.DateFilterFieldType:
-							switch operand {
-							case "bf", "before":
-								filterOperand = resources.DateBefore
-							case "eq", "equal":
-								filterOperand = resources.DateEqual
-							case "af", "after":
-								filterOperand = resources.DateAfter
-							}
-						case resources.NumberFilterFieldType:
-							switch operand {
-							case "eq", "equal":
-								filterOperand = resources.NumberEqual
-							case "ne", "notequal":
-								filterOperand = resources.NumberNotEqual
-							case "lt", "lessthan":
-								filterOperand = resources.NumberLessThan
-							case "le", "lessequal", "lessorequal":
-								filterOperand = resources.NumberLessOrEqualThan
-							case "gt", "greaterthan":
-								filterOperand = resources.NumberGreaterThan
-							case "ge", "greaterequal", "greaterorequal":
-								filterOperand = resources.NumberGreaterOrEqualThan
-							}
-						case resources.EnumFilterFieldType:
-							switch operand {
-							case "eq", "equal":
-								filterOperand = resources.EnumEqual
-							case "ne", "notequal":
-								filterOperand = resources.EnumNotEqual
-							}
-						case resources.JsonFilterFieldType:
-							if operand == "jsonpath" {
-								filterOperand = resources.JsonPathExpression
-								arg, err = url.QueryUnescape(arg)
-								if err != nil {
-									continue
-								}
-							}
-						default:
-							continue
-						}
-						if exists {
-							queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
-								Field:           field,
-								Value:           arg,
-								FilterOperation: filterOperand,
-							})
-						}
+					filter, err := parseFilterValue(value, filterFieldMap)
+					if err != nil {
+						return nil, err
 					}
-
+					if filter != nil {
+						queryParams.Filters = append(queryParams.Filters, *filter)
+					}
 				}
 			}
 		}
 	}
 
-	return &queryParams
+	return &queryParams, nil
 }
 
 // isValidJsonPath validates a JSONPath expression to prevent SQL injection
@@ -283,6 +197,156 @@ func isSimpleJsonPath(jsonPath string) bool {
 	}
 
 	return true
+}
+
+// parseFilterOperand parses a filter operand string and returns the corresponding FilterOperation
+// based on the field type. Returns UnspecifiedFilter if the operand is not recognized.
+func parseFilterOperand(operand string, fieldType resources.FilterFieldType) resources.FilterOperation {
+	operand = strings.ToLower(operand)
+
+	switch fieldType {
+	case resources.StringFilterFieldType:
+		switch operand {
+		case "eq", "equal":
+			return resources.StringEqual
+		case "eq_ic", "equal_ignorecase":
+			return resources.StringEqualIgnoreCase
+		case "ne", "notequal":
+			return resources.StringNotEqual
+		case "ne_ic", "notequal_ignorecase":
+			return resources.StringNotEqualIgnoreCase
+		case "ct", "contains":
+			return resources.StringContains
+		case "ct_ic", "contains_ignorecase":
+			return resources.StringContainsIgnoreCase
+		case "nc", "notcontains":
+			return resources.StringNotContains
+		case "nc_ic", "notcontains_ignorecase":
+			return resources.StringNotContainsIgnoreCase
+		}
+
+	case resources.StringArrayFilterFieldType:
+		if strings.Contains(operand, "ignorecase") {
+			return resources.StringArrayContainsIgnoreCase
+		}
+		return resources.StringArrayContains
+
+	case resources.DateFilterFieldType:
+		switch operand {
+		case "bf", "before":
+			return resources.DateBefore
+		case "eq", "equal":
+			return resources.DateEqual
+		case "af", "after":
+			return resources.DateAfter
+		}
+
+	case resources.NumberFilterFieldType:
+		switch operand {
+		case "eq", "equal":
+			return resources.NumberEqual
+		case "ne", "notequal":
+			return resources.NumberNotEqual
+		case "lt", "lessthan":
+			return resources.NumberLessThan
+		case "le", "lessequal", "lessorequal":
+			return resources.NumberLessOrEqualThan
+		case "gt", "greaterthan":
+			return resources.NumberGreaterThan
+		case "ge", "greaterequal", "greaterorequal":
+			return resources.NumberGreaterOrEqualThan
+		}
+
+	case resources.EnumFilterFieldType:
+		switch operand {
+		case "eq", "equal":
+			return resources.EnumEqual
+		case "ne", "notequal":
+			return resources.EnumNotEqual
+		}
+
+	case resources.JsonFilterFieldType:
+		if operand == "jsonpath" {
+			return resources.JsonPathExpression
+		}
+	}
+
+	return resources.UnspecifiedFilter
+}
+
+// parseFilterValue parses a single filter value string and returns a FilterOption.
+// Returns nil if the filter is invalid or the field doesn't exist in filterFieldMap.
+// Returns an error if the filter operand is not recognized for the field type.
+func parseFilterValue(value string, filterFieldMap map[string]resources.FilterFieldType) (*resources.FilterOption, error) {
+	bs := strings.Index(value, "[")
+	es := strings.Index(value, "]")
+	if bs == -1 || es == -1 || bs >= es {
+		return nil, nil
+	}
+
+	field, rest, _ := strings.Cut(value, "[")
+	operand, arg, _ := strings.Cut(rest, "]")
+
+	fieldType, exists := filterFieldMap[field]
+	if !exists {
+		return nil, nil
+	}
+
+	filterOperand := parseFilterOperand(operand, fieldType)
+	if filterOperand == resources.UnspecifiedFilter {
+		return nil, fmt.Errorf("invalid filter operand '%s' for field '%s' of type %v", operand, field, fieldType)
+	}
+
+	// Handle URL decoding for JSONPath expressions
+	if fieldType == resources.JsonFilterFieldType && filterOperand == resources.JsonPathExpression {
+		decodedArg, err := url.QueryUnescape(arg)
+		if err == nil {
+			arg = decodedArg
+		}
+	}
+
+	return &resources.FilterOption{
+		Field:           field,
+		FilterOperation: filterOperand,
+		Value:           arg,
+	}, nil
+}
+
+// FilterQueryWithPrefix parses filter query parameters with a specific key prefix.
+// For example, with prefix "ca_filter", it looks for query parameters named "ca_filter"
+// instead of the default "filter" parameter name.
+func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.FilterFieldType, prefix string) (*resources.QueryParameters, error) {
+	if len(r.URL.RawQuery) == 0 {
+		return nil, nil
+	}
+
+	values := r.URL.Query()
+	filterValues, exists := values[prefix]
+	if !exists || len(filterValues) == 0 {
+		return nil, nil
+	}
+
+	queryParams := resources.QueryParameters{
+		NextBookmark: "",
+		Filters:      []resources.FilterOption{},
+		PageSize:     25,
+	}
+
+	for _, value := range filterValues {
+		filter, err := parseFilterValue(value, filterFieldMap)
+		if err != nil {
+			return nil, err
+		}
+		if filter != nil {
+			queryParams.Filters = append(queryParams.Filters, *filter)
+		}
+	}
+
+	if len(queryParams.Filters) == 0 {
+		return nil, nil
+	}
+
+	return &queryParams, nil
 }
 
 // ConvertDeviceGroupCriteria converts API request criteria (with operand names) to model criteria (with FilterOperation enums).

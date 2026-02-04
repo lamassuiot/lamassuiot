@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -41,16 +42,68 @@ func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models
 	return engine, nil
 }
 
-func (cli *httpCAClient) GetStats(ctx context.Context) (*models.CAStats, error) {
-	stats, err := Get[*models.CAStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
+func (cli *httpCAClient) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
+	r, err := http.NewRequestWithContext(ctx, "GET", cli.baseUrl+"/v1/stats", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encode both CA and Certificate query parameters with their respective prefixes
+	query := r.URL.Query()
+	query = encodeQueryParamsWithPrefix(query, input.CAQueryParameters, "ca_filter")
+	query = encodeQueryParamsWithPrefix(query, input.CertificateQueryParameters, "cert_filter")
+	r.URL.RawQuery = query.Encode()
+
+	r.Header.Add("Content-Type", "application/json")
+	res, err := cli.httpClient.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode != 200 {
+		return nil, nonOKResponseToError(res.StatusCode, body, map[int][]error{})
+	}
+
+	stats, err := ParseJSON[*models.CAStats](body)
 	if err != nil {
 		return nil, err
 	}
 
 	return stats, nil
 }
+
 func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
-	stats, err := Get[map[models.CertificateStatus]int](ctx, cli.httpClient, cli.baseUrl+"/v1/stats/"+input.CAID, nil, map[int][]error{})
+	r, err := http.NewRequestWithContext(ctx, "GET", cli.baseUrl+"/v1/stats/"+input.CAID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encode certificate query parameters with cert_filter prefix
+	query := r.URL.Query()
+	query = encodeQueryParamsWithPrefix(query, input.CertificateQueryParameters, "cert_filter")
+	r.URL.RawQuery = query.Encode()
+
+	r.Header.Add("Content-Type", "application/json")
+	res, err := cli.httpClient.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode != 200 {
+		return nil, nonOKResponseToError(res.StatusCode, body, map[int][]error{})
+	}
+
+	stats, err := ParseJSON[map[models.CertificateStatus]int](body)
 	if err != nil {
 		return nil, err
 	}
