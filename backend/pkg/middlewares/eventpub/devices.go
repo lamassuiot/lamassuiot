@@ -128,3 +128,69 @@ func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services
 	}()
 	return mw.next.DeleteDevice(ctx, input)
 }
+
+// ============================================================================
+// Device Group Operations
+// ============================================================================
+
+func (mw *deviceEventPublisher) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (output *models.DeviceGroup, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateDeviceGroupKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device-group/%s", input.ID))
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(context.Background(), output)
+		}
+	}()
+	return mw.next.CreateDeviceGroup(ctx, input)
+}
+
+func (mw *deviceEventPublisher) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (output *models.DeviceGroup, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDeviceGroupKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device-group/%s", input.ID))
+
+	prev, err := mw.GetDeviceGroupByID(ctx, services.GetDeviceGroupByIDInput{
+		ID: input.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mw error: could not get DeviceGroup %s: %w", input.ID, err)
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.DeviceGroup]{
+				Updated:  *output,
+				Previous: *prev,
+			})
+		}
+	}()
+	return mw.next.UpdateDeviceGroup(ctx, input)
+}
+
+func (mw *deviceEventPublisher) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) (err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteDeviceGroupKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device-group/%s", input.ID))
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, input)
+		}
+	}()
+	return mw.next.DeleteDeviceGroup(ctx, input)
+}
+
+func (mw *deviceEventPublisher) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
+	return mw.next.GetDeviceGroupByID(ctx, input)
+}
+
+func (mw *deviceEventPublisher) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
+	return mw.next.GetDeviceGroups(ctx, input)
+}
+
+func (mw *deviceEventPublisher) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
+	return mw.next.GetDevicesByGroup(ctx, input)
+}
+
+func (mw *deviceEventPublisher) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
+	return mw.next.GetDeviceGroupStats(ctx, input)
+}

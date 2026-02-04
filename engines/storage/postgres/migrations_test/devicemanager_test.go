@@ -227,6 +227,13 @@ func TestDeviceManagerMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260120114735_idslot_text_to_jsonb")
 	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_DeviceManager_20260115161136_create_device_groups(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260115161136_create_device_groups")
+	}
 }
 
 func MigrationTest_DeviceManager_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -346,4 +353,74 @@ func MigrationTest_DeviceManager_20260120114735_idslot_text_to_jsonb(t *testing.
 		t.Fatalf("failed to query with jsonpath: %v", tx.Error)
 	}
 	assert.Equal(t, int64(1), count, "Should find one device with ACTIVE status")
+}
+
+func MigrationTest_DeviceManager_20260115161136_create_device_groups(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+
+	// Insert test root group with proper UUID
+	rootID := "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+	childID := "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22"
+
+	con.Exec(`INSERT INTO device_groups (id, name, description, parent_id, criteria)
+		VALUES($1, 'Root Group', 'A root device group', NULL, '[{"Field":"status","FilterOperation":12,"Value":"valid"}]')`, rootID)
+
+	// Insert test child group referencing the root
+	con.Exec(`INSERT INTO device_groups (id, name, description, parent_id, criteria)
+		VALUES($1, 'Child Group', 'A child device group', $2, '[{"Field":"tags","FilterOperation":7,"Value":"location:madrid"}]')`, childID, rootID)
+
+	// Verify root group
+	var rootGroup map[string]any
+	tx := con.Raw("SELECT * FROM device_groups WHERE id = $1", rootID).Scan(&rootGroup)
+	if tx.Error != nil {
+		t.Fatalf("failed to select root group: %v", tx.Error)
+	}
+	assert.Equal(t, rootID, rootGroup["id"])
+	assert.Equal(t, "Root Group", rootGroup["name"])
+	assert.Equal(t, "A root device group", rootGroup["description"])
+	assert.Nil(t, rootGroup["parent_id"], "Root group should have NULL parent_id")
+	assert.NotNil(t, rootGroup["created_at"])
+	assert.NotNil(t, rootGroup["updated_at"])
+
+	// Verify criteria is JSONB
+	var criteriaJSON string
+	tx = con.Raw("SELECT criteria FROM device_groups WHERE id = $1", rootID).Scan(&criteriaJSON)
+	if tx.Error != nil {
+		t.Fatalf("failed to query criteria: %v", tx.Error)
+	}
+	assert.Contains(t, criteriaJSON, "status")
+
+	// Verify child group and foreign key relationship
+	var childGroup map[string]any
+	tx = con.Raw("SELECT * FROM device_groups WHERE id = $1", childID).Scan(&childGroup)
+	if tx.Error != nil {
+		t.Fatalf("failed to select child group: %v", tx.Error)
+	}
+	assert.Equal(t, childID, childGroup["id"])
+	assert.Equal(t, "Child Group", childGroup["name"])
+	assert.Equal(t, rootID, childGroup["parent_id"])
+
+	// Verify unique constraint on name
+	duplicateID := "c2eebc99-9c0b-4ef8-bb6d-6bb9bd380a33"
+	tx = con.Exec(`INSERT INTO device_groups (id, name, description, criteria)
+		VALUES($1, 'Root Group', 'Duplicate name', '[]')`, duplicateID)
+	assert.Error(t, tx.Error, "Should fail on duplicate name")
+
+	// Verify CASCADE DELETE - deleting root should delete child
+	tx = con.Exec("DELETE FROM device_groups WHERE id = $1", rootID)
+	if tx.Error != nil {
+		t.Fatalf("failed to delete root group: %v", tx.Error)
+	}
+
+	// Check that child was cascade deleted
+	var count int64
+	con.Model(&struct{}{}).Table("device_groups").Where("id = $1", childID).Count(&count)
+	assert.Equal(t, int64(0), count, "Child group should be cascade deleted")
+
+	// Verify indexes exist
+	var indexCount int64
+	con.Raw(`SELECT COUNT(*) FROM pg_indexes 
+		WHERE tablename = 'device_groups' 
+		AND indexname IN ('idx_device_groups_parent', 'idx_device_groups_name')`).Scan(&indexCount)
+	assert.Equal(t, int64(2), indexCount, "Should have both indexes")
 }

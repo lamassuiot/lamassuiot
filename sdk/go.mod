@@ -3,8 +3,8 @@ module github.com/lamassuiot/lamassuiot/sdk/v3
 go 1.24.0
 
 require (
-	github.com/lamassuiot/lamassuiot/core/v3 v3.6.2
-	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.6.2
+	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.7.0
 	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/contrib/instrumentation/host v0.63.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0
@@ -43,7 +43,8 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
-	github.com/jakehl/goid v1.1.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -86,4 +87,5 @@ require (
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/gorm v1.30.0 // indirect
 )

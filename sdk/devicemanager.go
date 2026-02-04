@@ -2,7 +2,9 @@ package sdk
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -113,4 +115,192 @@ func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services
 		422: {errs.ErrDeviceInvalidStatus},
 		400: {errs.ErrValidateBadRequest},
 	})
+}
+
+// ============================================================================
+// Device Group Operations
+// ============================================================================
+
+func (cli *deviceManagerClient) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (*models.DeviceGroup, error) {
+	response, err := Post[map[string]interface{}](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups", resources.CreateDeviceGroupBody{
+		ID:          input.ID,
+		Name:        input.Name,
+		Description: input.Description,
+		ParentID:    input.ParentID,
+		Criteria:    convertCriteriaToRequest(input.Criteria),
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest, errs.ErrDeviceGroupCircularReference},
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response map to a DeviceGroup model
+	deviceGroup, err := convertResponseToDeviceGroup(&response)
+	if err != nil {
+		return nil, err
+	}
+
+	return deviceGroup, nil
+}
+
+func (cli *deviceManagerClient) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (*models.DeviceGroup, error) {
+	response, err := Put[map[string]interface{}](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, resources.UpdateDeviceGroupBody{
+		Name:        input.Name,
+		Description: input.Description,
+		ParentID:    input.ParentID,
+		Criteria:    convertCriteriaToRequest(input.Criteria),
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest, errs.ErrDeviceGroupCircularReference},
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response map to a DeviceGroup model
+	deviceGroup, err := convertResponseToDeviceGroup(&response)
+	if err != nil {
+		return nil, err
+	}
+
+	return deviceGroup, nil
+}
+
+func (cli *deviceManagerClient) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) error {
+	return Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+		400: {errs.ErrValidateBadRequest},
+	})
+}
+
+func (cli *deviceManagerClient) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
+	response, err := Get[map[string]interface{}](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, nil, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the response map to a DeviceGroup model
+	deviceGroup, err := convertResponseToDeviceGroup(&response)
+	if err != nil {
+		return nil, err
+	}
+
+	return deviceGroup, nil
+}
+
+func (cli *deviceManagerClient) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
+	url := cli.baseUrl + "/v1/device-groups"
+
+	return IterGet[models.DeviceGroup, *resources.GetDeviceGroupsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+func (cli *deviceManagerClient) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
+	url := cli.baseUrl + "/v1/device-groups/" + input.GroupID + "/devices"
+
+	return IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+}
+
+func (cli *deviceManagerClient) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
+	response, err := Get[models.DevicesStats](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.GroupID+"/stats", nil, map[int][]error{
+		404: {errs.ErrDeviceGroupNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// convertCriteriaToRequest converts model criteria (with FilterOperation integers) to API request criteria (with operand names).
+func convertCriteriaToRequest(modelCriteria []models.DeviceGroupFilterOption) []resources.DeviceGroupFilterOptionRequest {
+	if len(modelCriteria) == 0 {
+		return []resources.DeviceGroupFilterOptionRequest{}
+	}
+
+	requestCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, len(modelCriteria))
+
+	for _, criteria := range modelCriteria {
+		// Convert FilterOperation integer back to operand name
+		operand := resources.FormatOperandName(resources.FilterOperation(criteria.FilterOperation), resources.DeviceFilterableFields[criteria.Field])
+
+		requestCriteria = append(requestCriteria, resources.DeviceGroupFilterOptionRequest{
+			Field:   criteria.Field,
+			Operand: operand,
+			Value:   criteria.Value,
+		})
+	}
+
+	return requestCriteria
+}
+
+// convertResponseToDeviceGroup converts the HTTP response map back to a DeviceGroup model.
+// The HTTP response contains criteria with string operands, which need to be converted back to integer FilterOperations.
+func convertResponseToDeviceGroup(responseMap *map[string]interface{}) (*models.DeviceGroup, error) {
+	if responseMap == nil {
+		return nil, nil
+	}
+
+	// Marshal the response map back to JSON
+	jsonData, err := json.Marshal(responseMap)
+	if err != nil {
+		return nil, err
+	}
+
+	// Define intermediate structure matching the HTTP response format
+	type DeviceGroupResponse struct {
+		ID                string                                     `json:"id"`
+		Name              string                                     `json:"name"`
+		Description       string                                     `json:"description"`
+		ParentID          *string                                    `json:"parent_id,omitempty"`
+		Criteria          []resources.DeviceGroupFilterOptionRequest `json:"criteria"`
+		InheritedCriteria []resources.DeviceGroupFilterOptionRequest `json:"inherited_criteria"`
+		OwnCriteriaCount  int                                        `json:"own_criteria_count"`
+		CreatedAt         time.Time                                  `json:"created_at"`
+		UpdatedAt         time.Time                                  `json:"updated_at"`
+	}
+
+	// Unmarshal into the intermediate structure
+	var response DeviceGroupResponse
+	if err := json.Unmarshal(jsonData, &response); err != nil {
+		return nil, err
+	}
+
+	// Convert criteria from request format (with string operands) to model format (with integer FilterOperations)
+	convertCriteria := func(requestCriteria []resources.DeviceGroupFilterOptionRequest) []models.DeviceGroupFilterOption {
+		modelCriteria := make([]models.DeviceGroupFilterOption, 0, len(requestCriteria))
+		for _, criterion := range requestCriteria {
+			fieldType, exists := resources.DeviceFilterableFields[criterion.Field]
+			if !exists {
+				continue
+			}
+			// Convert operand name to FilterOperation integer
+			filterOp := resources.ParseOperandName(criterion.Operand, fieldType)
+			modelCriteria = append(modelCriteria, models.DeviceGroupFilterOption{
+				Field:           criterion.Field,
+				FilterOperation: int(filterOp),
+				Value:           criterion.Value,
+			})
+		}
+		return modelCriteria
+	}
+
+	// Combine inherited and own criteria (inherited first, then own)
+	allCriteria := append(convertCriteria(response.InheritedCriteria), convertCriteria(response.Criteria)...)
+
+	return &models.DeviceGroup{
+		ID:               response.ID,
+		Name:             response.Name,
+		Description:      response.Description,
+		ParentID:         response.ParentID,
+		Criteria:         allCriteria,
+		OwnCriteriaCount: response.OwnCriteriaCount,
+		CreatedAt:        response.CreatedAt,
+		UpdatedAt:        response.UpdatedAt,
+	}, nil
 }

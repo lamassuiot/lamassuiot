@@ -15,4 +15,31 @@ type DeviceManagerRepo interface {
 	Update(ctx context.Context, device *models.Device) (*models.Device, error)
 	Insert(ctx context.Context, device *models.Device) (*models.Device, error)
 	Delete(ctx context.Context, ID string) error
+
+	// DeviceGroups returns the device groups repository
+	DeviceGroups() DeviceGroupsRepo
+}
+
+type DeviceGroupsRepo interface {
+	// Count returns the total number of device groups
+	Count(ctx context.Context) (int, error)
+
+	// SelectAll returns all device groups with pagination
+	SelectAll(ctx context.Context, req StorageListRequest[models.DeviceGroup]) (string, error)
+
+	// SelectByID returns a device group by its ID
+	SelectByID(ctx context.Context, id string) (bool, *models.DeviceGroup, error)
+
+	// SelectAncestors returns all ancestor groups (parent chain) for a given group ID
+	// Used for hierarchy traversal when resolving group criteria
+	SelectAncestors(ctx context.Context, id string) ([]*models.DeviceGroup, error)
+
+	// Insert creates a new device group
+	Insert(ctx context.Context, group *models.DeviceGroup) (*models.DeviceGroup, error)
+
+	// Update modifies an existing device group
+	Update(ctx context.Context, group *models.DeviceGroup) (*models.DeviceGroup, error)
+
+	// Delete removes a device group by ID
+	Delete(ctx context.Context, id string) error
 }

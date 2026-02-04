@@ -17,8 +17,10 @@ import (
 	"github.com/fatih/color"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/storage/sqlite"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
@@ -101,11 +103,13 @@ func main() {
 	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
 	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
+	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
 
 	fmt.Printf("AWS IoT Manager Enabled: %v\n", *awsIoTManager)
+	fmt.Printf("Sample Data Enabled: %v\n", *sampleData)
 	if *awsIoTManager {
 		ai := *awsIoTManagerID
 		fmt.Printf("AWS IoT Manager ConnectorID: %s\n", ai)
@@ -463,7 +467,8 @@ func main() {
 			Enabled:   !*disableMonitor,
 			Frequency: "2m",
 		},
-		Storage: *pluglableStorageConfig,
+		Storage:            *pluglableStorageConfig,
+		PopulateSampleData: *sampleData,
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -504,6 +509,20 @@ func main() {
 		fmt.Println(engine.ID)
 	}
 	fmt.Println("========================================================================")
+
+	// Populate sample data if enabled
+	if *sampleData {
+		logger := chelpers.SetupLogger(cconfig.Info, "SampleData", "Populator")
+		// Use the internal HTTP ports since services are behind the gateway
+		// We'll construct URLs using the gateway
+		caServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/ca", conf.GatewayPortHttp)
+		deviceServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/devmanager", conf.GatewayPortHttp)
+
+		err := sampledata.PopulateSampleData(context.Background(), logger, caServiceURL, deviceServiceURL)
+		if err != nil {
+			fmt.Printf("Warning: Failed to populate sample data: %v\n", err)
+		}
+	}
 
 	forever := make(chan struct{})
 	<-forever
