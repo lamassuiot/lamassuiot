@@ -17,15 +17,15 @@ import (
 	"gorm.io/gorm"
 )
 
-func RunDB(t *testing.T, logger *logrus.Entry, dbName string) (func() error, *gorm.DB) {
+func RunDB(t *testing.T, logger *logrus.Entry, schemaName string) (func() error, *gorm.DB) {
 	cleanup, cfg, err := postgres_test.RunPostgresDocker(map[string]string{
-		dbName: "",
+		schemaName: "",
 	}, false)
 	if err != nil {
 		t.Fatalf("could not launch Postgres: %s", err)
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, dbName, cfg.Port)
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, "pki", cfg.Port, schemaName)
 	con, err := gorm.Open(postgresDriver.New(
 		postgresDriver.Config{
 			DSN:                  dsn,
@@ -37,6 +37,10 @@ func RunDB(t *testing.T, logger *logrus.Entry, dbName string) (func() error, *go
 	if err != nil {
 		t.Fatalf("could not connect to Postgres: %s", err)
 	}
+
+	// Ensure schema exists and set search_path
+	con.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaName))
+	con.Exec(fmt.Sprintf("SET search_path TO %s", schemaName))
 
 	return cleanup, con
 }
@@ -90,8 +94,12 @@ func ApplyMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName str
 }
 
 func CleanAllTables(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Get current schema from search_path
+	var schemaName string
+	con.Raw("SELECT current_schema()").Scan(&schemaName)
+
 	var tables []string
-	if err := con.Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error; err != nil {
+	if err := con.Raw("SELECT tablename FROM pg_tables WHERE schemaname = ?", schemaName).Pluck("tablename", &tables).Error; err != nil {
 		t.Fatalf("could not get tables: %s", err)
 	}
 
@@ -100,9 +108,17 @@ func CleanAllTables(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 		return s == "goose_db_version"
 	})
 
-	tx := con.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE;", strings.Join(tables, ", ")))
-	err := tx.Error
-	if err != nil {
-		t.Fatalf("could not truncate tables: %s", err)
+	if len(tables) > 0 {
+		// Qualify table names with schema
+		qualifiedTables := make([]string, len(tables))
+		for i, table := range tables {
+			qualifiedTables[i] = fmt.Sprintf("%s.%s", schemaName, table)
+		}
+
+		tx := con.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE;", strings.Join(qualifiedTables, ", ")))
+		err := tx.Error
+		if err != nil {
+			t.Fatalf("could not truncate tables: %s", err)
+		}
 	}
 }
