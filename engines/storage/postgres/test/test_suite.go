@@ -13,40 +13,46 @@ import (
 )
 
 type PostgresSuite struct {
-	dbNames       []string
+	schemaNames   []string
 	DB            map[string]*gorm.DB
 	cleanupDocker func() error
 }
 
-func BeforeSuite(dbNames []string, exposeAsStandardPort bool) (config.PostgresPSEConfig, PostgresSuite) {
-	dbs := make(map[string]string)
-	for _, dbName := range dbNames {
-		dbs[dbName] = ""
+func BeforeSuite(schemaNames []string, exposeAsStandardPort bool) (config.PostgresPSEConfig, PostgresSuite) {
+	schemas := make(map[string]string)
+	for _, schemaName := range schemaNames {
+		schemas[schemaName] = ""
 	}
 
-	cleaner, conf, err := RunPostgresDocker(dbs, exposeAsStandardPort)
+	cleaner, conf, err := RunPostgresDocker(schemas, exposeAsStandardPort)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	dbMap := make(map[string]*gorm.DB)
-	for _, dbName := range dbNames {
-		conStr := fmt.Sprintf("host=%s port=%d user=%s dbname=%s password=%s sslmode=disable",
+	for _, schemaName := range schemaNames {
+		conStr := fmt.Sprintf("host=%s port=%d user=%s dbname=%s password=%s search_path=%s sslmode=disable",
 			conf.Hostname,
 			conf.Port,
 			conf.Username,
-			dbName,
+			"pki",
 			conf.Password,
+			schemaName,
 		)
-		dbMap[dbName], _ = gorm.Open(postgres.Open(conStr), &gorm.Config{
+		db, _ := gorm.Open(postgres.Open(conStr), &gorm.Config{
 			Logger: gormLogger.Discard,
 		})
+
+		// Set search_path for each connection
+		db.Exec(fmt.Sprintf("SET search_path TO %s", schemaName))
+
+		dbMap[schemaName] = db
 	}
 
 	return *conf, PostgresSuite{
 		cleanupDocker: cleaner,
 		DB:            dbMap,
-		dbNames:       dbNames,
+		schemaNames:   schemaNames,
 	}
 }
 
@@ -56,9 +62,9 @@ func (st *PostgresSuite) AfterSuite() {
 
 func (st *PostgresSuite) BeforeEach() error {
 	// clear db tables before each test
-	for _, dbName := range st.dbNames {
+	for _, schemaName := range st.schemaNames {
 		var tables []string
-		if err := st.DB[dbName].Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error; err != nil {
+		if err := st.DB[schemaName].Raw("SELECT tablename FROM pg_tables WHERE schemaname = ?", schemaName).Pluck("tablename", &tables).Error; err != nil {
 			panic(err)
 		}
 
@@ -67,10 +73,18 @@ func (st *PostgresSuite) BeforeEach() error {
 			return s == "goose_db_version"
 		})
 
-		tx := st.DB[dbName].Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE;", strings.Join(tables, ", ")))
-		err := tx.Error
-		if err != nil {
-			return err
+		if len(tables) > 0 {
+			// Qualify table names with schema
+			qualifiedTables := make([]string, len(tables))
+			for i, table := range tables {
+				qualifiedTables[i] = fmt.Sprintf("%s.%s", schemaName, table)
+			}
+
+			tx := st.DB[schemaName].Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE;", strings.Join(qualifiedTables, ", ")))
+			err := tx.Error
+			if err != nil {
+				return err
+			}
 		}
 	}
 
