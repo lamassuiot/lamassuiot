@@ -13,18 +13,18 @@ import (
 
 func TestMigrateDatabaseCADatabase(t *testing.T) {
 	// Setup test database
-	cfg, suite := BeforeSuite([]string{postgres.CA_DB_NAME}, false)
+	cfg, suite := BeforeSuite([]string{postgres.CA_SCHEMA}, false)
 	defer suite.AfterSuite()
 
 	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "Test")
 
 	// Run migration
-	err := postgres.MigrateDatabase(logger, cfg, postgres.CA_DB_NAME)
+	err := postgres.MigrateDatabase(logger, cfg, postgres.CA_SCHEMA)
 	require.NoError(t, err, "migration should succeed")
 
 	// Verify migration was applied by checking goose_db_version table
 	var count int64
-	suite.DB[postgres.CA_DB_NAME].Table("goose_db_version").Count(&count)
+	suite.DB[postgres.CA_SCHEMA].Table("goose_db_version").Count(&count)
 	assert.Greater(t, count, int64(0), "should have migration version records")
 }
 
@@ -33,12 +33,12 @@ func TestMigrateDatabaseAllDatabases(t *testing.T) {
 		name   string
 		dbName string
 	}{
-		{"CA database", postgres.CA_DB_NAME},
-		{"Device Manager database", postgres.DEVICE_DB_NAME},
-		{"DMS Manager database", postgres.DMS_DB_NAME},
-		{"Alerts database", postgres.ALERTS_DB_NAME},
-		{"VA database", postgres.VA_DB_NAME},
-		{"KMS database", postgres.KMS_DB_NAME},
+		{"CA database", postgres.CA_SCHEMA},
+		{"Device Manager database", postgres.DEVICE_SCHEMA},
+		{"DMS Manager database", postgres.DMS_SCHEMA},
+		{"Alerts database", postgres.ALERTS_SCHEMA},
+		{"VA database", postgres.VA_SCHEMA},
+		{"KMS database", postgres.KMS_SCHEMA},
 	}
 
 	for _, tt := range tests {
@@ -63,26 +63,26 @@ func TestMigrateDatabaseAllDatabases(t *testing.T) {
 
 func TestMigrateDatabaseIdempotency(t *testing.T) {
 	// Setup test database
-	cfg, suite := BeforeSuite([]string{postgres.CA_DB_NAME}, false)
+	cfg, suite := BeforeSuite([]string{postgres.CA_SCHEMA}, false)
 	defer suite.AfterSuite()
 
 	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "Test")
 
 	// Run migration first time
-	err := postgres.MigrateDatabase(logger, cfg, postgres.CA_DB_NAME)
+	err := postgres.MigrateDatabase(logger, cfg, postgres.CA_SCHEMA)
 	require.NoError(t, err)
 
 	// Get version after first migration
 	var firstVersionCount int64
-	suite.DB[postgres.CA_DB_NAME].Table("goose_db_version").Count(&firstVersionCount)
+	suite.DB[postgres.CA_SCHEMA].Table("goose_db_version").Count(&firstVersionCount)
 
 	// Run migration second time (should be idempotent)
-	err = postgres.MigrateDatabase(logger, cfg, postgres.CA_DB_NAME)
+	err = postgres.MigrateDatabase(logger, cfg, postgres.CA_SCHEMA)
 	require.NoError(t, err)
 
 	// Get version after second migration
 	var secondVersionCount int64
-	suite.DB[postgres.CA_DB_NAME].Table("goose_db_version").Count(&secondVersionCount)
+	suite.DB[postgres.CA_SCHEMA].Table("goose_db_version").Count(&secondVersionCount)
 
 	// Should have same number of versions
 	assert.Equal(t, firstVersionCount, secondVersionCount, "migrations should be idempotent")
@@ -99,7 +99,7 @@ func TestMigrateDatabaseInvalidConnection(t *testing.T) {
 		Password: "invalid",
 	}
 
-	err := postgres.MigrateDatabase(logger, cfg, postgres.CA_DB_NAME)
+	err := postgres.MigrateDatabase(logger, cfg, postgres.CA_SCHEMA)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not create postgres connection")
 }
@@ -107,12 +107,12 @@ func TestMigrateDatabaseInvalidConnection(t *testing.T) {
 func TestMigrateAllDatabases(t *testing.T) {
 	// Setup all test databases
 	allDatabases := []string{
-		postgres.CA_DB_NAME,
-		postgres.DEVICE_DB_NAME,
-		postgres.DMS_DB_NAME,
-		postgres.ALERTS_DB_NAME,
-		postgres.VA_DB_NAME,
-		postgres.KMS_DB_NAME,
+		postgres.CA_SCHEMA,
+		postgres.DEVICE_SCHEMA,
+		postgres.DMS_SCHEMA,
+		postgres.ALERTS_SCHEMA,
+		postgres.VA_SCHEMA,
+		postgres.KMS_SCHEMA,
 	}
 
 	cfg, suite := BeforeSuite(allDatabases, false)
@@ -135,12 +135,12 @@ func TestMigrateAllDatabases(t *testing.T) {
 func TestMigrateAllDatabasesIdempotency(t *testing.T) {
 	// Setup all test databases
 	allDatabases := []string{
-		postgres.CA_DB_NAME,
-		postgres.DEVICE_DB_NAME,
-		postgres.DMS_DB_NAME,
-		postgres.ALERTS_DB_NAME,
-		postgres.VA_DB_NAME,
-		postgres.KMS_DB_NAME,
+		postgres.CA_SCHEMA,
+		postgres.DEVICE_SCHEMA,
+		postgres.DMS_SCHEMA,
+		postgres.ALERTS_SCHEMA,
+		postgres.VA_SCHEMA,
+		postgres.KMS_SCHEMA,
 	}
 
 	cfg, suite := BeforeSuite(allDatabases, false)
@@ -182,8 +182,8 @@ func TestMigrateAllDatabasesIdempotency(t *testing.T) {
 func TestMigrateAllDatabasesPartialFailure(t *testing.T) {
 	// Setup only some databases (to simulate partial environment)
 	availableDatabases := []string{
-		postgres.CA_DB_NAME,
-		postgres.DEVICE_DB_NAME,
+		postgres.CA_SCHEMA,
+		postgres.DEVICE_SCHEMA,
 	}
 
 	cfg, suite := BeforeSuite(availableDatabases, false)
@@ -202,8 +202,8 @@ func TestGetDatabaseVersion(t *testing.T) {
 		name   string
 		dbName string
 	}{
-		{"CA database", postgres.CA_DB_NAME},
-		{"Device Manager database", postgres.DEVICE_DB_NAME},
+		{"CA database", postgres.CA_SCHEMA},
+		{"Device Manager database", postgres.DEVICE_SCHEMA},
 	}
 
 	for _, tt := range tests {
@@ -244,7 +244,7 @@ func TestGetDatabaseVersionInvalidConnection(t *testing.T) {
 		Password: "invalid",
 	}
 
-	current, target, err := postgres.GetDatabaseVersion(logger, cfg, postgres.CA_DB_NAME)
+	current, target, err := postgres.GetDatabaseVersion(logger, cfg, postgres.CA_SCHEMA)
 	require.Error(t, err)
 	assert.Equal(t, int64(0), current)
 	assert.Equal(t, int64(0), target)
@@ -253,13 +253,13 @@ func TestGetDatabaseVersionInvalidConnection(t *testing.T) {
 
 func TestMigrationProgress(t *testing.T) {
 	// Setup test database
-	cfg, suite := BeforeSuite([]string{postgres.CA_DB_NAME}, false)
+	cfg, suite := BeforeSuite([]string{postgres.CA_SCHEMA}, false)
 	defer suite.AfterSuite()
 
 	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "Test")
 
 	// Get initial state
-	currentBefore, targetBefore, err := postgres.GetDatabaseVersion(logger, cfg, postgres.CA_DB_NAME)
+	currentBefore, targetBefore, err := postgres.GetDatabaseVersion(logger, cfg, postgres.CA_SCHEMA)
 	require.NoError(t, err)
 
 	// Should start at version 0
@@ -267,11 +267,11 @@ func TestMigrationProgress(t *testing.T) {
 	assert.Greater(t, targetBefore, int64(0), "should have pending migrations")
 
 	// Apply migrations
-	err = postgres.MigrateDatabase(logger, cfg, postgres.CA_DB_NAME)
+	err = postgres.MigrateDatabase(logger, cfg, postgres.CA_SCHEMA)
 	require.NoError(t, err)
 
 	// Get final state
-	currentAfter, targetAfter, err := postgres.GetDatabaseVersion(logger, cfg, postgres.CA_DB_NAME)
+	currentAfter, targetAfter, err := postgres.GetDatabaseVersion(logger, cfg, postgres.CA_SCHEMA)
 	require.NoError(t, err)
 
 	// Should be at target version
@@ -287,7 +287,7 @@ func TestMigrationProgress(t *testing.T) {
 	}
 
 	var versions []gooseVersion
-	err = suite.DB[postgres.CA_DB_NAME].Table("goose_db_version").Order("version_id").Find(&versions).Error
+	err = suite.DB[postgres.CA_SCHEMA].Table("goose_db_version").Order("version_id").Find(&versions).Error
 	require.NoError(t, err)
 
 	// All migrations should be applied
@@ -310,7 +310,7 @@ func TestMigrationTablesCreated(t *testing.T) {
 	}{
 		{
 			name:   "CA database creates correct tables",
-			dbName: postgres.CA_DB_NAME,
+			dbName: postgres.CA_SCHEMA,
 			expectedTables: []string{
 				"ca_certificates",
 				"certificates",
@@ -320,7 +320,7 @@ func TestMigrationTablesCreated(t *testing.T) {
 		},
 		{
 			name:   "Device Manager database creates correct tables",
-			dbName: postgres.DEVICE_DB_NAME,
+			dbName: postgres.DEVICE_SCHEMA,
 			expectedTables: []string{
 				"devices",
 				"goose_db_version",
@@ -328,7 +328,7 @@ func TestMigrationTablesCreated(t *testing.T) {
 		},
 		{
 			name:   "DMS Manager database creates correct tables",
-			dbName: postgres.DMS_DB_NAME,
+			dbName: postgres.DMS_SCHEMA,
 			expectedTables: []string{
 				"dms",
 				"goose_db_version",
@@ -336,7 +336,7 @@ func TestMigrationTablesCreated(t *testing.T) {
 		},
 		{
 			name:   "Alerts database creates correct tables",
-			dbName: postgres.ALERTS_DB_NAME,
+			dbName: postgres.ALERTS_SCHEMA,
 			expectedTables: []string{
 				"subscriptions",
 				"events",
@@ -345,7 +345,7 @@ func TestMigrationTablesCreated(t *testing.T) {
 		},
 		{
 			name:   "KMS database creates correct tables",
-			dbName: postgres.KMS_DB_NAME,
+			dbName: postgres.KMS_SCHEMA,
 			expectedTables: []string{
 				"kms_keys",
 				"goose_db_version",
