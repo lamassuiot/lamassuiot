@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -26,11 +27,11 @@ func init() {
 		log.Println("Usage: goose-lamassu DBSTRING COMMAND [ARGS...]")
 		log.Println()
 		log.Println("Examples:")
-		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" up`)
-		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=alerts port=5432 sslmode=disable" status`)
-		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=devicemanager port=5432 sslmode=disable" up-to 5`)
+		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=pki search_path=ca port=5432 sslmode=disable" up`)
+		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=pki search_path=alerts port=5432 sslmode=disable" status`)
+		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=pki search_path=devicemanager port=5432 sslmode=disable" up-to 5`)
 		log.Println()
-		log.Println("Valid databases: ca, devicemanager, dmsmanager, alerts, va, kms")
+		log.Println("Valid schemas: ca, devicemanager, dmsmanager, alerts, va, kms")
 		log.Println()
 		log.Println("Commands:")
 		log.Println("  up                   Migrate the DB to the most recent version available")
@@ -57,19 +58,19 @@ func main() {
 	}
 
 	// Parse: goose-lamassu DBSTRING COMMAND [ARGS...]
-	// Example: goose-lamassu "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" up
+	// Example: goose-lamassu "host=localhost user=postgres password=test dbname=pki search_path=ca port=5432 sslmode=disable" up
 	dbstring, command := args[0], args[1]
 
-	// Extract database name from connection string
-	dbName := extractDBName(dbstring)
-	if dbName == "" {
-		log.Fatalf("goose-lamassu: could not extract dbname from connection string")
+	// Extract schema name from connection string
+	schemaName := extractSearchPath(dbstring)
+	if schemaName == "" {
+		log.Fatalf("goose-lamassu: could not extract search_path from connection string. Required format: search_path=<schema>")
 	}
 
-	// Validate database name
-	validDatabases := []string{"ca", "devicemanager", "dmsmanager", "alerts", "va", "kms"}
-	if !contains(validDatabases, dbName) {
-		log.Fatalf("goose-lamassu: invalid database: %s. Must be one of: %s", dbName, strings.Join(validDatabases, ", "))
+	// Validate schema name
+	validSchemas := []string{"ca", "devicemanager", "dmsmanager", "alerts", "va", "kms"}
+	if !contains(validSchemas, schemaName) {
+		log.Fatalf("goose-lamassu: invalid schema: %s. Must be one of: %s", schemaName, strings.Join(validSchemas, ", "))
 	}
 
 	// Open database connection
@@ -84,13 +85,23 @@ func main() {
 		}
 	}()
 
-	// Reset global migrations and register migrations for this database
-	goose.ResetGlobalMigrations()
-	migrations.RegisterGoMigrations(dbName)
+	// Ensure schema exists
+	if _, err := db.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaName)); err != nil {
+		log.Fatalf("goose-lamassu: failed to create schema: %v", err)
+	}
 
-	// Get migrations filesystem for this database
+	// Set search_path for this connection
+	if _, err := db.Exec(fmt.Sprintf("SET search_path TO %s", schemaName)); err != nil {
+		log.Fatalf("goose-lamassu: failed to set search_path: %v", err)
+	}
+
+	// Reset global migrations and register migrations for this schema
+	goose.ResetGlobalMigrations()
+	migrations.RegisterGoMigrations(schemaName)
+
+	// Get migrations filesystem for this schema
 	embeddedFS := postgres.GetEmbeddedMigrations()
-	migrationsDir := filepath.Join("migrations", dbName)
+	migrationsDir := filepath.Join("migrations", schemaName)
 	migrationsFS, err := fs.Sub(embeddedFS, migrationsDir)
 	if err != nil {
 		log.Fatalf("goose-lamassu: failed to get migrations subdirectory: %v", err)
@@ -112,13 +123,13 @@ func main() {
 	}
 }
 
-// extractDBName extracts the dbname from a PostgreSQL connection string
-func extractDBName(connStr string) string {
-	// Parse connection string for dbname parameter
+// extractSearchPath extracts the search_path from a PostgreSQL connection string
+func extractSearchPath(connStr string) string {
+	// Parse connection string for search_path parameter
 	// Format: "key=value key2=value2 ..."
-	parts := strings.FieldsSeq(connStr)
-	for part := range parts {
-		if after, ok := strings.CutPrefix(part, "dbname="); ok {
+	parts := strings.Fields(connStr)
+	for _, part := range parts {
+		if after, ok := strings.CutPrefix(part, "search_path="); ok {
 			return after
 		}
 	}
