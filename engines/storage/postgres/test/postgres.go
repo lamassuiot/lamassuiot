@@ -18,7 +18,7 @@ const (
 	passwd = "test"
 )
 
-func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func() error, *config.PostgresPSEConfig, error) {
+func RunPostgresDocker(schemas map[string]string, exposeAsStandardPort bool) (func() error, *config.PostgresPSEConfig, error) {
 	pwd, err := os.Getwd()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get working directory: %s", err)
@@ -38,16 +38,20 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 	idx := 1
 	mounts := []docker.HostMount{}
 
-	sqlStatements := ""
-	for dbName, dbInitScript := range dbs {
-		sqlStatements = sqlStatements + fmt.Sprintf("CREATE DATABASE %s;\n", dbName)
-		if dbInitScript != "" {
+	// Create single pki database and schemas
+	sqlStatements := "CREATE DATABASE pki;\n"
+	sqlStatements += "\\c pki\n" // Connect to pki database
+
+	for schemaName, schemaInitScript := range schemas {
+		sqlStatements = sqlStatements + fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;\n", schemaName)
+		if schemaInitScript != "" {
 			initScript := "#!/bin/bash"
 			initScript = initScript + "\nset -e"
-			initScript = initScript + fmt.Sprintf("\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\" --dbname %s <<-EOSQL", dbName)
-			initScript = initScript + fmt.Sprintf("\n%s", dbInitScript)
+			initScript = initScript + fmt.Sprintf("\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\" --dbname pki <<-EOSQL")
+			initScript = initScript + fmt.Sprintf("\nSET search_path TO %s;", schemaName)
+			initScript = initScript + fmt.Sprintf("\n%s", schemaInitScript)
 			initScript = initScript + "\nEOSQL"
-			fname := fmt.Sprintf("%d_%s.sh", idx, dbName)
+			fname := fmt.Sprintf("%d_%s.sh", idx, schemaName)
 			fullpath, err := createTmpFile(fname, initScript)
 			if err != nil {
 				return nil, nil, err
@@ -104,7 +108,7 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 
 	conStr := fmt.Sprintf("host=localhost port=%s user=postgres dbname=%s password=%s sslmode=disable",
 		container.GetPort("5432/tcp"), // get port of localhost
-		"postgres",
+		"pki",
 		passwd,
 	)
 
