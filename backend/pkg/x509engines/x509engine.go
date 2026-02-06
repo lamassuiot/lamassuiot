@@ -313,12 +313,7 @@ func (engine X509Engine) validateCryptoEnforcement(
 //   - now: timestamp for NotBefore
 //
 // Returns detailed validation errors for misconfigured profiles.
-func (engine X509Engine) applyIssuanceProfileToTemplate(
-	ctx context.Context,
-	template *x509.Certificate,
-	profile models.IssuanceProfile,
-	now time.Time,
-) error {
+func (engine X509Engine) applyIssuanceProfileToTemplate(ctx context.Context, template *x509.Certificate, profile models.IssuanceProfile, now time.Time) error {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	// Apply validity period
@@ -334,9 +329,15 @@ func (engine X509Engine) applyIssuanceProfileToTemplate(
 		// Profile overrides subject but preserves CommonName from template
 		originalCN := template.Subject.CommonName
 		overriddenSubject := profile.Subject
-		overriddenSubject.CommonName = originalCN
+
+		if overriddenSubject.CommonName == "" {
+			overriddenSubject.CommonName = originalCN
+			lFunc.Debugf("profile subject does not specify CN, preserving original CN=%s", originalCN)
+		} else {
+			lFunc.Debugf("profile subject specifies CN=%s, overriding original CN=%s", overriddenSubject.CommonName, originalCN)
+		}
+
 		template.Subject = chelpers.SubjectToPkixName(overriddenSubject)
-		lFunc.Debugf("subject overridden by profile (preserving CN=%s)", originalCN)
 	}
 
 	// Apply key usage - profile overrides if HonorKeyUsage is false
