@@ -36,6 +36,7 @@ func testGetEngineConfig(t *testing.T, engine cryptoengines.CryptoEngine) {
 			Sizes: []int{
 				224,
 				256,
+				384,
 				521,
 			},
 		},
