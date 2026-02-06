@@ -930,3 +930,107 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 		}, nil
 	}
 }
+
+func (svc *KMSServiceBackend) RegisterExistingKey(ctx context.Context, input services.RegisterExistingKeyInput) (*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := kmsValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("RegisterExistingKey struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Use default engine
+	engine, ok := svc.cryptoEngines[svc.defaultCryptoEngineID]
+	engineID := svc.defaultCryptoEngineID
+
+	if !ok {
+		lFunc.Errorf("engine with id %s not found", engineID)
+		return nil, fmt.Errorf("crypto engine not found")
+	}
+
+	// Check if key already registered in KMS
+	exists, _, err := svc.kmsStorage.SelectExistsByKeyID(ctx, input.KeyID)
+	if err != nil {
+		lFunc.Errorf("failed to check if key exists in KMS: %s", err)
+		return nil, err
+	}
+
+	if exists {
+		lFunc.Warnf("key %s already registered in KMS", input.KeyID)
+		return nil, fmt.Errorf("key already registered")
+	}
+
+	engineInstance := *engine
+
+	// Verify key exists in crypto engine
+	signer, err := engineInstance.GetPrivateKeyByID(input.KeyID)
+	if err != nil {
+		lFunc.Errorf("key %s not found in engine %s: %s", input.KeyID, engineID, err)
+		return nil, fmt.Errorf("key not found in crypto engine: %w", err)
+	}
+
+	// Extract key metadata from existing key
+	publicKey := signer.Public()
+
+	var algorithm string
+	var size int
+
+	switch pub := publicKey.(type) {
+	case *rsa.PublicKey:
+		algorithm = "RSA"
+		size = pub.Size() * 8
+	case *ecdsa.PublicKey:
+		algorithm = "ECDSA"
+		size = pub.Curve.Params().BitSize
+	default:
+		lFunc.Errorf("unsupported key type for key %s", input.KeyID)
+		return nil, fmt.Errorf("unsupported key type")
+	}
+
+	// Encode public key to PEM
+	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		lFunc.Errorf("failed to marshal public key: %s", err)
+		return nil, fmt.Errorf("failed to marshal public key: %w", err)
+	}
+
+	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
+	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
+
+	// Initialize tags and metadata with defaults if not provided
+	tags := input.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	metadata := input.Metadata
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+
+	// Create KMS entry
+	kmsKey := models.Key{
+		PKCS11URI:     buildPKCS11ID(engineID, input.KeyID, "private"),
+		KeyID:         input.KeyID,
+		EngineID:      engineID,
+		Name:          input.Name,
+		Aliases:       []string{},
+		HasPrivateKey: true,
+		Algorithm:     algorithm,
+		Size:          size,
+		PublicKey:     base64PEM,
+		CreationTS:    time.Now(),
+		Tags:          tags,
+		Metadata:      metadata,
+	}
+
+	registeredKey, err := svc.kmsStorage.Insert(ctx, &kmsKey)
+	if err != nil {
+		lFunc.Errorf("failed to register key in KMS database: %s", err)
+		return nil, fmt.Errorf("failed to register key: %w", err)
+	}
+
+	lFunc.Infof("successfully registered existing key %s from engine %s", input.KeyID, engineID)
+	return registeredKey, nil
+}

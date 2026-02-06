@@ -20,6 +20,7 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 	rv1.GET("/keys/:id", routes.GetKeyByID)
 	rv1.POST("/keys", routes.CreateKey)
 	rv1.POST("/keys/import", routes.ImportKey)
+	rv1.POST("/keys/register", routes.RegisterExistingKey)
 	rv1.PUT("/keys/:id/alias", routes.UpdateKeyAliases)
 	rv1.PUT("/keys/:id/name", routes.UpdateKeyName)
 	rv1.PUT("/keys/:id/tags", routes.UpdateKeyTags)

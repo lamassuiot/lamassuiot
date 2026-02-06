@@ -3,9 +3,11 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	bhelpers "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -50,6 +52,8 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
+
+	lKMSKeys := helpers.SetupLogger(conf.Logs.Level, "CA", "KMS Keys creation")
 
 	caStorage, certStorage, issuerProfilesStorage, err := createCAStorageInstance(lStorage, conf.Storage)
 	if err != nil {
@@ -109,6 +113,14 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 		scheduler.Start()
 	}
 
+	if conf.RegisterKeysInKMS {
+		log.Infof("Register Keys in KMS is enabled")
+		err := registerCAKeysInKMS(lKMSKeys, caStorage, kmsSDK)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not register CA keys in KMS: %s", err)
+		}
+	}
+
 	return &svc, scheduler, nil
 }
 
@@ -134,4 +146,74 @@ func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEng
 	}
 
 	return caStorage, certStorage, issuanceProfileStorage, nil
+}
+
+func registerCAKeysInKMS(logger *log.Entry, caStorage storage.CACertificatesRepo, kmsSDK services.KMSService) error {
+	ctx := context.Background()
+
+	err := waitForKMSService(ctx, logger, kmsSDK)
+	if err != nil {
+		return fmt.Errorf("could not connect to KMS service: %s", err)
+	}
+
+	_, err = caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: true,
+		ApplyFunc: func(ca models.CACertificate) {
+			keyID := ca.Certificate.SubjectKeyID
+			name := fmt.Sprintf("Key For CA CN=%s", ca.Certificate.Subject.CommonName)
+
+			// Check if key already exists in KMS
+			_, err := kmsSDK.GetKey(ctx, services.GetKeyInput{
+				Identifier: keyID,
+			})
+			if err == nil {
+				logger.Infof("Key with ID %s already exists in KMS. Skipping registration.", keyID)
+				return
+			}
+
+			_, err = kmsSDK.RegisterExistingKey(ctx, services.RegisterExistingKeyInput{
+				KeyID: keyID,
+				Name:  name,
+			})
+
+			if err != nil {
+				logger.Errorf("failed to register key %s for CA %s: %s", keyID, name, err)
+				return
+			}
+			logger.Infof("successfully registered key %s for CA %s in KMS", keyID, name)
+
+			_, err = kmsSDK.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+				ID: keyID,
+				Patches: helpers.NewPatchBuilder().Add(helpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+					ResourceType: "certificate",
+					ResourceID:   bhelpers.SerialNumberToHexString(ca.Certificate.Certificate.SerialNumber),
+				}).Build(),
+			})
+			if err != nil {
+				logger.Errorf("could not bind CA %s to key %s in KMS: %s", ca.Certificate.Subject.CommonName, keyID, err)
+				return
+			}
+			logger.Infof("successfully binded CA %s to key %s in KMS", ca.Certificate.Subject.CommonName, keyID)
+		},
+	})
+	return nil
+}
+
+func waitForKMSService(ctx context.Context, logger *log.Entry, kmsSDK services.KMSService) error {
+	var err error
+	for attempt := 1; attempt <= 10; attempt++ {
+		logger.Infof("attempting to connect to KMS service (attempt %d/%d)", attempt, 10)
+
+		_, err = kmsSDK.GetCryptoEngineProvider(ctx)
+		if err != nil {
+			logger.Warnf("KMS service is not available yet. Retrying in 10 seconds...")
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		logger.Info("successfully connected to KMS service")
+		err = nil
+		break
+	}
+	return err
 }
