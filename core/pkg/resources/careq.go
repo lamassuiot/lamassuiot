@@ -180,6 +180,13 @@ type ImportKeyBody struct {
 	Metadata   map[string]any `json:"metadata"`
 }
 
+type RegisterExistingKeyBody struct {
+	KeyID    string         `json:"key_id"`
+	Name     string         `json:"name"`
+	Tags     []string       `json:"tags"`
+	Metadata map[string]any `json:"metadata"`
+}
+
 type CreateUpdateIssuanceProfileBody struct {
 	Name                   string                                     `json:"name"`
 	Description            string                                     `json:"description"`

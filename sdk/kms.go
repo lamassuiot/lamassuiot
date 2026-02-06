@@ -178,3 +178,17 @@ func (cli *httpKMSClient) VerifySignature(ctx context.Context, input services.Ve
 
 	return response, nil
 }
+
+func (cli *httpKMSClient) RegisterExistingKey(ctx context.Context, input services.RegisterExistingKeyInput) (*models.Key, error) {
+	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/register", resources.RegisterExistingKeyBody{
+		KeyID:    input.KeyID,
+		Name:     input.Name,
+		Tags:     input.Tags,
+		Metadata: input.Metadata,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
