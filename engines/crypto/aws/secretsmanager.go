@@ -65,6 +65,7 @@ func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadat
 					Sizes: []int{
 						224,
 						256,
+						384,
 						521,
 					},
 				},
