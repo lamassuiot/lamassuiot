@@ -2,6 +2,7 @@ package kms
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
@@ -76,7 +77,7 @@ func setupStatsTestData(t *testing.T, ctx context.Context, kmsTest *tests.KMSTes
 		if defaultEngine == "" {
 			defaultEngine = engine.ID
 		}
-		if engine.ID == "vault" {
+		if strings.HasPrefix(engine.ID, "vault") {
 			vaultEngine = engine.ID
 		}
 	}

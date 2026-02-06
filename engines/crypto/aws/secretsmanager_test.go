@@ -48,6 +48,7 @@ func TestNewAWSSecretManagerEngine(t *testing.T) {
 				Sizes: []int{
 					224,
 					256,
+					384,
 					521,
 				},
 			},

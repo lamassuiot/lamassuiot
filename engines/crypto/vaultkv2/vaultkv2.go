@@ -130,6 +130,7 @@ func (engine *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
 				Sizes: []int{
 					224,
 					256,
+					384,
 					521,
 				},
 			},
