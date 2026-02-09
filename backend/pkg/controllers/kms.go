@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
@@ -366,11 +367,17 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		return
 	}
 
-	signature, err := r.svc.SignMessage(ctx, services.SignMessageInput{
+	serviceCtx := ctx.Request.Context()
+	if ctx.Request.Header.Get("Accept") == "application/pkcs7-mime" || ctx.Request.Header.Get("Accept") == "application/pkcs7-signature" {
+		serviceCtx = context.WithValue(serviceCtx, "output_format", "pkcs7")
+	}
+
+	signature, err := r.svc.SignMessage(serviceCtx, services.SignMessageInput{
 		Identifier:  params.ID,
 		Algorithm:   requestBody.Algorithm,
 		Message:     requestBody.Message,
 		MessageType: requestBody.MessageType,
+		Certificate: requestBody.Certificate,
 	})
 	if err != nil {
 		switch err {
@@ -381,6 +388,15 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
+		return
+	}
+	if ctx.Request.Header.Get("Accept") == "application/pkcs7-mime" || ctx.Request.Header.Get("Accept") == "application/pkcs7-signature" {
+		ctx.Writer.Header().Set("Content-Type", "application/pkcs7-signature")
+		ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
+
+		// Return the PKCS7/CMS signature as base64-encoded DER
+		encoded := base64.StdEncoding.EncodeToString(signature.Signature)
+		ctx.Writer.Write([]byte(encoded))
 		return
 	}
 	ctx.JSON(200, signature)

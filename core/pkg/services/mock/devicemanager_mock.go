@@ -56,3 +56,13 @@ func (dm *MockDeviceManagerService) DeleteDevice(ctx context.Context, input serv
 	args := dm.Called(ctx, input)
 	return args.Error(0)
 }
+
+func (dm *MockDeviceManagerService) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (*models.Device, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.Device), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) UpdateWFXStatus(ctx context.Context, input services.UpdateWFXStatusInput) (*models.Device, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.Device), args.Error(1)
+}

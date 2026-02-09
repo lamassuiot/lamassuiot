@@ -1,10 +1,12 @@
 package services
 
+
+
 import (
-	"context"
 	"cloudflare/circl/sign/mldsa/mldsa44"
 	"cloudflare/circl/sign/mldsa/mldsa65"
 	"cloudflare/circl/sign/mldsa/mldsa87"
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -24,6 +26,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -784,32 +787,68 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 
 	return nil
 }
-
 func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	// Setup common KMS operation components
+	// 1. Setup common KMS operation components
 	setup, err := svc.initKMSKeyOperation(ctx, input.Identifier, input.Algorithm, "SignMessage", input)
 	if err != nil {
 		return nil, err
 	}
 
+	// 2. Check for PKCS7 Output Format (Your Addition)
+	// We check this early because PKCS7 often handles its own hashing/envelope logic
+	outputFormat := ""
+	if format, ok := ctx.Value("output_format").(string); ok {
+		outputFormat = format
+	}
+
+	if outputFormat == "pkcs7" {
+		if input.Certificate == "" {
+			lFunc.Error("certificate is required for PKCS7 signature format")
+			return nil, errors.New("certificate is required for PKCS7 signature format")
+		}
+
+		signerCert, err := helpers.ParseCertificatePEM(input.Certificate)
+		if err != nil {
+			lFunc.Errorf("failed to parse provided certificate: %s", err)
+			return nil, fmt.Errorf("failed to parse certificate: %w", err)
+		}
+
+		lFunc.Debugf("using provided certificate for PKCS7 signature: %s", signerCert.Subject.CommonName)
+
+		pkcs7Signature, err := helpers.CreateDetachedPKCS7Signature(input.Message, setup.Signer, signerCert)
+		if err != nil {
+			lFunc.Errorf("failed to create PKCS#7 signature: %s", err)
+			return nil, err
+		}
+
+		return &models.MessageSignature{
+			Signature: pkcs7Signature,
+		}, nil
+	}
+
+	// 3. Handle Digest Calculation (Merged Logic)
+	// We must keep the "PURE" check from the current version
 	var digest []byte
 	if strings.Contains(input.Algorithm, "PURE") {
 		digest = input.Message
 	} else {
 		digest, err = calculateDigest(setup.Hash, input.MessageType, input.Message)
 	}
+
 	if err != nil {
 		lFunc.Errorf("calculate digest error: %s", err)
 		return nil, err
 	}
 
+	if digest == nil {
+		return nil, errors.New("digest is nil")
+	}
+
+	// 4. Perform Raw Signing (Standard Path)
 	var signature []byte
 	if setup.IsRSA {
-		if digest == nil {
-			return nil, errors.New("digest is nil")
-		}
 		if setup.IsPSS {
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: setup.Hash}
 			signature, err = setup.Signer.Sign(rand.Reader, digest, opts)
@@ -825,10 +864,6 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 			}
 		}
 	} else {
-		if digest == nil {
-			return nil, errors.New("digest is nil")
-		}
-
 		signature, err = setup.Signer.Sign(rand.Reader, digest, setup.Hash)
 		if err != nil {
 			lFunc.Errorf("ECDSA Sign error: %s", err)

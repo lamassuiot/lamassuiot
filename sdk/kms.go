@@ -145,6 +145,7 @@ func (cli *httpKMSClient) SignMessage(ctx context.Context, input services.SignMe
 		Algorithm:   input.Algorithm,
 		Message:     input.Message,
 		MessageType: input.MessageType,
+		Certificate: input.Certificate,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 module github.com/lamassuiot/lamassuiot/backend/v3
 
 go 1.22.0
+replace "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers" => ../helpers
 
 replace github.com/lamassuiot/lamassuiot/core/v3 => ../core
 

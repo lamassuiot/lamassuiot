@@ -168,6 +168,9 @@ type SignMessageBody struct {
 	Algorithm   string                 `json:"algorithm"`
 	Message     []byte                 `json:"message"`
 	MessageType models.SignMessageType `json:"message_type"`
+	// Certificate is a PEM or base64-encoded certificate required when requesting PKCS7/CMS format.
+	// Must be provided when using Accept: application/pkcs7-signature header and is optional for that reason.
+	Certificate string `json:"certificate,omitempty"`
 }
 
 type VerifySignBody struct {

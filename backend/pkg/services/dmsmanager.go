@@ -1157,7 +1157,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 			},
 			Events: map[time.Time]models.DeviceEvent{
 				time.Now(): {
-					EvenType: models.DeviceEventTypeProvisioned,
+					EventType: models.DeviceEventTypeProvisioned,
 				},
 			},
 		}
@@ -1167,7 +1167,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
 
 		idSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          input.BindMode,
+			EventType:          input.BindMode,
 			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
 		}
 	}

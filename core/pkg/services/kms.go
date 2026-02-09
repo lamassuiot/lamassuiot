@@ -51,6 +51,7 @@ type SignMessageInput struct {
 	Algorithm   string                 `validate:"required"`
 	Message     []byte                 `validate:"required"`
 	MessageType models.SignMessageType `validate:"required"`
+	Certificate string				 
 }
 
 type VerifySignInput struct {

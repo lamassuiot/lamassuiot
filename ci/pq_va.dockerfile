@@ -13,6 +13,7 @@ RUN apt-get update -y && apt-get install -y golang-go
 WORKDIR /
 RUN git clone https://github.com/lamassuiot/pqc-cloudflare-go.git
 
+
 WORKDIR /pqc-cloudflare-go
 RUN cd src && ./make.bash
 ENV PATH "/pqc-cloudflare-go/bin:$PATH"

@@ -61,7 +61,7 @@ const (
 )
 
 type DeviceEvent struct {
-	EvenType          DeviceEventType `json:"type"`
+	EventType          DeviceEventType `json:"type"`
 	EventDescriptions string          `json:"description"`
 }
 

@@ -607,7 +607,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 	}
 
 	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
-		EvenType:          models.DeviceEventTypeShadowUpdated,
+		EventType:          models.DeviceEventTypeShadowUpdated,
 		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
 	}
 

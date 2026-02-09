@@ -49,6 +49,7 @@ const (
 	EventImportCertificateKey         EventType = "certificate.import"
 	EventUpdateCertificateStatusKey   EventType = "certificate.status.update"
 	EventUpdateCertificateMetadataKey EventType = "certificate.metadata.update"
+	
 	EventDeleteCertificateKey         EventType = "certificate.delete"
 
 	EventCreateDMSKey          EventType = "dms.create"
@@ -63,6 +64,8 @@ const (
 	EventUpdateDeviceIDSlotKey   EventType = "device.identity.update"
 	EventUpdateDeviceStatusKey   EventType = "device.status.update"
 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
+	EventUpdateDeviceEventsKey   EventType = "device.events.update"
+	EventUpdateWFXStatus         EventType = "device.wfx.update"
 	EventDeleteDeviceKey         EventType = "device.delete"
 
 	EventUpdateVARole EventType = "va.role.update"
