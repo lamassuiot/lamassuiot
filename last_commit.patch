@@ -1,0 +1,1064 @@
+From b4e419d3f1a56b46578a4dee5b65ba8c24429a62 Mon Sep 17 00:00:00 2001
+From: Diez-Andino Alvaro <adiezandino@ikerlan.es>
+Date: Tue, 20 Jan 2026 11:46:39 +0100
+Subject: [PATCH]  KMS modification: signature with cms cert structure
+
+---
+ backend/go.mod                                |   2 +-
+ backend/pkg/controllers/kms.go                |  25 +++-
+ backend/pkg/helpers/pkcs7.go                  |  99 ++++++++++++++++
+ backend/pkg/middlewares/audit/devices.go      |   7 ++
+ backend/pkg/middlewares/eventpub/devices.go   |  76 +++++++-----
+ backend/pkg/services/devicemanager.go         |  20 ++--
+ backend/pkg/services/kms.go                   |  37 ++++++
+ connectors/awsiot/go.mod                      |   2 +-
+ core/go.mod                                   |   2 +-
+ core/pkg/models/events.go                     |   1 +
+ core/pkg/resources/careq.go                   |   3 +
+ core/pkg/resources/devreq.go                  |   4 +
+ core/pkg/services/devicemanager.go            |   6 +-
+ core/pkg/services/eventhandling/handler.go    |  35 +++++-
+ core/pkg/services/kms.go                      |   3 +
+ core/pkg/services/updating device.code-search |   9 ++
+ engines/crypto/aws/go.mod                     |   2 +-
+ engines/crypto/filesystem/go.mod              |   2 +-
+ engines/crypto/pkcs11/go.mod                  |   2 +-
+ engines/crypto/software/go.mod                |   2 +-
+ engines/crypto/vaultkv2/go.mod                |   2 +-
+ engines/eventbus/amqp/go.mod                  |   2 +-
+ engines/eventbus/aws/go.mod                   |   2 +-
+ engines/fs-storage/localfs/go.mod             |   2 +-
+ engines/fs-storage/s3/go.mod                  |   2 +-
+ engines/storage/postgres/go.mod               |   2 +-
+ go.work                                       |   2 +-
+ monolithic/cmd/development/main.go            |  42 ++++++-
+ monolithic/go.mod                             |   2 +-
+ scripts/sign-swupdate.sh                      | 112 ++++++++++++++++++
+ sdk/devicemanager.go                          |   8 --
+ sdk/go.mod                                    |   2 +-
+ sdk/kms.go                                    |   1 +
+ shared/aws/go.mod                             |   2 +-
+ shared/http/go.mod                            |   2 +-
+ shared/subsystems/go.mod                      |   2 +-
+ 36 files changed, 450 insertions(+), 76 deletions(-)
+ create mode 100644 backend/pkg/helpers/pkcs7.go
+ create mode 100644 core/pkg/services/updating device.code-search
+ create mode 100644 scripts/sign-swupdate.sh
+
+diff --git a/backend/go.mod b/backend/go.mod
+index 4952a731..b68f90eb 100644
+--- a/backend/go.mod
++++ b/backend/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/backend/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/ThreeDotsLabs/watermill v1.4.6
+diff --git a/backend/pkg/controllers/kms.go b/backend/pkg/controllers/kms.go
+index 68d3ae2e..5ad2553c 100644
+--- a/backend/pkg/controllers/kms.go
++++ b/backend/pkg/controllers/kms.go
+@@ -1,11 +1,14 @@
+ package controllers
+ 
+ import (
++	"context"
+ 	"encoding/base64"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
++
++	//chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+@@ -366,11 +369,18 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
+ 		return
+ 	}
+ 
+-	signature, err := r.svc.SignMessage(ctx, services.SignMessageInput{
++	// Check Accept header for PKCS7 format request and set in context
++	serviceCtx := ctx.Request.Context()
++	if ctx.Request.Header.Get("Accept") == "application/pkcs7-mime" || ctx.Request.Header.Get("Accept") == "application/pkcs7-signature" {
++		serviceCtx = context.WithValue(serviceCtx, "output_format", "pkcs7")
++	}
++
++	signature, err := r.svc.SignMessage(serviceCtx, services.SignMessageInput{
+ 		Identifier:  params.ID,
+ 		Algorithm:   requestBody.Algorithm,
+ 		Message:     requestBody.Message,
+ 		MessageType: requestBody.MessageType,
++		Certificate: requestBody.Certificate,
+ 	})
+ 	if err != nil {
+ 		switch err {
+@@ -383,6 +393,19 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
+ 		}
+ 		return
+ 	}
++
++	// Return format based on Accept header
++	if ctx.Request.Header.Get("Accept") == "application/pkcs7-mime" || ctx.Request.Header.Get("Accept") == "application/pkcs7-signature" {
++		ctx.Writer.Header().Set("Content-Type", "application/pkcs7-signature")
++		ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
++
++		// Return the PKCS7/CMS signature as base64-encoded DER
++		encoded := base64.StdEncoding.EncodeToString(signature.Signature)
++		ctx.Writer.Write([]byte(encoded))
++		return
++	}
++
++	// Default JSON response
+ 	ctx.JSON(200, signature)
+ }
+ 
+diff --git a/backend/pkg/helpers/pkcs7.go b/backend/pkg/helpers/pkcs7.go
+new file mode 100644
+index 00000000..7af26e60
+--- /dev/null
++++ b/backend/pkg/helpers/pkcs7.go
+@@ -0,0 +1,99 @@
++package helpers
++
++import (
++	"crypto"
++	"crypto/x509"
++	"encoding/base64"
++	"encoding/pem"
++	"errors"
++	"fmt"
++
++	"go.mozilla.org/pkcs7"
++)
++
++// CreateDetachedPKCS7Signature creates a PKCS#7/CMS detached signature
++// The message is not included in the output (detached signature)
++// The certificate chain can optionally be included
++func CreateDetachedPKCS7Signature(message []byte, signer crypto.Signer, signerCert *x509.Certificate) ([]byte, error) {
++	if signerCert == nil {
++		return nil, errors.New("signer certificate is required")
++	}
++
++	// Create SignedData structure
++	signedData, err := pkcs7.NewSignedData(message)
++	if err != nil {
++		return nil, fmt.Errorf("failed to create signed data: %w", err)
++	}
++
++	// Add the signer with the certificate
++	if err := signedData.AddSigner(signerCert, signer, pkcs7.SignerInfoConfig{}); err != nil {
++		return nil, fmt.Errorf("failed to add signer: %w", err)
++	}
++
++	// Create detached signature (remove the content)
++	signedData.Detach()
++
++	// Finish and encode the PKCS#7 structure
++	pkcs7DER, err := signedData.Finish()
++	if err != nil {
++		return nil, fmt.Errorf("failed to finish signed data: %w", err)
++	}
++
++	return pkcs7DER, nil
++}
++
++// CreateDetachedPKCS7SignatureWithChain creates a PKCS#7/CMS detached signature
++// with the full certificate chain included
++func CreateDetachedPKCS7SignatureWithChain(message []byte, signer crypto.Signer, signerCert *x509.Certificate, chain []*x509.Certificate) ([]byte, error) {
++	if signerCert == nil {
++		return nil, errors.New("signer certificate is required")
++	}
++
++	// Create SignedData structure
++	signedData, err := pkcs7.NewSignedData(message)
++	if err != nil {
++		return nil, fmt.Errorf("failed to create signed data: %w", err)
++	}
++
++	// Add the signer with the certificate
++	if err := signedData.AddSigner(signerCert, signer, pkcs7.SignerInfoConfig{}); err != nil {
++		return nil, fmt.Errorf("failed to add signer: %w", err)
++	}
++
++	// Add chain certificates if provided
++	for _, cert := range chain {
++		if cert != nil {
++			signedData.AddCertificate(cert)
++		}
++	}
++
++	// Create detached signature (remove the content)
++	signedData.Detach()
++
++	// Finish and encode the PKCS#7 structure
++	pkcs7DER, err := signedData.Finish()
++	if err != nil {
++		return nil, fmt.Errorf("failed to finish signed data: %w", err)
++	}
++
++	return pkcs7DER, nil
++}
++
++// ParseCertificatePEM parses a PEM or base64-encoded certificate
++func ParseCertificatePEM(certData string) (*x509.Certificate, error) {
++	// Try base64 decode first (in case it's base64-encoded PEM or DER)
++	decoded, err := base64.StdEncoding.DecodeString(certData)
++	if err != nil {
++		// Not base64, try as raw PEM
++		decoded = []byte(certData)
++	}
++
++	// Try to parse as PEM
++	block, _ := pem.Decode(decoded)
++	if block != nil {
++		return x509.ParseCertificate(block.Bytes)
++	}
++
++	// Try to parse as raw DER
++	return x509.ParseCertificate(decoded)
++}
+diff --git a/backend/pkg/middlewares/audit/devices.go b/backend/pkg/middlewares/audit/devices.go
+index cd0219ef..f4c03f6a 100644
+--- a/backend/pkg/middlewares/audit/devices.go
++++ b/backend/pkg/middlewares/audit/devices.go
+@@ -86,3 +86,10 @@ func (mw *DeviceAuditEventPublisher) DeviceEventUpdate(ctx context.Context, inpu
+ 	}()
+ 	return mw.next.DeviceEventUpdate(ctx, input)
+ }
++
++func (mw *DeviceAuditEventPublisher) UpdateWFXStatus(ctx context.Context, input services.UpdateWFXStatusInput) (output *models.Device, err error) {
++	defer func() {
++		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateWFXStatus, input, err, output)
++	}()
++	return mw.next.UpdateWFXStatus(ctx, input)
++}
+diff --git a/backend/pkg/middlewares/eventpub/devices.go b/backend/pkg/middlewares/eventpub/devices.go
+index 4609fb85..8b20c303 100644
+--- a/backend/pkg/middlewares/eventpub/devices.go
++++ b/backend/pkg/middlewares/eventpub/devices.go
+@@ -3,6 +3,7 @@ package eventpub
+ import (
+ 	"context"
+ 	"fmt"
++	"time"
+ 
+ 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+ 	"github.com/lamassuiot/lamassuiot/core/v3"
+@@ -117,7 +118,7 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input
+ 	return mw.next.UpdateDeviceMetadata(ctx, input)
+ }
+ 
+-	func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) (err error) {
++func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) (err error) {
+ 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteDeviceKey)
+ 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+ 
+@@ -129,11 +130,10 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input
+ 	return mw.next.DeleteDevice(ctx, input)
+ }
+ 
+-	func (mw *deviceEventPublisher) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (output *models.Device, err error) {
++func (mw *deviceEventPublisher) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (output *models.Device, err error) {
+ 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDeviceEventsKey)
+ 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+ 
+-   
+ 	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+ 		ID: input.ID,
+ 	})
+@@ -143,40 +143,54 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input
+ 
+ 	defer func() {
+ 		if err == nil {
+-			   mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
+-				   Updated:  *output,
+-				   Previous: *prev,
+-			   })
+-			)
++			// Create a copy of the device to avoid modifying the return value
++			updatedEventDevice := *output
++			// Make a shallow copy of the events map so we don't modify the original map
++			updatedEventDevice.Events = make(map[time.Time]models.DeviceEvent)
++			for k, v := range output.Events {
++				desc := v.EventDescriptions
++				if len(desc) > 128 {
++					desc = desc[:128] + "..."
++				}
++				updatedEventDevice.Events[k] = models.DeviceEvent{
++					EventType:         v.EventType,
++					EventDescriptions: desc,
++				}
++			}
++
++			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
++				Updated:  updatedEventDevice,
++				Previous: *prev,
++			})
+ 		}
+ 	}()
+ 
+-   return mw.next.DeviceEventUpdate(ctx, input)
++	return mw.next.DeviceEventUpdate(ctx, input)
+ }
+ 
+ func (mw *deviceEventPublisher) UpdateWFXStatus(
+-       ctx context.Context,
+-       input services.UpdateWFXStatusInput,
++	ctx context.Context,
++	input services.UpdateWFXStatusInput,
+ ) (output *models.Device, err error) {
+ 
+-       ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateWFXStatus)
+-       ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+-
+-       prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+-	       ID: input.ID,
+-       })
+-       if err != nil {
+-	       return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
+-       }
+-
+-       defer func() {
+-	       if err == nil {
+-		       mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
+-			       Updated:  *output,
+-			       Previous: *prev,
+-		       })
+-	       }
+-       }()
+-
+-       return mw.next.UpdateWFXStatus(ctx, input)
++	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateWFXStatus)
++	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
++
++	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
++		ID: input.ID,
++	})
++	if err != nil {
++		return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
++	}
++
++	defer func() {
++		if err == nil {
++			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
++				Updated:  *output,
++				Previous: *prev,
++			})
++		}
++	}()
++
++	return mw.next.UpdateWFXStatus(ctx, input)
+ }
+diff --git a/backend/pkg/services/devicemanager.go b/backend/pkg/services/devicemanager.go
+index 7147b005..15de3ba9 100644
+--- a/backend/pkg/services/devicemanager.go
++++ b/backend/pkg/services/devicemanager.go
+@@ -273,7 +273,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
+ 		return nil, err
+ 	}
+ 
+-		device.Metadata = *updatedMetadata
++	device.Metadata = *updatedMetadata
+ 
+ 	lFunc.Debugf("updating %s device metadata", input.ID)
+ 	return svc.devicesStorage.Update(ctx, device)
+@@ -430,22 +430,21 @@ func (svc DeviceManagerServiceBackend) DeviceEventUpdate(ctx context.Context, in
+ 		lFunc.Warnf("device %s is not active, event update", input.ID)
+ 	}
+ 
+-
+ 	now := time.Now()
+ 	device.Events[now] = models.DeviceEvent{
+-		EventType:         models.DeviceEventTypeStatusUpdated,
++		EventType:         models.DeviceEventType(input.EventType),
+ 		EventDescriptions: input.EventData, // keep the JSON string
+ 	}
+ 
+-	 // Summarize large payloads to avoid printing big JSON blobs in logs
+-	 summary := input.EventData
+-	 if len(summary) > 256 {
+-		 summary = summary[:256] + "..."
+-	 }
+-	 lFunc.Debugf("updating device %s event with data: %s", input.ID, summary)
++	// Summarize large payloads to avoid printing big JSON blobs in logs
++	summary := input.EventData
++	if len(summary) > 128 {
++		summary = summary[:128] + "..."
++	}
++	lFunc.Debugf("updating device %s event with data: %s", input.ID, summary)
+ 
+ 	// Persist
+-	 return svc.devicesStorage.Update(ctx, device)
++	return svc.devicesStorage.Update(ctx, device)
+ }
+ 
+ func (svc DeviceManagerServiceBackend) UpdateWFXStatus(
+@@ -492,4 +491,3 @@ func (svc DeviceManagerServiceBackend) UpdateWFXStatus(
+ 	// Persist
+ 	return svc.devicesStorage.Update(ctx, device)
+ }
+- 
+diff --git a/backend/pkg/services/kms.go b/backend/pkg/services/kms.go
+index f17d3fc2..01669d94 100644
+--- a/backend/pkg/services/kms.go
++++ b/backend/pkg/services/kms.go
+@@ -17,6 +17,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/go-playground/validator/v10"
++	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+ 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+@@ -196,6 +197,7 @@ type kmsOperationSetup struct {
+ 	IsPSS  bool
+ 	Signer crypto.Signer
+ 	Engine *cryptoengines.CryptoEngine
++	Key    *models.Key
+ }
+ 
+ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
+@@ -764,6 +766,41 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
+ 		return nil, err
+ 	}
+ 
++	// Check context for output format (set by controller based on Accept header)
++	outputFormat := ""
++	if format, ok := ctx.Value("output_format").(string); ok {
++		outputFormat = format
++	}
++
++	// If PKCS7 format is requested, handle it separately
++	if outputFormat == "pkcs7" {
++		// Certificate is required for PKCS7 format
++		if input.Certificate == "" {
++			lFunc.Error("certificate is required for PKCS7 signature format")
++			return nil, errors.New("certificate is required for PKCS7 signature format")
++		}
++
++		// Parse the provided certificate
++		signerCert, err := helpers.ParseCertificatePEM(input.Certificate)
++		if err != nil {
++			lFunc.Errorf("failed to parse provided certificate: %s", err)
++			return nil, fmt.Errorf("failed to parse certificate: %w", err)
++		}
++		lFunc.Debugf("using provided certificate for PKCS7 signature: %s", signerCert.Subject.CommonName)
++
++		// Create the PKCS#7 detached signature
++		pkcs7Signature, err := helpers.CreateDetachedPKCS7Signature(input.Message, setup.Signer, signerCert)
++		if err != nil {
++			lFunc.Errorf("failed to create PKCS#7 signature: %s", err)
++			return nil, err
++		}
++
++		return &models.MessageSignature{
++			Signature: pkcs7Signature,
++		}, nil
++	}
++
++	// Default: Raw signature
+ 	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
+ 	if err != nil {
+ 		lFunc.Errorf("calculate digest error: %s", err)
+diff --git a/connectors/awsiot/go.mod b/connectors/awsiot/go.mod
+index 489ba00c..f1dc39b8 100644
+--- a/connectors/awsiot/go.mod
++++ b/connectors/awsiot/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/connectors/awsiot/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/ThreeDotsLabs/watermill v1.4.6
+diff --git a/core/go.mod b/core/go.mod
+index a01d4e8c..7b788ad5 100644
+--- a/core/go.mod
++++ b/core/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/core/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/ThreeDotsLabs/watermill v1.4.6
+diff --git a/core/pkg/models/events.go b/core/pkg/models/events.go
+index e8c3ef37..360fbab5 100644
+--- a/core/pkg/models/events.go
++++ b/core/pkg/models/events.go
+@@ -62,6 +62,7 @@ const (
+ 	EventUpdateDeviceStatusKey   EventType = "device.status.update"
+ 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
+ 	EventUpdateDeviceEventsKey   EventType = "device.events.update"
++	EventUpdateWFXStatus         EventType = "device.wfx.update"
+ 	EventDeleteDeviceKey         EventType = "device.delete"
+ 
+ 	EventUpdateVARole EventType = "va.role.update"
+diff --git a/core/pkg/resources/careq.go b/core/pkg/resources/careq.go
+index cc2eb696..92296049 100644
+--- a/core/pkg/resources/careq.go
++++ b/core/pkg/resources/careq.go
+@@ -155,6 +155,9 @@ type SignMessageBody struct {
+ 	Algorithm   string                 `json:"algorithm"`
+ 	Message     []byte                 `json:"message"`
+ 	MessageType models.SignMessageType `json:"message_type"`
++	// Certificate is a PEM or base64-encoded certificate required when requesting PKCS7/CMS format.
++	// Must be provided when using Accept: application/pkcs7-signature header.
++	Certificate string `json:"certificate,omitempty"`
+ }
+ 
+ type VerifySignBody struct {
+diff --git a/core/pkg/resources/devreq.go b/core/pkg/resources/devreq.go
+index df655ef0..a224ea5f 100644
+--- a/core/pkg/resources/devreq.go
++++ b/core/pkg/resources/devreq.go
+@@ -25,3 +25,7 @@ type UpdateDeviceMetadataBody struct {
+ type UpdateEventBody struct {
+ 	EventData string `json:"event_data"`
+ }
++
++type UpdateWFXStatusBody struct {
++	WFXStatus string `json:"wfx_status"`
++}
+diff --git a/core/pkg/services/devicemanager.go b/core/pkg/services/devicemanager.go
+index 3ada95c5..a4765237 100644
+--- a/core/pkg/services/devicemanager.go
++++ b/core/pkg/services/devicemanager.go
+@@ -21,8 +21,6 @@ type DeviceManagerService interface {
+ 	UpdateWFXStatus(ctx context.Context, input UpdateWFXStatusInput) (*models.Device, error)
+ }
+ 
+-
+-
+ type GetDevicesStatsInput struct {
+ }
+ 
+@@ -78,6 +76,6 @@ type UpdateEventInput struct {
+ 	EventData string `validate:"required,json"`
+ }
+ type UpdateWFXStatusInput struct {
+-	ID        string         `validate:"required"`
+-	WFXStatus string         `validate:"required,json"`
++	ID        string `validate:"required"`
++	WFXStatus string `validate:"required,json"`
+ }
+diff --git a/core/pkg/services/eventhandling/handler.go b/core/pkg/services/eventhandling/handler.go
+index 207a5924..c2299981 100644
+--- a/core/pkg/services/eventhandling/handler.go
++++ b/core/pkg/services/eventhandling/handler.go
+@@ -2,6 +2,7 @@ package eventhandling
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"fmt"
+ 
+ 	"github.com/ThreeDotsLabs/watermill/message"
+@@ -22,7 +23,7 @@ type CloudEventHandler struct {
+ }
+ 
+ func (h CloudEventHandler) HandleMessage(m *message.Message) error {
+-	h.Logger.Infof("Received event: %s", m.Payload)
++	// Parse event first to extract useful info for logging
+ 	event, err := helpers.ParseCloudEvent(m.Payload)
+ 	if err != nil {
+ 		err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
+@@ -30,6 +31,9 @@ func (h CloudEventHandler) HandleMessage(m *message.Message) error {
+ 		return err
+ 	}
+ 
++	// Log condensed event info instead of full payload
++	h.Logger.Infof("Received event: Type=%s Subject=%s%s", event.Type(), event.Subject(), extractStateTransition(m.Payload))
++
+ 	handler, ok := h.DispatchMap[event.Type()]
+ 	if !ok {
+ 		h.Logger.Warnf("No handler found for event type: %s", event.Type())
+@@ -75,3 +79,32 @@ func getContextFromMessage(m *message.Message) context.Context {
+ 
+ 	return ctx
+ }
++
++// extractStateTransition attempts to extract WFX state transition info from the event payload
++func extractStateTransition(payload []byte) string {
++	var data map[string]interface{}
++	if err := json.Unmarshal(payload, &data); err != nil {
++		return ""
++	}
++
++	// Try to get the "data" field from CloudEvent
++	eventData, ok := data["data"].(map[string]interface{})
++	if !ok {
++		return ""
++	}
++
++	// Look for wfx_status which contains state transition info
++	wfxStatus, ok := eventData["wfx_status"].(map[string]interface{})
++	if !ok {
++		return ""
++	}
++
++	// Extract current state from workflow definition
++	if workflow, ok := wfxStatus["workflow"].(map[string]interface{}); ok {
++		if currentState, ok := workflow["state"].(string); ok {
++			return fmt.Sprintf(" [WFX State: %s]", currentState)
++		}
++	}
++
++	return ""
++}
+diff --git a/core/pkg/services/kms.go b/core/pkg/services/kms.go
+index 3a8b36ba..b0f60460 100644
+--- a/core/pkg/services/kms.go
++++ b/core/pkg/services/kms.go
+@@ -51,6 +51,9 @@ type SignMessageInput struct {
+ 	Algorithm   string                 `validate:"required"`
+ 	Message     []byte                 `validate:"required"`
+ 	MessageType models.SignMessageType `validate:"required"`
++	// Certificate is a PEM or base64-encoded certificate required for PKCS7/CMS signatures.
++	// This field is mandatory when Accept: application/pkcs7-signature header is used.
++	Certificate string
+ }
+ 
+ type VerifySignInput struct {
+diff --git a/core/pkg/services/updating device.code-search b/core/pkg/services/updating device.code-search
+new file mode 100644
+index 00000000..3e499936
+--- /dev/null
++++ b/core/pkg/services/updating device.code-search	
+@@ -0,0 +1,9 @@
++# Query: updating device
++# ContextLines: 1
++
++1 result - 1 file
++
++backend/pkg/services/devicemanager.go:
++  441  
++  442: 	lFunc.Debugf("updating device %s event with data: %s", input.ID)
++  443  
+diff --git a/engines/crypto/aws/go.mod b/engines/crypto/aws/go.mod
+index e629644a..001f1cff 100644
+--- a/engines/crypto/aws/go.mod
++++ b/engines/crypto/aws/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/aws/aws-sdk-go-v2 v1.36.3
+diff --git a/engines/crypto/filesystem/go.mod b/engines/crypto/filesystem/go.mod
+index 7ed39cfe..83f1da8c 100644
+--- a/engines/crypto/filesystem/go.mod
++++ b/engines/crypto/filesystem/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/sirupsen/logrus v1.9.3
+diff --git a/engines/crypto/pkcs11/go.mod b/engines/crypto/pkcs11/go.mod
+index fc8e4ead..8b5852de 100644
+--- a/engines/crypto/pkcs11/go.mod
++++ b/engines/crypto/pkcs11/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require github.com/sirupsen/logrus v1.9.3
+ 
+diff --git a/engines/crypto/software/go.mod b/engines/crypto/software/go.mod
+index f4b5e993..78777b25 100644
+--- a/engines/crypto/software/go.mod
++++ b/engines/crypto/software/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/crypto/software/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/sirupsen/logrus v1.9.3
+diff --git a/engines/crypto/vaultkv2/go.mod b/engines/crypto/vaultkv2/go.mod
+index e9e1b431..a2b74b04 100644
+--- a/engines/crypto/vaultkv2/go.mod
++++ b/engines/crypto/vaultkv2/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/hashicorp/vault/api v1.16.0
+diff --git a/engines/eventbus/amqp/go.mod b/engines/eventbus/amqp/go.mod
+index 965eb5c3..4a3b3762 100644
+--- a/engines/eventbus/amqp/go.mod
++++ b/engines/eventbus/amqp/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/ThreeDotsLabs/watermill v1.4.6
+diff --git a/engines/eventbus/aws/go.mod b/engines/eventbus/aws/go.mod
+index c3c585b4..a5e0a46d 100644
+--- a/engines/eventbus/aws/go.mod
++++ b/engines/eventbus/aws/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/ThreeDotsLabs/watermill v1.4.6
+diff --git a/engines/fs-storage/localfs/go.mod b/engines/fs-storage/localfs/go.mod
+index ccd7f940..cc4b9d10 100644
+--- a/engines/fs-storage/localfs/go.mod
++++ b/engines/fs-storage/localfs/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/sirupsen/logrus v1.9.3
+diff --git a/engines/fs-storage/s3/go.mod b/engines/fs-storage/s3/go.mod
+index aed4360e..5ff4d025 100644
+--- a/engines/fs-storage/s3/go.mod
++++ b/engines/fs-storage/s3/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/aws/aws-sdk-go-v2/service/s3 v1.80.0
+diff --git a/engines/storage/postgres/go.mod b/engines/storage/postgres/go.mod
+index 6cffb503..dab03324 100644
+--- a/engines/storage/postgres/go.mod
++++ b/engines/storage/postgres/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/jakehl/goid v1.1.0
+diff --git a/go.work b/go.work
+index 7c7c1fb5..ff9d1afd 100644
+--- a/go.work
++++ b/go.work
+@@ -1,4 +1,4 @@
+-go 1.24.0
++go 1.23.0
+ 
+ replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
+ 
+diff --git a/monolithic/cmd/development/main.go b/monolithic/cmd/development/main.go
+index 2152fbc3..40004ab1 100644
+--- a/monolithic/cmd/development/main.go
++++ b/monolithic/cmd/development/main.go
+@@ -17,6 +17,7 @@ import (
+ 	"github.com/fatih/color"
+ 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+ 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
++	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+ 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
+ 	"github.com/lamassuiot/lamassuiot/sdk/v3"
+ 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+@@ -384,15 +385,20 @@ func main() {
+ 
+ 	if _, ok := cryptoengineOptionsMap[Filesystem]; ok {
+ 		engineId := "filesystem-test-1"
++		// Use a persistent directory instead of /tmp to keep keys across restarts
++		persistentKeyDir := os.Getenv("HOME") + "/.lamassu/dev/crypto-keys"
++		os.MkdirAll(persistentKeyDir, 0755)
++
+ 		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngineConfig{
+ 			ID:       engineId,
+ 			Metadata: make(map[string]interface{}),
+ 			Type:     cconfig.FilesystemProvider,
+ 			Config: map[string]interface{}{
+-				"storage_directory": "/tmp/gotest",
++				"storage_directory": persistentKeyDir,
+ 			},
+ 		})
+ 		cryptoEnginesConfig.DefaultEngine = engineId
++		fmt.Printf("Using persistent crypto key storage at: %s\n", persistentKeyDir)
+ 	}
+ 
+ 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
+@@ -463,6 +469,40 @@ func main() {
+ 	}
+ 	fmt.Println("========================================================================")
+ 
++	// Create test CA, ecs_dms DMS and device_1 to 4
++	dmsSDK := sdk.NewHttpDMSManagerClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/dmsmanager", conf.GatewayPortHttps))
++	devSDK := sdk.NewHttpDeviceManagerClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/devmanager", conf.GatewayPortHttps))
++
++	fmt.Println("3. Creating DMS ecs_DMS...")
++	_, err = dmsSDK.CreateDMS(context.Background(), services.CreateDMSInput{
++		ID:   "ecs_DMS",
++		Name: "ECS DMS",
++	})
++	if err != nil {
++		fmt.Printf("FAILED to create DMS: %s\n", err)
++	} else {
++		fmt.Println("DONE: DMS created")
++	}
++
++	fmt.Println("4. Creating devices...")
++	for i := 1; i <= 4; i++ {
++		deviceID := fmt.Sprintf("device_%d", i)
++		fmt.Printf(" - Creating %s...\n", deviceID)
++		_, err = devSDK.CreateDevice(context.Background(), services.CreateDeviceInput{
++			ID:        deviceID,
++			DMSID:     "ecs_DMS",
++			Icon:      "router",
++			IconColor: "blue",
++		})
++		if err != nil {
++			fmt.Printf("FAILED to create %s: %s\n", deviceID, err)
++		}
++	}
++	fmt.Println("DONE: Devices created")
++
++	// Create Code Signing Profile and Certificate for SWUpdate firmware signing
++	fmt.Println("5. Creating Code Signing Profile and Certificate for SWUpdate...")
++
+ 	forever := make(chan struct{})
+ 	<-forever
+ 
+diff --git a/monolithic/go.mod b/monolithic/go.mod
+index bdc35f5b..e0ca0e28 100644
+--- a/monolithic/go.mod
++++ b/monolithic/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/monolithic/v3
+ 
+-go 1.24.0
++go 1.22
+ 
+ replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
+ 
+diff --git a/scripts/sign-swupdate.sh b/scripts/sign-swupdate.sh
+new file mode 100644
+index 00000000..81b79981
+--- /dev/null
++++ b/scripts/sign-swupdate.sh
+@@ -0,0 +1,112 @@
++#!/bin/bash
++
++# Lamassu IoT KMS SWUpdate Signature Script
++# This script signs an SWUpdate sw-description file using the KMS service
++# and creates a PKCS7/CMS signature that can be verified by the device.
++
++# Arguments: Key ID, KMS URL, Algorithm, [Certificate Path]
++KEY_ID="$1"
++KMS_URL="$2"
++ALGO="${3:-RSASSA_PSS_SHA_256}"
++CERT_PATH="$4"
++
++# Normalize algorithm name: replace dashes with underscores
++ALGO=${ALGO//-/_}
++
++if [ -z "$KEY_ID" ] || [ -z "$KMS_URL" ]; then
++    echo "Usage: $0 <key_id> <kms_url> [algorithm] [certificate_path]"
++    echo "Example: $0 e48a... https://localhost:8443/api/kms/v1 RSASSA_PSS_SHA_256 /path/to/cert.pem"
++    echo ""
++    echo "Arguments:"
++    echo "  key_id           - KMS key identifier"
++    echo "  kms_url          - KMS base URL"
++    echo "  algorithm        - Signing algorithm (default: RSASSA_PSS_SHA_256)"
++    echo "  certificate_path - Path to PEM certificate"
++    echo ""
++    echo "Certificate lookup order:"
++    echo "  1. Fourth argument (certificate_path)"
++    echo "  2. Environment variable: SWUPDATE_CERT_PATH"
++    echo "  3. Default location: /etc/swupdate/certs/\${KEY_ID}.pem"
++    echo ""
++    echo "The certificate must be issued by a CA trusted by your devices."
++    exit 1
++fi
++
++# Determine certificate path
++# Priority: CLI argument > Environment variable > Default location based on key ID
++if [ -n "$CERT_PATH" ]; then
++    echo "Using certificate from command line argument: $CERT_PATH"
++elif [ -n "$SWUPDATE_CERT_PATH" ]; then
++    CERT_PATH="$SWUPDATE_CERT_PATH"
++    echo "Using certificate from SWUPDATE_CERT_PATH environment variable: $CERT_PATH"
++else
++    # Default: look for certificate in standard location named after the key ID
++    CERT_PATH="/etc/swupdate/certs/${KEY_ID}.pem"
++    if [ ! -f "$CERT_PATH" ]; then
++        # Try alternate location in user's home
++        CERT_PATH="$HOME/.swupdate/certs/${KEY_ID}.pem"
++    fi
++    echo "Using certificate from default location: $CERT_PATH"
++fi
++
++# Validate certificate file exists
++if [ ! -f "$CERT_PATH" ]; then
++    echo "Error: Certificate file not found: $CERT_PATH"
++    echo ""
++    echo "Please provide a certificate using one of these methods:"
++    echo "  1. Pass as 4th argument: $0 $KEY_ID $KMS_URL $ALGO /path/to/cert.pem"
++    echo "  2. Set environment variable: export SWUPDATE_CERT_PATH=/path/to/cert.pem"
++    echo "  3. Place certificate at: /etc/swupdate/certs/${KEY_ID}.pem"
++    echo "     or: $HOME/.swupdate/certs/${KEY_ID}.pem"
++    exit 1
++fi
++
++echo "Using certificate from: $CERT_PATH"
++
++# Build JSON payload with required certificate
++CERT_B64=$(base64 -w0 "$CERT_PATH")
++JSON_DATA=$(python3 -c "import json, sys; print(json.dumps({'algorithm': sys.argv[1], 'message': sys.argv[2], 'message_type': 'raw', 'certificate': sys.argv[3]}))" "$ALGO" "$MESSAGE_B64" "$CERT_B64")
++
++# Construct Endpoint URL
++# Assuming KMS_URL is the base API path like https://localhost:8443/api/kms/v1
++ENDPOINT="${KMS_URL}/keys/${KEY_ID}/sign"
++
++echo "Sending request to: $ENDPOINT"
++
++# Send request to KMS with Accept header to request PKCS7 format
++RESPONSE=$(curl -k -s -X POST "$ENDPOINT" \
++     -H "Content-Type: application/json" \
++     -H "Accept: application/pkcs7-signature" \
++     -d "$JSON_DATA")
++
++# Check for curl errors
++if [ $? -ne 0 ]; then
++    echo "Error: curl command failed."
++    exit 1
++fi
++
++# Check if response looks like an error (contains "err" field)
++if echo "$RESPONSE" | grep -q '"err"'; then
++    echo "Error from KMS:"
++    echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
++    exit 1
++fi
++
++# Response is base64-encoded PKCS7/CMS DER data
++# Decode and write directly to sw-description.sig
++echo -n "$RESPONSE" | base64 -d > "${SW_DESC}.sig"
++
++if [ $? -eq 0 ] && [ -f "${SW_DESC}.sig" ]; then
++    SIZE=$(stat -c%s "${SW_DESC}.sig")
++    echo "Successfully created PKCS7/CMS signature: ${SW_DESC}.sig ($SIZE bytes)"
++    
++    # Display signature info using openssl
++    if command -v openssl &> /dev/null; then
++        echo ""
++        echo "Signature information:"
++        openssl pkcs7 -inform DER -in "${SW_DESC}.sig" -print_certs -noout 2>/dev/null || echo "(OpenSSL info not available)"
++    fi
++else
++    echo "Error: Failed to write signature file."
++    exit 1
++fi
+diff --git a/sdk/devicemanager.go b/sdk/devicemanager.go
+index 5abd6b24..438edfda 100644
+--- a/sdk/devicemanager.go
++++ b/sdk/devicemanager.go
+@@ -120,18 +120,10 @@ func (cli *deviceManagerClient) UpdateWFXStatus(ctx context.Context, input servi
+ 
+ 	return response, nil
+ }
+-	}, map[int][]error{})
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	return response, nil
+-}
+ 
+ func (cli *deviceManagerClient) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (*models.Device, error) {
+ 	var eventData map[string]interface{}
+ 
+-	
+ 	if err := json.Unmarshal([]byte(input.EventData), &eventData); err != nil {
+ 		return nil, fmt.Errorf("invalid event data: %w", err)
+ 	}
+diff --git a/sdk/go.mod b/sdk/go.mod
+index ae3d9755..d7f98bd1 100644
+--- a/sdk/go.mod
++++ b/sdk/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/sdk/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/sirupsen/logrus v1.9.3
+diff --git a/sdk/kms.go b/sdk/kms.go
+index 02ff4027..91fcf56d 100644
+--- a/sdk/kms.go
++++ b/sdk/kms.go
+@@ -145,6 +145,7 @@ func (cli *httpKMSClient) SignMessage(ctx context.Context, input services.SignMe
+ 		Algorithm:   input.Algorithm,
+ 		Message:     input.Message,
+ 		MessageType: input.MessageType,
++		Certificate: input.Certificate,
+ 	}, map[int][]error{})
+ 	if err != nil {
+ 		return nil, err
+diff --git a/shared/aws/go.mod b/shared/aws/go.mod
+index 0ceac66a..7801bbca 100644
+--- a/shared/aws/go.mod
++++ b/shared/aws/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/shared/aws/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/aws/aws-sdk-go-v2 v1.36.3
+diff --git a/shared/http/go.mod b/shared/http/go.mod
+index 993f92fc..dd35f352 100644
+--- a/shared/http/go.mod
++++ b/shared/http/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/shared/http/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/gin-gonic/gin v1.10.1
+diff --git a/shared/subsystems/go.mod b/shared/subsystems/go.mod
+index d0cfe5cc..288f662c 100644
+--- a/shared/subsystems/go.mod
++++ b/shared/subsystems/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/lamassuiot/lamassuiot/shared/subsystems/v3
+ 
+-go 1.24.0
++go 1.23
+ 
+ require (
+ 	github.com/ory/dockertest/v3 v3.12.0
+-- 
+2.43.0
+
