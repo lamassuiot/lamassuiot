@@ -220,6 +220,261 @@ func TestApplyIssuanceProfileToTemplate_SubjectFields(t *testing.T) {
 	}
 }
 
+// TestApplyIssuanceProfileToTemplate_SparseSubjectFields tests handling of CSRs with minimal subject fields.
+// This simulates real-world scenarios where CSRs may only contain CN or a subset of fields.
+func TestApplyIssuanceProfileToTemplate_SparseSubjectFields(t *testing.T) {
+	logger := logrus.NewEntry(logrus.New())
+	engine := NewX509Engine(logger, []string{"va.example.com"}, nil)
+	ctx := context.Background()
+	now := time.Now()
+
+	testCases := []struct {
+		name             string
+		templateSubject  models.Subject
+		profileSubject   models.Subject
+		honorSubject     bool
+		expectedCN       string
+		expectedOrg      string
+		expectedOU       string
+		expectedCountry  string
+		expectedState    string
+		expectedLocality string
+	}{
+		{
+			name: "CSR with only CN - profile adds missing fields",
+			templateSubject: models.Subject{
+				CommonName: "device-abc-123",
+				// No other fields in CSR
+			},
+			profileSubject: models.Subject{
+				CommonName:       "", // Empty - should preserve CSR CN
+				Organization:     "Acme Corp",
+				OrganizationUnit: "IoT Devices",
+				Country:          "US",
+				State:            "California",
+				Locality:         "San Francisco",
+			},
+			honorSubject:     false,
+			expectedCN:       "device-abc-123", // Preserved from CSR
+			expectedOrg:      "Acme Corp",
+			expectedOU:       "IoT Devices",
+			expectedCountry:  "US",
+			expectedState:    "California",
+			expectedLocality: "San Francisco",
+		},
+		{
+			name: "CSR with only CN - profile overrides CN and adds fields",
+			templateSubject: models.Subject{
+				CommonName: "device-xyz-456",
+			},
+			profileSubject: models.Subject{
+				CommonName:       "managed-device",
+				Organization:     "Acme Corp",
+				OrganizationUnit: "IoT Devices",
+				Country:          "US",
+			},
+			honorSubject:     false,
+			expectedCN:       "managed-device",
+			expectedOrg:      "Acme Corp",
+			expectedOU:       "IoT Devices",
+			expectedCountry:  "US",
+			expectedState:    "", // Profile doesn't have this
+			expectedLocality: "",
+		},
+		{
+			name: "CSR with CN and Org only - profile fills remaining fields",
+			templateSubject: models.Subject{
+				CommonName:   "sensor-001",
+				Organization: "Original Org", // Will be overridden
+			},
+			profileSubject: models.Subject{
+				CommonName:       "", // Empty - preserve CSR CN
+				Organization:     "Profile Org",
+				OrganizationUnit: "Sensors",
+				Country:          "ES",
+				State:            "Gipuzkoa",
+			},
+			honorSubject:     false,
+			expectedCN:       "sensor-001",
+			expectedOrg:      "Profile Org",
+			expectedOU:       "Sensors",
+			expectedCountry:  "ES",
+			expectedState:    "Gipuzkoa",
+			expectedLocality: "",
+		},
+		{
+			name: "Empty CSR subject - profile provides all fields",
+			templateSubject: models.Subject{
+				// All fields empty
+			},
+			profileSubject: models.Subject{
+				CommonName:       "default-device",
+				Organization:     "Default Org",
+				OrganizationUnit: "Default OU",
+				Country:          "US",
+			},
+			honorSubject:     false,
+			expectedCN:       "default-device",
+			expectedOrg:      "Default Org",
+			expectedOU:       "Default OU",
+			expectedCountry:  "US",
+			expectedState:    "",
+			expectedLocality: "",
+		},
+		{
+			name: "HonorSubject=true - sparse CSR fields preserved as-is",
+			templateSubject: models.Subject{
+				CommonName: "device-honor-001",
+				Country:    "JP",
+				// Other fields missing
+			},
+			profileSubject: models.Subject{
+				CommonName:       "should-not-apply",
+				Organization:     "Should Not Apply",
+				OrganizationUnit: "Should Not Apply",
+				Country:          "US",
+				State:            "California",
+				Locality:         "San Francisco",
+			},
+			honorSubject:     true,
+			expectedCN:       "device-honor-001", // From CSR
+			expectedOrg:      "",                 // Not in CSR, not added
+			expectedOU:       "",
+			expectedCountry:  "JP", // From CSR
+			expectedState:    "",   // Not in CSR
+			expectedLocality: "",
+		},
+		{
+			name: "Profile with partial fields - only specified fields applied",
+			templateSubject: models.Subject{
+				CommonName:   "device-partial-001",
+				Organization: "Original Org",
+				State:        "Original State",
+			},
+			profileSubject: models.Subject{
+				CommonName:   "", // Preserve CSR CN
+				Organization: "New Org",
+				// Country, State, Locality not specified in profile
+			},
+			honorSubject:     false,
+			expectedCN:       "device-partial-001",
+			expectedOrg:      "New Org",
+			expectedOU:       "",
+			expectedCountry:  "",
+			expectedState:    "", // Profile doesn't have State
+			expectedLocality: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create template from CSR-like subject (sparse fields)
+			template := &x509.Certificate{
+				Subject:   chelpers.SubjectToPkixName(tc.templateSubject),
+				NotBefore: now,
+				NotAfter:  now.Add(time.Hour),
+			}
+
+			// Create profile
+			profile := models.IssuanceProfile{
+				Validity: models.Validity{
+					Type:     models.Duration,
+					Duration: models.TimeDuration(time.Hour),
+				},
+				HonorSubject: tc.honorSubject,
+				Subject:      tc.profileSubject,
+			}
+
+			// Apply profile to template
+			err := engine.applyIssuanceProfileToTemplate(ctx, template, profile, now)
+			if err != nil {
+				t.Fatalf("applyIssuanceProfileToTemplate failed: %v", err)
+			}
+
+			// Verify CN
+			if template.Subject.CommonName != tc.expectedCN {
+				t.Errorf("CN mismatch: got %q, want %q",
+					template.Subject.CommonName, tc.expectedCN)
+			}
+
+			// Verify Organization
+			if tc.expectedOrg == "" {
+				if len(template.Subject.Organization) > 0 && template.Subject.Organization[0] != "" {
+					t.Errorf("Organization should be empty, got %q",
+						template.Subject.Organization[0])
+				}
+			} else {
+				if len(template.Subject.Organization) == 0 {
+					t.Errorf("Organization missing, want %q", tc.expectedOrg)
+				} else if template.Subject.Organization[0] != tc.expectedOrg {
+					t.Errorf("Organization mismatch: got %q, want %q",
+						template.Subject.Organization[0], tc.expectedOrg)
+				}
+			}
+
+			// Verify OrganizationalUnit
+			if tc.expectedOU == "" {
+				if len(template.Subject.OrganizationalUnit) > 0 && template.Subject.OrganizationalUnit[0] != "" {
+					t.Errorf("OrganizationalUnit should be empty, got %q",
+						template.Subject.OrganizationalUnit[0])
+				}
+			} else {
+				if len(template.Subject.OrganizationalUnit) == 0 {
+					t.Errorf("OrganizationalUnit missing, want %q", tc.expectedOU)
+				} else if template.Subject.OrganizationalUnit[0] != tc.expectedOU {
+					t.Errorf("OrganizationalUnit mismatch: got %q, want %q",
+						template.Subject.OrganizationalUnit[0], tc.expectedOU)
+				}
+			}
+
+			// Verify Country
+			if tc.expectedCountry == "" {
+				if len(template.Subject.Country) > 0 && template.Subject.Country[0] != "" {
+					t.Errorf("Country should be empty, got %q",
+						template.Subject.Country[0])
+				}
+			} else {
+				if len(template.Subject.Country) == 0 {
+					t.Errorf("Country missing, want %q", tc.expectedCountry)
+				} else if template.Subject.Country[0] != tc.expectedCountry {
+					t.Errorf("Country mismatch: got %q, want %q",
+						template.Subject.Country[0], tc.expectedCountry)
+				}
+			}
+
+			// Verify State
+			if tc.expectedState == "" {
+				if len(template.Subject.Province) > 0 && template.Subject.Province[0] != "" {
+					t.Errorf("State should be empty, got %q",
+						template.Subject.Province[0])
+				}
+			} else {
+				if len(template.Subject.Province) == 0 {
+					t.Errorf("State missing, want %q", tc.expectedState)
+				} else if template.Subject.Province[0] != tc.expectedState {
+					t.Errorf("State mismatch: got %q, want %q",
+						template.Subject.Province[0], tc.expectedState)
+				}
+			}
+
+			// Verify Locality
+			if tc.expectedLocality == "" {
+				if len(template.Subject.Locality) > 0 && template.Subject.Locality[0] != "" {
+					t.Errorf("Locality should be empty, got %q",
+						template.Subject.Locality[0])
+				}
+			} else {
+				if len(template.Subject.Locality) == 0 {
+					t.Errorf("Locality missing, want %q", tc.expectedLocality)
+				} else if template.Subject.Locality[0] != tc.expectedLocality {
+					t.Errorf("Locality mismatch: got %q, want %q",
+						template.Subject.Locality[0], tc.expectedLocality)
+				}
+			}
+		})
+	}
+}
+
 // TestApplyIssuanceProfileToTemplate_KeyUsage tests key usage handling
 func TestApplyIssuanceProfileToTemplate_KeyUsage(t *testing.T) {
 	logger := logrus.NewEntry(logrus.New())
