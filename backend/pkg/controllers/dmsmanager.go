@@ -23,7 +23,7 @@ func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRout
 }
 
 func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.DMSFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DMSFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -42,7 +42,7 @@ func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.DMSFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DMSFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

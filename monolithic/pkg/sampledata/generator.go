@@ -44,6 +44,8 @@ func PopulateSampleData(
 		},
 	}
 
+	httpClient = sdk.HttpClientWithCustomHeaders(httpClient, "X-Principal-ID", "admin-mode")
+
 	// Create CA SDK client
 	caService := sdk.NewHttpCAClient(httpClient, caServiceURL)
 

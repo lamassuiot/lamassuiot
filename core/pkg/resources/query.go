@@ -81,6 +81,8 @@ const (
 	EnumNotEqual
 
 	JsonPathExpression
+
+	RawSQLExpression
 )
 
 type ListInput[E any] struct {

@@ -251,7 +251,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.CAFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.CAFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -304,7 +304,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas [get]
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.CAFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.CAFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -606,7 +606,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 // @Failure 500
 // @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.CertificateFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -648,7 +648,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 		return
 	}
 
-	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.CertificateFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -696,7 +696,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.CertificateFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -895,7 +895,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.CertificateFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -950,7 +950,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.CertificateFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -1154,7 +1154,7 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.IssuanceProfileFiltrableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.IssuanceProfileFiltrableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

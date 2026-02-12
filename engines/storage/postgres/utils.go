@@ -569,6 +569,8 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		// - Uses parameterized query (?) which prevents SQL injection
 		// - PostgreSQL's @@ operator safely evaluates the jsonpath expression
 		return tx.Where(fmt.Sprintf("%s @@ ?::jsonpath", filter.Field), filter.Value)
+	case resources.RawSQLExpression:
+		return tx.Where(filter.Value)
 	default:
 		return tx
 	}
