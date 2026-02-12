@@ -87,6 +87,8 @@ const (
 	StringNotInIgnoreCase
 
 	JsonPathExpression
+
+	RawSQLExpression
 )
 
 type ListInput[E any] struct {

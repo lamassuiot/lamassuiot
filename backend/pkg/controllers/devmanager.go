@@ -19,7 +19,7 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 }
 
 func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DeviceFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -43,7 +43,7 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DeviceFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -74,7 +74,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DeviceFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -443,7 +443,7 @@ func (r *devManagerHttpRoutes) GetDeviceGroupByID(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DeviceFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -488,7 +488,7 @@ func (r *devManagerHttpRoutes) GetDevicesByGroup(ctx *gin.Context) {
 		return
 	}
 
-	queryParams, err := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DeviceFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

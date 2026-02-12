@@ -15,7 +15,7 @@ func TestFilterQuery_SubjectKeyID(t *testing.T) {
 	q.Add("filter", "subject_key_id[eq]ABC123")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.CertificateFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestFilterQuery_DMSCreationDate(t *testing.T) {
 	q.Add("filter", "creation_date[after]2024-01-01T00:00:00Z")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.DMSFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.DMSFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestFilterQuery_JsonFilter_SimpleJsonPath(t *testing.T) {
 	q.Add("filter", "metadata[jsonpath]$.environment")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.KMSFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.KMSFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestFilterQuery_JsonFilter_ComplexJsonPathWithURLEncoding(t *testing.T) {
 	q.Add("filter", "metadata[jsonpath]%24.tags%5B%3F%28%40.key%20%3D%3D%20%22production%22%29%5D")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.KMSFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.KMSFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestFilterQuery_JsonFilter_InvalidOperand(t *testing.T) {
 	q.Add("filter", "metadata[eq]somevalue")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.KMSFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.KMSFilterableFields)
 	if err == nil {
 		t.Fatalf("expected error for invalid operand, got nil")
 	}
@@ -315,7 +315,7 @@ func TestFilterQuery_JsonFilter_MultipleJsonPaths(t *testing.T) {
 	q.Add("filter", "metadata[jsonpath]$.region")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.KMSFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.KMSFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestFilterQuery_JsonPathSort(t *testing.T) {
 		"metadata": resources.JsonFilterFieldType,
 	}
 
-	qp, err := FilterQuery(req, filterFieldMap)
+	qp, err := FilterQuery(nil, req, filterFieldMap)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -500,7 +500,7 @@ func TestFilterQuery_JsonPathSort_SQLInjection(t *testing.T) {
 		q.Add("sort_by", input)
 		req.URL.RawQuery = q.Encode()
 
-		qp, err := FilterQuery(req, filterFieldMap)
+		qp, err := FilterQuery(nil, req, filterFieldMap)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

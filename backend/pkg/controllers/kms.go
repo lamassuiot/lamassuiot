@@ -36,7 +36,7 @@ func (r *kmsHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 }
 
 func (r *kmsHttpRoutes) GetKeys(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.KMSFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.KMSFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -429,7 +429,7 @@ func (r *kmsHttpRoutes) VerifySignature(ctx *gin.Context) {
 }
 
 func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.KMSFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.KMSFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
