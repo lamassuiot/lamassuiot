@@ -255,6 +255,7 @@ func main() {
 		fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
 	}
 
+	storageConfig.LogLevel = cconfig.Trace
 	fmt.Println("Crypto Engines")
 
 	var vaultCryptoEngine cconfig.CryptoEngineConfig
