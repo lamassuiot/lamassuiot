@@ -7,11 +7,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
-func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) (*resources.QueryParameters, error) {
+func FilterQuery(ctx *gin.Context, r *http.Request, filterFieldMap map[string]resources.FilterFieldType) (*resources.QueryParameters, error) {
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
@@ -84,6 +85,14 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				}
 			}
 		}
+	}
+
+	if ctx.GetString("authz_filter") != "" {
+		authzFilter := ctx.GetString("authz_filter")
+		queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
+			FilterOperation: resources.RawSQLExpression,
+			Value:           authzFilter,
+		})
 	}
 
 	return &queryParams, nil
