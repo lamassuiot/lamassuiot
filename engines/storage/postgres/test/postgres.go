@@ -38,6 +38,8 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 	idx := 1
 	mounts := []docker.HostMount{}
 
+	dbs["cbom"] = ""
+
 	sqlStatements := ""
 	for dbName, dbInitScript := range dbs {
 		sqlStatements = sqlStatements + fmt.Sprintf("CREATE DATABASE %s;\n", dbName)
