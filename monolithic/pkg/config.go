@@ -16,22 +16,23 @@ const (
 )
 
 type MonolithicConfig struct {
-	OtelConfig            cconfig.OTELConfig             `mapstructure:"otel"`
-	Logs                  cconfig.Logging                `mapstructure:"logs"`
-	PublisherEventBus     cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
-	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
-	SubscriberDLQEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
-	Storage               cconfig.PluggableStorageEngine `mapstructure:"storage"`
-	CryptoEngines         []cconfig.CryptoEngineConfig   `mapstructure:"crypto_engines"`
-	Monitoring            cconfig.MonitoringJob          `mapstructure:"monitoring"`
-	Domains               []string                       `mapstructure:"domains"`
-	AssemblyMode          LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`
-	GatewayPortHttps      int                            `mapstructure:"gateway_port_https"`
-	GatewayPortHttp       int                            `mapstructure:"gateway_port_http"`
-	AWSIoTManager         MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
-	VAStorageDir          string                         `mapstructure:"va_storage_directory"`
-	UIPort                int                            `mapstructure:"ui_port"`
-	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
+	OtelConfig             cconfig.OTELConfig             `mapstructure:"otel"`
+	Logs                   cconfig.Logging                `mapstructure:"logs"`
+	PublisherEventBus      cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
+	SubscriberEventBus     cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
+	SubscriberDLQEventBus  cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
+	Storage                cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	CryptoEngines          []cconfig.CryptoEngineConfig   `mapstructure:"crypto_engines"`
+	Monitoring             cconfig.MonitoringJob          `mapstructure:"monitoring"`
+	Domains                []string                       `mapstructure:"domains"`
+	AssemblyMode           LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`
+	GatewayPortHttps       int                            `mapstructure:"gateway_port_https"`
+	GatewayPortHttp        int                            `mapstructure:"gateway_port_http"`
+	AWSIoTManager          MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
+	VAStorageDir           string                         `mapstructure:"va_storage_directory"`
+	UIPort                 int                            `mapstructure:"ui_port"`
+	PopulateSampleData     bool                           `mapstructure:"populate_sample_data"`
+	AdditionalPortsRouting map[string]int                 `mapstructure:"additional_ports_routing"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {

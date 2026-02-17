@@ -325,6 +325,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			proxy.ServeHTTP(c.Writer, c.Request)
 		}
 
+		for servicePath, port := range conf.AdditionalPortsRouting {
+			addRouteMap(servicePath, servicePath+"/", port)
+		}
+
 		addRouteMap("KMS", "/api/kms/", kmsPort)
 		addRouteMap("CA", "/api/ca/", caPort)
 		addRouteMap("Dev Manager", "/api/devmanager/", devPort)
