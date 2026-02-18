@@ -22,14 +22,14 @@ func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManag
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "device", logger)
+	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "devicemanager.device", logger)
 
 	rv1 := router.Group("/v1")
 
 	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/devices", authzMw.AuthListCheck(), routes.GetAllDevices)
 	rv1.POST("/devices", authzMw.AuthzCheck("create"), routes.CreateDevice)
-	rv1.GET("/devices/:id", routes.GetDeviceByID)
+	rv1.GET("/devices/:id", authzMw.AuthzCheck("read"), routes.GetDeviceByID)
 	rv1.DELETE("/devices/:id", authzMw.AuthzCheck("delete"), routes.DeleteDevice)
 	rv1.PUT("/devices/:id/idslot", routes.UpdateDeviceIdentitySlot)
 	rv1.PUT("/devices/:id/metadata", routes.UpdateDeviceMetadata)

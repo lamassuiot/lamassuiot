@@ -87,14 +87,6 @@ func FilterQuery(ctx *gin.Context, r *http.Request, filterFieldMap map[string]re
 		}
 	}
 
-	if ctx.GetString("authz_filter") != "" {
-		authzFilter := ctx.GetString("authz_filter")
-		queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
-			FilterOperation: resources.RawSQLExpression,
-			Value:           authzFilter,
-		})
-	}
-
 	return &queryParams, nil
 }
 

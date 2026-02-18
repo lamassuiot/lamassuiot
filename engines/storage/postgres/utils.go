@@ -25,6 +25,7 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 	"gorm.io/plugin/opentelemetry/tracing"
+	gorm_authz "ikerlan.es/authz/sdk/gorm"
 )
 
 //go:embed migrations/**
@@ -54,6 +55,7 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 
 	// Add OTel Tracing
 	err = db.Use(tracing.NewPlugin())
+	err = db.Use(gorm_authz.NewAuthzGormPlugin())
 
 	return db, err
 }
@@ -619,8 +621,6 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		// - Uses parameterized query (?) which prevents SQL injection
 		// - PostgreSQL's @@ operator safely evaluates the jsonpath expression
 		return tx.Where(fmt.Sprintf("%s @@ ?::jsonpath", filter.Field), filter.Value)
-	case resources.RawSQLExpression:
-		return tx.Where(filter.Value)
 	default:
 		return tx
 	}
