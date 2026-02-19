@@ -1,13 +1,28 @@
 package routes
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/sirupsen/logrus"
+	"ikerlan.es/authz/sdk"
+	authzSdk "ikerlan.es/authz/sdk"
+	middleware "ikerlan.es/authz/sdk/gin-middleware"
 )
 
-func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) {
+func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, logger *logrus.Entry) {
 	routes := controllers.NewCAHttpRoutes(svc)
+
+	config := sdk.DefaultConfig("http://localhost:8888") // Point to your authz service
+	client, err := sdk.NewClient(config)
+	if err != nil {
+		log.Fatalf("Failed to create SDK client: %v", err)
+	}
+
+	remoteEngine := authzSdk.NewRemoteEngine(client)
+	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca.certificate", logger)
 
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")
@@ -33,11 +48,11 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
 	rv1.DELETE("/cas/:id", routes.DeleteCA)
 
-	rv1.GET("/certificates", routes.GetCertificates)
+	rv1.GET("/certificates", authzMw.AuthListCheck(), routes.GetCertificates)
 	rv1.GET("/certificates/status/:status", routes.GetCertificatesByStatus)
 	rv1.GET("/certificates/expiration", routes.GetCertificatesByExpirationDate)
 	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
-	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
+	rv1.PUT("/certificates/:sn/status", authzMw.AuthzCheckCustomField("status-update/revoke", "sn"), routes.UpdateCertificateStatus)
 	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
 	rv1.PATCH("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
 	rv1.DELETE("/certificates/:sn", routes.DeleteCertificate)
