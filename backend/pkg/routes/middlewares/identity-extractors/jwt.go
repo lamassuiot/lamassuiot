@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -34,6 +35,21 @@ func (extractor JWTExtractor) ExtractAuthentication(ctx *gin.Context, req http.R
 	}
 
 	extractor.logger.Debugf("found JWT token in request headers")
+	callerID := ""
 
-	ctx.Set(string(IdentityExtractorJWT), token)
+	// Access the claims
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if ok {
+		// Extract the sub claim
+		sub, ok := claims["sub"].(string)
+		if ok {
+			callerID = sub
+		}
+	}
+
+	ctx.Set(core.LamassuContextKeyAuthType, IdentityExtractorJWT)
+	ctx.Set(core.LamassuContextKeyAuthCredentialString, tokenString)
+	ctx.Set(core.LamassuContextKeyAuthCredentialStruct, token)
+	ctx.Set(core.LamassuContextKeyAuthID, callerID)
+	ctx.Set(core.LamassuContextKeyAuthContext, claims)
 }
