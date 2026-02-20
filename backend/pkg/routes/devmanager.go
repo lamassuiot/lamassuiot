@@ -22,7 +22,7 @@ func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManag
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "devicemanager.device", logger)
+	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "devicemanager", "device", logger)
 
 	rv1 := router.Group("/v1")
 
