@@ -47,7 +47,7 @@ func (extractor JWTExtractor) ExtractAuthentication(ctx *gin.Context, req http.R
 		}
 	}
 
-	ctx.Set(core.LamassuContextKeyAuthType, IdentityExtractorJWT)
+	ctx.Set(core.LamassuContextKeyAuthType, string(IdentityExtractorJWT))
 	ctx.Set(core.LamassuContextKeyAuthCredentialString, tokenString)
 	ctx.Set(core.LamassuContextKeyAuthCredentialStruct, token)
 	ctx.Set(core.LamassuContextKeyAuthID, callerID)

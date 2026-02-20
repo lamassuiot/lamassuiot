@@ -39,8 +39,8 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 	if len(crts) > 0 {
 		crt := crts[0]
 		crtS := models.X509Certificate(*crt)
-		ctx.Set(string(IdentityExtractorClientCertificate), crts)
-		ctx.Set(core.LamassuContextKeyAuthType, IdentityExtractorClientCertificate)
+
+		ctx.Set(core.LamassuContextKeyAuthType, string(IdentityExtractorClientCertificate))
 		ctx.Set(core.LamassuContextKeyAuthCredentialString, crtS.String())
 		ctx.Set(core.LamassuContextKeyAuthCredentialStruct, crt)
 		ctx.Set(core.LamassuContextKeyAuthID, crt.Subject.CommonName)
