@@ -22,7 +22,7 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, 
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca.certificate", logger)
+	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "certificate", logger)
 
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")
