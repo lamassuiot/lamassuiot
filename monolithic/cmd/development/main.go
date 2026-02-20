@@ -383,33 +383,43 @@ func main() {
 
 		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
 
-		_, container, _, err = dockerrunner.RunDocker(dockertest.RunOptions{
+		_, cbomKitAPIContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 			Repository: "ghcr.io/cbomkit/cbomkit", // image
 			Tag:        "2.2.0",                   // version
 			Env: []string{
 				"CBOMKIT_DB_TYPE=postgresql",
-				"CBOMKIT_DB_JDBC_URL=jdbc:postgresql://" + storageConfig.Config["hostname"].(string) + ":5432/cbom",
+				"CBOMKIT_DB_JDBC_URL=jdbc:postgresql://host.docker.internal:5432/cbom",
 				"CBOMKIT_PORT=8081",
 				"CBOMKIT_DB_USERNAME=" + storageConfig.Config["username"].(string),
 				"CBOMKIT_DB_PASSWORD=" + string(storageConfig.Config["password"].(cconfig.Password)),
-				"CBOMKIT_FRONTEND_URL_CORS=*",
+				"CBOMKIT_FRONTEND_URL_CORS=http://localhost:8000,http://localhost:9002",
 			},
+			ExtraHosts: []string{"host.docker.internal:host-gateway"},
 			Labels: map[string]string{
 				"group": "lamassuiot-monolithic",
 			},
 		}, func(hc *docker.HostConfig) {
-			hc.AutoRemove = true
+			hc.AutoRemove = false
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"8081/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "8081",
+					},
+				},
+			}
 		})
 
-		cbomAPIPort, _ := strconv.Atoi(container.GetPort("8081/tcp"))
+		cbomAPIPort, _ := strconv.Atoi(cbomKitAPIContainer.GetPort("8081/tcp"))
+		fmt.Println(cbomAPIPort)
 
 		_, container, _, err = dockerrunner.RunDocker(dockertest.RunOptions{
 			Repository: "ghcr.io/cbomkit/cbomkit-frontend", // image
 			Tag:        "2.2.0",                            // version
 			Env: []string{
-				"VUE_APP_HTTP_API_BASE=http://localhost:8080/cbomkit-api",
-				"VUE_APP_WS_API_BASE=ws://localhost:8080/cbomkit-api",
-				"VUE_APP_TITLE=CBOMkit",
+				"VUE_APP_HTTP_API_BASE=http://localhost:8081",
+				"VUE_APP_WS_API_BASE=ws://localhost:8081",
+				"VUE_APP_TITLE=CBOMkit-LAMASSU",
 				"VUE_APP_VIEWER_ONLY=false",
 			},
 			Labels: map[string]string{
@@ -417,9 +427,19 @@ func main() {
 			},
 		}, func(hc *docker.HostConfig) {
 			hc.AutoRemove = true
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"8000/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "8000",
+					},
+				},
+			}
+
 		})
 
 		cbomFrontPort, _ := strconv.Atoi(container.GetPort("8000/tcp"))
+		fmt.Println(cbomFrontPort)
 
 		additionalPortsRouting["/cbomkit-api"] = cbomAPIPort
 		additionalPortsRouting["/cbomkit"] = cbomFrontPort
