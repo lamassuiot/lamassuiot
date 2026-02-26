@@ -129,8 +129,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				log.Fatalf("could not build HTTP CA Client: %s", err)
 			}
 
+			caHttpCli = sdk.HttpClientWithSourceHeaderInjector(caHttpCli, src)
+			caHttpCli = sdk.HttpClientWithCustomHeaders(caHttpCli, "X-Principal-ID", "admin-mode")
+
 			return sdk.NewHttpCAClient(
-				sdk.HttpClientWithSourceHeaderInjector(caHttpCli, src),
+				caHttpCli,
 				fmt.Sprintf("%s://%s%s:%d", caConnection.Protocol, caConnection.Hostname, caConnection.BasePath, caConnection.Port),
 			)
 		}
@@ -197,8 +200,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				log.Fatalf("could not build HTTP DevManager Client: %s", err)
 			}
 
+			devMngrHttpCli = sdk.HttpClientWithSourceHeaderInjector(devMngrHttpCli, src)
+			devMngrHttpCli = sdk.HttpClientWithCustomHeaders(devMngrHttpCli, "X-Principal-ID", "admin-mode")
+
 			return sdk.NewHttpDeviceManagerClient(
-				sdk.HttpClientWithSourceHeaderInjector(devMngrHttpCli, src),
+				devMngrHttpCli,
 				fmt.Sprintf("%s://%s%s:%d", devMngrConnection.Protocol, devMngrConnection.Hostname, devMngrConnection.BasePath, devMngrConnection.Port),
 			)
 		}
@@ -234,8 +240,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				log.Fatalf("could not build HTTP DMSManager Client: %s", err)
 			}
 
+			dmsMngrHttpCli = sdk.HttpClientWithSourceHeaderInjector(dmsMngrHttpCli, src)
+			dmsMngrHttpCli = sdk.HttpClientWithCustomHeaders(dmsMngrHttpCli, "X-Principal-ID", "admin-mode")
+
 			return sdk.NewHttpDMSManagerClient(
-				sdk.HttpClientWithSourceHeaderInjector(dmsMngrHttpCli, src),
+				dmsMngrHttpCli,
 				fmt.Sprintf("%s://%s%s:%d", dmsMngrConnection.Protocol, dmsMngrConnection.Hostname, dmsMngrConnection.BasePath, dmsMngrConnection.Port),
 			)
 		}
