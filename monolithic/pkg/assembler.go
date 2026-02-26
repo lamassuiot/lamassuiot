@@ -128,7 +128,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		caConn := localConn(caPort)
 		caSDKBuilder := func(serviceID, src string) services.CAService {
-			return sdk.NewHttpCAClient(buildLocalClient(serviceID, src, "LMS SDK - CA Client", caConn), baseURL(caConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - CA Client", caConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpCAClient(cli, baseURL(caConn))
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
@@ -167,7 +169,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		devConn := localConn(devPort)
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
-			return sdk.NewHttpDeviceManagerClient(buildLocalClient(serviceID, src, "LMS SDK - DevManager Client", devConn), baseURL(devConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - DevManager Client", devConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpDeviceManagerClient(cli, baseURL(devConn))
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
@@ -183,7 +187,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		dmsConn := localConn(dmsPort)
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
-			return sdk.NewHttpDMSManagerClient(buildLocalClient(serviceID, src, "LMS SDK - DMSManager Client", dmsConn), baseURL(dmsConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - DMSManager Client", dmsConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpDMSManagerClient(cli, baseURL(dmsConn))
 		}
 
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
