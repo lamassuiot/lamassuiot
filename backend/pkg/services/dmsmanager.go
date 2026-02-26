@@ -344,7 +344,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	switch estAuthOptions.AuthMode {
 	case models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate):
 		lFunc = lFunc.WithField("auth-method", identityextractors.IdentityExtractorClientCertificate)
-		clientCert, hasValue := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).(*x509.Certificate)
+		clientCert, hasValue := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).(*x509.Certificate)
 		if !hasValue {
 			lFunc.Errorf("aborting enrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
