@@ -1,6 +1,7 @@
 package identityextractors
 
 import (
+	"context"
 	"crypto/x509"
 	"net/http"
 
@@ -46,6 +47,16 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 		ctx.Set(core.LamassuContextKeyAuthContext, map[string]interface{}{
 			"crt": crtS.String(),
 		})
+
+		reqCtx := req.Context()
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, crt)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialString, crtS.String())
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, string(IdentityExtractorClientCertificate))
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthID, crt.Subject.CommonName)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, map[string]interface{}{
+			"crt": crtS.String(),
+		})
+		ctx.Request = ctx.Request.WithContext(reqCtx)
 	}
 }
 
