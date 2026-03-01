@@ -499,6 +499,18 @@ func isSQLite(tx *gorm.DB) bool {
 	return strings.Contains(strings.ToLower(tx.Dialector.Name()), "sqlite")
 }
 
+// splitNonEmpty splits a comma-separated string and returns only non-empty trimmed values.
+func splitNonEmpty(s string) []string {
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
 func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gorm.DB {
 	if strings.Contains(filter.Field, ".") {
 		filter.Field = strings.ReplaceAll(filter.Field, ".", "_")
@@ -535,6 +547,22 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringNotContainsIgnoreCase:
 		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, notIlike), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringIn:
+		values := splitNonEmpty(filter.Value)
+		if len(values) == 0 {
+			return tx
+		}
+		return tx.Where(fmt.Sprintf("%s IN ?", filter.Field), values)
+	case resources.StringInIgnoreCase:
+		values := splitNonEmpty(filter.Value)
+		if len(values) == 0 {
+			return tx
+		}
+		lowerValues := make([]string, len(values))
+		for i, v := range values {
+			lowerValues[i] = strings.ToLower(v)
+		}
+		return tx.Where(fmt.Sprintf("LOWER(%s) IN ?", filter.Field), lowerValues)
 	case resources.DateEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.DateBefore:
@@ -557,6 +585,12 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.EnumNotEqual:
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.EnumIn:
+		values := splitNonEmpty(filter.Value)
+		if len(values) == 0 {
+			return tx
+		}
+		return tx.Where(fmt.Sprintf("%s IN ?", filter.Field), values)
 	case resources.JsonPathExpression:
 		// JSONPath Filtering Security:
 		// - Field name validated against whitelist in controller layer

@@ -223,6 +223,10 @@ func parseFilterOperand(operand string, fieldType resources.FilterFieldType) res
 			return resources.StringNotContains
 		case "nc_ic", "notcontains_ignorecase":
 			return resources.StringNotContainsIgnoreCase
+		case "in":
+			return resources.StringIn
+		case "in_ic":
+			return resources.StringInIgnoreCase
 		}
 
 	case resources.StringArrayFilterFieldType:
@@ -263,6 +267,8 @@ func parseFilterOperand(operand string, fieldType resources.FilterFieldType) res
 			return resources.EnumEqual
 		case "ne", "notequal":
 			return resources.EnumNotEqual
+		case "in":
+			return resources.EnumIn
 		}
 
 	case resources.JsonFilterFieldType:
