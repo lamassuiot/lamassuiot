@@ -9,7 +9,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/uuid v1.6.0
-	github.com/sirupsen/logrus v1.9.3
+	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.40.0
@@ -17,6 +17,11 @@ require (
 	gocloud.dev v0.42.0
 	golang.org/x/crypto v0.47.0
 	gorm.io/gorm v1.30.0
+)
+
+require (
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	go.opentelemetry.io/otel/log v0.16.0 // indirect
 )
 
 require (
@@ -55,6 +60,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	go.opentelemetry.io/contrib/bridges/otellogrus v0.15.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect

@@ -15,3 +15,5 @@ init.sql
 *.logs
 .DS_Store
 testdata
+victoria-logs-data
+victoria-traces-data

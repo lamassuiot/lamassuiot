@@ -450,7 +450,13 @@ func main() {
 		OtelConfig: cconfig.OTELConfig{
 			Metrics: cconfig.OTELMetricsConfig{Enabled: false},
 			Traces:  cconfig.OTELTracesConfig{Enabled: false},
-			Logging: cconfig.OTELLoggingConfig{Enabled: false},
+			Logging: cconfig.OTELLoggingConfig{
+				Enabled:  true,
+				Hostname: "localhost",
+				Port:     9428,
+				Scheme:   "http",
+				BasePath: "/insert/opentelemetry/v1/logs",
+			},
 		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,

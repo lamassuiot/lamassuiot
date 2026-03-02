@@ -11,6 +11,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -33,6 +35,11 @@ func SetupLogger(currentLevel config.LogLevel, serviceID string, subsystem strin
 		"service":   serviceID,
 		"subsystem": subsystem,
 	})
+
+	// Add the hook to the local logger instance (not the package-level standard logger),
+	// so entries written through lSubsystem are actually forwarded to OTEL.
+	hook := otellogrus.NewHook(serviceID, otellogrus.WithLoggerProvider(global.GetLoggerProvider()))
+	logger.AddHook(hook)
 
 	if currentLevel == config.None {
 		lSubsystem.Infof("subsystem logging will be disabled")
