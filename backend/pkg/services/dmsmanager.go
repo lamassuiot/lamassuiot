@@ -332,8 +332,8 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc = lFunc.WithField("dms", dms.ID)
 	enrollSettings := dms.Settings.EnrollmentSettings
 
-	if enrollSettings.EnrollmentProtocol != models.EST {
-		lFunc.Errorf("aborting enrollment. DMS doesn't support EST Protocol")
+	if enrollSettings.EnrollmentProtocol != models.EST && enrollSettings.EnrollmentProtocol != models.CMP {
+		lFunc.Errorf("aborting enrollment. DMS enrollment protocol not supported (got %s)", enrollSettings.EnrollmentProtocol)
 		return nil, errs.ErrDMSOnlyEST
 	}
 
@@ -654,8 +654,8 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	enrollSettings := dms.Settings.EnrollmentSettings
-	if enrollSettings.EnrollmentProtocol != models.EST {
-		lFunc.Errorf("aborting reenrollment. DMS doesn't support EST Protocol")
+	if enrollSettings.EnrollmentProtocol != models.EST && enrollSettings.EnrollmentProtocol != models.CMP {
+		lFunc.Errorf("aborting reenrollment. DMS enrollment protocol not supported (got %s)", enrollSettings.EnrollmentProtocol)
 		return nil, errs.ErrDMSOnlyEST
 	}
 
