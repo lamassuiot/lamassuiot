@@ -34,6 +34,7 @@ type EnrollmentProto string
 
 const (
 	EST EnrollmentProto = "EST_RFC7030"
+	CMP EnrollmentProto = "CMP_RFC4210"
 )
 
 type ServerKeyGenSettings struct {
