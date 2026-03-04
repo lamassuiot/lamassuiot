@@ -11,6 +11,7 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
 	NewESTHttpRoutes(logger, httpGrp, svc)
+	NewCMPHTTPLayer(logger, httpGrp, svc)
 
 	rv1 := httpGrp.Group("/v1")
 
