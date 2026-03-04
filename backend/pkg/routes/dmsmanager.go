@@ -17,6 +17,7 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	dmsAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "dmsmanager", "dms", logger)
 
 	NewESTHttpRoutes(logger, httpGrp, svc)
+	NewCMPHTTPLayer(logger, httpGrp, svc)
 
 	rv1 := httpGrp.Group("/v1")
 
