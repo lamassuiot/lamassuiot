@@ -1,18 +1,18 @@
 TEST_FLAGS="-cover"
 
 test_engines:
-	# go test $(TEST_FLAGS) ./engines/crypto/vaultkv2/
-	# go test $(TEST_FLAGS) ./engines/crypto/vaultkv2/docker/
+	go test $(TEST_FLAGS) ./engines/crypto/vaultkv2/
+	go test $(TEST_FLAGS) ./engines/crypto/vaultkv2/docker/
 	go test $(TEST_FLAGS) ./engines/crypto/filesystem/
-	# go test $(TEST_FLAGS) ./engines/crypto/aws/
+	go test $(TEST_FLAGS) ./engines/crypto/aws/
 	# go test $(TEST_FLAGS) ./engines/crypto/pkcs11/
 	go test $(TEST_FLAGS) ./engines/crypto/software/
 	go test $(TEST_FLAGS) ./engines/storage/postgres/test
 	go test $(TEST_FLAGS) ./engines/storage/postgres/test/
 	go test $(TEST_FLAGS) ./engines/storage/postgres/migrations_test/
-	# go test $(TEST_FLAGS) ./engines/eventbus/aws/
-	# go test $(TEST_FLAGS) ./engines/eventbus/amqp/
-	# go test $(TEST_FLAGS) ./engines/eventbus/amqp/test
+	go test $(TEST_FLAGS) ./engines/eventbus/aws/
+	go test $(TEST_FLAGS) ./engines/eventbus/amqp/
+	go test $(TEST_FLAGS) ./engines/eventbus/amqp/test
 
 test_backend:
 	go test $(TEST_FLAGS) ./backend/pkg/jobs/

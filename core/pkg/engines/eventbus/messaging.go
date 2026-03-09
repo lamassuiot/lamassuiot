@@ -18,7 +18,6 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 		return nil, fmt.Errorf("could not create event bus router: %s", err)
 	}
 
-	posionMw, err := middleware.PoisonQueue(poisonPub, "lamassu-dlq")
 	dlqMw, err := middleware.PoisonQueue(dlqPub, "lamassu-dlq")
 	if err != nil {
 		return nil, fmt.Errorf("could not create poison queue middleware: %s", err)
@@ -35,9 +34,6 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 		dlqMw,
 		middleware.Recoverer,
 
-		// // Poision queue middleware will move messages that have been Nacked more than MaxRetries to a separate topic.
-		posionMw,
-
 		// CorrelationID will copy the correlation id from the incoming message's metadata to the produced messages
 		middleware.CorrelationID,
 
@@ -53,4 +49,4 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 	)
 
 	return router, nil
-
+}
