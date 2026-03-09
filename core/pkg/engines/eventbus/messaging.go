@@ -124,4 +124,4 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 	)
 
 	return router, nil
-
+}
