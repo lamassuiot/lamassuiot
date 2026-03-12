@@ -31,13 +31,13 @@ func (svc *CryptoMonitor) Run() {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	now := time.Now()
-	lFunc.Info("starting periodic CAs and Certificate check for expired certificates")
+	lFunc.Info("scanning CAs and certificates for expiry")
 
 	svc.scanCAsForUpdate(ctx, now)
 	svc.scanCertificatesForUpdate(ctx, now)
 
 	end := time.Now()
-	lFunc.Infof("ending check. Took %v", end.Sub(now))
+	lFunc.Infof("expiry scan completed in %v", end.Sub(now))
 }
 
 func (svc *CryptoMonitor) scanCertificatesForUpdate(ctx context.Context, now time.Time) {

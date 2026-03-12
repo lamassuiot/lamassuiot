@@ -20,11 +20,11 @@ func NewJobScheduler(logger *logrus.Entry, frequency string, job cron.Job) *JobS
 	var err error
 	var jobId cron.EntryID
 
-	logger.Infof("enabling periodic monitoring with cron expression: '%s'", frequency)
+	logger.Infof("scheduling periodic job with frequency '%s'", frequency)
 	f, err := GetSchedulerPeriod(frequency)
 	if err != nil {
 		f = time.Duration(30 * time.Minute)
-		logger.Warnf("could not parse frequency. defaulting to %s: %v", err, f)
+		logger.Warnf("could not parse frequency '%s', defaulting to %s: %v", frequency, f, err)
 	}
 
 	if f < time.Minute {

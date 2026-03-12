@@ -311,10 +311,10 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			Identifier: skid,
 		})
 		if err != nil {
-			lFunc.Infof("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
+			lFunc.Infof("key with SKID '%s' not found for CA %s, treating as external import without key: %s", skid, caCertSN, err)
 			importType = models.CertificateTypeImportedWithoutKey
 		} else {
-			lFunc.Infof("found key with SKID %s for CA %s in KMS", skid, caCertSN)
+			lFunc.Infof("found matching key with SKID '%s' for CA %s in KMS", skid, caCertSN)
 			importType = models.CertificateTypeManaged
 		}
 	}
@@ -475,7 +475,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		},
 	}
 
-	lFunc.Debugf("insert CA %s in storage engine", caID)
+	lFunc.Debugf("inserting CA '%s' into storage", caID)
 	cert, err := svc.caStorage.Insert(ctx, ca)
 
 	// Flag to check if it's the first iteration
@@ -799,7 +799,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		},
 	}
 
-	lFunc.Debugf("insert CA %s in storage engine", caID)
+	lFunc.Debugf("inserting CA '%s' into storage", caID)
 	return svc.caStorage.Insert(ctx, &caCert)
 }
 
@@ -811,12 +811,12 @@ func (svc *CAServiceBackend) getCACertificateIfExists(ctx context.Context, caID 
 	lFunc.Debugf("checking if CA '%s' exists", caID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, caID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", caID, err)
+		lFunc.Errorf("failed to look up CA '%s' in storage: %s", caID, err)
 		return nil, err
 	}
 
 	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", caID)
+		lFunc.Errorf("CA '%s' not found", caID)
 		return nil, errs.ErrCANotFound
 	}
 
@@ -855,7 +855,7 @@ func (svc *CAServiceBackend) GetCAs(ctx context.Context, input services.GetCAsIn
 		ExtraOpts:     nil,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading all CAs from storage engine: %s", err)
+		lFunc.Errorf("failed to list CAs from storage: %s", err)
 		return "", err
 	}
 
@@ -874,12 +874,12 @@ func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input serv
 	lFunc.Debugf("checking if CA '%s' exists", input.SerialNumber)
 	exists, ca, err := svc.caStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.SerialNumber, err)
+		lFunc.Errorf("failed to look up CA '%s' in storage: %s", input.SerialNumber, err)
 		return nil, err
 	}
 
 	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.SerialNumber)
+		lFunc.Errorf("CA with serial number '%s' not found", input.SerialNumber)
 		return nil, errs.ErrCANotFound
 	}
 
@@ -897,7 +897,7 @@ func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input servi
 		ExtraOpts:     nil,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading all CAs by Common name %s from storage engine: %s", input.CommonName, err)
+		lFunc.Errorf("failed to list CAs by common name '%s' from storage: %s", input.CommonName, err)
 		return "", err
 	}
 
@@ -974,7 +974,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 
 		ctr := 0
 		revokeCertFunc := func(c models.Certificate) {
-			lFunc.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
+			lFunc.Infof("revoking certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.ID)
 			ctr++
 			_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 				SerialNumber:     c.SerialNumber,
@@ -1062,12 +1062,12 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 // caValidatorCADeletionEligibility checks if a CA can be deleted based on its type and status
 func (svc *CAServiceBackend) caValidatorCADeletionEligibility(ca *models.CACertificate, lFunc *logrus.Entry) error {
 	if ca.Certificate.Type == models.CertificateTypeImportedWithoutKey {
-		lFunc.Debugf("ImportedWithoutKey CA can be deleted. Proceeding")
+		lFunc.Debugf("CA '%s' is ImportedWithoutKey type, eligible for deletion", ca.ID)
 		return nil
 	}
 
 	if ca.Certificate.Status == models.StatusExpired || ca.Certificate.Status == models.StatusRevoked {
-		lFunc.Debugf("Expired or revoked CA can be deleted. Proceeding")
+		lFunc.Debugf("CA '%s' is expired or revoked, eligible for deletion", ca.ID)
 		return nil
 	}
 
@@ -1079,7 +1079,7 @@ func (svc *CAServiceBackend) caValidatorCADeletionEligibility(ca *models.CACerti
 func (svc *CAServiceBackend) deleteChildCAs(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
 
 	deleteChildCAFunc := func(childCA models.CACertificate) {
-		lFunc.Infof("Deleting child CA %s (%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
+		lFunc.Infof("deleting child CA %s (CN=%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
 		err := svc.service.DeleteCA(ctx, services.DeleteCAInput{
 			CAID:          childCA.ID,
 			CascadeDelete: true,
@@ -1107,7 +1107,7 @@ func (svc *CAServiceBackend) deleteChildCAs(ctx context.Context, ca *models.CACe
 func (svc *CAServiceBackend) revokeChildCAs(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
 
 	revokeChildCAFunc := func(childCA models.CACertificate) {
-		lFunc.Infof("Revoking child CA %s (%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
+		lFunc.Infof("revoking child CA %s (CN=%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
 		_, err := svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
 			CAID:             childCA.ID,
 			Status:           models.StatusRevoked,
@@ -1137,7 +1137,7 @@ func (svc *CAServiceBackend) deleteCertificatesIssuedByCA(ctx context.Context, c
 
 	ctr := 0
 	deleteCertFunc := func(c models.Certificate) {
-		lFunc.Infof("Deleting certificate %d - %s", ctr, c.SerialNumber)
+		lFunc.Infof("deleting certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.ID)
 		ctr++
 		err := svc.service.DeleteCertificate(ctx, services.DeleteCertificateInput{
 			SerialNumber: c.SerialNumber,
@@ -1162,7 +1162,7 @@ func (svc *CAServiceBackend) revokeCertificatesIssuedByCA(ctx context.Context, c
 
 	ctr := 0
 	revokeCertFunc := func(c models.Certificate) {
-		lFunc.Infof("Revoking certificate %d - %s", ctr, c.SerialNumber)
+		lFunc.Infof("revoking certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.ID)
 		ctr++
 		_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 			SerialNumber:     c.SerialNumber,
@@ -1196,7 +1196,7 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 			return errs.ErrCascadeDeleteNotAllowed
 		}
 
-		lFunc.Debugf("cascade delete is enabled and allowed, proceeding with child CA and certificate deletion")
+		lFunc.Debugf("cascade delete enabled for CA '%s', deleting child CAs and certificates", ca.ID)
 
 		// Delete child CAs recursively
 		if err := svc.deleteChildCAs(ctx, ca, lFunc); err != nil {
@@ -1207,7 +1207,7 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 		return svc.deleteCertificatesIssuedByCA(ctx, ca, lFunc)
 	}
 
-	lFunc.Debugf("cascade delete is disabled, proceeding with child CA and certificate revocation")
+	lFunc.Debugf("cascade delete disabled for CA '%s', revoking child CAs and certificates", ca.ID)
 
 	// Revoke child CAs issued by the CA
 	if err := svc.revokeChildCAs(ctx, ca, lFunc); err != nil {
@@ -1238,7 +1238,7 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 	if err != nil {
 		lFunc.Warnf("could not delete private key for CA %s from crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
 	} else {
-		lFunc.Debugf("successfully deleted private key for CA %s from crypto engine %s", ca.ID, ca.Certificate.EngineID)
+		lFunc.Debugf("deleted private key for CA '%s' from crypto engine '%s'", ca.ID, ca.Certificate.EngineID)
 	}
 }
 
@@ -1303,7 +1303,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	// Override validity to preserve the original CA's validity duration only if not set
 	if profile.Validity.Type == "" {
 		profile.Validity = validity
-		lFunc.Debugf("Duration is not provided. Preserved current CA validity duration")
+		lFunc.Debugf("no validity duration specified, preserving current CA validity duration")
 	}
 
 	var newCert *x509.Certificate
@@ -1433,7 +1433,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		return nil, err
 	}
 
-	lFunc.Debugf("successfully reissued CA %s. New serial number: %s", input.CAID, newCertificateRecord.SerialNumber)
+	lFunc.Debugf("CA '%s' reissued with new serial number %s", input.CAID, newCertificateRecord.SerialNumber)
 
 	return updatedCA, nil
 }
@@ -1472,7 +1472,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 	// Delete the CA
 	err = svc.caStorage.Delete(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)
+		lFunc.Errorf("failed to delete CA '%s' from storage: %s", input.CAID, err)
 		return err
 	}
 
@@ -1576,7 +1576,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 
 	// CAs get inserted into the CA storage engine by the CreateCA method. Don't insert them here.
 	if !x509Cert.IsCA {
-		lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
+		lFunc.Debugf("inserting certificate '%s' into storage", cert.SerialNumber)
 		return svc.certStorage.Insert(ctx, &cert)
 	}
 
@@ -1661,18 +1661,18 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
+		lFunc.Errorf("failed to look up CA '%s' in storage: %s", input.CAID, err)
 		return nil, err
 	}
 
 	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
+		lFunc.Errorf("CA '%s' not found", input.CAID)
 		return nil, errs.ErrCANotFound
 	}
 
 	certSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 
-	lFunc.Debugf("sign signature with %s Certificate", ca.Certificate.SerialNumber)
+	lFunc.Debugf("verifying signature using CA certificate %s", ca.Certificate.SerialNumber)
 
 	var opts crypto.SignerOpts
 	hash := crypto.SHA256
@@ -1728,12 +1728,12 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
+		lFunc.Errorf("failed to look up CA '%s' in storage: %s", input.CAID, err)
 		return false, err
 	}
 
 	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
+		lFunc.Errorf("CA '%s' not found", input.CAID)
 		return false, errs.ErrCANotFound
 	}
 
@@ -1769,12 +1769,12 @@ func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, i
 	lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if Certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
+		lFunc.Errorf("failed to look up certificate '%s' in storage: %s", input.SerialNumber, err)
 		return nil, err
 	}
 
 	if !exists {
-		lFunc.Errorf("certificate %s can not be found in storage engine", input.SerialNumber)
+		lFunc.Errorf("certificate '%s' not found", input.SerialNumber)
 		return nil, errs.ErrCertificateNotFound
 	}
 
@@ -1807,12 +1807,12 @@ func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input serv
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, _, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
+		lFunc.Errorf("failed to look up CA '%s' in storage: %s", input.CAID, err)
 		return "", err
 	}
 
 	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
+		lFunc.Errorf("CA '%s' not found", input.CAID)
 		return "", errs.ErrCANotFound
 	}
 
@@ -1876,7 +1876,7 @@ func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input 
 		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
+		lFunc.Errorf("failed to look up certificate '%s' in storage: %s", input.SerialNumber, err)
 		return nil, err
 	}
 
@@ -1925,7 +1925,7 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
+		lFunc.Errorf("failed to look up certificate '%s' in storage: %s", input.SerialNumber, err)
 		return nil, err
 	}
 
@@ -1962,7 +1962,7 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
+		lFunc.Errorf("failed to look up certificate '%s' in storage: %s", input.SerialNumber, err)
 		return err
 	}
 
@@ -1981,10 +1981,10 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 
 	// Issuer CA does not exist, proceed with deletion
 	lFunc.Debugf("issuer CA '%s' not found, proceeding with certificate deletion", cert.IssuerCAMetadata.ID)
-	lFunc.Debugf("deleting certificate %s from storage engine", input.SerialNumber)
+	lFunc.Debugf("deleting certificate '%s' from storage", input.SerialNumber)
 	err = svc.certStorage.Delete(ctx, input.SerialNumber)
 	if err != nil {
-		lFunc.Errorf("something went wrong while deleting certificate '%s' from storage engine: %s", input.SerialNumber, err)
+		lFunc.Errorf("failed to delete certificate '%s' from storage: %s", input.SerialNumber, err)
 		return err
 	}
 
@@ -2040,7 +2040,7 @@ func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input se
 		return nil, err
 	}
 
-	lFunc.Infof("issuance profile '%s' with ID '%s' created successfully", input.Profile.Name, id)
+	lFunc.Infof("issuance profile '%s' created with ID '%s'", input.Profile.Name, id)
 	return p, nil
 }
 

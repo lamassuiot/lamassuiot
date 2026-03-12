@@ -62,7 +62,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		if !conf.SubscriberDLQEventBus.Enabled {
 			lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
 		} else {
-			log.Infof("Event Bus is enabled")
+			log.Infof("event bus subscription enabled for Alerts service")
 
 			dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, "alerts", lMessaging)
 			if err != nil {

@@ -119,7 +119,7 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (services.CRLService, error) {
 
 	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "VA", "Event Bus")
-	lMessaging.Infof("Publisher Event Bus is enabled")
+	lMessaging.Infof("event bus publishing enabled for VA service")
 	pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
 	if err != nil {
 		return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
@@ -142,7 +142,7 @@ func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLService
 	}
 
 	if conf.SubscriberEventBus.Enabled && conf.SubscriberDLQEventBus.Enabled {
-		lMessaging.Infof("Subscriber Event Bus is enabled")
+		lMessaging.Infof("event bus subscription enabled for VA service")
 
 		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
 		if err != nil {
@@ -173,7 +173,7 @@ func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLService
 
 func createCRLMonitoringJob(conf config.VAconfig, crl services.CRLService) error {
 
-	log.Infof("VA CRL Monitoring is enabled")
+	log.Infof("CRL monitoring enabled, scheduling job with frequency '%s'", conf.CRLMonitoringJob.Frequency)
 	lJob := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 
 	frequency := conf.CRLMonitoringJob.Frequency

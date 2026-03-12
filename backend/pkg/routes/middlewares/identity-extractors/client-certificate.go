@@ -23,7 +23,7 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 
 	crt, err = extractor.getCertificateFromHeader(req.Header)
 	if err != nil {
-		extractor.logger.Tracef("something went wrong while processing headers: %s", err)
+		extractor.logger.Tracef("failed to extract client certificate from headers: %s", err)
 	} else if crt != nil {
 		ctx.Set(string(IdentityExtractorClientCertificate), crt)
 		return

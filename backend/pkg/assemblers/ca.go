@@ -76,7 +76,7 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 	caSvc.SetService(svc)
 
 	if conf.PublisherEventBus.Enabled {
-		log.Infof("Event Bus is enabled")
+		log.Infof("event bus publishing enabled for CA service")
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "ca", lMessage)
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
@@ -103,7 +103,7 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 
 	var scheduler *jobs.JobScheduler
 	if conf.CertificateMonitoringJob.Enabled {
-		log.Infof("Crypto Monitoring is enabled")
+		log.Infof("certificate expiry monitoring enabled")
 		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
 		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, monitorJob)
 		scheduler.Start()

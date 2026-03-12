@@ -66,7 +66,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)
 
 	if conf.PublisherEventBus.Enabled {
-		log.Infof("Event Bus is enabled")
+		log.Infof("event bus publishing enabled for DMS Manager service")
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "dms-manager", lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)

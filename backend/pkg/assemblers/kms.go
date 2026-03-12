@@ -96,7 +96,7 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 	kmsSvc.SetService(svc)
 
 	if conf.PublisherEventBus.Enabled {
-		log.Infof("Event Bus is enabled")
+		log.Infof("event bus publishing enabled for KMS service")
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "kms", lMessage)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
@@ -165,7 +165,7 @@ func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID
 	}
 	keyMigLog := logger.WithField("engine", engineID)
 	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
-	keyMigLog.Infof("checking engine keys format")
+	keyMigLog.Debugf("checking key ID format for engine '%s'", engineID)
 
 	// Iter over all keys and rename if not in sha256 hex format
 	for _, keyID := range keyIDs {
@@ -181,7 +181,7 @@ func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID
 
 		// only rename if different
 		if newKeyID != keyID {
-			keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
+			keyMigLog.Debugf("renaming key '%s' to canonical format '%s'", keyID, newKeyID)
 			err = engine.Service.RenameKey(keyID, newKeyID)
 			if err != nil {
 				return fmt.Errorf("could not rename key %s: %w", keyID, err)
@@ -200,7 +200,7 @@ func migrateKeysToV3Format(logger *log.Entry, caCertsRepo storage.CACertificates
 
 	keyMigLog := logger.WithField("engine", engineID)
 	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
-	keyMigLog.Infof("checking engine keys format")
+	keyMigLog.Debugf("checking key ID format for engine '%s'", engineID)
 
 	for _, keyID := range keyIDs {
 		key, err := engine.Service.GetPrivateKeyByID(keyID)
@@ -232,7 +232,7 @@ func migrateKeysToV3Format(logger *log.Entry, caCertsRepo storage.CACertificates
 			certSkiInHex := hex.EncodeToString(x509.SubjectKeyId)
 
 			if oldKeyID, ok := mapKeyIDToSha256Hex[certPubKeySha256Hex]; ok && certSkiInHex != oldKeyID {
-				keyMigLog.Infof("migrating cert %s from keyID %s to %s", certSN, oldKeyID, certSkiInHex)
+				keyMigLog.Infof("migrating CA cert '%s' key ID from '%s' to SKID '%s'", certSN, oldKeyID, certSkiInHex)
 				err = engine.Service.RenameKey(oldKeyID, certSkiInHex)
 				if err != nil {
 					keyMigLog.Errorf("could not rename key %s to %s: %s", oldKeyID, certSkiInHex, err)

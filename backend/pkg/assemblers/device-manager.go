@@ -61,9 +61,9 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	deviceSvc := svc.(*lservices.DeviceManagerServiceBackend)
 
 	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
-	lMessaging.Infof("Publisher Event Bus is enabled")
 
 	if conf.PublisherEventBus.Enabled {
+		lMessaging.Infof("event bus publishing enabled for Device Manager service")
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
@@ -89,7 +89,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			}
 
 			lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
-			lMessaging.Infof("Subscriber Event Bus is enabled")
+			lMessaging.Infof("event bus subscription enabled for Device Manager service")
 
 			subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
 			if err != nil {

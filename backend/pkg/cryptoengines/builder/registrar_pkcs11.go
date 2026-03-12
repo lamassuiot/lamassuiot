@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	log.Info("Registering PKCS11 crypto engine")
+	log.Debug("registering PKCS11 crypto engine provider")
 	pkcs11.Register()
 	pkcs11_subsystem.Register()
 }

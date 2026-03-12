@@ -182,7 +182,7 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 
 	dev, err := svc.devicesStorage.Insert(ctx, device)
 	if err != nil {
-		lFunc.Errorf("could not insert device %s in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to insert device '%s' into storage: %s", input.ID, err)
 		return nil, err
 	}
 	return dev, nil
@@ -191,14 +191,14 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 func (svc DeviceManagerServiceBackend) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	lFunc.Debugf("getting all devices")
+	lFunc.Debugf("listing all devices")
 	return svc.devicesStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	lFunc.Debugf("getting all devices owned by DMS with ID=%s", input.DMSID)
+	lFunc.Debugf("listing devices owned by DMS '%s'", input.DMSID)
 	return svc.devicesStorage.SelectByDMS(ctx, input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }
 
@@ -213,10 +213,10 @@ func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input 
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up device '%s' in storage: %s", input.ID, err)
 		return nil, err
 	} else if !exists {
-		lFunc.Errorf("device %s can not be found in storage engine", input.ID)
+		lFunc.Errorf("device '%s' not found", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
 
@@ -234,18 +234,18 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up device '%s' in storage: %s", input.ID, err)
 		return nil, err
 	} else if !exists {
-		lFunc.Errorf("device %s can not be found in storage engine", input.ID)
+		lFunc.Errorf("device '%s' not found", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
 
 	if device.Status == input.NewStatus {
-		lFunc.Warnf("skipping update. Device already in %s status", input.NewStatus)
+		lFunc.Warnf("device '%s' already in '%s' status, skipping update", input.ID, input.NewStatus)
 		return device, nil
 	} else if device.Status == models.DeviceDecommissioned {
-		lFunc.Warnf("skipping update. Device decommissioned")
+		lFunc.Warnf("device '%s' is decommissioned, skipping status update", input.ID)
 		return device, nil
 	}
 
@@ -258,9 +258,9 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 		idSlot := device.IdentitySlot
 		if idSlot != nil {
 			if idSlot.Status == models.SlotExpired {
-				lFunc.Debugf("skipping slot update. Identity slot already expired")
+				lFunc.Debugf("device '%s' identity slot already expired, skipping slot update", input.ID)
 			} else if idSlot.Status == models.SlotRevoke {
-				lFunc.Debugf("skipping slot update. Identity slot already revoked")
+				lFunc.Debugf("device '%s' identity slot already revoked, skipping slot update", input.ID)
 			} else {
 
 				idSlot.Status = models.SlotRevoke
@@ -295,7 +295,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 		return nil, err
 	}
 
-	lFunc.Debugf("device %s status updated. new status: %s", input.ID, input.NewStatus)
+	lFunc.Debugf("device '%s' status updated to '%s'", input.ID, input.NewStatus)
 	return device, nil
 }
 
@@ -311,12 +311,12 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up device '%s' in storage: %s", input.ID, err)
 		return nil, err
 	}
 
 	if !exists {
-		lFunc.Errorf("device %s can not be found in storage engine", input.ID)
+		lFunc.Errorf("device '%s' not found", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
 
@@ -344,10 +344,10 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up device '%s' in storage: %s", input.ID, err)
 		return nil, err
 	} else if !exists {
-		lFunc.Errorf("device %s can not be found in storage engine", input.ID)
+		lFunc.Errorf("device '%s' not found", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
 
@@ -433,10 +433,10 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 	lFunc.Debugf("checking if device '%s' exists", id)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, id)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", id, err)
+		lFunc.Errorf("failed to look up device '%s' in storage: %s", id, err)
 		return err
 	} else if !exists {
-		lFunc.Errorf("device '%s' does not exist in storage engine", id)
+		lFunc.Errorf("device '%s' not found", id)
 		return errs.ErrDeviceNotFound
 	}
 
@@ -449,11 +449,11 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 	lFunc.Debugf("deleting device '%s'", id)
 	err = svc.devicesStorage.Delete(ctx, id)
 	if err != nil {
-		lFunc.Errorf("something went wrong while deleting device '%s' from storage engine: %s", id, err)
+		lFunc.Errorf("failed to delete device '%s' from storage: %s", id, err)
 		return err
 	}
 
-	lFunc.Infof("device '%s' deleted successfully", id)
+	lFunc.Infof("device '%s' deleted", id)
 	return nil
 }
 
@@ -497,11 +497,11 @@ func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, in
 	lFunc.Debugf("creating device group '%s'", input.ID)
 	group, err = svc.devicesStorage.DeviceGroups().Insert(ctx, group)
 	if err != nil {
-		lFunc.Errorf("could not insert device group '%s' in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to insert device group '%s' into storage: %s", input.ID, err)
 		return nil, err
 	}
 
-	lFunc.Infof("device group '%s' created successfully", input.ID)
+	lFunc.Infof("device group '%s' created", input.ID)
 
 	// Enrich with ancestor criteria
 	if err := svc.enrichGroupWithAncestorCriteria(ctx, lFunc, group); err != nil {
@@ -555,11 +555,11 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceGroup(ctx context.Context, in
 	lFunc.Debugf("updating device group '%s'", input.ID)
 	group, err = svc.devicesStorage.DeviceGroups().Update(ctx, group)
 	if err != nil {
-		lFunc.Errorf("could not update device group '%s' in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to update device group '%s' in storage: %s", input.ID, err)
 		return nil, err
 	}
 
-	lFunc.Infof("device group '%s' updated successfully", input.ID)
+	lFunc.Infof("device group '%s' updated", input.ID)
 
 	// Enrich with ancestor criteria
 	if err := svc.enrichGroupWithAncestorCriteria(ctx, lFunc, group); err != nil {
@@ -586,11 +586,11 @@ func (svc DeviceManagerServiceBackend) DeleteDeviceGroup(ctx context.Context, in
 	lFunc.Debugf("deleting device group '%s'", input.ID)
 	err = svc.devicesStorage.DeviceGroups().Delete(ctx, input.ID)
 	if err != nil {
-		lFunc.Errorf("could not delete device group '%s' from storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to delete device group '%s' from storage: %s", input.ID, err)
 		return err
 	}
 
-	lFunc.Infof("device group '%s' deleted successfully", input.ID)
+	lFunc.Infof("device group '%s' deleted", input.ID)
 	return nil
 }
 
@@ -604,7 +604,7 @@ func (svc DeviceManagerServiceBackend) GetDeviceGroupByID(ctx context.Context, i
 	}
 
 	// Get device group
-	lFunc.Debugf("getting device group '%s'", input.ID)
+	lFunc.Debugf("fetching device group '%s'", input.ID)
 	group, err := svc.verifyGroupExists(ctx, lFunc, input.ID)
 	if err != nil {
 		return nil, err
@@ -621,7 +621,7 @@ func (svc DeviceManagerServiceBackend) GetDeviceGroupByID(ctx context.Context, i
 func (svc DeviceManagerServiceBackend) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	lFunc.Debugf("getting all device groups")
+	lFunc.Debugf("listing all device groups")
 	return svc.devicesStorage.DeviceGroups().SelectAll(ctx, storage.StorageListRequest[models.DeviceGroup]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,

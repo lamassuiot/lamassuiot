@@ -88,7 +88,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 
 	response, err := r.ocsp.Verify(ctx.Request.Context(), ocsp)
 	if err != nil {
-		r.logger.Errorf("something went wrong while verifying ocsp request: %s", err)
+		r.logger.Errorf("failed to verify OCSP request: %s", err)
 		ctx.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
@@ -112,7 +112,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 		CASubjectKeyID: params.CASubjectKeyID,
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while getting crl list: %s", err)
+		r.logger.Errorf("failed to get CRL for CA '%s': %s", params.CASubjectKeyID, err)
 		r.handleError(ctx, err)
 		return
 	}
@@ -135,7 +135,7 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 		CASubjectKeyID: params.CASubjectKeyID,
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while getting va role: %s", err)
+		r.logger.Errorf("failed to get VA role for CA '%s': %s", params.CASubjectKeyID, err)
 		r.handleError(ctx, err)
 		return
 	}
@@ -165,7 +165,7 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 		CRLRole:        requestBody.VACRLRole,
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while updating va role: %s", err)
+		r.logger.Errorf("failed to update VA role for CA '%s': %s", params.CASubjectKeyID, err)
 		r.handleError(ctx, err)
 		return
 	}

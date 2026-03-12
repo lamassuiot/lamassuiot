@@ -262,7 +262,7 @@ func (svc *KMSServiceBackend) GetKeys(ctx context.Context, input services.GetKey
 		ExtraOpts:     nil,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading all Requests from storage engine: %s", err)
+		lFunc.Errorf("failed to list keys from storage: %s", err)
 		return "", err
 	}
 
@@ -279,46 +279,45 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 	}
 
 	if strings.HasPrefix(input.Identifier, "pkcs11:") {
-		lFunc.Debugf("checking if Key '%s' exists via PKCS11URI", input.Identifier)
+		lFunc.Debugf("resolving key '%s' via PKCS11 URI", input.Identifier)
 		_, keyID, _, err := parsePKCS11ID(input.Identifier)
 		if err != nil {
 			lFunc.Errorf("failed to parse PKCS11 ID: %s", err)
 			return nil, err
 		}
 
-		lFunc.Debugf("checking if Key '%s' exists via KeyID", keyID)
+		lFunc.Debugf("looking up key '%s' by keyID", keyID)
 		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID)
 		if err != nil {
-			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", keyID, err)
+			lFunc.Errorf("failed to look up key '%s' in storage: %s", keyID, err)
 			return nil, err
 		}
 
 		if !exists {
-			lFunc.Infof("key %s can not be found in storage engine via keyID", keyID)
+			lFunc.Infof("key '%s' not found by keyID", keyID)
 			return nil, fmt.Errorf("key not found")
 		}
 
 		return key, nil
 	} else {
 
-		lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
+		lFunc.Debugf("looking up key '%s' by keyID", input.Identifier)
 		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, input.Identifier)
 		if err != nil {
-			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+			lFunc.Errorf("failed to look up key '%s' in storage: %s", input.Identifier, err)
 			return nil, err
 		}
 
 		if !exists {
-			lFunc.Infof("key %s can not be found in storage engine via keyID", input.Identifier)
-			lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
+			lFunc.Debugf("key '%s' not found by keyID, retrying by alias", input.Identifier)
 			exists, key, err = svc.kmsStorage.SelectExistsByAlias(ctx, input.Identifier)
 			if err != nil {
-				lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+				lFunc.Errorf("failed to look up key '%s' in storage: %s", input.Identifier, err)
 				return nil, err
 			}
 
 			if !exists {
-				lFunc.Infof("key %s can not be found in storage engine via alias", input.Identifier)
+				lFunc.Infof("key '%s' not found by alias", input.Identifier)
 				return nil, fmt.Errorf("key not found")
 			}
 		}
@@ -638,7 +637,7 @@ func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input servi
 		Identifier: input.ID,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up key '%s' in storage: %s", input.ID, err)
 		return nil, err
 	}
 
@@ -672,7 +671,7 @@ func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input servic
 		Identifier: input.ID,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up key '%s' in storage: %s", input.ID, err)
 		return nil, err
 	}
 
@@ -728,7 +727,7 @@ func (svc *KMSServiceBackend) UpdateKeyName(ctx context.Context, input services.
 		Identifier: input.ID,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up key '%s' in storage: %s", input.ID, err)
 		return nil, err
 	}
 
@@ -755,7 +754,7 @@ func (svc *KMSServiceBackend) UpdateKeyTags(ctx context.Context, input services.
 		Identifier: input.ID,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
+		lFunc.Errorf("failed to look up key '%s' in storage: %s", input.ID, err)
 		return nil, err
 	}
 
@@ -782,7 +781,7 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 		Identifier: input.Identifier,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+		lFunc.Errorf("failed to look up key '%s' in storage: %s", input.Identifier, err)
 		return err
 	}
 
@@ -800,18 +799,18 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 
 	err = engineInstance.DeleteKey(key.KeyID)
 	if err != nil {
-		lFunc.Errorf("delete key error: %s", err)
+		lFunc.Errorf("failed to delete key '%s' from crypto engine: %s", key.KeyID, err)
 		return err
 	}
 
-	lFunc.Debugf("deleting key %s from storage engine", key.KeyID)
+	lFunc.Debugf("deleting key '%s' from storage", key.KeyID)
 	err = svc.kmsStorage.Delete(ctx, key.KeyID)
 	if err != nil {
-		lFunc.Errorf("delete by ID error: %s", err)
+		lFunc.Errorf("failed to delete key '%s' from storage: %s", key.KeyID, err)
 		return fmt.Errorf("failed to delete key from storage: %w", err)
 	}
 
-	lFunc.Infof("key %s deleted successfully", key.KeyID)
+	lFunc.Infof("key '%s' deleted", key.KeyID)
 
 	return nil
 }

@@ -85,7 +85,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 	if input.CRLVersion.Cmp(big.NewInt(0)) == 0 {
 		exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 		if err != nil {
-			lFunc.Errorf("something went wrong while reading VA role: %s", err)
+			lFunc.Errorf("failed to get VA role for CA '%s': %s", input.CASubjectKeyID, err)
 			return nil, err
 		}
 
@@ -99,7 +99,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 
 	crlPem, err := svc.bucket.ReadAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, versionStr))
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CRL: %s", err)
+		lFunc.Errorf("failed to read CRL for CA '%s' version %s: %s", input.CASubjectKeyID, versionStr, err)
 		return nil, err
 	}
 
@@ -107,7 +107,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 
 	crl, err := x509.ParseRevocationList(crlDer.Bytes)
 	if err != nil {
-		lFunc.Errorf("something went wrong while parsing CRL: %s", err)
+		lFunc.Errorf("failed to parse CRL for CA '%s': %s", input.CASubjectKeyID, err)
 		return nil, err
 	}
 
@@ -162,7 +162,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 		CASubjectKeyID: caSki,
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while calculating first CRL: %s", err)
+		lFunc.Errorf("failed to calculate initial CRL for CA '%s': %s", caSki, err)
 		return nil, err
 	}
 
@@ -183,7 +183,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	exists, vaRole, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading VA role: %s", err)
+		lFunc.Errorf("failed to get VA role for CA '%s': %s", input.CASubjectKeyID, err)
 		return nil, err
 	}
 
@@ -209,7 +209,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s: %s", input.CASubjectKeyID, err)
+		lFunc.Errorf("failed to look up CA with SKID '%s': %s", input.CASubjectKeyID, err)
 		return nil, err
 	}
 
@@ -219,7 +219,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	}
 
 	certList := []x509.RevocationListEntry{}
-	lFunc.Debugf("reading CA %s certificates", crlCA.ID)
+	lFunc.Debugf("fetching revoked certificates for CA '%s'", crlCA.ID)
 	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
 		CAID:   crlCA.ID,
 		Status: models.StatusRevoked,
@@ -239,7 +239,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", crlCA.ID, err)
+		lFunc.Errorf("failed to list revoked certificates for CA '%s': %s", crlCA.ID, err)
 		return nil, err
 	}
 
@@ -250,17 +250,18 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.SubjectKeyID))
 	if err != nil {
-		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
+		lFunc.Errorf("failed to create Issuing Distribution Point extension for CA '%s': %s", crlCA.ID, err)
 		return nil, err
 	}
 
 	extensions = append(extensions, *idp)
 
-	lFunc.Debugf("creating revocation list. CA %s", crlCA.ID)
 	now := time.Now()
 
 	crlVersion := big.NewInt(0)
 	crlVersion.Add(vaRole.LatestCRL.Version.Int, big.NewInt(1))
+
+	lFunc.Debugf("creating CRL v%s for CA '%s' with %d revoked certificates", crlVersion, crlCA.ID, len(certList))
 
 	entropy := software.NewLamassuEntropy(ctx)
 
@@ -272,20 +273,20 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		ExtraExtensions:           extensions,
 	}, caCert, crlSigner)
 	if err != nil {
-		lFunc.Errorf("something went wrong while creating revocation list: %s", err)
+		lFunc.Errorf("failed to create revocation list for CA '%s': %s", crlCA.ID, err)
 		return nil, err
 	}
 
 	crl, err := x509.ParseRevocationList(crlDer)
 	if err != nil {
-		lFunc.Errorf("something went wrong while parsing revocation list: %s", err)
+		lFunc.Errorf("failed to parse created revocation list for CA '%s': %s", crlCA.ID, err)
 		return nil, err
 	}
 
 	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
 	err = svc.bucket.WriteAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, crl.Number), crlPem, nil)
 	if err != nil {
-		lFunc.Errorf("something went wrong while saving CRL: %s", err)
+		lFunc.Errorf("failed to save CRL for CA '%s': %s", crlCA.ID, err)
 		return nil, err
 	}
 
@@ -297,7 +298,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	_, err = svc.vaRepo.Update(ctx, vaRole)
 	if err != nil {
-		lFunc.Errorf("something went wrong while updating VA role: %s", err)
+		lFunc.Errorf("failed to update VA role for CA '%s': %s", input.CASubjectKeyID, err)
 		return nil, err
 	}
 

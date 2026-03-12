@@ -18,11 +18,11 @@ var (
 
 func main() {
 	log.SetFormatter(helpers.LogFormatter)
-	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
+	log.Infof("starting API service: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
 	conf, err := cconfig.LoadConfig[config.AlertsConfig](nil)
 	if err != nil {
-		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
+		log.Fatalf("failed to load config, exiting: %s", err)
 	}
 
 	globalLogLevel, err := log.ParseLevel(string(conf.Logs.Level))

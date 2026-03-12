@@ -28,7 +28,7 @@ func NewVACrlMonitorJob(logger *logrus.Entry, service services.CRLService, blind
 func (svc *VACrlMonitor) Run() {
 	ctx := helpers.InitContext()
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-	lFunc.Info("starting periodic VA CRL check")
+	lFunc.Info("checking VA CRL validity")
 	svc.processVARoles(ctx, lFunc)
 }
 
@@ -38,23 +38,23 @@ func (svc *VACrlMonitor) processVARoles(ctx context.Context, lFunc *logrus.Entry
 		QueryParameters: &resources.QueryParameters{},
 		ExhaustiveRun:   true,
 		ApplyFunc: func(v models.VARole) {
-			lFunc.Infof("checking VA Role %s", v.CASubjectKeyID)
+			lFunc.Debugf("checking CRL validity for CA '%s'", v.CASubjectKeyID)
 			// Check if CRL is still valid
 			crlRemainDuration := v.LatestCRL.ValidUntil.Sub(now)
 
 			if crlRemainDuration < svc.blindPeriod {
 				// CRL is not valid anymore or will expire during the validityWindow, calculate new CRL
-				lFunc.Infof("CRL for CA %s expired at %s (%s)", v.CASubjectKeyID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
+				lFunc.Infof("CRL for CA '%s' expiring at %s (in %s), regenerating", v.CASubjectKeyID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
 				input := services.CalculateCRLInput{
 					CASubjectKeyID: v.CASubjectKeyID,
 				}
 
 				_, err := svc.service.CalculateCRL(context.Background(), input)
 				if err != nil {
-					lFunc.Warnf("something went wrong while calculating CRL for CA %s: %s", v.CASubjectKeyID, err)
+					lFunc.Warnf("failed to regenerate CRL for CA '%s': %s", v.CASubjectKeyID, err)
 				}
 			} else {
-				lFunc.Infof("CRL for CA %s is valid until %s (%s)", v.CASubjectKeyID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
+				lFunc.Debugf("CRL for CA '%s' is valid until %s (%s remaining)", v.CASubjectKeyID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
 			}
 		},
 	})
