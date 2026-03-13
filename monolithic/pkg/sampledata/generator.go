@@ -5,17 +5,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	_ "embed"
 	"encoding/pem"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
@@ -27,35 +24,23 @@ var embeddedPrivateKey []byte
 
 // PopulateSampleData populates the system with sample DMS, devices and issuance profiles for testing
 // It uses HTTP clients to interact with the services
-func PopulateSampleData(
-	ctx context.Context,
-	logger *logrus.Entry,
-	caServiceURL string,
-	deviceServiceURL string,
-) error {
+func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL string, caServiceURL string, dmsServiceURL string, deviceServiceURL string) error {
 	logger.Info("Populating system with sample data...")
 
-	// Setup HTTP client with insecure TLS (for development)
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
-	}
-
-	httpClient = sdk.HttpClientWithCustomHeaders(httpClient, "X-Principal-ID", "admin-mode")
+	httpCli := &http.Client{Timeout: 10 * time.Second}
+	sdk.HttpClientWithCustomHeaders(httpCli, "X-Principal-ID", "admin-mode")
 
 	// Create CA SDK client
-	caService := sdk.NewHttpCAClient(httpClient, caServiceURL)
+	caService := sdk.NewHttpCAClient(httpCli, caServiceURL)
 
 	// Create KMS SDK client - extract base URL from CA service URL
-	kmsServiceURL := strings.ReplaceAll(caServiceURL, "/api/ca", "/api/kms")
-	kmsService := sdk.NewHttpKMSClient(httpClient, kmsServiceURL)
+	kmsService := sdk.NewHttpKMSClient(httpCli, kmsServiceURL)
 
 	// Create DMS Manager SDK client - extract base URL from device service URL
-	dmsServiceURL := extractBaseURL(deviceServiceURL)
-	dmsService := sdk.NewHttpDMSManagerClient(httpClient, dmsServiceURL)
+	dmsService := sdk.NewHttpDMSManagerClient(httpCli, dmsServiceURL)
+
+	// Get device manager service URL
+	deviceManagerService := sdk.NewHttpDeviceManagerClient(httpCli, deviceServiceURL)
 
 	// Step 1: Create Issuance Profiles for the CAs
 	logger.Info("Creating CA issuance profiles...")
@@ -890,9 +875,6 @@ func PopulateSampleData(
 		},
 	}
 
-	// Get device manager service URL
-	deviceManagerService := sdk.NewHttpDeviceManagerClient(httpClient, deviceServiceURL)
-
 	logger.Info("Creating sample devices...")
 	var usedDMSID string
 	if createdDMS != nil {
@@ -1043,27 +1025,6 @@ func generateAndSignCertificate(ctx context.Context, caService services.CAServic
 	}
 
 	return signedCert, nil
-}
-
-// extractBaseURL extracts the base URL without the path
-// converts "http://127.0.0.1:8080/api/devmanager" to "http://127.0.0.1:8080/api/dmsmanager"
-func extractBaseURL(serviceURL string) string {
-	// Simple extraction: replace /devmanager with /dmsmanager
-	// This assumes the gateway URL structure
-	return strings.ReplaceAll(serviceURL, "/api/devmanager", "/api/dmsmanager")
-}
-
-// parseURL parses a service URL into HTTPConnection config
-func parseURL(serviceURL string) cconfig.HTTPConnection {
-	// Simple parser - assumes format like "http://127.0.0.1:8080" or "https://127.0.0.1:8443"
-	return cconfig.HTTPConnection{
-		BasicConnection: cconfig.BasicConnection{
-			Hostname: "127.0.0.1",
-			Port:     0,
-		},
-		Protocol: cconfig.HTTP,
-		BasePath: "",
-	}
 }
 
 // importKeyAndCreateCA imports a private key into KMS and creates a CA using that key

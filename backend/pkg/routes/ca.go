@@ -4,12 +4,12 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/authz/sdk"
+	authzSdk "github.com/lamassuiot/authz/sdk"
+	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
-	"ikerlan.es/authz/sdk"
-	authzSdk "ikerlan.es/authz/sdk"
-	middleware "ikerlan.es/authz/sdk/gin-middleware"
 )
 
 func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, logger *logrus.Entry) {
@@ -22,49 +22,51 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, 
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	authzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "certificate", logger)
+	caAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "ca_certificate", logger)
+	certAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "certificate", logger)
+	profileAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "issuance_profile", logger)
 
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")
 
-	// GET CAS
-	rv1.GET("/cas", routes.GetAllCAs)
-	rv1.POST("/cas", routes.CreateCA)
+	// CA endpoints
+	rv1.GET("/cas", caAuthzMw.AuthListCheck(), routes.GetAllCAs)
+	rv1.POST("/cas", caAuthzMw.AuthzCheck("create"), routes.CreateCA)
+	rv1.POST("/cas/import", caAuthzMw.AuthzCheck("create"), routes.ImportCA)
+	rv1.GET("/cas/:id", caAuthzMw.AuthzCheck("read"), routes.GetCAByID)
+	rv1.GET("/cas/cn/:cn", caAuthzMw.AuthListCheck(), routes.GetCAsByCommonName)
+	rv1.PUT("/cas/:id/metadata", caAuthzMw.AuthzCheck("metadata-update"), routes.UpdateCAMetadata)
+	rv1.PATCH("/cas/:id/metadata", caAuthzMw.AuthzCheck("metadata-update"), routes.UpdateCAMetadata)
+	rv1.POST("/cas/:id/status", caAuthzMw.AuthzCheck("status-update"), routes.UpdateCAStatus)
+	rv1.POST("/cas/:id/profile", caAuthzMw.AuthzCheck("metadata-update"), routes.UpdateCAProfile)
+	rv1.POST("/cas/:id/reissue", caAuthzMw.AuthzCheck("reissue"), routes.ReissueCA)
+	rv1.GET("/cas/:id/certificates", certAuthzMw.AuthListCheck(), routes.GetCertificatesByCA)
+	rv1.GET("/cas/:id/certificates/status/:status", certAuthzMw.AuthListCheck(), routes.GetCertificatesByCAAndStatus)
+	rv1.POST("/cas/:id/certificates/sign", caAuthzMw.AuthzCheck("sign"), routes.SignCertificate)
+	rv1.POST("/cas/:id/signature/sign", caAuthzMw.AuthzCheck("sign"), routes.SignatureSign)
+	rv1.POST("/cas/:id/signature/verify", caAuthzMw.AuthzCheck("read"), routes.SignatureVerify)
+	rv1.GET("/cas/:id/certificates/:sn", certAuthzMw.AuthzCheckCustomField("read", "sn"), routes.GetCertificateBySerialNumber)
+	rv1.DELETE("/cas/:id", caAuthzMw.AuthzCheck("delete"), routes.DeleteCA)
 
-	rv1.POST("/cas/import", routes.ImportCA)
-	rv1.GET("/cas/:id", routes.GetCAByID)
-	rv1.GET("/cas/cn/:cn", routes.GetCAsByCommonName)
+	// Certificate endpoints
+	rv1.GET("/certificates", certAuthzMw.AuthListCheck(), routes.GetCertificates)
+	rv1.GET("/certificates/status/:status", certAuthzMw.AuthListCheck(), routes.GetCertificatesByStatus)
+	rv1.GET("/certificates/expiration", certAuthzMw.AuthListCheck(), routes.GetCertificatesByExpirationDate)
+	rv1.GET("/certificates/:sn", certAuthzMw.AuthzCheckCustomField("read", "sn"), routes.GetCertificateBySerialNumber)
+	rv1.PUT("/certificates/:sn/status", certAuthzMw.AuthzCheckCustomField("status-update/revoke", "sn"), routes.UpdateCertificateStatus)
+	rv1.PUT("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", "sn"), routes.UpdateCertificateMetadata)
+	rv1.PATCH("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", "sn"), routes.UpdateCertificateMetadata)
+	rv1.DELETE("/certificates/:sn", certAuthzMw.AuthzCheckCustomField("delete", "sn"), routes.DeleteCertificate)
+	rv1.POST("/certificates/import", certAuthzMw.AuthzCheck("import"), routes.ImportCertificate)
 
-	rv1.PUT("/cas/:id/metadata", routes.UpdateCAMetadata)
-	rv1.PATCH("/cas/:id/metadata", routes.UpdateCAMetadata)
-	rv1.POST("/cas/:id/status", routes.UpdateCAStatus)
-	rv1.POST("/cas/:id/profile", routes.UpdateCAProfile)
-	rv1.POST("/cas/:id/reissue", routes.ReissueCA)
-	rv1.GET("/cas/:id/certificates", routes.GetCertificatesByCA)
-	rv1.GET("/cas/:id/certificates/status/:status", routes.GetCertificatesByCAAndStatus)
-	rv1.POST("/cas/:id/certificates/sign", routes.SignCertificate)
-	rv1.POST("/cas/:id/signature/sign", routes.SignatureSign)
-	rv1.POST("/cas/:id/signature/verify", routes.SignatureVerify)
-	rv1.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
-	rv1.DELETE("/cas/:id", routes.DeleteCA)
+	// Stats endpoints
+	rv1.GET("/stats", caAuthzMw.AuthListCheck(), routes.GetStats)
+	rv1.GET("/stats/:id", caAuthzMw.AuthzCheck("read"), routes.GetStatsByCAID)
 
-	rv1.GET("/certificates", authzMw.AuthListCheck(), routes.GetCertificates)
-	rv1.GET("/certificates/status/:status", routes.GetCertificatesByStatus)
-	rv1.GET("/certificates/expiration", routes.GetCertificatesByExpirationDate)
-	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
-	rv1.PUT("/certificates/:sn/status", authzMw.AuthzCheckCustomField("status-update/revoke", "sn"), routes.UpdateCertificateStatus)
-	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
-	rv1.PATCH("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
-	rv1.DELETE("/certificates/:sn", routes.DeleteCertificate)
-	rv1.POST("/certificates/import", routes.ImportCertificate)
-	rv1.POST("/certificates", routes.CreateCertificate)
-
-	rv1.GET("/stats", routes.GetStats)
-	rv1.GET("/stats/:id", routes.GetStatsByCAID)
-
-	rv1.GET("/profiles", routes.GetIssuanceProfiles)
-	rv1.GET("/profiles/:id", routes.GetIssuanceProfileByID)
-	rv1.POST("/profiles", routes.CreateIssuanceProfile)
-	rv1.PUT("/profiles/:id", routes.UpdateIssuanceProfile)
-	rv1.DELETE("/profiles/:id", routes.DeleteIssuanceProfile)
+	// Issuance profile endpoints
+	rv1.GET("/profiles", profileAuthzMw.AuthListCheck(), routes.GetIssuanceProfiles)
+	rv1.GET("/profiles/:id", profileAuthzMw.AuthzCheck("read"), routes.GetIssuanceProfileByID)
+	rv1.POST("/profiles", profileAuthzMw.AuthzCheck("create"), routes.CreateIssuanceProfile)
+	rv1.PUT("/profiles/:id", profileAuthzMw.AuthzCheck("update"), routes.UpdateIssuanceProfile)
+	rv1.DELETE("/profiles/:id", profileAuthzMw.AuthzCheck("delete"), routes.DeleteIssuanceProfile)
 }
