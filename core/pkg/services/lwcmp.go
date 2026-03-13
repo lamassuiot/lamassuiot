@@ -24,19 +24,19 @@ import (
 type LightweightCMPService interface {
 	// Enroll issues a certificate for a new end-entity (ir / cr / p10cr).
 	// RFC 9483 §4.1.1, §4.1.2, §4.1.4.
-	Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
+	LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
 
 	// Reenroll renews or rekeyes an existing certificate (kur).
 	// RFC 9483 §4.1.3.
-	Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
+	LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
 
 	// CACerts returns the issuing CA certificate chain (genm / caCerts).
 	// RFC 9483 §4.3.1.
-	CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error)
+	LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error)
 
 	// RevokeCertificate requests revocation of a certificate (rr / rp).
 	// RFC 9483 §4.2.
-	RevokeCertificate(ctx context.Context, input RevokeCertificateInput) error
+	LWCRevokeCertificate(ctx context.Context, input RevokeCertificateInput) error
 
 	// GetRootCACertUpdate returns an updated root CA certificate set
 	// (genm id-it-rootCaCert / genp id-it-rootCaKeyUpdate).
@@ -45,7 +45,7 @@ type LightweightCMPService interface {
 	// currentRootCert is the root CA certificate the caller currently trusts
 	// and wishes to update; it may be nil if no disambiguation is needed.
 	// Returns nil when no update is available.
-	GetRootCACertUpdate(ctx context.Context, input GetRootCACertUpdateInput) (*RootCACertUpdateOutput, error)
+	LWCGetRootCACertUpdate(ctx context.Context, input GetRootCACertUpdateInput) (*RootCACertUpdateOutput, error)
 
 	// GetCertReqTemplate returns a certificate request template describing
 	// what the CA requires in certificate requests
@@ -53,14 +53,14 @@ type LightweightCMPService interface {
 	// RFC 9483 §4.3.3.
 	//
 	// Returns nil when the CA imposes no specific requirements.
-	GetCertReqTemplate(ctx context.Context, input GetCertReqTemplateInput) (*CertReqTemplateOutput, error)
+	LWCGetCertReqTemplate(ctx context.Context, input GetCertReqTemplateInput) (*CertReqTemplateOutput, error)
 
 	// GetCRL returns the latest CRL for the requested issuer
 	// (genm id-it-crlStatusList / genp id-it-crls).
 	// RFC 9483 §4.3.4.
 	//
 	// Returns nil when no CRL newer than input.CurrentThisUpdate is available.
-	GetCRL(ctx context.Context, input GetCMPCRLInput) (*x509.RevocationList, error)
+	LWCGetCRL(ctx context.Context, input GetCMPCRLInput) (*x509.RevocationList, error)
 }
 
 // ---------------------------------------------------------------------------
