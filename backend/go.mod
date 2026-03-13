@@ -2,9 +2,9 @@ module github.com/lamassuiot/lamassuiot/backend/v3
 
 go 1.24.0
 
-replace ikerlan.es/authz => /home/ubuntu/dev/authz
+replace github.com/lamassuiot/authz => /home/ubuntu/dev/authz2
 
-require ikerlan.es/authz v0.0.0-00010101000000-000000000000
+require github.com/lamassuiot/authz v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.6
