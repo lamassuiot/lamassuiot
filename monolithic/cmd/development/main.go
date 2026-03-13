@@ -498,6 +498,8 @@ func main() {
 		},
 	}
 
+	http.DefaultClient = sdk.HttpClientWithCustomHeaders(http.DefaultClient, "X-Principal-ID", "admin-mode")
+
 	time.Sleep(3 * time.Second)
 	kmsSDK := sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/kms", conf.GatewayPortHttps))
 	engines, err := kmsSDK.GetCryptoEngineProvider(context.Background())
@@ -516,10 +518,12 @@ func main() {
 		logger := chelpers.SetupLogger(cconfig.Info, "SampleData", "Populator")
 		// Use the internal HTTP ports since services are behind the gateway
 		// We'll construct URLs using the gateway
+		kmsServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/kms", conf.GatewayPortHttp)
 		caServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/ca", conf.GatewayPortHttp)
+		dmsServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/dmsmanager", conf.GatewayPortHttp)
 		deviceServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/devmanager", conf.GatewayPortHttp)
 
-		err := sampledata.PopulateSampleData(context.Background(), logger, caServiceURL, deviceServiceURL)
+		err := sampledata.PopulateSampleData(context.Background(), logger, kmsServiceURL, caServiceURL, dmsServiceURL, deviceServiceURL)
 		if err != nil {
 			fmt.Printf("Warning: Failed to populate sample data: %v\n", err)
 		}
