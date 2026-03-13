@@ -72,3 +72,38 @@ func (m *MockDMSManagerService) BindIdentityToDevice(ctx context.Context, input 
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.BindIdentityToDeviceOutput), args.Error(1)
 }
+
+func (m *MockDMSManagerService) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	args := m.Called(ctx, csr, aps)
+	return args.Get(0).(*x509.Certificate), args.Error(1)
+}
+
+func (m *MockDMSManagerService) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	args := m.Called(ctx, csr, aps)
+	return args.Get(0).(*x509.Certificate), args.Error(1)
+}
+
+func (m *MockDMSManagerService) LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	args := m.Called(ctx, aps)
+	return args.Get(0).([]*x509.Certificate), args.Error(1)
+}
+
+func (m *MockDMSManagerService) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
+}
+
+func (m *MockDMSManagerService) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*services.RootCACertUpdateOutput), args.Error(1)
+}
+
+func (m *MockDMSManagerService) LWCGetCertReqTemplate(ctx context.Context, input services.GetCertReqTemplateInput) (*services.CertReqTemplateOutput, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*services.CertReqTemplateOutput), args.Error(1)
+}
+
+func (m *MockDMSManagerService) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*x509.RevocationList), args.Error(1)
+}
