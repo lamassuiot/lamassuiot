@@ -499,11 +499,9 @@ func TestBuildSyntheticCSR(t *testing.T) {
 	pubDER, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
 	require.NoError(t, err)
 
-	// Parse SPKI fields so we can populate cmp.SubjectPublicKeyInfo.
-	var spki struct {
-		Algorithm pkix.AlgorithmIdentifier
-		PublicKey asn1.BitString
-	}
+	// Unmarshal directly into cmp.SubjectPublicKeyInfo so the roundtrip through
+	// asn1.Marshal in buildSyntheticCSR is lossless.
+	var spki cmp.SubjectPublicKeyInfo
 	_, err = asn1.Unmarshal(pubDER, &spki)
 	require.NoError(t, err)
 
@@ -514,11 +512,8 @@ func TestBuildSyntheticCSR(t *testing.T) {
 		},
 	}
 	template := cmp.CertTemplate{
-		Subject: cmp.Name{RDNSequence: rdns},
-		PublicKey: cmp.SubjectPublicKeyInfo{
-			Algorithm:        spki.Algorithm,
-			SubjectPublicKey: spki.PublicKey,
-		},
+		Subject:   cmp.Name{RDNSequence: rdns},
+		PublicKey: spki,
 	}
 
 	csr, err := buildSyntheticCSR(template)
@@ -623,6 +618,10 @@ func extractPublicKeyFromBody(bodyBytes []byte) ([]byte, error) {
 		return nil, fmt.Errorf("CertTemplate: %w", err)
 	}
 	// Scan CertTemplate fields for PublicKey [6].
+	// SubjectPublicKeyInfo is a SEQUENCE (not CHOICE), so under IMPLICIT TAGS
+	// the [6] tag replaces the outer SEQUENCE tag. field.Bytes therefore holds
+	// the SEQUENCE content; we must re-wrap with a UNIVERSAL SEQUENCE header
+	// so x509.ParsePKIXPublicKey receives a complete SubjectPublicKeyInfo TLV.
 	remaining := certTemplate.Bytes
 	for len(remaining) > 0 {
 		var field asn1.RawValue
@@ -631,8 +630,16 @@ func extractPublicKeyFromBody(bodyBytes []byte) ([]byte, error) {
 			return nil, fmt.Errorf("CertTemplate field: %w", err)
 		}
 		if field.Class == asn1.ClassContextSpecific && field.Tag == 6 {
-			// EXPLICIT [6]: field.Bytes is the SubjectPublicKeyInfo SEQUENCE DER.
-			return field.Bytes, nil
+			wrapped, werr := asn1.Marshal(asn1.RawValue{
+				Class:      asn1.ClassUniversal,
+				Tag:        asn1.TagSequence,
+				IsCompound: true,
+				Bytes:      field.Bytes,
+			})
+			if werr != nil {
+				return nil, fmt.Errorf("rewrap SubjectPublicKeyInfo: %w", werr)
+			}
+			return wrapped, nil
 		}
 	}
 	return nil, fmt.Errorf("PublicKey [6] field not found in CertTemplate")
