@@ -1,7 +1,13 @@
 package controllers
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
 	"encoding/pem"
@@ -12,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zjj/gocmp/cmp"
 )
 
 // cmpPEMBlockType is the PEM block type used by standard CMP clients (RFC 6712 §3).
@@ -340,9 +347,296 @@ func TestTransactionIDPresentInRawHeaderBytes(t *testing.T) {
 	}
 }
 
+// --- SenderNonce presence (raw header scanning) ---
+
+// TestSenderNoncePresentInSamples verifies that each sample PKIHeader carries a
+// SenderNonce [5] EXPLICIT OCTET STRING. The caf-pki-local-agent echoes it as
+// RecipNonce in every response; a missing nonce breaks replay protection.
+//
+// Note: gocmp's PKIHeader cannot decode SenderNonce from EXPLICIT-tagged
+// samples (SenderKID offset stalls optional-field parsing), so we scan the raw
+// PKIHeader SEQUENCE bytes instead of reading msg.Header.SenderNonce directly.
+func TestSenderNoncePresentInSamples(t *testing.T) {
+	tests := []struct{ file string }{
+		{"0001.ip"},
+		{"0002.cr"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(samplesDir, tc.file))
+			require.NoError(t, err)
+
+			block, _ := pem.Decode(data)
+			require.NotNil(t, block)
+
+			// Capture raw PKIHeader bytes (first SEQUENCE element of PKIMessage).
+			type rawDispatch struct {
+				Header asn1.RawValue
+				Body   asn1.RawValue
+			}
+			var dispatch rawDispatch
+			_, err = asn1.Unmarshal(block.Bytes, &dispatch)
+			require.NoError(t, err)
+
+			// SenderNonce is encoded as [5] EXPLICIT OCTET STRING inside PKIHeader.
+			// pkiHeaderFieldIsNonce returns true when it finds a context-specific
+			// tag=5 whose inner value is a non-empty OCTET STRING (distinguishing
+			// the nonce from ediPartyName [5] which would contain a SEQUENCE).
+			assert.True(t, pkiHeaderFieldIsNonce(dispatch.Header.Bytes, 5),
+				"PKIHeader must contain SenderNonce at [5] OCTET STRING")
+		})
+	}
+}
+
+// pkiHeaderFieldIsNonce scans a PKIHeader SEQUENCE content for a
+// context-specific field at the given tag whose inner content is a non-empty
+// OCTET STRING — the encoding used for transactionID [4] and senderNonce [5].
+func pkiHeaderFieldIsNonce(headerBytes []byte, tag int) bool {
+	remaining := headerBytes
+	for len(remaining) > 0 {
+		var field asn1.RawValue
+		var err error
+		remaining, err = asn1.Unmarshal(remaining, &field)
+		if err != nil {
+			return false
+		}
+		if field.Class != asn1.ClassContextSpecific || field.Tag != tag {
+			continue
+		}
+		// EXPLICIT encoding: inner TLV is a universal OCTET STRING.
+		var inner asn1.RawValue
+		if _, err := asn1.Unmarshal(field.Bytes, &inner); err == nil {
+			if inner.Class == asn1.ClassUniversal &&
+				inner.Tag == asn1.TagOctetString &&
+				len(inner.Bytes) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// --- CertReqID from samples (manual ASN.1 peeling) ---
+
+// TestCertReqIDFromSamples verifies that the certReqId field is a valid
+// non-negative integer in each sample. The server echoes it back inside the
+// IP/CP response so the client can match the issued certificate to its request.
+//
+// decodeCertReqMessages (which uses gocmp with IMPLICIT-only tag expectations)
+// cannot decode these EXPLICIT-tagged samples from real CMP clients. We use
+// the same manual ASN.1 peeling approach as extractSubjectCNFromBody instead.
+func TestCertReqIDFromSamples(t *testing.T) {
+	tests := []struct{ file string }{
+		{"0001.ip"},
+		{"0002.cr"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(samplesDir, tc.file))
+			require.NoError(t, err)
+
+			block, _ := pem.Decode(data)
+			require.NotNil(t, block)
+
+			var msg rawPKIMessage
+			_, err = asn1.Unmarshal(block.Bytes, &msg)
+			require.NoError(t, err)
+
+			id, err := extractCertReqIDFromBody(msg.Body.Bytes)
+			require.NoError(t, err, "certReqId must be present and parseable")
+			assert.GreaterOrEqual(t, id, 0, "certReqId must be a non-negative integer")
+		})
+	}
+}
+
+// --- PublicKey parseability from samples (manual ASN.1 peeling) ---
+
+// TestCertTemplatePublicKeyFromSamples verifies that the PublicKey field inside
+// the CertTemplate is a valid PKIX SubjectPublicKeyInfo. The caf-pki-local-agent
+// calls x509.ParsePKIXPublicKey on it before issuing a certificate; an
+// unparseable key causes enrollment to fail.
+func TestCertTemplatePublicKeyFromSamples(t *testing.T) {
+	tests := []struct{ file string }{
+		{"0001.ip"},
+		{"0002.cr"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(samplesDir, tc.file))
+			require.NoError(t, err)
+
+			block, _ := pem.Decode(data)
+			require.NotNil(t, block)
+
+			var msg rawPKIMessage
+			_, err = asn1.Unmarshal(block.Bytes, &msg)
+			require.NoError(t, err)
+
+			spkiDER, err := extractPublicKeyFromBody(msg.Body.Bytes)
+			require.NoError(t, err, "PublicKey [6] must be present in CertTemplate")
+			assert.NotEmpty(t, spkiDER)
+
+			pubKey, err := x509.ParsePKIXPublicKey(spkiDER)
+			require.NoError(t, err, "CertTemplate.PublicKey must parse as valid PKIX")
+			assert.NotNil(t, pubKey)
+		})
+	}
+}
+
+// --- buildSyntheticCSR round-trip ---
+
+// TestBuildSyntheticCSR verifies that buildSyntheticCSR produces a valid
+// *x509.CertificateRequest from a manually-constructed CertTemplate containing
+// an ECDSA P-256 public key and a known Subject CommonName.
+//
+// This exercises the path taken by handleEnroll / handleReenroll after
+// decodeCertReqMessages returns a CertReqMessage.
+func TestBuildSyntheticCSR(t *testing.T) {
+	// Generate an ephemeral ECDSA key to supply a real SubjectPublicKeyInfo.
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	pubDER, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	require.NoError(t, err)
+
+	// Parse SPKI fields so we can populate cmp.SubjectPublicKeyInfo.
+	var spki struct {
+		Algorithm pkix.AlgorithmIdentifier
+		PublicKey asn1.BitString
+	}
+	_, err = asn1.Unmarshal(pubDER, &spki)
+	require.NoError(t, err)
+
+	const wantCN = "test-device-synthetic-001"
+	rdns := pkix.RDNSequence{
+		pkix.RelativeDistinguishedNameSET{
+			{Type: asn1.ObjectIdentifier{2, 5, 4, 3}, Value: wantCN},
+		},
+	}
+	template := cmp.CertTemplate{
+		Subject: cmp.Name{RDNSequence: rdns},
+		PublicKey: cmp.SubjectPublicKeyInfo{
+			Algorithm:        spki.Algorithm,
+			SubjectPublicKey: spki.PublicKey,
+		},
+	}
+
+	csr, err := buildSyntheticCSR(template)
+	require.NoError(t, err, "buildSyntheticCSR must succeed")
+	require.NotNil(t, csr)
+
+	assert.Equal(t, wantCN, csr.Subject.CommonName,
+		"synthetic CSR Subject.CommonName must match CertTemplate Subject")
+	assert.NotNil(t, csr.PublicKey, "synthetic CSR must carry the public key")
+}
+
+// --- buildResponseHeader nonce/transaction echoing ---
+
+// TestBuildResponseHeader verifies the three invariants the caf-pki-local-agent
+// relies on when processing a CMP response:
+//  1. TransactionID is echoed unchanged (correlation).
+//  2. RecipNonce is set to the request SenderNonce (replay protection).
+//  3. A fresh SenderNonce is generated (different from RecipNonce).
+func TestBuildResponseHeader(t *testing.T) {
+	req := *cmp.NewPKIHeader()
+	req.PVNO = pvnoCMP2000
+	req.TransactionID = []byte{0x01, 0x02, 0x03, 0x04}
+	req.SenderNonce = []byte{0xAA, 0xBB, 0xCC, 0xDD}
+
+	resp := buildResponseHeader(req)
+
+	assert.Equal(t, pvnoCMP2000, resp.PVNO, "response PVNO must be cmp2000 (2)")
+
+	assert.Equal(t, req.TransactionID, resp.TransactionID,
+		"TransactionID must be echoed from request (correlation)")
+
+	assert.Equal(t, req.SenderNonce, resp.RecipNonce,
+		"RecipNonce must equal request SenderNonce (replay protection)")
+
+	assert.NotEmpty(t, resp.SenderNonce, "response must include a fresh SenderNonce")
+	assert.False(t, bytes.Equal(resp.SenderNonce, resp.RecipNonce),
+		"fresh SenderNonce must differ from RecipNonce")
+}
+
 // -----------------------------------------------------------------------
 // Test-private helpers
 // -----------------------------------------------------------------------
+
+// extractCertReqIDFromBody extracts the certReqId integer from the first
+// CertReqMessage embedded in the given CMP PKIBody bytes using the same manual
+// ASN.1 peeling as extractSubjectCNFromBody (compatible with EXPLICIT encoding).
+func extractCertReqIDFromBody(bodyBytes []byte) (int, error) {
+	var crMsgsSeq asn1.RawValue
+	if _, err := asn1.Unmarshal(bodyBytes, &crMsgsSeq); err != nil {
+		return 0, fmt.Errorf("CertReqMessages: %w", err)
+	}
+	var crMsg asn1.RawValue
+	if _, err := asn1.Unmarshal(crMsgsSeq.Bytes, &crMsg); err != nil {
+		return 0, fmt.Errorf("CertReqMsg: %w", err)
+	}
+	var certReqSeq asn1.RawValue
+	if _, err := asn1.Unmarshal(crMsg.Bytes, &certReqSeq); err != nil {
+		return 0, fmt.Errorf("CertRequest: %w", err)
+	}
+	var certReqID asn1.RawValue
+	if _, err := asn1.Unmarshal(certReqSeq.Bytes, &certReqID); err != nil {
+		return 0, fmt.Errorf("certReqId raw: %w", err)
+	}
+	if certReqID.Tag != asn1.TagInteger || certReqID.Class != asn1.ClassUniversal {
+		return 0, fmt.Errorf("expected INTEGER for certReqId, got class=%d tag=%d",
+			certReqID.Class, certReqID.Tag)
+	}
+	var id int
+	if _, err := asn1.Unmarshal(certReqID.FullBytes, &id); err != nil {
+		return 0, fmt.Errorf("parse certReqId: %w", err)
+	}
+	return id, nil
+}
+
+// extractPublicKeyFromBody extracts the SubjectPublicKeyInfo DER bytes from the
+// CertTemplate.PublicKey [6] field in the first CertReqMessage.
+// With EXPLICIT encoding (as used by real CMP clients), field.Bytes is the full
+// SubjectPublicKeyInfo SEQUENCE DER and can be passed directly to
+// x509.ParsePKIXPublicKey.
+func extractPublicKeyFromBody(bodyBytes []byte) ([]byte, error) {
+	var crMsgsSeq asn1.RawValue
+	if _, err := asn1.Unmarshal(bodyBytes, &crMsgsSeq); err != nil {
+		return nil, fmt.Errorf("CertReqMessages: %w", err)
+	}
+	var crMsg asn1.RawValue
+	if _, err := asn1.Unmarshal(crMsgsSeq.Bytes, &crMsg); err != nil {
+		return nil, fmt.Errorf("CertReqMsg: %w", err)
+	}
+	var certReqSeq asn1.RawValue
+	if _, err := asn1.Unmarshal(crMsg.Bytes, &certReqSeq); err != nil {
+		return nil, fmt.Errorf("CertRequest: %w", err)
+	}
+	// Skip certReqId INTEGER.
+	var certReqID asn1.RawValue
+	rest, err := asn1.Unmarshal(certReqSeq.Bytes, &certReqID)
+	if err != nil {
+		return nil, fmt.Errorf("certReqId: %w", err)
+	}
+	// CertTemplate SEQUENCE.
+	var certTemplate asn1.RawValue
+	if _, err := asn1.Unmarshal(rest, &certTemplate); err != nil {
+		return nil, fmt.Errorf("CertTemplate: %w", err)
+	}
+	// Scan CertTemplate fields for PublicKey [6].
+	remaining := certTemplate.Bytes
+	for len(remaining) > 0 {
+		var field asn1.RawValue
+		remaining, err = asn1.Unmarshal(remaining, &field)
+		if err != nil {
+			return nil, fmt.Errorf("CertTemplate field: %w", err)
+		}
+		if field.Class == asn1.ClassContextSpecific && field.Tag == 6 {
+			// EXPLICIT [6]: field.Bytes is the SubjectPublicKeyInfo SEQUENCE DER.
+			return field.Bytes, nil
+		}
+	}
+	return nil, fmt.Errorf("PublicKey [6] field not found in CertTemplate")
+}
 
 // extractSubjectCNFromBody extracts the CommonName from the Subject field of
 // the first CertTemplate embedded in the given CMP PKIBody bytes.
