@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	gorm_authz "github.com/lamassuiot/authz/sdk/gorm"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
@@ -25,7 +26,6 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 	"gorm.io/plugin/opentelemetry/tracing"
-	gorm_authz "ikerlan.es/authz/sdk/gorm"
 )
 
 //go:embed migrations/**
