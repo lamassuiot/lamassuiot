@@ -423,15 +423,26 @@ func buildSyntheticCSR(certTemplate cmp.CertTemplate) (*x509.CertificateRequest,
 	}
 
 	// Assemble CertificationRequestInfo (PKCS#10 §4.1).
+	// The attributes field [0] IMPLICIT SET is REQUIRED by Go's
+	// x509.ParseCertificateRequest even when empty; omitting it causes
+	// "sequence truncated" because the decoder expects the tag.
+	emptyAttrs, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal empty attrs: %w", err)
+	}
 	type pkcs10CRI struct {
 		Version int
 		Subject asn1.RawValue
 		SPKInfo asn1.RawValue
+		Attrs   asn1.RawValue
 	}
 	criDER, err := asn1.Marshal(pkcs10CRI{
 		Version: 0,
 		Subject: asn1.RawValue{FullBytes: subjectDER},
 		SPKInfo: asn1.RawValue{FullBytes: spkiDER},
+		Attrs:   asn1.RawValue{FullBytes: emptyAttrs},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal CRI: %w", err)
