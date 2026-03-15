@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"fmt"
 	"slices"
@@ -26,6 +27,7 @@ type DMSManagerMiddleware func(services.DMSManagerService) services.DMSManagerSe
 type DMSManagerServiceBackend struct {
 	service          services.DMSManagerService
 	downstreamCert   *x509.Certificate
+	downstreamSigner crypto.Signer
 	dmsStorage       storage.DMSRepo
 	deviceManagerCli services.DeviceManagerService
 	caClient         services.CAService
@@ -38,6 +40,7 @@ type DMSManagerBuilder struct {
 	CAClient              services.CAService
 	DMSStorage            storage.DMSRepo
 	DownstreamCertificate *x509.Certificate
+	DownstreamSigner      crypto.Signer
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
@@ -46,6 +49,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
 		downstreamCert:   builder.DownstreamCertificate,
+		downstreamSigner: builder.DownstreamSigner,
 		logger:           builder.Logger,
 	}
 
@@ -56,6 +60,16 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 
 func (svc *DMSManagerServiceBackend) SetService(service services.DMSManagerService) {
 	svc.service = service
+}
+
+func (svc DMSManagerServiceBackend) LWCProtectionCredentials() (*x509.Certificate, crypto.Signer, error) {
+	if svc.downstreamCert == nil {
+		return nil, nil, fmt.Errorf("cmp protection certificate not configured")
+	}
+	if svc.downstreamSigner == nil {
+		return nil, nil, fmt.Errorf("cmp protection signer not configured")
+	}
+	return svc.downstreamCert, svc.downstreamSigner, nil
 }
 
 func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {

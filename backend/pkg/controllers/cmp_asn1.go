@@ -3,7 +3,6 @@ package controllers
 import (
 	"crypto/sha256"
 	"encoding/asn1"
-	"fmt"
 
 	"github.com/zjj/gocmp/cmp"
 )
@@ -33,9 +32,18 @@ const (
 // CHOICE alternative whose CONSTRUCTED bit is set and whose class is
 // CONTEXT-SPECIFIC; the tag number is the CHOICE index (0, 2, 7, 24, …).
 type rawPKIMessage struct {
-	Header cmp.PKIHeader
+	Header asn1.RawValue
 	Body   asn1.RawValue
 	// Protection and ExtraCerts are intentionally omitted for dispatch purposes.
+}
+
+type requestPKIHeader struct {
+	PVNO          int
+	Sender        asn1.RawValue
+	Recipient     asn1.RawValue
+	TransactionID []byte `asn1:"optional,explicit,tag:4,omitempty"`
+	SenderNonce   []byte `asn1:"optional,explicit,tag:5,omitempty"`
+	RecipNonce    []byte `asn1:"optional,explicit,tag:6,omitempty"`
 }
 
 // certStatusASN1 is the server-side parse target for one CertStatus entry
@@ -82,22 +90,21 @@ type serverCertRepMessage struct {
 	Responses []serverCertResponse
 }
 
-// marshalCertOrEncCert encodes a certificate DER as [0] IMPLICIT Certificate,
-// which is the `certificate` alternative of the CertOrEncCert CHOICE:
+// marshalCertOrEncCert encodes a certificate DER as the `certificate`
+// alternative of the CertOrEncCert CHOICE.
 //
 //	CertOrEncCert ::= CHOICE {
-//	    certificate   [0] CMPCertificate,     -- [0] IMPLICIT replaces SEQUENCE tag
+//	    certificate   [0] CMPCertificate,
 //	    encryptedCert [1] EncryptedValue }
+//
+// OpenSSL accepts this in the same shape used by caf-pki-local-agent:
+// a context-specific [0] wrapper whose payload is the full certificate DER.
 func marshalCertOrEncCert(certDER []byte) ([]byte, error) {
-	var certSeq asn1.RawValue
-	if _, err := asn1.Unmarshal(certDER, &certSeq); err != nil {
-		return nil, fmt.Errorf("cmp: unmarshal certificate DER: %w", err)
-	}
 	return asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
 		Tag:        0,
 		IsCompound: true,
-		Bytes:      certSeq.Bytes,
+		Bytes:      certDER,
 	})
 }
 
@@ -115,11 +122,12 @@ func marshalCertifiedKeyPair(certOrEncCertDER []byte) ([]byte, error) {
 	})
 }
 
-// marshalCertRepBody assembles a CP (bodyTag 3) or KUP (bodyTag 8) body DER,
-// applying the IMPLICIT CHOICE tag per RFC 4210 Appendix F.
+// marshalCertRepBody assembles the raw CertRepMessage DER. The PKIBody
+// context-specific wrapper is added by sendRawBody.
 // certReqID is the certReqId from the corresponding CertRequest.
 // certDER is the DER of the issued certificate.
 func marshalCertRepBody(bodyTag, certReqID int, certDER []byte) ([]byte, error) {
+	_ = bodyTag
 	certOrEncCert, err := marshalCertOrEncCert(certDER)
 	if err != nil {
 		return nil, err
@@ -129,26 +137,21 @@ func marshalCertRepBody(bodyTag, certReqID int, certDER []byte) ([]byte, error) 
 		return nil, err
 	}
 	certResp := serverCertResponse{
-		CertReqID: certReqID,
-		Status:    cmp.PKIStatusInfo{Status: cmp.PKIStatus(0)}, // accepted
+		CertReqID:        certReqID,
+		Status:           cmp.PKIStatusInfo{Status: cmp.PKIStatus(0)}, // accepted
 		CertifiedKeyPair: asn1.RawValue{FullBytes: ckpDER},
 	}
 	msg := serverCertRepMessage{Responses: []serverCertResponse{certResp}}
-	return asn1.MarshalWithParams(msg, fmt.Sprintf("tag:%d", bodyTag))
+	return asn1.Marshal(msg)
 }
 
-// marshalPKIConfBody produces the pkiConf body: [19] CONSTRUCTED {}.
-// The tag replaces the outer SEQUENCE tag of PKIFreeText (IMPLICIT TAGS).
+// marshalPKIConfBody produces the raw body payload for pkiConf.
 func marshalPKIConfBody() ([]byte, error) {
-	return asn1.Marshal(asn1.RawValue{
-		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagPKIConf,
-		IsCompound: true,
-		Bytes:      nil,
-	})
+	return asn1.Marshal(asn1.NullRawValue)
 }
 
-// marshalErrorBody produces a CMP Error body as [23] IMPLICIT ErrorMsgContent.
+// marshalErrorBody produces the raw ErrorMsgContent DER. The PKIBody wrapper is
+// added by sendRawBody.
 func marshalErrorBody(status cmp.PKIStatus, reason string) ([]byte, error) {
 	errMsg := cmp.ErrorMsgContent{
 		PKIStatusInfo: cmp.PKIStatusInfo{
@@ -158,7 +161,7 @@ func marshalErrorBody(status cmp.PKIStatus, reason string) ([]byte, error) {
 			},
 		},
 	}
-	return asn1.MarshalWithParams(errMsg, fmt.Sprintf("tag:%d", cmpBodyTagError))
+	return asn1.Marshal(errMsg)
 }
 
 // rewrapBodyAsSequence re-wraps the raw content bytes of an IMPLICIT-tagged
