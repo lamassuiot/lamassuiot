@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"time"
 )
 
 func ReadCertificateFromFile(filePath string) (*x509.Certificate, error) {
@@ -91,10 +92,15 @@ func PrivateKeyToPEM(key any) (string, error) {
 
 func GenerateSelfSignedCertificate(key crypto.Signer, cn string) (*x509.Certificate, error) {
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+	now := time.Now().UTC()
 
 	crt := x509.Certificate{
-		SerialNumber: sn,
-		Subject:      pkix.Name{CommonName: cn},
+		SerialNumber:          sn,
+		Subject:               pkix.Name{CommonName: cn},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(365 * 24 * time.Hour),
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 	}
 
 	crtB, _ := x509.CreateCertificate(rand.Reader, &crt, &crt, key.Public(), key)
