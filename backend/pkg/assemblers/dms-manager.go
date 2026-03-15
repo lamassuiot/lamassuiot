@@ -2,6 +2,7 @@ package assemblers
 
 import (
 	"context"
+	"crypto"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -50,6 +51,20 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		return nil, fmt.Errorf("could not read downstream certificate: %s", err)
 	}
 
+	var downSigner crypto.Signer
+	if conf.Server.KeyFile != "" {
+		key, err := chelpers.ReadPrivateKeyFromFile(conf.Server.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("could not read downstream private key: %s", err)
+		}
+
+		signer, ok := key.(crypto.Signer)
+		if !ok {
+			return nil, fmt.Errorf("downstream private key does not implement crypto.Signer: %T", key)
+		}
+		downSigner = signer
+	}
+
 	devStorage, err := createDMSStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
@@ -61,6 +76,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		CAClient:              caService,
 		DevManagerCli:         deviceService,
 		DownstreamCertificate: downCert,
+		DownstreamSigner:      downSigner,
 	})
 
 	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)

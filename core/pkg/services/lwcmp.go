@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"time"
 
@@ -61,6 +62,12 @@ type LightweightCMPService interface {
 	//
 	// Returns nil when no CRL newer than input.CurrentThisUpdate is available.
 	LWCGetCRL(ctx context.Context, input GetCMPCRLInput) (*x509.RevocationList, error)
+}
+
+// LightweightCMPProtectionProvider exposes the credentials used to apply
+// signature-based protection to CMP responses.
+type LightweightCMPProtectionProvider interface {
+	LWCProtectionCredentials() (*x509.Certificate, crypto.Signer, error)
 }
 
 // ---------------------------------------------------------------------------
