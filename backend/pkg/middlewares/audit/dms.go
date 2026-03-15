@@ -2,7 +2,9 @@ package auditpub
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
+	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -135,4 +137,12 @@ func (mw DmsAuditEventPublisher) LWCGetCertReqTemplate(ctx context.Context, inpu
 
 func (mw DmsAuditEventPublisher) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
 	return mw.next.LWCGetCRL(ctx, input)
+}
+
+func (mw DmsAuditEventPublisher) LWCProtectionCredentials() (*x509.Certificate, crypto.Signer, error) {
+	provider, ok := mw.next.(services.LightweightCMPProtectionProvider)
+	if !ok {
+		return nil, nil, fmt.Errorf("cmp protection credentials not available")
+	}
+	return provider.LWCProtectionCredentials()
 }

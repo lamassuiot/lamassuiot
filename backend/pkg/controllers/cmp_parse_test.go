@@ -2,12 +2,8 @@ package controllers
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
 	"encoding/pem"
@@ -18,7 +14,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zjj/gocmp/cmp"
 )
 
 // cmpPEMBlockType is the PEM block type used by standard CMP clients (RFC 6712 §3).
@@ -78,7 +73,9 @@ func TestParsePEMEncodedCMPMessages(t *testing.T) {
 			_ = leftover
 
 			// 3. PKIHeader fields
-			assert.Equal(t, pvnoCMP2000, msg.Header.PVNO,
+			header, err := decodeRequestHeader(msg.Header.FullBytes)
+			require.NoError(t, err, "decoding PKIHeader")
+			assert.Equal(t, pvnoCMP2000, header.PVNO,
 				"PVNO must be cmp2000 (2) per RFC 9480 §2.20")
 
 			// 4. PKIBody tag and encoding
@@ -230,7 +227,7 @@ func TestCMPASN1Helpers(t *testing.T) {
 		assert.Len(t, got, 32)
 	})
 
-	t.Run("marshalPKIConfBody produces [19] context-specific compound tag", func(t *testing.T) {
+	t.Run("marshalPKIConfBody produces raw NULL payload", func(t *testing.T) {
 		der, err := marshalPKIConfBody()
 		require.NoError(t, err)
 		require.NotEmpty(t, der)
@@ -238,12 +235,12 @@ func TestCMPASN1Helpers(t *testing.T) {
 		var rv asn1.RawValue
 		_, err = asn1.Unmarshal(der, &rv)
 		require.NoError(t, err)
-		assert.Equal(t, cmpBodyTagPKIConf, rv.Tag, "tag must be 19 (pkiConf)")
-		assert.Equal(t, asn1.ClassContextSpecific, rv.Class)
-		assert.True(t, rv.IsCompound)
+		assert.Equal(t, asn1.TagNull, rv.Tag)
+		assert.Equal(t, asn1.ClassUniversal, rv.Class)
+		assert.False(t, rv.IsCompound)
 	})
 
-	t.Run("marshalErrorBody produces [23] context-specific compound tag", func(t *testing.T) {
+	t.Run("marshalErrorBody produces raw ErrorMsgContent sequence", func(t *testing.T) {
 		der, err := marshalErrorBody(2, "test error reason")
 		require.NoError(t, err)
 		require.NotEmpty(t, der)
@@ -251,12 +248,12 @@ func TestCMPASN1Helpers(t *testing.T) {
 		var rv asn1.RawValue
 		_, err = asn1.Unmarshal(der, &rv)
 		require.NoError(t, err)
-		assert.Equal(t, cmpBodyTagError, rv.Tag, "tag must be 23 (error)")
-		assert.Equal(t, asn1.ClassContextSpecific, rv.Class)
+		assert.Equal(t, asn1.TagSequence, rv.Tag)
+		assert.Equal(t, asn1.ClassUniversal, rv.Class)
 		assert.True(t, rv.IsCompound)
 	})
 
-	t.Run("marshalCertRepBody (IP, tag 1) produces [1] context-specific tag", func(t *testing.T) {
+	t.Run("marshalCertRepBody (IP, tag 1) produces raw CertRepMessage sequence", func(t *testing.T) {
 		// Minimal DER certificate for testing - any valid SEQUENCE will do.
 		fakeCertDER, _ := asn1.Marshal(asn1.RawValue{
 			Class:      asn1.ClassUniversal,
@@ -271,12 +268,12 @@ func TestCMPASN1Helpers(t *testing.T) {
 		var rv asn1.RawValue
 		_, err = asn1.Unmarshal(der, &rv)
 		require.NoError(t, err)
-		assert.Equal(t, cmpBodyTagIP, rv.Tag, "tag must be 1 (ip)")
-		assert.Equal(t, asn1.ClassContextSpecific, rv.Class)
+		assert.Equal(t, asn1.TagSequence, rv.Tag)
+		assert.Equal(t, asn1.ClassUniversal, rv.Class)
 		assert.True(t, rv.IsCompound)
 	})
 
-	t.Run("marshalCertRepBody (CP, tag 3) produces [3] context-specific tag", func(t *testing.T) {
+	t.Run("marshalCertRepBody (CP, tag 3) produces raw CertRepMessage sequence", func(t *testing.T) {
 		fakeCertDER, _ := asn1.Marshal(asn1.RawValue{
 			Class:      asn1.ClassUniversal,
 			Tag:        asn1.TagSequence,
@@ -290,7 +287,8 @@ func TestCMPASN1Helpers(t *testing.T) {
 		var rv asn1.RawValue
 		_, err = asn1.Unmarshal(der, &rv)
 		require.NoError(t, err)
-		assert.Equal(t, cmpBodyTagCP, rv.Tag, "tag must be 3 (cp)")
+		assert.Equal(t, asn1.TagSequence, rv.Tag)
+		assert.Equal(t, asn1.ClassUniversal, rv.Class)
 	})
 
 	t.Run("hashesEqual is true for equal slices", func(t *testing.T) {
@@ -483,48 +481,6 @@ func TestCertTemplatePublicKeyFromSamples(t *testing.T) {
 	}
 }
 
-// --- buildSyntheticCSR round-trip ---
-
-// TestBuildSyntheticCSR verifies that buildSyntheticCSR produces a valid
-// *x509.CertificateRequest from a manually-constructed CertTemplate containing
-// an ECDSA P-256 public key and a known Subject CommonName.
-//
-// This exercises the path taken by handleEnroll / handleReenroll after
-// decodeCertReqMessages returns a CertReqMessage.
-func TestBuildSyntheticCSR(t *testing.T) {
-	// Generate an ephemeral ECDSA key to supply a real SubjectPublicKeyInfo.
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
-	pubDER, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
-	require.NoError(t, err)
-
-	// Unmarshal directly into cmp.SubjectPublicKeyInfo so the roundtrip through
-	// asn1.Marshal in buildSyntheticCSR is lossless.
-	var spki cmp.SubjectPublicKeyInfo
-	_, err = asn1.Unmarshal(pubDER, &spki)
-	require.NoError(t, err)
-
-	const wantCN = "test-device-synthetic-001"
-	rdns := pkix.RDNSequence{
-		pkix.RelativeDistinguishedNameSET{
-			{Type: asn1.ObjectIdentifier{2, 5, 4, 3}, Value: wantCN},
-		},
-	}
-	template := cmp.CertTemplate{
-		Subject:   cmp.Name{RDNSequence: rdns},
-		PublicKey: spki,
-	}
-
-	csr, err := buildSyntheticCSR(template)
-	require.NoError(t, err, "buildSyntheticCSR must succeed")
-	require.NotNil(t, csr)
-
-	assert.Equal(t, wantCN, csr.Subject.CommonName,
-		"synthetic CSR Subject.CommonName must match CertTemplate Subject")
-	assert.NotNil(t, csr.PublicKey, "synthetic CSR must carry the public key")
-}
-
 // --- buildResponseHeader nonce/transaction echoing ---
 
 // TestBuildResponseHeader verifies the three invariants the caf-pki-local-agent
@@ -533,10 +489,11 @@ func TestBuildSyntheticCSR(t *testing.T) {
 //  2. RecipNonce is set to the request SenderNonce (replay protection).
 //  3. A fresh SenderNonce is generated (different from RecipNonce).
 func TestBuildResponseHeader(t *testing.T) {
-	req := *cmp.NewPKIHeader()
-	req.PVNO = pvnoCMP2000
-	req.TransactionID = []byte{0x01, 0x02, 0x03, 0x04}
-	req.SenderNonce = []byte{0xAA, 0xBB, 0xCC, 0xDD}
+	req := requestPKIHeader{
+		PVNO:          pvnoCMP2000,
+		TransactionID: []byte{0x01, 0x02, 0x03, 0x04},
+		SenderNonce:   []byte{0xAA, 0xBB, 0xCC, 0xDD},
+	}
 
 	resp := buildResponseHeader(req)
 
