@@ -18,7 +18,7 @@ import (
 //
 // A content-type guard middleware rejects requests that do not carry the
 // application/pkixcmp media type (RFC 6712 §3.1).
-func NewCMPHTTPLayer(logger *logrus.Entry, rg *gin.RouterGroup, svc services.DMSManagerService) {
+func NewCMPHTTPLayer(logger *logrus.Entry, rg *gin.RouterGroup, svc services.LightweightCMPService) {
 	routes := controllers.NewCMPHttpRoutes(logger, svc)
 
 	cmpGrp := rg.Group("/.well-known/cmp")

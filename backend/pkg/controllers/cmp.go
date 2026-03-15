@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -70,13 +71,13 @@ func (s *cmpTxStore) startCleanup() {
 
 // cmpHttpRoutes is the Gin handler for /.well-known/cmp/p/:id.
 type cmpHttpRoutes struct {
-	svc    services.DMSManagerService
+	svc    services.LightweightCMPService
 	logger *logrus.Entry
 	store  *cmpTxStore
 }
 
 // NewCMPHttpRoutes creates and initialises the CMP HTTP handler.
-func NewCMPHttpRoutes(logger *logrus.Entry, svc services.DMSManagerService) *cmpHttpRoutes {
+func NewCMPHttpRoutes(logger *logrus.Entry, svc services.LightweightCMPService) *cmpHttpRoutes {
 	store := &cmpTxStore{}
 	store.startCleanup()
 	return &cmpHttpRoutes{svc: svc, logger: logger, store: store}
@@ -85,11 +86,8 @@ func NewCMPHttpRoutes(logger *logrus.Entry, svc services.DMSManagerService) *cmp
 // HandleCMP handles all inbound CMP messages posted to /.well-known/cmp/p/:id.
 //
 // It reads a DER-encoded PKIMessage, dispatches on the body CHOICE tag, calls
-// the appropriate svc.Enroll / svc.Reenroll method, and returns a DER-encoded
+// the appropriate LightweightCMPService operation, and returns a DER-encoded
 // response.
-//
-// Unprotected responses are used in this implementation; RFC 9480 §3.2 permits
-// unprotected messages for private networks / testing.
 func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	lFunc := r.logger.WithField("component", "cmp-handler")
 
@@ -118,49 +116,46 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	header := rawMsg.Header
 	body := rawMsg.Body
 
+	reqHeader, err := decodeRequestHeader(header.FullBytes)
+	if err != nil {
+		lFunc.Warnf("failed to decode PKIHeader: %v", err)
+		r.rejectWithError(ctx, nil, cmp.PKIStatus(2), "malformed PKIHeader")
+		return
+	}
+
 	lFunc = lFunc.
 		WithField("dms", dmsID).
 		WithField("bodyTag", body.Tag).
-		WithField("txid", hex.EncodeToString(header.TransactionID))
+		WithField("bodyTagStr", cmpTagToString(body.Tag)).
+		WithField("txid", hex.EncodeToString(reqHeader.TransactionID))
 	lFunc.Debugf("received CMP message body tag=%d", body.Tag)
 
 	// Dispatch on body CHOICE tag
 	switch body.Tag {
 	case cmpBodyTagIR, cmpBodyTagCR:
-		r.handleEnroll(ctx, lFunc, header, body, dmsID)
+		r.handleEnroll(ctx, lFunc, reqHeader, body, dmsID)
 	case cmpBodyTagKUR:
-		r.handleReenroll(ctx, lFunc, header, body, dmsID)
+		r.handleReenroll(ctx, lFunc, reqHeader, body, dmsID)
 	case cmpBodyTagCertConf:
-		r.handleCertConf(ctx, lFunc, header, body)
+		r.handleCertConf(ctx, lFunc, reqHeader, body)
 	default:
 		lFunc.Warnf("unsupported CMP body tag %d", body.Tag)
-		r.rejectWithError(ctx, &header, cmp.PKIStatus(2),
+		r.rejectWithError(ctx, &reqHeader, cmp.PKIStatus(2),
 			fmt.Sprintf("unsupported body tag %d", body.Tag))
 	}
 }
 
 // handleEnroll processes an ir (0) or cr (2) body.
-// Both ir and cr route to svc.Enroll; the DMS enrollment policy governs access.
-func (r *cmpHttpRoutes) handleEnroll(
-	ctx *gin.Context,
-	lFunc *logrus.Entry,
-	header cmp.PKIHeader,
-	body asn1.RawValue,
-	dmsID string,
-) {
-	msgs, err := decodeCertReqMessages(body.Bytes)
+// Both ir and cr route to svc.LWCEnroll; the DMS enrollment policy governs access.
+func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string) {
+	req, err := decodeFirstCertReq(body.Bytes)
 	if err != nil {
-		lFunc.Errorf("ir/cr: decode CertReqMessages: %v", err)
-		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "malformed CertReqMessages")
-		return
-	}
-	if len(msgs) == 0 {
-		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "empty CertReqMessages")
+		lFunc.Errorf("ir/cr: decode CertReqMessage: %v", err)
+		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "malformed CertReqMessage")
 		return
 	}
 
-	msg := msgs[0]
-	csr, err := buildSyntheticCSR(msg.CertReq.CertTemplate)
+	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER)
 	if err != nil {
 		lFunc.Errorf("ir/cr: synthesize CSR: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "cannot build CSR from CertTemplate")
@@ -169,7 +164,7 @@ func (r *cmpHttpRoutes) handleEnroll(
 	lFunc = lFunc.WithField("cn", csr.Subject.CommonName)
 	lFunc.Infof("enroll request CN=%s", csr.Subject.CommonName)
 
-	cert, err := r.svc.Enroll(ctx.Request.Context(), csr, dmsID)
+	cert, err := r.svc.LWCEnroll(ctx.Request.Context(), csr, dmsID)
 	if err != nil {
 		lFunc.Errorf("ir/cr: enroll failed: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), err.Error())
@@ -183,36 +178,31 @@ func (r *cmpHttpRoutes) handleEnroll(
 	if body.Tag == cmpBodyTagIR {
 		respTag = cmpBodyTagIP
 	}
-	certRepDER, err := marshalCertRepBody(respTag, msg.CertReq.CertReqID, cert.Raw)
+	certRepDER, err := marshalCertRepBody(respTag, req.CertReqID, cert.Raw)
 	if err != nil {
 		lFunc.Errorf("ir/cr: build cert rep body: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "cannot build response")
 		return
 	}
-	r.sendRawBody(ctx, lFunc, header, certRepDER)
+	r.sendRawBody(ctx, lFunc, header, respTag, certRepDER)
 }
 
 // handleReenroll processes a kur (7) body and responds with kup (8).
 func (r *cmpHttpRoutes) handleReenroll(
 	ctx *gin.Context,
 	lFunc *logrus.Entry,
-	header cmp.PKIHeader,
+	header requestPKIHeader,
 	body asn1.RawValue,
 	dmsID string,
 ) {
-	msgs, err := decodeCertReqMessages(body.Bytes)
+	req, err := decodeFirstCertReq(body.Bytes)
 	if err != nil {
-		lFunc.Errorf("kur: decode CertReqMessages: %v", err)
-		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "malformed CertReqMessages")
-		return
-	}
-	if len(msgs) == 0 {
-		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "empty CertReqMessages")
+		lFunc.Errorf("kur: decode CertReqMessage: %v", err)
+		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "malformed CertReqMessage")
 		return
 	}
 
-	msg := msgs[0]
-	csr, err := buildSyntheticCSR(msg.CertReq.CertTemplate)
+	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER)
 	if err != nil {
 		lFunc.Errorf("kur: synthesize CSR: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "cannot build CSR from CertTemplate")
@@ -221,7 +211,7 @@ func (r *cmpHttpRoutes) handleReenroll(
 	lFunc = lFunc.WithField("cn", csr.Subject.CommonName)
 	lFunc.Infof("reenroll request (kur) CN=%s", csr.Subject.CommonName)
 
-	cert, err := r.svc.Reenroll(ctx.Request.Context(), csr, dmsID)
+	cert, err := r.svc.LWCReenroll(ctx.Request.Context(), csr, dmsID)
 	if err != nil {
 		lFunc.Errorf("kur: reenroll failed: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), err.Error())
@@ -230,13 +220,13 @@ func (r *cmpHttpRoutes) handleReenroll(
 
 	r.store.put(header.TransactionID, pendingTx{CertDER: cert.Raw, SentAt: time.Now()})
 
-	kupDER, err := marshalCertRepBody(cmpBodyTagKUP, msg.CertReq.CertReqID, cert.Raw)
+	kupDER, err := marshalCertRepBody(cmpBodyTagKUP, req.CertReqID, cert.Raw)
 	if err != nil {
 		lFunc.Errorf("kur: build kup body: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "cannot build response")
 		return
 	}
-	r.sendRawBody(ctx, lFunc, header, kupDER)
+	r.sendRawBody(ctx, lFunc, header, cmpBodyTagKUP, kupDER)
 }
 
 // handleCertConf processes a certConf (24) body.
@@ -244,7 +234,7 @@ func (r *cmpHttpRoutes) handleReenroll(
 func (r *cmpHttpRoutes) handleCertConf(
 	ctx *gin.Context,
 	lFunc *logrus.Entry,
-	header cmp.PKIHeader,
+	header requestPKIHeader,
 	body asn1.RawValue,
 ) {
 	seqDER, err := rewrapBodyAsSequence(body.Bytes)
@@ -252,8 +242,8 @@ func (r *cmpHttpRoutes) handleCertConf(
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "cannot decode certConf body")
 		return
 	}
-	var statuses []certStatusASN1
-	if _, err := asn1.Unmarshal(seqDER, &statuses); err != nil {
+	statuses, err := decodeCertConfStatuses(seqDER)
+	if err != nil {
 		lFunc.Errorf("certConf: decode: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "malformed certConf")
 		return
@@ -283,7 +273,7 @@ func (r *cmpHttpRoutes) handleCertConf(
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "cannot build pkiConf")
 		return
 	}
-	r.sendRawBody(ctx, lFunc, header, pkiConfDER)
+	r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER)
 }
 
 // hashesEqual compares two byte slices in constant time.
@@ -300,61 +290,77 @@ func hashesEqual(a, b []byte) bool {
 
 // rejectWithError sends a CMP Error PKIMessage response.
 // header may be nil if the incoming PKIMessage header could not be parsed.
-func (r *cmpHttpRoutes) rejectWithError(
-	ctx *gin.Context,
-	header *cmp.PKIHeader,
-	status cmp.PKIStatus,
-	reason string,
-) {
+func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHeader, status cmp.PKIStatus, reason string) {
 	errBody, err := marshalErrorBody(status, reason)
 	if err != nil {
 		ctx.Status(http.StatusInternalServerError)
 		return
 	}
-	var h cmp.PKIHeader
+	var h requestPKIHeader
 	if header != nil {
 		h = *header
-	} else {
-		h = *cmp.NewPKIHeader()
 	}
-	r.sendRawBody(ctx, r.logger, h, errBody)
+	r.sendRawBody(ctx, r.logger, h, cmpBodyTagError, errBody)
 }
 
 // sendRawBody assembles a PKIMessage from a pre-encoded body CHOICE DER and
 // writes the result as application/pkixcmp to the Gin context.
-func (r *cmpHttpRoutes) sendRawBody(
-	ctx *gin.Context,
-	lFunc *logrus.Entry,
-	reqHeader cmp.PKIHeader,
-	bodyChoiceDER []byte,
-) {
-	respHeader := buildResponseHeader(reqHeader)
-
-	type serverPKIMessage struct {
-		Header cmp.PKIHeader
-		Body   asn1.RawValue
+func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHeader requestPKIHeader, bodyTag int, bodyDER []byte) {
+	sendResponse := func(respDER []byte) {
+		lFunc.Infof("CMP response (tag=%d) PEM:\n%s", bodyTag,
+			pem.EncodeToMemory(&pem.Block{Type: "CMP MESSAGE", Bytes: respDER}))
+		ctx.Data(http.StatusOK, "application/pkixcmp", respDER)
 	}
-	respDER, err := asn1.Marshal(serverPKIMessage{
-		Header: respHeader,
-		Body:   asn1.RawValue{FullBytes: bodyChoiceDER},
-	})
+
+	if provider, ok := r.svc.(services.LightweightCMPProtectionProvider); ok {
+		respCert, signer, credErr := provider.LWCProtectionCredentials()
+		if credErr != nil {
+			lFunc.Errorf("load cmp protection credentials: %v", credErr)
+			ctx.Status(http.StatusInternalServerError)
+			return
+		}
+
+		respDER, err := marshalProtectedResponse(reqHeader, bodyTag, bodyDER, respCert, signer)
+		if err != nil {
+			lFunc.Errorf("marshal protected response PKIMessage: %v", err)
+			ctx.Status(http.StatusInternalServerError)
+			return
+		}
+		sendResponse(respDER)
+		return
+	}
+
+	respDER, err := marshalUnprotectedResponse(reqHeader, bodyTag, bodyDER)
 	if err != nil {
 		lFunc.Errorf("marshal response PKIMessage: %v", err)
 		ctx.Status(http.StatusInternalServerError)
 		return
 	}
-	ctx.Data(http.StatusOK, "application/pkixcmp", respDER)
+	sendResponse(respDER)
 }
 
 // buildResponseHeader constructs a response PKIHeader mirroring the
 // transactionID from the request and echoing senderNonce as recipNonce.
-func buildResponseHeader(req cmp.PKIHeader) cmp.PKIHeader {
-	resp := *cmp.NewPKIHeader()
-	resp.PVNO = pvnoCMP2000
-	resp.TransactionID = req.TransactionID
-	resp.RecipNonce = req.SenderNonce
-	resp.SenderNonce = newNonce()
-	return resp
+func buildResponseHeader(req requestPKIHeader) responsePKIHeader {
+	defaultHeader := cmp.NewPKIHeader()
+	sender := defaultHeader.Sender
+	if len(req.Recipient.FullBytes) > 0 {
+		sender = asn1.RawValue{FullBytes: req.Recipient.FullBytes}
+	}
+
+	recipient := defaultHeader.Recipient
+	if len(req.Sender.FullBytes) > 0 {
+		recipient = asn1.RawValue{FullBytes: req.Sender.FullBytes}
+	}
+
+	return responsePKIHeader{
+		PVNO:          pvnoCMP2000,
+		Sender:        sender,
+		Recipient:     recipient,
+		TransactionID: req.TransactionID,
+		RecipNonce:    req.SenderNonce,
+		SenderNonce:   newNonce(),
+	}
 }
 
 // newNonce generates a 16-byte cryptographically random nonce.
@@ -366,36 +372,281 @@ func newNonce() []byte {
 	return b
 }
 
-// decodeCertReqMessages re-wraps the raw CHOICE body bytes with a SEQUENCE
-// header and decodes them into a []cmp.CertReqMessage.
-//
-// Per RFC 4210 IMPLICIT TAGS, the CHOICE tag replaces the outer SEQUENCE tag
-// of CertReqMessages; we must restore the SEQUENCE header to unmarshal.
-func decodeCertReqMessages(bodyBytes []byte) ([]cmp.CertReqMessage, error) {
-	seqDER, err := rewrapBodyAsSequence(bodyBytes)
+type firstCertReq struct {
+	CertReqID    int
+	SubjectDER   []byte
+	PublicKeyDER []byte
+}
+
+type responsePKIHeader struct {
+	PVNO          int                      `asn1:"default:2"`
+	Sender        interface{}              // GeneralName
+	Recipient     interface{}              // GeneralName
+	MessageTime   time.Time                `asn1:"generalized,explicit,optional,tag:0,omitempty"`
+	ProtectionAlg pkix.AlgorithmIdentifier `asn1:"explicit,optional,tag:1,omitempty"`
+	TransactionID []byte                   `asn1:"optional,explicit,tag:4,omitempty"`
+	SenderNonce   []byte                   `asn1:"optional,explicit,tag:5,omitempty"`
+	RecipNonce    []byte                   `asn1:"optional,explicit,tag:6,omitempty"`
+}
+
+// decodeFirstCertReq extracts the fields needed for enrollment from the first
+// CertReqMessage using manual ASN.1 peeling compatible with OpenSSL CMP.
+func decodeFirstCertReq(bodyBytes []byte) (*firstCertReq, error) {
+	var crMsgsSeq asn1.RawValue
+	if _, err := asn1.Unmarshal(bodyBytes, &crMsgsSeq); err != nil {
+		return nil, fmt.Errorf("CertReqMessages: %w", err)
+	}
+
+	var crMsg asn1.RawValue
+	if _, err := asn1.Unmarshal(crMsgsSeq.Bytes, &crMsg); err != nil {
+		return nil, fmt.Errorf("CertReqMsg: %w", err)
+	}
+
+	var certReqSeq asn1.RawValue
+	if _, err := asn1.Unmarshal(crMsg.Bytes, &certReqSeq); err != nil {
+		return nil, fmt.Errorf("CertRequest: %w", err)
+	}
+
+	var certReqIDRaw asn1.RawValue
+	rest, err := asn1.Unmarshal(certReqSeq.Bytes, &certReqIDRaw)
+	if err != nil {
+		return nil, fmt.Errorf("certReqId: %w", err)
+	}
+	if certReqIDRaw.Tag != asn1.TagInteger || certReqIDRaw.Class != asn1.ClassUniversal {
+		return nil, fmt.Errorf("expected INTEGER for certReqId, got class=%d tag=%d", certReqIDRaw.Class, certReqIDRaw.Tag)
+	}
+
+	var certReqID int
+	if _, err := asn1.Unmarshal(certReqIDRaw.FullBytes, &certReqID); err != nil {
+		return nil, fmt.Errorf("parse certReqId: %w", err)
+	}
+
+	var certTemplate asn1.RawValue
+	if _, err := asn1.Unmarshal(rest, &certTemplate); err != nil {
+		return nil, fmt.Errorf("CertTemplate: %w", err)
+	}
+	if certTemplate.Tag != asn1.TagSequence || certTemplate.Class != asn1.ClassUniversal {
+		return nil, fmt.Errorf("expected UNIVERSAL SEQUENCE for CertTemplate, got class=%d tag=%d", certTemplate.Class, certTemplate.Tag)
+	}
+
+	var subjectDER []byte
+	var publicKeyDER []byte
+	remaining := certTemplate.Bytes
+	for len(remaining) > 0 {
+		var field asn1.RawValue
+		remaining, err = asn1.Unmarshal(remaining, &field)
+		if err != nil {
+			return nil, fmt.Errorf("CertTemplate field: %w", err)
+		}
+
+		switch {
+		case field.Class == asn1.ClassContextSpecific && field.Tag == 5:
+			subjectDER, err = normalizeSequenceDER(field.Bytes, "subject")
+			if err != nil {
+				return nil, err
+			}
+		case field.Class == asn1.ClassContextSpecific && field.Tag == 6:
+			publicKeyDER, err = wrapSequenceDER(field.Bytes, "SubjectPublicKeyInfo")
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if len(subjectDER) == 0 {
+		return nil, fmt.Errorf("Subject [5] field not found in CertTemplate")
+	}
+	if len(publicKeyDER) == 0 {
+		return nil, fmt.Errorf("PublicKey [6] field not found in CertTemplate")
+	}
+
+	return &firstCertReq{
+		CertReqID:    certReqID,
+		SubjectDER:   subjectDER,
+		PublicKeyDER: publicKeyDER,
+	}, nil
+}
+
+func normalizeSequenceDER(der []byte, label string) ([]byte, error) {
+	var rv asn1.RawValue
+	if _, err := asn1.Unmarshal(der, &rv); err == nil && rv.Class == asn1.ClassUniversal && rv.Tag == asn1.TagSequence {
+		return rv.FullBytes, nil
+	}
+
+	wrapped, err := wrapSequenceDER(der, label)
 	if err != nil {
 		return nil, err
 	}
-	var msgs []cmp.CertReqMessage
-	if _, err := asn1.Unmarshal(seqDER, &msgs); err != nil {
-		return nil, fmt.Errorf("unmarshal CertReqMessages: %w", err)
+
+	var wrappedRV asn1.RawValue
+	if _, err := asn1.Unmarshal(wrapped, &wrappedRV); err != nil {
+		return nil, fmt.Errorf("%s: %w", label, err)
 	}
-	return msgs, nil
+	return wrappedRV.FullBytes, nil
 }
 
-// buildSyntheticCSR constructs a *x509.CertificateRequest from a CMP
-// CertTemplate (RFC 4211 §5).
+func wrapSequenceDER(content []byte, label string) ([]byte, error) {
+	der, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassUniversal,
+		Tag:        asn1.TagSequence,
+		IsCompound: true,
+		Bytes:      content,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("rewrap %s: %w", label, err)
+	}
+	return der, nil
+}
+
+func decodeRequestHeader(headerDER []byte) (requestPKIHeader, error) {
+	var seq asn1.RawValue
+	if _, err := asn1.Unmarshal(headerDER, &seq); err != nil {
+		return requestPKIHeader{}, fmt.Errorf("PKIHeader: %w", err)
+	}
+	if seq.Class != asn1.ClassUniversal || seq.Tag != asn1.TagSequence {
+		return requestPKIHeader{}, fmt.Errorf("PKIHeader is not a SEQUENCE")
+	}
+
+	var header requestPKIHeader
+	remaining := seq.Bytes
+
+	var pvnoRaw asn1.RawValue
+	var err error
+	remaining, err = asn1.Unmarshal(remaining, &pvnoRaw)
+	if err != nil {
+		return requestPKIHeader{}, fmt.Errorf("pvno: %w", err)
+	}
+	if _, err := asn1.Unmarshal(pvnoRaw.FullBytes, &header.PVNO); err != nil {
+		return requestPKIHeader{}, fmt.Errorf("parse pvno: %w", err)
+	}
+
+	remaining, err = asn1.Unmarshal(remaining, &header.Sender)
+	if err != nil {
+		return requestPKIHeader{}, fmt.Errorf("sender: %w", err)
+	}
+
+	remaining, err = asn1.Unmarshal(remaining, &header.Recipient)
+	if err != nil {
+		return requestPKIHeader{}, fmt.Errorf("recipient: %w", err)
+	}
+
+	for len(remaining) > 0 {
+		var field asn1.RawValue
+		remaining, err = asn1.Unmarshal(remaining, &field)
+		if err != nil {
+			return requestPKIHeader{}, fmt.Errorf("optional header field: %w", err)
+		}
+		if field.Class != asn1.ClassContextSpecific {
+			continue
+		}
+
+		switch field.Tag {
+		case 4:
+			header.TransactionID, err = decodeExplicitOctetString(field.Bytes, "transactionID")
+		case 5:
+			header.SenderNonce, err = decodeExplicitOctetString(field.Bytes, "senderNonce")
+		case 6:
+			header.RecipNonce, err = decodeExplicitOctetString(field.Bytes, "recipNonce")
+		}
+		if err != nil {
+			return requestPKIHeader{}, err
+		}
+	}
+
+	return header, nil
+}
+
+func decodeExplicitOctetString(der []byte, label string) ([]byte, error) {
+	var value []byte
+	if _, err := asn1.Unmarshal(der, &value); err != nil {
+		return nil, fmt.Errorf("%s: %w", label, err)
+	}
+	return value, nil
+}
+
+func decodeCertConfStatuses(seqDER []byte) ([]certStatusASN1, error) {
+	var outer asn1.RawValue
+	if _, err := asn1.Unmarshal(seqDER, &outer); err != nil {
+		return nil, fmt.Errorf("CertConfirmContent: %w", err)
+	}
+	if outer.Class != asn1.ClassUniversal || outer.Tag != asn1.TagSequence {
+		return nil, fmt.Errorf("CertConfirmContent is not a SEQUENCE")
+	}
+
+	var statuses []certStatusASN1
+	remaining := outer.Bytes
+	for len(remaining) > 0 {
+		var certStatusSeq asn1.RawValue
+		var err error
+		remaining, err = asn1.Unmarshal(remaining, &certStatusSeq)
+		if err != nil {
+			return nil, fmt.Errorf("CertStatus: %w", err)
+		}
+		if certStatusSeq.Class != asn1.ClassUniversal || certStatusSeq.Tag != asn1.TagSequence {
+			return nil, fmt.Errorf("CertStatus is not a SEQUENCE")
+		}
+
+		var status certStatusASN1
+		status.CertHash, err = findFirstOctetString(certStatusSeq.FullBytes)
+		if err != nil {
+			return nil, fmt.Errorf("certHash: %w", err)
+		}
+		if len(status.CertHash) == 0 {
+			return nil, fmt.Errorf("certHash missing")
+		}
+
+		statuses = append(statuses, status)
+	}
+
+	return statuses, nil
+}
+
+func findFirstOctetString(der []byte) ([]byte, error) {
+	var root asn1.RawValue
+	if _, err := asn1.Unmarshal(der, &root); err != nil {
+		return nil, err
+	}
+	return findOctetStringInRaw(root)
+}
+
+func findOctetStringInRaw(rv asn1.RawValue) ([]byte, error) {
+	if rv.Class == asn1.ClassUniversal && rv.Tag == asn1.TagOctetString {
+		var out []byte
+		if _, err := asn1.Unmarshal(rv.FullBytes, &out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	if !rv.IsCompound {
+		return nil, nil
+	}
+
+	remaining := rv.Bytes
+	for len(remaining) > 0 {
+		var child asn1.RawValue
+		var err error
+		remaining, err = asn1.Unmarshal(remaining, &child)
+		if err != nil {
+			return nil, err
+		}
+		found, err := findOctetStringInRaw(child)
+		if err != nil {
+			return nil, err
+		}
+		if len(found) > 0 {
+			return found, nil
+		}
+	}
+	return nil, nil
+}
+
+// buildSyntheticCSR constructs a *x509.CertificateRequest from the Subject and
+// SubjectPublicKeyInfo carried in a CMP CertTemplate (RFC 4211 §5).
 //
 // Because POPO is handled at the CMP layer (not inside the CSR), the resulting
 // CSR has a dummy 1-byte zero signature. Set VerifyCSRSignature=false in the
 // DMS EnrollmentSettings when using CMP to bypass csr.CheckSignature().
-func buildSyntheticCSR(certTemplate cmp.CertTemplate) (*x509.CertificateRequest, error) {
-	// Build SPKI DER from CertTemplate.PublicKey (cmp.SubjectPublicKeyInfo).
-	spkiDER, err := asn1.Marshal(certTemplate.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("marshal SPKI: %w", err)
-	}
-
+func buildSyntheticCSR(subjectDER, spkiDER []byte) (*x509.CertificateRequest, error) {
 	// Parse public key to determine signature algorithm.
 	pubKey, err := x509.ParsePKIXPublicKey(spkiDER)
 	if err != nil {
@@ -411,15 +662,6 @@ func buildSyntheticCSR(certTemplate cmp.CertTemplate) (*x509.CertificateRequest,
 		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2} // ECDSAWithSHA256
 	default:
 		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11} // fallback RSA
-	}
-
-	// Build Subject DER via pkix.Name for correct SET-OF encoding.
-	var pname pkix.Name
-	rdns := certTemplate.Subject.RDNSequence
-	pname.FillFromRDNSequence(&rdns)
-	subjectDER, err := asn1.Marshal(pname.ToRDNSequence())
-	if err != nil {
-		return nil, fmt.Errorf("marshal subject: %w", err)
 	}
 
 	// Assemble CertificationRequestInfo (PKCS#10 §4.1).
@@ -470,4 +712,29 @@ func buildSyntheticCSR(certTemplate cmp.CertTemplate) (*x509.CertificateRequest,
 
 	// Parse into *x509.CertificateRequest to populate all exported fields.
 	return x509.ParseCertificateRequest(csrDER)
+}
+
+func cmpTagToString(t int) string {
+	switch t {
+	case cmpBodyTagIR:
+		return "ir"
+	case cmpBodyTagCR:
+		return "cr"
+	case cmpBodyTagKUR:
+		return "kur"
+	case cmpBodyTagCP:
+		return "cp"
+	case cmpBodyTagIP:
+		return "ip"
+	case cmpBodyTagKUP:
+		return "kup"
+	case cmpBodyTagCertConf:
+		return "certConf"
+	case cmpBodyTagPKIConf:
+		return "pkiConf"
+	case cmpBodyTagError:
+		return "error"
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
+	}
 }
