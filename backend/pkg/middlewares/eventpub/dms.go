@@ -2,6 +2,7 @@ package eventpub
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"fmt"
 
@@ -180,4 +181,12 @@ func (mw dmsEventPublisher) LWCGetCertReqTemplate(ctx context.Context, input ser
 
 func (mw dmsEventPublisher) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
 	return mw.next.LWCGetCRL(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCProtectionCredentials() (*x509.Certificate, crypto.Signer, error) {
+	provider, ok := mw.next.(services.LightweightCMPProtectionProvider)
+	if !ok {
+		return nil, nil, fmt.Errorf("cmp protection credentials not available")
+	}
+	return provider.LWCProtectionCredentials()
 }
