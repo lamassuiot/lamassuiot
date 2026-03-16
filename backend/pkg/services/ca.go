@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -2116,7 +2117,7 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 		})
 		if err != nil {
 			lFunc.Errorf("could not get key %s: %s", input.KeySpec.KeyIdentifier, err)
-			if strings.Contains(err.Error(), errs.ErrKeyNotFound.Error()) {
+			if errors.Is(err, errs.ErrKeyNotFound) {
 				return nil, errs.ErrKeyNotFound
 			}
 			return nil, err
