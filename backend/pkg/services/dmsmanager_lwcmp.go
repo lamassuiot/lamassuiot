@@ -25,7 +25,23 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	}
 
 	enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA
+	if cmpCA := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.EnrollmentCA; cmpCA != "" {
+		enrollCA = cmpCA
+	}
 	lFunc = lFunc.WithField("dms", dms.ID)
+
+	var existingDevice *models.Device
+	existingDevice, err = svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: csr.Subject.CommonName})
+	if err != nil && err != errs.ErrDeviceNotFound {
+		lFunc.Errorf("could not get device '%s': %s", csr.Subject.CommonName, err)
+		return nil, err
+	}
+
+	enrollSettings := dms.Settings.EnrollmentSettings
+	device, err := svc.ensureDeviceRegistered(ctx, lFunc, enrollSettings, dms.ID, csr.Subject.CommonName, existingDevice)
+	if err != nil {
+		return nil, err
+	}
 
 	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollCA)
 	if err != nil {
@@ -44,8 +60,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	}
 
 	bindMode := models.DeviceEventTypeProvisioned
-	device, devErr := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: csr.Subject.CommonName})
-	if devErr == nil && device.IdentitySlot != nil {
+	if device.IdentitySlot != nil {
 		bindMode = models.DeviceEventTypeReProvisioned
 	}
 
@@ -76,6 +91,9 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 
 	enrollSettings := dms.Settings.EnrollmentSettings
 	enrollCA := enrollSettings.EnrollmentCA
+	if cmpCA := enrollSettings.EnrollmentOptionsLWCRFC9483.EnrollmentCA; cmpCA != "" {
+		enrollCA = cmpCA
+	}
 
 	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: csr.Subject.CommonName,

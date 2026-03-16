@@ -67,7 +67,7 @@ type LightweightCMPService interface {
 // LightweightCMPProtectionProvider exposes the credentials used to apply
 // signature-based protection to CMP responses.
 type LightweightCMPProtectionProvider interface {
-	LWCProtectionCredentials() (*x509.Certificate, crypto.Signer, error)
+	LWCProtectionCredentials(aps string) (*x509.Certificate, crypto.Signer, error)
 }
 
 // ---------------------------------------------------------------------------
