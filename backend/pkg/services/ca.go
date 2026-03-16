@@ -2185,8 +2185,6 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 	}
 
 	lFunc.Debugf("signing certificate for CN=%s with CA %s", input.Subject.CommonName, input.CAID)
-	lFunc.Debugf("issuance profile key usage: honor=%v usage=%v", profile.HonorKeyUsage, profile.KeyUsage)
-	lFunc.Debugf("issuance profile extended key usages: honor=%v usages=%v", profile.HonorExtendedKeyUsages, profile.ExtendedKeyUsages)
 	cert, err := svc.service.SignCertificate(ctx, services.SignCertificateInput{
 		CAID:            input.CAID,
 		CertRequest:     (*models.X509CertificateRequest)(csr),
