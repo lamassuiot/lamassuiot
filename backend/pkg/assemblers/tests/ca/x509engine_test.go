@@ -821,7 +821,7 @@ func TestSignCertificateRequest(t *testing.T) {
 				},
 				SignAsCA:        false,
 				KeyUsage:        models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageContentCommitment),
-				HonorKeyUsage:   true,
+				HonorKeyUsage:   false,
 				HonorSubject:    true,
 				HonorExtensions: true,
 			},
@@ -870,7 +870,7 @@ func TestSignCertificateRequest(t *testing.T) {
 					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
 					models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
 				},
-				HonorExtendedKeyUsages: true,
+				HonorExtendedKeyUsages: false,
 				HonorSubject:           true,
 				HonorExtensions:        true,
 			},
@@ -897,7 +897,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			},
 		},
 		{
-			name:          "OK/HONOR_KEY_USAGE_FALSE",
+			name:          "OK/HONOR_KEY_USAGE_TRUE",
 			caCertificate: caCertificateEC,
 			caSigner:      caSignerEC,
 			profile: models.IssuanceProfile{
@@ -906,8 +906,8 @@ func TestSignCertificateRequest(t *testing.T) {
 					Time: expirationTime,
 				},
 				SignAsCA:        false,
-				KeyUsage:        models.X509KeyUsage(x509.KeyUsageCRLSign), // should NOT be applied
-				HonorKeyUsage:   false,
+				KeyUsage:        models.X509KeyUsage(x509.KeyUsageCRLSign), // should NOT be applied; CSR's KU is honored
+				HonorKeyUsage:   true,
 				HonorSubject:    true,
 				HonorExtensions: true,
 			},
@@ -923,13 +923,13 @@ func TestSignCertificateRequest(t *testing.T) {
 					return fmt.Errorf("unexpected error: %s", errSign)
 				}
 				if cert.KeyUsage&x509.KeyUsageCRLSign != 0 {
-					return fmt.Errorf("profile KeyUsage was applied despite HonorKeyUsage=false")
+					return fmt.Errorf("profile KeyUsage was applied despite HonorKeyUsage=true")
 				}
 				return nil
 			},
 		},
 		{
-			name:          "OK/HONOR_EXT_KEY_USAGE_FALSE",
+			name:          "OK/HONOR_EXT_KEY_USAGE_TRUE",
 			caCertificate: caCertificateEC,
 			caSigner:      caSignerEC,
 			profile: models.IssuanceProfile{
@@ -939,9 +939,9 @@ func TestSignCertificateRequest(t *testing.T) {
 				},
 				SignAsCA: false,
 				ExtendedKeyUsages: []models.X509ExtKeyUsage{
-					models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning), // should NOT be applied
+					models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning), // should NOT be applied; CSR's EKUs are honored
 				},
-				HonorExtendedKeyUsages: false,
+				HonorExtendedKeyUsages: true,
 				HonorSubject:           true,
 				HonorExtensions:        true,
 			},
@@ -957,7 +957,7 @@ func TestSignCertificateRequest(t *testing.T) {
 					return fmt.Errorf("unexpected error: %s", errSign)
 				}
 				if slices.Contains(cert.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
-					return fmt.Errorf("profile ExtKeyUsage was applied despite HonorExtendedKeyUsages=false")
+					return fmt.Errorf("profile ExtKeyUsage was applied despite HonorExtendedKeyUsages=true")
 				}
 				return nil
 			},

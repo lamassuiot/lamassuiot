@@ -339,13 +339,13 @@ func (engine X509Engine) applyIssuanceProfileToTemplate(
 		lFunc.Debugf("subject overridden by profile (preserving CN=%s)", originalCN)
 	}
 
-	// Apply key usage - profile overrides if HonorKeyUsage is true
+	// Apply key usage - profile overrides if HonorKeyUsage is false (CSR's KU not honored)
 	if !profile.HonorKeyUsage {
 		template.KeyUsage = x509.KeyUsage(profile.KeyUsage)
 		lFunc.Debugf("key usage overridden by profile: %v", template.KeyUsage)
 	}
 
-	// Apply extended key usage - profile overrides if HonorExtendedKeyUsages is true
+	// Apply extended key usage - profile overrides if HonorExtendedKeyUsages is false (CSR's EKUs not honored)
 	if !profile.HonorExtendedKeyUsages {
 		var finalExtKeyUsage []x509.ExtKeyUsage
 		for _, usage := range profile.ExtendedKeyUsages {
