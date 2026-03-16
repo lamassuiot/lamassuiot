@@ -226,10 +226,10 @@ type CreateCertificateInput struct {
 	// Subject provides the X.509 subject fields for the generated CSR.
 	Subject models.Subject `json:"subject" validate:"required"`
 
-	// Exactly one of IssuanceProfileID or IssuanceProfile may be set.
-	// IssuanceProfile (inline) takes precedence. If neither is set the CA's
-	// default profile (CACertificate.ProfileID) is used. An error is returned
-	// when no profile can be resolved.
+	// At most one of IssuanceProfileID or IssuanceProfile should be set.
+	// If both are set, IssuanceProfile (inline) takes precedence. If neither
+	// is set the CA's default profile (CACertificate.ProfileID) is used. An
+	// error is returned when no profile can be resolved.
 	IssuanceProfileID string                  `json:"issuance_profile_id"`
 	IssuanceProfile   *models.IssuanceProfile `json:"issuance_profile"`
 
