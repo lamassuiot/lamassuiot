@@ -2084,17 +2084,20 @@ func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input se
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	// Validate key spec: exactly one mode must be chosen
-	generateMode := input.KeySpec.Type != models.KeyType(0) || input.KeySpec.Bits != 0
+	if err := caValidator.Struct(input); err != nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Validate key spec: exactly one mode must be chosen.
+	// generateMode requires BOTH Type and Bits; a partial spec (one set, other zero)
+	// falls through to the "neither" branch and returns ErrInvalidKeySpec.
+	generateMode := input.KeySpec.Type != models.KeyType(0) && input.KeySpec.Bits != 0
 	reuseMode := input.KeySpec.KeyIdentifier != ""
 
 	if generateMode && reuseMode {
 		return nil, errs.ErrInvalidKeySpec
 	}
 	if !generateMode && !reuseMode {
-		return nil, errs.ErrInvalidKeySpec
-	}
-	if generateMode && (input.KeySpec.Type == models.KeyType(0) || input.KeySpec.Bits == 0) {
 		return nil, errs.ErrInvalidKeySpec
 	}
 

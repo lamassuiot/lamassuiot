@@ -810,7 +810,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 // @Router /certificates [post]
 func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 	var requestBody resources.CreateCertificateBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
+	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}

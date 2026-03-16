@@ -273,6 +273,76 @@ func TestCreateCertificateSDK(t *testing.T) {
 			},
 		},
 		// ------------------------------------------------------------------ //
+		// Success: generate-mode certificate is MANAGED (KMS key bound to cert)
+		// ------------------------------------------------------------------ //
+		{
+			name: "OK/GenerateMode-ManagedType",
+			before: func(caSDK services.CAService) (string, error) {
+				return createActiveCA(t, caSDK).ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
+				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+					CAID: caID,
+					KeySpec: services.CertificateKeySpec{
+						Type: models.KeyType(x509.RSA),
+						Bits: 2048,
+					},
+					Subject: models.Subject{CommonName: "managed-type-cert"},
+				})
+			},
+			resultCheck: func(cert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have created certificate but got error: %s", err)
+				}
+				if cert == nil {
+					return fmt.Errorf("returned certificate is nil")
+				}
+				if cert.Type != models.CertificateTypeManaged {
+					return fmt.Errorf("expected CertificateTypeManaged, got %s", cert.Type)
+				}
+				if cert.EngineID == "" {
+					return fmt.Errorf("expected non-empty EngineID on MANAGED certificate")
+				}
+				return nil
+			},
+		},
+		// ------------------------------------------------------------------ //
+		// Success: explicit EngineID routes key generation to the named engine
+		// ------------------------------------------------------------------ //
+		{
+			name: "OK/GenerateMode-WithExplicitEngineID",
+			before: func(caSDK services.CAService) (string, error) {
+				return createActiveCA(t, caSDK).ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
+				// "filesystem-1" is the default engine wired by PrepareCryptoEnginesForTest.
+				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+					CAID: caID,
+					KeySpec: services.CertificateKeySpec{
+						Type:     models.KeyType(x509.RSA),
+						Bits:     2048,
+						EngineID: "filesystem-1",
+					},
+					Subject: models.Subject{CommonName: "explicit-engine-cert"},
+				})
+			},
+			resultCheck: func(cert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have created certificate but got error: %s", err)
+				}
+				if cert == nil {
+					return fmt.Errorf("returned certificate is nil")
+				}
+				if cert.Type != models.CertificateTypeManaged {
+					return fmt.Errorf("expected CertificateTypeManaged, got %s", cert.Type)
+				}
+				if cert.EngineID != "filesystem-1" {
+					return fmt.Errorf("expected EngineID 'filesystem-1', got '%s'", cert.EngineID)
+				}
+				return nil
+			},
+		},
+		// ------------------------------------------------------------------ //
 		// Success: metadata is preserved on the issued certificate
 		// ------------------------------------------------------------------ //
 		{
@@ -380,6 +450,34 @@ func TestCreateCertificateSDK(t *testing.T) {
 						// Bits intentionally omitted (0).
 					},
 					Subject: models.Subject{CommonName: "no-bits-cert"},
+				})
+			},
+			resultCheck: func(cert *models.Certificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should have got ErrInvalidKeySpec but got no error")
+				}
+				if !errors.Is(err, errs.ErrInvalidKeySpec) {
+					return fmt.Errorf("expected ErrInvalidKeySpec but got: %s", err)
+				}
+				return nil
+			},
+		},
+		// ------------------------------------------------------------------ //
+		// Error: generate-mode with Bits set but Type==0 (other partial direction)
+		// ------------------------------------------------------------------ //
+		{
+			name: "ERR/InvalidKeySpec-BitsWithoutType",
+			before: func(caSDK services.CAService) (string, error) {
+				return createActiveCA(t, caSDK).ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
+				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+					CAID: caID,
+					KeySpec: services.CertificateKeySpec{
+						// Type intentionally omitted (zero value); only Bits set.
+						Bits: 2048,
+					},
+					Subject: models.Subject{CommonName: "no-type-cert"},
 				})
 			},
 			resultCheck: func(cert *models.Certificate, err error) error {
@@ -507,6 +605,55 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return nil
 			},
 		},
+		// ------------------------------------------------------------------ //
+		// Success: when both IssuanceProfileID and IssuanceProfile are set, the
+		// inline profile wins (documents precedence via HTTP stack end-to-end)
+		// ------------------------------------------------------------------ //
+		{
+			name: "OK/BothProfilesSet-InlineWins",
+			before: func(caSDK services.CAService) (string, error) {
+				return createActiveCA(t, caSDK).ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
+				// Referenced profile: 8h validity.
+				refProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:     "8h-profile",
+						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(8 * time.Hour)},
+					},
+				})
+				if err != nil {
+					return nil, fmt.Errorf("failed to create issuance profile: %s", err)
+				}
+
+				// Inline profile: 4h validity — must win over the 8h reference.
+				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+					CAID: caID,
+					KeySpec: services.CertificateKeySpec{
+						Type: models.KeyType(x509.RSA),
+						Bits: 2048,
+					},
+					Subject:           models.Subject{CommonName: "both-profiles-cert"},
+					IssuanceProfileID: refProfile.ID,
+					IssuanceProfile: &models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(4 * time.Hour)},
+					},
+				})
+			},
+			resultCheck: func(cert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have created certificate but got error: %s", err)
+				}
+				if cert == nil {
+					return fmt.Errorf("returned certificate is nil")
+				}
+				actualDuration := cert.Certificate.NotAfter.Sub(cert.Certificate.NotBefore)
+				if actualDuration != 4*time.Hour {
+					return fmt.Errorf("expected 4h validity from inline profile, got %s", actualDuration)
+				}
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -615,6 +762,28 @@ func TestCreateCertificateService(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name: "ERR/InvalidKeySpec-BitsWithoutType",
+			before: func(caSDK services.CAService) (string, error) {
+				return createActiveCA(t, caSDK).ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
+				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+					CAID: caID,
+					KeySpec: services.CertificateKeySpec{
+						// Type = zero value, Bits set — other partial direction
+						Bits: 2048,
+					},
+					Subject: models.Subject{CommonName: "bits-no-type"},
+				})
+			},
+			resultCheck: func(cert *models.Certificate, err error) error {
+				if !errors.Is(err, errs.ErrInvalidKeySpec) {
+					return fmt.Errorf("expected ErrInvalidKeySpec, got: %v", err)
+				}
+				return nil
+			},
+		},
 		// ------------------------------------------------------------------ //
 		// Service returns ErrCANotFound for a missing CA
 		// ------------------------------------------------------------------ //
@@ -702,6 +871,37 @@ func TestCreateCertificateService(t *testing.T) {
 				}
 				if cert == nil {
 					return fmt.Errorf("returned certificate is nil")
+				}
+				return nil
+			},
+		},
+		// ------------------------------------------------------------------ //
+		// Service marks generate-mode certificates as MANAGED (KMS binding)
+		// ------------------------------------------------------------------ //
+		{
+			name: "OK/GenerateMode-ManagedType",
+			before: func(caSDK services.CAService) (string, error) {
+				return createActiveCA(t, caSDK).ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
+				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+					CAID: caID,
+					KeySpec: services.CertificateKeySpec{
+						Type: models.KeyType(x509.RSA),
+						Bits: 2048,
+					},
+					Subject: models.Subject{CommonName: "managed-type-cert"},
+				})
+			},
+			resultCheck: func(cert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("expected success, got: %s", err)
+				}
+				if cert.Type != models.CertificateTypeManaged {
+					return fmt.Errorf("expected CertificateTypeManaged, got %s", cert.Type)
+				}
+				if cert.EngineID == "" {
+					return fmt.Errorf("expected non-empty EngineID on MANAGED certificate")
 				}
 				return nil
 			},
