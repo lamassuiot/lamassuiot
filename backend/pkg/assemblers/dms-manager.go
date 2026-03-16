@@ -2,7 +2,6 @@ package assemblers
 
 import (
 	"context"
-	"crypto"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -20,8 +19,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
-	service, err := AssembleDMSManagerService(conf, caService, deviceService)
+func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
+	service, err := AssembleDMSManagerService(conf, kmsService, caService, deviceService)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
@@ -39,7 +38,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 	return service, port, nil
 }
 
-func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
+func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
 	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", conf.OtelConfig)
 
 	lSvc := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
@@ -51,20 +50,6 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		return nil, fmt.Errorf("could not read downstream certificate: %s", err)
 	}
 
-	var downSigner crypto.Signer
-	if conf.Server.KeyFile != "" {
-		key, err := chelpers.ReadPrivateKeyFromFile(conf.Server.KeyFile)
-		if err != nil {
-			return nil, fmt.Errorf("could not read downstream private key: %s", err)
-		}
-
-		signer, ok := key.(crypto.Signer)
-		if !ok {
-			return nil, fmt.Errorf("downstream private key does not implement crypto.Signer: %T", key)
-		}
-		downSigner = signer
-	}
-
 	devStorage, err := createDMSStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
@@ -73,10 +58,10 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
+		KMSClient:             kmsService,
 		CAClient:              caService,
 		DevManagerCli:         deviceService,
 		DownstreamCertificate: downCert,
-		DownstreamSigner:      downSigner,
 	})
 
 	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)
