@@ -91,8 +91,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				log.Fatalf("could not build HTTP KMS Client: %s", err)
 			}
 
+			kmsHttpCli = sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, src)
+			kmsHttpCli = sdk.HttpClientWithCustomHeaders(kmsHttpCli, "X-Principal-ID", "admin-mode")
+
 			return sdk.NewHttpKMSClient(
-				sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, src),
+				kmsHttpCli,
 				fmt.Sprintf("%s://%s%s:%d", kmsConnection.Protocol, kmsConnection.Hostname, kmsConnection.BasePath, kmsConnection.Port),
 			)
 		}
