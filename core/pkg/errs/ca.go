@@ -30,4 +30,7 @@ var (
 
 	//KMS
 	ErrKeyNotFound error = errors.New("key not found")
+
+	// CreateCertificate
+	ErrInvalidKeySpec error = errors.New("invalid key spec: exactly one of (Type+Bits) or KeyIdentifier must be provided")
 )

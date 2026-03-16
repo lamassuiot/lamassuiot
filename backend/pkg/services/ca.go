@@ -1551,10 +1551,29 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
+	// Detect whether the subject key is managed in the KMS and, if so, bind it to this certificate.
+	certType := models.CertificateTypeImportedWithoutKey
+	engineID := ""
+	subjectKey, getKeyErr := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: ski})
+	if getKeyErr == nil && subjectKey.HasPrivateKey {
+		certType = models.CertificateTypeManaged
+		engineID = subjectKey.EngineID
+		_, bindErr := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+			ID: subjectKey.KeyID,
+			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+				ResourceType: "certificate",
+				ResourceID:   helpers.SerialNumberToHexString(x509Cert.SerialNumber),
+			}).Build(),
+		})
+		if bindErr != nil {
+			lFunc.Warnf("could not bind key %s to certificate %s: %s", subjectKey.KeyID, helpers.SerialNumberToHexString(x509Cert.SerialNumber), bindErr)
+		}
+	}
+
 	cert := models.Certificate{
 		VersionSchema: "1.0",
 		Metadata:      map[string]interface{}{},
-		Type:          models.CertificateTypeImportedWithoutKey,
+		Type:          certType,
 		Certificate:   (*models.X509Certificate)(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SN: helpers.SerialNumberToHexString(caCert.SerialNumber),
@@ -1571,7 +1590,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		IsCA:                x509Cert.IsCA,
 		SubjectKeyID:        ski,
 		AuthorityKeyID:      aki,
-		EngineID:            "",
+		EngineID:            engineID,
 	}
 
 	// CAs get inserted into the CA storage engine by the CreateCA method. Don't insert them here.
@@ -2050,4 +2069,116 @@ func (svc *CAServiceBackend) UpdateIssuanceProfile(ctx context.Context, input se
 
 func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
 	return svc.issuanceProfilesStorage.Delete(ctx, input.ProfileID)
+}
+
+// Returned Error Codes:
+//   - ErrCANotFound
+//     The specified CA can not be found in the Database
+//   - ErrCAStatus
+//     The CA is not in an active state
+//   - ErrInvalidKeySpec
+//     Neither or both of (Type+Bits) and KeyIdentifier were specified
+//   - ErrValidateBadRequest
+//     The required variables of the data structure are not valid.
+func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	// Validate key spec: exactly one mode must be chosen
+	generateMode := input.KeySpec.KeyIdentifier == "" && (input.KeySpec.Type != models.KeyType(0) || input.KeySpec.Bits != 0)
+	reuseMode := input.KeySpec.KeyIdentifier != ""
+
+	if generateMode && reuseMode {
+		return nil, errs.ErrInvalidKeySpec
+	}
+	if !generateMode && !reuseMode {
+		return nil, errs.ErrInvalidKeySpec
+	}
+	if generateMode && (input.KeySpec.Type == models.KeyType(0) || input.KeySpec.Bits == 0) {
+		return nil, errs.ErrInvalidKeySpec
+	}
+
+	// Resolve the signing CA
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
+	if err != nil {
+		return nil, err
+	}
+
+	if ca.Certificate.Status != models.StatusActive {
+		lFunc.Errorf("%s CA is not active", ca.ID)
+		return nil, errs.ErrCAStatus
+	}
+
+	// Get or create the key
+	var key *models.Key
+	if reuseMode {
+		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
+			Identifier: input.KeySpec.KeyIdentifier,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get key %s: %s", input.KeySpec.KeyIdentifier, err)
+			return nil, err
+		}
+	} else {
+		key, err = svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
+			Algorithm: input.KeySpec.Type.String(),
+			Size:      input.KeySpec.Bits,
+			EngineID:  input.KeySpec.EngineID,
+			Name:      fmt.Sprintf("Key For Cert CN=%s", input.CertSpec.Subject.CommonName),
+		})
+		if err != nil {
+			lFunc.Errorf("could not create key for cert %s: %s", input.CertSpec.Subject.CommonName, err)
+			return nil, err
+		}
+	}
+
+	signer := NewKMSCryptoSigner(ctx, *key, svc.kmsService)
+
+	// Build CSR from CertSpec.Subject
+	subject := chelpers.SubjectToPkixName(input.CertSpec.Subject)
+
+	entropy := software.NewLamassuEntropy(ctx)
+	csrDerBytes, err := x509.CreateCertificateRequest(entropy, &x509.CertificateRequest{
+		Subject: subject,
+	}, signer)
+	if err != nil {
+		lFunc.Errorf("could not create CSR for cert %s: %s", input.CertSpec.Subject.CommonName, err)
+		return nil, err
+	}
+
+	csr, err := x509.ParseCertificateRequest(csrDerBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve issuance profile: inline > referenced > build from CertSpec
+	var profile *models.IssuanceProfile
+	if input.IssuanceProfile != nil {
+		profile = input.IssuanceProfile
+	} else if input.IssuanceProfileID != "" {
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: input.IssuanceProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
+			return nil, err
+		}
+	} else {
+		// Build an inline profile from CertSpec so validity/key-usage are honoured
+		profile = &models.IssuanceProfile{
+			Validity:               input.CertSpec.Validity,
+			SignAsCA:               input.CertSpec.IsCA,
+			HonorSubject:           false,
+			HonorKeyUsage:          true,
+			KeyUsage:               input.CertSpec.KeyUsage,
+			HonorExtendedKeyUsages: true,
+			ExtendedKeyUsages:      input.CertSpec.ExtendedKeyUsages,
+		}
+	}
+
+	lFunc.Debugf("signing certificate for CN=%s with CA %s", input.CertSpec.Subject.CommonName, input.CAID)
+	return svc.service.SignCertificate(ctx, services.SignCertificateInput{
+		CAID:            input.CAID,
+		CertRequest:     (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: profile,
+	})
 }

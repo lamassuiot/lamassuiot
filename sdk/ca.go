@@ -228,7 +228,40 @@ func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.Sig
 }
 
 func (cli *httpCAClient) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
-	return nil, fmt.Errorf("TODO")
+	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates", resources.CreateCertificateBody{
+		CAID: input.CAID,
+		KeySpec: resources.CreateCertificateBodyKeySpec{
+			Type:          input.KeySpec.Type,
+			Bits:          input.KeySpec.Bits,
+			EngineID:      input.KeySpec.EngineID,
+			KeyIdentifier: input.KeySpec.KeyIdentifier,
+		},
+		CertSpec: resources.CreateCertificateBodyCertSpec{
+			Subject:           input.CertSpec.Subject,
+			Validity:          input.CertSpec.Validity,
+			KeyUsage:          input.CertSpec.KeyUsage,
+			ExtendedKeyUsages: input.CertSpec.ExtendedKeyUsages,
+			IsCA:              input.CertSpec.IsCA,
+		},
+		IssuanceProfileID: input.IssuanceProfileID,
+		IssuanceProfile:   input.IssuanceProfile,
+		Metadata:          input.Metadata,
+	}, map[int][]error{
+		400: {
+			errs.ErrInvalidKeySpec,
+			errs.ErrValidateBadRequest,
+			errs.ErrCAStatus,
+		},
+		404: {
+			errs.ErrCANotFound,
+			errs.ErrKeyNotFound,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 func (cli *httpCAClient) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
