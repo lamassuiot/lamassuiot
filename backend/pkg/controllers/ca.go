@@ -805,7 +805,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 // @Param message body resources.CreateCertificateBody true "Create Certificate Info"
 // @Success 201 {object} models.Certificate
 // @Failure 400 {string} string "Invalid key spec || Struct Validation error || CA Status inconsistent"
-// @Failure 404 {string} string "CA not found || Key not found"
+// @Failure 404 {string} string "CA not found || Key not found || Issuance profile not found"
 // @Failure 500
 // @Router /certificates [post]
 func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
