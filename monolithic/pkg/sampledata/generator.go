@@ -27,8 +27,7 @@ var embeddedPrivateKey []byte
 func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL string, caServiceURL string, dmsServiceURL string, deviceServiceURL string) error {
 	logger.Info("Populating system with sample data...")
 
-	httpCli := &http.Client{Timeout: 10 * time.Second}
-	sdk.HttpClientWithCustomHeaders(httpCli, "X-Principal-ID", "admin-mode")
+	httpCli := sdk.HttpClientWithCustomHeaders(&http.Client{Timeout: 10 * time.Second}, "X-Principal-ID", "admin-mode")
 
 	// Create CA SDK client
 	caService := sdk.NewHttpCAClient(httpCli, caServiceURL)
