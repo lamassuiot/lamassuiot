@@ -234,8 +234,9 @@ type CreateCertificateInput struct {
 	KeySpec  CertificateKeySpec `json:"key_spec"  validate:"required"`
 	CertSpec CertificateSpec    `json:"cert_spec" validate:"required"`
 
-	// Exactly one of IssuanceProfileID or IssuanceProfile may be set.
-	// IssuanceProfile (inline) takes precedence. If neither is set the CA default profile is used.
+	// Optional issuance profile reference or inline definition.
+	// If both IssuanceProfileID and IssuanceProfile are set, IssuanceProfile (inline) takes precedence.
+	// If neither is set, the CA default issuance profile is used.
 	IssuanceProfileID string                  `json:"issuance_profile_id"`
 	IssuanceProfile   *models.IssuanceProfile `json:"issuance_profile"`
 
