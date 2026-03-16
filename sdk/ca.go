@@ -236,13 +236,7 @@ func (cli *httpCAClient) CreateCertificate(ctx context.Context, input services.C
 			EngineID:      input.KeySpec.EngineID,
 			KeyIdentifier: input.KeySpec.KeyIdentifier,
 		},
-		CertSpec: resources.CreateCertificateBodyCertSpec{
-			Subject:           input.CertSpec.Subject,
-			Validity:          input.CertSpec.Validity,
-			KeyUsage:          input.CertSpec.KeyUsage,
-			ExtendedKeyUsages: input.CertSpec.ExtendedKeyUsages,
-			IsCA:              input.CertSpec.IsCA,
-		},
+		Subject:           input.Subject,
 		IssuanceProfileID: input.IssuanceProfileID,
 		IssuanceProfile:   input.IssuanceProfile,
 		Metadata:          input.Metadata,
@@ -255,6 +249,7 @@ func (cli *httpCAClient) CreateCertificate(ctx context.Context, input services.C
 		404: {
 			errs.ErrCANotFound,
 			errs.ErrKeyNotFound,
+			errs.ErrIssuanceProfileNotFound,
 		},
 	})
 	if err != nil {

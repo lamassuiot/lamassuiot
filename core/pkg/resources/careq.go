@@ -96,21 +96,13 @@ type CreateCertificateBodyKeySpec struct {
 	KeyIdentifier string         `json:"key_identifier"`
 }
 
-type CreateCertificateBodyCertSpec struct {
-	Subject           models.Subject           `json:"subject"`
-	Validity          models.Validity          `json:"validity"`
-	KeyUsage          models.X509KeyUsage      `json:"key_usage"`
-	ExtendedKeyUsages []models.X509ExtKeyUsage `json:"extended_key_usages"`
-	IsCA              bool                     `json:"is_ca"`
-}
-
 type CreateCertificateBody struct {
-	CAID              string                        `json:"ca_id"               validate:"required"`
-	KeySpec           CreateCertificateBodyKeySpec  `json:"key_spec"            validate:"required"`
-	CertSpec          CreateCertificateBodyCertSpec `json:"cert_spec"           validate:"required"`
-	IssuanceProfileID string                        `json:"issuance_profile_id"`
-	IssuanceProfile   *models.IssuanceProfile       `json:"issuance_profile"`
-	Metadata          map[string]any                `json:"metadata"`
+	CAID              string                       `json:"ca_id"               validate:"required"`
+	KeySpec           CreateCertificateBodyKeySpec `json:"key_spec"            validate:"required"`
+	Subject           models.Subject               `json:"subject"             validate:"required"`
+	IssuanceProfileID string                       `json:"issuance_profile_id"`
+	IssuanceProfile   *models.IssuanceProfile      `json:"issuance_profile"`
+	Metadata          map[string]any               `json:"metadata"`
 }
 
 type SignatureSignBody struct {

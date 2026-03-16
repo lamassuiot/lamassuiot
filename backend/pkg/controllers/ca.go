@@ -823,13 +823,7 @@ func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 			EngineID:      requestBody.KeySpec.EngineID,
 			KeyIdentifier: requestBody.KeySpec.KeyIdentifier,
 		},
-		CertSpec: services.CertificateSpec{
-			Subject:           requestBody.CertSpec.Subject,
-			Validity:          requestBody.CertSpec.Validity,
-			KeyUsage:          requestBody.CertSpec.KeyUsage,
-			ExtendedKeyUsages: requestBody.CertSpec.ExtendedKeyUsages,
-			IsCA:              requestBody.CertSpec.IsCA,
-		},
+		Subject:           requestBody.Subject,
 		IssuanceProfileID: requestBody.IssuanceProfileID,
 		IssuanceProfile:   requestBody.IssuanceProfile,
 		Metadata:          requestBody.Metadata,
@@ -838,7 +832,7 @@ func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 		switch err {
 		case errs.ErrInvalidKeySpec, errs.ErrValidateBadRequest, errs.ErrCAStatus:
 			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCANotFound, errs.ErrKeyNotFound:
+		case errs.ErrCANotFound, errs.ErrKeyNotFound, errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})

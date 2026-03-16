@@ -217,25 +217,19 @@ type CertificateKeySpec struct {
 	KeyIdentifier string `json:"key_identifier"`
 }
 
-// CertificateSpec mandates the X.509 fields to be applied to the certificate.
-// Subject and Validity MUST be explicitly set by the caller.
-type CertificateSpec struct {
-	Subject           models.Subject           `json:"subject"              validate:"required"`
-	Validity          models.Validity          `json:"validity"             validate:"required"`
-	KeyUsage          models.X509KeyUsage      `json:"key_usage"`
-	ExtendedKeyUsages []models.X509ExtKeyUsage `json:"extended_key_usages"`
-	IsCA              bool                     `json:"is_ca"`
-}
-
 type CreateCertificateInput struct {
 	// CAID is the CA that will sign the certificate. Mandatory.
 	CAID string `json:"ca_id" validate:"required"`
 
-	KeySpec  CertificateKeySpec `json:"key_spec"  validate:"required"`
-	CertSpec CertificateSpec    `json:"cert_spec" validate:"required"`
+	KeySpec CertificateKeySpec `json:"key_spec" validate:"required"`
+
+	// Subject provides the X.509 subject fields for the generated CSR.
+	Subject models.Subject `json:"subject" validate:"required"`
 
 	// Exactly one of IssuanceProfileID or IssuanceProfile may be set.
-	// IssuanceProfile (inline) takes precedence. If neither is set the CA default profile is used.
+	// IssuanceProfile (inline) takes precedence. If neither is set the CA's
+	// default profile (CACertificate.ProfileID) is used. An error is returned
+	// when no profile can be resolved.
 	IssuanceProfileID string                  `json:"issuance_profile_id"`
 	IssuanceProfile   *models.IssuanceProfile `json:"issuance_profile"`
 

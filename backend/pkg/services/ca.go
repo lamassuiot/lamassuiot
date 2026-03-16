@@ -2123,25 +2123,25 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 			Algorithm: input.KeySpec.Type.String(),
 			Size:      input.KeySpec.Bits,
 			EngineID:  input.KeySpec.EngineID,
-			Name:      fmt.Sprintf("Key For Cert CN=%s", input.CertSpec.Subject.CommonName),
+			Name:      fmt.Sprintf("Key For Cert CN=%s", input.Subject.CommonName),
 		})
 		if err != nil {
-			lFunc.Errorf("could not create key for cert %s: %s", input.CertSpec.Subject.CommonName, err)
+			lFunc.Errorf("could not create key for cert %s: %s", input.Subject.CommonName, err)
 			return nil, err
 		}
 	}
 
 	signer := NewKMSCryptoSigner(ctx, *key, svc.kmsService)
 
-	// Build CSR from CertSpec.Subject
-	subject := chelpers.SubjectToPkixName(input.CertSpec.Subject)
+	// Build CSR from Subject
+	subject := chelpers.SubjectToPkixName(input.Subject)
 
 	entropy := software.NewLamassuEntropy(ctx)
 	csrDerBytes, err := x509.CreateCertificateRequest(entropy, &x509.CertificateRequest{
 		Subject: subject,
 	}, signer)
 	if err != nil {
-		lFunc.Errorf("could not create CSR for cert %s: %s", input.CertSpec.Subject.CommonName, err)
+		lFunc.Errorf("could not create CSR for cert %s: %s", input.Subject.CommonName, err)
 		return nil, err
 	}
 
@@ -2150,7 +2150,7 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 		return nil, err
 	}
 
-	// Resolve issuance profile: inline > referenced > build from CertSpec
+	// Resolve issuance profile: inline > referenced > CA default
 	var profile *models.IssuanceProfile
 	if input.IssuanceProfile != nil {
 		profile = input.IssuanceProfile
@@ -2163,19 +2163,21 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 			return nil, err
 		}
 	} else {
-		// Build an inline profile from CertSpec so validity/key-usage are honoured
-		profile = &models.IssuanceProfile{
-			Validity:               input.CertSpec.Validity,
-			SignAsCA:               input.CertSpec.IsCA,
-			HonorSubject:           false,
-			HonorKeyUsage:          true,
-			KeyUsage:               input.CertSpec.KeyUsage,
-			HonorExtendedKeyUsages: true,
-			ExtendedKeyUsages:      input.CertSpec.ExtendedKeyUsages,
+		// Fall back to the CA's default profile
+		if ca.ProfileID == "" {
+			lFunc.Errorf("no issuance profile specified and CA %s has no default profile", input.CAID)
+			return nil, errs.ErrIssuanceProfileNotFound
+		}
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: ca.ProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get CA default issuance profile %s: %s", ca.ProfileID, err)
+			return nil, err
 		}
 	}
 
-	lFunc.Debugf("signing certificate for CN=%s with CA %s", input.CertSpec.Subject.CommonName, input.CAID)
+	lFunc.Debugf("signing certificate for CN=%s with CA %s", input.Subject.CommonName, input.CAID)
 	return svc.service.SignCertificate(ctx, services.SignCertificateInput{
 		CAID:            input.CAID,
 		CertRequest:     (*models.X509CertificateRequest)(csr),
