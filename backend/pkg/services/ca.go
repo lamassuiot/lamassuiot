@@ -2084,7 +2084,7 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Validate key spec: exactly one mode must be chosen
-	generateMode := input.KeySpec.KeyIdentifier == "" && (input.KeySpec.Type != models.KeyType(0) || input.KeySpec.Bits != 0)
+	generateMode := input.KeySpec.Type != models.KeyType(0) || input.KeySpec.Bits != 0
 	reuseMode := input.KeySpec.KeyIdentifier != ""
 
 	if generateMode && reuseMode {
@@ -2116,6 +2116,9 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 		})
 		if err != nil {
 			lFunc.Errorf("could not get key %s: %s", input.KeySpec.KeyIdentifier, err)
+			if strings.Contains(err.Error(), errs.ErrKeyNotFound.Error()) {
+				return nil, errs.ErrKeyNotFound
+			}
 			return nil, err
 		}
 	} else {
