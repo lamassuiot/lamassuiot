@@ -2178,9 +2178,29 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 	}
 
 	lFunc.Debugf("signing certificate for CN=%s with CA %s", input.Subject.CommonName, input.CAID)
-	return svc.service.SignCertificate(ctx, services.SignCertificateInput{
+	cert, err := svc.service.SignCertificate(ctx, services.SignCertificateInput{
 		CAID:            input.CAID,
 		CertRequest:     (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: profile,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(input.Metadata) > 0 {
+		pb := chelpers.NewPatchBuilder()
+		for k, v := range input.Metadata {
+			pb.Add(chelpers.JSONPointerBuilder(k), v)
+		}
+		cert, err = svc.service.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
+			SerialNumber: cert.SerialNumber,
+			Patches:      pb.Build(),
+		})
+		if err != nil {
+			lFunc.Errorf("could not apply metadata to certificate %s: %s", cert.SerialNumber, err)
+			return nil, err
+		}
+	}
+
+	return cert, nil
 }
