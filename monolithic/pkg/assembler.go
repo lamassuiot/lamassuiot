@@ -111,7 +111,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		kmsConn := localConn(kmsPort)
 		kmsSDKBuilder := func(serviceID, src string) services.KMSService {
-			return sdk.NewHttpKMSClient(buildLocalClient(serviceID, src, "LMS SDK - KMS Client", kmsConn), baseURL(kmsConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - KMS Client", kmsConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpKMSClient(cli, baseURL(kmsConn))
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
