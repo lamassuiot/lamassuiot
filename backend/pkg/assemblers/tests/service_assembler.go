@@ -425,7 +425,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 	}, nil
 }
 
-func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
+func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, kmsTestServer *KMSTestServer, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
 	key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 	crt, _ := chelpers.GenerateSelfSignedCertificate(key, "downstream")
 	downstreamPath := fmt.Sprintf("/tmp/%s", crt.SerialNumber.String())
@@ -465,6 +465,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		Storage:                   storageEngine.Config,
 		DownstreamCertificateFile: downstreamCertPath,
 	},
+		kmsTestServer.HttpKMSSDK,
 		caTestServer.HttpCASDK,
 		deviceManagerTestServer.Service,
 		models.APIServiceInfo{
@@ -635,7 +636,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 			return nil, fmt.Errorf("could not cast supposed DeviceManagerTestServer. Make sure it was created correctly")
 		}
 
-		dmsManagerTestServer, err := BuildDMSManagerServiceTestServer(storageEngine, eventBus, caTestServer, deviceTestServer)
+		dmsManagerTestServer, err := BuildDMSManagerServiceTestServer(storageEngine, eventBus, kmsTestServer, caTestServer, deviceTestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build DMSManagerTestServer: %s", err)
 		}

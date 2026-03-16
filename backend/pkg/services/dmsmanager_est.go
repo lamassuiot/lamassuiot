@@ -330,31 +330,9 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 	}
 
-	if enrollSettings.RegistrationMode == models.JITP {
-		if device == nil {
-			lFunc.Debugf("DMS is configured with JustInTime registration. will create device with ID %s", csr.Subject.CommonName)
-			//contact device manager and register device first
-			device, err = svc.deviceManagerCli.CreateDevice(ctx, services.CreateDeviceInput{
-				ID:        csr.Subject.CommonName,
-				Alias:     csr.Subject.CommonName,
-				Tags:      enrollSettings.DeviceProvisionProfile.Tags,
-				Metadata:  enrollSettings.DeviceProvisionProfile.Metadata,
-				Icon:      enrollSettings.DeviceProvisionProfile.Icon,
-				IconColor: enrollSettings.DeviceProvisionProfile.IconColor,
-				DMSID:     dms.ID,
-			})
-			if err != nil {
-				lFunc.Errorf("could not register device: %s", err)
-				return nil, err
-			}
-		} else {
-			lFunc.Debugf("skipping device registration since already exists")
-		}
-	} else if device == nil {
-		lFunc.Errorf("aborting enrollment. DMS doesn't allow JustInTime registration. register the device manually or switch DMS JIT option ON")
-		return nil, fmt.Errorf("device not preregistered")
-	} else {
-		lFunc.Infof("device %s already preregistered. continuing enrollment process", device.ID)
+	device, err = svc.ensureDeviceRegistered(ctx, lFunc, enrollSettings, dms.ID, csr.Subject.CommonName, device)
+	if err != nil {
+		return nil, err
 	}
 
 	lFunc.Infof("device registration process completed successfully")
