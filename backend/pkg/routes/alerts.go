@@ -22,8 +22,8 @@ func NewAlertsHTTPLayer(logger *logrus.Entry, router *gin.RouterGroup, svc servi
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	eventAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "alerts", "event", logger)
-	subscriptionAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "alerts", "subscription", logger)
+	eventAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "alerts", "event", logger)
+	subscriptionAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "alerts", "subscription", logger)
 
 	rv1 := router.Group("/v1")
 
@@ -31,5 +31,5 @@ func NewAlertsHTTPLayer(logger *logrus.Entry, router *gin.RouterGroup, svc servi
 
 	rv1.GET("/user/:userId/subscriptions", subscriptionAuthzMw.AuthListCheck(), routes.GetUserSubscriptions)
 	rv1.POST("/user/:userId/subscribe", subscriptionAuthzMw.AuthzCheck("create"), routes.Subscribe)
-	rv1.POST("/user/:userId/unsubscribe/:subId", subscriptionAuthzMw.AuthzCheckCustomField("delete", "subId"), routes.Unsubscribe)
+	rv1.POST("/user/:userId/unsubscribe/:subId", subscriptionAuthzMw.AuthzCheckCustomField("delete", []string{"subId"}), routes.Unsubscribe)
 }
