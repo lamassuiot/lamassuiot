@@ -22,9 +22,9 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, 
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	caAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "ca_certificate", logger)
-	certAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "certificate", logger)
-	profileAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "ca", "issuance_profile", logger)
+	caAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "ca", "ca_certificate", logger)
+	certAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "ca", "certificate", logger)
+	profileAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "ca", "issuance_profile", logger)
 
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")
@@ -45,18 +45,18 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, 
 	rv1.POST("/cas/:id/certificates/sign", caAuthzMw.AuthzCheck("sign"), routes.SignCertificate)
 	rv1.POST("/cas/:id/signature/sign", caAuthzMw.AuthzCheck("sign"), routes.SignatureSign)
 	rv1.POST("/cas/:id/signature/verify", caAuthzMw.AuthzCheck("read"), routes.SignatureVerify)
-	rv1.GET("/cas/:id/certificates/:sn", certAuthzMw.AuthzCheckCustomField("read", "sn"), routes.GetCertificateBySerialNumber)
+	rv1.GET("/cas/:id/certificates/:sn", certAuthzMw.AuthzCheckCustomField("read", []string{"sn"}), routes.GetCertificateBySerialNumber)
 	rv1.DELETE("/cas/:id", caAuthzMw.AuthzCheck("delete"), routes.DeleteCA)
 
 	// Certificate endpoints
 	rv1.GET("/certificates", certAuthzMw.AuthListCheck(), routes.GetCertificates)
 	rv1.GET("/certificates/status/:status", certAuthzMw.AuthListCheck(), routes.GetCertificatesByStatus)
 	rv1.GET("/certificates/expiration", certAuthzMw.AuthListCheck(), routes.GetCertificatesByExpirationDate)
-	rv1.GET("/certificates/:sn", certAuthzMw.AuthzCheckCustomField("read", "sn"), routes.GetCertificateBySerialNumber)
-	rv1.PUT("/certificates/:sn/status", certAuthzMw.AuthzCheckCustomField("status-update/revoke", "sn"), routes.UpdateCertificateStatus)
-	rv1.PUT("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", "sn"), routes.UpdateCertificateMetadata)
-	rv1.PATCH("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", "sn"), routes.UpdateCertificateMetadata)
-	rv1.DELETE("/certificates/:sn", certAuthzMw.AuthzCheckCustomField("delete", "sn"), routes.DeleteCertificate)
+	rv1.GET("/certificates/:sn", certAuthzMw.AuthzCheckCustomField("read", []string{"sn"}), routes.GetCertificateBySerialNumber)
+	rv1.PUT("/certificates/:sn/status", certAuthzMw.AuthzCheckCustomField("status-update/revoke", []string{"sn"}), routes.UpdateCertificateStatus)
+	rv1.PUT("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", []string{"sn"}), routes.UpdateCertificateMetadata)
+	rv1.PATCH("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", []string{"sn"}), routes.UpdateCertificateMetadata)
+	rv1.DELETE("/certificates/:sn", certAuthzMw.AuthzCheckCustomField("delete", []string{"sn"}), routes.DeleteCertificate)
 	rv1.POST("/certificates/import", certAuthzMw.AuthzCheck("import"), routes.ImportCertificate)
 
 	// Stats endpoints
