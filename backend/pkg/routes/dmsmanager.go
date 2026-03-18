@@ -22,7 +22,7 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	dmsAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "dmsmanager", "dms", logger)
+	dmsAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "dmsmanager", "dms", logger)
 
 	NewESTHttpRoutes(logger, httpGrp, svc)
 

@@ -22,7 +22,7 @@ func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp se
 	}
 
 	remoteEngine := authzSdk.NewRemoteEngine(client)
-	vaAuthzMw := middleware.NewAuthzMiddleware(remoteEngine, "pki", "va", "va_role", logger)
+	vaAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "va", "va_role", logger)
 
 	// OCSP and CRL are public PKI infrastructure endpoints - no authz required
 	httpGrp.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
@@ -31,6 +31,6 @@ func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp se
 
 	v1 := httpGrp.Group("/v1")
 
-	v1.GET("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustomField("read", "ca-ski"), vaRoutes.GetRoleByID)
-	v1.PUT("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustomField("update", "ca-ski"), vaRoutes.UpdateRole)
+	v1.GET("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustomField("read", []string{"ca-ski"}), vaRoutes.GetRoleByID)
+	v1.PUT("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustomField("update", []string{"ca-ski"}), vaRoutes.UpdateRole)
 }
