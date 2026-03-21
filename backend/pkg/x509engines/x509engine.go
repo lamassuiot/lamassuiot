@@ -326,7 +326,7 @@ func (engine X509Engine) applyIssuanceProfileToTemplate(ctx context.Context, tem
 
 	// Apply subject - profile overrides if HonorSubject is false
 	if !profile.HonorSubject {
-		// Profile overrides subject but preserves CommonName from template
+		// Profile overrides subject; preserve template CommonName only when profile subject CommonName is empty
 		originalCN := template.Subject.CommonName
 		overriddenSubject := profile.Subject
 

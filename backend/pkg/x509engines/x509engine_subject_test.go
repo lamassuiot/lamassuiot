@@ -668,10 +668,22 @@ func TestValidateCryptoEnforcement(t *testing.T) {
 	ctx := context.Background()
 
 	// Generate test keys
-	rsaKey2048, _ := rsa.GenerateKey(rand.Reader, 2048)
-	rsaKey4096, _ := rsa.GenerateKey(rand.Reader, 4096)
-	ecdsaKey256, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	ecdsaKey384, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	rsaKey2048, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("failed to generate 2048-bit RSA key: %v", err)
+	}
+	rsaKey4096, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		t.Fatalf("failed to generate 4096-bit RSA key: %v", err)
+	}
+	ecdsaKey256, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate P-256 ECDSA key: %v", err)
+	}
+	ecdsaKey384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate P-384 ECDSA key: %v", err)
+	}
 
 	testCases := []struct {
 		name        string
