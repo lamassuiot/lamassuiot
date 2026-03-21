@@ -101,6 +101,68 @@ func TestFilterQuery_StringInIgnoreCase(t *testing.T) {
 	}
 }
 
+func TestFilterQuery_StringNotIn(t *testing.T) {
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	q.Add("filter", "subject_key_id[nin]ABC123,DEF456")
+	req.URL.RawQuery = q.Encode()
+
+	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	if len(qp.Filters) != 1 {
+		t.Fatalf("expected 1 filter, got %d", len(qp.Filters))
+	}
+
+	f := qp.Filters[0]
+	if f.Field != "subject_key_id" {
+		t.Fatalf("expected field 'subject_key_id', got '%s'", f.Field)
+	}
+	if f.Value != "ABC123,DEF456" {
+		t.Fatalf("expected value 'ABC123,DEF456', got '%s'", f.Value)
+	}
+	if f.FilterOperation != resources.StringNotIn {
+		t.Fatalf("expected operation StringNotIn, got %v", f.FilterOperation)
+	}
+}
+
+func TestFilterQuery_StringNotInIgnoreCase(t *testing.T) {
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	q.Add("filter", "subject_key_id[nin_ic]ABC123,DEF456")
+	req.URL.RawQuery = q.Encode()
+
+	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	if len(qp.Filters) != 1 {
+		t.Fatalf("expected 1 filter, got %d", len(qp.Filters))
+	}
+
+	f := qp.Filters[0]
+	if f.Field != "subject_key_id" {
+		t.Fatalf("expected field 'subject_key_id', got '%s'", f.Field)
+	}
+	if f.Value != "ABC123,DEF456" {
+		t.Fatalf("expected value 'ABC123,DEF456', got '%s'", f.Value)
+	}
+	if f.FilterOperation != resources.StringNotInIgnoreCase {
+		t.Fatalf("expected operation StringNotInIgnoreCase, got %v", f.FilterOperation)
+	}
+}
+
 func TestFilterQuery_EnumIn(t *testing.T) {
 	req := &http.Request{}
 	req.URL = &url.URL{}

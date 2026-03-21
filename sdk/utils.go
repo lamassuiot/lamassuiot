@@ -366,6 +366,14 @@ func filterOperationToOperand(op resources.FilterOperation) string {
 		return "nc"
 	case resources.StringNotContainsIgnoreCase:
 		return "nc_ic"
+	case resources.StringIn:
+		return "in"
+	case resources.StringInIgnoreCase:
+		return "in_ic"
+	case resources.StringNotIn:
+		return "nin"
+	case resources.StringNotInIgnoreCase:
+		return "nin_ic"
 	case resources.StringArrayContains:
 		return "ct"
 	case resources.StringArrayContainsIgnoreCase:

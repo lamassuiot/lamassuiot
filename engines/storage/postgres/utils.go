@@ -563,6 +563,22 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 			lowerValues[i] = strings.ToLower(v)
 		}
 		return tx.Where(fmt.Sprintf("LOWER(%s) IN ?", filter.Field), lowerValues)
+	case resources.StringNotIn:
+		values := splitNonEmpty(filter.Value)
+		if len(values) == 0 {
+			return tx
+		}
+		return tx.Where(fmt.Sprintf("%s NOT IN ?", filter.Field), values)
+	case resources.StringNotInIgnoreCase:
+		values := splitNonEmpty(filter.Value)
+		if len(values) == 0 {
+			return tx
+		}
+		lowerValues := make([]string, len(values))
+		for i, v := range values {
+			lowerValues[i] = strings.ToLower(v)
+		}
+		return tx.Where(fmt.Sprintf("LOWER(%s) NOT IN ?", filter.Field), lowerValues)
 	case resources.DateEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.DateBefore:

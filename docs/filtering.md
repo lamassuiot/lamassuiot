@@ -32,6 +32,10 @@ Note: values must be URL-encoded when required (spaces, quotes, `>` etc.).
 | `ct_ic` | contains (case-insensitive) | `description[ct_ic]=backup` |
 | `nc` | not contains | `description[nc]=skip` |
 | `nc_ic` | not contains (case-insensitive) | `description[nc_ic]=skip` |
+| `in` | in list | `status[in]=ACTIVE,PENDING` |
+| `in_ic` | in list (case-insensitive) | `name[in_ic]=alice,bob` |
+| `nin` | not in list | `status[nin]=REVOKED,EXPIRED` |
+| `nin_ic` | not in list (case-insensitive) | `name[nin_ic]=alice,bob` |
 | `bf` | date before | `creation_date[bf]=2026-01-01` |
 | `af` | date after | `creation_date[af]=2025-01-01` |
 | `lt` | number less than | `size[lt]=1024` |

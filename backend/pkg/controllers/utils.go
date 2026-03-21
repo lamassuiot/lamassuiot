@@ -227,6 +227,10 @@ func parseFilterOperand(operand string, fieldType resources.FilterFieldType) res
 			return resources.StringIn
 		case "in_ic":
 			return resources.StringInIgnoreCase
+		case "nin":
+			return resources.StringNotIn
+		case "nin_ic":
+			return resources.StringNotInIgnoreCase
 		}
 
 	case resources.StringArrayFilterFieldType:

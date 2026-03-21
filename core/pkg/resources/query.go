@@ -83,6 +83,8 @@ const (
 
 	StringIn
 	StringInIgnoreCase
+	StringNotIn
+	StringNotInIgnoreCase
 
 	JsonPathExpression
 )
@@ -121,6 +123,10 @@ func ParseOperandName(operand string, fieldType FilterFieldType) FilterOperation
 			return StringIn
 		case "in_ic":
 			return StringInIgnoreCase
+		case "nin":
+			return StringNotIn
+		case "nin_ic":
+			return StringNotInIgnoreCase
 		}
 
 	case StringArrayFilterFieldType:
@@ -202,6 +208,10 @@ func FormatOperandName(filterOp FilterOperation, fieldType FilterFieldType) stri
 			return "in"
 		case StringInIgnoreCase:
 			return "in_ic"
+		case StringNotIn:
+			return "nin"
+		case StringNotInIgnoreCase:
+			return "nin_ic"
 		}
 
 	case StringArrayFilterFieldType:
