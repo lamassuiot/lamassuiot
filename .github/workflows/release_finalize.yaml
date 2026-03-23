@@ -232,6 +232,9 @@ jobs:
 
   build_docker_image:
     needs: [create_module_release, finalize]
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         service:
