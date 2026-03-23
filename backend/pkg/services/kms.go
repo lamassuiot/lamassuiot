@@ -295,7 +295,7 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 
 		if !exists {
 			lFunc.Infof("key %s can not be found in storage engine via keyID", keyID)
-			return nil, fmt.Errorf("key not found")
+			return nil, errs.ErrKeyNotFound
 		}
 
 		return key, nil
@@ -319,7 +319,7 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 
 			if !exists {
 				lFunc.Infof("key %s can not be found in storage engine via alias", input.Identifier)
-				return nil, fmt.Errorf("key not found")
+				return nil, errs.ErrKeyNotFound
 			}
 		}
 

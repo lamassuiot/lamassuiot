@@ -797,6 +797,52 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	ctx.JSON(201, ca)
 }
 
+// @Summary Create Certificate
+// @Description Generate a new key pair (or reuse an existing KMS key) and issue a certificate signed by the specified CA.
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.CreateCertificateBody true "Create Certificate Info"
+// @Success 201 {object} models.Certificate
+// @Failure 400 {string} string "Invalid key spec || Struct Validation error || CA Status inconsistent"
+// @Failure 404 {string} string "CA not found || Key not found || Issuance profile not found"
+// @Failure 500
+// @Router /certificates [post]
+func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
+	var requestBody resources.CreateCertificateBody
+	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	cert, err := r.svc.CreateCertificate(ctx.Request.Context(), services.CreateCertificateInput{
+		CAID: requestBody.CAID,
+		KeySpec: services.CertificateKeySpec{
+			Type:          requestBody.KeySpec.Type,
+			Bits:          requestBody.KeySpec.Bits,
+			EngineID:      requestBody.KeySpec.EngineID,
+			KeyIdentifier: requestBody.KeySpec.KeyIdentifier,
+		},
+		Subject:           requestBody.Subject,
+		IssuanceProfileID: requestBody.IssuanceProfileID,
+		IssuanceProfile:   requestBody.IssuanceProfile,
+		Metadata:          requestBody.Metadata,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrInvalidKeySpec, errs.ErrValidateBadRequest, errs.ErrCAStatus:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCANotFound, errs.ErrKeyNotFound, errs.ErrIssuanceProfileNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(201, cert)
+}
+
 func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`

@@ -950,7 +950,7 @@ func createCAProfile(ctx context.Context, logger *logrus.Entry, caService servic
 				Type:     models.Duration,
 				Duration: models.TimeDuration(3650 * 24 * time.Hour), // 10 years
 			},
-			SignAsCA:      true,
+			SignAsCA:      false,
 			HonorKeyUsage: false,
 			KeyUsage: models.X509KeyUsage(
 				x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,

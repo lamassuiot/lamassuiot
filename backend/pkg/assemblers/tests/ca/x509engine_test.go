@@ -821,6 +821,7 @@ func TestSignCertificateRequest(t *testing.T) {
 				},
 				SignAsCA:        false,
 				KeyUsage:        models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageContentCommitment),
+				HonorKeyUsage:   false,
 				HonorSubject:    true,
 				HonorExtensions: true,
 			},
@@ -869,8 +870,9 @@ func TestSignCertificateRequest(t *testing.T) {
 					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
 					models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
 				},
-				HonorSubject:    true,
-				HonorExtensions: true,
+				HonorExtendedKeyUsages: false,
+				HonorSubject:           true,
+				HonorExtensions:        true,
 			},
 			subject: csrSubject,
 			keyType: models.KeyType(x509.ECDSA),
@@ -891,6 +893,72 @@ func TestSignCertificateRequest(t *testing.T) {
 					}
 				}
 
+				return nil
+			},
+		},
+		{
+			name:          "OK/HONOR_KEY_USAGE_TRUE",
+			caCertificate: caCertificateEC,
+			caSigner:      caSignerEC,
+			profile: models.IssuanceProfile{
+				Validity: models.Validity{
+					Type: models.Time,
+					Time: expirationTime,
+				},
+				SignAsCA:        false,
+				KeyUsage:        models.X509KeyUsage(x509.KeyUsageCRLSign), // should NOT be applied; CSR's KU is honored
+				HonorKeyUsage:   true,
+				HonorSubject:    true,
+				HonorExtensions: true,
+			},
+			subject: csrSubject,
+			keyType: models.KeyType(x509.ECDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			extensions: func() []pkix.Extension { return []pkix.Extension{} },
+			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
+				if errSign != nil {
+					return fmt.Errorf("unexpected error: %s", errSign)
+				}
+				if cert.KeyUsage&x509.KeyUsageCRLSign != 0 {
+					return fmt.Errorf("profile KeyUsage was applied despite HonorKeyUsage=true")
+				}
+				return nil
+			},
+		},
+		{
+			name:          "OK/HONOR_EXT_KEY_USAGE_TRUE",
+			caCertificate: caCertificateEC,
+			caSigner:      caSignerEC,
+			profile: models.IssuanceProfile{
+				Validity: models.Validity{
+					Type: models.Time,
+					Time: expirationTime,
+				},
+				SignAsCA: false,
+				ExtendedKeyUsages: []models.X509ExtKeyUsage{
+					models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning), // should NOT be applied; CSR's EKUs are honored
+				},
+				HonorExtendedKeyUsages: true,
+				HonorSubject:           true,
+				HonorExtensions:        true,
+			},
+			subject: csrSubject,
+			keyType: models.KeyType(x509.ECDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			extensions: func() []pkix.Extension { return []pkix.Extension{} },
+			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
+				if errSign != nil {
+					return fmt.Errorf("unexpected error: %s", errSign)
+				}
+				if slices.Contains(cert.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
+					return fmt.Errorf("profile ExtKeyUsage was applied despite HonorExtendedKeyUsages=true")
+				}
 				return nil
 			},
 		},

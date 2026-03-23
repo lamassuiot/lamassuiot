@@ -28,6 +28,7 @@ type CAService interface {
 	SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error)
 
 	SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error)
+	CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error)
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
 
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
@@ -196,9 +197,43 @@ type SignCertificateInput struct {
 	IssuanceProfileID string
 }
 
+// CertificateKeySpec defines the private key to use when issuing the certificate.
+// Exactly one mode MUST be chosen — they are mutually exclusive:
+//
+//   - Generate mode: set Type and Bits (EngineID is optional).
+//   - Reuse mode:    set KeyIdentifier referencing an existing KMS key
+//     (accepts a KeyID, Alias, or PKCS11URI).
+//
+// Validation MUST return ErrInvalidKeySpec if both are set, or if neither
+// provides enough information (e.g. Type set but Bits == 0).
+type CertificateKeySpec struct {
+	// --- generate mode ---
+	Type     models.KeyType `json:"type"`      // e.g. RSA, ECDSA
+	Bits     int            `json:"bits"`      // e.g. 2048, 4096, 256
+	EngineID string         `json:"engine_id"` // optional: target a specific crypto engine
+
+	// --- reuse mode ---
+	// KeyIdentifier references an existing KMS key by its KeyID, Alias, or PKCS11URI.
+	KeyIdentifier string `json:"key_identifier"`
+}
+
 type CreateCertificateInput struct {
-	KeyMetadata models.KeyMetadata `validate:"required"`
-	Subject     models.Subject     `validate:"required"`
+	// CAID is the CA that will sign the certificate. Mandatory.
+	CAID string `json:"ca_id" validate:"required"`
+
+	KeySpec CertificateKeySpec `json:"key_spec" validate:"required"`
+
+	// Subject provides the X.509 subject fields for the generated CSR.
+	Subject models.Subject `json:"subject" validate:"required"`
+
+	// At most one of IssuanceProfileID or IssuanceProfile should be set.
+	// If both are set, IssuanceProfile (inline) takes precedence. If neither
+	// is set the CA's default profile (CACertificate.ProfileID) is used. An
+	// error is returned when no profile can be resolved.
+	IssuanceProfileID string                  `json:"issuance_profile_id"`
+	IssuanceProfile   *models.IssuanceProfile `json:"issuance_profile"`
+
+	Metadata map[string]any `json:"metadata"`
 }
 
 type ImportCertificateInput struct {

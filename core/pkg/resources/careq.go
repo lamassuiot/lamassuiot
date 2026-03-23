@@ -89,6 +89,22 @@ type ReissueCACertificateBody struct {
 	ProfileID string                  `json:"profile_id"`
 }
 
+type CreateCertificateBodyKeySpec struct {
+	Type          models.KeyType `json:"type"`
+	Bits          int            `json:"bits"`
+	EngineID      string         `json:"engine_id"`
+	KeyIdentifier string         `json:"key_identifier"`
+}
+
+type CreateCertificateBody struct {
+	CAID              string                       `json:"ca_id"               validate:"required"`
+	KeySpec           CreateCertificateBodyKeySpec `json:"key_spec"            validate:"required"`
+	Subject           models.Subject               `json:"subject"             validate:"required"`
+	IssuanceProfileID string                       `json:"issuance_profile_id"`
+	IssuanceProfile   *models.IssuanceProfile      `json:"issuance_profile"`
+	Metadata          map[string]any               `json:"metadata"`
+}
+
 type SignatureSignBody struct {
 	Message          string                 `json:"message"`
 	MessageType      models.SignMessageType `json:"message_type"`

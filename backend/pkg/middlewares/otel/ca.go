@@ -119,6 +119,13 @@ func (mw CAOTelTracer) SignCertificate(ctx context.Context, input services.SignC
 	return mw.next.SignCertificate(ctx, input)
 }
 
+func (mw CAOTelTracer) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.CreateCertificate(ctx, input)
+}
+
 func (mw CAOTelTracer) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()

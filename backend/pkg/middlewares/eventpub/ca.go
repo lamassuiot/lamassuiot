@@ -180,6 +180,18 @@ func (mw CAEventPublisher) SignCertificate(ctx context.Context, input services.S
 	return mw.Next.SignCertificate(ctx, input)
 }
 
+func (mw CAEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCertificateKey)
+
+	defer func() {
+		if err == nil {
+			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", output.SerialNumber))
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
+		}
+	}()
+	return mw.Next.CreateCertificate(ctx, input)
+}
+
 func (mw CAEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventImportCertificateKey)
 	serialNumber := ""
