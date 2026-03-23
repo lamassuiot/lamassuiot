@@ -1,8 +1,8 @@
 module github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3
 
-go 1.24.1
+go 1.24.0
 
-toolchain go1.24.7
+
 
 require (
 	github.com/jakehl/goid v1.1.0
