@@ -4,6 +4,11 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 )
 
+func (c CAConfig) GetOtel() cconfig.OTELConfig          { return c.OtelConfig }
+func (c CAConfig) GetLogs() cconfig.Logging             { return c.Logs }
+func (c CAConfig) GetServer() cconfig.HttpServer        { return c.Server }
+func (c CAConfig) GetPublisher() cconfig.EventBusEngine { return c.PublisherEventBus }
+
 type CAConfig struct {
 	OtelConfig               cconfig.OTELConfig             `mapstructure:"otel"`
 	Logs                     cconfig.Logging                `mapstructure:"logs"`

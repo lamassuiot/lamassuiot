@@ -7,11 +7,11 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/servicebuilder"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -24,38 +24,28 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.APIServiceInfo) (*services.KMSService, int, error) {
-	kmsService, err := AssembleKMSService(conf)
-	if err != nil {
-		return nil, -1, fmt.Errorf("could not assemble KMS Service. Exiting: %s", err)
-	}
-
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "KMS", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
-	httpGrp := httpEngine.Group("/")
-	routes.NewKMSHTTPLayer(httpGrp, *kmsService)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
-	if err != nil {
-		return nil, -1, fmt.Errorf("could not run KMS Service http server: %s", err)
-	}
-
-	return kmsService, port, nil
+// RunKMS is the entry point for the standalone KMS service binary.
+// It loads config, assembles the full service, and blocks.
+func RunKMS(serviceInfo models.APIServiceInfo) {
+	servicebuilder.Run[config.KMSConfig](serviceInfo, func(conf config.KMSConfig, info models.APIServiceInfo) error {
+		_, _, err := AssembleKMSServiceWithHTTPServer(conf, info)
+		return err
+	})
 }
 
-func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
+// AssembleKMSService builds and wires the KMS service: storage, crypto engines, service, and all middlewares.
+func AssembleKMSService(conf config.KMSConfig) (services.KMSService, error) {
 	sdk.InitOtelSDK(context.Background(), "KMS Service", conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "KMS", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "KMS", "Event Bus")
 	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "KMS", "Audit Bus")
-
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "KMS", "Storage")
 	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "KMS", "CryptoEngine")
 
 	kmsStorage, err := createKMSStorageInstance(lStorage, conf.Storage)
 	if err != nil {
-		return nil, fmt.Errorf("could not create CA storage instance: %s", err)
+		return nil, fmt.Errorf("could not create KMS storage: %s", err)
 	}
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
@@ -67,14 +57,11 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 		logEntry := log.NewEntry(log.StandardLogger())
 		if engine.Default {
 			logEntry = log.WithField("subsystem-provider", "DEFAULT ENGINE")
-
 		}
-
 		logEntry.Infof("loaded %s engine with id %s", engine.Service.GetEngineConfig().Type, engineID)
 
 		if conf.CryptoEngineConfig.MigrateKeysFormat {
-			err = migrateKeysToV2Format(lSvc, engine, engineID)
-			if err != nil {
+			if err := migrateKeysToV2Format(lSvc, engine, engineID); err != nil {
 				return nil, fmt.Errorf("could not migrate %s engine keys to v2 format: %s", engineID, err)
 			}
 		}
@@ -86,42 +73,46 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 		CryptoEngines: engines,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("could not create KMS service: %v", err)
+		return nil, fmt.Errorf("could not create KMS service: %s", err)
 	}
 
-	kmsSvc := svc.(*lservices.KMSServiceBackend)
-
-	// Add OTel Middleware
-	svc = otel.NewKMSOTelTracer()(svc)
-	kmsSvc.SetService(svc)
-
-	if conf.PublisherEventBus.Enabled {
-		log.Infof("Event Bus is enabled")
-		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "kms", lMessage)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
-		}
-
-		eventPublisher := &eventpub.CloudEventPublisher{
-			Publisher: pub,
-			ServiceID: "kms",
-			Logger:    lMessage,
-		}
-
-		auditPublisher := &eventpub.CloudEventPublisher{
-			Publisher: pub,
-			ServiceID: "kms",
-			Logger:    lAudit,
-		}
-
-		svc = eventpub.NewKMSEventBusPublisher(eventPublisher)(svc)
-		svc = auditpub.NewKMSAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
-
-		//this utilizes the middlewares from within the KMS service (if svc.service.func is used instead of regular svc.func)
-		kmsSvc.SetService(svc)
+	backend := svc.(*lservices.KMSServiceBackend)
+	svc, err = servicebuilder.ApplyMiddlewares(
+		"KMS", "kms", conf.PublisherEventBus,
+		svc, backend.SetService,
+		func(s services.KMSService) services.KMSService { return otel.NewKMSOTelTracer()(s) },
+		func(s services.KMSService, p eventpub.ICloudEventPublisher) services.KMSService {
+			return eventpub.NewKMSEventBusPublisher(p)(s)
+		},
+		func(s services.KMSService, a auditpub.AuditPublisher) services.KMSService {
+			return auditpub.NewKMSAuditEventBusPublisher(a)(s)
+		},
+		lMessage, lAudit,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	return &svc, nil
+	return svc, nil
+}
+
+// AssembleKMSServiceWithHTTPServer assembles the KMS service and starts the HTTP server.
+// Returns the service, the bound port, and any error.
+func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.APIServiceInfo) (*services.KMSService, int, error) {
+	svc, err := AssembleKMSService(conf)
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
+	}
+
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "KMS", "HTTP Server")
+	httpEngine := routes.NewGinEngine(lHttp)
+	routes.NewKMSHTTPLayer(httpEngine.Group("/"), svc)
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not run KMS HTTP server: %s", err)
+	}
+
+	return &svc, port, nil
 }
 
 func createKMSStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.KMSKeysRepo, error) {

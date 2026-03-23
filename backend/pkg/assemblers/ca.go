@@ -5,12 +5,12 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/servicebuilder"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -22,38 +22,37 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSService, serviceInfo models.APIServiceInfo) (*services.CAService, *jobs.JobScheduler, int, error) {
-	caService, scheduler, err := AssembleCAService(conf, kmsSDK)
-	if err != nil {
-		return nil, nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
-	}
-
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "CA", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
-	httpGrp := httpEngine.Group("/")
-	routes.NewCAHTTPLayer(httpGrp, *caService)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
-	if err != nil {
-		return nil, nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)
-	}
-
-	return caService, scheduler, port, nil
+// RunCA is the entry point for the standalone CA service binary.
+// It loads config, builds the KMS SDK client, assembles the full service, and blocks.
+func RunCA(serviceInfo models.APIServiceInfo) {
+	servicebuilder.Run[config.CAConfig](serviceInfo, func(conf config.CAConfig, info models.APIServiceInfo) error {
+		lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "CA", "KMS Client")
+		kmsHttpCli, err := sdk.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
+		if err != nil {
+			return fmt.Errorf("could not build KMS HTTP client: %s", err)
+		}
+		kmsSDK := sdk.NewHttpKMSClient(
+			sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.CASource),
+			fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
+		)
+		_, _, _, err = AssembleCAServiceWithHTTPServer(conf, kmsSDK, info)
+		return err
+	})
 }
 
-func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*services.CAService, *jobs.JobScheduler, error) {
+// AssembleCAService builds and wires the CA service: storage, service, all middlewares, and background jobs.
+// The returned scheduler may be nil if certificate monitoring is disabled.
+func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (services.CAService, *jobs.JobScheduler, error) {
 	sdk.InitOtelSDK(context.Background(), "CA Service", conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
 	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Audit Bus")
-
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
-	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
 
-	caStorage, certStorage, issuerProfilesStorage, err := createCAStorageInstance(lStorage, conf.Storage)
+	caStorage, certStorage, issuanceStorage, err := createCAStorageInstance(lStorage, conf.Storage)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not create CA storage instance: %s", err)
+		return nil, nil, fmt.Errorf("could not create CA storage: %s", err)
 	}
 
 	svc, err := lservices.NewCAService(lservices.CAServiceBuilder{
@@ -61,55 +60,58 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 		KMSService:             kmsSDK,
 		CAStorage:              caStorage,
 		CertificateStorage:     certStorage,
-		IssuanceProfileStorage: issuerProfilesStorage,
+		IssuanceProfileStorage: issuanceStorage,
 		VAServerDomains:        conf.VAServerDomains,
 		AllowCascadeDelete:     conf.AllowCascadeDelete,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not create CA service: %v", err)
+		return nil, nil, fmt.Errorf("could not create CA service: %s", err)
 	}
 
-	caSvc := svc.(*lservices.CAServiceBackend)
-
-	// Add OTel middleware
-	svc = otel.NewCAOTelTracer()(svc)
-	caSvc.SetService(svc)
-
-	if conf.PublisherEventBus.Enabled {
-		log.Infof("Event Bus is enabled")
-		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "ca", lMessage)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
-		}
-
-		eventPublisher := &eventpub.CloudEventPublisher{
-			Publisher: pub,
-			ServiceID: "ca",
-			Logger:    lMessage,
-		}
-
-		auditPublisher := &eventpub.CloudEventPublisher{
-			Publisher: pub,
-			ServiceID: "ca",
-			Logger:    lAudit,
-		}
-
-		svc = eventpub.NewCAEventBusPublisher(eventPublisher)(svc)
-		svc = auditpub.NewCAAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
-
-		//this utilizes the middlewares from within the CA service (if svc.service.func is used instead of regular svc.func)
-		caSvc.SetService(svc)
+	backend := svc.(*lservices.CAServiceBackend)
+	svc, err = servicebuilder.ApplyMiddlewares(
+		"CA", "ca", conf.PublisherEventBus,
+		svc, backend.SetService,
+		func(s services.CAService) services.CAService { return otel.NewCAOTelTracer()(s) },
+		func(s services.CAService, p eventpub.ICloudEventPublisher) services.CAService {
+			return eventpub.NewCAEventBusPublisher(p)(s)
+		},
+		func(s services.CAService, a auditpub.AuditPublisher) services.CAService {
+			return auditpub.NewCAAuditEventBusPublisher(a)(s)
+		},
+		lMessage, lAudit,
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	var scheduler *jobs.JobScheduler
 	if conf.CertificateMonitoringJob.Enabled {
-		log.Infof("Crypto Monitoring is enabled")
-		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
-		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, monitorJob)
+		lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
+		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, jobs.NewCryptoMonitor(svc, lMonitor))
 		scheduler.Start()
 	}
 
-	return &svc, scheduler, nil
+	return svc, scheduler, nil
+}
+
+// AssembleCAServiceWithHTTPServer assembles the CA service and starts the HTTP server.
+// Returns the service, the scheduler (may be nil), the bound port, and any error.
+func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSService, serviceInfo models.APIServiceInfo) (*services.CAService, *jobs.JobScheduler, int, error) {
+	svc, scheduler, err := AssembleCAService(conf, kmsSDK)
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("could not assemble CA Service: %s", err)
+	}
+
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "CA", "HTTP Server")
+	httpEngine := routes.NewGinEngine(lHttp)
+	routes.NewCAHTTPLayer(httpEngine.Group("/"), svc)
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("could not run CA HTTP server: %s", err)
+	}
+
+	return &svc, scheduler, port, nil
 }
 
 func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, storage.IssuanceProfileRepo, error) {
