@@ -8,6 +8,10 @@ on:
       - "CHANGELOG.md" # optional: run only when CHANGELOG.md changed
       - "RELEASE-NOTES.md" # optional: run only when RELEASE-NOTES.md changed
 
+# Default to least-privilege read-only access for GITHUB_TOKEN
+permissions:
+  contents: read
+
 env:
   RELEASE_VERSION: "" # Global variable to be set by extract_version job
 
@@ -56,6 +60,8 @@ jobs:
     name: Bump Module Versions
     needs: extract_version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,6 +144,8 @@ jobs:
     name: Create Global Tag & Release
     needs: finalize
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
