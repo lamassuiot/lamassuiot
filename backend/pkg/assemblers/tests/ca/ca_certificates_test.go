@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -377,5 +378,159 @@ func TestGetCertificatesFilterBySubjectKeyID(t *testing.T) {
 
 	if found[0].SubjectKeyID != cert1.SubjectKeyID {
 		t.Fatalf("expected subject_key_id %s, got %s", cert1.SubjectKeyID, found[0].SubjectKeyID)
+	}
+}
+
+func TestGetCertificatesFilterBySubjectKeyIDNotIn(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	// Ensure clean DB and init CA
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("failed running BeforeEach: %s", err)
+	}
+	_, err = initCA(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to init CA: %s", err)
+	}
+
+	// Create three CAs and issue a certificate each
+	_, cert1, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create first CA and certificate: %s", err)
+	}
+
+	_, cert2, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create second CA and certificate: %s", err)
+	}
+
+	_, cert3, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create third CA and certificate: %s", err)
+	}
+
+	// Query certificates excluding cert1 and cert2 using NotIn filter
+	found := []*models.Certificate{}
+	qp := &resources.QueryParameters{
+		PageSize: 25,
+		Filters: []resources.FilterOption{
+			{
+				Field:           "subject_key_id",
+				Value:           cert1.SubjectKeyID + "," + cert2.SubjectKeyID,
+				FilterOperation: resources.StringNotIn,
+			},
+		},
+	}
+
+	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+		ListInput: resources.ListInput[models.Certificate]{
+			QueryParameters: qp,
+			ExhaustiveRun:   true,
+			ApplyFunc: func(elem models.Certificate) {
+				found = append(found, &elem)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetCertificates returned error: %s", err)
+	}
+
+	// Should only find cert3 (and the original init certificate from initCA)
+	// At minimum, cert3 should be in the results and cert1, cert2 should not
+	foundCert3 := false
+	for _, cert := range found {
+		if cert.SubjectKeyID == cert1.SubjectKeyID || cert.SubjectKeyID == cert2.SubjectKeyID {
+			t.Fatalf("certificate with excluded subject_key_id was found in results: %s", cert.SubjectKeyID)
+		}
+		if cert.SubjectKeyID == cert3.SubjectKeyID {
+			foundCert3 = true
+		}
+	}
+
+	if !foundCert3 {
+		t.Fatalf("expected to find cert3 with subject_key_id %s in not-in filtered results", cert3.SubjectKeyID)
+	}
+}
+
+func TestGetCertificatesFilterBySubjectKeyIDNotInIgnoreCase(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	// Ensure clean DB and init CA
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("failed running BeforeEach: %s", err)
+	}
+	_, err = initCA(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to init CA: %s", err)
+	}
+
+	// Create three CAs and issue a certificate each
+	_, cert1, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create first CA and certificate: %s", err)
+	}
+
+	_, cert2, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create second CA and certificate: %s", err)
+	}
+
+	_, cert3, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create third CA and certificate: %s", err)
+	}
+
+	// Query certificates excluding cert1 and cert2 using NotInIgnoreCase filter
+	// Note: We uppercase the filter values to test case-insensitivity
+	found := []*models.Certificate{}
+	qp := &resources.QueryParameters{
+		PageSize: 25,
+		Filters: []resources.FilterOption{
+			{
+				Field:           "subject_key_id",
+				Value:           strings.ToUpper(cert1.SubjectKeyID) + "," + strings.ToUpper(cert2.SubjectKeyID),
+				FilterOperation: resources.StringNotInIgnoreCase,
+			},
+		},
+	}
+
+	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+		ListInput: resources.ListInput[models.Certificate]{
+			QueryParameters: qp,
+			ExhaustiveRun:   true,
+			ApplyFunc: func(elem models.Certificate) {
+				found = append(found, &elem)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetCertificates returned error: %s", err)
+	}
+
+	// Should only find cert3 (and the original init certificate from initCA)
+	// At minimum, cert3 should be in the results and cert1, cert2 should not
+	foundCert3 := false
+	for _, cert := range found {
+		if strings.ToLower(cert.SubjectKeyID) == strings.ToLower(cert1.SubjectKeyID) ||
+			strings.ToLower(cert.SubjectKeyID) == strings.ToLower(cert2.SubjectKeyID) {
+			t.Fatalf("certificate with excluded subject_key_id was found in results: %s", cert.SubjectKeyID)
+		}
+		if cert.SubjectKeyID == cert3.SubjectKeyID {
+			foundCert3 = true
+		}
+	}
+
+	if !foundCert3 {
+		t.Fatalf("expected to find cert3 with subject_key_id %s in not-in-ignorecase filtered results", cert3.SubjectKeyID)
 	}
 }

@@ -79,6 +79,12 @@ const (
 
 	EnumEqual
 	EnumNotEqual
+	EnumIn
+
+	StringIn
+	StringInIgnoreCase
+	StringNotIn
+	StringNotInIgnoreCase
 
 	JsonPathExpression
 )
@@ -113,6 +119,14 @@ func ParseOperandName(operand string, fieldType FilterFieldType) FilterOperation
 			return StringNotContains
 		case "nc_ic", "notcontains_ignorecase":
 			return StringNotContainsIgnoreCase
+		case "in":
+			return StringIn
+		case "in_ic":
+			return StringInIgnoreCase
+		case "nin":
+			return StringNotIn
+		case "nin_ic":
+			return StringNotInIgnoreCase
 		}
 
 	case StringArrayFilterFieldType:
@@ -155,6 +169,8 @@ func ParseOperandName(operand string, fieldType FilterFieldType) FilterOperation
 			return EnumEqual
 		case "ne", "notequal":
 			return EnumNotEqual
+		case "in":
+			return EnumIn
 		}
 
 	case JsonFilterFieldType:
@@ -188,6 +204,14 @@ func FormatOperandName(filterOp FilterOperation, fieldType FilterFieldType) stri
 			return "nc"
 		case StringNotContainsIgnoreCase:
 			return "nc_ic"
+		case StringIn:
+			return "in"
+		case StringInIgnoreCase:
+			return "in_ic"
+		case StringNotIn:
+			return "nin"
+		case StringNotInIgnoreCase:
+			return "nin_ic"
 		}
 
 	case StringArrayFilterFieldType:
@@ -230,6 +254,8 @@ func FormatOperandName(filterOp FilterOperation, fieldType FilterFieldType) stri
 			return "eq"
 		case EnumNotEqual:
 			return "ne"
+		case EnumIn:
+			return "in"
 		}
 
 	case JsonFilterFieldType:
