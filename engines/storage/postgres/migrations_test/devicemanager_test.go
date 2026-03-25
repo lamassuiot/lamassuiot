@@ -230,9 +230,9 @@ func TestDeviceManagerMigrations(t *testing.T) {
 
 	CleanAllTables(t, logger, con)
 
-	MigrationTest_DeviceManager_20260115161136_create_device_groups(t, logger, con)
+	MigrationTest_DeviceManager_20260120114736_create_device_groups(t, logger, con)
 	if t.Failed() {
-		t.Fatalf("failed while running migration v20260115161136_create_device_groups")
+		t.Fatalf("failed while running migration v20260120114736_create_device_groups")
 	}
 }
 
@@ -355,7 +355,7 @@ func MigrationTest_DeviceManager_20260120114735_idslot_text_to_jsonb(t *testing.
 	assert.Equal(t, int64(1), count, "Should find one device with ACTIVE status")
 }
 
-func MigrationTest_DeviceManager_20260115161136_create_device_groups(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+func MigrationTest_DeviceManager_20260120114736_create_device_groups(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	ApplyMigration(t, logger, con, DeviceManagerDBName)
 
 	// Insert test root group with proper UUID
