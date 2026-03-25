@@ -36,7 +36,7 @@ func SetupLogger(currentLevel config.LogLevel, serviceID string, subsystem strin
 		"subsystem": subsystem,
 	})
 
-	// Add the hook to the local logger instance (not the package-level standard logger),
+	// Add the hook to the local logger instance,
 	// so entries written through lSubsystem are actually forwarded to OTEL.
 	hook := otellogrus.NewHook(serviceID, otellogrus.WithLoggerProvider(global.GetLoggerProvider()))
 	logger.AddHook(hook)
