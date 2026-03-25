@@ -26,7 +26,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 )
 
 var (
@@ -108,8 +107,13 @@ func initOtelSDKInternal(ctx context.Context, svcName string, config config.OTEL
 
 func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, resources *resource.Resource) error {
 	if !config.Enabled {
-		// If tracing is disabled, set a no-op tracer provider so span and trace IDs are still generated, but no spans are exported.
-		otel.SetTracerProvider(noop.NewTracerProvider())
+		// If tracing is disabled, use an SDK tracer provider with NeverSample so valid trace/span IDs are still
+		// generated for log correlation, but no spans are sampled or exported.
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithSampler(sdktrace.NeverSample()),
+			sdktrace.WithResource(resources),
+		)
+		otel.SetTracerProvider(tp)
 		return nil
 	}
 
