@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -108,6 +110,7 @@ func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, re
 	if !config.Enabled {
 		// If tracing is disabled, set a no-op tracer provider so span and trace IDs are still generated, but no spans are exported.
 		otel.SetTracerProvider(noop.NewTracerProvider())
+		return nil
 	}
 
 	options := []otlptracehttp.Option{
@@ -183,13 +186,17 @@ func GetCallerFunctionName() string {
 }
 
 func setupLogging(config config.OTELLoggingConfig, resources *resource.Resource) error {
-	url := fmt.Sprintf("%s://%s:%d", config.Scheme, config.Hostname, config.Port)
-	if config.BasePath != "" {
-		url = fmt.Sprintf("%s%s", url, config.BasePath)
+	u := &url.URL{
+		Scheme: config.Scheme,
+		Host:   fmt.Sprintf("%s:%d", config.Hostname, config.Port),
 	}
+	if config.BasePath != "" {
+		u.Path = path.Join("/", config.BasePath)
+	}
+	endpointURL := u.String()
 
 	options := []otlploghttp.Option{
-		otlploghttp.WithEndpointURL(url),
+		otlploghttp.WithEndpointURL(endpointURL),
 	}
 
 	if config.Scheme == "http" {
