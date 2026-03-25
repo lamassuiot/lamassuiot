@@ -1567,8 +1567,8 @@ func TestSignCertificate(t *testing.T) {
 					return fmt.Errorf("should've got issued certificate but got nil")
 				}
 
-				if issuedCert.Subject.CommonName == "other-test" {
-					return fmt.Errorf("issued certificate should respect CSR CN 'test' but got %s", issuedCert.Subject.CommonName)
+				if issuedCert.Subject.CommonName != "other-test" {
+					return fmt.Errorf("issued certificate should use profile CN 'other-test' but got %s", issuedCert.Subject.CommonName)
 				}
 
 				if issuedCert.Subject.Country != "US" {

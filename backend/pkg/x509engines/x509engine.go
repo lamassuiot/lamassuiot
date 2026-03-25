@@ -324,7 +324,7 @@ func (engine X509Engine) applyIssuanceProfileToTemplate(ctx context.Context, tem
 		template.NotAfter = profile.Validity.Time
 	}
 
-	// Apply subject - profile overrides if HonorSubject is false
+	// Apply subject - profile overrides CSR Subject fields if HonorSubject is false
 	if !profile.HonorSubject {
 		// Profile overrides subject; preserve template CommonName only when profile subject CommonName is empty
 		originalCN := template.Subject.CommonName

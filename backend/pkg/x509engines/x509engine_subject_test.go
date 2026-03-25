@@ -303,7 +303,7 @@ func TestApplyIssuanceProfileToTemplate_SparseSubjectFields(t *testing.T) {
 			expectedLocality: "",
 		},
 		{
-			name: "Empty CSR subject - profile provides all fields",
+			name:            "Empty CSR subject - profile provides all fields",
 			templateSubject: models.Subject{
 				// All fields empty
 			},
