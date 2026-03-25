@@ -108,18 +108,18 @@ func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) (*x509.
 		return nil, nil, fmt.Errorf("DMS '%s' not found", aps)
 	}
 
-	protectionCAID := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ProtectionCA
-	if protectionCAID == "" {
-		return nil, nil, fmt.Errorf("protection_ca not configured for DMS '%s'", aps)
+	protectionCertSN := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ProtectionCertificateSerialNumber
+	if protectionCertSN == "" {
+		return nil, nil, fmt.Errorf("protection_certificate not configured for DMS '%s'", aps)
 	}
 
-	ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: protectionCAID})
+	cert, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: protectionCertSN})
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not get protection CA '%s': %w", protectionCAID, err)
+		return nil, nil, fmt.Errorf("could not get protection certificate '%s': %w", protectionCertSN, err)
 	}
 
-	caSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsClient)
-	return (*x509.Certificate)(ca.Certificate.Certificate), caSigner, nil
+	caSigner := NewCertificateSigner(ctx, cert, svc.kmsClient)
+	return (*x509.Certificate)(cert.Certificate), caSigner, nil
 }
 
 func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
