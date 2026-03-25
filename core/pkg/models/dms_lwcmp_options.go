@@ -25,11 +25,11 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// Reuses the same structure as the EST mTLS auth option.
 	AuthOptionsMTLS AuthOptionsClientCertificate `json:"client_certificate_settings"`
 
-	// ProtectionCA is the ID of the CA whose key the RA uses to sign CMP
-	// response messages (signature-based PKIMessage protection).
-	// The CA certificate is sent as the protection certificate in the response.
+	// ProtectionCertificateSerialNumber is the serial number of the end-entity certificate
+	// whose key the RA uses to sign CMP response messages (signature-based PKIMessage protection).
+	// The key associated with the certificate must be stored in the KMS.
 	// If empty, CMP responses are sent unprotected.
-	ProtectionCA string `json:"protection_ca"`
+	ProtectionCertificateSerialNumber string `json:"protection_certificate"`
 }
 
 type CMPConfirmationMode string
