@@ -4,12 +4,16 @@ coverage:
       default: off
       shared-aws:
         target: auto
-        flags: 
+        flags:
         - shared-aws
       shared-http:
         target: auto
-        flags: 
+        flags:
         - shared-http
+      shared-subsystems:
+        target: auto
+        flags:
+        - shared-subsystems
       core:
         target: auto
         flags: 
@@ -46,10 +50,10 @@ coverage:
         target: auto
         flags: 
         - eventbus-aws
-      backend-rest:
+      backend:
         target: auto
         flags:
-        - backend-rest
+        - backend
       backend-assemblers-ca:
         target: auto
         flags:
@@ -74,10 +78,14 @@ coverage:
         target: auto
         flags:
         - backend-assemblers-alerts
-      connector-aws:
+      connector-awsiot:
         target: auto
-        flags: 
-        - connector-aws
+        flags:
+        - connector-awsiot
+      monolithic:
+        target: auto
+        flags:
+        - monolithic
     patch: off
 
 flags:
@@ -88,6 +96,10 @@ flags:
   shared-http:
     paths:
         - shared/http/
+    carryforward: true
+  shared-subsystems:
+    paths:
+        - shared/subsystems/
     carryforward: true
   core:
     paths:
@@ -125,7 +137,7 @@ flags:
     paths:
         - engines/eventbus/aws/
     carryforward: true
-  backend-rest:
+  backend:
     paths:
         - backend/
     carryforward: true
@@ -153,9 +165,13 @@ flags:
     paths:
         - backend/
     carryforward: true
-  connector-aws:
+  connector-awsiot:
     paths:
-        - connector/aws/
+        - connectors/awsiot/
+    carryforward: true
+  monolithic:
+    paths:
+        - monolithic/
     carryforward: true
 
 ignore:

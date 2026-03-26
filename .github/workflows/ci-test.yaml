@@ -209,4 +209,4 @@ jobs:
           commit_parent: ${{ github.event.pull_request.base.sha }}
           fail_ci_if_error: true
           verbose: true
-          flags: backend-rest
+          flags: backend
