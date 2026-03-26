@@ -100,7 +100,7 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 	}
 
 	if conf.SubscriberEventBus.Enabled {
-		err := createSubscriberEventBus(conf, crlSvc)
+		err := createSubscriberEventBus(conf, crl)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -134,7 +134,7 @@ func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (ser
 	return crl, nil
 }
 
-func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLServiceBackend) error {
+func createSubscriberEventBus(conf config.VAconfig, crlSvc services.CRLService) error {
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
 
 	if conf.SubscriberEventBus.Enabled && !conf.SubscriberDLQEventBus.Enabled {

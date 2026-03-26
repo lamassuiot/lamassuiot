@@ -62,5 +62,13 @@ func (mw *clrEventPublisher) CalculateCRL(ctx context.Context, input services.Ca
 }
 
 func (mw *clrEventPublisher) InitCRLRole(ctx context.Context, caSki string) (output *models.VARole, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventInitCRLRole)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", caSki))
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
+		}
+	}()
 	return mw.next.InitCRLRole(ctx, caSki)
 }

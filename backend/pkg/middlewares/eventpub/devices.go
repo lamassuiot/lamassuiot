@@ -34,7 +34,7 @@ func (mw *deviceEventPublisher) CreateDevice(ctx context.Context, input services
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.next.CreateDevice(ctx, input)
@@ -139,7 +139,7 @@ func (mw *deviceEventPublisher) CreateDeviceGroup(ctx context.Context, input ser
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.next.CreateDeviceGroup(ctx, input)
