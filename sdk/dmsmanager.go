@@ -137,6 +137,10 @@ func (cli *dmsManagerClient) LWCGetCRL(ctx context.Context, input services.GetCM
 	return nil, fmt.Errorf("not supported, use the cmp client instead")
 }
 
+func (cli *dmsManagerClient) LWCGetEnrollmentOptions(ctx context.Context, aps string) (*services.LWCEnrollmentOptions, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
 func (cli *dmsManagerClient) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
 	response, err := Post[*models.BindIdentityToDeviceOutput](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/bind-identity", resources.BindIdentityToDeviceBody{
 		BindMode:                input.BindMode,
