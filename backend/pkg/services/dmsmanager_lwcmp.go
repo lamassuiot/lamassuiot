@@ -202,6 +202,17 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	return nil
 }
 
+func (svc DMSManagerServiceBackend) LWCGetEnrollmentOptions(ctx context.Context, aps string) (*services.LWCEnrollmentOptions, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: aps})
+	if err != nil {
+		lFunc.Errorf("LWCGetEnrollmentOptions: could not get DMS '%s': %s", aps, err)
+		return nil, err
+	}
+	opts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	return &opts, nil
+}
+
 func (svc DMSManagerServiceBackend) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {
 	// Root CA key rollover is not currently supported; signal no update available.
 	return nil, nil
