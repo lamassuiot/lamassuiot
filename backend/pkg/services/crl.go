@@ -21,7 +21,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 
-
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -68,7 +67,7 @@ func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	return svc, nil
 }
 
-func (svc CRLServiceBackend) SetService(service services.CRLService) {
+func (svc *CRLServiceBackend) SetService(service services.CRLService) {
 	svc.service = service
 }
 
