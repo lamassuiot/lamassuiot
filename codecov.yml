@@ -46,10 +46,34 @@ coverage:
         target: auto
         flags: 
         - eventbus-aws
-      backend:
+      backend-rest:
         target: auto
-        flags: 
-        - backend
+        flags:
+        - backend-rest
+      backend-assemblers-ca:
+        target: auto
+        flags:
+        - backend-assemblers-ca
+      backend-assemblers-kms:
+        target: auto
+        flags:
+        - backend-assemblers-kms
+      backend-assemblers-va:
+        target: auto
+        flags:
+        - backend-assemblers-va
+      backend-assemblers-device-manager:
+        target: auto
+        flags:
+        - backend-assemblers-device-manager
+      backend-assemblers-dms-manager:
+        target: auto
+        flags:
+        - backend-assemblers-dms-manager
+      backend-assemblers-alerts:
+        target: auto
+        flags:
+        - backend-assemblers-alerts
       connector-aws:
         target: auto
         flags: 
@@ -101,7 +125,31 @@ flags:
     paths:
         - engines/eventbus/aws/
     carryforward: true
-  backend:
+  backend-rest:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-ca:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-kms:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-va:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-device-manager:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-dms-manager:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-alerts:
     paths:
         - backend/
     carryforward: true
