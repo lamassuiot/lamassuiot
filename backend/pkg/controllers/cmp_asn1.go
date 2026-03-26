@@ -24,26 +24,36 @@ const (
 	pvnoCMP2000 = 2
 )
 
-// rawPKIMessage is used for dispatch of incoming PKIMessages.
-// The Body is delivered as asn1.RawValue so we can inspect its tag before
-// deciding which decoder to run.
-//
-// Per RFC 4210 Appendix F (IMPLICIT TAGS module default), the body value is a
-// CHOICE alternative whose CONSTRUCTED bit is set and whose class is
-// CONTEXT-SPECIFIC; the tag number is the CHOICE index (0, 2, 7, 24, …).
+// oidImplicitConfirm is id-it-implicitConfirm (1.3.6.1.5.5.7.4.13).
+// When present in the request PKIHeader generalInfo field, the EE signals that
+// it supports implicit certificate confirmation per RFC 4210 §5.3.2.
+var oidImplicitConfirm = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 13}
+
+// rawPKIMessage captures the Header and Body of an incoming PKIMessage for
+// body-tag dispatch. Protection and ExtraCerts are omitted here; use
+// rawPKIMessageFull when those fields are needed.
 type rawPKIMessage struct {
 	Header asn1.RawValue
 	Body   asn1.RawValue
-	// Protection and ExtraCerts are intentionally omitted for dispatch purposes.
+}
+
+// rawPKIMessageFull captures all four top-level fields of a PKIMessage so that
+// the controller can verify incoming signature-based protection.
+type rawPKIMessageFull struct {
+	Header     asn1.RawValue
+	Body       asn1.RawValue
+	Protection asn1.RawValue   `asn1:"optional,explicit,tag:0"`
+	ExtraCerts []asn1.RawValue `asn1:"optional,explicit,tag:1"`
 }
 
 type requestPKIHeader struct {
 	PVNO          int
 	Sender        asn1.RawValue
 	Recipient     asn1.RawValue
-	TransactionID []byte `asn1:"optional,explicit,tag:4,omitempty"`
-	SenderNonce   []byte `asn1:"optional,explicit,tag:5,omitempty"`
-	RecipNonce    []byte `asn1:"optional,explicit,tag:6,omitempty"`
+	TransactionID []byte          `asn1:"optional,explicit,tag:4,omitempty"`
+	SenderNonce   []byte          `asn1:"optional,explicit,tag:5,omitempty"`
+	RecipNonce    []byte          `asn1:"optional,explicit,tag:6,omitempty"`
+	GeneralInfo   []asn1.RawValue // decoded from [8] EXPLICIT SEQUENCE; empty when absent
 }
 
 // certStatusASN1 is the server-side parse target for one CertStatus entry

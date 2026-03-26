@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 	"github.com/zjj/gocmp/cmp"
@@ -105,16 +107,16 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		return
 	}
 
-	// Decode PKIMessage – capture header and raw body CHOICE value
-	var rawMsg rawPKIMessage
-	if _, err := asn1.Unmarshal(bodyBytes, &rawMsg); err != nil {
+	// Decode PKIMessage fully (including Protection and ExtraCerts for verification).
+	var fullMsg rawPKIMessageFull
+	if _, err := asn1.Unmarshal(bodyBytes, &fullMsg); err != nil {
 		lFunc.Warnf("failed to unmarshal PKIMessage: %v", err)
 		r.rejectWithError(ctx, nil, cmp.PKIStatus(2), "malformed PKIMessage", dmsID)
 		return
 	}
 
-	header := rawMsg.Header
-	body := rawMsg.Body
+	header := fullMsg.Header
+	body := fullMsg.Body
 
 	reqHeader, err := decodeRequestHeader(header.FullBytes)
 	if err != nil {
@@ -129,6 +131,14 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		WithField("bodyTagStr", cmpTagToString(body.Tag)).
 		WithField("txid", hex.EncodeToString(reqHeader.TransactionID))
 	lFunc.Debugf("received CMP message body tag=%d", body.Tag)
+
+	// Verify signature-based protection if present in the request.
+	if err := verifyRequestProtection(fullMsg); err != nil {
+		lFunc.Warnf("protection verification failed: %v", err)
+		r.rejectWithError(ctx, &reqHeader, cmp.PKIStatus(2),
+			fmt.Sprintf("protection verification failed: %v", err), dmsID)
+		return
+	}
 
 	// Dispatch on body CHOICE tag
 	switch body.Tag {
@@ -171,7 +181,15 @@ func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, head
 		return
 	}
 
-	r.store.put(header.TransactionID, pendingTx{CertDER: cert.Raw, SentAt: time.Now()})
+	// Only store the pending transaction when explicit confirmation is required.
+	// When the DMS is in IMPLICIT mode AND the EE included id-it-implicitConfirm
+	// in its request generalInfo, skip the store so no certConf is expected.
+	if !r.isImplicitConfirm(ctx.Request.Context(), header, dmsID) {
+		r.store.put(header.TransactionID, pendingTx{CertDER: cert.Raw, SentAt: time.Now()})
+	} else {
+		lFunc.Debugf("implicit confirm: skipping transaction store for txID %s",
+			hex.EncodeToString(header.TransactionID))
+	}
 
 	// Respond IP (tag 1) for ir, CP (tag 3) for cr
 	respTag := cmpBodyTagCP
@@ -265,6 +283,20 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
 }
 
+// isImplicitConfirm reports whether the current request should be treated as
+// implicitly confirmed — i.e. the DMS is in IMPLICIT mode AND the EE included
+// the id-it-implicitConfirm OID in the request's generalInfo header.
+func (r *cmpHttpRoutes) isImplicitConfirm(ctx context.Context, header requestPKIHeader, dmsID string) bool {
+	if !hasImplicitConfirmOID(header.GeneralInfo) {
+		return false
+	}
+	opts, err := r.svc.LWCGetEnrollmentOptions(ctx, dmsID)
+	if err != nil || opts == nil {
+		return false
+	}
+	return opts.ConfirmationMode == models.CMPConfirmationModeImplicit
+}
+
 // hashesEqual compares two byte slices in constant time.
 func hashesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
@@ -304,13 +336,13 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 
 	if aps != "" {
 		if provider, ok := r.svc.(services.LightweightCMPProtectionProvider); ok {
-			respCert, signer, credErr := provider.LWCProtectionCredentials(aps)
+			certChain, signer, credErr := provider.LWCProtectionCredentials(aps)
 			if credErr != nil {
 				lFunc.Errorf("load cmp protection credentials: %v", credErr)
 				ctx.Status(http.StatusInternalServerError)
 				return
 			}
-			respDER, err := marshalProtectedResponse(reqHeader, bodyTag, bodyDER, respCert, signer)
+			respDER, err := marshalProtectedResponse(reqHeader, bodyTag, bodyDER, certChain, signer)
 			if err != nil {
 				lFunc.Errorf("marshal protected response PKIMessage: %v", err)
 				ctx.Status(http.StatusInternalServerError)
@@ -538,6 +570,8 @@ func decodeRequestHeader(headerDER []byte) (requestPKIHeader, error) {
 			header.SenderNonce, err = decodeExplicitOctetString(field.Bytes, "senderNonce")
 		case 6:
 			header.RecipNonce, err = decodeExplicitOctetString(field.Bytes, "recipNonce")
+		case 8:
+			header.GeneralInfo, err = decodeGeneralInfo(field.Bytes)
 		}
 		if err != nil {
 			return requestPKIHeader{}, err
@@ -545,6 +579,46 @@ func decodeRequestHeader(headerDER []byte) (requestPKIHeader, error) {
 	}
 
 	return header, nil
+}
+
+// decodeGeneralInfo parses the content bytes of a [8] EXPLICIT generalInfo field.
+// generalInfo is SEQUENCE SIZE (1..MAX) OF InfoTypeAndValue, where each
+// InfoTypeAndValue is SEQUENCE { infoType OID, infoValue ANY OPTIONAL }.
+// We return the raw InfoTypeAndValue entries for inspection.
+func decodeGeneralInfo(bytes []byte) ([]asn1.RawValue, error) {
+	// bytes is the content of [8] EXPLICIT, which is a SEQUENCE OF InfoTypeAndValue.
+	var seq asn1.RawValue
+	if _, err := asn1.Unmarshal(bytes, &seq); err != nil {
+		return nil, fmt.Errorf("generalInfo SEQUENCE: %w", err)
+	}
+	var items []asn1.RawValue
+	rest := seq.Bytes
+	for len(rest) > 0 {
+		var item asn1.RawValue
+		var err error
+		rest, err = asn1.Unmarshal(rest, &item)
+		if err != nil {
+			return nil, fmt.Errorf("generalInfo item: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// hasImplicitConfirmOID reports whether any InfoTypeAndValue in the given
+// generalInfo slice carries the id-it-implicitConfirm OID (1.3.6.1.5.5.7.4.13).
+func hasImplicitConfirmOID(generalInfo []asn1.RawValue) bool {
+	for _, item := range generalInfo {
+		// Each item is a SEQUENCE { OID, ... }; we extract just the OID.
+		var oid asn1.ObjectIdentifier
+		if _, err := asn1.Unmarshal(item.Bytes, &oid); err != nil {
+			continue
+		}
+		if oid.Equal(oidImplicitConfirm) {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeExplicitOctetString(der []byte, label string) ([]byte, error) {

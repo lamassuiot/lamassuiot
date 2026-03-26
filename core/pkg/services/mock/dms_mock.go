@@ -107,3 +107,9 @@ func (m *MockDMSManagerService) LWCGetCRL(ctx context.Context, input services.Ge
 	args := m.Called(ctx, input)
 	return args.Get(0).(*x509.RevocationList), args.Error(1)
 }
+
+func (m *MockDMSManagerService) LWCGetEnrollmentOptions(ctx context.Context, aps string) (*services.LWCEnrollmentOptions, error) {
+	args := m.Called(ctx, aps)
+	opts, _ := args.Get(0).(*services.LWCEnrollmentOptions)
+	return opts, args.Error(1)
+}

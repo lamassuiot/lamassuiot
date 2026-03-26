@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+
 type responsePKIMessage struct {
 	Header     responsePKIHeader
 	Body       asn1.RawValue
@@ -31,13 +32,87 @@ type rawResponsePKIMessage struct {
 	ExtraCerts []asn1.RawValue `asn1:"optional,explicit,tag:1"`
 }
 
+// verifyRequestProtection verifies the signature-based protection of an
+// incoming PKIMessage. It uses the public key from the first certificate in
+// extraCerts (the EE's protection certificate per RFC 9483 §3.2) to verify
+// the Protection BitString over DER(header) || DER(body).
+//
+// Returns nil when verification succeeds, or an error describing the failure.
+// If the incoming message carries no protection (protection bytes empty), this
+// function returns nil immediately — protection is optional at the EE layer.
+func verifyRequestProtection(full rawPKIMessageFull) error {
+	if len(full.Protection.Bytes) == 0 {
+		return nil
+	}
+	if len(full.ExtraCerts) == 0 {
+		return fmt.Errorf("protection present but extraCerts is empty: cannot identify EE certificate")
+	}
+
+	eeCert, err := x509.ParseCertificate(full.ExtraCerts[0].FullBytes)
+	if err != nil {
+		return fmt.Errorf("parse EE certificate from extraCerts[0]: %w", err)
+	}
+
+	payload, err := marshalProtectedPayload(full.Header.FullBytes, full.Body.FullBytes)
+	if err != nil {
+		return fmt.Errorf("marshal protected payload for verification: %w", err)
+	}
+
+	// full.Protection is decoded from the [0] EXPLICIT wrapper as a RawValue.
+	// Go's asn1 package does not strip the explicit tag for RawValue fields, so
+	// full.Protection holds the outer [0] context-specific value and its
+	// Bytes field contains the inner BitString TLV.
+	// We need one more level of unmarshalling to reach the actual signature.
+	var innerBitString asn1.RawValue
+	if _, err := asn1.Unmarshal(full.Protection.Bytes, &innerBitString); err != nil {
+		return fmt.Errorf("parse protection BitString: %w", err)
+	}
+	if innerBitString.Tag != asn1.TagBitString {
+		return fmt.Errorf("protection field is not a BitString (tag=%d)", innerBitString.Tag)
+	}
+	// innerBitString.Bytes = [unused_bits_count, sig_octets...]
+	// For whole-byte signatures unused_bits_count is always 0x00.
+	if len(innerBitString.Bytes) < 1 {
+		return fmt.Errorf("protection BitString is empty")
+	}
+	protBytes := innerBitString.Bytes[1:] // skip unused-bits byte
+
+	switch pub := eeCert.PublicKey.(type) {
+	case *ecdsa.PublicKey:
+		digest := crypto.SHA256.New()
+		digest.Write(payload)
+		if !ecdsa.VerifyASN1(pub, digest.Sum(nil), protBytes) {
+			return fmt.Errorf("protection verification failed: invalid ECDSA signature")
+		}
+	case *rsa.PublicKey:
+		digest := crypto.SHA256.New()
+		digest.Write(payload)
+		if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest.Sum(nil), protBytes); err != nil {
+			return fmt.Errorf("protection verification failed: %w", err)
+		}
+	case ed25519.PublicKey:
+		if !ed25519.Verify(pub, payload, protBytes) {
+			return fmt.Errorf("protection verification failed: invalid Ed25519 signature")
+		}
+	default:
+		return fmt.Errorf("unsupported EE public key type for protection verification: %T", pub)
+	}
+
+	return nil
+}
+
 func marshalProtectedResponse(
 	reqHeader requestPKIHeader,
 	bodyTag int,
 	bodyDER []byte,
-	cert *x509.Certificate,
+	certChain []*x509.Certificate,
 	signer crypto.Signer,
 ) ([]byte, error) {
+	if len(certChain) == 0 {
+		return nil, fmt.Errorf("marshalProtectedResponse: certChain must not be empty")
+	}
+	leaf := certChain[0]
+
 	protectionAlg, hash, err := cmpProtectionAlgorithm(signer)
 	if err != nil {
 		return nil, err
@@ -46,11 +121,16 @@ func marshalProtectedResponse(
 	respHeader := buildResponseHeader(reqHeader)
 	respHeader.MessageTime = time.Now().UTC().Round(time.Second)
 	respHeader.ProtectionAlg = protectionAlg
-	respSender, err := generalNameDirectoryName(cert.Subject)
+	respSender, err := generalNameDirectoryName(leaf.Subject)
 	if err != nil {
 		return nil, fmt.Errorf("marshal cmp sender general name: %w", err)
 	}
 	respHeader.Sender = respSender
+
+	extraCerts := make([]responseCMPCerts, len(certChain))
+	for i, c := range certChain {
+		extraCerts[i] = responseCMPCerts{Raw: c.Raw}
+	}
 
 	msg := responsePKIMessage{
 		Header: respHeader,
@@ -60,7 +140,7 @@ func marshalProtectedResponse(
 			IsCompound: true,
 			Bytes:      bodyDER,
 		},
-		ExtraCerts: []responseCMPCerts{{Raw: cert.Raw}},
+		ExtraCerts: extraCerts,
 	}
 
 	encoded, err := asn1.Marshal(msg)

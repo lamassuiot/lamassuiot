@@ -62,13 +62,29 @@ type LightweightCMPService interface {
 	//
 	// Returns nil when no CRL newer than input.CurrentThisUpdate is available.
 	LWCGetCRL(ctx context.Context, input GetCMPCRLInput) (*x509.RevocationList, error)
+
+	// LWCGetEnrollmentOptions returns the CMP enrollment options configured on
+	// the DMS identified by aps. The controller uses this to make per-request
+	// dispatch decisions such as implicit confirmation mode.
+	LWCGetEnrollmentOptions(ctx context.Context, aps string) (*LWCEnrollmentOptions, error)
 }
 
 // LightweightCMPProtectionProvider exposes the credentials used to apply
 // signature-based protection to CMP responses.
+// LWCProtectionCredentials returns the full certificate chain (leaf first)
+// and the crypto.Signer for the leaf certificate's private key.
+// The chain is placed in the extraCerts field of all protected responses so
+// that EE clients can verify the RA's signature without pre-configuring the
+// RA certificate.
 type LightweightCMPProtectionProvider interface {
-	LWCProtectionCredentials(aps string) (*x509.Certificate, crypto.Signer, error)
+	LWCProtectionCredentials(aps string) ([]*x509.Certificate, crypto.Signer, error)
 }
+
+// LWCEnrollmentOptions is returned by LWCGetEnrollmentOptions and carries the
+// DMS-level CMP settings the controller needs to make dispatch decisions
+// (e.g. whether implicit confirmation is allowed).
+// The controller must not cache this value across requests.
+type LWCEnrollmentOptions = models.EnrollmentOptionsLWCRFC9483
 
 // ---------------------------------------------------------------------------
 // RevokeCertificate

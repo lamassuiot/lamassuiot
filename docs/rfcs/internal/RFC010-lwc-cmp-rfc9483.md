@@ -237,3 +237,72 @@ Tests should verify externally observable behavior: the correct CMP body tag and
 - **`VerifyCSRSignature` flag:** When the DMS is used with CMP, `VerifyCSRSignature` in `EnrollmentSettings` should be set to `false` because the synthetic PKCS#10 CSR constructed from the CertTemplate carries a dummy signature. The EE's proof-of-possession is instead validated at the CMP layer via the request protection verification.
 - **Protection certificate lifecycle:** The RA protection certificate (`ProtectionCertificateSerialNumber`) is an end-entity certificate whose private key is managed by the KMS service. Operators must renew this certificate before expiry; no automatic renewal is provided by the DMS Manager.
 - **openssl cmp compatibility:** Tests use `openssl cmp` (OpenSSL 3.x) as the reference client. The implementation should be validated against this client's default behavior, including its default protection algorithm selection and certConf handling.
+
+
+==========
+
+The PRD is in context from the previous step. I have a thorough understanding of the codebase. Let me identify the architectural      
+  anchors and propose the vertical slices.                                                                                              
+                                                                                                                                      
+---                                                                                                                                   
+Durable architectural decisions I identified                                                                                          
+                                                                                                                                      
+- Single route: POST /.well-known/cmp/p/:id handles all operations — no new routes needed                                             
+- Dispatch model: Single HandleCMP function dispatching on ASN.1 body tag; genm sub-dispatches on InfoType OID                        
+- Auth: mTLS enforced as Gin middleware on the CMP route group (mirrors EST pattern)                                                  
+- Protection: Signature-based only (KMS-managed RA cert); no PBMAC1                                                                   
+- Transaction store: In-memory cmpTxStore, stays in-memory (no persistent storage for this PRD)                                       
+- Key model changes: EnforceIssuanceProfile bool, ServerKeyGenEnabled bool, CKGTrustedEncryptionCAs []string added to                 
+EnrollmentOptionsLWCRFC9483                                                                                                           
+- CKG key transport: Key Transport (RSA-OAEP) and Key Agreement (ECDH); algorithm selected by controller based on EE encryption cert  
+key type                                                                                                                              
+                                                                                                                                    
+---                                                                                                                                   
+Proposed vertical slices                                                                                                            
+                        
+Phase 1 — Authentication & Protocol Integrity
+Stories: 5, 6, 7, 12, 13, 14, 32, 33, 34, 35, 36, 37, 43, 45, 48                                                                      
+Auth middleware (mTLS validation against DMS CAs), EE signature verification on inbound messages, extraCerts populated in all         
+responses, implicitConfirm generalInfo handling. This is the foundational correctness layer — existing enrollment/reenroll continue to
+  work, but are now properly authenticated and protected.                                                                              
+                                                                                                                                      
+---                                                                                                                                 
+Phase 2 — Revocation (rr/rp)
+Stories: 18, 19, 20, 44 (revocation)                                                                                                  
+Dispatch for body tag 11, ASN.1 structures for RevReqContent/RevRepContent, implement LWCRevokeCertificate fully, E2E test: enroll → 
+revoke via openssl cmp -cmd rr.                                                                                                       
+                                                                                                                                      
+---
+Phase 3 — PKCS#10 Enrollment (p10cr)                                                                                                  
+Stories: 3, 4, 46 (p10cr)                                                                                                             
+Dispatch for body tag 4, parse embedded PKCS#10 CSR directly (no CertTemplate extraction needed), verify CSR self-signature, call 
+LWCEnroll, E2E test: openssl cmp -cmd p10cr.                                                                                          
+                                                                                                                                      
+---
+Phase 4 — CertTemplate Extension Forwarding                                                                                           
+Stories: 38, 39                                                                                                                       
+Add EnforceIssuanceProfile to model and DMS REST API. When false: extract SANs, key usage, EKU from CertTemplate and forward to CA. 
+When true: current behavior (subject + pubkey only). Tests for both modes on ir/cr/kur.                                               
+                                                                                                                                      
+---
+Phase 5 — Support Messages (genm/genp)                                                                                                
+Stories: 21, 22, 23, 24, 25                                                                                                         
+Dispatch for body tag 21, sub-dispatch on 4 InfoType OIDs, implement all four service stubs (LWCCACerts already works, 
+LWCGetRootCACertUpdate, LWCGetCertReqTemplate, LWCGetCRL fully implemented), ASN.1 structures for genm/genp, E2E test for each.
+                                                                                                                                      
+---
+Phase 6 — Central Key Generation (CKG)                                                                                                
+Stories: 26, 27, 28, 29, 30, 31, 40, 41                                                                                             
+Add ServerKeyGenEnabled / CKGTrustedEncryptionCAs to model. Detect empty public key in CertTemplate (ir/cr), add LWCServerKeyGen 
+service method (KMS-generated key, EnvelopedData wrapping), implement Key Transport + Key Agreement, validate EE encryption cert, E2E 
+test.                                                                                                                                 
+      
+---                                                                                                                                   
+Questions for you:                                                                                                                    
+
+1. Does the granularity feel right, or should any phases be merged / split?                                                           
+2. Should Phase 1 (auth + integrity) be split into two — one for the mTLS middleware alone (which unblocks the rest), and one for   
+protection validation + extraCerts?                                                                                                   
+3. Phases 2 and 3 are small. Should they be merged into a single "Missing enrollment operations" phase?
+4. Any ordering constraints I should know about — e.g. must Phase 4 (extension forwarding) land before a specific release?            
+                                                                                                                                      
