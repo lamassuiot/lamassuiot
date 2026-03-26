@@ -97,7 +97,7 @@ func (svc DMSManagerServiceBackend) ensureDeviceRegistered(ctx context.Context, 
 	return device, nil
 }
 
-func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) (*x509.Certificate, crypto.Signer, error) {
+func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) ([]*x509.Certificate, crypto.Signer, error) {
 	ctx := context.Background()
 
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, aps)
@@ -119,7 +119,19 @@ func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) (*x509.
 	}
 
 	caSigner := NewCertificateSigner(ctx, cert, svc.kmsClient)
-	return (*x509.Certificate)(cert.Certificate), caSigner, nil
+	leaf := (*x509.Certificate)(cert.Certificate)
+
+	// Fetch the issuer chain for the protection certificate so that the
+	// controller can populate extraCerts with the full chain.
+	chain := []*x509.Certificate{leaf}
+	if cert.IssuerCAMetadata.ID != "" {
+		issuerCA, caErr := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: cert.IssuerCAMetadata.ID})
+		if caErr == nil && issuerCA != nil {
+			chain = append(chain, (*x509.Certificate)(issuerCA.Certificate.Certificate))
+		}
+	}
+
+	return chain, caSigner, nil
 }
 
 func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
