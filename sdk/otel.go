@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -14,10 +16,13 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -69,16 +74,22 @@ func initOtelSDKInternal(ctx context.Context, svcName string, config config.OTEL
 		return shutdown, err
 	}
 
-	if config.Traces.Enabled {
-		err = setupTracerProvider(ctx, config.Traces, resources)
+	err = setupTracerProvider(ctx, config.Traces, resources)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+
+	if config.Metrics.Enabled {
+		err = setupMeterProvider(ctx, config.Metrics, resources)
 		if err != nil {
 			log.Fatal(err)
 			return nil, err
 		}
 	}
 
-	if config.Metrics.Enabled {
-		err = setupMeterProvider(ctx, config.Metrics, resources)
+	if config.Logging.Enabled {
+		err = setupLogging(config.Logging, resources)
 		if err != nil {
 			log.Fatal(err)
 			return nil, err
@@ -95,6 +106,17 @@ func initOtelSDKInternal(ctx context.Context, svcName string, config config.OTEL
 }
 
 func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, resources *resource.Resource) error {
+	if !config.Enabled {
+		// If tracing is disabled, use an SDK tracer provider with NeverSample so valid trace/span IDs are still
+		// generated for log correlation, but no spans are sampled or exported.
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithSampler(sdktrace.NeverSample()),
+			sdktrace.WithResource(resources),
+		)
+		otel.SetTracerProvider(tp)
+		return nil
+	}
+
 	options := []otlptracehttp.Option{
 		otlptracehttp.WithEndpoint(fmt.Sprintf("%s:%d", config.Hostname, config.Port)),
 	}
@@ -165,4 +187,35 @@ func GetCallerFunctionName() string {
 	split := strings.Split(fullName, ".")
 
 	return split[len(split)-1]
+}
+
+func setupLogging(config config.OTELLoggingConfig, resources *resource.Resource) error {
+	u := &url.URL{
+		Scheme: config.Scheme,
+		Host:   fmt.Sprintf("%s:%d", config.Hostname, config.Port),
+	}
+	if config.BasePath != "" {
+		u.Path = path.Join("/", config.BasePath)
+	}
+	endpointURL := u.String()
+
+	options := []otlploghttp.Option{
+		otlploghttp.WithEndpointURL(endpointURL),
+	}
+
+	if config.Scheme == "http" {
+		options = append(options, otlploghttp.WithInsecure())
+	}
+
+	exporter, err := otlploghttp.New(context.Background(), options...)
+	if err != nil {
+		return err
+	}
+
+	processor := sdklog.NewBatchProcessor(exporter)
+	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(processor))
+
+	global.SetLoggerProvider(provider)
+
+	return nil
 }
