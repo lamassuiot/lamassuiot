@@ -194,7 +194,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 			{
 				Field:           "metadata",
 				FilterOperation: int(resources.JsonPathExpression),
-				Value:           "[temp] > 50",
+				Value:           "$.temp > 50",
 			},
 		},
 	})
@@ -593,6 +593,225 @@ func TestGetDeviceGroups(t *testing.T) {
 
 	if len(groups) < 2 {
 		t.Errorf("expected at least 2 groups, got %d", len(groups))
+	}
+}
+
+func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
+	ctx := context.Background()
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+	client := dmgr.HttpDeviceManagerSDK
+
+	// Create devices with numeric metadata
+	hotDevice, err := dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+		ID:        "hot-sensor",
+		Tags:      []string{"sensor"},
+		Metadata:  map[string]interface{}{"temp": 75, "active": true, "env": "production"},
+		DMSID:     "test-dms",
+		Icon:      "sensor",
+		IconColor: "#FF0000",
+	})
+	if err != nil {
+		t.Fatalf("failed to create hot-sensor: %s", err)
+	}
+
+	coldDevice, err := dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+		ID:        "cold-sensor",
+		Tags:      []string{"sensor"},
+		Metadata:  map[string]interface{}{"temp": 20, "active": false, "env": "staging"},
+		DMSID:     "test-dms",
+		Icon:      "sensor",
+		IconColor: "#0000FF",
+	})
+	if err != nil {
+		t.Fatalf("failed to create cold-sensor: %s", err)
+	}
+
+	warmDevice, err := dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+		ID:        "warm-sensor",
+		Tags:      []string{"sensor"},
+		Metadata:  map[string]interface{}{"temp": 55, "active": true, "env": "staging"},
+		DMSID:     "test-dms",
+		Icon:      "sensor",
+		IconColor: "#00FF00",
+	})
+	if err != nil {
+		t.Fatalf("failed to create warm-sensor: %s", err)
+	}
+
+	// Test 1: Group filtering by numeric threshold ($.temp > 50)
+	highTempGroupID := uuid.NewString()
+	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+		ID:          highTempGroupID,
+		Name:        "High Temp Sensors",
+		Description: "Sensors with temp > 50",
+		ParentID:    nil,
+		Criteria: []models.DeviceGroupFilterOption{
+			{
+				Field:           "metadata",
+				FilterOperation: int(resources.JsonPathExpression),
+				Value:           "$.temp > 50",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create high-temp group: %s", err)
+	}
+
+	highTempDevices := []models.Device{}
+	_, err = client.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
+		GroupID: highTempGroupID,
+		ListInput: resources.ListInput[models.Device]{
+			ExhaustiveRun: true,
+			ApplyFunc: func(d models.Device) {
+				highTempDevices = append(highTempDevices, d)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetDevicesByGroup (temp > 50) error: %s", err)
+	}
+	if len(highTempDevices) != 2 {
+		t.Errorf("expected 2 devices with temp > 50, got %d", len(highTempDevices))
+	}
+	for _, d := range highTempDevices {
+		if d.ID == coldDevice.ID {
+			t.Errorf("cold-sensor (temp=20) should not be in high-temp group")
+		}
+	}
+
+	// Test 2: Group filtering by boolean field ($.active == true)
+	activeGroupID := uuid.NewString()
+	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+		ID:          activeGroupID,
+		Name:        "Active Sensors",
+		Description: "Sensors where active is true",
+		ParentID:    nil,
+		Criteria: []models.DeviceGroupFilterOption{
+			{
+				Field:           "metadata",
+				FilterOperation: int(resources.JsonPathExpression),
+				Value:           "$.active == true",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create active group: %s", err)
+	}
+
+	activeDevices := []models.Device{}
+	_, err = client.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
+		GroupID: activeGroupID,
+		ListInput: resources.ListInput[models.Device]{
+			ExhaustiveRun: true,
+			ApplyFunc: func(d models.Device) {
+				activeDevices = append(activeDevices, d)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetDevicesByGroup (active==true) error: %s", err)
+	}
+	if len(activeDevices) != 2 {
+		t.Errorf("expected 2 active devices, got %d", len(activeDevices))
+	}
+	for _, d := range activeDevices {
+		if d.ID == coldDevice.ID {
+			t.Errorf("cold-sensor (active=false) should not be in active group")
+		}
+	}
+
+	// Test 3: Group filtering by string equality ($.env == "production")
+	prodGroupID := uuid.NewString()
+	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+		ID:          prodGroupID,
+		Name:        "Production Sensors",
+		Description: "Sensors in production environment",
+		ParentID:    nil,
+		Criteria: []models.DeviceGroupFilterOption{
+			{
+				Field:           "metadata",
+				FilterOperation: int(resources.JsonPathExpression),
+				Value:           `$.env == "production"`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create production group: %s", err)
+	}
+
+	prodDevices := []models.Device{}
+	_, err = client.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
+		GroupID: prodGroupID,
+		ListInput: resources.ListInput[models.Device]{
+			ExhaustiveRun: true,
+			ApplyFunc: func(d models.Device) {
+				prodDevices = append(prodDevices, d)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetDevicesByGroup (env=production) error: %s", err)
+	}
+	if len(prodDevices) != 1 {
+		t.Errorf("expected 1 production device, got %d", len(prodDevices))
+	}
+	if len(prodDevices) > 0 && prodDevices[0].ID != hotDevice.ID {
+		t.Errorf("expected hot-sensor in production group, got %s", prodDevices[0].ID)
+	}
+
+	// Test 4: Combined JSONPath with && — active AND temp > 50
+	activeHotGroupID := uuid.NewString()
+	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+		ID:          activeHotGroupID,
+		Name:        "Active Hot Sensors",
+		Description: "Active sensors with temp > 50",
+		ParentID:    nil,
+		Criteria: []models.DeviceGroupFilterOption{
+			{
+				Field:           "metadata",
+				FilterOperation: int(resources.JsonPathExpression),
+				Value:           "$.active == true && $.temp > 50",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create active-hot group: %s", err)
+	}
+
+	activeHotDevices := []models.Device{}
+	_, err = client.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
+		GroupID: activeHotGroupID,
+		ListInput: resources.ListInput[models.Device]{
+			ExhaustiveRun: true,
+			ApplyFunc: func(d models.Device) {
+				activeHotDevices = append(activeHotDevices, d)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetDevicesByGroup (active && temp>50) error: %s", err)
+	}
+	if len(activeHotDevices) != 2 {
+		t.Errorf("expected 2 active-and-hot devices, got %d", len(activeHotDevices))
+	}
+	for _, d := range activeHotDevices {
+		if d.ID == coldDevice.ID {
+			t.Errorf("cold-sensor should not be in active-hot group")
+		}
+	}
+
+	// Confirm warmDevice is included (active=true, temp=55 > 50)
+	foundWarm := false
+	for _, d := range activeHotDevices {
+		if d.ID == warmDevice.ID {
+			foundWarm = true
+		}
+	}
+	if !foundWarm {
+		t.Errorf("warm-sensor (active=true, temp=55) should be in active-hot group")
 	}
 }
 
