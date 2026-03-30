@@ -3,10 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-	"os/signal"
-	"runtime/coverage"
-	"syscall"
 
 	"github.com/lamassuiot/authz/pkg/api"
 	authzconfig "github.com/lamassuiot/authz/pkg/config"
@@ -29,12 +25,6 @@ func main() {
 	preloadDir := flag.String("preload", "", "Directory of policy JSON files to initialize on startup")
 	flag.Parse()
 
-	// Ensure the directory exists
-	covDir := "./covdata"
-	if _, err := os.Stat(covDir); os.IsNotExist(err) {
-		os.Mkdir(covDir, 0755)
-	}
-
 	// Load configuration from YAML file
 	appCfg, err := authzconfig.LoadAppConfig(*configPath)
 	if err != nil {
@@ -55,32 +45,17 @@ func main() {
 
 	apiCfg := api.Config{
 		Debug:       appCfg.Debug,
+		Port:        8888,
 		Schemas:     appCfg.Schemas,
 		Credentials: credentials,
 		PreloadDir:  *preloadDir,
 	}
 
-	// Setup signal listener to flush coverage while running
-	go func() {
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGUSR1)
-		for {
-			<-sigs
-			logrus.Info("Flushing coverage counters...")
-			if err := coverage.WriteCountersDir(covDir); err != nil {
-				logrus.Errorf("error writing coverage: %v", err)
-			} else {
-				logrus.Info("Coverage flushed successfully")
-			}
-		}
-	}()
-
 	logrus.Info("Database and Policy Store initialized")
 
-	// Start your service in a goroutine if you want main to continue,
-	// but usually Assemble functions block. If this blocks, the signal
-	// handler above still works because it's in its own goroutine.
-	go api.AssembleAuthzServiceWithHTTPServer(apiCfg)
+	if _, err := api.AssembleAuthzServiceWithHTTPServer(apiCfg); err != nil {
+		logrus.Fatalf("Failed to start Authz service: %v", err)
+	}
 
 	fmt.Println(readyToAuthz)
 

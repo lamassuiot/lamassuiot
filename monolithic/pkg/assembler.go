@@ -16,6 +16,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	authzapi "github.com/lamassuiot/authz/pkg/api"
 	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -328,6 +329,14 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 		if conf.WfxSouthPort > 0 {
 			registerRoute("wfx SBI", "/api/wfx/sbi/", conf.WfxSouthPort, "/api/wfx/")
+		}
+
+		if conf.AuthzConfig != nil {
+			authzPort, err := authzapi.AssembleAuthzServiceWithHTTPServer(*conf.AuthzConfig)
+			if err != nil {
+				return -1, -1, fmt.Errorf("could not assemble Authz Service: %s", err)
+			}
+			addRouteMap("Authz", "/api/authz/", authzPort)
 		}
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {

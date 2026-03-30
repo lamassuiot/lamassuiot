@@ -27,7 +27,7 @@ func NewAuthzRoutes(router *gin.RouterGroup, principalManager *authz.PrincipalMa
 	fmt.Printf("Setting up routes with authz middleware: %v\n", authzMwPolicies)
 
 	// API v1
-	v1 := router.Group("/api/v1")
+	v1 := router.Group("/v1")
 	{
 		// Authorization endpoints
 		authz := v1.Group("/authz")

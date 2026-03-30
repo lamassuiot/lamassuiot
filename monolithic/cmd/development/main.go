@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/lamassuiot/authz/pkg/api"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -106,6 +107,9 @@ func main() {
 	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
+	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
+	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/authz/examples/iot/schemas.pki-v2.json", "path to PKI schema JSON file for authz service")
+	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -524,6 +528,7 @@ func main() {
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, *authzPkiSchema, *authzPreloadDir),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -623,4 +628,40 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 		dst[k] = v
 	}
 	return dst
+}
+
+func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, pkiSchema, preloadDir string) *api.Config {
+	if !enabled || useSqlite {
+		return nil
+	}
+	pgHost, _ := storageConfig.Config["hostname"].(string)
+	pgPort, _ := storageConfig.Config["port"].(int)
+	pgUser, _ := storageConfig.Config["username"].(string)
+	pgPass := string(storageConfig.Config["password"].(cconfig.Password))
+
+	// Silently ignore preload dir if it doesn't exist
+	if preloadDir != "" {
+		if _, err := os.Stat(preloadDir); os.IsNotExist(err) {
+			fmt.Printf(">> authz: preload directory %q not found, skipping preload\n", preloadDir)
+			preloadDir = ""
+		}
+	}
+
+	return &api.Config{
+		Debug: true,
+		Port:  8888,
+		Schemas: map[string]string{
+			"pki": pkiSchema,
+		},
+		Credentials: map[string]api.CredentialConfig{
+			"pki": {
+				Username: pgUser,
+				Password: pgPass,
+				Host:     pgHost,
+				Port:     pgPort,
+				Database: "pki",
+			},
+		},
+		PreloadDir: preloadDir,
+	}
 }

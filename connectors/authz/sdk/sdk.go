@@ -201,7 +201,7 @@ func newAuthzClient(client *Client) AuthzService {
 
 func (s *authzClient) Authorize(ctx context.Context, req *dto.AuthorizeRequest) (*dto.AuthorizeResponse, error) {
 	var result dto.AuthorizeResponse
-	err := s.client.post(ctx, "/api/v1/authz/authorize", req, &result)
+	err := s.client.post(ctx, "/v1/authz/authorize", req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (s *authzClient) Authorize(ctx context.Context, req *dto.AuthorizeRequest) 
 
 func (s *authzClient) GetFilter(ctx context.Context, req *dto.GetFilterRequest) (*dto.GetFilterResponse, error) {
 	var result dto.GetFilterResponse
-	err := s.client.post(ctx, "/api/v1/authz/filter", req, &result)
+	err := s.client.post(ctx, "/v1/authz/filter", req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (s *authzClient) GetFilter(ctx context.Context, req *dto.GetFilterRequest) 
 
 func (s *authzClient) MatchAndAuthorize(ctx context.Context, req *dto.MatchAndAuthorizeRequest) (*dto.MatchAndAuthorizeResponse, error) {
 	var result dto.MatchAndAuthorizeResponse
-	err := s.client.post(ctx, "/api/v1/authz/match/authorize", req, &result)
+	err := s.client.post(ctx, "/v1/authz/match/authorize", req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (s *authzClient) MatchAndAuthorize(ctx context.Context, req *dto.MatchAndAu
 
 func (s *authzClient) MatchAndGetFilter(ctx context.Context, req *dto.MatchAndGetFilterRequest) (*dto.MatchAndGetFilterResponse, error) {
 	var result dto.MatchAndGetFilterResponse
-	err := s.client.post(ctx, "/api/v1/authz/match/filter", req, &result)
+	err := s.client.post(ctx, "/v1/authz/match/filter", req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func newPrincipalClient(client *Client) PrincipalService {
 
 func (s *principalClient) Create(ctx context.Context, req *dto.CreatePrincipalRequest) (*dto.PrincipalResponse, error) {
 	var result dto.PrincipalResponse
-	err := s.client.post(ctx, "/api/v1/principals", req, &result)
+	err := s.client.post(ctx, "/v1/principals", req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func (s *principalClient) Create(ctx context.Context, req *dto.CreatePrincipalRe
 
 func (s *principalClient) Get(ctx context.Context, id string) (*dto.PrincipalResponse, error) {
 	var result dto.PrincipalResponse
-	err := s.client.get(ctx, fmt.Sprintf("/api/v1/principals/%s", url.PathEscape(id)), &result)
+	err := s.client.get(ctx, fmt.Sprintf("/v1/principals/%s", url.PathEscape(id)), &result)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func (s *principalClient) Get(ctx context.Context, id string) (*dto.PrincipalRes
 }
 
 func (s *principalClient) List(ctx context.Context, activeOnly bool) (*dto.ListPrincipalsResponse, error) {
-	path := "/api/v1/principals"
+	path := "/v1/principals"
 	if activeOnly {
 		path += "?activeOnly=true"
 	}
@@ -288,7 +288,7 @@ func (s *principalClient) List(ctx context.Context, activeOnly bool) (*dto.ListP
 
 func (s *principalClient) Update(ctx context.Context, id string, req *dto.UpdatePrincipalRequest) (*dto.PrincipalResponse, error) {
 	var result dto.PrincipalResponse
-	err := s.client.put(ctx, fmt.Sprintf("/api/v1/principals/%s", url.PathEscape(id)), req, &result)
+	err := s.client.put(ctx, fmt.Sprintf("/v1/principals/%s", url.PathEscape(id)), req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -296,12 +296,12 @@ func (s *principalClient) Update(ctx context.Context, id string, req *dto.Update
 }
 
 func (s *principalClient) Delete(ctx context.Context, id string) error {
-	return s.client.delete(ctx, fmt.Sprintf("/api/v1/principals/%s", url.PathEscape(id)))
+	return s.client.delete(ctx, fmt.Sprintf("/v1/principals/%s", url.PathEscape(id)))
 }
 
 func (s *principalClient) GetPolicies(ctx context.Context, id string) (*dto.ListPrincipalPoliciesResponse, error) {
 	var result dto.ListPrincipalPoliciesResponse
-	err := s.client.get(ctx, fmt.Sprintf("/api/v1/principals/%s/policies", url.PathEscape(id)), &result)
+	err := s.client.get(ctx, fmt.Sprintf("/v1/principals/%s/policies", url.PathEscape(id)), &result)
 	if err != nil {
 		return nil, err
 	}
@@ -309,11 +309,11 @@ func (s *principalClient) GetPolicies(ctx context.Context, id string) (*dto.List
 }
 
 func (s *principalClient) GrantPolicy(ctx context.Context, id string, req *dto.GrantPolicyRequest) error {
-	return s.client.post(ctx, fmt.Sprintf("/api/v1/principals/%s/policies", url.PathEscape(id)), req, nil)
+	return s.client.post(ctx, fmt.Sprintf("/v1/principals/%s/policies", url.PathEscape(id)), req, nil)
 }
 
 func (s *principalClient) RevokePolicy(ctx context.Context, id string, policyID string) error {
-	return s.client.delete(ctx, fmt.Sprintf("/api/v1/principals/%s/policies/%s", url.PathEscape(id), url.PathEscape(policyID)))
+	return s.client.delete(ctx, fmt.Sprintf("/v1/principals/%s/policies/%s", url.PathEscape(id), url.PathEscape(policyID)))
 }
 
 // PolicyService handles policy management operations
@@ -336,7 +336,7 @@ func newPolicyClient(client *Client) PolicyService {
 
 func (s *policyClient) Create(ctx context.Context, req *dto.CreatePolicyRequest) (*dto.PolicyResponse, error) {
 	var result dto.PolicyResponse
-	err := s.client.post(ctx, "/api/v1/policies", req, &result)
+	err := s.client.post(ctx, "/v1/policies", req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +345,7 @@ func (s *policyClient) Create(ctx context.Context, req *dto.CreatePolicyRequest)
 
 func (s *policyClient) Get(ctx context.Context, id string) (*dto.PolicyResponse, error) {
 	var result dto.PolicyResponse
-	err := s.client.get(ctx, fmt.Sprintf("/api/v1/policies/%s", url.PathEscape(id)), &result)
+	err := s.client.get(ctx, fmt.Sprintf("/v1/policies/%s", url.PathEscape(id)), &result)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ func (s *policyClient) Get(ctx context.Context, id string) (*dto.PolicyResponse,
 
 func (s *policyClient) List(ctx context.Context) (*dto.PolicyListResponse, error) {
 	var result dto.PolicyListResponse
-	err := s.client.get(ctx, "/api/v1/policies", &result)
+	err := s.client.get(ctx, "/v1/policies", &result)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func (s *policyClient) List(ctx context.Context) (*dto.PolicyListResponse, error
 
 func (s *policyClient) Update(ctx context.Context, id string, req *dto.UpdatePolicyRequest) (*dto.PolicyResponse, error) {
 	var result dto.PolicyResponse
-	err := s.client.put(ctx, fmt.Sprintf("/api/v1/policies/%s", url.PathEscape(id)), req, &result)
+	err := s.client.put(ctx, fmt.Sprintf("/v1/policies/%s", url.PathEscape(id)), req, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -371,12 +371,12 @@ func (s *policyClient) Update(ctx context.Context, id string, req *dto.UpdatePol
 }
 
 func (s *policyClient) Delete(ctx context.Context, id string) error {
-	return s.client.delete(ctx, fmt.Sprintf("/api/v1/policies/%s", url.PathEscape(id)))
+	return s.client.delete(ctx, fmt.Sprintf("/v1/policies/%s", url.PathEscape(id)))
 }
 
 func (s *policyClient) GetStats(ctx context.Context, id string) (*dto.PolicyStatsResponse, error) {
 	var result dto.PolicyStatsResponse
-	err := s.client.get(ctx, fmt.Sprintf("/api/v1/policies/%s/stats", url.PathEscape(id)), &result)
+	err := s.client.get(ctx, fmt.Sprintf("/v1/policies/%s/stats", url.PathEscape(id)), &result)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +398,7 @@ func newSchemaClient(client *Client) SchemaService {
 
 func (s *schemaClient) GetSchemas(ctx context.Context) (map[string]*authz.SchemaDefinition, error) {
 	var result map[string]*authz.SchemaDefinition
-	err := s.client.get(ctx, "/api/v1/schemas", &result)
+	err := s.client.get(ctx, "/v1/schemas", &result)
 	if err != nil {
 		return nil, err
 	}
