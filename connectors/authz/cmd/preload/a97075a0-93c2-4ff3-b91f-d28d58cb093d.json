@@ -1,0 +1,41 @@
+{
+  "id": "a97075a0-93c2-4ff3-b91f-d28d58cb093d",
+  "name": "Device Manager - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schemaName": "devicemanager",
+      "entityType": "device_group",
+      "actions": [
+        "read",
+        "update",
+        "delete",
+        "create",
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schemaName": "devicemanager",
+      "entityType": "device",
+      "actions": [
+        "read",
+        "delete",
+        "provision",
+        "decomission",
+        "metadata-update",
+        "create",
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    }
+  ]
+}
