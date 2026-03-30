@@ -2,10 +2,6 @@ module github.com/lamassuiot/lamassuiot/backend/v3
 
 go 1.24.0
 
-replace github.com/lamassuiot/authz => /home/ubuntu/dev/authz2
-
-require github.com/lamassuiot/authz v0.0.0-00010101000000-000000000000
-
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.6
 	github.com/cloudevents/sdk-go/v2 v2.16.1
@@ -114,7 +110,6 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.3 // indirect
 	github.com/google/go-tpm v0.3.2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/wire v0.7.0 // indirect
@@ -168,6 +163,7 @@ require (
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect

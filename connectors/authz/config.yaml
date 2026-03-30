@@ -1,0 +1,24 @@
+# Authz Service Configuration
+
+# Enable debug logging
+debug: true
+
+# Schema name -> path to the JSON schema file
+schemas:
+  authz: /home/ubuntu/dev/authz/examples/authz/schemas.json
+  pki: /home/ubuntu/dev/authz/examples/iot/schemas.pki-v2.json
+
+# Database credentials keyed by schema name
+credentials:
+  authz:
+    username: postgres
+    password: test
+    host: localhost
+    port: 5432
+    database: pki
+  pki:
+    username: postgres
+    password: test
+    host: localhost
+    port: 5432
+    database: pki

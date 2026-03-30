@@ -1,0 +1,31 @@
+{
+  "id": "d5dea139-a704-432e-9870-973d56fffb90",
+  "name": "UI Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schemaName": "*",
+      "entityType": "*",
+      "actions": [
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schemaName": "*",
+      "entityType": "*",
+      "actions": [
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    }
+  ]
+}

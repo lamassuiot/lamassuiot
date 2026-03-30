@@ -1,0 +1,61 @@
+{
+  "id": "77fb978b-3c25-4d2f-8402-d02541b9a708",
+  "name": "Certificate - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schemaName": "ca",
+      "entityType": "ca_certificate",
+      "actions": [
+        "create",
+        "status-update",
+        "delete",
+        "read",
+        "sign",
+        "metadata-update",
+        "reissue",
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schemaName": "ca",
+      "entityType": "certificate",
+      "actions": [
+        "read",
+        "delete",
+        "status-update/revoke",
+        "import",
+        "ui",
+        "status-update/reactivate",
+        "status-update",
+        "metadata-update"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schemaName": "ca",
+      "entityType": "issuance_profile",
+      "actions": [
+        "read",
+        "delete",
+        "update",
+        "ui",
+        "create"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    }
+  ]
+}

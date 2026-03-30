@@ -6,6 +6,7 @@ replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-2019020
 
 use (
 	./backend
+	./connectors/authz
 	./connectors/awsiot
 	./core
 	./engines/crypto/aws
