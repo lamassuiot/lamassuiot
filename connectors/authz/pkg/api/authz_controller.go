@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -8,20 +9,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/authz"
-	"github.com/lamassuiot/authz/pkg/models"
 )
 
 type AuthzController struct {
-	engine           *authz.Engine
-	principalManager *authz.PrincipalManager
-	policyManager    *authz.PolicyManager
+	engine   *authz.Engine
+	resolver *authz.IdentityResolver
 }
 
-func NewAuthzController(engine *authz.Engine, principalManager *authz.PrincipalManager, policyManager *authz.PolicyManager) *AuthzController {
+func NewAuthzController(engine *authz.Engine, resolver *authz.IdentityResolver) *AuthzController {
 	return &AuthzController{
-		engine:           engine,
-		principalManager: principalManager,
-		policyManager:    policyManager,
+		engine:   engine,
+		resolver: resolver,
 	}
 }
 
@@ -54,34 +52,13 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 		return
 	}
 
-	// Get policy IDs for the principal
-	policyIDs, err := ctrl.principalManager.GetPrincipalPolicies(req.PrincipalID)
+	policies, err := ctrl.resolver.GetPoliciesForPrincipal(c.Request.Context(), req.PrincipalID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to get principal policies",
 			Details: map[string]string{"error": err.Error()},
 		})
 		return
-	}
-
-	// Load policies from bucket
-	policies := authz.NewPolicyRegistry()
-	for _, policyID := range policyIDs {
-		policy, err := ctrl.policyManager.GetPolicy(c.Request.Context(), policyID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-				Error:   "Failed to load policy",
-				Details: map[string]string{"policyID": policyID, "error": err.Error()},
-			})
-			return
-		}
-		if err := ctrl.addPolicyToRegistry(policies, policy); err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-				Error:   "Failed to register policy",
-				Details: map[string]string{"policyID": policyID, "error": err.Error()},
-			})
-			return
-		}
 	}
 
 	entityKey, err := resolveEntityKey(ctrl.engine.GetSchemas(), req.SchemaName, req.EntityType, req.EntityKey)
@@ -141,34 +118,13 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 		return
 	}
 
-	// Get policy IDs for the principal
-	policyIDs, err := ctrl.principalManager.GetPrincipalPolicies(req.PrincipalID)
+	policies, err := ctrl.resolver.GetPoliciesForPrincipal(c.Request.Context(), req.PrincipalID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to get principal policies",
 			Details: map[string]string{"error": err.Error()},
 		})
 		return
-	}
-
-	// Load policies from bucket
-	policies := authz.NewPolicyRegistry()
-	for _, policyID := range policyIDs {
-		policy, err := ctrl.policyManager.GetPolicy(c.Request.Context(), policyID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-				Error:   "Failed to load policy",
-				Details: map[string]string{"policyID": policyID, "error": err.Error()},
-			})
-			return
-		}
-		if err := ctrl.addPolicyToRegistry(policies, policy); err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-				Error:   "Failed to register policy",
-				Details: map[string]string{"policyID": policyID, "error": err.Error()},
-			})
-			return
-		}
 	}
 
 	filterSQL, err := ctrl.engine.GetListFilter(policies, req.Namespace, req.SchemaName, req.EntityType)
@@ -186,11 +142,6 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 		EntityType:  req.EntityType,
 		FilterQuery: filterSQL,
 	})
-}
-
-// addPolicyToRegistry adds a policy to the registry by validating and appending it
-func (ctrl *AuthzController) addPolicyToRegistry(registry *authz.PolicyRegistry, policy *models.Policy) error {
-	return registry.AddPolicy(policy)
 }
 
 // MatchAndAuthorize godoc
@@ -223,53 +174,20 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 		return
 	}
 
-	// Match principals from auth material
-	matchedPrincipals, err := ctrl.principalManager.MatchPrincipals(c.Request.Context(), req.AuthMaterial, req.AuthType)
+	policies, matchedPrincipals, err := ctrl.resolver.Resolve(c.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to match principals",
-			Details: map[string]string{"error": err.Error()},
-		})
-		return
-	}
-
-	if len(matchedPrincipals) == 0 {
-		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
-			Error:   "Authentication failed",
-			Details: map[string]string{"reason": "No matching principals found"},
-		})
-		return
-	}
-
-	// Collect all policies from all matched principals
-	policies := authz.NewPolicyRegistry()
-	for _, principalID := range matchedPrincipals {
-		policyIDs, err := ctrl.principalManager.GetPrincipalPolicies(principalID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-				Error:   "Failed to get principal policies",
-				Details: map[string]string{"principalID": principalID, "error": err.Error()},
+		if errors.Is(err, authz.ErrNoMatch) {
+			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
+				Error:   "Authentication failed",
+				Details: map[string]string{"reason": "No matching principals found"},
 			})
 			return
 		}
-
-		for _, policyID := range policyIDs {
-			policy, err := ctrl.policyManager.GetPolicy(c.Request.Context(), policyID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-					Error:   "Failed to load policy",
-					Details: map[string]string{"policyID": policyID, "error": err.Error()},
-				})
-				return
-			}
-			if err := ctrl.addPolicyToRegistry(policies, policy); err != nil {
-				c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-					Error:   "Failed to register policy",
-					Details: map[string]string{"policyID": policyID, "error": err.Error()},
-				})
-				return
-			}
-		}
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Error:   "Failed to resolve principals",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
 	}
 
 	entityKey, err := resolveEntityKey(ctrl.engine.GetSchemas(), req.SchemaName, req.EntityType, req.EntityKey)
@@ -331,56 +249,22 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 		return
 	}
 
-	// Match principals from auth material
-	matchedPrincipals, err := ctrl.principalManager.MatchPrincipals(c.Request.Context(), req.AuthMaterial, req.AuthType)
+	policies, matchedPrincipals, err := ctrl.resolver.Resolve(c.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
+		if errors.Is(err, authz.ErrNoMatch) {
+			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
+				Error:   "Authentication failed",
+				Details: map[string]string{"reason": "No matching principals found"},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to match principals",
+			Error:   "Failed to resolve principals",
 			Details: map[string]string{"error": err.Error()},
 		})
 		return
 	}
 
-	if len(matchedPrincipals) == 0 {
-		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
-			Error:   "Authentication failed",
-			Details: map[string]string{"reason": "No matching principals found"},
-		})
-		return
-	}
-
-	// Collect all policies from all matched principals
-	policies := authz.NewPolicyRegistry()
-	for _, principalID := range matchedPrincipals {
-		policyIDs, err := ctrl.principalManager.GetPrincipalPolicies(principalID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-				Error:   "Failed to get principal policies",
-				Details: map[string]string{"principalID": principalID, "error": err.Error()},
-			})
-			return
-		}
-
-		for _, policyID := range policyIDs {
-			policy, err := ctrl.policyManager.GetPolicy(c.Request.Context(), policyID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-					Error:   "Failed to load policy",
-					Details: map[string]string{"policyID": policyID, "error": err.Error()},
-				})
-				return
-			}
-			if err := ctrl.addPolicyToRegistry(policies, policy); err != nil {
-				c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-					Error:   "Failed to register policy",
-					Details: map[string]string{"policyID": policyID, "error": err.Error()},
-				})
-				return
-			}
-		}
-	}
-
-	// Generate filter with combined policies (OR logic)
 	filterSQL, err := ctrl.engine.GetListFilter(policies, req.Namespace, req.SchemaName, req.EntityType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{

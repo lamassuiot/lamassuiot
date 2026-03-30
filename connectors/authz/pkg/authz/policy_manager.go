@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -162,6 +163,31 @@ func (pm *PolicyManager) ListPolicies(ctx context.Context) ([]*models.Policy, er
 	}
 
 	return policies, nil
+}
+
+// SearchPolicies retrieves all policies whose ID, Name, or Description contain the given
+// query string (case-insensitive). An empty query returns all policies.
+func (pm *PolicyManager) SearchPolicies(ctx context.Context, query string) ([]*models.Policy, error) {
+	policies, err := pm.ListPolicies(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if query == "" {
+		return policies, nil
+	}
+
+	lower := strings.ToLower(query)
+	var matched []*models.Policy
+	for _, p := range policies {
+		if strings.Contains(strings.ToLower(p.ID), lower) ||
+			strings.Contains(strings.ToLower(p.Name), lower) ||
+			strings.Contains(strings.ToLower(p.Description), lower) {
+			matched = append(matched, p)
+		}
+	}
+
+	return matched, nil
 }
 
 // getPolicyKey generates the blob storage key for a policy

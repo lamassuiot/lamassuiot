@@ -83,8 +83,7 @@ func base64PEMFromCert(cert *x509.Certificate) string {
 func TestPrincipalManager_MatchX509_CNAndCA_AuthorityKeyID(t *testing.T) {
 	caCert, leafCert, _ := createTestCAAndLeafCerts(t)
 
-	pm := &PrincipalManager{}
-	principal := &models.Principal{
+	principal := models.Principal{
 		AuthConfig: map[string]interface{}{
 			"match_mode": "cn_and_ca",
 			"subject_cn": "sensor-*.example.com",
@@ -96,16 +95,15 @@ func TestPrincipalManager_MatchX509_CNAndCA_AuthorityKeyID(t *testing.T) {
 		},
 	}
 
-	matched, err := pm.matchX509(principal, leafCert)
+	matched, err := X509Matcher{}.Match([]models.Principal{principal}, leafCert)
 	require.NoError(t, err)
-	assert.True(t, matched)
+	assert.NotEmpty(t, matched)
 }
 
 func TestPrincipalManager_MatchX509_AnyFromCA_FingerprintSelfSignedCA(t *testing.T) {
 	caCert, _, _ := createTestCAAndLeafCerts(t)
 
-	pm := &PrincipalManager{}
-	principal := &models.Principal{
+	principal := models.Principal{
 		AuthConfig: map[string]interface{}{
 			"match_mode": "any_from_ca",
 			"ca_trust": map[string]interface{}{
@@ -116,16 +114,17 @@ func TestPrincipalManager_MatchX509_AnyFromCA_FingerprintSelfSignedCA(t *testing
 		},
 	}
 
-	matched, err := pm.matchX509(principal, caCert)
+	matched, err := X509Matcher{}.Match([]models.Principal{principal}, caCert)
 	require.NoError(t, err)
-	assert.True(t, matched)
+	assert.NotEmpty(t, matched)
 }
 
 func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
 	caCert, _, _ := createTestCAAndLeafCerts(t)
 
-	pm := &PrincipalManager{}
-	principal := &models.Principal{
+	// A principal with missing PEM is silently skipped — per-principal errors
+	// are non-fatal in X509Matcher so that one bad config doesn't block others.
+	principal := models.Principal{
 		AuthConfig: map[string]interface{}{
 			"match_mode": "any_from_ca",
 			"ca_trust": map[string]interface{}{
@@ -135,10 +134,9 @@ func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
 		},
 	}
 
-	matched, err := pm.matchX509(principal, caCert)
-	require.Error(t, err)
-	assert.False(t, matched)
-	assert.Contains(t, err.Error(), "missing ca_trust.pem")
+	matched, err := X509Matcher{}.Match([]models.Principal{principal}, caCert)
+	require.NoError(t, err)
+	assert.Empty(t, matched)
 }
 
 // setupTestBucket creates an in-memory blob bucket for testing

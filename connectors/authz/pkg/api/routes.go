@@ -10,13 +10,13 @@ import (
 )
 
 // SetupRoutes configures all HTTP routes
-func NewAuthzRoutes(router *gin.RouterGroup, principalManager *authz.PrincipalManager, engine *authz.Engine, policyManager *authz.PolicyManager, logger *logrus.Entry) {
+func NewAuthzRoutes(router *gin.RouterGroup, principalManager *authz.PrincipalManager, engine *authz.Engine, policyManager *authz.PolicyManager, resolver *authz.IdentityResolver, logger *logrus.Entry) {
 	// Controllers
-	authzCtrl := NewAuthzController(engine, principalManager, policyManager)
+	authzCtrl := NewAuthzController(engine, resolver)
 	principalCtrl := NewPrincipalController(principalManager)
 	schemaCtrl := NewSchemaController(engine)
 	policyCtrl := NewPolicyController(policyManager, principalManager)
-	capabilitiesCtrl := NewCapabilitiesController(engine, principalManager, policyManager)
+	capabilitiesCtrl := NewCapabilitiesController(engine, principalManager, policyManager, resolver)
 
 	svc := authz.NewAuthzService(engine, principalManager, policyManager)
 
@@ -67,6 +67,7 @@ func NewAuthzRoutes(router *gin.RouterGroup, principalManager *authz.PrincipalMa
 		{
 			policies.POST("", policyCtrl.CreatePolicy)
 			policies.GET("", policyCtrl.ListPolicies)
+			policies.GET("/search", policyCtrl.SearchPolicies)
 			policies.GET("/:id", policyCtrl.GetPolicy)
 			policies.PUT("/:id", policyCtrl.UpdatePolicy)
 			policies.DELETE("/:id", policyCtrl.DeletePolicy)
