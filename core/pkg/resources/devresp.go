@@ -6,6 +6,10 @@ type GetDevicesResponse struct {
 	IterableList[models.Device]
 }
 
+type GetDeviceEventsResponse struct {
+	IterableList[models.DeviceEvent]
+}
+
 type GetDeviceGroupsResponse struct {
 	IterableList[models.DeviceGroup]
 }
