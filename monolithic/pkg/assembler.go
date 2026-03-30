@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	authzapi "github.com/lamassuiot/authz/pkg/api"
 	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -343,6 +344,14 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+
+		if conf.AuthzConfig != nil {
+			authzPort, err := authzapi.AssembleAuthzServiceWithHTTPServer(*conf.AuthzConfig)
+			if err != nil {
+				return -1, -1, fmt.Errorf("could not assemble Authz Service: %s", err)
+			}
+			addRouteMap("Authz", "/api/authz/", authzPort)
+		}
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
 			proxy := func(c *gin.Context) {

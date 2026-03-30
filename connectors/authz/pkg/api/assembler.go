@@ -24,6 +24,7 @@ import (
 
 type Config struct {
 	Debug       bool
+	Port        int
 	Schemas     map[string]string
 	Credentials map[string]CredentialConfig
 	PreloadDir  string
@@ -37,10 +38,10 @@ type CredentialConfig struct {
 	Database string
 }
 
-func AssembleAuthzServiceWithHTTPServer(cfg Config) {
+func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
 	principalManager, engine, policyManager, err := AssembleAuthzService(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to assemble Authz service: %v", err))
+		return -1, fmt.Errorf("failed to assemble Authz service: %w", err)
 	}
 
 	lHttp := helpers.SetupLogger(config.Debug, "AUTHZ", "HTTP Server")
@@ -55,16 +56,17 @@ func AssembleAuthzServiceWithHTTPServer(cfg Config) {
 		config.HttpServer{
 			LogLevel:      config.Debug,
 			ListenAddress: "0.0.0.0",
-			Port:          8888,
+			Port:          cfg.Port,
 			Protocol:      config.HTTP,
 		},
 		models.APIServiceInfo{Version: "", BuildSHA: "", BuildTime: ""},
 	)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to start HTTP server: %v", err))
+		return -1, fmt.Errorf("failed to start Authz HTTP server: %w", err)
 	}
 
 	lHttp.Infof("Authz Service is running on port %d", port)
+	return port, nil
 }
 
 func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *authz.PolicyManager, error) {
