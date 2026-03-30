@@ -1,0 +1,31 @@
+{
+  "id": "a6811b60-5f89-4ce7-badb-78ea234794d3",
+  "name": "SUPER ADMIN",
+  "description": "Full access",
+  "rules": [
+    {
+      "namespace": "authz",
+      "schemaName": "*",
+      "entityType": "*",
+      "actions": [
+        "*"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schemaName": "*",
+      "entityType": "*",
+      "actions": [
+        "*"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    }
+  ]
+}

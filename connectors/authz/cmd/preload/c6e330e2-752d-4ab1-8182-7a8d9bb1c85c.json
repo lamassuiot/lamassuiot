@@ -1,0 +1,36 @@
+{
+  "id": "c6e330e2-752d-4ab1-8182-7a8d9bb1c85c",
+  "name": "Alerts - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schemaName": "alerts",
+      "entityType": "event",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schemaName": "alerts",
+      "entityType": "subscription",
+      "actions": [
+        "read",
+        "delete",
+        "update",
+        "create",
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "75519529-be16-4f18-bc12-8e7745902e4e",
+  "name": "DMS Manager - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schemaName": "dmsmanager",
+      "entityType": "dms",
+      "actions": [
+        "read",
+        "update",
+        "delete",
+        "create",
+        "bind-identity",
+        "ui"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    }
+  ]
+}
