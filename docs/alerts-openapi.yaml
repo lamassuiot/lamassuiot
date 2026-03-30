@@ -29,15 +29,36 @@ paths:
       tags: [Events]
       summary: Get the latest event per event type
       operationId: getLatestEvents
+      parameters:
+        - name: page_size
+          in: query
+          required: false
+          description: Maximum number of events to return
+          schema:
+            type: integer
+            minimum: 1
+            default: 25
+        - name: bookmark
+          in: query
+          required: false
+          description: Opaque bookmark token for next page retrieval
+          schema:
+            type: string
       responses:
         '200':
           description: Latest events grouped by type
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AlertLatestEvent'
+                type: object
+                properties:
+                  next:
+                    type: string
+                    description: Bookmark for the next page. Empty when no more items are available.
+                  list:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlertLatestEvent'
         '500':
           description: Internal server error
           content:

@@ -37,7 +37,7 @@ type Device struct {
 	DMSOwner          string                    `json:"dms_owner"`
 	IdentitySlot      *Slot[string]             `json:"identity,omitempty" gorm:"serializer:json"`
 	ExtraSlots        map[string]*Slot[any]     `json:"slots" gorm:"serializer:json"`
-	Events            map[time.Time]DeviceEvent `json:"events" gorm:"serializer:json"`
+	Events            map[time.Time]DeviceEvent `json:"events,omitempty" gorm:"-"`
 }
 
 type Slot[E any] struct {
@@ -62,8 +62,26 @@ const (
 )
 
 type DeviceEvent struct {
+	ID                string          `json:"id,omitempty" gorm:"-"`
+	EventTS           time.Time       `json:"event_ts,omitempty" gorm:"-"`
 	EvenType          DeviceEventType `json:"type"`
 	EventDescriptions string          `json:"description"`
+	Source            string          `json:"source,omitempty" gorm:"-"`
+	StructuredFields  map[string]any  `json:"structured_fields" gorm:"serializer:json"`
+}
+
+type DeviceEventRecord struct {
+	ID               string         `json:"id" gorm:"primaryKey"`
+	DeviceID         string         `json:"device_id"`
+	EventTS          time.Time      `json:"event_ts"`
+	EventType        string         `json:"event_type"`
+	Description      string         `json:"description,omitempty"`
+	Source           string         `json:"source,omitempty"`
+	StructuredFields map[string]any `json:"structured_fields" gorm:"serializer:json"`
+}
+
+func (DeviceEventRecord) TableName() string {
+	return "device_events"
 }
 
 type DevicesStats struct {
