@@ -2,6 +2,7 @@ package migrationstest
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -446,11 +447,21 @@ func MigrationTest_DeviceManager_20260317120000_create_device_events(t *testing.
 		VALUES('device-without-events', '{}', 'NO_IDENTITY', 'device', '#00FF00', '2026-03-17 10:00:00+00', '{}', 'test-dms', NULL, '{}', NULL);
 	`)
 
+	// Insert real-world device data from production-like SQL dump (4 devices with ~218 events total)
+	sqlData, err := os.ReadFile("testdata/devices_202603301338.sql")
+	if err != nil {
+		t.Fatalf("failed to read testdata/devices_202603301338.sql: %v", err)
+	}
+	tx := con.Exec(string(sqlData))
+	if tx.Error != nil {
+		t.Fatalf("failed to insert real-world device data: %v", tx.Error)
+	}
+
 	ApplyMigration(t, logger, con, DeviceManagerDBName)
 
 	// Verify events column was removed from devices table
 	var eventsColumnCount int64
-	tx := con.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'events'`).Scan(&eventsColumnCount)
+	tx = con.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'events'`).Scan(&eventsColumnCount)
 	if tx.Error != nil {
 		t.Fatalf("failed to inspect devices columns: %v", tx.Error)
 	}
@@ -522,4 +533,79 @@ func MigrationTest_DeviceManager_20260317120000_create_device_events(t *testing.
 		t.Fatalf("failed to count events for device-without-events: %v", tx.Error)
 	}
 	assert.Equal(t, int64(0), noEventsCount)
+
+	// ---- Real-world data assertions ----
+	// Verify migrated event counts per device from production SQL dump
+	expectedCounts := map[string]int64{
+		"device_1": 58,
+		"device_2": 82,
+		"device_3": 41,
+		"device_4": 37,
+	}
+
+	for deviceID, expectedCount := range expectedCounts {
+		var count int64
+		tx = con.Raw("SELECT COUNT(*) FROM device_events WHERE device_id = ?", deviceID).Scan(&count)
+		if tx.Error != nil {
+			t.Fatalf("failed to count events for %s: %v", deviceID, tx.Error)
+		}
+		assert.Equal(t, expectedCount, count, "Event count mismatch for %s", deviceID)
+	}
+
+	// Verify total: 218 (real-world) + 3 (simple test device) = 221
+	var totalEvents int64
+	tx = con.Raw("SELECT COUNT(*) FROM device_events").Scan(&totalEvents)
+	if tx.Error != nil {
+		t.Fatalf("failed to count total events: %v", tx.Error)
+	}
+	assert.Equal(t, int64(221), totalEvents, "Total events: 218 real-world + 3 test")
+
+	// Each real-world device should have exactly 1 CREATED event
+	for _, deviceID := range []string{"device_1", "device_2", "device_3", "device_4"} {
+		var createdCount int64
+		tx = con.Raw("SELECT COUNT(*) FROM device_events WHERE device_id = ? AND event_type = 'CREATED'", deviceID).Scan(&createdCount)
+		if tx.Error != nil {
+			t.Fatalf("failed to count CREATED events for %s: %v", deviceID, tx.Error)
+		}
+		assert.Equal(t, int64(1), createdCount, "Device %s should have exactly 1 CREATED event", deviceID)
+	}
+
+	// All real-world events should have source defaulted to 'service/devmanager' (no source in original data)
+	var nonDefaultSourceCount int64
+	tx = con.Raw(`SELECT COUNT(*) FROM device_events 
+		WHERE device_id IN ('device_1','device_2','device_3','device_4') 
+		AND source != 'service/devmanager'`).Scan(&nonDefaultSourceCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to check sources: %v", tx.Error)
+	}
+	assert.Equal(t, int64(0), nonDefaultSourceCount, "All real-world events should use default source")
+
+	// Verify all timestamps from real-world data fall within March 2026
+	var invalidTsCount int64
+	tx = con.Raw(`SELECT COUNT(*) FROM device_events 
+		WHERE device_id IN ('device_1','device_2','device_3','device_4') 
+		AND (event_ts < '2026-03-01' OR event_ts > '2026-04-01')`).Scan(&invalidTsCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to check timestamps: %v", tx.Error)
+	}
+	assert.Equal(t, int64(0), invalidTsCount, "All real-world timestamps should be in March 2026")
+
+	// Verify all 4 real-world devices still exist in the devices table
+	var realDeviceCount int64
+	tx = con.Raw("SELECT COUNT(*) FROM devices WHERE id IN ('device_1','device_2','device_3','device_4')").Scan(&realDeviceCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to count real-world devices: %v", tx.Error)
+	}
+	assert.Equal(t, int64(4), realDeviceCount, "All 4 real-world devices should still exist")
+
+	// Verify wfx events have non-empty description (the nested JSON job data)
+	var emptyDescWfxCount int64
+	tx = con.Raw(`SELECT COUNT(*) FROM device_events 
+		WHERE device_id IN ('device_1','device_2','device_3','device_4') 
+		AND event_type = 'lamaassu.io/device-event/wfx/update/job' 
+		AND (description IS NULL OR description = '')`).Scan(&emptyDescWfxCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to check wfx event descriptions: %v", tx.Error)
+	}
+	assert.Equal(t, int64(0), emptyDescWfxCount, "All wfx events should have non-empty descriptions")
 }
