@@ -234,6 +234,13 @@ func TestDeviceManagerMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260115161136_create_device_groups")
 	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_DeviceManager_20260317120000_create_device_events(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260317120000_create_device_events")
+	}
 }
 
 func MigrationTest_DeviceManager_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -423,4 +430,96 @@ func MigrationTest_DeviceManager_20260115161136_create_device_groups(t *testing.
 		WHERE tablename = 'device_groups' 
 		AND indexname IN ('idx_device_groups_parent', 'idx_device_groups_name')`).Scan(&indexCount)
 	assert.Equal(t, int64(2), indexCount, "Should have both indexes")
+}
+
+func MigrationTest_DeviceManager_20260317120000_create_device_events(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert test device with legacy events payload in devices.events
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-with-events', '{}', 'ACTIVE', 'device', '#FF0000', '2026-03-17 10:00:00+00', '{}', 'test-dms', '{}', '{}',
+		'{"2026-03-17T10:30:00Z":{"type":"CREATED","description":"created"},"2026-03-17T11:30:00Z":{"type":"STATUS-UPDATED","description":"status changed","source":"legacy","details":{"from":"NO_IDENTITY","to":"ACTIVE"}},"2026-03-17T12:00:00Z":{"type":"CREATED","description":"created from main format"}}');
+	`)
+
+	// Insert another device without events to validate migration robustness
+	con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots, events)
+		VALUES('device-without-events', '{}', 'NO_IDENTITY', 'device', '#00FF00', '2026-03-17 10:00:00+00', '{}', 'test-dms', NULL, '{}', NULL);
+	`)
+
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+
+	// Verify events column was removed from devices table
+	var eventsColumnCount int64
+	tx := con.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'devices' AND column_name = 'events'`).Scan(&eventsColumnCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to inspect devices columns: %v", tx.Error)
+	}
+	assert.Equal(t, int64(0), eventsColumnCount, "devices.events column should be removed")
+
+	// Verify migrated events exist in normalized table
+	var migratedEventsCount int64
+	tx = con.Raw("SELECT COUNT(*) FROM device_events WHERE device_id = 'device-with-events'").Scan(&migratedEventsCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to count device_events rows: %v", tx.Error)
+	}
+	assert.Equal(t, int64(3), migratedEventsCount, "expected three migrated events")
+
+	// Verify status-updated event mapped legacy source into source column
+	var source string
+	tx = con.Raw(`
+		SELECT source
+		FROM device_events
+		WHERE device_id = 'device-with-events' AND event_type = 'STATUS-UPDATED'
+		LIMIT 1
+	`).Scan(&source)
+	if tx.Error != nil {
+		t.Fatalf("failed to query migrated event data: %v", tx.Error)
+	}
+	assert.Equal(t, "legacy", source)
+
+	// Verify status-updated event data payload preserved extra fields
+	var fromInData string
+	tx = con.Raw(`
+		SELECT structured_fields->'details'->>'from'
+		FROM device_events
+		WHERE device_id = 'device-with-events' AND event_type = 'STATUS-UPDATED'
+		LIMIT 1
+	`).Scan(&fromInData)
+	if tx.Error != nil {
+		t.Fatalf("failed to query migrated event details payload: %v", tx.Error)
+	}
+	assert.Equal(t, "NO_IDENTITY", fromInData)
+
+	// Verify main-format created event receives default source and empty structured_fields
+	var createdEventSource string
+	tx = con.Raw(`
+		SELECT source
+		FROM device_events
+		WHERE device_id = 'device-with-events' AND event_type = 'CREATED' AND description = 'created from main format'
+		LIMIT 1
+	`).Scan(&createdEventSource)
+	if tx.Error != nil {
+		t.Fatalf("failed to query created event source: %v", tx.Error)
+	}
+	assert.Equal(t, "service/devmanager", createdEventSource)
+
+	var createdEventPayload string
+	tx = con.Raw(`
+		SELECT COALESCE(structured_fields::text, '{}')
+		FROM device_events
+		WHERE device_id = 'device-with-events' AND event_type = 'CREATED' AND description = 'created from main format'
+		LIMIT 1
+	`).Scan(&createdEventPayload)
+	if tx.Error != nil {
+		t.Fatalf("failed to query created event structured fields: %v", tx.Error)
+	}
+	assert.Equal(t, "{}", createdEventPayload)
+
+	// Verify no events migrated for device with NULL events payload
+	var noEventsCount int64
+	tx = con.Raw("SELECT COUNT(*) FROM device_events WHERE device_id = 'device-without-events'").Scan(&noEventsCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to count events for device-without-events: %v", tx.Error)
+	}
+	assert.Equal(t, int64(0), noEventsCount)
 }

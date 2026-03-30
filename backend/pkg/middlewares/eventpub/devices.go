@@ -44,6 +44,14 @@ func (mw *deviceEventPublisher) GetDeviceByID(ctx context.Context, input service
 	return mw.next.GetDeviceByID(ctx, input)
 }
 
+func (mw *deviceEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
+}
+
+func (mw *deviceEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	return mw.next.CreateDeviceEvent(ctx, input)
+}
+
 func (mw *deviceEventPublisher) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	return mw.next.GetDevices(ctx, input)
 }

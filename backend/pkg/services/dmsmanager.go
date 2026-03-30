@@ -1156,6 +1156,8 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	}
 
 	idSlot := device.IdentitySlot
+	eventType := models.DeviceEventTypeProvisioned
+	eventDescription := ""
 	if idSlot == nil {
 		idSlot = &models.Slot[string]{
 			Status:         models.SlotActive,
@@ -1165,22 +1167,15 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 			Secrets: map[int]string{
 				0: crt.SerialNumber,
 			},
-			Events: map[time.Time]models.DeviceEvent{
-				time.Now(): {
-					EvenType: models.DeviceEventTypeProvisioned,
-				},
-			},
+			Events: map[time.Time]models.DeviceEvent{},
 		}
 	} else {
 		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
 		idSlot.Status = models.SlotActive
 		idSlot.ExpirationDate = &crt.ValidTo
 		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-
-		idSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          input.BindMode,
-			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
-		}
+		eventType = input.BindMode
+		eventDescription = fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion)
 	}
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 		ID:   crt.Subject.CommonName,
@@ -1188,6 +1183,18 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	})
 	if err != nil {
 		lFunc.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
+		return nil, err
+	}
+
+	_, err = svc.deviceManagerCli.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		DeviceID:    crt.Subject.CommonName,
+		Timestamp:   time.Now(),
+		Type:        eventType,
+		Description: eventDescription,
+		Source:      models.DMSManagerSource,
+	})
+	if err != nil {
+		lFunc.Errorf("could not create device event for device '%s': %s", device.ID, err)
 		return nil, err
 	}
 
