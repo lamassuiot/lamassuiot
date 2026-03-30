@@ -46,7 +46,7 @@ func TestFilterQuery_StringIn(t *testing.T) {
 	q.Add("filter", "subject_key_id[in]ABC123,DEF456")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.CertificateFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestFilterQuery_StringInIgnoreCase(t *testing.T) {
 	q.Add("filter", "subject_key_id[in_ic]ABC123,DEF456")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.CertificateFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestFilterQuery_StringNotIn(t *testing.T) {
 	q.Add("filter", "subject_key_id[nin]ABC123,DEF456")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.CertificateFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestFilterQuery_StringNotInIgnoreCase(t *testing.T) {
 	q.Add("filter", "subject_key_id[nin_ic]ABC123,DEF456")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.CertificateFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestFilterQuery_EnumIn(t *testing.T) {
 	q.Add("filter", "status[in]ACTIVE,REVOKED")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.CertificateFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
