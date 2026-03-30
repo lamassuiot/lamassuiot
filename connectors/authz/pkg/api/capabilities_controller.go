@@ -15,6 +15,7 @@ type CapabilitiesController struct {
 	engine           *authz.Engine
 	principalManager *authz.PrincipalManager
 	policyManager    *authz.PolicyManager
+	resolver         *authz.IdentityResolver
 }
 
 // NewCapabilitiesController creates a new CapabilitiesController.
@@ -22,11 +23,13 @@ func NewCapabilitiesController(
 	engine *authz.Engine,
 	principalManager *authz.PrincipalManager,
 	policyManager *authz.PolicyManager,
+	resolver *authz.IdentityResolver,
 ) *CapabilitiesController {
 	return &CapabilitiesController{
 		engine:           engine,
 		principalManager: principalManager,
 		policyManager:    policyManager,
+		resolver:         resolver,
 	}
 }
 
@@ -92,7 +95,7 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 
 	log.Printf("[API] MatchAndGetGlobalCapabilities auth_type=%s", req.AuthType)
 
-	matchedPrincipals, err := c.principalManager.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
+	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to match principals: " + err.Error()})
 		return
@@ -192,7 +195,7 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 
 	log.Printf("[API] MatchAndGetEntityCapabilities auth_type=%s queries=%d", req.AuthType, len(req.Queries))
 
-	matchedPrincipals, err := c.principalManager.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
+	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to match principals: " + err.Error()})
 		return
