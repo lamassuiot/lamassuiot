@@ -15,7 +15,7 @@ import (
 func NewAlertsHTTPLayer(logger *logrus.Entry, router *gin.RouterGroup, svc services.AlertsService) {
 	routes := controllers.NewAlertsHttpRoutes(svc)
 
-	config := sdk.DefaultConfig("http://localhost:8888")
+	config := sdk.DefaultConfig("http://localhost:8888") // Point to your authz service
 	client, err := sdk.NewClient(config)
 	if err != nil {
 		log.Fatalf("Failed to create SDK client: %v", err)
