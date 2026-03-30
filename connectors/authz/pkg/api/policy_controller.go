@@ -95,6 +95,30 @@ func (ctrl *PolicyController) GetPolicy(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.ToPolicyResponse(policy))
 }
 
+// SearchPolicies godoc
+// @Summary Search policies
+// @Description Searches policies by ID, Name, or Description (case-insensitive). Returns all policies when query is empty.
+// @Tags policies
+// @Produce json
+// @Param query query string false "Search query"
+// @Success 200 {object} dto.PolicyListResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/policies/search [get]
+func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
+	query := c.Query("query")
+
+	policies, err := ctrl.policyManager.SearchPolicies(c.Request.Context(), query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Error:   "Failed to search policies",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.ToPolicyListResponse(policies))
+}
+
 // ListPolicies godoc
 // @Summary List all policies
 // @Description Retrieves all policies
