@@ -1,6 +1,8 @@
 package resources
 
 import (
+	"time"
+
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
@@ -20,6 +22,14 @@ type UpdateDeviceIdentitySlotBody struct {
 
 type UpdateDeviceMetadataBody struct {
 	Patches []models.PatchOperation `json:"patches"`
+}
+
+type CreateDeviceEventBody struct {
+	Timestamp        time.Time              `json:"event_ts"`
+	Type             models.DeviceEventType `json:"type"`
+	Description      string                 `json:"description"`
+	Source           string                 `json:"source"`
+	StructuredFields map[string]any         `json:"structured_fields"`
 }
 
 // Device Group Request Bodies

@@ -62,6 +62,37 @@ func (cli *deviceManagerClient) GetDeviceByID(ctx context.Context, input service
 	return &response, nil
 }
 
+func (cli *deviceManagerClient) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	url := cli.baseUrl + "/v1/devices/" + input.DeviceID + "/events"
+
+	applyFunc := input.ApplyFunc
+	if applyFunc == nil {
+		applyFunc = func(models.DeviceEvent) {}
+	}
+
+	return IterGet[models.DeviceEvent, *resources.GetDeviceEventsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, applyFunc, map[int][]error{
+		404: {errs.ErrDeviceNotFound},
+	})
+}
+
+func (cli *deviceManagerClient) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	response, err := Post[*models.DeviceEvent](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.DeviceID+"/events", resources.CreateDeviceEventBody{
+		Timestamp:        input.Timestamp,
+		Type:             input.Type,
+		Description:      input.Description,
+		Source:           input.Source,
+		StructuredFields: input.StructuredFields,
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest},
+		404: {errs.ErrDeviceNotFound},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *deviceManagerClient) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	url := cli.baseUrl + "/v1/devices"
 

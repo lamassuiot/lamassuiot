@@ -752,6 +752,62 @@ func TestGetDeviceByID(t *testing.T) {
 	}
 }
 
+func TestGetDeviceEvents(t *testing.T) {
+	ctx := context.Background()
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+
+	deviceID := "events-device"
+	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+		ID:        deviceID,
+		Alias:     "events-device",
+		Tags:      []string{"events"},
+		Metadata:  map[string]interface{}{"env": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	})
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	_, err = dmgr.Service.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
+		ID:        deviceID,
+		NewStatus: models.DeviceActive,
+	})
+	if err != nil {
+		t.Fatalf("could not update device status: %s", err)
+	}
+
+	events := []models.DeviceEvent{}
+	_, err = dmgr.HttpDeviceManagerSDK.GetDeviceEvents(ctx, services.GetDeviceEventsInput{
+		DeviceID: deviceID,
+		ListInput: resources.ListInput[models.DeviceEvent]{
+			ExhaustiveRun: true,
+			ApplyFunc: func(event models.DeviceEvent) {
+				events = append(events, event)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not get device events: %s", err)
+	}
+
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+
+	eventTypes := []models.DeviceEventType{events[0].EvenType, events[1].EvenType}
+	if !slices.Contains(eventTypes, models.DeviceEventTypeCreated) {
+		t.Fatalf("expected events to contain CREATED, got %v", eventTypes)
+	}
+	if !slices.Contains(eventTypes, models.DeviceEventTypeStatusUpdated) {
+		t.Fatalf("expected events to contain STATUS-UPDATED, got %v", eventTypes)
+	}
+}
+
 func TestUpdateDeviceMetadata(t *testing.T) {
 	// t.Parallel()
 
@@ -1650,8 +1706,8 @@ func checkDevice(t *testing.T, device *models.Device, deviceSample services.Crea
 		t.Fatalf("device creation timestamp is zero")
 	}
 
-	if device.Events == nil {
-		t.Fatalf("device events is nil")
+	if device.Events != nil {
+		t.Fatalf("device events should not be included in device payload")
 	}
 
 	if device.IdentitySlot != nil {

@@ -142,6 +142,92 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 	ctx.JSON(200, dms)
 }
 
+func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceEventFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	events := []models.DeviceEvent{}
+	nextBookmark, err := r.svc.GetDeviceEvents(ctx.Request.Context(), services.GetDeviceEventsInput{
+		DeviceID: params.ID,
+		ListInput: resources.ListInput[models.DeviceEvent]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(ev models.DeviceEvent) {
+				events = append(events, ev)
+			},
+		},
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, resources.GetDeviceEventsResponse{
+		IterableList: resources.IterableList[models.DeviceEvent]{
+			NextBookmark: nextBookmark,
+			List:         events,
+		},
+	})
+}
+
+func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.CreateDeviceEventBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	event, err := r.svc.CreateDeviceEvent(ctx.Request.Context(), services.CreateDeviceEventInput{
+		DeviceID:         params.ID,
+		Timestamp:        requestBody.Timestamp,
+		Type:             requestBody.Type,
+		Description:      requestBody.Description,
+		Source:           requestBody.Source,
+		StructuredFields: requestBody.StructuredFields,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(201, event)
+}
+
 func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
 	var requestBody resources.CreateDeviceBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
