@@ -39,7 +39,7 @@ type CredentialConfig struct {
 }
 
 func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
-	principalManager, engine, policyManager, err := AssembleAuthzService(cfg)
+	principalManager, engine, policyManager, resolver, err := AssembleAuthzService(cfg)
 	if err != nil {
 		return -1, fmt.Errorf("failed to assemble Authz service: %w", err)
 	}
@@ -48,7 +48,7 @@ func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 
-	NewAuthzRoutes(httpGrp, principalManager, engine, policyManager, lHttp)
+	NewAuthzRoutes(httpGrp, principalManager, engine, policyManager, resolver, lHttp)
 
 	port, err := routes.RunHttpRouter(
 		lHttp,
@@ -69,26 +69,26 @@ func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
 	return port, nil
 }
 
-func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *authz.PolicyManager, error) {
+func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *authz.PolicyManager, *authz.IdentityResolver, error) {
 	lDB := helpers.SetupLogger(config.Trace, "AUTHZ", "DB")
 	lBucketStore := helpers.SetupLogger(config.Debug, "AUTHZ", "BucketStore")
 
 	// Create SQLite DB for principal management
 	principalDB, err := CreateSQLiteDBConnection(lDB, "authz_principals.db", "")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create principal database: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to create principal database: %w", err)
 	}
 
 	// Create policy store
 	policyStore, err := CreateBucketStore(lBucketStore, "policy_store")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Create principal manager
 	principalManager, err := authz.NewPrincipalManager(principalDB, policyStore)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Create database connections for each schema
@@ -97,7 +97,7 @@ func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *
 		lDB.Infof("Creating database connection for schema: %s", schemaName)
 		db, err := CreatePostgresDBConnection(lDB, credentials)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to create database connection for schema %s: %w", schemaName, err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to create database connection for schema %s: %w", schemaName, err)
 		}
 		schemaDbs[schemaName] = db
 	}
@@ -105,7 +105,7 @@ func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *
 	// Create engine with multiple database connections
 	engine, err := authz.NewEngine(schemaDbs, cfg.Schemas)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	policyManager := authz.NewPolicyManager(policyStore)
@@ -113,11 +113,13 @@ func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *
 	if cfg.PreloadDir != "" {
 		lPreload := helpers.SetupLogger(config.Debug, "AUTHZ", "Preload")
 		if err := preloadPolicies(context.Background(), policyManager, cfg.PreloadDir, lPreload); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to preload policies: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to preload policies: %w", err)
 		}
 	}
 
-	return principalManager, engine, policyManager, nil
+	resolver := principalManager.NewIdentityResolver(policyManager)
+
+	return principalManager, engine, policyManager, resolver, nil
 }
 
 // preloadPolicies reads all JSON files from dir and creates them as policies if they don't already exist.
