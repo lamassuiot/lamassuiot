@@ -1,0 +1,68 @@
+{
+  "id": "cec5d897-3a3f-43d1-b67a-dd220719572b",
+  "name": "Authz - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "authz",
+      "schemaName": "authz_schema",
+      "entityType": "principal",
+      "actions": [
+        "read",
+        "delete",
+        "assign_policy",
+        "revoke_policy",
+        "write",
+        "list"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schemaName": "authz_schema",
+      "entityType": "policy",
+      "actions": [
+        "read",
+        "delete",
+        "assign",
+        "revoke",
+        "write",
+        "list"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schemaName": "authz_schema",
+      "entityType": "principal_policy",
+      "actions": [
+        "read",
+        "revoke",
+        "write",
+        "list"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schemaName": "authz_schema",
+      "entityType": "schema",
+      "actions": [
+        "read"
+      ],
+      "relations": [],
+      "directGrants": [
+        "*"
+      ]
+    }
+  ]
+}
