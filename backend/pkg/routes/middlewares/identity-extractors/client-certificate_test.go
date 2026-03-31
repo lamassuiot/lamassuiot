@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -34,8 +33,6 @@ func TestClientCertificateIdentityExtractorHeaderEnvoy(t *testing.T) {
 	if !ok {
 		t.Errorf("Expected certificate, got %T", value)
 	}
-
-	fmt.Println(crts[1].Subject.CommonName)
 
 	if crts[0].Subject.CommonName != "test" {
 		t.Errorf("Expected certificate with CN test, got %s", crts[0].Subject.CommonName)

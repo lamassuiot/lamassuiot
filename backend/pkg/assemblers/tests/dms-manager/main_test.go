@@ -2146,6 +2146,85 @@ func TestESTEnroll(t *testing.T) {
 			},
 		},
 		{
+			// ChainLevelValidation=1 with a 2-cert chain where the leaf cert is signed by an
+			// intermediate CA (not directly by the ValidationCA). After trimming to 1, only
+			// [leafCert] remains but ValidateCertificates(bootstrapCA, [leafCert]) fails
+			// because bootstrapCA did not sign the leaf. Enrollment must be rejected.
+			name: "Err/ChainLevelValidation=1/TrimmedChainLeafInvalidAfterTrim",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				// intermediateCA is a separate CA whose cert was signed by bootstrapCA but is
+				// NOT one of the ValidationCAs. We want the leaf to be signed by intermediateCA.
+				intermediateCA, err := createCA("intermediate", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create intermediate CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 1
+					// Only bootstrapCA is trusted — intermediateCA is NOT in ValidationCAs.
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				// Sign the leaf cert with intermediateCA (not with bootstrapCA).
+				leafKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				leafCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "leaf-cert"}, leafKey)
+				leafCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:              intermediateCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(leafCsr),
+					IssuanceProfileID: intermediateCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign leaf certificate with intermediate CA: %s", err)
+				}
+
+				// 2-cert chain: [leafCert, intermediateCA]. ChainLevelValidation=1 trims it to
+				// [leafCert]. ValidateCertificates(bootstrapCA, [leafCert]) then fails because
+				// the leaf was not issued by bootstrapCA — enrollment must be rejected.
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates: []*x509.Certificate{
+						(*x509.Certificate)(leafCrt.Certificate),
+						(*x509.Certificate)(intermediateCA.Certificate.Certificate),
+					},
+					PrivateKey:         leafKey,
+					InsecureSkipVerify: true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(ctx, enrollCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected enrollment to be rejected after chain trimming, but got no error")
+				}
+				expectedErr := "invalid certificate"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain %q. Got: %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
 			// ChainLevelValidation=2 with a 3-cert chain (exceeds the limit).
 			// Condition (len(clientCerts)=3 > ChainLevelValidation=2) is true, so the chain
 			// is trimmed to [leafCert, intermediateCert]. The leaf cert is still valid against

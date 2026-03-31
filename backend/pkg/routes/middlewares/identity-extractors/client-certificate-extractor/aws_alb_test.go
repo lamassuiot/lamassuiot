@@ -17,7 +17,7 @@ func TestAwsALBCertExtraction(t *testing.T) {
 	crts := extractor.ExtractCertificate(headers)
 
 	if len(crts) != 3 {
-		t.Errorf("Expected 3 certificate, got %d", len(crts))
+		t.Errorf("Expected 3 certificates, got %d", len(crts))
 	}
 
 	if crts[0].Subject.CommonName != "example.com" {
