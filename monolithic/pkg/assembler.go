@@ -402,13 +402,12 @@ func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.TLS != nil {
 			if len(c.Request.TLS.PeerCertificates) > 0 {
-				crtChain := []string{}
+				fullChain := ""
 				for _, crt := range c.Request.TLS.PeerCertificates {
-					crtPem := chelpers.CertificateToPEM(crt)
-					crtURLEnc := url.QueryEscape(crtPem)
-					crtChain = append(crtChain, fmt.Sprintf("Cert=%s", crtURLEnc))
+					fullChain += chelpers.CertificateToPEM(crt)
 				}
-				c.Request.Header.Add("x-forwarded-client-cert", strings.Join(crtChain, ";"))
+				chainURLEnc := url.QueryEscape(fullChain)
+				c.Request.Header.Add("x-forwarded-client-cert", fmt.Sprintf("Chain=%q", chainURLEnc))
 			}
 		}
 
