@@ -18,27 +18,27 @@ type ClientCertificateExtractor struct {
 }
 
 func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Context, req http.Request) {
-	var crt *x509.Certificate
+	var crts []*x509.Certificate
 	var err error
 
-	crt, err = extractor.getCertificateFromHeader(req.Header)
+	crts, err = extractor.getCertificateFromHeader(req.Header)
 	if err != nil {
 		extractor.logger.Tracef("something went wrong while processing headers: %s", err)
-	} else if crt != nil {
-		ctx.Set(string(IdentityExtractorClientCertificate), crt)
+	} else if crts != nil {
+		ctx.Set(string(IdentityExtractorClientCertificate), crts)
 		return
 	}
 
 	//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
 	if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
 		extractor.logger.Trace("Using certificate presented in peer connection")
-		crt = req.TLS.PeerCertificates[0]
+		crts = req.TLS.PeerCertificates
 	} else {
 		extractor.logger.Trace("No certificate presented in peer connection")
 	}
 
-	if crt != nil {
-		ctx.Set(string(IdentityExtractorClientCertificate), crt)
+	if len(crts) > 0 {
+		ctx.Set(string(IdentityExtractorClientCertificate), crts)
 	}
 }
 
@@ -46,7 +46,7 @@ type ClientCertificateReqExtractor interface {
 	ExtractCertificate(http.Header) []*x509.Certificate
 }
 
-func (extractor ClientCertificateExtractor) getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
+func (extractor ClientCertificateExtractor) getCertificateFromHeader(h http.Header) ([]*x509.Certificate, error) {
 	headerExtractors := []ClientCertificateReqExtractor{
 		clientcertificateextractor.NewEnvoyClientCertificateExtractor(extractor.logger),
 		clientcertificateextractor.NewNginxClientCertificateExtractor(extractor.logger),
@@ -57,7 +57,7 @@ func (extractor ClientCertificateExtractor) getCertificateFromHeader(h http.Head
 		certs := headerExtractor.ExtractCertificate(h)
 
 		if len(certs) > 0 {
-			return certs[0], nil
+			return certs, nil
 		}
 	}
 

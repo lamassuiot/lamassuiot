@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -27,13 +28,21 @@ func (extractor nginxClientCertificateExtractor) ExtractCertificate(headers http
 		return []*x509.Certificate{}
 	}
 
-	decodedCert, _ := url.QueryUnescape(cert)
-	block, _ := pem.Decode([]byte(decodedCert))
-	certificate, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		extractor.logger.Warnf("request includes header %s but could not decode certificate. Skipping: %s", nginxClientCertificateHeader, err)
-		return []*x509.Certificate{}
+	decodedCert, _ := url.QueryUnescape(strings.ReplaceAll(cert, "+", "%2B"))
+	var certs []*x509.Certificate
+	rest := []byte(decodedCert)
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		certificate, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			extractor.logger.Warnf("request includes header %s but could not decode certificate. Skipping: %s", nginxClientCertificateHeader, err)
+			continue
+		}
+		certs = append(certs, certificate)
 	}
-
-	return []*x509.Certificate{certificate}
+	return certs
 }
