@@ -34,6 +34,10 @@ func TestClientCertificateIdentityExtractorHeaderEnvoy(t *testing.T) {
 		t.Errorf("Expected certificate, got %T", value)
 	}
 
+	if len(crts) != 2 {
+		t.Fatalf("Expected 2 certificates, got %d", len(crts))
+	}
+
 	if crts[0].Subject.CommonName != "test" {
 		t.Errorf("Expected certificate with CN test, got %s", crts[0].Subject.CommonName)
 	}
