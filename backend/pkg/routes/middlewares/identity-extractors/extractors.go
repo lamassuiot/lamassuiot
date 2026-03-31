@@ -72,14 +72,14 @@ func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 
 	clientCertAny, hasValue := ctx.Get(string(IdentityExtractorClientCertificate))
 	if hasValue {
-		clientCert := clientCertAny.(*x509.Certificate)
+		clientCerts := clientCertAny.([]*x509.Certificate)
 		// Store client certificate in request context for service access
-		reqCtx = context.WithValue(reqCtx, string(IdentityExtractorClientCertificate), clientCert)
+		reqCtx = context.WithValue(reqCtx, string(IdentityExtractorClientCertificate), clientCerts)
 
 		authMode = "crt"
-		callerID = clientCert.Subject.CommonName
+		callerID = clientCerts[0].Subject.CommonName
 
-		crt := models.X509Certificate(*clientCert)
+		crt := models.X509Certificate(*clientCerts[0])
 		authCtx = map[string]interface{}{
 			"crt": crt.String(),
 		}

@@ -1889,6 +1889,356 @@ func TestESTEnroll(t *testing.T) {
 				}
 			},
 		},
+		{
+			// ChainLevelValidation=0 means disabled: no trimming regardless of chain length.
+			// Client sends a 2-cert chain; condition (ChainLevelValidation > 0) is false,
+			// so clientCerts is never trimmed and enrollment succeeds.
+			name: "OK/ChainLevelValidation=0/DisabledNoTrimming",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 0
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:              bootstrapCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: bootstrapCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				// Send a 2-cert chain: leaf + bootstrap CA cert. With ChainLevelValidation=0
+				// the condition is never triggered, so the full chain is kept and enrollment
+				// is expected to succeed.
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates: []*x509.Certificate{
+						(*x509.Certificate)(bootCrt.Certificate),
+						(*x509.Certificate)(bootstrapCA.Certificate.Certificate),
+					},
+					PrivateKey:         bootKey,
+					InsecureSkipVerify: true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(ctx, enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+
+				priv, ok := key.(*ecdsa.PrivateKey)
+				if !ok {
+					t.Fatalf("could not cast priv key into ECDSA")
+				}
+
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				if err != nil {
+					t.Fatalf("could not validate cert and key. Got error: %s", err)
+				}
+
+				if !valid {
+					t.Fatalf("private key does not match public key")
+				}
+
+				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+					t.Fatalf("could not validate certificate with CA: %s", err)
+				}
+			},
+		},
+		{
+			// ChainLevelValidation=1 with a single-cert chain (exactly at the limit).
+			// Condition (len(clientCerts) > ChainLevelValidation) is false (1 > 1 is false),
+			// so no trimming occurs and enrollment succeeds.
+			name: "OK/ChainLevelValidation=1/SingleCertAtLimit",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 1
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:              bootstrapCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: bootstrapCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				// Single cert chain: len == ChainLevelValidation, so no trimming.
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(ctx, enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+
+				priv, ok := key.(*ecdsa.PrivateKey)
+				if !ok {
+					t.Fatalf("could not cast priv key into ECDSA")
+				}
+
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				if err != nil {
+					t.Fatalf("could not validate cert and key. Got error: %s", err)
+				}
+
+				if !valid {
+					t.Fatalf("private key does not match public key")
+				}
+
+				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+					t.Fatalf("could not validate certificate with CA: %s", err)
+				}
+			},
+		},
+		{
+			// ChainLevelValidation=1 with a 2-cert chain (exceeds the limit).
+			// Condition (len(clientCerts)=2 > ChainLevelValidation=1) is true, so the chain
+			// is trimmed to [leafCert]. The leaf cert is still valid against the bootstrap CA,
+			// so enrollment succeeds.
+			name: "OK/ChainLevelValidation=1/TrimmedChainFrom2",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 1
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:              bootstrapCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: bootstrapCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				// 2-cert chain exceeds the limit of 1: the chain is trimmed to [leafCert].
+				// Enrollment should still succeed because the leaf cert is valid.
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates: []*x509.Certificate{
+						(*x509.Certificate)(bootCrt.Certificate),
+						(*x509.Certificate)(bootstrapCA.Certificate.Certificate),
+					},
+					PrivateKey:         bootKey,
+					InsecureSkipVerify: true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(ctx, enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+
+				priv, ok := key.(*ecdsa.PrivateKey)
+				if !ok {
+					t.Fatalf("could not cast priv key into ECDSA")
+				}
+
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				if err != nil {
+					t.Fatalf("could not validate cert and key. Got error: %s", err)
+				}
+
+				if !valid {
+					t.Fatalf("private key does not match public key")
+				}
+
+				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+					t.Fatalf("could not validate certificate with CA: %s", err)
+				}
+			},
+		},
+		{
+			// ChainLevelValidation=2 with a 3-cert chain (exceeds the limit).
+			// Condition (len(clientCerts)=3 > ChainLevelValidation=2) is true, so the chain
+			// is trimmed to [leafCert, intermediateCert]. The leaf cert is still valid against
+			// the bootstrap CA, so enrollment succeeds.
+			name: "OK/ChainLevelValidation=2/TrimmedChainFrom3",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				// An extra CA used as a third chain entry to exceed ChainLevelValidation=2.
+				extraCA, err := createCA("extra", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create extra CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 2
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:              bootstrapCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: bootstrapCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				// 3-cert chain exceeds the limit of 2: trimmed to [leafCert, bootstrapCACert].
+				// Enrollment should still succeed because the leaf cert is valid.
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates: []*x509.Certificate{
+						(*x509.Certificate)(bootCrt.Certificate),
+						(*x509.Certificate)(bootstrapCA.Certificate.Certificate),
+						(*x509.Certificate)(extraCA.Certificate.Certificate),
+					},
+					PrivateKey:         bootKey,
+					InsecureSkipVerify: true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(ctx, enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+
+				priv, ok := key.(*ecdsa.PrivateKey)
+				if !ok {
+					t.Fatalf("could not cast priv key into ECDSA")
+				}
+
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				if err != nil {
+					t.Fatalf("could not validate cert and key. Got error: %s", err)
+				}
+
+				if !valid {
+					t.Fatalf("private key does not match public key")
+				}
+
+				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+					t.Fatalf("could not validate certificate with CA: %s", err)
+				}
+			},
+		},
 	}
 
 	for _, tc := range testcases {
