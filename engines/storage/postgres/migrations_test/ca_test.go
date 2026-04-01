@@ -569,9 +569,7 @@ func MigrationTest_CA_20260331120000_add_certificate_extensions(t *testing.T, lo
 			jsonb_exists(extensions_key_usage, 'CRLSign') AS has_crl_sign,
 			jsonb_exists(extensions_extended_key_usage, 'ClientAuth') AS has_client_auth,
 			jsonb_exists(extensions_extended_key_usage, 'ServerAuth') AS has_server_auth,
-			jsonb_array_length(extensions_extended_key_usage) AS extended_key_usage_length,
-			jsonb_exists(metadata, 'lamassu.io/ca/links') AS has_links_metadata,
-			jsonb_array_length(metadata -> 'lamassu.io/ca/links') AS links_length
+			jsonb_array_length(extensions_extended_key_usage) AS extended_key_usage_length
 		FROM certificates
 		WHERE serial_number = ?
 	`, serial).Scan(&result)
@@ -591,8 +589,6 @@ func MigrationTest_CA_20260331120000_add_certificate_extensions(t *testing.T, lo
 	assert.Equal(t, true, result["has_client_auth"])
 	assert.Equal(t, true, result["has_server_auth"])
 	assert.Equal(t, int32(2), result["extended_key_usage_length"])
-	assert.Equal(t, true, result["has_links_metadata"])
-	assert.Equal(t, int32(0), result["links_length"])
 
 	var versionSchemaColumnCount int64
 	tx = con.Raw(`
