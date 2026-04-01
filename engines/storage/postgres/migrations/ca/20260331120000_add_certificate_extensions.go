@@ -80,16 +80,6 @@ func upAddCertificateExtensions(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE certificates
-		SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-			$1::text,
-			'[]'::jsonb
-		)
-	`, models.CertificateMetadataLinksKey); err != nil {
-		return err
-	}
-
 	if _, err := tx.ExecContext(ctx, "ALTER TABLE certificates DROP COLUMN version_schema;"); err != nil {
 		return err
 	}
@@ -109,13 +99,6 @@ func downAddCertificateExtensions(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, query); err != nil {
 			return err
 		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE certificates
-		SET metadata = COALESCE(metadata, '{}'::jsonb) - $1
-	`, models.CertificateMetadataLinksKey); err != nil {
-		return err
 	}
 
 	return nil
