@@ -80,6 +80,25 @@ func (svc *CAServiceBackend) SetService(service services.CAService) {
 	svc.service = service
 }
 
+func certificateExtensionsFromX509(cert *x509.Certificate) models.CertificateExtensions {
+	if cert == nil {
+		return models.CertificateExtensions{
+			KeyUsage:         models.X509KeyUsage(0),
+			ExtendedKeyUsage: []models.X509ExtKeyUsage{},
+		}
+	}
+
+	extendedKeyUsage := make([]models.X509ExtKeyUsage, 0, len(cert.ExtKeyUsage))
+	for _, usage := range cert.ExtKeyUsage {
+		extendedKeyUsage = append(extendedKeyUsage, models.X509ExtKeyUsage(usage))
+	}
+
+	return models.CertificateExtensions{
+		KeyUsage:         models.X509KeyUsage(cert.KeyUsage),
+		ExtendedKeyUsage: extendedKeyUsage,
+	}
+}
+
 func (svc *CAServiceBackend) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -456,10 +475,10 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		CreationTS: time.Now(),
 		Level:      level,
 		Certificate: models.Certificate{
-			VersionSchema:       "unknown",
 			SubjectKeyID:        skid,
 			AuthorityKeyID:      akid,
 			Certificate:         input.CACertificate,
+			Extensions:          certificateExtensionsFromX509((*x509.Certificate)(caCert)),
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToHexString(caCert.SerialNumber),
 			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
@@ -777,10 +796,10 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
-			VersionSchema:  "1.0",
 			SubjectKeyID:   skid,
 			AuthorityKeyID: akid,
 			Certificate:    (*models.X509Certificate)(ca),
+			Extensions:     certificateExtensionsFromX509(ca),
 			Status:         models.StatusActive,
 			SerialNumber:   helpers.SerialNumberToHexString(ca.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
@@ -1399,12 +1418,12 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	// Create the new certificate record
 	newCertificateRecord := models.Certificate{
 		SerialNumber:     helpers.SerialNumberToHexString(newCert.SerialNumber),
-		VersionSchema:    "1.0",
 		SubjectKeyID:     newSKID,
 		AuthorityKeyID:   newAKID,
 		Metadata:         newMetadata,
 		Status:           models.StatusActive,
 		Certificate:      (*models.X509Certificate)(newCert),
+		Extensions:       certificateExtensionsFromX509(newCert),
 		KeyMetadata:      ca.Certificate.KeyMetadata,
 		Subject:          ca.Certificate.Subject,
 		Issuer:           ca.Certificate.Issuer,
@@ -1572,10 +1591,10 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	}
 
 	cert := models.Certificate{
-		VersionSchema: "1.0",
-		Metadata:      map[string]interface{}{},
-		Type:          certType,
-		Certificate:   (*models.X509Certificate)(x509Cert),
+		Metadata:    map[string]interface{}{},
+		Type:        certType,
+		Certificate: (*models.X509Certificate)(x509Cert),
+		Extensions:  certificateExtensionsFromX509(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SN: helpers.SerialNumberToHexString(caCert.SerialNumber),
 			ID: ca.ID,
@@ -1619,10 +1638,10 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 	}
 
 	newCert := models.Certificate{
-		VersionSchema:       "unknown",
 		Metadata:            input.Metadata,
 		Type:                models.CertificateTypeImportedWithoutKey,
 		Certificate:         (*models.X509Certificate)(input.Certificate),
+		Extensions:          certificateExtensionsFromX509(x509Cert),
 		Status:              status,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
 		Subject:             chelpers.PkixNameToSubject(input.Certificate.Subject),
@@ -2161,6 +2180,8 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 	var profile *models.IssuanceProfile
 	if input.IssuanceProfile != nil {
 		profile = input.IssuanceProfile
+		profile.HonorExtendedKeyUsages = false // For CreateCertificate, we want to ignore EKUs in the profile and only use the KeyUsage and ExtKeyUsage fields
+		profile.HonorKeyUsage = false
 	} else if input.IssuanceProfileID != "" {
 		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
 			ProfileID: input.IssuanceProfileID,

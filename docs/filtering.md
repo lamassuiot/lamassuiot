@@ -22,29 +22,98 @@ Note: values must be URL-encoded when required (spaces, quotes, `>` etc.).
 
 ## Supported operators
 
-| Operator | Meaning | Example (HTTP) |
-|---|---:|---|
-| `eq` | equal | `status[eq]=ACTIVE` |
-| `eq_ic` | equal (case-insensitive) | `name[eq_ic]=alice` |
-| `ne` | not equal | `status[ne]=REVOKED` |
-| `ne_ic` | not equal (case-insensitive) | `name[ne_ic]=alice` |
-| `ct` | contains (string) | `description[ct]=backup` |
-| `ct_ic` | contains (case-insensitive) | `description[ct_ic]=backup` |
-| `nc` | not contains | `description[nc]=skip` |
-| `nc_ic` | not contains (case-insensitive) | `description[nc_ic]=skip` |
-| `in` | in list | `status[in]=ACTIVE,PENDING` |
-| `in_ic` | in list (case-insensitive) | `name[in_ic]=alice,bob` |
-| `nin` | not in list | `status[nin]=REVOKED,EXPIRED` |
-| `nin_ic` | not in list (case-insensitive) | `name[nin_ic]=alice,bob` |
-| `bf` | date before | `creation_date[bf]=2026-01-01` |
-| `af` | date after | `creation_date[af]=2025-01-01` |
-| `lt` | number less than | `size[lt]=1024` |
-| `le` | number less or equal | `size[le]=1024` |
-| `gt` | number greater than | `size[gt]=1024` |
-| `ge` | number greater or equal | `size[ge]=1024` |
-| `jsonpath` | JSONPath expression on a JSON field | see below |
+All operators are specified in the form `field[op]=value`. Accepted operators depend on the field type — see [Operators per field type](#operators-per-field-type) below.
+
+| Operator | Applies to type(s) | Meaning | Example (HTTP) |
+|---|---|---|---|
+| `eq` | String, Date, Number, Enum | equal | `status[eq]=ACTIVE` |
+| `eq_ic` | String | equal (case-insensitive) | `name[eq_ic]=alice` |
+| `ne` | String, Number, Enum | not equal | `status[ne]=REVOKED` |
+| `ne_ic` | String | not equal (case-insensitive) | `name[ne_ic]=alice` |
+| `ct` | String, StringArray | contains | `description[ct]=backup` |
+| `ct_ic` | String, StringArray | contains (case-insensitive) | `description[ct_ic]=backup` |
+| `nc` | String | not contains | `description[nc]=skip` |
+| `nc_ic` | String | not contains (case-insensitive) | `description[nc_ic]=skip` |
+| `in` | String, Enum | in list (comma-separated) | `status[in]=ACTIVE,PENDING` |
+| `in_ic` | String | in list (case-insensitive) | `name[in_ic]=alice,bob` |
+| `nin` | String | not in list | `status[nin]=REVOKED,EXPIRED` |
+| `nin_ic` | String | not in list (case-insensitive) | `name[nin_ic]=alice,bob` |
+| `bf` | Date | date before | `creation_date[bf]=2026-01-01` |
+| `af` | Date | date after | `creation_date[af]=2025-01-01` |
+| `lt` | Number | less than | `size[lt]=1024` |
+| `le` | Number | less or equal | `size[le]=1024` |
+| `gt` | Number | greater than | `size[gt]=1024` |
+| `ge` | Number | greater or equal | `size[ge]=1024` |
+| `jsonpath` | JSON | JSONPath expression | see below |
 
 These operators map to internal `resources.FilterOperation` values used by the SDK and server (see `core/pkg/resources/query.go`).
+
+---
+
+## Operators per field type
+
+The following tables list every accepted operator for each field type, together with its Go constant and both supported short and long forms.
+
+### String
+
+| Operator | Long form | Go constant | Meaning |
+|---|---|---|---|
+| `eq` | `equal` | `StringEqual` | exact match |
+| `eq_ic` | `equal_ignorecase` | `StringEqualIgnoreCase` | exact match (case-insensitive) |
+| `ne` | `notequal` | `StringNotEqual` | not equal |
+| `ne_ic` | `notequal_ignorecase` | `StringNotEqualIgnoreCase` | not equal (case-insensitive) |
+| `ct` | `contains` | `StringContains` | substring match |
+| `ct_ic` | `contains_ignorecase` | `StringContainsIgnoreCase` | substring match (case-insensitive) |
+| `nc` | `notcontains` | `StringNotContains` | does not contain |
+| `nc_ic` | `notcontains_ignorecase` | `StringNotContainsIgnoreCase` | does not contain (case-insensitive) |
+| `in` | — | `StringIn` | value is one of a comma-separated list |
+| `in_ic` | — | `StringInIgnoreCase` | value is one of a list (case-insensitive) |
+| `nin` | — | `StringNotIn` | value is not in a comma-separated list |
+| `nin_ic` | — | `StringNotInIgnoreCase` | value is not in a list (case-insensitive) |
+
+### StringArray
+
+| Operator | Long form | Go constant | Meaning |
+|---|---|---|---|
+| `ct` | `contains` | `StringArrayContains` | array contains the value |
+| `ct_ic` | `contains_ignorecase` | `StringArrayContainsIgnoreCase` | array contains the value (case-insensitive) |
+
+### Date
+
+Values must be ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ`).
+
+| Operator | Long form | Go constant | Meaning |
+|---|---|---|---|
+| `eq` | `equal` | `DateEqual` | exact date match |
+| `bf` | `before` | `DateBefore` | before the given date |
+| `af` | `after` | `DateAfter` | after the given date |
+
+### Number
+
+| Operator | Long form | Go constant | Meaning |
+|---|---|---|---|
+| `eq` | `equal` | `NumberEqual` | equal |
+| `ne` | `notequal` | `NumberNotEqual` | not equal |
+| `lt` | `lessthan` | `NumberLessThan` | less than |
+| `le` | `lessequal` / `lessorequal` | `NumberLessOrEqualThan` | less than or equal |
+| `gt` | `greaterthan` | `NumberGreaterThan` | greater than |
+| `ge` | `greaterequal` / `greaterorequal` | `NumberGreaterOrEqualThan` | greater than or equal |
+
+### Enum
+
+| Operator | Long form | Go constant | Meaning |
+|---|---|---|---|
+| `eq` | `equal` | `EnumEqual` | exact value match |
+| `ne` | `notequal` | `EnumNotEqual` | not equal |
+| `in` | — | `EnumIn` | value is one of a comma-separated list |
+
+### JSON
+
+| Operator | Go constant | Meaning |
+|---|---|---|
+| `jsonpath` | `JsonPathExpression` | PostgreSQL JSONPath expression evaluated with `field @@ ?::jsonpath` |
+
+See [JSONPath filtering](#jsonpath-filtering-advanced) for expression syntax.
 
 ---
 
@@ -296,25 +365,29 @@ Below is a concise list of the fields you can filter on for the main resources. 
 ### CA
 
 | Field | Type | Notes |
-|---|---:|---|
+|---|---|---|
 | `id` | String | |
-| `level` | Number | |
+| `profile_id` | String | |
 | `type` | Enum | |
 | `serial_number` | String | |
+| `subject.common_name` | String | dotted path for nested subject fields |
+| `subject_key_id` | String | |
+| `issuer_meta.id` | String | dotted path to issuer metadata |
 | `status` | Enum | |
 | `engine_id` | String | |
 | `valid_to` | Date | |
 | `valid_from` | Date | |
 | `revocation_timestamp` | Date | |
 | `revocation_reason` | Enum | |
-| `subject.common_name` | String | dotted path for nested subject fields |
-| `subject_key_id` | String | |
-| `profile_id` | String | |
+| `is_ca` | Enum | boolean-like enum |
+| `extensions.key_usage` | StringArray | use `ct` / `ct_ic` |
+| `extensions.extended_key_usage` | StringArray | use `ct` / `ct_ic` |
+| `metadata` | JSON | use `[jsonpath]` operator |
 
 ### Certificate
 
 | Field | Type | Notes |
-|---|---:|---|
+|---|---|---|
 | `type` | Enum | |
 | `serial_number` | String | |
 | `subject.common_name` | String | |
@@ -326,33 +399,37 @@ Below is a concise list of the fields you can filter on for the main resources. 
 | `valid_from` | Date | |
 | `revocation_timestamp` | Date | |
 | `revocation_reason` | Enum | |
-| `metadata` | JSON | Use `[jsonpath]` operator for advanced queries |
+| `is_ca` | Enum | boolean-like enum |
+| `extensions.key_usage` | StringArray | use `ct` / `ct_ic` |
+| `extensions.extended_key_usage` | StringArray | use `ct` / `ct_ic` |
+| `metadata` | JSON | use `[jsonpath]` operator |
 
 ### Device
 
 | Field | Type | Notes |
-|---|---:|---|
+|---|---|---|
 | `id` | String | |
 | `dms_owner` | String | |
 | `creation_timestamp` | Date | |
 | `status` | Enum | |
-| `tags` | StringArray | use contains operators (`ct`, `ct_ic`) |
-| `metadata` | JSON | Use `[jsonpath]` operator |
+| `tags` | StringArray | use `ct` / `ct_ic` |
+| `metadata` | JSON | use `[jsonpath]` operator |
+| `identity_slot` | JSON | use `[jsonpath]` operator |
 
 ### DMS
 
 | Field | Type | Notes |
-|---|---:|---|
+|---|---|---|
 | `id` | String | |
 | `name` | String | |
 | `creation_date` | Date | |
-| `metadata` | JSON | Use `[jsonpath]` operator |
-| `settings` | JSON | Use `[jsonpath]` operator |
+| `metadata` | JSON | use `[jsonpath]` operator |
+| `settings` | JSON | use `[jsonpath]` operator |
 
 ### KMS
 
 | Field | Type | Notes |
-|---|---:|---|
+|---|---|---|
 | `key_id` | String | |
 | `engine_id` | String | |
 | `has_private_key` | Enum | boolean-like enum |
@@ -362,13 +439,13 @@ Below is a concise list of the fields you can filter on for the main resources. 
 | `status` | String | |
 | `creation_ts` | Date | |
 | `name` | String | |
-| `tags` | StringArray | |
-| `metadata` | JSON | Use `[jsonpath]` operator |
+| `tags` | StringArray | use `ct` / `ct_ic` |
+| `metadata` | JSON | use `[jsonpath]` operator |
 
 ### Issuance Profile
 
 | Field | Type | Notes |
-|---|---:|---|
+|---|---|---|
 | `id` | String | |
 | `name` | String | |
 

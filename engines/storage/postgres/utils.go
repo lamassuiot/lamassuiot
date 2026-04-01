@@ -538,11 +538,9 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 	case resources.StringContainsIgnoreCase:
 		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, ilike), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringArrayContains:
-		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
-		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where(fmt.Sprintf("%s @> ?", filter.Field), fmt.Sprintf(`["%s"]`, filter.Value))
 	case resources.StringArrayContainsIgnoreCase:
-		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
-		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, ilike), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where(fmt.Sprintf("%s::text %s ?", filter.Field, ilike), "%\""+filter.Value+"\"%")
 	case resources.StringNotContains:
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringNotContainsIgnoreCase:

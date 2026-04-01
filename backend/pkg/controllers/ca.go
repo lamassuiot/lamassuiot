@@ -1200,7 +1200,7 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
-	queryParams, err := FilterQuery(ctx.Request, resources.IssuanceProfileFiltrableFields)
+	queryParams, err := FilterQuery(ctx.Request, resources.IssuanceProfileFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

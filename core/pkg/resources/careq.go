@@ -6,41 +6,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
-var CAFilterableFields = map[string]FilterFieldType{
-	"id":                   StringFilterFieldType,
-	"level":                NumberFilterFieldType,
-	"type":                 EnumFilterFieldType,
-	"serial_number":        StringFilterFieldType,
-	"status":               EnumFilterFieldType,
-	"engine_id":            StringFilterFieldType,
-	"valid_to":             DateFilterFieldType,
-	"valid_from":           DateFilterFieldType,
-	"revocation_timestamp": DateFilterFieldType,
-	"revocation_reason":    EnumFilterFieldType,
-	"subject.common_name":  StringFilterFieldType,
-	"subject_key_id":       StringFilterFieldType,
-	"profile_id":           StringFilterFieldType,
-}
-
-var KMSFilterableFields = map[string]FilterFieldType{
-	"key_id":          StringFilterFieldType,
-	"engine_id":       StringFilterFieldType,
-	"has_private_key": EnumFilterFieldType,
-	"algorithm":       StringFilterFieldType,
-	"size":            NumberFilterFieldType,
-	"public_key":      StringFilterFieldType,
-	"status":          StringFilterFieldType,
-	"creation_ts":     DateFilterFieldType,
-	"name":            StringFilterFieldType,
-	"tags":            StringArrayFilterFieldType,
-	"metadata":        JsonFilterFieldType,
-}
-
-var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
-	"id":   StringFilterFieldType,
-	"name": StringFilterFieldType,
-}
-
 type CreateCABody struct {
 	ID                  string                  `json:"id"`
 	ParentID            string                  `json:"parent_id"`
