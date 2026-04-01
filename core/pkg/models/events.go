@@ -63,6 +63,7 @@ const (
 	EventUpdateDeviceStatusKey   EventType = "device.status.update"
 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
 	EventDeleteDeviceKey         EventType = "device.delete"
+	EventCreateDeviceEventKey    EventType = "device.event.create"
 
 	EventCreateDeviceGroupKey EventType = "device-group.create"
 	EventUpdateDeviceGroupKey EventType = "device-group.update"
