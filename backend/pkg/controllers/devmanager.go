@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -9,12 +12,20 @@ import (
 )
 
 type devManagerHttpRoutes struct {
-	svc services.DeviceManagerService
+	svc    services.DeviceManagerService
+	sseHub *DeviceEventSSEHub
 }
 
 func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHttpRoutes {
 	return &devManagerHttpRoutes{
 		svc: svc,
+	}
+}
+
+func NewDeviceManagerHttpRoutesWithSSE(svc services.DeviceManagerService, hub *DeviceEventSSEHub) *devManagerHttpRoutes {
+	return &devManagerHttpRoutes{
+		svc:    svc,
+		sseHub: hub,
 	}
 }
 
@@ -140,6 +151,98 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, dms)
+}
+
+func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	// Content negotiation: if the client requests SSE, stream events in real time
+	if ctx.GetHeader("Accept") == "text/event-stream" {
+		r.streamDeviceEventsSSE(ctx, params.ID)
+		return
+	}
+
+	queryParams, err := FilterQuery(ctx.Request, resources.DeviceEventFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	events := []models.DeviceEvent{}
+	nextBookmark, err := r.svc.GetDeviceEvents(ctx.Request.Context(), services.GetDeviceEventsInput{
+		DeviceID: params.ID,
+		ListInput: resources.ListInput[models.DeviceEvent]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(ev models.DeviceEvent) {
+				events = append(events, ev)
+			},
+		},
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, resources.GetDeviceEventsResponse{
+		IterableList: resources.IterableList[models.DeviceEvent]{
+			NextBookmark: nextBookmark,
+			List:         events,
+		},
+	})
+}
+
+func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.CreateDeviceEventBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	event, err := r.svc.CreateDeviceEvent(ctx.Request.Context(), services.CreateDeviceEventInput{
+		DeviceID:         params.ID,
+		Timestamp:        requestBody.Timestamp,
+		Type:             requestBody.Type,
+		Description:      requestBody.Description,
+		Source:           requestBody.Source,
+		StructuredFields: requestBody.StructuredFields,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(201, event)
 }
 
 func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
@@ -550,4 +653,62 @@ func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, stats)
+}
+
+// streamDeviceEventsSSE handles the SSE streaming path for GetDeviceEvents.
+// Called when the client sends Accept: text/event-stream.
+func (r *devManagerHttpRoutes) streamDeviceEventsSSE(ctx *gin.Context, deviceID string) {
+	if r.sseHub == nil {
+		ctx.JSON(501, gin.H{"err": "SSE not enabled: event bus subscriber is not configured"})
+		return
+	}
+
+	// Verify device exists
+	_, err := r.svc.GetDeviceByID(ctx.Request.Context(), services.GetDeviceByIDInput{
+		ID: deviceID,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ch := r.sseHub.Subscribe(deviceID)
+	defer r.sseHub.Unsubscribe(deviceID, ch)
+
+	ctx.Header("Content-Type", "text/event-stream")
+	ctx.Header("Cache-Control", "no-cache")
+	ctx.Header("Connection", "keep-alive")
+	ctx.Header("X-Accel-Buffering", "no")
+
+	// Flush headers immediately so the client sees the SSE connection is open
+	ctx.Writer.Flush()
+
+	// Use a ticker to send keepalive comments every 15 seconds.
+	// Without this, idle connections are dropped by proxies or Go's HTTP server.
+	keepalive := time.NewTicker(15 * time.Second)
+	defer keepalive.Stop()
+
+	clientGone := ctx.Request.Context().Done()
+	for {
+		select {
+		case <-clientGone:
+			return
+		case data, ok := <-ch:
+			if !ok {
+				return
+			}
+			// SSE data frame
+			fmt.Fprintf(ctx.Writer, "event: device-event\ndata: %s\n\n", data)
+			ctx.Writer.Flush()
+		case <-keepalive.C:
+			// SSE comment line — keeps the connection alive without triggering client events
+			fmt.Fprintf(ctx.Writer, ": keepalive\n\n")
+			ctx.Writer.Flush()
+		}
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -17,6 +18,8 @@ import (
 )
 
 var deviceValidate *validator.Validate
+
+const defaultDeviceEventSource = "service/devmanager"
 
 type DeviceMiddleware func(services.DeviceManagerService) services.DeviceManagerService
 
@@ -141,6 +144,43 @@ func addStatusFilter(queryParams *resources.QueryParameters, status models.Devic
 	return statusQueryParams
 }
 
+func toDeviceEventRecord(deviceID string, eventTS time.Time, event models.DeviceEvent) *models.DeviceEventRecord {
+	if eventTS.IsZero() {
+		eventTS = time.Now()
+	}
+
+	source := event.Source
+	if source == "" {
+		source = defaultDeviceEventSource
+	}
+
+	return &models.DeviceEventRecord{
+		ID:               uuid.NewString(),
+		DeviceID:         deviceID,
+		EventTS:          eventTS,
+		EventType:        string(event.EvenType),
+		Description:      event.EventDescriptions,
+		Source:           source,
+		StructuredFields: event.StructuredFields,
+	}
+}
+
+func (svc DeviceManagerServiceBackend) persistDeviceEvent(ctx context.Context, deviceID string, eventTS time.Time, event models.DeviceEvent) error {
+	_, err := svc.devicesStorage.DeviceEvents().Insert(ctx, toDeviceEventRecord(deviceID, eventTS, event))
+	return err
+}
+
+func deviceEventFromRecord(record models.DeviceEventRecord) models.DeviceEvent {
+	return models.DeviceEvent{
+		ID:                record.ID,
+		EventTS:           record.EventTS,
+		EvenType:          models.DeviceEventType(record.EventType),
+		EventDescriptions: record.Description,
+		Source:            record.Source,
+		StructuredFields:  record.StructuredFields,
+	}
+}
+
 func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (*models.Device, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -172,12 +212,6 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 		IconColor:         input.IconColor,
 		DMSOwner:          input.DMSID,
 		CreationTimestamp: now,
-		Events: map[time.Time]models.DeviceEvent{
-			now: {
-				EvenType:          models.DeviceEventTypeCreated,
-				EventDescriptions: "",
-			},
-		},
 	}
 
 	dev, err := svc.devicesStorage.Insert(ctx, device)
@@ -185,6 +219,15 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 		lFunc.Errorf("could not insert device %s in storage engine: %s", input.ID, err)
 		return nil, err
 	}
+
+	if err = svc.persistDeviceEvent(ctx, dev.ID, now, models.DeviceEvent{EvenType: models.DeviceEventTypeCreated}); err != nil {
+		lFunc.Errorf("could not persist creation event for device %s: %s", input.ID, err)
+		if rollbackErr := svc.devicesStorage.Delete(ctx, dev.ID); rollbackErr != nil {
+			lFunc.Errorf("could not rollback device %s after event persistence failure: %s", input.ID, rollbackErr)
+		}
+		return nil, err
+	}
+
 	return dev, nil
 }
 
@@ -192,14 +235,24 @@ func (svc DeviceManagerServiceBackend) GetDevices(ctx context.Context, input ser
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices")
-	return svc.devicesStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	applyFunc := input.ApplyFunc
+	if applyFunc == nil {
+		applyFunc = func(models.Device) {}
+	}
+
+	return svc.devicesStorage.SelectAll(ctx, input.ExhaustiveRun, applyFunc, input.QueryParameters, nil)
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices owned by DMS with ID=%s", input.DMSID)
-	return svc.devicesStorage.SelectByDMS(ctx, input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	applyFunc := input.ApplyFunc
+	if applyFunc == nil {
+		applyFunc = func(models.Device) {}
+	}
+
+	return svc.devicesStorage.SelectByDMS(ctx, input.DMSID, input.ExhaustiveRun, applyFunc, input.QueryParameters, nil)
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
@@ -221,6 +274,87 @@ func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input 
 	}
 
 	return device, nil
+}
+
+func (svc DeviceManagerServiceBackend) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return "", errs.ErrValidateBadRequest
+	}
+
+	lFunc.Debugf("checking if device '%s' exists", input.DeviceID)
+	exists, _, err := svc.devicesStorage.SelectExists(ctx, input.DeviceID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.DeviceID, err)
+		return "", err
+	} else if !exists {
+		lFunc.Errorf("device %s can not be found in storage engine", input.DeviceID)
+		return "", errs.ErrDeviceNotFound
+	}
+
+	// Default sort: latest events first
+	if input.QueryParameters == nil {
+		input.QueryParameters = &resources.QueryParameters{}
+	}
+	if input.QueryParameters.Sort.SortField == "" {
+		input.QueryParameters.Sort = resources.SortOptions{
+			SortField: "event_ts",
+			SortMode:  resources.SortModeDesc,
+		}
+	}
+
+	applyFunc := input.ApplyFunc
+	if applyFunc == nil {
+		applyFunc = func(models.DeviceEvent) {}
+	}
+
+	return svc.devicesStorage.DeviceEvents().SelectByDeviceID(ctx, storage.StorageListRequest[models.DeviceEventRecord]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		QueryParams:   input.QueryParameters,
+		ApplyFunc: func(event models.DeviceEventRecord) {
+			applyFunc(deviceEventFromRecord(event))
+		},
+	}, input.DeviceID)
+}
+
+func (svc DeviceManagerServiceBackend) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	lFunc.Debugf("checking if device '%s' exists", input.DeviceID)
+	exists, _, err := svc.devicesStorage.SelectExists(ctx, input.DeviceID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.DeviceID, err)
+		return nil, err
+	} else if !exists {
+		lFunc.Errorf("device %s can not be found in storage engine", input.DeviceID)
+		return nil, errs.ErrDeviceNotFound
+	}
+
+	event := models.DeviceEvent{
+		EvenType:          input.Type,
+		EventDescriptions: input.Description,
+		Source:            input.Source,
+		StructuredFields:  input.StructuredFields,
+	}
+
+	record := toDeviceEventRecord(input.DeviceID, input.Timestamp, event)
+	_, err = svc.devicesStorage.DeviceEvents().Insert(ctx, record)
+	if err != nil {
+		lFunc.Errorf("could not persist event for device %s: %s", input.DeviceID, err)
+		return nil, err
+	}
+
+	domainEvent := deviceEventFromRecord(*record)
+	return &domainEvent, nil
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (*models.Device, error) {
@@ -249,9 +383,12 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 		return device, nil
 	}
 
-	if input.NewStatus == models.DeviceDecommissioned {
+	var statusEvent *models.DeviceEvent
+	statusEventTS := time.Time{}
 
-		device.Events[time.Now()] = models.DeviceEvent{
+	if input.NewStatus == models.DeviceDecommissioned {
+		statusEventTS = time.Now()
+		statusEvent = &models.DeviceEvent{
 			EvenType: models.DeviceEventTypeStatusDecommissioned,
 		}
 
@@ -281,7 +418,8 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 			}
 		}
 	} else {
-		device.Events[time.Now()] = models.DeviceEvent{
+		statusEventTS = time.Now()
+		statusEvent = &models.DeviceEvent{
 			EvenType:          models.DeviceEventTypeStatusUpdated,
 			EventDescriptions: fmt.Sprintf("Status updated from '%s' to '%s'", device.Status, input.NewStatus),
 		}
@@ -293,6 +431,14 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	if err != nil {
 		lFunc.Errorf("error while updating %s device status. could not update DB: %s", device.ID, err)
 		return nil, err
+	}
+
+	if statusEvent != nil {
+		err = svc.persistDeviceEvent(ctx, device.ID, statusEventTS, *statusEvent)
+		if err != nil {
+			lFunc.Errorf("could not persist status event for device %s: %s", device.ID, err)
+			return nil, err
+		}
 	}
 
 	lFunc.Debugf("device %s status updated. new status: %s", input.ID, input.NewStatus)
@@ -329,7 +475,12 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 	device.Metadata = *updatedMetadata
 
 	lFunc.Debugf("updating %s device metadata", input.ID)
-	return svc.devicesStorage.Update(ctx, device)
+	device, err = svc.devicesStorage.Update(ctx, device)
+	if err != nil {
+		return nil, err
+	}
+
+	return device, nil
 
 }
 
@@ -357,6 +508,13 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	}
 
 	newSlot := input.Slot
+	oldSlotStatus := models.SlotStatus("")
+	slotStatusChanged := false
+	if device.IdentitySlot != nil {
+		oldSlotStatus = device.IdentitySlot.Status
+		slotStatusChanged = newSlot.Status != oldSlotStatus
+	}
+
 	var newDevStatus models.DeviceStatus
 	switch input.Slot.Status {
 	case models.SlotRevoke:
@@ -392,18 +550,37 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 		newDevStatus = models.DeviceExpired
 	}
 
-	if device.IdentitySlot != nil && newSlot.Status != device.IdentitySlot.Status {
-		newSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeStatusUpdated,
-			EventDescriptions: fmt.Sprintf("Identity Slot Status updated from '%s' to '%s'", device.Status, newSlot.Status),
-		}
-	}
+	// Determine if this is a first-time provisioning or a re-provisioning
+	isFirstProvisioning := device.IdentitySlot == nil
+
 	device.IdentitySlot = &newSlot
 
 	lFunc.Debugf("updating %s device identity slot. New device status %s. ID slot status %s", input.ID, device.Status, device.IdentitySlot.Status)
 	device, err = svc.devicesStorage.Update(ctx, device)
 	if err != nil {
 		return nil, err
+	}
+
+	// Persist provisioning event
+	now := time.Now()
+	if isFirstProvisioning {
+		err = svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
+			EvenType:          models.DeviceEventTypeProvisioned,
+			EventDescriptions: fmt.Sprintf("Identity slot provisioned with status '%s'", newSlot.Status),
+		})
+		if err != nil {
+			lFunc.Errorf("could not persist provisioning event for device %s: %s", input.ID, err)
+			return nil, err
+		}
+	} else if slotStatusChanged {
+		err = svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
+			EvenType:          models.DeviceEventTypeReProvisioned,
+			EventDescriptions: fmt.Sprintf("Identity Slot Status updated from '%s' to '%s'", oldSlotStatus, newSlot.Status),
+		})
+		if err != nil {
+			lFunc.Errorf("could not persist re-provisioning event for device %s: %s", input.ID, err)
+			return nil, err
+		}
 	}
 
 	if device.Status != newDevStatus {
@@ -444,6 +621,12 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 	if device.Status != models.DeviceDecommissioned {
 		lFunc.Errorf("cannot delete device '%s': device must be decommissioned first. Current status: %s", id, device.Status)
 		return errs.ErrDeviceInvalidStatus
+	}
+
+	err = svc.devicesStorage.DeviceEvents().DeleteByDeviceID(ctx, id)
+	if err != nil {
+		lFunc.Errorf("could not delete events for device '%s': %s", id, err)
+		return err
 	}
 
 	lFunc.Debugf("deleting device '%s'", id)

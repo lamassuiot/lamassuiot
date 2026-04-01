@@ -109,7 +109,13 @@ func TestGetLastEvents(t *testing.T) {
 	}
 
 	alertsTest := serverTest.Alerts
-	eventSamples, err := alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{})
+	eventSamples := []models.AlertLatestEvent{}
+	_, err = alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{
+		ExhaustiveRun: true,
+		ApplyFunc: func(ev models.AlertLatestEvent) {
+			eventSamples = append(eventSamples, ev)
+		},
+	})
 	if err != nil {
 		t.Fatalf("could not get latest events: %s", err)
 	}
@@ -133,7 +139,13 @@ func TestGetLastEvents(t *testing.T) {
 		t.Fatalf("could not handle event: %s", err)
 	}
 
-	eventSamples, err = alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{})
+	eventSamples = []models.AlertLatestEvent{}
+	_, err = alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{
+		ExhaustiveRun: true,
+		ApplyFunc: func(ev models.AlertLatestEvent) {
+			eventSamples = append(eventSamples, ev)
+		},
+	})
 	if err != nil {
 		t.Fatalf("could not get latest events: %s", err)
 	}
@@ -148,7 +160,13 @@ func TestGetLastEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
-	eventSamples, err = alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{})
+	eventSamples = []models.AlertLatestEvent{}
+	_, err = alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{
+		ExhaustiveRun: true,
+		ApplyFunc: func(ev models.AlertLatestEvent) {
+			eventSamples = append(eventSamples, ev)
+		},
+	})
 	if err != nil {
 		t.Fatalf("could not get latest events: %s", err)
 	}
