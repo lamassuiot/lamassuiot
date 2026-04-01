@@ -295,6 +295,17 @@ func (svc DeviceManagerServiceBackend) GetDeviceEvents(ctx context.Context, inpu
 		return "", errs.ErrDeviceNotFound
 	}
 
+	// Default sort: latest events first
+	if input.QueryParameters == nil {
+		input.QueryParameters = &resources.QueryParameters{}
+	}
+	if input.QueryParameters.Sort.SortField == "" {
+		input.QueryParameters.Sort = resources.SortOptions{
+			SortField: "event_ts",
+			SortMode:  resources.SortModeDesc,
+		}
+	}
+
 	applyFunc := input.ApplyFunc
 	if applyFunc == nil {
 		applyFunc = func(models.DeviceEvent) {}
@@ -539,6 +550,9 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 		newDevStatus = models.DeviceExpired
 	}
 
+	// Determine if this is a first-time provisioning or a re-provisioning
+	isFirstProvisioning := device.IdentitySlot == nil
+
 	device.IdentitySlot = &newSlot
 
 	lFunc.Debugf("updating %s device identity slot. New device status %s. ID slot status %s", input.ID, device.Status, device.IdentitySlot.Status)
@@ -547,13 +561,24 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 		return nil, err
 	}
 
-	if slotStatusChanged {
-		err = svc.persistDeviceEvent(ctx, device.ID, time.Now(), models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeStatusUpdated,
+	// Persist provisioning event
+	now := time.Now()
+	if isFirstProvisioning {
+		err = svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
+			EvenType:          models.DeviceEventTypeProvisioned,
+			EventDescriptions: fmt.Sprintf("Identity slot provisioned with status '%s'", newSlot.Status),
+		})
+		if err != nil {
+			lFunc.Errorf("could not persist provisioning event for device %s: %s", input.ID, err)
+			return nil, err
+		}
+	} else if slotStatusChanged {
+		err = svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
+			EvenType:          models.DeviceEventTypeReProvisioned,
 			EventDescriptions: fmt.Sprintf("Identity Slot Status updated from '%s' to '%s'", oldSlotStatus, newSlot.Status),
 		})
 		if err != nil {
-			lFunc.Errorf("could not persist identity slot status update event for device %s: %s", input.ID, err)
+			lFunc.Errorf("could not persist re-provisioning event for device %s: %s", input.ID, err)
 			return nil, err
 		}
 	}
