@@ -450,3 +450,30 @@ func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
 
 	ctx.JSON(200, stats)
 }
+
+func (r *kmsHttpRoutes) RegisterExistingKey(ctx *gin.Context) {
+	var requestBody resources.RegisterExistingKeyBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := r.svc.RegisterExistingKey(ctx.Request.Context(), services.RegisterExistingKeyInput{
+		KeyID:    requestBody.KeyID,
+		Name:     requestBody.Name,
+		Tags:     requestBody.Tags,
+		Metadata: requestBody.Metadata,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(201, key)
+}

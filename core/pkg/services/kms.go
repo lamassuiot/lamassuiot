@@ -16,6 +16,7 @@ type KMSService interface {
 
 	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
 	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
+	RegisterExistingKey(ctx context.Context, input RegisterExistingKeyInput) (*models.Key, error)
 
 	UpdateKeyMetadata(ctx context.Context, input UpdateKeyMetadataInput) (*models.Key, error)
 	UpdateKeyAliases(ctx context.Context, input UpdateKeyAliasesInput) (*models.Key, error)
@@ -68,6 +69,13 @@ type ImportKeyInput struct {
 	Name       string
 	Tags       []string
 	Metadata   map[string]any
+}
+
+type RegisterExistingKeyInput struct {
+	KeyID    string `validate:"required"`
+	Name     string `validate:"required"`
+	Tags     []string
+	Metadata map[string]any
 }
 
 type UpdateKeyMetadataInput struct {

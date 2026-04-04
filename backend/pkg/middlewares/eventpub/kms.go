@@ -190,3 +190,15 @@ func (mw KMSEventPublisher) VerifySignature(ctx context.Context, input services.
 	}()
 	return mw.Next.VerifySignature(ctx, input)
 }
+
+func (mw KMSEventPublisher) RegisterExistingKey(ctx context.Context, input services.RegisterExistingKeyInput) (output *models.Key, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventRegisterExistingKMSKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.KeyID))
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
+		}
+	}()
+	return mw.Next.RegisterExistingKey(ctx, input)
+}

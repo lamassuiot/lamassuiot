@@ -118,3 +118,10 @@ func (mw KMSOTelTracer) ImportKey(ctx context.Context, input services.ImportKeyI
 
 	return mw.next.ImportKey(ctx, input)
 }
+
+func (mw KMSOTelTracer) RegisterExistingKey(ctx context.Context, input services.RegisterExistingKeyInput) (output *models.Key, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.RegisterExistingKey(ctx, input)
+}

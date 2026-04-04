@@ -113,3 +113,11 @@ func (mw KMSAuditEventPublisher) VerifySignature(ctx context.Context, input serv
 
 	return mw.next.VerifySignature(ctx, input)
 }
+
+func (mw KMSAuditEventPublisher) RegisterExistingKey(ctx context.Context, input services.RegisterExistingKeyInput) (output *models.Key, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventRegisterExistingKMSKey, input, err, output)
+	}()
+
+	return mw.next.RegisterExistingKey(ctx, input)
+}
