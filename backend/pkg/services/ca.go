@@ -99,6 +99,33 @@ func certificateExtensionsFromX509(cert *x509.Certificate) models.CertificateExt
 	}
 }
 
+func (svc *CAServiceBackend) getManagedKMSKey(ctx context.Context, identifier string) (*models.Key, error) {
+	key, err := svc.kmsService.GetKey(ctx, services.GetKeyInput{
+		Identifier: identifier,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if !key.HasPrivateKey {
+		return nil, nil
+	}
+
+	return key, nil
+}
+
+func (svc *CAServiceBackend) bindKeyToCertificate(ctx context.Context, keyID string, serialNumber string) error {
+	_, err := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+		ID: keyID,
+		Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+			ResourceType: "certificate",
+			ResourceID:   serialNumber,
+		}).Build(),
+	})
+
+	return err
+}
+
 func (svc *CAServiceBackend) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -326,16 +353,16 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 	} else {
-		//search in KMS if key exists for the CA being imported
-		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
-			Identifier: skid,
-		})
+		key, err = svc.getManagedKMSKey(ctx, skid)
 		if err != nil {
-			lFunc.Infof("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
+			lFunc.Infof("could not find private key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
 			importType = models.CertificateTypeImportedWithoutKey
-		} else {
-			lFunc.Infof("found key with SKID %s for CA %s in KMS", skid, caCertSN)
+		} else if key != nil {
+			lFunc.Infof("found private key with SKID %s for CA %s in KMS", skid, caCertSN)
 			importType = models.CertificateTypeManaged
+		} else {
+			lFunc.Infof("found KMS key with SKID %s for CA %s but it has no private key", skid, caCertSN)
+			importType = models.CertificateTypeImportedWithoutKey
 		}
 	}
 
@@ -455,13 +482,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	engineID := ""
 	if key != nil {
 		engineID = key.EngineID
-		key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: key.KeyID,
-			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
-			}).Build(),
-		})
+		err = svc.bindKeyToCertificate(ctx, key.KeyID, helpers.SerialNumberToHexString(caCert.SerialNumber))
 		if err != nil {
 			lFunc.Errorf("could not bind CA %s to key %s: %s", caCert.Subject.CommonName, key.KeyID, err)
 			return nil, err
@@ -477,6 +498,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		Certificate: models.Certificate{
 			SubjectKeyID:        skid,
 			AuthorityKeyID:      akid,
+			HasPrivateKey:       key != nil,
 			Certificate:         input.CACertificate,
 			Extensions:          certificateExtensionsFromX509((*x509.Certificate)(caCert)),
 			Status:              models.StatusActive,
@@ -798,6 +820,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		Certificate: models.Certificate{
 			SubjectKeyID:   skid,
 			AuthorityKeyID: akid,
+			HasPrivateKey:  true,
 			Certificate:    (*models.X509Certificate)(ca),
 			Extensions:     certificateExtensionsFromX509(ca),
 			Status:         models.StatusActive,
@@ -1420,6 +1443,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		SerialNumber:     helpers.SerialNumberToHexString(newCert.SerialNumber),
 		SubjectKeyID:     newSKID,
 		AuthorityKeyID:   newAKID,
+		HasPrivateKey:    ca.Certificate.HasPrivateKey,
 		Metadata:         newMetadata,
 		Status:           models.StatusActive,
 		Certificate:      (*models.X509Certificate)(newCert),
@@ -1574,17 +1598,13 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	// Detect whether the subject key is managed in the KMS and, if so, bind it to this certificate.
 	certType := models.CertificateTypeImportedWithoutKey
 	engineID := ""
-	subjectKey, getKeyErr := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: ski})
-	if getKeyErr == nil && subjectKey.HasPrivateKey {
+	hasPrivateKey := false
+	subjectKey, getKeyErr := svc.getManagedKMSKey(ctx, ski)
+	if getKeyErr == nil && subjectKey != nil {
 		certType = models.CertificateTypeManaged
 		engineID = subjectKey.EngineID
-		_, bindErr := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: subjectKey.KeyID,
-			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   helpers.SerialNumberToHexString(x509Cert.SerialNumber),
-			}).Build(),
-		})
+		hasPrivateKey = true
+		bindErr := svc.bindKeyToCertificate(ctx, subjectKey.KeyID, helpers.SerialNumberToHexString(x509Cert.SerialNumber))
 		if bindErr != nil {
 			lFunc.Warnf("could not bind key %s to certificate %s: %s", subjectKey.KeyID, helpers.SerialNumberToHexString(x509Cert.SerialNumber), bindErr)
 		}
@@ -1610,6 +1630,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		IsCA:                x509Cert.IsCA,
 		SubjectKeyID:        ski,
 		AuthorityKeyID:      aki,
+		HasPrivateKey:       hasPrivateKey,
 		EngineID:            engineID,
 	}
 
@@ -1651,6 +1672,18 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		RevocationTimestamp: time.Time{},
 		IsCA:                x509Cert.IsCA,
 		SubjectKeyID:        skid,
+		HasPrivateKey:       false,
+	}
+
+	key, err := svc.getManagedKMSKey(ctx, skid)
+	if err == nil && key != nil {
+		newCert.Type = models.CertificateTypeManaged
+		newCert.EngineID = key.EngineID
+		newCert.HasPrivateKey = true
+		bindErr := svc.bindKeyToCertificate(ctx, key.KeyID, newCert.SerialNumber)
+		if bindErr != nil {
+			lFunc.Warnf("could not bind key %s to certificate %s: %s", key.KeyID, newCert.SerialNumber, bindErr)
+		}
 	}
 
 	var parentCA *models.CACertificate

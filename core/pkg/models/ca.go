@@ -32,6 +32,7 @@ type Certificate struct {
 	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
 	SubjectKeyID        string                 `json:"subject_key_id"`
 	AuthorityKeyID      string                 `json:"authority_key_id"`
+	HasPrivateKey       bool                   `json:"has_private_key"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	Status              CertificateStatus      `json:"status"`
 	Certificate         *X509Certificate       `json:"certificate"`

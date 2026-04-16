@@ -604,6 +604,41 @@ func MigrationTest_CA_20260331120000_add_certificate_extensions(t *testing.T, lo
 	assert.Equal(t, int64(0), versionSchemaColumnCount)
 }
 
+func MigrationTest_CA_20260414120000_add_has_private_key(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	con.Exec(`
+		INSERT INTO certificates
+			(serial_number, is_ca, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, issuer_common_name, issuer_organization, issuer_organization_unit, issuer_country, issuer_state, issuer_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id, authority_key_id)
+		VALUES
+			('managed-cert', false, '{}'::jsonb, '-', '-', 0, 'ACTIVE', '', 'RSA', 2048, 'HIGH', 'Managed', '', '', '', '', '', 'Issuer', '', '', '', '', '', NOW(), NOW(), NOW(), 'Unspecified', 'MANAGED', 'filesystem-1', 'managed-ski', 'managed-aki'),
+			('imported-with-key-cert', false, '{}'::jsonb, '-', '-', 0, 'ACTIVE', '', 'RSA', 2048, 'HIGH', 'ImportedWithKey', '', '', '', '', '', 'Issuer', '', '', '', '', '', NOW(), NOW(), NOW(), 'Unspecified', 'IMPORTED_WITH_KEY', 'filesystem-1', 'imported-ski', 'imported-aki'),
+			('imported-without-key-cert', false, '{}'::jsonb, '-', '-', 0, 'ACTIVE', '', 'RSA', 2048, 'HIGH', 'ImportedWithoutKey', '', '', '', '', '', 'Issuer', '', '', '', '', '', NOW(), NOW(), NOW(), 'Unspecified', 'IMPORTED_WITHOUT_KEY', '', 'no-key-ski', 'no-key-aki')
+	`)
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	type hasPrivateKeyResult struct {
+		SerialNumber  string
+		HasPrivateKey bool
+	}
+
+	var rows []hasPrivateKeyResult
+	tx := con.Raw(`
+		SELECT serial_number, has_private_key
+		FROM certificates
+		WHERE serial_number IN ('managed-cert', 'imported-with-key-cert', 'imported-without-key-cert')
+		ORDER BY serial_number
+	`).Scan(&rows)
+	if tx.Error != nil {
+		t.Fatalf("failed to query migrated certificates: %v", tx.Error)
+	}
+
+	assert.Equal(t, []hasPrivateKeyResult{
+		{SerialNumber: "imported-with-key-cert", HasPrivateKey: true},
+		{SerialNumber: "imported-without-key-cert", HasPrivateKey: false},
+		{SerialNumber: "managed-cert", HasPrivateKey: true},
+	}, rows)
+}
+
 func MigrationTest_CA_20260520120000_update_certificate_type_values(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	// Insert rows with legacy type values before applying migration
 	for _, tc := range []struct{ serial, typ string }{
@@ -735,6 +770,11 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20260331120000_add_certificate_extensions(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260331120000_add_certificate_extensions")
+	}
+
+	MigrationTest_CA_20260414120000_add_has_private_key(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260414120000_add_has_private_key")
 	}
 
 	MigrationTest_CA_20260520120000_update_certificate_type_values(t, logger, con)
