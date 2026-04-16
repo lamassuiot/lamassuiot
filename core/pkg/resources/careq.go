@@ -13,6 +13,7 @@ var CAFilterableFields = map[string]FilterFieldType{
 	"serial_number":        StringFilterFieldType,
 	"status":               EnumFilterFieldType,
 	"engine_id":            StringFilterFieldType,
+	"has_private_key":      EnumFilterFieldType,
 	"valid_to":             DateFilterFieldType,
 	"valid_from":           DateFilterFieldType,
 	"revocation_timestamp": DateFilterFieldType,

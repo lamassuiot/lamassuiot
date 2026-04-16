@@ -33,6 +33,7 @@ type Certificate struct {
 	VersionSchema       string                 `json:"version_schema"` // Indicates the lamassu schema when codifying the certificate. If some property is changed (added, removed, or changed), then it should change.
 	SubjectKeyID        string                 `json:"subject_key_id"`
 	AuthorityKeyID      string                 `json:"authority_key_id"`
+	HasPrivateKey       bool                   `json:"has_private_key"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	Status              CertificateStatus      `json:"status"`
 	Certificate         *X509Certificate       `json:"certificate"`

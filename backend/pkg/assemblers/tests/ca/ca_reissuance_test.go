@@ -214,6 +214,11 @@ func TestReissueCAService(t *testing.T) {
 						originalCA.Certificate.Type, reissuedCA.Certificate.Type)
 				}
 
+				if originalCA.Certificate.HasPrivateKey != reissuedCA.Certificate.HasPrivateKey {
+					return fmt.Errorf("CA has_private_key changed: expected %t, got %t",
+						originalCA.Certificate.HasPrivateKey, reissuedCA.Certificate.HasPrivateKey)
+				}
+
 				// Verify metadata contains reissuance information
 				if reissuedCA.Metadata[models.CAMetadataReissuedFromKey] != originalCA.Certificate.SerialNumber {
 					return fmt.Errorf("missing or incorrect reissued-from metadata: expected %s, got %v",
