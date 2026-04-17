@@ -101,6 +101,37 @@ func TestFilterQuery_StringInIgnoreCase(t *testing.T) {
 	}
 }
 
+func TestFilterQuery_StringArrayContainsIgnoreCase(t *testing.T) {
+	req := &http.Request{}
+	req.URL = &url.URL{}
+	q := req.URL.Query()
+	q.Add("filter", "extensions.extended_key_usage[ct_ic]clientauth")
+	req.URL.RawQuery = q.Encode()
+
+	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if qp == nil {
+		t.Fatalf("expected QueryParameters, got nil")
+	}
+
+	if len(qp.Filters) != 1 {
+		t.Fatalf("expected 1 filter, got %d", len(qp.Filters))
+	}
+
+	f := qp.Filters[0]
+	if f.Field != "extensions.extended_key_usage" {
+		t.Fatalf("expected field 'extensions.extended_key_usage', got '%s'", f.Field)
+	}
+	if f.Value != "clientauth" {
+		t.Fatalf("expected value 'clientauth', got '%s'", f.Value)
+	}
+	if f.FilterOperation != resources.StringArrayContainsIgnoreCase {
+		t.Fatalf("expected operation StringArrayContainsIgnoreCase, got %v", f.FilterOperation)
+	}
+}
+
 func TestFilterQuery_StringNotIn(t *testing.T) {
 	req := &http.Request{}
 	req.URL = &url.URL{}
