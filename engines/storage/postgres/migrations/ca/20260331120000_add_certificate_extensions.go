@@ -11,6 +11,13 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+const certificateExtensionsBackfillBatchSize = 500
+
+type certificateExtensionsBackfillRow struct {
+	serialNumber      string
+	base64Certificate string
+}
+
 func Register20260331120000AddCertificateExtensions() {
 	goose.AddMigrationContext(upAddCertificateExtensions, downAddCertificateExtensions)
 }
@@ -27,57 +34,80 @@ func upAddCertificateExtensions(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 
-	rows, err := tx.QueryContext(ctx, "SELECT serial_number, certificate FROM certificates")
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	result, err := mhelper.RowsToMap(rows)
-	if err != nil {
-		return err
-	}
-
-	for _, row := range result {
-		serialNumber, ok := row["serial_number"].(string)
-		if !ok || serialNumber == "" {
-			return fmt.Errorf("invalid serial number while backfilling certificate extensions")
-		}
-
-		base64Certificate, ok := row["certificate"].(string)
-		if !ok || base64Certificate == "" {
-			continue
-		}
-
-		certificate, err := mhelper.DecodeCertificate(base64Certificate)
+	lastSerialNumber := ""
+	for {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT serial_number, certificate
+			FROM certificates
+			WHERE serial_number > $1
+			ORDER BY serial_number
+			LIMIT $2
+		`, lastSerialNumber, certificateExtensionsBackfillBatchSize)
 		if err != nil {
-			return fmt.Errorf("decode certificate %s: %w", serialNumber, err)
+			return err
 		}
 
-		keyUsageJSON, err := json.Marshal(models.X509KeyUsage(certificate.KeyUsage))
-		if err != nil {
-			return fmt.Errorf("marshal key usage for certificate %s: %w", serialNumber, err)
+		batch := make([]certificateExtensionsBackfillRow, 0, certificateExtensionsBackfillBatchSize)
+		for rows.Next() {
+			var row certificateExtensionsBackfillRow
+			if err := rows.Scan(&row.serialNumber, &row.base64Certificate); err != nil {
+				rows.Close()
+				return fmt.Errorf("scan certificate extensions backfill row: %w", err)
+			}
+
+			batch = append(batch, row)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return fmt.Errorf("iterate certificate extensions backfill rows: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close certificate extensions backfill rows: %w", err)
+		}
+		if len(batch) == 0 {
+			break
 		}
 
-		extendedKeyUsage := make([]models.X509ExtKeyUsage, 0, len(certificate.ExtKeyUsage))
-		for _, usage := range certificate.ExtKeyUsage {
-			extendedKeyUsage = append(extendedKeyUsage, models.X509ExtKeyUsage(usage))
+		for _, row := range batch {
+			if row.serialNumber == "" {
+				return fmt.Errorf("invalid serial number while backfilling certificate extensions")
+			}
+			if row.base64Certificate == "" {
+				continue
+			}
+
+			certificate, err := mhelper.DecodeCertificate(row.base64Certificate)
+			if err != nil {
+				return fmt.Errorf("decode certificate %s: %w", row.serialNumber, err)
+			}
+
+			keyUsageJSON, err := json.Marshal(models.X509KeyUsage(certificate.KeyUsage))
+			if err != nil {
+				return fmt.Errorf("marshal key usage for certificate %s: %w", row.serialNumber, err)
+			}
+
+			extendedKeyUsage := make([]models.X509ExtKeyUsage, 0, len(certificate.ExtKeyUsage))
+			for _, usage := range certificate.ExtKeyUsage {
+				extendedKeyUsage = append(extendedKeyUsage, models.X509ExtKeyUsage(usage))
+			}
+
+			extendedKeyUsageJSON, err := json.Marshal(extendedKeyUsage)
+			if err != nil {
+				return fmt.Errorf("marshal extended key usage for certificate %s: %w", row.serialNumber, err)
+			}
+
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE certificates
+				SET
+					extensions_key_usage = $1::jsonb,
+					extensions_extended_key_usage = $2::jsonb
+				WHERE serial_number = $3
+			`, string(keyUsageJSON), string(extendedKeyUsageJSON), row.serialNumber); err != nil {
+				return fmt.Errorf("update certificate %s extensions: %w", row.serialNumber, err)
+			}
 		}
 
-		extendedKeyUsageJSON, err := json.Marshal(extendedKeyUsage)
-		if err != nil {
-			return fmt.Errorf("marshal extended key usage for certificate %s: %w", serialNumber, err)
-		}
-
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE certificates
-			SET
-				extensions_key_usage = $1::jsonb,
-				extensions_extended_key_usage = $2::jsonb
-			WHERE serial_number = $3
-		`, string(keyUsageJSON), string(extendedKeyUsageJSON), serialNumber); err != nil {
-			return fmt.Errorf("update certificate %s extensions: %w", serialNumber, err)
-		}
+		lastSerialNumber = batch[len(batch)-1].serialNumber
 	}
 
 	if _, err := tx.ExecContext(ctx, "ALTER TABLE certificates DROP COLUMN version_schema;"); err != nil {

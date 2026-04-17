@@ -2179,8 +2179,10 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 	// Resolve issuance profile: inline > referenced > CA default
 	var profile *models.IssuanceProfile
 	if input.IssuanceProfile != nil {
-		profile = input.IssuanceProfile
-		profile.HonorExtendedKeyUsages = false // For CreateCertificate, we want to ignore EKUs in the profile and only use the KeyUsage and ExtKeyUsage fields
+		profileCopy := *input.IssuanceProfile
+		profile = &profileCopy
+		// For CreateCertificate, override the Honor* flags so this operation uses the provided KeyUsage and ExtKeyUsage fields.
+		profile.HonorExtendedKeyUsages = false
 		profile.HonorKeyUsage = false
 	} else if input.IssuanceProfileID != "" {
 		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{

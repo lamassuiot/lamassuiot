@@ -8,8 +8,9 @@ The API supports flexible server-side filtering and sorting on list endpoints us
 
 ## Query syntax (HTTP)
 
-- Basic form: `?filter=<field>[<op>]<value>`
+- Basic form: `?filter=<field>[<op>]=<value>`
 - Repeat `filter` to add multiple conditions (combined with AND).
+- The parser also accepts `?filter=<field>[<op>]<value>` and the legacy `:<value>` separator for backward compatibility, but `=` is the canonical form for scalar filters.
 
 Examples:
 
@@ -22,7 +23,7 @@ Note: values must be URL-encoded when required (spaces, quotes, `>` etc.).
 
 ## Supported operators
 
-All operators are specified in the form `field[op]=value`. Accepted operators depend on the field type — see [Operators per field type](#operators-per-field-type) below.
+For scalar filters, operators are specified in the form `field[op]=value`. Accepted operators depend on the field type — see [Operators per field type](#operators-per-field-type) below. JSONPath filters keep the expression immediately after the operator: `field[jsonpath]<expression>`.
 
 | Operator | Applies to type(s) | Meaning | Example (HTTP) |
 |---|---|---|---|
@@ -810,4 +811,3 @@ GET /api/dmsmanager/v1/stats?filter=metadata[jsonpath]$.environment%20==%20%22pr
 | Invalid JSONPath | 400 Bad Request | "invalid JSONPath expression: [details]" |
 
 ---
-
