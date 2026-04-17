@@ -538,7 +538,11 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 	case resources.StringContainsIgnoreCase:
 		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, ilike), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringArrayContains:
-		return tx.Where(fmt.Sprintf("%s @> ?", filter.Field), fmt.Sprintf(`["%s"]`, filter.Value))
+		if isSQLite(tx) {
+			return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, ilike), "%\""+filter.Value+"\"%")
+		}
+		// Arrays serialized into text columns need a cast before using the JSON containment operator.
+		return tx.Where(fmt.Sprintf("%s::jsonb @> ?::jsonb", filter.Field), fmt.Sprintf(`["%s"]`, filter.Value))
 	case resources.StringArrayContainsIgnoreCase:
 		return tx.Where(fmt.Sprintf("%s::text %s ?", filter.Field, ilike), "%\""+filter.Value+"\"%")
 	case resources.StringNotContains:
