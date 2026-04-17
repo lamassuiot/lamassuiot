@@ -18,6 +18,14 @@ var DeviceFilterableFields = map[string]FilterFieldType{
 	"identity_slot":      JsonFilterFieldType,
 }
 
+var DeviceEventFilterableFields = map[string]FilterFieldType{
+	"event_ts":          DateFilterFieldType,
+	"event_type":        EnumFilterFieldType,
+	"description":       StringFilterFieldType,
+	"source":            StringFilterFieldType,
+	"structured_fields": JsonFilterFieldType,
+}
+
 var CertificateFilterableFields = map[string]FilterFieldType{
 	"type":                 EnumFilterFieldType,
 	"serial_number":        StringFilterFieldType,
@@ -31,4 +39,10 @@ var CertificateFilterableFields = map[string]FilterFieldType{
 	"revocation_timestamp": DateFilterFieldType,
 	"revocation_reason":    EnumFilterFieldType,
 	"metadata":             JsonFilterFieldType,
+}
+
+var AlertFilterableFields = map[string]FilterFieldType{
+	"event_type": StringFilterFieldType,
+	"seen_at":    DateFilterFieldType,
+	"counter":    NumberFilterFieldType,
 }

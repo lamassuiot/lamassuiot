@@ -32,6 +32,7 @@ type MonolithicConfig struct {
 	VAStorageDir          string                         `mapstructure:"va_storage_directory"`
 	UIPort                int                            `mapstructure:"ui_port"`
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
+	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {

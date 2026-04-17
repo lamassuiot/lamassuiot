@@ -27,6 +27,16 @@ func (dm *MockDeviceManagerService) GetDeviceByID(ctx context.Context, input ser
 	return args.Get(0).(*models.Device), args.Error(1)
 }
 
+func (dm *MockDeviceManagerService) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	args := dm.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.DeviceEvent), args.Error(1)
+}
+
 func (dm *MockDeviceManagerService) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	args := dm.Called(ctx, input)
 	return args.String(0), args.Error(1)
