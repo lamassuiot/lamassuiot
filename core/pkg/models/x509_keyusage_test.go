@@ -193,6 +193,11 @@ func TestExtendedKeyUsageMarshal(t *testing.T) {
 			keyUsage:       X509ExtKeyUsage(x509.ExtKeyUsageTimeStamping),
 			expectedString: "TimeStamping",
 		},
+		{
+			name:           "OK/MicrosoftKernelCodeSigning",
+			keyUsage:       X509ExtKeyUsage(x509.ExtKeyUsageMicrosoftKernelCodeSigning),
+			expectedString: "MicrosoftKernelCodeSigning",
+		},
 	}
 
 	for _, tc := range testcases {
@@ -274,6 +279,12 @@ func TestExtendedKeyUsageUnmarshal(t *testing.T) {
 			name:             "OK/TimeStamping",
 			keyUsage:         "TimeStamping",
 			expectedKeyUsage: X509ExtKeyUsage(x509.ExtKeyUsageTimeStamping),
+			expectedErr:      nil,
+		},
+		{
+			name:             "OK/MicrosoftKernelCodeSigning",
+			keyUsage:         "MicrosoftKernelCodeSigning",
+			expectedKeyUsage: X509ExtKeyUsage(x509.ExtKeyUsageMicrosoftKernelCodeSigning),
 			expectedErr:      nil,
 		},
 		{
