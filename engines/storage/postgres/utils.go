@@ -65,6 +65,11 @@ func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primary
 type TextSerializer struct{}
 
 func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+	// NULL in database → leave field as its zero value (nil for pointer fields).
+	if dbValue == nil {
+		return nil
+	}
+
 	// Create a new instance of the field type
 	fieldValue := reflect.New(field.FieldType).Interface()
 
@@ -97,6 +102,14 @@ func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect
 
 // Value implements serializer interface
 func (TextSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+	// Nil pointer → store NULL in the database.
+	if fieldValue == nil {
+		return nil, nil
+	}
+	if rv := reflect.ValueOf(fieldValue); rv.Kind() == reflect.Ptr && rv.IsNil() {
+		return nil, nil
+	}
+
 	// Check if fieldValue implements encoding.TextMarshaler
 	if marshaler, ok := fieldValue.(encoding.TextMarshaler); ok {
 		text, err := marshaler.MarshalText()
