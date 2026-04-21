@@ -43,7 +43,7 @@ type Certificate struct {
 	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
 	ValidTo             time.Time              `json:"valid_to"`
 	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
-	RevocationReason    RevocationReason       `json:"revocation_reason" gorm:"serializer:text"`
+	RevocationReason    *RevocationReason      `json:"revocation_reason,omitempty" gorm:"serializer:text"`
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
 	IsCA                bool                   `json:"is_ca"`

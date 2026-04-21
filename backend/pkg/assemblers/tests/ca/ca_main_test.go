@@ -2782,8 +2782,8 @@ func TestRevokeCA(t *testing.T) {
 					return fmt.Errorf("CA should have Revoked status but is in %s status", revokedCA.Certificate.Status)
 				}
 
-				if revokedCA.Certificate.RevocationReason != ocsp.AACompromise {
-					return fmt.Errorf("CA should have RevocationReason AACompromise status but is in %s reason", revokedCA.Certificate.RevocationReason)
+				if revokedCA.Certificate.RevocationReason == nil || *revokedCA.Certificate.RevocationReason != models.RevocationReason(ocsp.AACompromise) {
+					return fmt.Errorf("CA should have RevocationReason AACompromise status but is in %s reason", revokedCA.Certificate.RevocationReason.String())
 				}
 
 				return nil

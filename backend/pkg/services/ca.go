@@ -950,7 +950,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
-	if ca.Certificate.Status == models.StatusRevoked && ca.Certificate.RevocationReason != ocsp.CertificateHold {
+	if ca.Certificate.Status == models.StatusRevoked && (ca.Certificate.RevocationReason == nil || *ca.Certificate.RevocationReason != ocsp.CertificateHold) {
 		lFunc.Errorf("cannot update a revoke CA certificate in %s status. Only a revoked CA certificate with reason '6 - CertificateHold' can be unrevoked", ca.Certificate.RevocationReason.String())
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
@@ -959,8 +959,11 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 	if ca.Certificate.Status == models.StatusRevoked {
 		rrb, _ := input.RevocationReason.MarshalText()
 		lFunc.Infof("CA %s is being revoked with revocation reason %d - %s", input.CAID, input.RevocationReason, string(rrb))
-		ca.Certificate.RevocationReason = input.RevocationReason
+		rr := input.RevocationReason
+		ca.Certificate.RevocationReason = &rr
 		ca.Certificate.RevocationTimestamp = time.Now()
+	} else {
+		ca.Certificate.RevocationReason = nil
 	}
 
 	lFunc.Debugf("updating the status of CA %s to %s", input.CAID, input.Status)
@@ -1924,7 +1927,7 @@ func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input 
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
-	if cert.Status == models.StatusRevoked && cert.RevocationReason != ocsp.CertificateHold {
+	if cert.Status == models.StatusRevoked && (cert.RevocationReason == nil || *cert.RevocationReason != ocsp.CertificateHold) {
 		lFunc.Errorf("cannot update a revoke certificate in %s status. Only a revoked certificate with reason '6 - CertificateHold' can be unrevoked", cert.RevocationReason.String())
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
@@ -1934,11 +1937,13 @@ func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input 
 	if input.NewStatus == models.StatusRevoked {
 		rrb, _ := input.RevocationReason.MarshalText()
 		lFunc.Infof("certificate with SN %s issued by CA with ID %s and CN %s is being revoked with revocation reason %d - %s", input.SerialNumber, cert.IssuerCAMetadata.ID, cert.Certificate.Issuer.CommonName, input.RevocationReason, string(rrb))
-		cert.RevocationReason = input.RevocationReason
+		rr := input.RevocationReason
+		cert.RevocationReason = &rr
 		cert.RevocationTimestamp = time.Now()
 	} else {
 		//Make sure to reset revocation TS in case of reactivation
 		cert.RevocationTimestamp = time.Time{}
+		cert.RevocationReason = nil
 	}
 
 	lFunc.Debugf("updating %s certificate status to %s", input.SerialNumber, input.NewStatus)

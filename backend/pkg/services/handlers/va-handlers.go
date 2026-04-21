@@ -60,7 +60,7 @@ func updateCertificateStatus(ctx context.Context, event *event.Event, crlSvc ser
 
 	// Check if this is a certificate being reactivated from CertificateHold
 	isReactivationFromHold := cert.Previous.Status == models.StatusRevoked &&
-		cert.Previous.RevocationReason == ocsp.CertificateHold &&
+		cert.Previous.RevocationReason != nil && *cert.Previous.RevocationReason == models.RevocationReason(ocsp.CertificateHold) &&
 		cert.Updated.Status == models.StatusActive
 
 	// Check if this is a normal revocation

@@ -868,7 +868,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	//Check if current cert is REVOKED
 	if currentDeviceCert.Status == models.StatusRevoked {
-		lFunc.Warnf("aborting reenrollment as certificate %s is revoked with status code %s", currentDeviceCertSN, currentDeviceCert.RevocationReason)
+		lFunc.Warnf("aborting reenrollment as certificate %s is revoked with status code %s", currentDeviceCertSN, currentDeviceCert.RevocationReason.String())
 		return nil, fmt.Errorf("revoked certificate")
 	}
 
