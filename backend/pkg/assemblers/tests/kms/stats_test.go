@@ -2,10 +2,12 @@ package kms
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/stretchr/testify/assert"
@@ -59,6 +61,28 @@ func TestGetKeyStatsFiltered(t *testing.T) {
 	})
 }
 
+func getDeterministicDefaultEngineID(t *testing.T, engines []*models.CryptoEngineProvider) string {
+	t.Helper()
+
+	if len(engines) == 0 {
+		t.Fatal("no crypto engines available for testing")
+	}
+
+	for _, engine := range engines {
+		if engine.Default {
+			return engine.ID
+		}
+	}
+
+	// Fall back to a stable order if the default flag is unavailable.
+	engineIDs := make([]string, 0, len(engines))
+	for _, engine := range engines {
+		engineIDs = append(engineIDs, engine.ID)
+	}
+	sort.Strings(engineIDs)
+	return engineIDs[0]
+}
+
 // setupStatsTestData creates all test keys with various properties across engines and algorithms
 func setupStatsTestData(t *testing.T, ctx context.Context, kmsTest *tests.KMSTestServer) {
 	// Get available engines
@@ -71,12 +95,9 @@ func setupStatsTestData(t *testing.T, ctx context.Context, kmsTest *tests.KMSTes
 		t.Fatal("no crypto engines available for testing")
 	}
 
-	defaultEngine := ""
+	defaultEngine := getDeterministicDefaultEngineID(t, engines)
 	vaultEngine := ""
 	for _, engine := range engines {
-		if defaultEngine == "" {
-			defaultEngine = engine.ID
-		}
 		if strings.HasPrefix(engine.ID, "vault") {
 			vaultEngine = engine.ID
 		}
@@ -259,7 +280,7 @@ func testStatsEngineFiltering(t *testing.T, ctx context.Context, kmsTest *tests.
 	assert.NoError(t, err)
 	assert.NotEmpty(t, engines, "Should have at least one engine")
 
-	targetEngine := engines[0].ID
+	targetEngine := getDeterministicDefaultEngineID(t, engines)
 
 	// Get stats filtered by specific engine
 	queryParams := &resources.QueryParameters{
@@ -392,7 +413,7 @@ func testStatsCombinedFilters(t *testing.T, ctx context.Context, kmsTest *tests.
 	// Get available engines first
 	engines, err := kmsTest.Service.GetCryptoEngineProvider(ctx)
 	assert.NoError(t, err)
-	targetEngine := engines[0].ID
+	targetEngine := getDeterministicDefaultEngineID(t, engines)
 
 	// Combine engine filter + algorithm filter
 	queryParams := &resources.QueryParameters{
@@ -563,7 +584,7 @@ func testStatsAlgorithmDistribution(t *testing.T, ctx context.Context, kmsTest *
 				{
 					Field:           "engine_id",
 					FilterOperation: resources.StringEqual,
-					Value:           availableEngines[0].ID,
+					Value:           getDeterministicDefaultEngineID(t, availableEngines),
 				},
 			},
 		}

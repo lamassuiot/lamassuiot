@@ -14,6 +14,7 @@ func RegisterGoMigrations(dbname string) {
 		ca.Register20250226114600CaAddKids()
 		ca.Register20250908074250AddProfileId()
 		ca.Register20250915090500UpdateSkiAki()
+		ca.Register20260331120000AddCertificateExtensions()
 	case "devicemanager":
 		devicemanager.Register20250925120000RemoveSerialHyphens()
 	case "dmsmanager":

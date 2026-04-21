@@ -116,6 +116,7 @@ var X509ExtKeyUsageMap = map[x509.ExtKeyUsage]string{
 	x509.ExtKeyUsageMicrosoftServerGatedCrypto:     "MicrosoftServerGatedCrypto",
 	x509.ExtKeyUsageNetscapeServerGatedCrypto:      "NetscapeServerGatedCrypto",
 	x509.ExtKeyUsageMicrosoftCommercialCodeSigning: "MicrosoftCommercialCodeSigning",
+	x509.ExtKeyUsageMicrosoftKernelCodeSigning:     "MicrosoftKernelCodeSigning",
 }
 
 func (p X509ExtKeyUsage) MarshalText() ([]byte, error) {

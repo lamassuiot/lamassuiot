@@ -548,6 +548,62 @@ func MigrationTest_CA_20251217120000_metadata_text_to_jsonb(t *testing.T, logger
 	assert.Equal(t, "value", keyValue)
 }
 
+func MigrationTest_CA_20260331120000_add_certificate_extensions(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	const serial = "37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79"
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id, is_ca)
+		VALUES ('37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '{}', '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', 'b0db9cc7-2cce-45be-8085-88f7aff40ca2', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUY5RENDQTl5Z0F3SUJBZ0lSQU85dFIvVGx2Y2pqZ1dkMFlCTEJEMGN3RFFZSktvWklodmNOQVFFTEJRQXcKSERFYU1CZ0dBMVVFQXhNUlJVTlRMVTFoYm5WbVlXTjBkWEpwYm1jd0hoY05NalF4TVRJMU1EazBOVFE0V2hjTgpNalV3T1RJeE1EazBOVFEwV2pBY01Sb3dHQVlEVlFRREV4RkZRMU10VFdGdWRXWmhZM1IxY21sdVp6Q0NBaUl3CkRRWUpLb1pJaHZjTkFRRUJCUUFEZ2dJUEFEQ0NBZ29DZ2dJQkFOQllQKytacmZNY2MzL1BiTXVVYjBVcklMMVEKb2Jtbm41TllWdXJkU1c2ZEhZMEF3ajQzbmhlTndtV3NPbGt5bmR3UGNmVWdpWnlsS1dpVzcxUlFsMGF1bWFZLworczFVcnhjQXhidFFCOGQ3c3dBd2xYZ0xoMk1XR3ppUm4wUjBuNDJkRDdxVFdZWXIwcFRnbkc1WG82LzV1ak5iCmlSVzZaWXA4ZzNuM1BCbWFhbFRRVmxmRWgzNHBIbFU5SThFUExUdmFvMnFXU01RSlY4WDM5Y1VDdjBib0RKVEwKa0daaWpxTVM0dEoyR3NRWHo4UE8yTk83UHlXVndLWlgvSE5tYTA1NWlZV0tzNi9GN2I3bEY3YkNEQVFMalVCdwphWldWOW00VmpwRWpCMEc0WTkzTm5VMFNqVUxzR2ZFYVRlblovVk5zMXBZZ3hJcHRXWFdtZUdBT3RJWi90bFJ0CmwyTitweTVZenFtQ2tYbjZxRlRpb3ZyN1huTjFWSkxRblJKMkhSZUxWVUJ6K21TWmMzSmRXOHd6QmgvWTVtYUgKK1RpZ0dyTnIrcFZVZi9vNTZ6ZS9pblAzWUUvdERoUG5FRk1PSVBCbGdyZktlcFRKOVd6dmtPWHNkb1hwR2RHYQp6QlIwNTl1N05uVFpEQzBsc3ByKzJWMTVGVVhIMXRyelg3Nmk4QSt5bVJRak45U2NhTWlhemlzWUdSU09XNVRTClhJZ0VkSVM0YXg4TWQ1Skd5TStFVVdyQ2pwaHRaamVlQzNvdjY0R25mSWdiL1lOTFNQUi9FeHhwekJwNjN4d3AKdS8wWnZaRTZVNVBNTExwNkF0RzkzY2h2NTFVdE1lVVAzYXlQaUF4OEhZTmp3L0djN2VHKzZ1cnhYMVFnakpHSQp1MWNqU3djTE00dFA4aXdMQWdNQkFBR2pnZ0V2TUlJQkt6QU9CZ05WSFE4QkFmOEVCQU1DQVpZd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0lHQ0NzR0FRVUZCd01CTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3TFFZRFZSME8KQkNZRUpEbGlaV1ZpWXpWaUxXSmhPR1F0Tkdaak1DMDVaVGszTFRVNE1qazVaRE13WVdVNVpqQXZCZ05WSFNNRQpLREFtZ0NRNVltVmxZbU0xWWkxaVlUaGtMVFJtWXpBdE9XVTVOeTAxT0RJNU9XUXpNR0ZsT1dZd053WUlLd1lCCkJRVUhBUUVFS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWoKYzNBd1VBWURWUjBmQkVrd1J6QkZvRU9nUVlZL2FIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dgpPV0psWldKak5XSXRZbUU0WkMwMFptTXdMVGxsT1RjdE5UZ3lPVGxrTXpCaFpUbG1NQTBHQ1NxR1NJYjNEUUVCCkN3VUFBNElDQVFDQ1pTOG5pRStxeEdBYjJjSVhVWW4rRHNJVGRwZXFnM3BQRU1EZU5DR29rUUY4cGcwbkpOdjcKZURmaTR3TEp2ZlBRK0lzNjNLYnU4dVBoanpYcnVrWUE3VWgyTmJRZnJHM1d3L3JDUGlJTkVZNktjNmltdnk1RApyK2NIbFJKYkEyaE9yNTd3Tnc0b2RrMERsdkdIbVN6M2hOWXFxcWZJcEYxMEYwdUNTNllOV1AvUHU1VFVaN2V4CkFPTjF2aWZMdFBGcGFnYkxPd3k5K3JicStHUkZET0ZSRjlzYzdBUHdoWVpUZTdHSnFNblZKbklPOU1Qd01idDEKMW1KRHNJTzlqTkhNVkVMbzBGWVRhOE05K29EWE1CaThzRWN5aER0ZlN1ZUU5bU9wWkhFck1Wb2s5aTd6Y2FObwp4OEFBZTNHRFU5MDB1SlB1Y0t3TmprVjZpL21FMk1maXBCYTMxV3NHcUdNbjY3MDBoSjJhS00wcjVIRnhhK3l4CnMzMVArQ1hCZjF4THBaYTBPY3ZTTFJuTzJtSFhnTTlzRGRsdW5WZkEzOGFoU2Zna1ZBK1BQU1EvTTFZTVUxT1YKRTIvdlNvUjR0elF4QU9wU3RjaUxGUFpxczcrY0ZJbzlKSk5aZnNNR2ZKempDbFBlRU91VFJ0YklmR0FEc1VzeQp0MmdtdDZMeDhSc2M1V0NXanNGMjFjR3FKZjB3TlJHcloyb20xTnlRcjhDZTdmQ1Y1dWY0dlNJMEZkVGU3cE5WCjNKKzJwa3ZDV05TVUdyNktmUEw2OGw1YnhiVWl0d294N0doV0dZT2IwaEp5b2V4VC92MmNiQys2WWNDUXZCSFUKeUR6bU1EZVFVQkVJeXhFRk96bE5uZlZxRnNQbmVJT2ZhbWNNaHd1VkdRSUhMdWhIK0gwdDVBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=', 'RSA', 4096, 'HIGH', 'ECS-Manufacturing', '', '', '', '', '', '2024-11-25 09:45:48+00', '2025-09-21 11:45:44+00', '0001-01-01 00:00:00+00', 'Unspecified', 'MANAGED', 'filesystem-1', '9beebc5b-ba8d-4fc0-9e97-58299d30ae9f', true);
+	`)
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	var result map[string]any
+	tx := con.Raw(`
+		SELECT
+			pg_typeof(extensions_key_usage)::text AS key_usage_type,
+			pg_typeof(extensions_extended_key_usage)::text AS extended_key_usage_type,
+			jsonb_exists(extensions_key_usage, 'DigitalSignature') AS has_digital_signature,
+			jsonb_exists(extensions_key_usage, 'DataEncipherment') AS has_data_encipherment,
+			jsonb_exists(extensions_key_usage, 'CertSign') AS has_cert_sign,
+			jsonb_exists(extensions_key_usage, 'CRLSign') AS has_crl_sign,
+			jsonb_exists(extensions_extended_key_usage, 'ClientAuth') AS has_client_auth,
+			jsonb_exists(extensions_extended_key_usage, 'ServerAuth') AS has_server_auth,
+			jsonb_array_length(extensions_extended_key_usage) AS extended_key_usage_length
+		FROM certificates
+		WHERE serial_number = ?
+	`, serial).Scan(&result)
+	if tx.Error != nil {
+		t.Fatalf("failed to select certificate extensions: %v", tx.Error)
+	}
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
+	}
+
+	assert.Equal(t, "jsonb", result["key_usage_type"])
+	assert.Equal(t, "jsonb", result["extended_key_usage_type"])
+	assert.Equal(t, true, result["has_digital_signature"])
+	assert.Equal(t, true, result["has_data_encipherment"])
+	assert.Equal(t, true, result["has_cert_sign"])
+	assert.Equal(t, true, result["has_crl_sign"])
+	assert.Equal(t, true, result["has_client_auth"])
+	assert.Equal(t, true, result["has_server_auth"])
+	assert.Equal(t, int32(2), result["extended_key_usage_length"])
+
+	var versionSchemaColumnCount int64
+	tx = con.Raw(`
+		SELECT COUNT(*)
+		FROM information_schema.columns
+		WHERE table_name = 'certificates'
+			AND column_name = 'version_schema'
+	`).Scan(&versionSchemaColumnCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to check version_schema column: %v", tx.Error)
+	}
+
+	assert.Equal(t, int64(0), versionSchemaColumnCount)
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -638,5 +694,12 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20251217120000_metadata_text_to_jsonb(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20251217120000_metadata_text_to_jsonb")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20260331120000_add_certificate_extensions(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260331120000_add_certificate_extensions")
 	}
 }

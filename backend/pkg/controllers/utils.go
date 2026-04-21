@@ -234,10 +234,13 @@ func parseFilterOperand(operand string, fieldType resources.FilterFieldType) res
 		}
 
 	case resources.StringArrayFilterFieldType:
-		if strings.Contains(operand, "ignorecase") {
+		switch operand {
+		case "ct_ic", "contains_ignorecase":
 			return resources.StringArrayContainsIgnoreCase
+		case "ct", "contains":
+			return resources.StringArrayContains
 		}
-		return resources.StringArrayContains
+		return resources.UnspecifiedFilter
 
 	case resources.DateFilterFieldType:
 		switch operand {

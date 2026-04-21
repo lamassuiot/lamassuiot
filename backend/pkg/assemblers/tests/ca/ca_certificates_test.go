@@ -307,6 +307,40 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 	return ca, cert, nil
 }
 
+func createCertificateWithExtensions(t *testing.T, caSDK services.CAService, caID string, commonName string, keyUsage x509.KeyUsage, extendedKeyUsage []x509.ExtKeyUsage) *models.Certificate {
+	t.Helper()
+
+	profileExtendedKeyUsage := make([]models.X509ExtKeyUsage, 0, len(extendedKeyUsage))
+	for _, usage := range extendedKeyUsage {
+		profileExtendedKeyUsage = append(profileExtendedKeyUsage, models.X509ExtKeyUsage(usage))
+	}
+
+	cert, err := caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+		CAID: caID,
+		KeySpec: services.CertificateKeySpec{
+			Type: models.KeyType(x509.RSA),
+			Bits: 2048,
+		},
+		Subject: models.Subject{CommonName: commonName},
+		IssuanceProfile: &models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(12 * time.Hour)},
+
+			HonorSubject: true,
+
+			HonorKeyUsage: false,
+			KeyUsage:      models.X509KeyUsage(keyUsage),
+
+			HonorExtendedKeyUsages: false,
+			ExtendedKeyUsages:      profileExtendedKeyUsage,
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create certificate %s: %s", commonName, err)
+	}
+
+	return cert
+}
+
 func TestGetCertificatesFilterBySubjectKeyID(t *testing.T) {
 	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
@@ -532,5 +566,131 @@ func TestGetCertificatesFilterBySubjectKeyIDNotInIgnoreCase(t *testing.T) {
 
 	if !foundCert3 {
 		t.Fatalf("expected to find cert3 with subject_key_id %s in not-in-ignorecase filtered results", cert3.SubjectKeyID)
+	}
+}
+
+func TestGetCertificatesFilterByExtensionKeyUsage(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("failed running BeforeEach: %s", err)
+	}
+
+	ca := createActiveCA(t, caTest.HttpCASDK)
+
+	cert1 := createCertificateWithExtensions(t, caTest.HttpCASDK, ca.ID, "ku-digital-signature", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+	cert2 := createCertificateWithExtensions(t, caTest.HttpCASDK, ca.ID, "ku-key-encipherment", x509.KeyUsageKeyEncipherment, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
+	cert3 := createCertificateWithExtensions(t, caTest.HttpCASDK, ca.ID, "ku-both", x509.KeyUsageDigitalSignature|x509.KeyUsageKeyEncipherment, []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning})
+
+	found := []*models.Certificate{}
+	qp := &resources.QueryParameters{
+		PageSize: 25,
+		Filters: []resources.FilterOption{
+			{
+				Field:           "extensions.key_usage",
+				Value:           "DigitalSignature",
+				FilterOperation: resources.StringArrayContains,
+			},
+		},
+	}
+
+	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+		ListInput: resources.ListInput[models.Certificate]{
+			QueryParameters: qp,
+			ExhaustiveRun:   true,
+			ApplyFunc: func(elem models.Certificate) {
+				found = append(found, &elem)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetCertificates returned error: %s", err)
+	}
+
+	if len(found) != 2 {
+		t.Fatalf("expected 2 certificates filtered by key usage, got %d", len(found))
+	}
+
+	foundSerials := map[string]bool{}
+	for _, cert := range found {
+		foundSerials[cert.SerialNumber] = true
+	}
+
+	if !foundSerials[cert1.SerialNumber] {
+		t.Fatalf("expected certificate %s to be returned when filtering by DigitalSignature", cert1.SerialNumber)
+	}
+	if !foundSerials[cert3.SerialNumber] {
+		t.Fatalf("expected certificate %s to be returned when filtering by DigitalSignature", cert3.SerialNumber)
+	}
+	if foundSerials[cert2.SerialNumber] {
+		t.Fatalf("did not expect certificate %s to be returned when filtering by DigitalSignature", cert2.SerialNumber)
+	}
+}
+
+func TestGetCertificatesFilterByExtensionExtendedKeyUsageIgnoreCase(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("failed running BeforeEach: %s", err)
+	}
+
+	ca := createActiveCA(t, caTest.HttpCASDK)
+
+	cert1 := createCertificateWithExtensions(t, caTest.HttpCASDK, ca.ID, "eku-client-auth", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+	cert2 := createCertificateWithExtensions(t, caTest.HttpCASDK, ca.ID, "eku-server-auth", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
+	cert3 := createCertificateWithExtensions(t, caTest.HttpCASDK, ca.ID, "eku-both", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageCodeSigning})
+
+	found := []*models.Certificate{}
+	qp := &resources.QueryParameters{
+		PageSize: 25,
+		Filters: []resources.FilterOption{
+			{
+				Field:           "extensions.extended_key_usage",
+				Value:           "clientauth",
+				FilterOperation: resources.StringArrayContainsIgnoreCase,
+			},
+		},
+	}
+
+	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+		ListInput: resources.ListInput[models.Certificate]{
+			QueryParameters: qp,
+			ExhaustiveRun:   true,
+			ApplyFunc: func(elem models.Certificate) {
+				found = append(found, &elem)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetCertificates returned error: %s", err)
+	}
+
+	if len(found) != 2 {
+		t.Fatalf("expected 2 certificates filtered by extended key usage, got %d", len(found))
+	}
+
+	foundSerials := map[string]bool{}
+	for _, cert := range found {
+		foundSerials[cert.SerialNumber] = true
+	}
+
+	if !foundSerials[cert1.SerialNumber] {
+		t.Fatalf("expected certificate %s to be returned when filtering by ClientAuth", cert1.SerialNumber)
+	}
+	if !foundSerials[cert3.SerialNumber] {
+		t.Fatalf("expected certificate %s to be returned when filtering by ClientAuth", cert3.SerialNumber)
+	}
+	if foundSerials[cert2.SerialNumber] {
+		t.Fatalf("did not expect certificate %s to be returned when filtering by ClientAuth", cert2.SerialNumber)
 	}
 }

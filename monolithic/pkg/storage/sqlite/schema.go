@@ -32,7 +32,7 @@ func initializeSchema(db *gorm.DB) error {
 		// - 20241223183344_unified_ca_models.sql: Renamed key_strength_meta_* to key_meta_*, changed types
 		// - 20250107164937_add_is_ca.sql: Added is_ca column
 		// - 20250226114600_ca_add_kids.go: Renamed key_id to subject_key_id, added authority_key_id and issuer_* columns
-		// - 20250704101200_add_version_schema.sql: Added version_schema column
+		// - 20260331120000_add_certificate_extensions.go: Added extension_* JSON columns and dropped version_schema
 		`CREATE TABLE IF NOT EXISTS certificates (
 			serial_number TEXT NOT NULL,
 			metadata TEXT NULL,
@@ -65,7 +65,8 @@ func initializeSchema(db *gorm.DB) error {
 			issuer_state TEXT NULL,
 			issuer_locality TEXT NULL,
 			is_ca INTEGER NULL,
-			version_schema TEXT NULL,
+			extensions_key_usage TEXT NOT NULL DEFAULT '[]',
+			extensions_extended_key_usage TEXT NOT NULL DEFAULT '[]',
 			PRIMARY KEY (serial_number)
 		)`,
 

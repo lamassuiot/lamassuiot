@@ -30,7 +30,6 @@ const (
 
 type Certificate struct {
 	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
-	VersionSchema       string                 `json:"version_schema"` // Indicates the lamassu schema when codifying the certificate. If some property is changed (added, removed, or changed), then it should change.
 	SubjectKeyID        string                 `json:"subject_key_id"`
 	AuthorityKeyID      string                 `json:"authority_key_id"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
@@ -40,6 +39,7 @@ type Certificate struct {
 	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
 	Issuer              Subject                `json:"issuer" gorm:"embedded;embeddedPrefix:issuer_"`
 	ValidFrom           time.Time              `json:"valid_from"`
+	Extensions          CertificateExtensions  `json:"extensions" gorm:"embedded;embeddedPrefix:extensions_"`
 	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
 	ValidTo             time.Time              `json:"valid_to"`
 	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
@@ -47,6 +47,16 @@ type Certificate struct {
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
 	IsCA                bool                   `json:"is_ca"`
+}
+
+type CertificateExtensions struct {
+	KeyUsage         X509KeyUsage      `json:"key_usage" gorm:"type:jsonb;serializer:json"`
+	ExtendedKeyUsage []X509ExtKeyUsage `json:"extended_key_usage" gorm:"type:jsonb;serializer:json"`
+}
+
+type MetadataResourceLink struct {
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
 }
 
 type Validity struct {
