@@ -3503,7 +3503,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("certificate should be revoked")
 				}
 
-				if crt1.RevocationReason != ocsp.Superseded {
+				if crt1.RevocationReason == nil || *crt1.RevocationReason != models.RevocationReason(ocsp.Superseded) {
 					t.Fatalf("certificate should be revoked with reason superseded")
 				}
 
