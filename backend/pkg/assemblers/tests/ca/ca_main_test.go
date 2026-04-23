@@ -6560,7 +6560,12 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 				var updatedCADeltas models.CAMetadataMonitoringExpirationDeltas
 				helpers.GetMetadataToStruct(updatedCA.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &updatedCADeltas)
 				for _, definedDelta := range updatedCADeltas {
-					if definedDelta.Delta > models.TimeDuration(caExpFromNow) {
+					// Add a 3-second grace period beyond the delta threshold before
+					// asserting the trigger. The monitoring job runs every 1s and the
+					// test loop also ticks every 1s; at the exact second the threshold
+					// is first crossed both may run concurrently, causing the test to
+					// read triggered=false before the monitoring's DB write completes.
+					if time.Duration(definedDelta.Delta) > 3*time.Second+caExpFromNow {
 						if definedDelta.Triggered == false {
 							t.Fatalf("delta '%s' should've been triggered by now. CA expires in %ds and delta was defined with %ds", definedDelta.Name, int(caExpFromNow.Seconds()), int(time.Duration(definedDelta.Delta).Seconds()))
 						} else {
