@@ -6565,7 +6565,7 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 					// test loop also ticks every 1s; at the exact second the threshold
 					// is first crossed both may run concurrently, causing the test to
 					// read triggered=false before the monitoring's DB write completes.
-					if time.Duration(definedDelta.Delta) > caExpFromNow+3*time.Second {
+					if time.Duration(definedDelta.Delta) > 3*time.Second+caExpFromNow {
 						if definedDelta.Triggered == false {
 							t.Fatalf("delta '%s' should've been triggered by now. CA expires in %ds and delta was defined with %ds", definedDelta.Name, int(caExpFromNow.Seconds()), int(time.Duration(definedDelta.Delta).Seconds()))
 						} else {
