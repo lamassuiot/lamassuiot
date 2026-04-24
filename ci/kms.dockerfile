@@ -32,9 +32,12 @@ RUN apt-get update && \
     apt-get --no-install-recommends install -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev opensc ca-certificates && \
     apt-get clean
 
+# -DCMAKE_POLICY_VERSION_MINIMUM=3.5 lets CMake 4.x configure pkcs11-proxy's
+# old CMakeLists.txt, and -Wno-error=incompatible-pointer-types keeps GCC 15
+# pointer type diagnostics as warnings instead of build-stopping errors.
 RUN git clone https://github.com/SUNET/pkcs11-proxy && \
     cd pkcs11-proxy && \
-    cmake . && make && make install
+    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_FLAGS="-Wno-error=incompatible-pointer-types" . && make && make install
 
 # Clean build artifacts
 RUN rm -rf /pkcs11-proxy
