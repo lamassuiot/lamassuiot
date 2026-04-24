@@ -24,7 +24,7 @@ RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
     go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o kms backend/cmd/kms/main.go 
 
 # Alpine and scartch dont work for this image due to non corss compileable HSM library
-FROM ubuntu:20.04
+FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Dependencies for pkcs11-proxy and opensc for pkcs11-tool

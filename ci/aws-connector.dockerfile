@@ -24,7 +24,7 @@ RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
     go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o aws connectors/awsiot/cmd/main.go 
 
 # cannot use scratch becaue of the ca-certificates & hosntame -i command used by the service
-FROM ubuntu:20.04
+FROM ubuntu:26.04
 RUN apt-get update && apt-get --no-install-recommends install -y ca-certificates \
     && apt-get clean
 

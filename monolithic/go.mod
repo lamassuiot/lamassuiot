@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/monolithic/v3
 
-go 1.25.0
+go 1.26.2
 
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 
