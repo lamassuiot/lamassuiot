@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/backend/v3
 
-go 1.24.0
+go 1.26.2
 
 
 

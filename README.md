@@ -44,7 +44,7 @@ There are 3 main repositories to consider when developing Lamassu
 
 ### Prerequisites
 
-- [Go 1.24+](https://go.dev/doc/install)
+- [Go 1.26+](https://go.dev/doc/install)
 - Docker (for running dependencies such as PostgreSQL, Vault, or message brokers)
 - Kubernetes cluster (optional, recommended for production deployments)
 

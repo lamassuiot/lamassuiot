@@ -308,7 +308,7 @@ Use `monolithic/cmd/development/main.go` for local development:
 ### Dockerfile Pattern
 Each service has a Dockerfile in `ci/` with multi-stage build:
 ```dockerfile
-# Build stage: golang:1.24.3-bullseye with workspace context
+# Build stage: golang:1.26.2-bookworm with workspace context
 COPY go.work go.work
 COPY {all modules} ...
 RUN go work vendor && go build -ldflags="-X main.version=..."
