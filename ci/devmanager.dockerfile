@@ -1,4 +1,4 @@
-FROM golang:1.24.3-bullseye
+FROM golang:1.26.2-bookworm
 WORKDIR /app
 
 COPY core core
@@ -23,16 +23,12 @@ ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
     go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o device-manager backend/cmd/device-manager/main.go 
 
-FROM ubuntu:20.04
+FROM ubuntu:26.04
 
-ARG USERNAME=lamassu
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
-RUN groupadd --gid "$USER_GID" "$USERNAME" \
-    && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" 
-
-USER $USERNAME
 
 COPY --from=0 /app/device-manager /
+USER lamassu
 CMD ["/device-manager"]

@@ -1,4 +1,4 @@
-FROM golang:1.24.3-bullseye
+FROM golang:1.26.2-bookworm
 WORKDIR /app
 
 COPY core core
@@ -19,16 +19,12 @@ RUN go work vendor
 
 RUN go build -mod vendor -o monolithic monolithic/cmd/development/main.go 
 
-FROM ubuntu:20.04
+FROM ubuntu:26.04
 
-ARG USERNAME=lamassu
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
-RUN groupadd --gid "$USER_GID" "$USERNAME" \
-    && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" 
-
-USER $USERNAME
 
 COPY --from=0 /app/monolithic /
+USER lamassu
 CMD ["/monolithic"]

@@ -1,4 +1,4 @@
-FROM golang:1.24.3-bullseye AS builder
+FROM golang:1.26.2-bookworm AS builder
 WORKDIR /app
 
 COPY core core

@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3
 
-go 1.24.0
+go 1.26.2
 
 require (
 	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0

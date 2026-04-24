@@ -1,4 +1,4 @@
-FROM golang:1.24.3-bullseye
+FROM golang:1.26.2-bookworm
 WORKDIR /app
 
 COPY core core
@@ -24,7 +24,7 @@ RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
     go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o kms backend/cmd/kms/main.go 
 
 # Alpine and scartch dont work for this image due to non corss compileable HSM library
-FROM ubuntu:20.04
+FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Dependencies for pkcs11-proxy and opensc for pkcs11-tool
@@ -32,9 +32,12 @@ RUN apt-get update && \
     apt-get --no-install-recommends install -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev opensc ca-certificates && \
     apt-get clean
 
+# -DCMAKE_POLICY_VERSION_MINIMUM=3.5 lets CMake 4.x configure pkcs11-proxy's
+# old CMakeLists.txt, and -Wno-error=incompatible-pointer-types keeps GCC 15
+# pointer type diagnostics as warnings instead of build-stopping errors.
 RUN git clone https://github.com/SUNET/pkcs11-proxy && \
     cd pkcs11-proxy && \
-    cmake . && make && make install
+    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_FLAGS="-Wno-error=incompatible-pointer-types" . && make && make install
 
 # Clean build artifacts
 RUN rm -rf /pkcs11-proxy
@@ -43,14 +46,9 @@ RUN apt-get remove -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-de
     apt-get autoremove -y && \
     apt-get clean
 
-ARG USERNAME=lamassu
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-
-RUN groupadd --gid "$USER_GID" "$USERNAME" \
-    && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" 
-
-USER $USERNAME
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
 COPY --from=0 /app/kms /
+USER lamassu
 CMD ["/kms"]
