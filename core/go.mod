@@ -13,6 +13,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.40.0
+	go.opentelemetry.io/otel/log v0.16.0
 	go.opentelemetry.io/otel/trace v1.40.0
 	gocloud.dev v0.42.0
 	golang.org/x/crypto v0.47.0
@@ -20,14 +21,14 @@ require (
 )
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.41.6 // indirect
+	github.com/aws/smithy-go v1.25.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	go.opentelemetry.io/otel/log v0.16.0 // indirect
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.80.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
