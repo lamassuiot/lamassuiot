@@ -5,9 +5,23 @@ on:
 
 jobs:
   build_docker_image:
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
-        service: [kms, ca, devmanager, dmsmanager, va, alerts, aws-connector, lamassu-db-migration]
+        service:
+          [
+            kms,
+            ca,
+            devmanager,
+            dmsmanager,
+            va,
+            alerts,
+            aws-connector,
+            lamassu-db-migration,
+            monolithic,
+          ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
     environment: release
