@@ -31,7 +31,6 @@ RUN apt-get update && apt-get --no-install-recommends install -y ca-certificates
 RUN groupadd --system lamassu && \
     useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
-
 COPY --from=0 /app/aws /
 USER lamassu
 CMD ["/aws"]

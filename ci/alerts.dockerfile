@@ -25,27 +25,12 @@ RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
 
 FROM ubuntu:26.04
 
-ARG USERNAME=lamassu
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-
 RUN apt-get update && apt-get --no-install-recommends install -y ca-certificates \
     && apt-get clean
-RUN set -eux; \
-    if getent group "$USER_GID" >/dev/null; then \
-        existing_group="$(getent group "$USER_GID" | cut -d: -f1)"; \
-        [ "$existing_group" = "$USERNAME" ] || groupmod -n "$USERNAME" "$existing_group"; \
-    else \
-        groupadd --gid "$USER_GID" "$USERNAME"; \
-    fi; \
-    if getent passwd "$USER_UID" >/dev/null; then \
-        existing_user="$(getent passwd "$USER_UID" | cut -d: -f1)"; \
-        [ "$existing_user" = "$USERNAME" ] || usermod -l "$USERNAME" -d "/home/$USERNAME" -m "$existing_user"; \
-        usermod -g "$USER_GID" "$USERNAME"; \
-    else \
-        useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME"; \
-    fi
 
-USER $USERNAME
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
+
 COPY --from=0 /app/alerts /
+USER lamassu
 CMD ["/alerts"]
