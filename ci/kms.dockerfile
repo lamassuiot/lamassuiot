@@ -46,7 +46,9 @@ RUN apt-get remove -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-de
     apt-get autoremove -y && \
     apt-get clean
 
-
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
 COPY --from=0 /app/kms /
+USER lamassu
 CMD ["/kms"]

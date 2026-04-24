@@ -21,7 +21,10 @@ RUN go build -mod vendor -o monolithic monolithic/cmd/development/main.go
 
 FROM ubuntu:26.04
 
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
 
 COPY --from=0 /app/monolithic /
+USER lamassu
 CMD ["/monolithic"]

@@ -25,7 +25,10 @@ RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
 
 FROM ubuntu:26.04
 
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
 
 COPY --from=0 /app/device-manager /
+USER lamassu
 CMD ["/device-manager"]

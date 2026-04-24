@@ -28,7 +28,10 @@ FROM ubuntu:26.04
 RUN apt-get update && apt-get --no-install-recommends install -y ca-certificates \
     && apt-get clean
 
+RUN groupadd --system lamassu && \
+    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
 
 COPY --from=0 /app/aws /
+USER lamassu
 CMD ["/aws"]
