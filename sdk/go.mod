@@ -27,6 +27,7 @@ require (
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/time v0.15.0 // indirect
 )
 
 require (
