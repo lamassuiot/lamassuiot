@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -44,7 +45,7 @@ func main() {
 
 	logger := helpers.SetupLogger(conf.LogLevel, "Migration", "ca-to-kms")
 	if *dryRun {
-		logger.Info("running in dry-run mode — no writes will occur")
+		logger.Info("running in DRY-RUN mode — NO WRITES will occur")
 	}
 
 	ctx := context.Background()
@@ -69,10 +70,16 @@ func main() {
 		log.Fatalf("could not get KMS storage: %s", err)
 	}
 
-	keyMap := collectKeys(ctx, logger, caStorage)
+	keyMap, err := collectKeys(ctx, logger, caStorage)
+	if err != nil {
+		log.Fatalf("could not collect keys from CA storage: %s", err)
+	}
 	logger.Infof("found %d unique keys across CA certificates", len(keyMap))
 
-	runMigration(ctx, logger, kmsStorage, keyMap, *dryRun)
+	_, _, failed := runMigration(ctx, logger, kmsStorage, keyMap, *dryRun)
+	if failed > 0 {
+		os.Exit(1)
+	}
 }
 
 // keyEntry accumulates all data needed to build a models.Key record.
@@ -88,7 +95,7 @@ type keyEntry struct {
 }
 
 // collectKeys scans MANAGED and IMPORTED_WITH_KEY CA certs and groups them by key.
-func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACertificatesRepo) map[string]*keyEntry {
+func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACertificatesRepo) (map[string]*keyEntry, error) {
 	keyMap := map[string]*keyEntry{}
 
 	collect := func(ca models.CACertificate) {
@@ -137,16 +144,16 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACer
 			ApplyFunc:     collect,
 		})
 		if err != nil {
-			log.Fatalf("could not list CA certs of type %s: %s", certType, err)
+			return nil, fmt.Errorf("could not list CA certs of type %s: %w", certType, err)
 		}
 	}
 
-	return keyMap
+	return keyMap, nil
 }
 
 // runMigration inserts missing keys into KMS storage (or logs what it would do in dry-run mode).
-func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMSKeysRepo, keyMap map[string]*keyEntry, dryRun bool) {
-	inserted, skipped, failed := 0, 0, 0
+// It returns the number of inserted (or would-insert in dry-run), skipped, and failed keys.
+func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMSKeysRepo, keyMap map[string]*keyEntry, dryRun bool) (inserted, skipped, failed int) {
 
 	for _, entry := range keyMap {
 		exists, _, err := kmsStorage.SelectExistsByKeyID(ctx, entry.keyID)
@@ -206,8 +213,5 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 		action = "would insert"
 	}
 	logger.Infof("migration complete: %s=%d skipped=%d failed=%d", action, inserted, skipped, failed)
-
-	if failed > 0 {
-		os.Exit(1)
-	}
+	return
 }
