@@ -197,16 +197,12 @@ func (s *GormPrincipalStore) Has(_ context.Context, principalID, policyID string
 	return count > 0, nil
 }
 
-func (s *GormPrincipalStore) ListForPrincipal(_ context.Context, principalID string) ([]string, error) {
+func (s *GormPrincipalStore) ListForPrincipal(_ context.Context, principalID string) ([]models.PrincipalPolicy, error) {
 	var rows []models.PrincipalPolicy
 	if err := s.db.Where("principal_id = ?", principalID).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list grants for principal: %w", err)
 	}
-	ids := make([]string, len(rows))
-	for i, r := range rows {
-		ids[i] = r.PolicyID
-	}
-	return ids, nil
+	return rows, nil
 }
 
 func (s *GormPrincipalStore) ListForPolicy(_ context.Context, policyID string) ([]*models.Principal, error) {

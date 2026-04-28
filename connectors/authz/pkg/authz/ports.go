@@ -28,7 +28,7 @@ type GrantStore interface {
 	GrantBatch(ctx context.Context, principalID string, policyIDs []string, grantedBy string) error
 	RevokeBatch(ctx context.Context, principalID string, policyIDs []string) error
 	Has(ctx context.Context, principalID, policyID string) (bool, error)
-	ListForPrincipal(ctx context.Context, principalID string) ([]string, error)
+	ListForPrincipal(ctx context.Context, principalID string) ([]models.PrincipalPolicy, error)
 	ListForPolicy(ctx context.Context, policyID string) ([]*models.Principal, error)
 	CountForPrincipal(ctx context.Context, principalID string) (int64, error)
 	CountForPolicy(ctx context.Context, policyID string) (int64, error)

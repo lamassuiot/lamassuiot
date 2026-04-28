@@ -86,7 +86,7 @@ func (m *PrincipalManager) HasPolicy(principalID, policyID string) (bool, error)
 	return m.store.Has(context.Background(), principalID, policyID)
 }
 
-func (m *PrincipalManager) GetPrincipalPolicies(principalID string) ([]string, error) {
+func (m *PrincipalManager) GetPrincipalPolicies(principalID string) ([]models.PrincipalPolicy, error) {
 	return m.store.ListForPrincipal(context.Background(), principalID)
 }
 
