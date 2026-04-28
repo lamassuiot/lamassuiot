@@ -281,7 +281,7 @@ func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 	id := c.Param("id")
 
-	policyIDs, err := ctrl.manager.GetPrincipalPolicies(id)
+	grants, err := ctrl.manager.GetPrincipalPolicies(id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to get policies",
@@ -290,13 +290,13 @@ func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 		return
 	}
 
-	// Convert to response format
-	policies := make([]dto.PrincipalPolicyResponse, len(policyIDs))
-	for i, policyID := range policyIDs {
+	policies := make([]dto.PrincipalPolicyResponse, len(grants))
+	for i, g := range grants {
 		policies[i] = dto.PrincipalPolicyResponse{
 			PrincipalID: id,
-			PolicyID:    policyID,
-			// TODO: Fetch additional details if needed
+			PolicyID:    g.PolicyID,
+			GrantedAt:   g.GrantedAt,
+			GrantedBy:   g.GrantedBy,
 		}
 	}
 

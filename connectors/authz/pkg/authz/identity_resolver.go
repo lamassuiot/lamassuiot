@@ -36,17 +36,17 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 
 	registry := NewPolicyRegistry()
 	for _, pid := range principalIDs {
-		policyIDs, err := r.grants.ListForPrincipal(ctx, pid)
+		grants, err := r.grants.ListForPrincipal(ctx, pid)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get policies for principal %s: %w", pid, err)
 		}
-		for _, id := range policyIDs {
-			policy, err := r.policies.GetPolicy(ctx, id)
+		for _, g := range grants {
+			policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
 			if err != nil {
-				return nil, nil, fmt.Errorf("load policy %s: %w", id, err)
+				return nil, nil, fmt.Errorf("load policy %s: %w", g.PolicyID, err)
 			}
 			if err := registry.AddPolicy(policy); err != nil {
-				return nil, nil, fmt.Errorf("register policy %s: %w", id, err)
+				return nil, nil, fmt.Errorf("register policy %s: %w", g.PolicyID, err)
 			}
 		}
 	}
@@ -56,19 +56,19 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 // GetPoliciesForPrincipal loads policies for a single known principal ID and returns
 // a populated PolicyRegistry. Used by the by-ID authorization path (Authorize, GetFilter).
 func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principalID string) (*PolicyRegistry, error) {
-	policyIDs, err := r.grants.ListForPrincipal(ctx, principalID)
+	grants, err := r.grants.ListForPrincipal(ctx, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("get policies for principal %s: %w", principalID, err)
 	}
 
 	registry := NewPolicyRegistry()
-	for _, id := range policyIDs {
-		policy, err := r.policies.GetPolicy(ctx, id)
+	for _, g := range grants {
+		policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
 		if err != nil {
-			return nil, fmt.Errorf("load policy %s: %w", id, err)
+			return nil, fmt.Errorf("load policy %s: %w", g.PolicyID, err)
 		}
 		if err := registry.AddPolicy(policy); err != nil {
-			return nil, fmt.Errorf("register policy %s: %w", id, err)
+			return nil, fmt.Errorf("register policy %s: %w", g.PolicyID, err)
 		}
 	}
 	return registry, nil

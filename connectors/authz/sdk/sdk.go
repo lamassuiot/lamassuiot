@@ -149,7 +149,13 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	if resp.StatusCode >= 400 {
 		var errResp dto.ErrorResponse
 		if err := json.Unmarshal(respBody, &errResp); err != nil {
-			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+			return &APIError{
+				StatusCode: resp.StatusCode,
+				Message:    string(respBody),
+			}
+		}
+		if errResp.Error == "" {
+			errResp.Error = string(respBody)
 		}
 		return &APIError{
 			StatusCode: resp.StatusCode,
@@ -181,6 +187,13 @@ func (e *APIError) Error() string {
 		return fmt.Sprintf("API error (HTTP %d): %s - %s", e.StatusCode, e.Message, string(detailsJSON))
 	}
 	return fmt.Sprintf("API error (HTTP %d): %s", e.StatusCode, e.Message)
+}
+
+func (e *APIError) HTTPStatusCode() int {
+	if e == nil {
+		return 0
+	}
+	return e.StatusCode
 }
 
 // AuthzService handles authorization operations

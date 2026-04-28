@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -61,7 +63,7 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 		authorized, matchedPrincipals, err := m.engine.MatchAndAuthorize(authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKey)
 		if err != nil {
 			m.logger.Errorf("error in MatchAndAuthorize: %v", err)
-			c.AbortWithStatusJSON(500, gin.H{"error": "Authorization service error", "details": err.Error()})
+			abortWithAuthzServiceError(c, err)
 			return
 		}
 
@@ -110,7 +112,7 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 		authorizedList, matchedPrincipals, err := s.engine.MatchAndGetFilter(authType, authMaterial, s.namespace, s.schemaName, s.entityType)
 		if err != nil {
 			s.logger.Errorf("error in MatchAndGetFilter: %v", err)
-			c.AbortWithStatusJSON(500, gin.H{"error": "Authorization service error", "details": err.Error()})
+			abortWithAuthzServiceError(c, err)
 			return
 		}
 
@@ -124,6 +126,31 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 		c.Set("matched_principals", matchedPrincipals)
 		c.Next()
 	}
+}
+
+type httpStatusCoder interface {
+	HTTPStatusCode() int
+}
+
+func abortWithAuthzServiceError(c *gin.Context, err error) {
+	if status, ok := authzServiceStatus(err); ok && status == http.StatusUnauthorized {
+		c.AbortWithStatusJSON(status, gin.H{"error": "Authorization service error", "details": err.Error()})
+		return
+	}
+
+	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Authorization service error", "details": err.Error()})
+}
+
+func authzServiceStatus(err error) (int, bool) {
+	var statusErr httpStatusCoder
+	if errors.As(err, &statusErr) {
+		status := statusErr.HTTPStatusCode()
+		if status != 0 {
+			return status, true
+		}
+	}
+
+	return 0, false
 }
 
 func extractAuthInputs(c *gin.Context) (string, string, error) {
