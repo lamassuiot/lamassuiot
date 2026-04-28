@@ -1,4 +1,4 @@
-package main
+package catokms
 
 import (
 	"context"
@@ -282,6 +282,26 @@ func newECDSACACert(t *testing.T, id, serial, engineID string, certType models.C
 	return makeCACert(t, id, serial, engineID, certType, key.Public(), curve.Params().BitSize, models.KeyType(x509.ECDSA), cn, validFrom)
 }
 
+// newKeyEntryFromRSA builds a keyEntry from a freshly generated RSA key.
+func newKeyEntryFromRSA(t *testing.T, engineID, serial, cn string) *keyEntry {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID := keyIDFromPub(t, key.Public())
+	return &keyEntry{
+		engineID:   engineID,
+		keyID:      keyID,
+		algorithm:  "RSA",
+		size:       2048,
+		publicKey:  pubKeyB64PEM(t, key.Public()),
+		name:       cn,
+		creationTS: time.Now(),
+		serials:    []string{serial},
+	}
+}
+
 // ---------------------------------------------------------------------------
 // collectKeys tests
 // ---------------------------------------------------------------------------
@@ -333,7 +353,6 @@ func TestCollectKeys_ManagedCert(t *testing.T) {
 	if entry.publicKey == "" {
 		t.Error("publicKey should not be empty")
 	}
-	// publicKey should decode to valid base64-encoded PEM
 	raw, err2 := base64.StdEncoding.DecodeString(entry.publicKey)
 	if err2 != nil {
 		t.Errorf("publicKey is not valid base64: %s", err2)
@@ -463,26 +482,6 @@ func TestCollectKeys_MixedTypes_OnlyManagedAndImportedWithKey(t *testing.T) {
 // runMigration tests
 // ---------------------------------------------------------------------------
 
-// newKeyEntryFromRSA builds a keyEntry from a freshly generated RSA key.
-func newKeyEntryFromRSA(t *testing.T, engineID, serial, cn string) *keyEntry {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyID := keyIDFromPub(t, key.Public())
-	return &keyEntry{
-		engineID:   engineID,
-		keyID:      keyID,
-		algorithm:  "RSA",
-		size:       2048,
-		publicKey:  pubKeyB64PEM(t, key.Public()),
-		name:       cn,
-		creationTS: time.Now(),
-		serials:    []string{serial},
-	}
-}
-
 func TestRunMigration_InsertsNewKey(t *testing.T) {
 	entry := newKeyEntryFromRSA(t, "engine-a", "serial-1", "MyCA")
 	kms := newMockKMSStorage()
@@ -602,7 +601,6 @@ func TestRunMigration_Mixed_NewExistingFailed(t *testing.T) {
 	inner := newMockKMSStorage()
 	inner.existing[existingEntry.keyID] = &models.Key{KeyID: existingEntry.keyID}
 
-	// Succeed the first new-key insert, fail all subsequent ones.
 	kms := &controlledKMSStorage{inner: inner, failAfter: 1}
 
 	keyMap := map[string]*keyEntry{
@@ -684,15 +682,58 @@ func TestRunMigration_Idempotent_SecondRunSkipsAll(t *testing.T) {
 
 	kms := newMockKMSStorage()
 
-	// First run: both keys are new.
 	ins, skip, fail := runMigration(context.Background(), silentLogger(), kms, keyMap, false)
 	if ins != 2 || skip != 0 || fail != 0 {
 		t.Errorf("first run: ins=%d skip=%d fail=%d, want 2/0/0", ins, skip, fail)
 	}
 
-	// Second run: both keys now exist.
 	ins, skip, fail = runMigration(context.Background(), silentLogger(), kms, keyMap, false)
 	if ins != 0 || skip != 2 || fail != 0 {
 		t.Errorf("second run: ins=%d skip=%d fail=%d, want 0/2/0", ins, skip, fail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Migrate (public API) tests
+// ---------------------------------------------------------------------------
+
+func TestMigrate_ReturnsResultStruct(t *testing.T) {
+	ca := newRSACACert(t, "ca-1", "serial-1", "engine-a", models.CertificateTypeManaged, 2048, "MyCA", time.Now())
+	caStore := &mockCACertStorage{certs: []models.CACertificate{ca}}
+	kms := newMockKMSStorage()
+
+	result, err := Migrate(context.Background(), silentLogger(), caStore, kms, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if result.Inserted != 1 || result.Skipped != 0 || result.Failed != 0 {
+		t.Errorf("result: %+v, want {1 0 0}", result)
+	}
+}
+
+func TestMigrate_DryRun_ReturnsResultWithoutWriting(t *testing.T) {
+	ca := newRSACACert(t, "ca-1", "serial-1", "engine-a", models.CertificateTypeManaged, 2048, "MyCA", time.Now())
+	caStore := &mockCACertStorage{certs: []models.CACertificate{ca}}
+	kms := newMockKMSStorage()
+
+	result, err := Migrate(context.Background(), silentLogger(), caStore, kms, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if result.Inserted != 1 {
+		t.Errorf("dry-run inserted count: got %d, want 1", result.Inserted)
+	}
+	if len(kms.inserted) != 0 {
+		t.Error("dry-run must not write to storage")
+	}
+}
+
+func TestMigrate_CAStorageError_ReturnsError(t *testing.T) {
+	caStore := &mockCACertStorage{listErr: errors.New("db failure")}
+	kms := newMockKMSStorage()
+
+	_, err := Migrate(context.Background(), silentLogger(), caStore, kms, false)
+	if err == nil {
+		t.Fatal("expected error from CA storage failure, got nil")
 	}
 }
