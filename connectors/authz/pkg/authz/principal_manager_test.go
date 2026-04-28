@@ -236,10 +236,12 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 	assert.True(t, hasPolicy)
 
 	// Get policies
-	policyIDs, err := pm.GetPrincipalPolicies("user-1")
+	grants, err := pm.GetPrincipalPolicies("user-1")
 	require.NoError(t, err)
-	assert.Len(t, policyIDs, 1)
-	assert.Equal(t, "policy-iot-admin", policyIDs[0])
+	assert.Len(t, grants, 1)
+	assert.Equal(t, "policy-iot-admin", grants[0].PolicyID)
+	assert.Equal(t, "admin", grants[0].GrantedBy)
+	assert.False(t, grants[0].GrantedAt.IsZero())
 }
 
 func TestPrincipalManager_RevokePolicy(t *testing.T) {
