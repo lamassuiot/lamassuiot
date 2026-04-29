@@ -61,7 +61,7 @@ func addFileOutput(entry *logrus.Entry, fileWriter io.Writer) {
 		return
 	}
 	entry.Logger.SetOutput(io.MultiWriter(entry.Logger.Out, fileWriter))
-	entry.Logger.SetFormatter(&logrus.JSONFormatter{})
+	entry.Logger.SetFormatter(&OrderedJSONFormatter{FieldOrder: authzFieldOrder})
 }
 
 func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {

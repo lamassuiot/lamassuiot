@@ -346,6 +346,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
 
 		if conf.AuthzConfig != nil {
+			conf.AuthzConfig.Debug = true
+			conf.AuthzConfig.LogFile = "/home/ubuntu/dev/lamassu/lamassuiot/authz.log"
 			authzPort, err := authzapi.AssembleAuthzServiceWithHTTPServer(*conf.AuthzConfig)
 			if err != nil {
 				return -1, -1, fmt.Errorf("could not assemble Authz Service: %s", err)
