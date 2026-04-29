@@ -26,9 +26,7 @@ func NewRemoteEngine(client *Client) core.AuthzEngine {
 
 // Authorize checks if a principal is authorized to perform an action on an entity
 // by forwarding the request to the remote authz service
-func (r *RemoteEngine) Authorize(principalID, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, error) {
-	ctx := context.Background()
-
+func (r *RemoteEngine) Authorize(ctx context.Context, principalID, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, error) {
 	req := &dto.AuthorizeRequest{
 		PrincipalID: principalID,
 		Namespace:   namespace,
@@ -48,9 +46,7 @@ func (r *RemoteEngine) Authorize(principalID, namespace, schemaName, action, ent
 
 // GetFilter retrieves a SQL filter for list operations
 // by forwarding the request to the remote authz service
-func (r *RemoteEngine) GetFilter(principalID, namespace, schemaName, entityType string) (string, error) {
-	ctx := context.Background()
-
+func (r *RemoteEngine) GetFilter(ctx context.Context, principalID, namespace, schemaName, entityType string) (string, error) {
 	req := &dto.GetFilterRequest{
 		PrincipalID: principalID,
 		Namespace:   namespace,
@@ -69,9 +65,7 @@ func (r *RemoteEngine) GetFilter(principalID, namespace, schemaName, entityType 
 
 // MatchAndAuthorize checks authorization using authentication material
 // to automatically match and authorize principal(s)
-func (r *RemoteEngine) MatchAndAuthorize(authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, []string, error) {
-	ctx := context.Background()
-
+func (r *RemoteEngine) MatchAndAuthorize(ctx context.Context, authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, []string, error) {
 	req := &dto.MatchAndAuthorizeRequest{
 		AuthMaterial: authMaterial,
 		AuthType:     authType,
@@ -92,9 +86,7 @@ func (r *RemoteEngine) MatchAndAuthorize(authType, authMaterial, namespace, sche
 
 // MatchAndGetFilter retrieves a SQL filter using authentication material
 // to automatically match principal(s) and generate the appropriate filter
-func (r *RemoteEngine) MatchAndGetFilter(authType, authMaterial, namespace, schemaName, entityType string) (string, []string, error) {
-	ctx := context.Background()
-
+func (r *RemoteEngine) MatchAndGetFilter(ctx context.Context, authType, authMaterial, namespace, schemaName, entityType string) (string, []string, error) {
 	req := &dto.MatchAndGetFilterRequest{
 		AuthMaterial: authMaterial,
 		AuthType:     authType,

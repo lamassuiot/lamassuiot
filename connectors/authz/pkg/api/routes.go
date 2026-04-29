@@ -1,8 +1,6 @@
 package api
 
 import (
-	"fmt"
-
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/authz"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
@@ -12,19 +10,19 @@ import (
 // SetupRoutes configures all HTTP routes
 func NewAuthzRoutes(router *gin.RouterGroup, principalManager *authz.PrincipalManager, engine *authz.Engine, policyManager *authz.PolicyManager, resolver *authz.IdentityResolver, logger *logrus.Entry) {
 	// Controllers
-	authzCtrl := NewAuthzController(engine, resolver)
+	authzCtrl := NewAuthzController(engine, resolver, logger)
 	principalCtrl := NewPrincipalController(principalManager)
 	schemaCtrl := NewSchemaController(engine)
 	policyCtrl := NewPolicyController(policyManager, principalManager)
-	capabilitiesCtrl := NewCapabilitiesController(engine, principalManager, policyManager, resolver)
+	capabilitiesCtrl := NewCapabilitiesController(engine, principalManager, policyManager, resolver, logger)
 
-	svc := authz.NewAuthzService(engine, principalManager, policyManager)
+	svc := authz.NewAuthzService(engine, principalManager, policyManager, authz.WithServiceLogger(logger))
 
 	authzMwPrincipals := middleware.NewSimpleAuthzMiddleware(svc, "authz", "public", "principal", logger)
 	authzMwPolicies := middleware.NewSimpleAuthzMiddleware(svc, "authz", "public", "policy", logger)
 
-	fmt.Printf("Setting up routes with authz middleware: %v\n", authzMwPrincipals)
-	fmt.Printf("Setting up routes with authz middleware: %v\n", authzMwPolicies)
+	_ = authzMwPrincipals
+	_ = authzMwPolicies
 
 	// API v1
 	v1 := router.Group("/v1")

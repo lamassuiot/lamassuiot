@@ -70,7 +70,7 @@ func TestGetGlobalCapabilities_PolicyWithGlobalActions(t *testing.T) {
 	registry := NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(registry)
+	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	// Only global actions should be returned.
@@ -109,7 +109,7 @@ func TestGetGlobalCapabilities_PolicyWithOnlyAtomicActions(t *testing.T) {
 	registry := NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(registry)
+	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	// Nothing under "iot.public.organization" because no global action is granted.
@@ -142,7 +142,7 @@ func TestGetGlobalCapabilities_WildcardActionsIncludesGlobalSubset(t *testing.T)
 	registry := NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(registry)
+	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	assert.Contains(t, gc["iot.public.organization"], "write")
@@ -178,7 +178,7 @@ func TestGetGlobalCapabilities_MultipleEntityTypes(t *testing.T) {
 	registry := NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(registry)
+	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	assert.Contains(t, gc["iot.public.organization"], "list")
@@ -213,7 +213,7 @@ func TestGetEntityCapabilities_DirectGrants(t *testing.T) {
 	registry := NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	ec, err := engine.GetEntityCapabilities(registry, "iot", "public", "organization", map[string]string{"id": "org-1"})
+	ec, err := engine.GetEntityCapabilities(context.Background(), registry, "iot", "public", "organization", map[string]string{"id": "org-1"})
 	require.NoError(t, err)
 	require.NotNil(t, ec)
 
@@ -257,7 +257,7 @@ func TestGetEntityCapabilities_NoAccess(t *testing.T) {
 	registry := NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	ec, err := engine.GetEntityCapabilities(registry, "iot", "public", "organization", map[string]string{"id": "org-99"})
+	ec, err := engine.GetEntityCapabilities(context.Background(), registry, "iot", "public", "organization", map[string]string{"id": "org-99"})
 	require.NoError(t, err)
 	require.NotNil(t, ec)
 
@@ -274,7 +274,7 @@ func TestGetEntityCapabilities_UnknownSchema(t *testing.T) {
 
 	registry := NewPolicyRegistry()
 
-	_, err = engine.GetEntityCapabilities(registry, "nonexistent", "nonexistent", "organisation", map[string]string{"id": "org-1"})
+	_, err = engine.GetEntityCapabilities(context.Background(), registry, "nonexistent", "nonexistent", "organisation", map[string]string{"id": "org-1"})
 	assert.Error(t, err, "should return an error for unknown schema/entity type")
 }
 
@@ -326,7 +326,7 @@ func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 	require.NoError(t, principalManager.CreatePrincipal(principal))
 	require.NoError(t, principalManager.GrantPolicy("user-global", "principal-policy", "admin"))
 
-	gc, err := engine.GetGlobalCapabilitiesForPrincipal(principalManager, policyManager, "user-global")
+	gc, err := engine.GetGlobalCapabilitiesForPrincipal(context.Background(), principalManager, policyManager, "user-global")
 	require.NoError(t, err)
 
 	assert.Contains(t, gc["iot.public.organization"], "write")

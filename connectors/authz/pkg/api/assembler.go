@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 type Config struct {
 	Debug       bool
 	Port        int
+	LogFile     string
 	Schemas     map[string]string
 	Credentials map[string]CredentialConfig
 	PreloadDir  string
@@ -38,13 +40,44 @@ type CredentialConfig struct {
 	Database string
 }
 
+// openLogFile returns an io.Writer that tees to the named file alongside the
+// existing logger output.  Returns nil when logFile is empty (no-op).
+func openLogFile(logFile string) (io.Writer, error) {
+	if logFile == "" {
+		return nil, nil
+	}
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file %q: %w", logFile, err)
+	}
+	return f, nil
+}
+
+// addFileOutput wraps the logger's current output with an io.MultiWriter so
+// entries are written to both the existing destination and the file.
+// Does nothing when fileWriter is nil.
+func addFileOutput(entry *logrus.Entry, fileWriter io.Writer) {
+	if fileWriter == nil {
+		return
+	}
+	entry.Logger.SetOutput(io.MultiWriter(entry.Logger.Out, fileWriter))
+	entry.Logger.SetFormatter(&logrus.JSONFormatter{})
+}
+
 func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
-	principalManager, engine, policyManager, resolver, err := AssembleAuthzService(cfg)
+	fileWriter, err := openLogFile(cfg.LogFile)
+	if err != nil {
+		return -1, err
+	}
+
+	principalManager, engine, policyManager, resolver, err := AssembleAuthzService(cfg, fileWriter)
 	if err != nil {
 		return -1, fmt.Errorf("failed to assemble Authz service: %w", err)
 	}
 
 	lHttp := helpers.SetupLogger(config.Debug, "AUTHZ", "HTTP Server")
+	addFileOutput(lHttp, fileWriter)
+
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 
@@ -69,9 +102,11 @@ func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
 	return port, nil
 }
 
-func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *authz.PolicyManager, *authz.IdentityResolver, error) {
+func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*authz.PrincipalManager, *authz.Engine, *authz.PolicyManager, *authz.IdentityResolver, error) {
 	lDB := helpers.SetupLogger(config.Trace, "AUTHZ", "DB")
+	addFileOutput(lDB, fileWriter)
 	lBucketStore := helpers.SetupLogger(config.Debug, "AUTHZ", "BucketStore")
+	addFileOutput(lBucketStore, fileWriter)
 
 	// Create SQLite DB for principal management
 	principalDB, err := CreateSQLiteDBConnection(lDB, "authz_principals.db", "")
@@ -102,8 +137,11 @@ func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *
 		schemaDbs[schemaName] = db
 	}
 
+	lHttp := helpers.SetupLogger(config.Debug, "AUTHZ", "Engine")
+	addFileOutput(lHttp, fileWriter)
+
 	// Create engine with multiple database connections
-	engine, err := authz.NewEngine(schemaDbs, cfg.Schemas)
+	engine, err := authz.NewEngine(schemaDbs, cfg.Schemas, authz.WithLogger(lHttp))
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -112,6 +150,7 @@ func AssembleAuthzService(cfg Config) (*authz.PrincipalManager, *authz.Engine, *
 
 	if cfg.PreloadDir != "" {
 		lPreload := helpers.SetupLogger(config.Debug, "AUTHZ", "Preload")
+		addFileOutput(lPreload, fileWriter)
 		if err := preloadPolicies(context.Background(), policyManager, cfg.PreloadDir, lPreload); err != nil {
 			return nil, nil, nil, nil, fmt.Errorf("failed to preload policies: %w", err)
 		}
