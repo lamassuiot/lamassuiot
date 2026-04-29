@@ -21,9 +21,9 @@ func LoadServerConfig() *ServerConfig {
 	return &ServerConfig{
 		Host:       getEnv("HOST", "0.0.0.0"),
 		Port:       port,
-		SchemaPath: getEnv("SCHEMA_PATH", "/home/ubuntu/dev/authz2/examples/iot/schemas.json"),
+		SchemaPath: getEnv("SCHEMA_PATH", "/home/ubuntu/dev/authz/examples/iot/schemas.json"),
 		PolicyPaths: []string{
-			getEnv("POLICY_PATH", "/home/ubuntu/dev/authz2/examples/iot/policies.json"),
+			getEnv("POLICY_PATH", "/home/ubuntu/dev/authz/examples/iot/policies.json"),
 		},
 		DatabaseDSN: getEnv("DATABASE_DSN", ""),
 		EnableCORS:  getEnv("ENABLE_CORS", "true") == "true",

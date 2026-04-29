@@ -79,7 +79,7 @@ func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 	assert.Equal(t, "user-123", matchedIDs[0])
 
 	// test-schema organization has no globalActions, so global capabilities must be empty.
-	gc, err := engine.GetGlobalCapabilities(policyRegistry)
+	gc, err := engine.GetGlobalCapabilities(context.Background(), policyRegistry)
 	require.NoError(t, err)
 	assert.Empty(t, gc["public.organization"],
 		"test schema defines no globalActions for organization, so result must be empty")
@@ -151,7 +151,7 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 	require.NotEmpty(t, matchedIDs)
 
 	// Granted entity org-1 → expect atomic actions read + delete.
-	ec, err := engine.GetEntityCapabilities(policyRegistry, "test", "public", "organization", map[string]string{"id": "org-1"})
+	ec, err := engine.GetEntityCapabilities(context.Background(), policyRegistry, "test", "public", "organization", map[string]string{"id": "org-1"})
 	require.NoError(t, err)
 	require.NotNil(t, ec)
 	assert.Equal(t, "public", ec.SchemaName)
@@ -161,7 +161,7 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 	assert.Contains(t, ec.Actions, "delete")
 
 	// Entity org-99 is not in grants → empty actions, no error.
-	ecNoAccess, err := engine.GetEntityCapabilities(policyRegistry, "test", "public", "organization", map[string]string{"id": "org-99"})
+	ecNoAccess, err := engine.GetEntityCapabilities(context.Background(), policyRegistry, "test", "public", "organization", map[string]string{"id": "org-99"})
 	require.NoError(t, err)
 	assert.Empty(t, ecNoAccess.Actions)
 

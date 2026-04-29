@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -153,7 +154,7 @@ func TestEngine_Authorize_NonExistentEntity(t *testing.T) {
 	}
 
 	// Non-existent device should return false
-	allowed, err := engine.Authorize(policies, "iot_schema", "public", "read", "device", map[string]string{"device_id": "device-999"})
+	allowed, err := engine.Authorize(context.Background(), policies, "iot_schema", "public", "read", "device", map[string]string{"device_id": "device-999"})
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestEngine_GetListFilter(t *testing.T) {
 	}
 
 	// Get list filter based on policy directGrants
-	filterSQL, err := engine.GetListFilter(policies, "iot", "public", "device")
+	filterSQL, err := engine.GetListFilter(context.Background(), policies, "iot", "public", "device")
 	if err != nil {
 		t.Fatalf("GetListFilter failed: %v", err)
 	}
@@ -224,13 +225,13 @@ func TestEngine_InvalidEntityType(t *testing.T) {
 	}
 
 	// Try to authorize non-existent entity type
-	_, err = engine.Authorize(policies, "iot_schema", "public", "read", "nonexistent", map[string]string{"id": "123"})
+	_, err = engine.Authorize(context.Background(), policies, "iot_schema", "public", "read", "nonexistent", map[string]string{"id": "123"})
 	if err == nil {
 		t.Error("Expected error for non-existent entity type")
 	}
 
 	// Try to get filter for non-existent entity type
-	_, err = engine.GetListFilter(policies, "iot_schema", "public", "nonexistent")
+	_, err = engine.GetListFilter(context.Background(), policies, "iot_schema", "public", "nonexistent")
 	if err == nil {
 		t.Error("Expected error for non-existent entity type")
 	}
@@ -271,7 +272,7 @@ func TestEngine_GlobalAction_EmptyDirectGrants(t *testing.T) {
 
 	// Global actions should still be allowed even with empty directGrants
 	// because the rule defines the action for the entity type
-	allowed, err := engine.Authorize(policies, "iot_schema", "public", "write", "device", nil)
+	allowed, err := engine.Authorize(context.Background(), policies, "iot_schema", "public", "write", "device", nil)
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -279,7 +280,7 @@ func TestEngine_GlobalAction_EmptyDirectGrants(t *testing.T) {
 		t.Error("Expected global action 'write' to be allowed even with empty directGrants")
 	}
 
-	allowed, err = engine.Authorize(policies, "iot_schema", "public", "list", "device", nil)
+	allowed, err = engine.Authorize(context.Background(), policies, "iot_schema", "public", "list", "device", nil)
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -322,7 +323,7 @@ func TestEngine_GlobalAction_WithDirectGrants(t *testing.T) {
 	}
 
 	// Global actions should be allowed when directGrants exist
-	allowed, err := engine.Authorize(policies, "iot_schema", "public", "write", "device", nil)
+	allowed, err := engine.Authorize(context.Background(), policies, "iot_schema", "public", "write", "device", nil)
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -330,7 +331,7 @@ func TestEngine_GlobalAction_WithDirectGrants(t *testing.T) {
 		t.Error("Expected global action 'write' to be allowed with directGrants")
 	}
 
-	allowed, err = engine.Authorize(policies, "iot_schema", "public", "list", "device", nil)
+	allowed, err = engine.Authorize(context.Background(), policies, "iot_schema", "public", "list", "device", nil)
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -371,7 +372,7 @@ func TestEngine_Authorize_GlobalAction_DeniesWhenRuleNamespaceDoesNotMatchReques
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	allowed, err := engine.Authorize(policies, "iot_schema", "public", "list", "device", nil)
+	allowed, err := engine.Authorize(context.Background(), policies, "iot_schema", "public", "list", "device", nil)
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -412,7 +413,7 @@ func TestEngine_Authorize_GlobalAction_AllowsWildcardRuleSchemaAndEntity(t *test
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	allowed, err := engine.Authorize(policies, "iot_schema", "public", "list", "device", nil)
+	allowed, err := engine.Authorize(context.Background(), policies, "iot_schema", "public", "list", "device", nil)
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -453,7 +454,7 @@ func TestEngine_Authorize_GlobalAction_AllowsWildcardAction(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	allowed, err := engine.Authorize(policies, "iot_schema", "public", "list", "device", nil)
+	allowed, err := engine.Authorize(context.Background(), policies, "iot_schema", "public", "list", "device", nil)
 	if err != nil {
 		t.Fatalf("Authorize failed: %v", err)
 	}
@@ -494,7 +495,7 @@ func TestEngine_GetListFilter_DoesNotUseRulesFromOtherNamespaces(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	filterSQL, err := engine.GetListFilter(policies, "iot_schema", "public", "device")
+	filterSQL, err := engine.GetListFilter(context.Background(), policies, "iot_schema", "public", "device")
 	if err != nil {
 		t.Fatalf("GetListFilter failed: %v", err)
 	}
