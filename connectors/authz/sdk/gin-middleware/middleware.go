@@ -60,7 +60,7 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 
 		entityKey := entityKeyFunc(c)
 
-		authorized, matchedPrincipals, err := m.engine.MatchAndAuthorize(authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKey)
+		authorized, matchedPrincipals, err := m.engine.MatchAndAuthorize(c.Request.Context(), authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKey)
 		if err != nil {
 			m.logger.Errorf("error in MatchAndAuthorize: %v", err)
 			abortWithAuthzServiceError(c, err)
@@ -109,7 +109,7 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 			return
 		}
 
-		authorizedList, matchedPrincipals, err := s.engine.MatchAndGetFilter(authType, authMaterial, s.namespace, s.schemaName, s.entityType)
+		authorizedList, matchedPrincipals, err := s.engine.MatchAndGetFilter(c.Request.Context(), authType, authMaterial, s.namespace, s.schemaName, s.entityType)
 		if err != nil {
 			s.logger.Errorf("error in MatchAndGetFilter: %v", err)
 			abortWithAuthzServiceError(c, err)

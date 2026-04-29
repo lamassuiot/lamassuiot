@@ -10,6 +10,7 @@ import (
 // AppConfig is the top-level YAML configuration for the authz service.
 type AppConfig struct {
 	Debug       bool                     `yaml:"debug"`
+	LogFile     string                   `yaml:"log_file"`
 	Schemas     map[string]string        `yaml:"schemas"`
 	Credentials map[string]DBCredentials `yaml:"credentials"`
 }

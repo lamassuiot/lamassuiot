@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,19 +16,19 @@ type fakeEngine struct {
 	err error
 }
 
-func (e *fakeEngine) Authorize(principalID, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, error) {
+func (e *fakeEngine) Authorize(_ context.Context, principalID, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, error) {
 	return false, e.err
 }
 
-func (e *fakeEngine) GetFilter(principalID, namespace, schemaName, entityType string) (string, error) {
+func (e *fakeEngine) GetFilter(_ context.Context, principalID, namespace, schemaName, entityType string) (string, error) {
 	return "", e.err
 }
 
-func (e *fakeEngine) MatchAndAuthorize(authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, []string, error) {
+func (e *fakeEngine) MatchAndAuthorize(_ context.Context, authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, []string, error) {
 	return false, nil, e.err
 }
 
-func (e *fakeEngine) MatchAndGetFilter(authType, authMaterial, namespace, schemaName, entityType string) (string, []string, error) {
+func (e *fakeEngine) MatchAndGetFilter(_ context.Context, authType, authMaterial, namespace, schemaName, entityType string) (string, []string, error) {
 	return "", nil, e.err
 }
 

@@ -9,17 +9,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/sirupsen/logrus"
 )
 
 type AuthzController struct {
 	engine   *authz.Engine
 	resolver *authz.IdentityResolver
+	logger   *logrus.Entry
 }
 
-func NewAuthzController(engine *authz.Engine, resolver *authz.IdentityResolver) *AuthzController {
+func NewAuthzController(engine *authz.Engine, resolver *authz.IdentityResolver, logger *logrus.Entry) *AuthzController {
 	return &AuthzController{
 		engine:   engine,
 		resolver: resolver,
+		logger:   logger,
 	}
 }
 
@@ -70,7 +73,7 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 		return
 	}
 
-	allowed, err := ctrl.engine.Authorize(policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
+	allowed, err := ctrl.engine.Authorize(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Authorization check failed",
@@ -127,7 +130,7 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 		return
 	}
 
-	filterSQL, err := ctrl.engine.GetListFilter(policies, req.Namespace, req.SchemaName, req.EntityType)
+	filterSQL, err := ctrl.engine.GetListFilter(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.EntityType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to generate filter",
@@ -199,7 +202,7 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 		return
 	}
 
-	allowed, err := ctrl.engine.Authorize(policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
+	allowed, err := ctrl.engine.Authorize(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Authorization check failed",
@@ -265,7 +268,7 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 		return
 	}
 
-	filterSQL, err := ctrl.engine.GetListFilter(policies, req.Namespace, req.SchemaName, req.EntityType)
+	filterSQL, err := ctrl.engine.GetListFilter(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.EntityType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to generate filter",
@@ -273,8 +276,6 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 		})
 		return
 	}
-
-	fmt.Println(filterSQL)
 
 	c.JSON(http.StatusOK, dto.MatchAndGetFilterResponse{
 		Namespace:         req.Namespace,

@@ -5,8 +5,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"strings"
+
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/sirupsen/logrus"
 )
 
 // GlobalCapabilities maps a namespaced entity type key ("namespace.schema_name.entity_type",
@@ -46,7 +48,8 @@ func MergeGlobalCapabilities(dst, src GlobalCapabilities) {
 // GetGlobalCapabilities evaluates the given policies and returns every global action
 // (those classified as globalActions in the schema) the principal is granted, grouped by
 // qualified entity type (e.g. "public.device").  Atomic actions are never included.
-func (e *Engine) GetGlobalCapabilities(policies *PolicyRegistry) (GlobalCapabilities, error) {
+func (e *Engine) GetGlobalCapabilities(ctx context.Context, policies *PolicyRegistry) (GlobalCapabilities, error) {
+	log := helpers.ConfigureLogger(ctx, e.logger)
 	result := make(GlobalCapabilities)
 
 	allSchemas := e.schemas.GetAll()
@@ -57,8 +60,11 @@ func (e *Engine) GetGlobalCapabilities(policies *PolicyRegistry) (GlobalCapabili
 				for _, rule := range policy.Rules {
 					if ruleMatchesSchema(rule, schema) && rule.HasAction(action) {
 						result.addGlobalAction(namespacedKey, action)
-						log.Printf("[CAPABILITIES] Global action '%s' on '%s' granted by policy '%s'",
-							action, namespacedKey, policy.ID)
+						log.WithFields(logrus.Fields{
+							"action":      action,
+							"entity_type": namespacedKey,
+							"policy_id":   policy.ID,
+						}).Debug("global action granted")
 						break
 					}
 				}
@@ -73,9 +79,11 @@ func (e *Engine) GetGlobalCapabilities(policies *PolicyRegistry) (GlobalCapabili
 // returns only the atomic actions (those classified as atomicActions in the schema) that are
 // granted on that entity.  Global actions are never included.
 func (e *Engine) GetEntityCapabilities(
+	ctx context.Context,
 	policies *PolicyRegistry,
 	namespace, schemaName, entityType string, entityKey map[string]string,
 ) (*EntityCapabilities, error) {
+	log := helpers.ConfigureLogger(ctx, e.logger)
 	schema, err := e.schemas.GetBySchemaEntity(schemaName, entityType)
 	if err != nil {
 		return nil, fmt.Errorf("schema not found for %s.%s: %w", schemaName, entityType, err)
@@ -93,10 +101,14 @@ func (e *Engine) GetEntityCapabilities(
 	}
 
 	for _, action := range schema.AtomicActions {
-		allowed, err := e.Authorize(policies, schema.ConfigSchema, schemaName, action, entityType, entityKey)
+		allowed, err := e.Authorize(ctx, policies, schema.ConfigSchema, schemaName, action, entityType, entityKey)
 		if err != nil {
-			log.Printf("[CAPABILITIES] Warning: auth check failed for action=%s entity=%s.%s/%v: %v",
-				action, schemaName, entityType, entityKey, err)
+			log.WithFields(logrus.Fields{
+				"action":      action,
+				"schema":      schemaName,
+				"entity_type": entityType,
+				"error":       err,
+			}).Warn("auth check failed for action")
 			continue
 		}
 		if allowed {
@@ -104,8 +116,11 @@ func (e *Engine) GetEntityCapabilities(
 		}
 	}
 
-	log.Printf("[CAPABILITIES] Entity %s.%s/%v: atomic actions granted = %v",
-		schemaName, entityType, entityKey, result.Actions)
+	log.WithFields(logrus.Fields{
+		"schema":       schemaName,
+		"entity_type":  entityType,
+		"action_count": len(result.Actions),
+	}).Debug("entity capabilities evaluated")
 
 	return result, nil
 }
@@ -113,10 +128,12 @@ func (e *Engine) GetEntityCapabilities(
 // GetPrincipalPolicies retrieves all policies associated with a principal from the database
 // and returns them as a ready-to-use PolicyRegistry.
 func (e *Engine) GetPrincipalPolicies(
+	ctx context.Context,
 	principalManager *PrincipalManager,
 	policyManager *PolicyManager,
 	principalID string,
 ) (*PolicyRegistry, error) {
+	log := helpers.ConfigureLogger(ctx, e.logger)
 	principal, err := principalManager.GetPrincipalWithPolicies(principalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get principal: %w", err)
@@ -124,13 +141,19 @@ func (e *Engine) GetPrincipalPolicies(
 
 	registry := NewPolicyRegistry()
 	for _, pp := range principal.Policies {
-		policy, err := policyManager.GetPolicy(context.Background(), pp.PolicyID)
+		policy, err := policyManager.GetPolicy(ctx, pp.PolicyID)
 		if err != nil {
-			log.Printf("[CAPABILITIES] Warning: could not load policy %s: %v", pp.PolicyID, err)
+			log.WithFields(logrus.Fields{
+				"policy_id": pp.PolicyID,
+				"error":     err,
+			}).Warn("could not load policy")
 			continue
 		}
 		if err := registry.AddPolicy(policy); err != nil {
-			log.Printf("[CAPABILITIES] Warning: could not add policy %s to registry: %v", pp.PolicyID, err)
+			log.WithFields(logrus.Fields{
+				"policy_id": pp.PolicyID,
+				"error":     err,
+			}).Warn("could not register policy")
 			continue
 		}
 	}
@@ -141,29 +164,31 @@ func (e *Engine) GetPrincipalPolicies(
 // GetGlobalCapabilitiesForPrincipal loads the principal's policies and returns their global
 // capabilities across all entity types.
 func (e *Engine) GetGlobalCapabilitiesForPrincipal(
+	ctx context.Context,
 	principalManager *PrincipalManager,
 	policyManager *PolicyManager,
 	principalID string,
 ) (GlobalCapabilities, error) {
-	policies, err := e.GetPrincipalPolicies(principalManager, policyManager, principalID)
+	policies, err := e.GetPrincipalPolicies(ctx, principalManager, policyManager, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get principal policies: %w", err)
 	}
-	return e.GetGlobalCapabilities(policies)
+	return e.GetGlobalCapabilities(ctx, policies)
 }
 
 // GetEntityCapabilitiesForPrincipal loads the principal's policies and returns the atomic
 // actions granted on the specified entity instance.
 func (e *Engine) GetEntityCapabilitiesForPrincipal(
+	ctx context.Context,
 	principalManager *PrincipalManager,
 	policyManager *PolicyManager,
 	principalID, namespace, schemaName, entityType string, entityKey map[string]string,
 ) (*EntityCapabilities, error) {
-	policies, err := e.GetPrincipalPolicies(principalManager, policyManager, principalID)
+	policies, err := e.GetPrincipalPolicies(ctx, principalManager, policyManager, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get principal policies: %w", err)
 	}
-	return e.GetEntityCapabilities(policies, namespace, schemaName, entityType, entityKey)
+	return e.GetEntityCapabilities(ctx, policies, namespace, schemaName, entityType, entityKey)
 }
 
 // EntityCapabilityQuery describes a single entity to evaluate in a batch request.
@@ -185,12 +210,13 @@ type EntityCapabilitiesResult struct {
 }
 
 func (e *Engine) GetEntityCapabilitiesBatch(
+	ctx context.Context,
 	policies *PolicyRegistry,
 	queries []EntityCapabilityQuery,
 ) []EntityCapabilitiesResult {
 	results := make([]EntityCapabilitiesResult, len(queries))
 	for i, q := range queries {
-		ec, err := e.GetEntityCapabilities(policies, q.Namespace, q.SchemaName, q.EntityType, q.EntityKey)
+		ec, err := e.GetEntityCapabilities(ctx, policies, q.Namespace, q.SchemaName, q.EntityType, q.EntityKey)
 		if err != nil {
 			results[i] = EntityCapabilitiesResult{
 				EntityCapabilities: EntityCapabilities{
@@ -212,16 +238,17 @@ func (e *Engine) GetEntityCapabilitiesBatch(
 // GetEntityCapabilitiesBatchForPrincipal loads the principal's policies once and evaluates
 // all queries, returning results in the same order as the input.
 func (e *Engine) GetEntityCapabilitiesBatchForPrincipal(
+	ctx context.Context,
 	principalManager *PrincipalManager,
 	policyManager *PolicyManager,
 	principalID string,
 	queries []EntityCapabilityQuery,
 ) ([]EntityCapabilitiesResult, error) {
-	policies, err := e.GetPrincipalPolicies(principalManager, policyManager, principalID)
+	policies, err := e.GetPrincipalPolicies(ctx, principalManager, policyManager, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get principal policies: %w", err)
 	}
-	return e.GetEntityCapabilitiesBatch(policies, queries), nil
+	return e.GetEntityCapabilitiesBatch(ctx, policies, queries), nil
 }
 
 // parseCertificate parses a PEM- or DER-encoded X.509 certificate.

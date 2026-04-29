@@ -46,6 +46,7 @@ func main() {
 	apiCfg := api.Config{
 		Debug:       appCfg.Debug,
 		Port:        8888,
+		LogFile:     appCfg.LogFile,
 		Schemas:     appCfg.Schemas,
 		Credentials: credentials,
 		PreloadDir:  *preloadDir,
