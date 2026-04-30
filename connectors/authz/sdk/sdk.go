@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/lamassuiot/authz/pkg/engine"
 )
 
 // ClientConfig holds configuration for the SDK client
@@ -398,7 +398,7 @@ func (s *policyClient) GetStats(ctx context.Context, id string) (*dto.PolicyStat
 
 // SchemaService handles schema operations
 type SchemaService interface {
-	GetSchemas(ctx context.Context) (map[string]*authz.SchemaDefinition, error)
+	GetSchemas(ctx context.Context) (map[string]*engine.SchemaDefinition, error)
 }
 
 type schemaClient struct {
@@ -409,8 +409,8 @@ func newSchemaClient(client *Client) SchemaService {
 	return &schemaClient{client: client}
 }
 
-func (s *schemaClient) GetSchemas(ctx context.Context) (map[string]*authz.SchemaDefinition, error) {
-	var result map[string]*authz.SchemaDefinition
+func (s *schemaClient) GetSchemas(ctx context.Context) (map[string]*engine.SchemaDefinition, error) {
+	var result map[string]*engine.SchemaDefinition
 	err := s.client.get(ctx, "/v1/schemas", &result)
 	if err != nil {
 		return nil, err

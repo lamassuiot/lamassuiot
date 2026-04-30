@@ -1,4 +1,4 @@
-package authz
+package engine
 
 import (
 	"context"
@@ -32,11 +32,15 @@ func engineNopLogger() *logrus.Entry {
 	return logrus.NewEntry(l)
 }
 
+// Logger returns the engine's logrus.Entry (used by the service layer for capability logging).
+func (e *Engine) Logger() *logrus.Entry {
+	return e.logger
+}
+
 // NewEngine creates a new authorization engine
 // dbs: map of config schema name (e.g., "pki", "iot") -> database connection
 // schemaPaths: map of config schema name -> schema file path
 func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...EngineOption) (*Engine, error) {
-	// Load schemas
 	schemas := NewSchemaRegistry()
 	for configSchemaName, schemaPath := range schemaPaths {
 		if err := schemas.Load(schemaPath, configSchemaName); err != nil {
@@ -59,12 +63,11 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	return e, nil
 }
 
-// Authorize checks if an action is allowed
-// For atomic actions (read, write, delete, etc.): checks against a specific entity key in the database
-// For global actions (create, list, etc.): checks policy grants without database queries (entityKey is ignored)
+// Authorize checks if an action is allowed.
+// For atomic actions: checks against a specific entity key in the database.
+// For global actions: checks policy grants without database queries (entityKey is ignored).
 func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, error) {
 	log := helpers.ConfigureLogger(ctx, e.logger)
-	// Get schema to know table name and primary key
 	schema, err := e.schemas.GetBySchemaEntity(schemaName, entityType)
 	if err != nil {
 		return false, fmt.Errorf("schema not found: %w", err)
@@ -74,12 +77,10 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 		return false, fmt.Errorf("entity type '%s' does not belong to namespace '%s'", entityType, namespace)
 	}
 
-	// Validate that the action is defined
 	if !schema.HasAction(action) {
 		return false, fmt.Errorf("action '%s' is not defined for entity type '%s'", action, entityType)
 	}
 
-	// Handle global actions - no database query needed, just check policy grants
 	if schema.IsGlobalAction(action) {
 		matchedRules := 0
 		for _, rule := range policies.GetRules() {
@@ -109,18 +110,13 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 		return false, nil
 	}
 
-	// Handle atomic actions - requires database query with specific entity key
-
-	// Create filter generator with provided policies
 	filterGenerator := NewFilterGenerator(e.schemas, policies)
 
-	// Generate filter for this specific check
 	result, err := filterGenerator.GenerateCheckFilter(action, schemaName, entityType, entityKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to generate filter: %w", err)
 	}
 
-	// If filter is impossible (1 = 0), no access
 	if len(result.Conditions) == 1 && result.Conditions[0] == "1 = 0" {
 		log.WithFields(logrus.Fields{
 			"action":      action,
@@ -139,23 +135,18 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 		"join_count":      len(result.Joins),
 	}).Debug("authorization filter generated")
 
-	// Get the database connection for this schema
 	db, err := e.getDBForSchema(schema)
 	if err != nil {
 		return false, fmt.Errorf("failed to get database connection: %w", err)
 	}
 
-	// Build query with JOINs and WHERE conditions
 	var exists int
 	query := db.Table(schema.QualifiedTableName())
 
-	// Add JOINs
 	for _, join := range result.Joins {
 		query = query.Joins(join)
 	}
 
-	// Add WHERE conditions
-	// For check filters, conditions are already properly combined (access conditions AND entity key)
 	whereClause := strings.Join(result.Conditions, " AND ")
 
 	log.WithFields(logrus.Fields{
@@ -188,8 +179,7 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 	return authorized, nil
 }
 
-// GetListFilter returns a SQL filter for listing entities based on policy directGrants
-// Uses the implicit "read" action to determine which entities can be listed
+// GetListFilter returns a SQL filter for listing entities based on policy rules.
 func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, namespace, schemaName, entityType string) (string, error) {
 	log := helpers.ConfigureLogger(ctx, e.logger)
 	schema, err := e.schemas.GetBySchemaEntity(schemaName, entityType)
@@ -201,7 +191,6 @@ func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, na
 		return "", fmt.Errorf("entity type '%s' does not belong to namespace '%s'", entityType, namespace)
 	}
 
-	// Create filter generator with provided policies
 	filterGenerator := NewFilterGenerator(e.schemas, policies)
 
 	result, err := filterGenerator.GenerateListFilter("read", schemaName, entityType)
@@ -232,7 +221,6 @@ func (e *Engine) GetSchemas() *SchemaRegistry {
 	return e.schemas
 }
 
-// getDBForSchema returns the database connection for a given schema definition
 func (e *Engine) getDBForSchema(schema *SchemaDefinition) (*gorm.DB, error) {
 	db, exists := e.dbs[schema.ConfigSchema]
 	if !exists {

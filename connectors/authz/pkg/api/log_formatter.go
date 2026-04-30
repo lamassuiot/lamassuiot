@@ -53,14 +53,37 @@ func (f *OrderedJSONFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		buf.Write(v)
 	}
 
-	// Fixed prefix: timestamp, level, message.
+	// seen tracks fields already emitted so they are not repeated later.
+	seen := make(map[string]bool, len(f.FieldOrder))
+
+	// Fixed prefix: timestamp, trace/span IDs, level, auth context, message.
 	write("time", entry.Time.Format(tsFormat))
+
+	// trace-id and span-id between time and level.
+	for _, k := range []string{"trace-id", "span-id"} {
+		if v, ok := entry.Data[k]; ok {
+			write(k, v)
+			seen[k] = true
+		}
+	}
+
 	write("level", entry.Level.String())
+
+	// auth context values between level and msg.
+	for _, k := range []string{"auth-credential-struct", "auth-type", "auth-id", "auth-context"} {
+		if v, ok := entry.Data[k]; ok {
+			write(k, v)
+			seen[k] = true
+		}
+	}
+
 	write("msg", entry.Message)
 
 	// Declared fields in order.
-	seen := make(map[string]bool, len(f.FieldOrder))
 	for _, key := range f.FieldOrder {
+		if seen[key] {
+			continue
+		}
 		if v, ok := entry.Data[key]; ok {
 			write(key, v)
 			seen[key] = true

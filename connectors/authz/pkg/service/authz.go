@@ -1,4 +1,4 @@
-package authz
+package service
 
 import (
 	"context"
@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	"github.com/lamassuiot/authz/pkg/core"
+	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
+// AuthzImplementation is the thin orchestration layer implementing core.AuthzEngine.
 type AuthzImplementation struct {
-	engine           *Engine
+	engine           *engine.Engine
 	principalManager *PrincipalManager
 	policyManager    *PolicyManager
 	resolver         *IdentityResolver
@@ -34,14 +36,15 @@ func serviceNopLogger() *logrus.Entry {
 	return logrus.NewEntry(l)
 }
 
-func NewAuthzService(engine *Engine, principalManager *PrincipalManager, policyManager *PolicyManager, opts ...ServiceOption) core.AuthzEngine {
+// NewAuthzService creates an AuthzImplementation that satisfies core.AuthzEngine.
+func NewAuthzService(e *engine.Engine, principalManager *PrincipalManager, policyManager *PolicyManager, opts ...ServiceOption) core.AuthzEngine {
 	resolver := NewIdentityResolver(
 		principalManager.matchService,
 		principalManager.store,
 		policyManager,
 	)
 	s := &AuthzImplementation{
-		engine:           engine,
+		engine:           e,
 		principalManager: principalManager,
 		policyManager:    policyManager,
 		resolver:         resolver,
@@ -103,8 +106,6 @@ func (s *AuthzImplementation) GetFilter(ctx context.Context, principalID, namesp
 	return filterSQL, nil
 }
 
-// MatchAndAuthorize checks authorization using authentication material
-// to automatically match a principal and check authorization.
 func (s *AuthzImplementation) MatchAndAuthorize(ctx context.Context, authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, []string, error) {
 	log := helpers.ConfigureLogger(ctx, s.logger)
 
@@ -138,8 +139,6 @@ func (s *AuthzImplementation) MatchAndAuthorize(ctx context.Context, authType, a
 	return allowed, matchedPrincipals, nil
 }
 
-// MatchAndGetFilter retrieves a SQL filter using authentication material
-// to automatically match a principal and generate the appropriate filter.
 func (s *AuthzImplementation) MatchAndGetFilter(ctx context.Context, authType, authMaterial, namespace, schemaName, entityType string) (string, []string, error) {
 	log := helpers.ConfigureLogger(ctx, s.logger)
 

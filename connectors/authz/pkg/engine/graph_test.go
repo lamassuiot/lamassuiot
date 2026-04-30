@@ -1,4 +1,4 @@
-package authz
+package engine
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package authz
+package service
 
 import (
 	"crypto/rand"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/authz/pkg/store"
 	"github.com/lamassuiot/authz/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -95,7 +96,7 @@ func TestPrincipalManager_MatchX509_CNAndCA_AuthorityKeyID(t *testing.T) {
 		},
 	}
 
-	matched, err := X509Matcher{}.Match([]models.Principal{principal}, leafCert)
+	matched, err := store.X509Matcher{}.Match([]models.Principal{principal}, leafCert)
 	require.NoError(t, err)
 	assert.NotEmpty(t, matched)
 }
@@ -114,7 +115,7 @@ func TestPrincipalManager_MatchX509_AnyFromCA_FingerprintSelfSignedCA(t *testing
 		},
 	}
 
-	matched, err := X509Matcher{}.Match([]models.Principal{principal}, caCert)
+	matched, err := store.X509Matcher{}.Match([]models.Principal{principal}, caCert)
 	require.NoError(t, err)
 	assert.NotEmpty(t, matched)
 }
@@ -134,7 +135,7 @@ func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
 		},
 	}
 
-	matched, err := X509Matcher{}.Match([]models.Principal{principal}, caCert)
+	matched, err := store.X509Matcher{}.Match([]models.Principal{principal}, caCert)
 	require.NoError(t, err)
 	assert.Empty(t, matched)
 }

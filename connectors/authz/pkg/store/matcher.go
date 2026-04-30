@@ -1,4 +1,4 @@
-package authz
+package store
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
 )
 
@@ -69,25 +70,25 @@ func (X509Matcher) Match(principals []models.Principal, authMaterial interface{}
 // to the correct PrincipalMatcher by auth type. It is the only place that knows
 // the mapping from authType string to PrincipalMatcher implementation.
 type MatchService struct {
-	store    PrincipalStore
-	matchers map[string]PrincipalMatcher
+	store    engine.PrincipalStore
+	matchers map[string]engine.PrincipalMatcher
 }
 
 // NewMatchService creates a MatchService with the given store and matcher dispatch table.
-func NewMatchService(store PrincipalStore, matchers map[string]PrincipalMatcher) *MatchService {
+func NewMatchService(store engine.PrincipalStore, matchers map[string]engine.PrincipalMatcher) *MatchService {
 	return &MatchService{store: store, matchers: matchers}
 }
 
 // DefaultMatchService returns a MatchService wired with the standard OIDC and X.509 matchers.
-func DefaultMatchService(store PrincipalStore) *MatchService {
-	return NewMatchService(store, map[string]PrincipalMatcher{
+func DefaultMatchService(store engine.PrincipalStore) *MatchService {
+	return NewMatchService(store, map[string]engine.PrincipalMatcher{
 		"oidc": OIDCMatcher{},
 		"x509": X509Matcher{},
 	})
 }
 
 // MatchPrincipals loads active principals of authType from the store and returns those
-// whose AuthConfig matches authMaterial. Drop-in replacement for PrincipalManager.MatchPrincipals.
+// whose AuthConfig matches authMaterial.
 func (ms *MatchService) MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error) {
 	matcher, ok := ms.matchers[authType]
 	if !ok {
