@@ -8,6 +8,7 @@ import (
 	authzSdk "github.com/lamassuiot/authz/sdk"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
@@ -15,7 +16,7 @@ import (
 func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc services.DMSManagerService) {
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
-	config := sdk.DefaultConfig("http://localhost:8888")
+	config := sdk.DefaultConfig("http://localhost:8888", models.DMSManagerSource)
 	client, err := sdk.NewClient(config)
 	if err != nil {
 		log.Fatalf("Failed to create SDK client: %v", err)

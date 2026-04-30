@@ -16,7 +16,7 @@ import (
 func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService, logger *logrus.Entry) {
 	routes := controllers.NewKMSHttpRoutes(svc)
 
-	config := sdk.DefaultConfig("http://localhost:8888")
+	config := sdk.DefaultConfig("http://localhost:8888", models.KMSSource)
 	client, err := sdk.NewClient(config)
 	if err != nil {
 		log.Fatalf("Failed to create SDK client: %v", err)

@@ -408,17 +408,20 @@
   <text x="660" y="250" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/models/principal.go</text>
 
   <!-- ── SERVICE ── -->
-  <rect x="130" y="292" width="140" height="32" rx="6" fill="#10b981" opacity=".8"/>
-  <text x="200" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">service.go</text>
+  <rect x="130" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".8"/>
+  <text x="189" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">authz.go</text>
 
-  <rect x="288" y="292" width="165" height="32" rx="6" fill="#10b981" opacity=".75"/>
-  <text x="370" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">identity_resolver.go</text>
+  <rect x="256" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".75"/>
+  <text x="315" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">identity.go</text>
 
-  <rect x="471" y="292" width="170" height="32" rx="6" fill="#10b981" opacity=".7"/>
-  <text x="556" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">principal_manager.go</text>
+  <rect x="382" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".7"/>
+  <text x="441" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">principal.go</text>
 
-  <rect x="659" y="292" width="160" height="32" rx="6" fill="#10b981" opacity=".65"/>
-  <text x="739" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">policy_manager.go</text>
+  <rect x="508" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".65"/>
+  <text x="567" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">policy.go</text>
+
+  <rect x="634" y="292" width="135" height="32" rx="6" fill="#10b981" opacity=".6"/>
+  <text x="701" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">capabilities.go</text>
 
   <!-- ── ENGINE ── -->
   <rect x="130" y="354" width="100" height="28" rx="5" fill="#f59e0b" opacity=".85"/>
@@ -450,11 +453,11 @@
   <text x="554" y="405" text-anchor="middle" fill="#d97706" font-size="10" font-weight="600">AuthorizationGraph · GraphNode · GraphEdge</text>
 
   <!-- ── DATA ACCESS ── -->
-  <rect x="220" y="440" width="210" height="32" rx="6" fill="#ef4444" opacity=".75"/>
-  <text x="325" y="460" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">principal_store_gorm.go</text>
+  <rect x="220" y="440" width="180" height="32" rx="6" fill="#ef4444" opacity=".75"/>
+  <text x="310" y="460" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/store/gorm.go</text>
 
-  <rect x="450" y="440" width="195" height="32" rx="6" fill="#ef4444" opacity=".65"/>
-  <text x="547" y="460" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">principal_matcher.go</text>
+  <rect x="415" y="440" width="195" height="32" rx="6" fill="#ef4444" opacity=".65"/>
+  <text x="512" y="460" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/store/matcher.go</text>
 
   <!-- ── SDK ── -->
   <rect x="130" y="502" width="130" height="32" rx="6" fill="#a78bfa" opacity=".8"/>
@@ -682,31 +685,38 @@
   <div class="file-grid">
 
     <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('service')">
-      <div class="path">pkg/authz/service.go</div>
+      <div class="path">pkg/service/authz.go</div>
       <div class="name">AuthzImplementation (Service)</div>
       <div class="desc">Implements core.AuthzEngine. Adds the principal-resolution layer on top of the Engine: given a principal ID or auth material, loads the appropriate PolicyRegistry via IdentityResolver, then delegates to Engine. Logs the final authorization decision with structured fields and the request trace-ID.</div>
       <div class="tags"><span class="tag">AuthzImplementation</span><span class="tag">NewAuthzService</span><span class="tag">WithServiceLogger</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('identity_resolver')">
-      <div class="path">pkg/authz/identity_resolver.go</div>
+      <div class="path">pkg/service/identity.go</div>
       <div class="name">Identity Resolver</div>
-      <div class="desc">Single entry point for "auth material → policies" resolution. Calls MatchService to find matching active principals, then loads all their granted policies from blob storage into a PolicyRegistry. Returns ErrNoMatch when nothing matches, allowing callers to distinguish 401 from 403.</div>
+      <div class="desc">Single entry point for "auth material → policies" resolution. Calls MatchService to find matching active principals, then loads all their granted policies into a PolicyRegistry. Returns ErrNoMatch when nothing matches, allowing callers to distinguish 401 from 403. Uses local private interfaces (principalMatcher, policyLoader) to avoid circular imports.</div>
       <div class="tags"><span class="tag">IdentityResolver</span><span class="tag">Resolve</span><span class="tag">GetPoliciesForPrincipal</span><span class="tag">ErrNoMatch</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('principal_manager')">
-      <div class="path">pkg/authz/principal_manager.go</div>
+      <div class="path">pkg/service/principal.go</div>
       <div class="name">Principal Manager</div>
-      <div class="desc">High-level façade over GormPrincipalStore and MatchService. Provides all principal operations (CRUD, activate/deactivate) and all policy grant/revoke operations in one place. Also exposes NewIdentityResolver() to wire a resolver that uses this manager's store as the GrantStore.</div>
+      <div class="desc">Façade over GormPrincipalStore (pkg/store) and MatchService. Provides all principal CRUD and policy grant/revoke operations. Also exposes NewIdentityResolver() to wire a resolver using this manager's store as the GrantStore.</div>
       <div class="tags"><span class="tag">PrincipalManager</span><span class="tag">GrantPolicy</span><span class="tag">RevokePolicy</span><span class="tag">NewIdentityResolver</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('policy_manager')">
-      <div class="path">pkg/authz/policy_manager.go</div>
+      <div class="path">pkg/service/policy.go</div>
       <div class="name">Policy Manager</div>
-      <div class="desc">Manages policies via gocloud.dev blob storage, enabling swappable backends (filesystem, GCS, S3, in-memory). Supports CRUD, free-text search, and statistics. Policies are stored as JSON blobs keyed by policy ID, making them independent of any relational schema.</div>
+      <div class="desc">Manages policies via gocloud.dev blob storage, enabling swappable backends (filesystem, GCS, S3, in-memory). Supports CRUD, free-text search, and statistics. Calls engine.ValidatePolicyStruct for storage-time validation.</div>
       <div class="tags"><span class="tag">PolicyManager</span><span class="tag">PolicyStats</span><span class="tag">blob.Bucket</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('service_capabilities')">
+      <div class="path">pkg/service/capabilities.go</div>
+      <div class="name">Principal Capability Helpers</div>
+      <div class="desc">Package-level functions that bridge Engine capability methods with the service layer. Loads the principal's PolicyRegistry once via PrincipalManager/PolicyManager, then delegates to engine.GetGlobalCapabilities or engine.GetEntityCapabilitiesBatch. Moved here from pkg/engine to break the circular dependency that would arise if Engine held references to service-layer managers.</div>
+      <div class="tags"><span class="tag">GetPrincipalPolicies</span><span class="tag">GetGlobalCapabilitiesForPrincipal</span><span class="tag">GetEntityCapabilitiesForPrincipal</span><span class="tag">GetEntityCapabilitiesBatchForPrincipal</span></div>
     </div>
 
   </div>
@@ -718,49 +728,49 @@
   <div class="file-grid">
 
     <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('engine')">
-      <div class="path">pkg/authz/engine.go</div>
+      <div class="path">pkg/engine/engine.go</div>
       <div class="name">Authorization Engine</div>
       <div class="desc">The core decision maker. Validates namespace/schema/entity, classifies actions as global (no DB query) or atomic (SQL existence check), builds SQL filters via FilterGenerator, and executes against the appropriate PostgreSQL database. Accepts a logrus.Entry via functional option; uses helpers.ConfigureLogger(ctx) to attach the request trace-ID to every log line.</div>
       <div class="tags"><span class="tag">Engine</span><span class="tag">Authorize</span><span class="tag">GetListFilter</span><span class="tag">EngineOption</span><span class="tag">WithLogger</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('capabilities')">
-      <div class="path">pkg/authz/capabilities.go</div>
+      <div class="path">pkg/engine/capabilities.go</div>
       <div class="name">Capability Evaluator</div>
-      <div class="desc">Methods on Engine for computing what a principal CAN do, rather than whether they can do a specific thing. GetGlobalCapabilities scans all schemas for granted global actions. GetEntityCapabilities probes each atomic action on a concrete entity. Batch variant evaluates multiple entities in one call using a single policy load.</div>
+      <div class="desc">Pure engine methods for computing what a principal CAN do given an already-loaded PolicyRegistry. GetGlobalCapabilities scans all schemas for granted global actions without DB queries. GetEntityCapabilities probes each atomic action on a concrete entity. The ForPrincipal variants (which need PrincipalManager/PolicyManager) live in pkg/service/capabilities.go to avoid circular imports.</div>
       <div class="tags"><span class="tag">GlobalCapabilities</span><span class="tag">EntityCapabilities</span><span class="tag">GetEntityCapabilitiesBatch</span><span class="tag">MergeGlobalCapabilities</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('filter')">
-      <div class="path">pkg/authz/filter.go</div>
+      <div class="path">pkg/engine/filter.go</div>
       <div class="name">SQL Filter Generator</div>
       <div class="desc">Translates policy rules into SQL JOINs and WHERE conditions. Handles three access patterns: direct ID grants (IN clause), cascading FK relations (JOIN chain computed via AuthorizationGraph path-finding), and attribute-based column filters. Produces both list filters (open-ended) and check filters (entity-key-bounded existence queries).</div>
       <div class="tags"><span class="tag">FilterGenerator</span><span class="tag">FilterResult</span><span class="tag">GenerateListFilter</span><span class="tag">GenerateCheckFilter</span><span class="tag">buildPathFilter</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('graph')">
-      <div class="path">pkg/authz/graph.go</div>
+      <div class="path">pkg/engine/graph.go</div>
       <div class="name">Authorization Graph</div>
       <div class="desc">Builds a directed entity-relationship graph from policy rules and schema relation configs. Edges represent foreign-key relationships between entity types. DFS path-finding discovers cascading access paths (e.g. user → organization → device), which FilterGenerator converts into JOIN chains.</div>
       <div class="tags"><span class="tag">AuthorizationGraph</span><span class="tag">GraphNode</span><span class="tag">GraphEdge</span><span class="tag">FindPathsBetween</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('schema')">
-      <div class="path">pkg/authz/schema.go</div>
+      <div class="path">pkg/engine/schema.go</div>
       <div class="name">Schema Registry</div>
       <div class="desc">Loads entity schemas from JSON files. Each SchemaDefinition describes a database table: its qualified name, primary key columns, foreign-key relations to other entity types, which actions are "atomic" (need DB check) vs "global" (no DB check), and which columns can be used in attribute filters. Supports multi-schema environments.</div>
       <div class="tags"><span class="tag">SchemaRegistry</span><span class="tag">SchemaDefinition</span><span class="tag">FilterableField</span><span class="tag">RelationConfig</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('policy_reg')">
-      <div class="path">pkg/authz/policy.go</div>
+      <div class="path">pkg/engine/policy.go</div>
       <div class="name">Policy Registry &amp; Validation</div>
       <div class="desc">In-memory registry of all policies active for a request. Validates policy structure (rule fields, relation cycles, column filter types), provides schema-matching helpers (wildcards, namespace checks), and exposes rule iteration for engine and filter generator. A new PolicyRegistry is built per-request from blob storage.</div>
       <div class="tags"><span class="tag">PolicyRegistry</span><span class="tag">AddPolicy</span><span class="tag">GetRules</span><span class="tag">ruleMatchesSchema</span><span class="tag">wildcardMatches</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('ports')">
-      <div class="path">pkg/authz/ports.go</div>
+      <div class="path">pkg/engine/ports.go</div>
       <div class="name">Ports (Dependency Interfaces)</div>
       <div class="desc">Defines the three hexagonal ports: PrincipalStore (CRUD + type-filtered list), GrantStore (policy assignment operations), and PrincipalMatcher (pure stateless matching, no DB). Implementations live in separate files (principal_store_gorm.go, principal_matcher.go), allowing easy substitution.</div>
       <div class="tags"><span class="tag">PrincipalStore</span><span class="tag">GrantStore</span><span class="tag">PrincipalMatcher</span></div>
@@ -775,16 +785,16 @@
   <div class="file-grid">
 
     <div class="file-card" style="--hover-color:var(--c-data)" onclick="showDetail('gorm_store')">
-      <div class="path">pkg/authz/principal_store_gorm.go</div>
+      <div class="path">pkg/store/gorm.go</div>
       <div class="name">GORM Principal Store</div>
-      <div class="desc">Implements both PrincipalStore and GrantStore ports using GORM. Persists Principal records and the principal_policies join table to SQLite (development) or PostgreSQL (production). Handles AutoMigration, index creation, and all context-aware CRUD operations including batch grant/revoke.</div>
+      <div class="desc">Implements both PrincipalStore and GrantStore ports (defined in pkg/engine/ports.go) using GORM. Persists Principal records and the principal_policies join table to SQLite (development) or PostgreSQL (production). Handles AutoMigration, index creation, and all context-aware CRUD operations including batch grant/revoke. Satisfies engine interfaces via Go structural typing — no import of pkg/engine needed.</div>
       <div class="tags"><span class="tag">GormPrincipalStore</span><span class="tag">AutoMigrate</span><span class="tag">ListByType</span><span class="tag">Grant / Revoke</span></div>
     </div>
 
     <div class="file-card" style="--hover-color:var(--c-data)" onclick="showDetail('matcher')">
-      <div class="path">pkg/authz/principal_matcher.go</div>
-      <div name="name">Principal Matcher</div>
-      <div class="desc">Two stateless PrincipalMatcher implementations. OIDCMatcher filters principals by JWT claim conditions (equals, contains, regex). X509Matcher filters by certificate attributes (serial, CN, CA fingerprint, authority key ID). MatchService coordinates both, loading principals by auth type and dispatching to the appropriate matcher.</div>
+      <div class="path">pkg/store/matcher.go</div>
+      <div class="name">Principal Matcher</div>
+      <div class="desc">Two stateless PrincipalMatcher implementations. OIDCMatcher filters principals by JWT claim conditions (equals, contains, regex). X509Matcher filters by certificate attributes (serial, CN, CA fingerprint, authority key ID). MatchService coordinates both, loading principals by auth type and dispatching to the appropriate matcher. Imports pkg/engine only for the PrincipalStore and PrincipalMatcher interface types.</div>
       <div class="tags"><span class="tag">OIDCMatcher</span><span class="tag">X509Matcher</span><span class="tag">MatchService</span><span class="tag">DefaultMatchService</span></div>
     </div>
 
@@ -850,12 +860,12 @@
     <h3>1 — Authorization Check (Direct Principal)</h3>
     <div class="flow-steps">
       <div class="flow-step"><div class="flow-num">1</div><div><strong>authz_controller.go</strong> — receives POST /v1/authz/authorize, binds JSON, validates namespace/schema/entity.</div></div>
-      <div class="flow-step"><div class="flow-num">2</div><div><strong>identity_resolver.go</strong> → <strong>principal_store_gorm.go</strong> — loads all grants for the given principal ID from SQLite.</div></div>
-      <div class="flow-step"><div class="flow-num">3</div><div><strong>identity_resolver.go</strong> → <strong>policy_manager.go</strong> — fetches each policy JSON blob from the file/blob store, builds a PolicyRegistry.</div></div>
-      <div class="flow-step"><div class="flow-num">4</div><div><strong>engine.go Authorize()</strong> — classifies action: global (return immediately based on rule match) or atomic (continue to filter).</div></div>
-      <div class="flow-step"><div class="flow-num">5</div><div><strong>filter.go GenerateCheckFilter()</strong> → <strong>graph.go</strong> — finds cascading access paths, builds JOIN + WHERE conditions.</div></div>
-      <div class="flow-step"><div class="flow-num">6</div><div><strong>engine.go</strong> — executes <code>SELECT 1 FROM table WHERE … LIMIT 1</code> against the entity's PostgreSQL DB. Returns allowed=true if rows &gt; 0.</div></div>
-      <div class="flow-step"><div class="flow-num">7</div><div><strong>service.go</strong> — logs the final decision with trace-ID (from context) at Info level.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div><strong>pkg/service/identity.go</strong> → <strong>pkg/store/gorm.go</strong> — loads all grants for the given principal ID from SQLite.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/service/identity.go</strong> → <strong>pkg/service/policy.go</strong> — fetches each policy JSON blob from the blob store, builds a PolicyRegistry.</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div><strong>pkg/engine/engine.go Authorize()</strong> — classifies action: global (return immediately based on rule match) or atomic (continue to filter).</div></div>
+      <div class="flow-step"><div class="flow-num">5</div><div><strong>pkg/engine/filter.go GenerateCheckFilter()</strong> → <strong>pkg/engine/graph.go</strong> — finds cascading access paths, builds JOIN + WHERE conditions.</div></div>
+      <div class="flow-step"><div class="flow-num">6</div><div><strong>pkg/engine/engine.go</strong> — executes <code>SELECT 1 FROM table WHERE … LIMIT 1</code> against the entity's PostgreSQL DB. Returns allowed=true if rows &gt; 0.</div></div>
+      <div class="flow-step"><div class="flow-num">7</div><div><strong>pkg/service/authz.go</strong> — logs the final decision with trace-ID (from context) at Info level.</div></div>
     </div>
   </div>
 
@@ -863,8 +873,8 @@
     <h3>2 — Match &amp; Authorize (Auth Material)</h3>
     <div class="flow-steps">
       <div class="flow-step"><div class="flow-num">1</div><div><strong>gin-middleware/middleware.go AuthzCheck()</strong> — extracts auth type and credential from Gin context (set by upstream auth middleware).</div></div>
-      <div class="flow-step"><div class="flow-num">2</div><div><strong>service.go MatchAndAuthorize()</strong> → <strong>identity_resolver.go Resolve()</strong> — dispatches to MatchService.</div></div>
-      <div class="flow-step"><div class="flow-num">3</div><div><strong>principal_matcher.go MatchService</strong> — loads all active principals of the given type from SQLite, feeds to OIDCMatcher or X509Matcher.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div><strong>pkg/service/authz.go MatchAndAuthorize()</strong> → <strong>pkg/service/identity.go Resolve()</strong> — dispatches to MatchService.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/store/matcher.go MatchService</strong> — loads all active principals of the given type from SQLite, feeds to OIDCMatcher or X509Matcher.</div></div>
       <div class="flow-step"><div class="flow-num">4</div><div><strong>OIDCMatcher / X509Matcher</strong> — pure in-memory filtering: checks JWT claims or certificate attributes against each principal's AuthConfig. Returns matching principal IDs.</div></div>
       <div class="flow-step"><div class="flow-num">5</div><div>For each matched principal: load grants → load policy blobs → merge into one PolicyRegistry.</div></div>
       <div class="flow-step"><div class="flow-num">6</div><div><strong>engine.go</strong> — proceeds as in Flow 1, steps 4–6.</div></div>
@@ -876,7 +886,7 @@
     <div class="flow-steps">
       <div class="flow-step"><div class="flow-num">1</div><div>Caller (middleware or controller) invokes <code>MatchAndGetFilter()</code> or <code>GetFilter()</code>.</div></div>
       <div class="flow-step"><div class="flow-num">2</div><div>Principal resolution proceeds identically to flows above → PolicyRegistry ready.</div></div>
-      <div class="flow-step"><div class="flow-num">3</div><div><strong>engine.go GetListFilter()</strong> → <strong>filter.go GenerateListFilter()</strong> — for each rule: build IN-clause (direct grants), JOIN chains (cascading relations), or column conditions (attribute filters).</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/engine/engine.go GetListFilter()</strong> → <strong>pkg/engine/filter.go GenerateListFilter()</strong> — for each rule: build IN-clause (direct grants), JOIN chains (cascading relations), or column conditions (attribute filters).</div></div>
       <div class="flow-step"><div class="flow-num">4</div><div>Returns a <strong>FilterResult</strong> with SQL joins and WHERE conditions. Full SQL is logged at Trace level; shape (count) at Debug.</div></div>
       <div class="flow-step"><div class="flow-num">5</div><div>Middleware stores the WHERE clause in the Gin context under <code>authz_query</code>. The downstream handler appends it to its GORM query before execution.</div></div>
     </div>
@@ -886,9 +896,9 @@
     <h3>4 — Capability Query</h3>
     <div class="flow-steps">
       <div class="flow-step"><div class="flow-num">1</div><div><strong>capabilities_controller.go</strong> — receives a batch of entity queries with a principal ID.</div></div>
-      <div class="flow-step"><div class="flow-num">2</div><div><strong>engine.go GetPrincipalPolicies()</strong> — loads policies exactly once for the principal.</div></div>
-      <div class="flow-step"><div class="flow-num">3</div><div><strong>capabilities.go GetEntityCapabilitiesBatch()</strong> — for each query, calls <code>GetEntityCapabilities()</code> which probes each atomic action via a separate <code>Authorize()</code> call.</div></div>
-      <div class="flow-step"><div class="flow-num">4</div><div><strong>capabilities.go GetGlobalCapabilities()</strong> — scans all schema global actions against all policy rules; no DB query needed.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div><strong>pkg/service/capabilities.go GetPrincipalPolicies()</strong> — loads policies exactly once for the principal via PrincipalManager + PolicyManager.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/engine/capabilities.go GetEntityCapabilitiesBatch()</strong> — for each query, calls <code>GetEntityCapabilities()</code> which probes each atomic action via a separate <code>Authorize()</code> call.</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div><strong>pkg/engine/capabilities.go GetGlobalCapabilities()</strong> — scans all schema global actions against all policy rules; no DB query needed.</div></div>
       <div class="flow-step"><div class="flow-num">5</div><div>Results returned as a list aligned to the input query order. For auth-material variants, results are OR-merged across all matched principals.</div></div>
     </div>
   </div>
@@ -944,8 +954,8 @@ const details = {
     layer: 'HTTP API', color: '#3b82f6',
     purpose: 'Assembles all runtime dependencies in the correct order. Creates SQLite DB (WAL mode, foreign keys enabled, single-writer connection pool) for principal management; PostgreSQL DBs for entity authorization; blob bucket for policies. Configures structured JSON logging with optional file output via io.MultiWriter. Applies addFileOutput to every logger so all subsystems write to the same file.',
     types: ['Config', 'CredentialConfig', 'GormLogger'],
-    functions: ['AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error)', 'AssembleAuthzService(cfg Config, fw io.Writer) (*PrincipalManager, *Engine, *PolicyManager, *IdentityResolver, error)', 'CreateSQLiteDBConnection', 'CreatePostgresDBConnection', 'CreateBucketStore', 'preloadPolicies', 'openLogFile', 'addFileOutput'],
-    deps: ['pkg/authz (all)', 'GORM', 'gocloud.dev/blob', 'logrus', 'lamassu helpers/routes'],
+    functions: ['AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error)', 'AssembleAuthzService(cfg Config, fw io.Writer) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, error)', 'CreateSQLiteDBConnection', 'CreatePostgresDBConnection', 'CreateBucketStore', 'preloadPolicies', 'openLogFile', 'addFileOutput'],
+    deps: ['pkg/engine', 'pkg/service', 'GORM', 'gocloud.dev/blob', 'logrus', 'lamassu helpers/routes'],
     dependents: ['cmd/main.go']
   },
   routes: {
@@ -955,7 +965,7 @@ const details = {
     purpose: 'Single function that registers every HTTP endpoint on a gin.RouterGroup. Constructs all controllers, instantiates the AuthzService (passing the logger for structured decision logs), and sets up the authz middleware instances. Endpoint groups: /v1/authz, /v1/principals, /v1/policies, /v1/schemas.',
     types: [],
     functions: ['NewAuthzRoutes(router, principalManager, engine, policyManager, resolver, logger)'],
-    deps: ['all controllers', 'authz.NewAuthzService', 'sdk/gin-middleware'],
+    deps: ['all controllers', 'pkg/service.NewAuthzService', 'sdk/gin-middleware'],
     dependents: ['pkg/api/assembler.go']
   },
   authz_ctrl: {
@@ -965,7 +975,7 @@ const details = {
     purpose: 'Four Gin handlers for the primary authorization operations. Every handler validates that the entity type actually belongs to the stated namespace before proceeding. resolveEntityKey auto-maps a plain string to the schema\'s single PK column, removing the need for callers to know column names.',
     types: ['AuthzController'],
     functions: ['Authorize', 'GetFilter', 'MatchAndAuthorize', 'MatchAndGetFilter', 'validateEntityNamespace', 'resolveEntityKey'],
-    deps: ['pkg/authz/engine.go', 'pkg/authz/identity_resolver.go', 'pkg/api/dto'],
+    deps: ['pkg/engine', 'pkg/service (IdentityResolver, ErrNoMatch)', 'pkg/api/dto'],
     dependents: ['pkg/api/routes.go']
   },
   capabilities_ctrl: {
@@ -975,7 +985,7 @@ const details = {
     purpose: 'Exposes "what can this principal do?" queries. Global capabilities return a map of entity-type → []action for all entity types. Entity capabilities evaluate a batch of concrete entities and return the atomic actions permitted on each. Auth-material variants match principals first, then OR-merge results across all matched principals.',
     types: ['CapabilitiesController'],
     functions: ['GetGlobalCapabilities', 'MatchAndGetGlobalCapabilities', 'GetEntityCapabilities', 'MatchAndGetEntityCapabilities', 'dtoQueriesToEngine', 'engineResultsToDTO'],
-    deps: ['pkg/authz/engine.go (capabilities methods)', 'pkg/authz/identity_resolver.go', 'pkg/api/dto'],
+    deps: ['pkg/engine (Engine, capability types)', 'pkg/service (capabilities helpers, IdentityResolver)', 'pkg/api/dto'],
     dependents: ['pkg/api/routes.go']
   },
   principal_ctrl: {
@@ -985,7 +995,7 @@ const details = {
     purpose: 'Standard CRUD for principals. Notably, GrantPolicy and RevokePolicy manage the many-to-many relationship between principals and policies, recording who granted the policy and when.',
     types: ['PrincipalController'],
     functions: ['CreatePrincipal', 'GetPrincipal', 'ListPrincipals', 'UpdatePrincipal', 'DeletePrincipal', 'SetPrincipalActive', 'GrantPolicy', 'RevokePolicy', 'GetPrincipalPolicies'],
-    deps: ['pkg/authz/principal_manager.go', 'pkg/api/dto'],
+    deps: ['pkg/service (PrincipalManager)', 'pkg/api/dto'],
     dependents: ['pkg/api/routes.go']
   },
   policy_ctrl: {
@@ -995,7 +1005,7 @@ const details = {
     purpose: 'CRUD for policies stored in a blob bucket. DeletePolicy checks whether any principal still holds the policy and refuses deletion if so, preventing orphaned grants. SearchPolicies performs substring matching across ID, name, and description.',
     types: ['PolicyController'],
     functions: ['CreatePolicy', 'GetPolicy', 'ListPolicies', 'SearchPolicies', 'UpdatePolicy', 'DeletePolicy', 'GetPolicyStats'],
-    deps: ['pkg/authz/policy_manager.go', 'pkg/authz/principal_manager.go (usage check)', 'pkg/api/dto'],
+    deps: ['pkg/service (PolicyManager, PrincipalManager)', 'pkg/api/dto'],
     dependents: ['pkg/api/routes.go']
   },
   schema_ctrl: {
@@ -1005,7 +1015,7 @@ const details = {
     purpose: 'Single GET endpoint for schema introspection. Returns all registered SchemaDefinitions grouped by config-schema name. Useful for admin tooling to discover entity types without reading raw JSON files.',
     types: ['SchemaController'],
     functions: ['GetSchemas → GET /v1/schemas'],
-    deps: ['pkg/authz/engine.go (GetSchemas)'],
+    deps: ['pkg/engine (Engine.GetSchemas, SchemaDefinition)'],
     dependents: ['pkg/api/routes.go']
   },
   log_formatter: {
@@ -1066,7 +1076,7 @@ const details = {
     types: ['AuthzEngine interface'],
     functions: ['Authorize(ctx, principalID, namespace, schemaName, action, entityType, entityKey)', 'GetFilter(ctx, principalID, namespace, schemaName, entityType)', 'MatchAndAuthorize(ctx, authType, authMaterial, namespace, schemaName, action, entityType, entityKey)', 'MatchAndGetFilter(ctx, authType, authMaterial, namespace, schemaName, entityType)'],
     deps: ['context'],
-    dependents: ['pkg/authz/service.go (implements)', 'sdk/remote_engine.go (implements)', 'sdk/gin-middleware/middleware.go (uses)']
+    dependents: ['pkg/service/authz.go (implements AuthzEngine)', 'sdk/remote_engine.go (implements AuthzEngine)', 'sdk/gin-middleware/middleware.go (uses AuthzEngine)']
   },
   model_policy: {
     path: 'pkg/models/policy.go',
@@ -1076,7 +1086,7 @@ const details = {
     types: ['Policy', 'Rule', 'RelationRule', 'ColumnFilter', 'RelationTarget'],
     functions: ['QualifiedEntityType', 'GetSchemaAndEntity', 'HasAction', 'UnmarshalJSON (RelationRule)'],
     deps: ['encoding/json'],
-    dependents: ['pkg/authz/policy.go', 'pkg/authz/filter.go', 'pkg/api/dto/policy_dto.go']
+    dependents: ['pkg/engine/policy.go', 'pkg/engine/filter.go', 'pkg/api/dto/policy_dto.go']
   },
   model_principal: {
     path: 'pkg/models/principal.go',
@@ -1086,137 +1096,147 @@ const details = {
     types: ['Principal', 'PrincipalPolicy', 'AuthConfig'],
     functions: ['(AuthConfig).Value()', '(AuthConfig).Scan()', 'TableName()'],
     deps: ['database/sql', 'GORM'],
-    dependents: ['pkg/authz/principal_store_gorm.go', 'pkg/authz/principal_matcher.go']
+    dependents: ['pkg/store/gorm.go (principals table)', 'pkg/store/matcher.go (auth matching)']
   },
   service: {
-    path: 'pkg/authz/service.go',
+    path: 'pkg/service/authz.go',
     name: 'AuthzImplementation (Service)',
     layer: 'Service Layer', color: '#10b981',
     purpose: 'Thin orchestration layer implementing core.AuthzEngine. Its only job is: (1) resolve the caller\'s identity to a PolicyRegistry via IdentityResolver, (2) delegate the actual decision to Engine, (3) log the result with request context. Each method calls helpers.ConfigureLogger(ctx, s.logger) to attach the OTel trace-ID to the decision log entry.',
     types: ['AuthzImplementation', 'ServiceOption'],
     functions: ['NewAuthzService', 'WithServiceLogger', 'Authorize', 'GetFilter', 'MatchAndAuthorize', 'MatchAndGetFilter'],
-    deps: ['pkg/authz/engine.go', 'pkg/authz/identity_resolver.go', 'pkg/authz/principal_manager.go', 'pkg/authz/policy_manager.go', 'pkg/core', 'logrus helpers'],
+    deps: ['pkg/engine (Engine)', 'pkg/service/identity.go (IdentityResolver)', 'pkg/core', 'logrus helpers'],
     dependents: ['pkg/api/routes.go (instantiated)', 'sdk/gin-middleware (via AuthzEngine interface)']
   },
   identity_resolver: {
-    path: 'pkg/authz/identity_resolver.go',
+    path: 'pkg/service/identity.go',
     name: 'Identity Resolver',
     layer: 'Service Layer', color: '#10b981',
-    purpose: 'Collapses the "match auth material → load policies" pattern that was previously duplicated across multiple call sites. Resolve() returns ErrNoMatch (check with errors.Is) when no principal matched, allowing the caller to distinguish 401 (no identity) from 403 (identity found, access denied). GetPoliciesForPrincipal() skips matching for known principal IDs.',
+    purpose: 'Collapses the "match auth material → load policies" pattern into one place. Resolve() returns ErrNoMatch (check with errors.Is) when no principal matched, allowing the caller to distinguish 401 from 403. GetPoliciesForPrincipal() skips matching for known principal IDs. Uses local private interfaces (principalMatcher, policyLoader) to avoid circular imports.',
     types: ['IdentityResolver'],
     functions: ['NewIdentityResolver', 'Resolve', 'GetPoliciesForPrincipal', 'MatchPrincipals'],
-    deps: ['pkg/authz/principal_matcher.go (MatchService)', 'pkg/authz/ports.go (GrantStore)', 'pkg/authz/policy_manager.go', 'pkg/authz/policy.go (PolicyRegistry)'],
-    dependents: ['pkg/authz/service.go', 'pkg/api/authz_controller.go', 'pkg/api/capabilities_controller.go']
+    deps: ['pkg/store (MatchService via principalMatcher interface)', 'pkg/engine (GrantStore, PolicyRegistry)'],
+    dependents: ['pkg/service/authz.go', 'pkg/api/authz_controller.go', 'pkg/api/capabilities_controller.go']
   },
   principal_manager: {
-    path: 'pkg/authz/principal_manager.go',
+    path: 'pkg/service/principal.go',
     name: 'Principal Manager',
     layer: 'Service Layer', color: '#10b981',
-    purpose: 'Unified API for all principal and grant operations. Wraps GormPrincipalStore (which implements both PrincipalStore and GrantStore) and MatchService. NewIdentityResolver() is a convenience factory that wires a resolver using this manager\'s own store, ensuring principal loads and grant lookups share the same DB connection.',
+    purpose: 'Façade over GormPrincipalStore (pkg/store) and MatchService. Provides all principal CRUD and policy grant/revoke operations. NewIdentityResolver() is a convenience factory that wires a resolver using this manager\'s own store, ensuring principal loads and grant lookups share the same DB connection.',
     types: ['PrincipalManager'],
     functions: ['NewPrincipalManager', 'CreatePrincipal', 'GetPrincipal', 'GetPrincipalWithPolicies', 'ListPrincipals', 'UpdatePrincipal', 'DeletePrincipal', 'SetPrincipalActive', 'GrantPolicy', 'RevokePolicy', 'GrantPolicies', 'RevokePolicies', 'HasPolicy', 'GetPrincipalPolicies', 'GetPolicyPrincipals', 'MatchPrincipals', 'NewIdentityResolver'],
-    deps: ['pkg/authz/principal_store_gorm.go', 'pkg/authz/principal_matcher.go'],
-    dependents: ['pkg/api/assembler.go', 'pkg/api/routes.go', 'all controllers', 'pkg/authz/identity_resolver.go']
+    deps: ['pkg/store (GormPrincipalStore, MatchService)'],
+    dependents: ['pkg/api/assembler.go', 'pkg/api/routes.go', 'all controllers', 'pkg/service/capabilities.go']
   },
   policy_manager: {
-    path: 'pkg/authz/policy_manager.go',
+    path: 'pkg/service/policy.go',
     name: 'Policy Manager',
     layer: 'Service Layer', color: '#10b981',
-    purpose: 'Policies are stored as JSON blobs in a gocloud.dev/blob bucket. This makes the policy store pluggable (filesystem in dev, GCS/S3 in production) without changing any business logic. GetPolicyStats loads all policies to compute counts and sizes — suitable for admin UIs, not hot paths.',
+    purpose: 'Policies stored as JSON blobs in a gocloud.dev/blob bucket, making the store pluggable (filesystem, GCS, S3). Calls engine.ValidatePolicyStruct for storage-time validation. GetPolicyStats computes counts and sizes — suitable for admin UIs, not hot paths.',
     types: ['PolicyManager', 'PolicyStats'],
     functions: ['NewPolicyManager', 'CreatePolicy', 'GetPolicy', 'UpdatePolicy', 'DeletePolicy', 'ListPolicies', 'SearchPolicies', 'GetPolicyStats'],
-    deps: ['gocloud.dev/blob', 'pkg/models/policy.go', 'encoding/json'],
-    dependents: ['pkg/api/assembler.go', 'pkg/authz/identity_resolver.go', 'pkg/api/policy_controller.go']
+    deps: ['gocloud.dev/blob', 'pkg/models/policy.go', 'pkg/engine (ValidatePolicyStruct)', 'encoding/json'],
+    dependents: ['pkg/api/assembler.go', 'pkg/service/identity.go', 'pkg/api/policy_controller.go', 'pkg/service/capabilities.go']
   },
-  engine: {
-    path: 'pkg/authz/engine.go',
-    name: 'Authorization Engine',
-    layer: 'Engine Layer', color: '#f59e0b',
-    purpose: 'The decision core. Holds one *gorm.DB per config-schema name for multi-tenant authorization. Classifies each action as global (granted if any matching rule exists, no DB query) or atomic (requires SQL existence check). For atomic actions, builds filter conditions via FilterGenerator then executes SELECT 1 FROM table WHERE … LIMIT 1. Uses helpers.ConfigureLogger(ctx, e.logger) at the start of every log-emitting method to attach the request trace-ID.',
-    types: ['Engine', 'EngineOption'],
-    functions: ['NewEngine(dbs, schemaPaths, ...EngineOption)', 'WithLogger(l *logrus.Entry)', 'Authorize(ctx, policies, namespace, schemaName, action, entityType, entityKey)', 'GetListFilter(ctx, policies, namespace, schemaName, entityType)', 'GetSchemas()', 'getDBForSchema(schema)'],
-    deps: ['pkg/authz/schema.go', 'pkg/authz/policy.go', 'pkg/authz/filter.go', 'GORM', 'logrus helpers'],
-    dependents: ['pkg/authz/service.go', 'pkg/authz/capabilities.go', 'all API controllers']
-  },
-  capabilities: {
-    path: 'pkg/authz/capabilities.go',
-    name: 'Capability Evaluator',
-    layer: 'Engine Layer', color: '#f59e0b',
-    purpose: 'Methods attached to Engine that answer "what can this principal do?" rather than "can they do X?". GetGlobalCapabilities scans every schema and policy rule without DB queries. GetEntityCapabilities makes one Authorize() call per atomic action per entity — batch variants amortize the policy load. MergeGlobalCapabilities uses OR logic for multi-principal scenarios.',
-    types: ['GlobalCapabilities (map[string][]string)', 'EntityCapabilities', 'EntityCapabilityQuery', 'EntityCapabilitiesResult'],
-    functions: ['GetGlobalCapabilities(ctx, policies)', 'GetEntityCapabilities(ctx, policies, namespace, schemaName, entityType, entityKey)', 'GetEntityCapabilitiesBatch(ctx, policies, queries)', 'GetPrincipalPolicies(ctx, pm, polm, principalID)', 'GetGlobalCapabilitiesForPrincipal', 'GetEntityCapabilitiesForPrincipal', 'GetEntityCapabilitiesBatchForPrincipal', 'MergeGlobalCapabilities'],
-    deps: ['pkg/authz/engine.go', 'pkg/authz/schema.go', 'pkg/authz/policy.go', 'pkg/authz/principal_manager.go', 'pkg/authz/policy_manager.go'],
+  service_capabilities: {
+    path: 'pkg/service/capabilities.go',
+    name: 'Principal Capability Helpers',
+    layer: 'Service Layer', color: '#10b981',
+    purpose: 'Package-level functions that bridge the Engine capability methods with PrincipalManager and PolicyManager. Each function loads the principal\'s PolicyRegistry once, then calls the corresponding pure engine method. Separated from pkg/engine/capabilities.go to avoid a circular dependency: Engine would need to import service-layer managers if these lived in the engine package.',
+    types: [],
+    functions: ['GetPrincipalPolicies(ctx, engine, pm, polm, principalID)', 'GetGlobalCapabilitiesForPrincipal(ctx, engine, pm, polm, principalID)', 'GetEntityCapabilitiesForPrincipal(ctx, engine, pm, polm, principalID, ...)', 'GetEntityCapabilitiesBatchForPrincipal(ctx, engine, pm, polm, principalID, queries)'],
+    deps: ['pkg/engine (Engine, PolicyRegistry, GlobalCapabilities, EntityCapabilities)', 'pkg/service/principal.go', 'pkg/service/policy.go'],
     dependents: ['pkg/api/capabilities_controller.go']
   },
+  engine: {
+    path: 'pkg/engine/engine.go',
+    name: 'Authorization Engine',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'The decision core. Holds one *gorm.DB per config-schema name for multi-tenant authorization. Classifies each action as global (granted if any matching rule exists, no DB query) or atomic (requires SQL existence check). For atomic actions, builds filter conditions via FilterGenerator then executes SELECT 1 FROM table WHERE … LIMIT 1. Exposes Logger() accessor so pkg/service/capabilities.go can share the same logrus.Entry.',
+    types: ['Engine', 'EngineOption'],
+    functions: ['NewEngine(dbs, schemaPaths, ...EngineOption)', 'WithLogger(l *logrus.Entry)', 'Logger() *logrus.Entry', 'Authorize(ctx, policies, namespace, schemaName, action, entityType, entityKey)', 'GetListFilter(ctx, policies, namespace, schemaName, entityType)', 'GetSchemas()'],
+    deps: ['pkg/engine/schema.go', 'pkg/engine/policy.go', 'pkg/engine/filter.go', 'GORM', 'logrus helpers'],
+    dependents: ['pkg/service/authz.go', 'pkg/service/capabilities.go', 'pkg/engine/capabilities.go', 'all API controllers']
+  },
+  capabilities: {
+    path: 'pkg/engine/capabilities.go',
+    name: 'Capability Evaluator',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'Pure engine methods that answer "what can this principal do?" given an already-loaded PolicyRegistry. GetGlobalCapabilities scans every schema without DB queries. GetEntityCapabilities makes one Authorize() call per atomic action. The ForPrincipal variants (which load policies from PrincipalManager/PolicyManager) were moved to pkg/service/capabilities.go to avoid circular imports.',
+    types: ['GlobalCapabilities (map[string][]string)', 'EntityCapabilities', 'EntityCapabilityQuery', 'EntityCapabilitiesResult'],
+    functions: ['GetGlobalCapabilities(ctx, policies)', 'GetEntityCapabilities(ctx, policies, namespace, schemaName, entityType, entityKey)', 'GetEntityCapabilitiesBatch(ctx, policies, queries)', 'MergeGlobalCapabilities(dst, src)'],
+    deps: ['pkg/engine/engine.go', 'pkg/engine/schema.go', 'pkg/engine/policy.go'],
+    dependents: ['pkg/service/capabilities.go (ForPrincipal helpers)', 'pkg/api/capabilities_controller.go (via service helpers)']
+  },
   filter: {
-    path: 'pkg/authz/filter.go',
+    path: 'pkg/engine/filter.go',
     name: 'SQL Filter Generator',
     layer: 'Engine Layer', color: '#f59e0b',
     purpose: 'The most complex file. Converts policy rules into SQL. Three access strategies: (1) Direct grants → IN clause with entity IDs. (2) Cascading relations → JOIN chain derived from AuthorizationGraph path-finding, enabling "user has access to device because user → organization → device". (3) Column filters → attribute conditions (column operator value). GenerateCheckFilter adds an entity-key equality condition on top of any list filter. Wildcard rules generate broader filters (1=1 for all-access).',
     types: ['FilterGenerator', 'FilterResult'],
     functions: ['NewFilterGenerator', 'GenerateListFilter(action, schemaName, entityType)', 'GenerateCheckFilter(action, schemaName, entityType, entityKey)', 'buildCascadingAccess', 'buildCascadingAccessWildcard', 'buildCascadingAccessByColumnFilter', 'buildPathFilter', 'buildPathFilterWildcard', 'buildPathFilterByColumnFilter'],
-    deps: ['pkg/authz/schema.go', 'pkg/authz/policy.go', 'pkg/authz/graph.go', 'pkg/models/policy.go'],
-    dependents: ['pkg/authz/engine.go (Authorize, GetListFilter)']
+    deps: ['pkg/engine/schema.go', 'pkg/engine/policy.go', 'pkg/engine/graph.go', 'pkg/models/policy.go'],
+    dependents: ['pkg/engine/engine.go (Authorize, GetListFilter)']
   },
   graph: {
-    path: 'pkg/authz/graph.go',
+    path: 'pkg/engine/graph.go',
     name: 'Authorization Graph',
     layer: 'Engine Layer', color: '#f59e0b',
     purpose: 'Entity-relationship graph used by FilterGenerator. BuildFromPoliciesAndSchemas constructs directed edges: policy relation rules add "access edges" (principal can access device via organization); schema relation configs add "FK edges" (device.organization_id → organizations.id). FindPathsBetween uses DFS to discover all paths between two entity types, enabling multi-hop JOIN chains.',
     types: ['AuthorizationGraph', 'GraphNode', 'GraphEdge'],
     functions: ['BuildFromPoliciesAndSchemas(schemas, policies)', 'FindPathsBetween(from, to)', 'FindPathsToUser(from)', 'addRuleEdges', 'addRelationEdges', 'dfs (private)'],
-    deps: ['pkg/authz/schema.go', 'pkg/authz/policy.go'],
-    dependents: ['pkg/authz/filter.go']
+    deps: ['pkg/engine/schema.go', 'pkg/engine/policy.go'],
+    dependents: ['pkg/engine/filter.go']
   },
   schema: {
-    path: 'pkg/authz/schema.go',
+    path: 'pkg/engine/schema.go',
     name: 'Schema Registry',
     layer: 'Engine Layer', color: '#f59e0b',
     purpose: 'Loads and validates entity schemas from JSON files. Each schema file can define multiple entity types; multiple files can be loaded under different config-schema names (e.g., "iot", "pki"). SchemaDefinition carries the SQL table name, primary key columns, relation configs (FK → parent entity), atomic vs. global action lists, and filterable column specs. Used pervasively by engine, filter, graph, and controllers.',
     types: ['SchemaRegistry', 'SchemaDefinition', 'FilterableField', 'RelationConfig'],
     functions: ['NewSchemaRegistry', 'Load(path, configSchemaName)', 'Get(entityType)', 'GetBySchemaEntity(schemaName, entityType)', 'GetAll()', 'QualifiedTableName', 'NamespacedType', 'IsGlobalAction', 'HasAction', 'ValidateEntityKey'],
     deps: ['encoding/json', 'os'],
-    dependents: ['pkg/authz/engine.go', 'pkg/authz/filter.go', 'pkg/authz/graph.go', 'pkg/authz/capabilities.go', 'pkg/api/authz_controller.go']
+    dependents: ['pkg/engine/engine.go', 'pkg/engine/filter.go', 'pkg/engine/graph.go', 'pkg/engine/capabilities.go', 'pkg/api/authz_controller.go']
   },
   policy_reg: {
-    path: 'pkg/authz/policy.go',
+    path: 'pkg/engine/policy.go',
     name: 'Policy Registry & Validation',
     layer: 'Engine Layer', color: '#f59e0b',
-    purpose: 'In-memory registry built fresh per request. AddPolicy validates the full rule structure (required fields, valid operators, no cyclic relation paths) before registering. Provides GetRules() for engine iteration and ruleMatchesSchema() / wildcardMatches() helpers for namespace-aware rule filtering. A lightweight, allocation-efficient structure since it is created and discarded per authorization call.',
+    purpose: 'In-memory registry built fresh per request. AddPolicy validates the full rule structure before registering. ValidatePolicyStruct is exported so pkg/service/policy.go can reuse it for storage-time validation. Provides GetRules() for engine iteration and ruleMatchesSchema() / wildcardMatches() helpers for namespace-aware rule filtering.',
     types: ['PolicyRegistry'],
-    functions: ['NewPolicyRegistry', 'Load(path, configSchemaName)', 'AddPolicy', 'GetPolicy', 'GetAll', 'GetRules', 'validatePolicy', 'ruleMatchesSchema', 'concretizeRuleForSchema', 'wildcardMatches'],
+    functions: ['NewPolicyRegistry', 'AddPolicy', 'GetRules', 'ValidatePolicyStruct (exported)', 'ruleMatchesSchema', 'concretizeRuleForSchema', 'wildcardMatches'],
     deps: ['pkg/models/policy.go', 'encoding/json'],
-    dependents: ['pkg/authz/engine.go', 'pkg/authz/filter.go', 'pkg/authz/graph.go', 'pkg/authz/capabilities.go', 'pkg/authz/identity_resolver.go']
+    dependents: ['pkg/engine/engine.go', 'pkg/engine/filter.go', 'pkg/engine/graph.go', 'pkg/engine/capabilities.go', 'pkg/service/identity.go', 'pkg/service/policy.go (ValidatePolicyStruct)']
   },
   ports: {
-    path: 'pkg/authz/ports.go',
+    path: 'pkg/engine/ports.go',
     name: 'Ports (Dependency Interfaces)',
     layer: 'Engine Layer', color: '#f59e0b',
-    purpose: 'Hexagonal architecture ports. PrincipalStore: full CRUD plus ListByType (loads only principals of a given auth type, minimizing data read during matching). GrantStore: join-table operations with batch grant/revoke, usage counts. PrincipalMatcher: pure stateless matching — receives pre-loaded principals and auth material, returns matching IDs. No GORM in this file.',
+    purpose: 'Hexagonal architecture ports. PrincipalStore: full CRUD plus ListByType (loads only principals of a given auth type, minimizing data read during matching). GrantStore: join-table operations with batch grant/revoke, usage counts. PrincipalMatcher: pure stateless matching — receives pre-loaded principals and auth material, returns matching IDs. pkg/store satisfies PrincipalStore+GrantStore via Go structural typing (gorm.go does not import this package directly).',
     types: ['PrincipalStore', 'GrantStore', 'PrincipalMatcher'],
     functions: ['(all interface method signatures)'],
     deps: ['context', 'pkg/models'],
-    dependents: ['pkg/authz/principal_store_gorm.go (implements PrincipalStore+GrantStore)', 'pkg/authz/principal_matcher.go (implements PrincipalMatcher)', 'pkg/authz/identity_resolver.go (uses GrantStore)', 'pkg/authz/principal_manager.go (uses all)']
+    dependents: ['pkg/store/gorm.go (satisfies PrincipalStore+GrantStore via duck typing)', 'pkg/store/matcher.go (imports for type references)', 'pkg/service/identity.go (uses GrantStore)']
   },
   gorm_store: {
-    path: 'pkg/authz/principal_store_gorm.go',
+    path: 'pkg/store/gorm.go',
     name: 'GORM Principal Store',
     layer: 'Data Access', color: '#ef4444',
-    purpose: 'Implements PrincipalStore and GrantStore using GORM. On first use, AutoMigrates the principals table and principal_policies join table, creating indexes for type-filtered lookups. All methods are context-aware. ListByType is the hot path for matching: loads only active principals of one auth type, keeping the in-memory match set small.',
+    purpose: 'Implements PrincipalStore and GrantStore (pkg/engine/ports.go) using GORM — satisfies the interfaces via Go structural typing without importing pkg/engine. On first use, AutoMigrates the principals table and principal_policies join table. All methods are context-aware. ListByType is the hot path for matching: loads only active principals of one auth type.',
     types: ['GormPrincipalStore'],
     functions: ['NewGormPrincipalStore', 'Create', 'Get', 'GetWithPolicies', 'List', 'Update', 'Delete', 'SetActive', 'ListByType', 'Grant', 'Revoke', 'GrantBatch', 'RevokeBatch', 'Has', 'ListForPrincipal', 'ListForPolicy', 'CountForPrincipal', 'CountForPolicy'],
     deps: ['GORM', 'pkg/models/principal.go'],
-    dependents: ['pkg/authz/principal_manager.go (wraps)', 'pkg/authz/identity_resolver.go (via GrantStore port)']
+    dependents: ['pkg/service/principal.go (wraps)', 'pkg/service/identity.go (via GrantStore port)']
   },
   matcher: {
-    path: 'pkg/authz/principal_matcher.go',
+    path: 'pkg/store/matcher.go',
     name: 'Principal Matcher',
     layer: 'Data Access', color: '#ef4444',
-    purpose: 'Two zero-field stateless matchers. OIDCMatcher evaluates JWT claim conditions (equals, contains, regex operators) against each principal\'s AuthConfig. X509Matcher checks parsed X.509 certificates by serial number, common name, CA fingerprint (SHA-256), or authority key ID. MatchService coordinates: loads principals by type via PrincipalStore.ListByType, dispatches to the right matcher, returns the IDs of all matching principals.',
+    purpose: 'Two zero-field stateless matchers. OIDCMatcher evaluates JWT claim conditions (equals, contains, regex operators) against each principal\'s AuthConfig. X509Matcher checks parsed X.509 certificates by serial number, common name, CA fingerprint (SHA-256), or authority key ID. MatchService coordinates both. Imports pkg/engine only for the PrincipalStore and PrincipalMatcher interface types — no concrete engine dependencies.',
     types: ['OIDCMatcher', 'X509Matcher', 'MatchService'],
-    functions: ['DefaultMatchService(store PrincipalStore)', 'MatchPrincipals(ctx, authMaterial, authType)', '(OIDCMatcher).Match', '(X509Matcher).Match', 'parseCertificate (helper)'],
-    deps: ['pkg/models/principal.go', 'pkg/authz/ports.go', 'golang-jwt/jwt', 'crypto/x509', 'encoding/json'],
-    dependents: ['pkg/authz/principal_manager.go (holds MatchService)']
+    functions: ['DefaultMatchService(store engine.PrincipalStore)', 'MatchPrincipals(ctx, authMaterial, authType)', '(OIDCMatcher).Match', '(X509Matcher).Match'],
+    deps: ['pkg/models/principal.go', 'pkg/engine (PrincipalStore, PrincipalMatcher interfaces)', 'golang-jwt/jwt', 'crypto/x509', 'encoding/json'],
+    dependents: ['pkg/service/principal.go (holds MatchService)']
   },
   sdk_client: {
     path: 'sdk/sdk.go',
@@ -1266,7 +1286,7 @@ const details = {
     types: ['PostgresContainer'],
     functions: ['RunPostgresWithMigration(migrationPath string) (*PostgresContainer, error)', '(c).Cleanup()', '(c).DSN()'],
     deps: ['ory/dockertest', 'GORM', 'postgres driver'],
-    dependents: ['pkg/authz/engine_test.go', 'pkg/authz/capabilities_test.go', 'pkg/authz/capabilities_integration_test.go']
+    dependents: ['pkg/engine/*_test.go', 'pkg/service/capabilities_test.go', 'pkg/service/capabilities_integration_test.go']
   }
 };
 

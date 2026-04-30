@@ -17,7 +17,7 @@ func TestClientPreservesStatusForNonJSONErrorResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(DefaultConfig(server.URL))
+	client, err := NewClient(DefaultConfig(server.URL, ""))
 	require.NoError(t, err)
 
 	err = client.get(context.Background(), "/v1/authz/match/authorize", nil)

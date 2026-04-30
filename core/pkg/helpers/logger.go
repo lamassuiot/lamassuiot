@@ -93,6 +93,10 @@ func configureLoggerWitSourceAndCallerID(ctx context.Context, logger *logrus.Ent
 	logger = logger.WithField("auth-type", authMode)
 	logger = logger.WithField("auth-id", authID)
 
+	if authCtx := ctx.Value(core.LamassuContextKeyAuthContext); authCtx != nil {
+		logger = logger.WithField("auth-context", authCtx)
+	}
+
 	return logger
 }
 
