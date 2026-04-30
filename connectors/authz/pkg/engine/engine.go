@@ -141,7 +141,7 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 	}
 
 	var exists int
-	query := db.Table(schema.QualifiedTableName())
+	query := db.WithContext(ctx).Table(schema.QualifiedTableName())
 
 	for _, join := range result.Joins {
 		query = query.Joins(join)
@@ -164,17 +164,30 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 	authorized := query.RowsAffected > 0
 
 	reason := "entity not found or does not match policy conditions"
-	if authorized {
-		reason = "entity found matching policy conditions"
-	}
-
-	log.WithFields(logrus.Fields{
+	fields := logrus.Fields{
 		"action":      action,
 		"entity_type": entityType,
 		"namespace":   namespace,
 		"allowed":     authorized,
 		"reason":      reason,
-	}).Info("authorization decision")
+	}
+	if authorized {
+		fields["reason"] = "entity found matching policy conditions"
+		var matchedPolicyIDs []string
+		for _, policy := range policies.GetAll() {
+			for _, rule := range policy.Rules {
+				if ruleMatchesSchema(rule, schema) && rule.HasAction(action) {
+					matchedPolicyIDs = append(matchedPolicyIDs, policy.ID)
+					break
+				}
+			}
+		}
+		if len(matchedPolicyIDs) > 0 {
+			fields["policy_ids"] = matchedPolicyIDs
+		}
+	}
+
+	log.WithFields(fields).Info("authorization decision")
 
 	return authorized, nil
 }
