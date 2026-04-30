@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/service"
@@ -373,10 +374,24 @@ func enrichContextByPrincipalID(ctx context.Context, principalID string) context
 
 // enrichContextByAuthMaterial stores the credential type and material into the context
 // before principals are matched, so that even failed-match logs carry auth context.
+// For JWT-based auth types (oidc), the raw token is never stored; decoded claims are
+// logged instead. X.509 and other credential types are stored as-is.
 func enrichContextByAuthMaterial(ctx context.Context, authType string, authMaterial interface{}) context.Context {
 	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthType, authType)
+
+	credential := authMaterial
+	if authType == "oidc" {
+		if tokenStr, ok := authMaterial.(string); ok {
+			claims := jwt.MapClaims{}
+			parser := jwt.NewParser()
+			if _, _, err := parser.ParseUnverified(tokenStr, claims); err == nil {
+				credential = map[string]interface{}(claims)
+			}
+		}
+	}
+
 	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthContext, map[string]interface{}{
-		"credential": authMaterial,
+		"credential": credential,
 	})
 	return ctx
 }
