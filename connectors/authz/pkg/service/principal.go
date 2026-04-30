@@ -1,32 +1,31 @@
-package authz
+package service
 
 import (
 	"context"
 
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/authz/pkg/store"
 	"gocloud.dev/blob"
 	"gorm.io/gorm"
 )
 
-// PrincipalManager is a backward-compatible facade over GormPrincipalStore and MatchService.
-// All existing call sites in pkg/api/ and pkg/authz/service.go compile unchanged.
-// New code should depend on the individual ports (PrincipalStore, GrantStore, PrincipalMatcher)
-// rather than this aggregate.
+// PrincipalManager is a facade over GormPrincipalStore and MatchService.
 type PrincipalManager struct {
-	store        *GormPrincipalStore
-	matchService *MatchService
+	store        *store.GormPrincipalStore
+	matchService *store.MatchService
 }
 
-// NewPrincipalManager creates a PrincipalManager. The bucket parameter is accepted for
-// API compatibility but is unused — policy storage is handled by PolicyManager.
+// NewPrincipalManager creates a PrincipalManager backed by the given SQLite/Postgres DB.
+// The bucket parameter is accepted for API compatibility but unused — policy storage is
+// handled by PolicyManager.
 func NewPrincipalManager(db *gorm.DB, _ *blob.Bucket) (*PrincipalManager, error) {
-	store, err := NewGormPrincipalStore(db)
+	s, err := store.NewGormPrincipalStore(db)
 	if err != nil {
 		return nil, err
 	}
 	return &PrincipalManager{
-		store:        store,
-		matchService: DefaultMatchService(store),
+		store:        s,
+		matchService: store.DefaultMatchService(s),
 	}, nil
 }
 
@@ -63,7 +62,6 @@ func (m *PrincipalManager) SetPrincipalActive(id string, active bool) error {
 // --- Policy grants ---
 
 func (m *PrincipalManager) GrantPolicy(principalID, policyID, grantedBy string) error {
-	// Preserve original behavior: verify principal exists before granting.
 	if _, err := m.store.Get(context.Background(), principalID); err != nil {
 		return err
 	}
@@ -103,7 +101,7 @@ func (m *PrincipalManager) CountPolicyPrincipals(policyID string) (int64, error)
 }
 
 // NewIdentityResolver creates an IdentityResolver wired to this manager's store and
-// match service. Use this in assembler.go to avoid exposing internal fields.
+// match service.
 func (m *PrincipalManager) NewIdentityResolver(policies *PolicyManager) *IdentityResolver {
 	return NewIdentityResolver(m.matchService, m.store, policies)
 }

@@ -4,16 +4,16 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/lamassuiot/authz/pkg/engine"
 )
 
 type SchemaController struct {
-	engine *authz.Engine
+	eng *engine.Engine
 }
 
-func NewSchemaController(engine *authz.Engine) *SchemaController {
+func NewSchemaController(eng *engine.Engine) *SchemaController {
 	return &SchemaController{
-		engine: engine,
+		eng: eng,
 	}
 }
 
@@ -22,13 +22,13 @@ func NewSchemaController(engine *authz.Engine) *SchemaController {
 // @Description Returns all registered entity schemas grouped by authorization namespace
 // @Tags schema
 // @Produce json
-// @Success 200 {object} map[string][]authz.SchemaDefinition
+// @Success 200 {object} map[string][]engine.SchemaDefinition
 // @Router /api/v1/schemas [get]
 func (ctrl *SchemaController) GetSchemas(c *gin.Context) {
-	schemas := ctrl.engine.GetSchemas().GetAll()
+	schemas := ctrl.eng.GetSchemas().GetAll()
 
 	// Group schemas by config schema (authorization namespace)
-	grouped := make(map[string][]*authz.SchemaDefinition)
+	grouped := make(map[string][]*engine.SchemaDefinition)
 	for _, schema := range schemas {
 		configSchema := schema.ConfigSchema
 		if configSchema == "" {

@@ -1,4 +1,4 @@
-package authz
+package engine
 
 import (
 	"os"
@@ -475,7 +475,7 @@ func TestPolicyValidation_RejectsRepeatedVertexInRelationPath(t *testing.T) {
 		},
 	}
 
-	err := validatePolicyStruct(policy)
+	err := ValidatePolicyStruct(policy)
 	if err == nil {
 		t.Fatalf("expected validation error for repeated vertex, got nil")
 	}
@@ -513,7 +513,7 @@ func TestPolicyValidation_AllowsRepeatedVertexAcrossDifferentBranches(t *testing
 		},
 	}
 
-	if err := validatePolicyStruct(policy); err != nil {
+	if err := ValidatePolicyStruct(policy); err != nil {
 		t.Fatalf("expected policy to be valid for separate branches, got: %v", err)
 	}
 }

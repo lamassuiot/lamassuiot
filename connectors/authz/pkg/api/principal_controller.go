@@ -5,15 +5,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/authz"
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/authz/pkg/service"
 )
 
 type PrincipalController struct {
-	manager *authz.PrincipalManager
+	manager *service.PrincipalManager
 }
 
-func NewPrincipalController(manager *authz.PrincipalManager) *PrincipalController {
+func NewPrincipalController(manager *service.PrincipalManager) *PrincipalController {
 	return &PrincipalController{manager: manager}
 }
 

@@ -8,19 +8,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/lamassuiot/authz/pkg/engine"
+	"github.com/lamassuiot/authz/pkg/service"
 	"github.com/sirupsen/logrus"
 )
 
 type AuthzController struct {
-	engine   *authz.Engine
-	resolver *authz.IdentityResolver
+	engine   *engine.Engine
+	resolver *service.IdentityResolver
 	logger   *logrus.Entry
 }
 
-func NewAuthzController(engine *authz.Engine, resolver *authz.IdentityResolver, logger *logrus.Entry) *AuthzController {
+func NewAuthzController(eng *engine.Engine, resolver *service.IdentityResolver, logger *logrus.Entry) *AuthzController {
 	return &AuthzController{
-		engine:   engine,
+		engine:   eng,
 		resolver: resolver,
 		logger:   logger,
 	}
@@ -179,7 +180,7 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 
 	policies, matchedPrincipals, err := ctrl.resolver.Resolve(c.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
-		if errors.Is(err, authz.ErrNoMatch) {
+		if errors.Is(err, service.ErrNoMatch) {
 			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 				Error:   "Authentication failed",
 				Details: map[string]string{"reason": "No matching principals found"},
@@ -254,7 +255,7 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 
 	policies, matchedPrincipals, err := ctrl.resolver.Resolve(c.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
-		if errors.Is(err, authz.ErrNoMatch) {
+		if errors.Is(err, service.ErrNoMatch) {
 			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 				Error:   "Authentication failed",
 				Details: map[string]string{"reason": "No matching principals found"},
@@ -325,7 +326,7 @@ func (ctrl *AuthzController) validateEntityNamespace(namespace, schemaName, enti
 // Returning nil is valid for global actions (no entity required).
 // If the key is a plain string, the schema's single PK column is resolved automatically;
 // composite-PK schemas require the object form.
-func resolveEntityKey(schemas *authz.SchemaRegistry, schemaName, entityType string, key dto.FlexEntityKey) (map[string]string, error) {
+func resolveEntityKey(schemas *engine.SchemaRegistry, schemaName, entityType string, key dto.FlexEntityKey) (map[string]string, error) {
 	if key.IsEmpty() {
 		return nil, nil
 	}
