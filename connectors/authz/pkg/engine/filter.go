@@ -1,4 +1,4 @@
-package authz
+package engine
 
 import (
 	"fmt"
@@ -218,7 +218,6 @@ func (fg *FilterGenerator) GenerateListFilter(action, targetSchemaName, targetEn
 
 				if hasWildcard {
 					// Wildcard - cascade from ALL entities of this type
-					// Pass the policy to check policy-specific relation actions
 					cascadeResult, newPathCounter, err := fg.buildCascadingAccessWildcard(
 						concreteRule,
 						action,
@@ -234,8 +233,6 @@ func (fg *FilterGenerator) GenerateListFilter(action, targetSchemaName, targetEn
 				} else {
 					// Specific entity IDs
 					for _, entityID := range concreteRule.GetDirectGrants() {
-						// Check if this entity can cascade to target with the requested action
-						// Pass the policy to check policy-specific relation actions
 						cascadeResult, newPathCounter, err := fg.buildCascadingAccess(
 							concreteRule,
 							entityID,
@@ -252,8 +249,7 @@ func (fg *FilterGenerator) GenerateListFilter(action, targetSchemaName, targetEn
 					}
 				}
 			} else if concreteRule.HasColumnFilters() {
-				// Attribute-based cascading: source entities satisfying the column filters
-				// grant access to the related target entities.
+				// Attribute-based cascading
 				cascadeResult, newPathCounter, err := fg.buildCascadingAccessByColumnFilter(
 					concreteRule,
 					action,
@@ -299,7 +295,6 @@ func (fg *FilterGenerator) GenerateCheckFilter(action, schemaName, entityType st
 	}
 
 	// Wrap access conditions in parentheses and AND with entity key check
-	// This ensures: (access_condition_1 OR access_condition_2) AND pk_col = value [AND ...]
 	accessCondition := "(" + strings.Join(result.Conditions, " OR ") + ")"
 	entityKeyCondition, err := schema.EntityKeyCondition(entityKey, schema.QualifiedTableName())
 	if err != nil {
@@ -321,13 +316,9 @@ func (fg *FilterGenerator) buildCascadingAccess(rule *models.Rule, ownedEntityID
 
 	pathIdx := startPathIdx
 
-	// Find all paths from owned entity to target using the graph
-	// Use the rule's entity type
 	paths := fg.graph.FindPathsBetween(rule.QualifiedEntityType(), targetEntityType, action, 10)
 
-	// Build SQL filter for each path, checking if this rule's relations support the action
 	for _, path := range paths {
-		// Check if this path is allowed by the rule's relations
 		if !fg.pathAllowedByRule(rule, path, action) {
 			continue
 		}
@@ -338,7 +329,7 @@ func (fg *FilterGenerator) buildCascadingAccess(rule *models.Rule, ownedEntityID
 		if len(pathResult.Conditions) > 0 || len(pathResult.Joins) > 0 {
 			result.Joins = append(result.Joins, pathResult.Joins...)
 			result.Conditions = append(result.Conditions, pathResult.Conditions...)
-			pathIdx++ // Increment for next path
+			pathIdx++
 		}
 	}
 
@@ -354,12 +345,9 @@ func (fg *FilterGenerator) buildCascadingAccessWildcard(rule *models.Rule, actio
 
 	pathIdx := startPathIdx
 
-	// Find all paths from owned entity type to target using the graph
 	paths := fg.graph.FindPathsBetween(rule.QualifiedEntityType(), targetEntityType, action, 10)
 
-	// Build SQL filter for each path (without filtering by specific entity ID)
 	for _, path := range paths {
-		// Check if this path is allowed by the rule's relations
 		if !fg.pathAllowedByRule(rule, path, action) {
 			continue
 		}
@@ -370,7 +358,7 @@ func (fg *FilterGenerator) buildCascadingAccessWildcard(rule *models.Rule, actio
 		if len(pathResult.Conditions) > 0 || len(pathResult.Joins) > 0 {
 			result.Joins = append(result.Joins, pathResult.Joins...)
 			result.Conditions = append(result.Conditions, pathResult.Conditions...)
-			pathIdx++ // Increment for next path
+			pathIdx++
 		}
 	}
 
@@ -383,29 +371,22 @@ func (fg *FilterGenerator) pathAllowedByRule(rule *models.Rule, path []*GraphEdg
 		return false
 	}
 
-	// Check each edge in the path against the rule's relations
 	currentRelations := rule.Relations
 	for i, edge := range path {
-		// Find the relation in the current rule/relation that matches this edge
 		found := false
 		for _, rel := range currentRelations {
 			if rel.QualifiedTo() == edge.To && rel.Via == edge.Via {
-				// Only check action support on the LAST edge (final destination)
-				// Intermediate edges just need to exist to establish the relationship path
 				if i == len(path)-1 {
-					// Last edge - check if this relation supports the requested action
 					if !relHasAction(&rel, action) {
 						return false
 					}
 				}
-				// Move to nested relations for next edge
 				currentRelations = rel.Relations
 				found = true
 				break
 			}
 		}
 		if !found {
-			// This edge doesn't exist in the rule's relations
 			return false
 		}
 	}
@@ -423,12 +404,10 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 		return &FilterResult{}, nil
 	}
 
-	// Verify path starts from owned entity
 	if path[0].From != ownedEntityType {
 		return nil, fmt.Errorf("path does not start from owned entity %s", ownedEntityType)
 	}
 
-	// Get target entity schema (the table we're querying FROM)
 	targetSchema, err := fg.schemas.Get(path[len(path)-1].To)
 	if err != nil {
 		return nil, err
@@ -439,20 +418,14 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 		Conditions: []string{},
 	}
 
-	// Build JOIN chain for the path
-	// NOTE: The path is from owned entity to target, but we need to join from target back to owned entity
-	// So we traverse the path in REVERSE order
 	var ownedSchema *SchemaDefinition
 	var ownedAlias string
 	for i := len(path) - 1; i >= 0; i-- {
 		edge := path[i]
-		joinIdx := len(path) - 1 - i // Join index for alias naming
+		joinIdx := len(path) - 1 - i
 		alias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx)
 
 		if joinIdx == 0 {
-			// First join: join from target table to the next entity in the chain
-			// The edge points FROM parent TO child, so edge.To is closer to target
-			// We need to get the schema for the entity we're joining TO (the parent in the original path)
 			fromSchema, err := fg.schemas.Get(edge.From)
 			if err != nil {
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
@@ -467,7 +440,6 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 				fromSchema.PrimaryKeys[0])
 			result.Joins = append(result.Joins, joinClause)
 		} else {
-			// Subsequent joins: join from previous table in the chain
 			prevAlias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx-1)
 			fromSchema, err := fg.schemas.Get(edge.From)
 			if err != nil {
@@ -497,18 +469,13 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 		return nil, fmt.Errorf("owned entity alias not found in path for %s", ownedEntityType)
 	}
 
-	// Add condition for the owned entity ID on the alias that represents the owned entity
 	result.Conditions = append(result.Conditions, fmt.Sprintf("%s.%s = %s", ownedAlias, ownedSchema.PrimaryKeys[0], sqlStringLiteral(ownedEntityID)))
-
-	// Build complete SQL query
 	result.buildFullSQL(targetSchema, " AND ")
 
 	return result, nil
 }
 
-// buildPathFilterByColumnFilter converts a graph path into JOIN clauses with column-filter
-// conditions on the owned (source) entity alias. The owned entity is constrained by the
-// provided ColumnFilters rather than a specific ID or IS NOT NULL check.
+// buildPathFilterByColumnFilter converts a graph path into JOIN clauses with column-filter conditions
 func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string, columnFilters []models.ColumnFilter, path []*GraphEdge, pathIdx int) (*FilterResult, error) {
 	if len(path) == 0 {
 		return &FilterResult{}, nil
@@ -528,7 +495,6 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 		Conditions: []string{},
 	}
 
-	// Build JOIN chain (identical to buildPathFilterWildcard)
 	for i := len(path) - 1; i >= 0; i-- {
 		edge := path[i]
 		joinIdx := len(path) - 1 - i
@@ -564,7 +530,6 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 		}
 	}
 
-	// The owned entity is path[0].From, mapped to the last alias in the reversed traversal.
 	ownedAlias := fmt.Sprintf("j%d_%d", pathIdx, len(path)-1)
 	ownedSchema, err := fg.schemas.Get(ownedEntityType)
 	if err != nil {
@@ -578,7 +543,6 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 	if cond != "" {
 		result.Conditions = append(result.Conditions, cond)
 	} else {
-		// No filters means unrestricted — use IS NOT NULL to keep the join semantically correct.
 		result.Conditions = append(result.Conditions, fmt.Sprintf("%s.%s IS NOT NULL", ownedAlias, ownedSchema.PrimaryKeys[0]))
 	}
 
@@ -587,8 +551,7 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 	return result, nil
 }
 
-// buildCascadingAccessByColumnFilter builds cascading access from all entities of a type that
-// satisfy the rule's ColumnFilters (attribute-based scoping instead of specific IDs or wildcard).
+// buildCascadingAccessByColumnFilter builds cascading access from entities satisfying column filters
 func (fg *FilterGenerator) buildCascadingAccessByColumnFilter(rule *models.Rule, action string, targetEntityType string, startPathIdx int) (*FilterResult, int, error) {
 	result := &FilterResult{
 		Joins:      []string{},
@@ -623,12 +586,10 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 		return &FilterResult{}, nil
 	}
 
-	// Verify path starts from owned entity
 	if path[0].From != ownedEntityType {
 		return nil, fmt.Errorf("path does not start from owned entity %s", ownedEntityType)
 	}
 
-	// Get target entity schema (the table we're querying FROM)
 	targetSchema, err := fg.schemas.Get(path[len(path)-1].To)
 	if err != nil {
 		return nil, err
@@ -639,18 +600,12 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 		Conditions: []string{},
 	}
 
-	// Build JOIN chain for the path (without filtering by specific entity ID)
-	// NOTE: The path is from owned entity to target, but we need to join from target back to owned entity
-	// So we traverse the path in REVERSE order
 	for i := len(path) - 1; i >= 0; i-- {
 		edge := path[i]
-		joinIdx := len(path) - 1 - i // Join index for alias naming
+		joinIdx := len(path) - 1 - i
 		alias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx)
 
 		if joinIdx == 0 {
-			// First join: join from target table to the next entity in the chain
-			// The edge points FROM parent TO child, so edge.To is closer to target
-			// We need to get the schema for the entity we're joining TO (the parent in the original path)
 			fromSchema, err := fg.schemas.Get(edge.From)
 			if err != nil {
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
@@ -664,9 +619,7 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 				alias,
 				fromSchema.PrimaryKeys[0])
 			result.Joins = append(result.Joins, joinClause)
-			// No condition for wildcard - allows all entities
 		} else {
-			// Subsequent joins: join from previous table in the chain
 			prevAlias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx-1)
 			fromSchema, err := fg.schemas.Get(edge.From)
 			if err != nil {
@@ -685,7 +638,6 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 	}
 
 	// Add a condition that the join chain is valid (owned entity exists).
-	// The owned entity is path[0].From, which maps to the LAST alias in the reversed traversal.
 	lastAlias := fmt.Sprintf("j%d_%d", pathIdx, len(path)-1)
 	ownedEntityType = path[0].From
 	var ownedSchema *SchemaDefinition
@@ -695,7 +647,6 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 	}
 	result.Conditions = append(result.Conditions, fmt.Sprintf("%s.%s IS NOT NULL", lastAlias, ownedSchema.PrimaryKeys[0]))
 
-	// Build complete SQL query
 	result.buildFullSQL(targetSchema, " AND ")
 
 	return result, nil

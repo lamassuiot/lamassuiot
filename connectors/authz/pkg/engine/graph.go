@@ -1,4 +1,4 @@
-package authz
+package engine
 
 import (
 	"fmt"
@@ -138,8 +138,6 @@ func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace s
 		if targetSchema == nil {
 			return fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, targetEntityType)
 		}
-
-		// Via is the foreign key column name - use it directly
 
 		// Create edge from source to target
 		edge := &GraphEdge{

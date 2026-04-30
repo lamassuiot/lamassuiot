@@ -2,21 +2,22 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/lamassuiot/authz/pkg/engine"
+	"github.com/lamassuiot/authz/pkg/service"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/sirupsen/logrus"
 )
 
 // SetupRoutes configures all HTTP routes
-func NewAuthzRoutes(router *gin.RouterGroup, principalManager *authz.PrincipalManager, engine *authz.Engine, policyManager *authz.PolicyManager, resolver *authz.IdentityResolver, logger *logrus.Entry) {
+func NewAuthzRoutes(router *gin.RouterGroup, principalManager *service.PrincipalManager, eng *engine.Engine, policyManager *service.PolicyManager, resolver *service.IdentityResolver, logger *logrus.Entry) {
 	// Controllers
-	authzCtrl := NewAuthzController(engine, resolver, logger)
+	authzCtrl := NewAuthzController(eng, resolver, logger)
 	principalCtrl := NewPrincipalController(principalManager)
-	schemaCtrl := NewSchemaController(engine)
+	schemaCtrl := NewSchemaController(eng)
 	policyCtrl := NewPolicyController(policyManager, principalManager)
-	capabilitiesCtrl := NewCapabilitiesController(engine, principalManager, policyManager, resolver, logger)
+	capabilitiesCtrl := NewCapabilitiesController(eng, principalManager, policyManager, resolver, logger)
 
-	svc := authz.NewAuthzService(engine, principalManager, policyManager, authz.WithServiceLogger(logger))
+	svc := service.NewAuthzService(eng, principalManager, policyManager, service.WithServiceLogger(logger))
 
 	authzMwPrincipals := middleware.NewSimpleAuthzMiddleware(svc, "authz", "public", "principal", logger)
 	authzMwPolicies := middleware.NewSimpleAuthzMiddleware(svc, "authz", "public", "policy", logger)
@@ -28,21 +29,21 @@ func NewAuthzRoutes(router *gin.RouterGroup, principalManager *authz.PrincipalMa
 	v1 := router.Group("/v1")
 	{
 		// Authorization endpoints
-		authz := v1.Group("/authz")
+		authzGrp := v1.Group("/authz")
 		{
 			// Direct authorization with known principal IDs
-			authz.POST("/authorize", authzCtrl.Authorize)
-			authz.POST("/filter", authzCtrl.GetFilter)
-			authz.POST("/match/authorize", authzCtrl.MatchAndAuthorize)
-			authz.POST("/match/filter", authzCtrl.MatchAndGetFilter)
+			authzGrp.POST("/authorize", authzCtrl.Authorize)
+			authzGrp.POST("/filter", authzCtrl.GetFilter)
+			authzGrp.POST("/match/authorize", authzCtrl.MatchAndAuthorize)
+			authzGrp.POST("/match/filter", authzCtrl.MatchAndGetFilter)
 
 			// Global capabilities (principal only – returns global actions per entity type)
-			authz.POST("/capabilities/global", capabilitiesCtrl.GetGlobalCapabilities)
-			authz.POST("/match/capabilities/global", capabilitiesCtrl.MatchAndGetGlobalCapabilities)
+			authzGrp.POST("/capabilities/global", capabilitiesCtrl.GetGlobalCapabilities)
+			authzGrp.POST("/match/capabilities/global", capabilitiesCtrl.MatchAndGetGlobalCapabilities)
 
 			// Entity capabilities (principal + entity – returns atomic actions for that entity)
-			authz.POST("/capabilities/entity", capabilitiesCtrl.GetEntityCapabilities)
-			authz.POST("/match/capabilities/entity", capabilitiesCtrl.MatchAndGetEntityCapabilities)
+			authzGrp.POST("/capabilities/entity", capabilitiesCtrl.GetEntityCapabilities)
+			authzGrp.POST("/match/capabilities/entity", capabilitiesCtrl.MatchAndGetEntityCapabilities)
 		}
 
 		// Principal management endpoints

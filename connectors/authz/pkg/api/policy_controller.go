@@ -6,15 +6,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/lamassuiot/authz/pkg/service"
 )
 
 type PolicyController struct {
-	policyManager    *authz.PolicyManager
-	principalManager *authz.PrincipalManager
+	policyManager    *service.PolicyManager
+	principalManager *service.PrincipalManager
 }
 
-func NewPolicyController(policyManager *authz.PolicyManager, principalManager *authz.PrincipalManager) *PolicyController {
+func NewPolicyController(policyManager *service.PolicyManager, principalManager *service.PrincipalManager) *PolicyController {
 	return &PolicyController{
 		policyManager:    policyManager,
 		principalManager: principalManager,

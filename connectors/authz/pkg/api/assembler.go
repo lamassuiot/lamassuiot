@@ -8,8 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/lamassuiot/authz/pkg/engine"
 	authzmodels "github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/authz/pkg/service"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -70,7 +71,7 @@ func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
 		return -1, err
 	}
 
-	principalManager, engine, policyManager, resolver, err := AssembleAuthzService(cfg, fileWriter)
+	principalManager, eng, policyManager, resolver, err := AssembleAuthzService(cfg, fileWriter)
 	if err != nil {
 		return -1, fmt.Errorf("failed to assemble Authz service: %w", err)
 	}
@@ -81,7 +82,7 @@ func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 
-	NewAuthzRoutes(httpGrp, principalManager, engine, policyManager, resolver, lHttp)
+	NewAuthzRoutes(httpGrp, principalManager, eng, policyManager, resolver, lHttp)
 
 	port, err := routes.RunHttpRouter(
 		lHttp,
@@ -102,7 +103,7 @@ func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
 	return port, nil
 }
 
-func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*authz.PrincipalManager, *authz.Engine, *authz.PolicyManager, *authz.IdentityResolver, error) {
+func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, error) {
 	lDB := helpers.SetupLogger(config.Trace, "AUTHZ", "DB")
 	addFileOutput(lDB, fileWriter)
 	lBucketStore := helpers.SetupLogger(config.Debug, "AUTHZ", "BucketStore")
@@ -121,7 +122,7 @@ func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*authz.PrincipalMan
 	}
 
 	// Create principal manager
-	principalManager, err := authz.NewPrincipalManager(principalDB, policyStore)
+	principalManager, err := service.NewPrincipalManager(principalDB, policyStore)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -141,12 +142,12 @@ func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*authz.PrincipalMan
 	addFileOutput(lHttp, fileWriter)
 
 	// Create engine with multiple database connections
-	engine, err := authz.NewEngine(schemaDbs, cfg.Schemas, authz.WithLogger(lHttp))
+	eng, err := engine.NewEngine(schemaDbs, cfg.Schemas, engine.WithLogger(lHttp))
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	policyManager := authz.NewPolicyManager(policyStore)
+	policyManager := service.NewPolicyManager(policyStore)
 
 	if cfg.PreloadDir != "" {
 		lPreload := helpers.SetupLogger(config.Debug, "AUTHZ", "Preload")
@@ -158,11 +159,11 @@ func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*authz.PrincipalMan
 
 	resolver := principalManager.NewIdentityResolver(policyManager)
 
-	return principalManager, engine, policyManager, resolver, nil
+	return principalManager, eng, policyManager, resolver, nil
 }
 
 // preloadPolicies reads all JSON files from dir and creates them as policies if they don't already exist.
-func preloadPolicies(ctx context.Context, pm *authz.PolicyManager, dir string, log *logrus.Entry) error {
+func preloadPolicies(ctx context.Context, pm *service.PolicyManager, dir string, log *logrus.Entry) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("failed to read preload directory %q: %w", dir, err)

@@ -1,31 +1,43 @@
-package authz
+package service
 
 import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/lamassuiot/authz/pkg/engine"
+	"github.com/lamassuiot/authz/pkg/models"
 )
 
 // ErrNoMatch is returned by IdentityResolver when auth material matches no active principals.
 var ErrNoMatch = errors.New("no matching principals found")
 
-// IdentityResolver is the single entry point for the "match auth material → load policies"
-// flow. It collapses the pattern that was previously copy-pasted across four call sites.
+// IdentityResolver is the single entry point for the "match auth material → load policies" flow.
 type IdentityResolver struct {
-	match    *MatchService
-	grants   GrantStore
-	policies *PolicyManager
+	match    principalMatcher
+	grants   engine.GrantStore
+	policies policyLoader
+}
+
+// principalMatcher is the local interface for the MatchService.
+type principalMatcher interface {
+	MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error)
+}
+
+// policyLoader is the local interface for PolicyManager used by IdentityResolver.
+type policyLoader interface {
+	GetPolicy(ctx context.Context, policyID string) (*models.Policy, error)
 }
 
 // NewIdentityResolver wires a MatchService, GrantStore, and PolicyManager into a resolver.
-func NewIdentityResolver(match *MatchService, grants GrantStore, policies *PolicyManager) *IdentityResolver {
+func NewIdentityResolver(match principalMatcher, grants engine.GrantStore, policies policyLoader) *IdentityResolver {
 	return &IdentityResolver{match: match, grants: grants, policies: policies}
 }
 
 // Resolve matches auth material to active principals, loads all their granted policies,
 // and returns a populated PolicyRegistry ready for Engine.Authorize or Engine.GetListFilter.
 // Returns ErrNoMatch (check with errors.Is) when no principals matched.
-func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}, authType string) (*PolicyRegistry, []string, error) {
+func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}, authType string) (*engine.PolicyRegistry, []string, error) {
 	principalIDs, err := r.match.MatchPrincipals(ctx, authMaterial, authType)
 	if err != nil {
 		return nil, nil, fmt.Errorf("match principals: %w", err)
@@ -34,7 +46,7 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 		return nil, nil, ErrNoMatch
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	for _, pid := range principalIDs {
 		grants, err := r.grants.ListForPrincipal(ctx, pid)
 		if err != nil {
@@ -54,14 +66,14 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 }
 
 // GetPoliciesForPrincipal loads policies for a single known principal ID and returns
-// a populated PolicyRegistry. Used by the by-ID authorization path (Authorize, GetFilter).
-func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principalID string) (*PolicyRegistry, error) {
+// a populated PolicyRegistry. Used by the by-ID authorization path.
+func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principalID string) (*engine.PolicyRegistry, error) {
 	grants, err := r.grants.ListForPrincipal(ctx, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("get policies for principal %s: %w", principalID, err)
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	for _, g := range grants {
 		policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
 		if err != nil {

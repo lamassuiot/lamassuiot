@@ -1,9 +1,10 @@
-package authz
+package service
 
 import (
 	"context"
 	"testing"
 
+	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/testutil"
 	"github.com/stretchr/testify/assert"
@@ -18,15 +19,15 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestMergeGlobalCapabilities(t *testing.T) {
-	dst := GlobalCapabilities{
+	dst := engine.GlobalCapabilities{
 		"iot.public.device": {"create"},
 	}
-	src := GlobalCapabilities{
+	src := engine.GlobalCapabilities{
 		"iot.public.device":  {"create", "list"}, // "create" is a duplicate
 		"iot.public.gateway": {"list"},
 	}
 
-	MergeGlobalCapabilities(dst, src)
+	engine.MergeGlobalCapabilities(dst, src)
 
 	assert.ElementsMatch(t, []string{"create", "list"}, dst["iot.public.device"])
 	assert.ElementsMatch(t, []string{"list"}, dst["iot.public.gateway"])
@@ -36,14 +37,14 @@ func TestMergeGlobalCapabilities(t *testing.T) {
 // GetGlobalCapabilities – policy-level tests
 // ---------------------------------------------------------------------------
 
-func setupIoTEngine(t *testing.T, db *gorm.DB) *Engine {
+func setupIoTEngine(t *testing.T, db *gorm.DB) *engine.Engine {
 	t.Helper()
-	engine, err := NewEngine(
+	eng, err := engine.NewEngine(
 		map[string]*gorm.DB{"iot": db},
 		map[string]string{"iot": "../../examples/iot/schemas.json"},
 	)
 	require.NoError(t, err)
-	return engine
+	return eng
 }
 
 func TestGetGlobalCapabilities_PolicyWithGlobalActions(t *testing.T) {
@@ -51,7 +52,7 @@ func TestGetGlobalCapabilities_PolicyWithGlobalActions(t *testing.T) {
 	require.NoError(t, err)
 	defer postgres.Cleanup()
 
-	engine := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, postgres.DB)
 
 	// "write" and "list" are global actions in the IoT schema for organization.
 	policy := &models.Policy{
@@ -67,10 +68,10 @@ func TestGetGlobalCapabilities_PolicyWithGlobalActions(t *testing.T) {
 		},
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
+	gc, err := eng.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	// Only global actions should be returned.
@@ -89,7 +90,7 @@ func TestGetGlobalCapabilities_PolicyWithOnlyAtomicActions(t *testing.T) {
 	require.NoError(t, err)
 	defer postgres.Cleanup()
 
-	engine := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, postgres.DB)
 
 	// Only atomic actions granted – global capabilities should be empty.
 	policy := &models.Policy{
@@ -106,10 +107,10 @@ func TestGetGlobalCapabilities_PolicyWithOnlyAtomicActions(t *testing.T) {
 		},
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
+	gc, err := eng.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	// Nothing under "iot.public.organization" because no global action is granted.
@@ -122,7 +123,7 @@ func TestGetGlobalCapabilities_WildcardActionsIncludesGlobalSubset(t *testing.T)
 	require.NoError(t, err)
 	defer postgres.Cleanup()
 
-	engine := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, postgres.DB)
 
 	// Wildcard "*" expands to all actions (atomic + global) – only global should appear.
 	policy := &models.Policy{
@@ -139,10 +140,10 @@ func TestGetGlobalCapabilities_WildcardActionsIncludesGlobalSubset(t *testing.T)
 		},
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
+	gc, err := eng.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	assert.Contains(t, gc["iot.public.organization"], "write")
@@ -154,7 +155,7 @@ func TestGetGlobalCapabilities_MultipleEntityTypes(t *testing.T) {
 	require.NoError(t, err)
 	defer postgres.Cleanup()
 
-	engine := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, postgres.DB)
 
 	policy := &models.Policy{
 		ID:   "multi-entity",
@@ -175,10 +176,10 @@ func TestGetGlobalCapabilities_MultipleEntityTypes(t *testing.T) {
 		},
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	gc, err := engine.GetGlobalCapabilities(context.Background(), registry)
+	gc, err := eng.GetGlobalCapabilities(context.Background(), registry)
 	require.NoError(t, err)
 
 	assert.Contains(t, gc["iot.public.organization"], "list")
@@ -194,7 +195,7 @@ func TestGetEntityCapabilities_DirectGrants(t *testing.T) {
 	require.NoError(t, err)
 	defer postgres.Cleanup()
 
-	engine := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, postgres.DB)
 
 	policy := &models.Policy{
 		ID:   "entity-policy",
@@ -210,10 +211,10 @@ func TestGetEntityCapabilities_DirectGrants(t *testing.T) {
 		},
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	ec, err := engine.GetEntityCapabilities(context.Background(), registry, "iot", "public", "organization", map[string]string{"id": "org-1"})
+	ec, err := eng.GetEntityCapabilities(context.Background(), registry, "iot", "public", "organization", map[string]string{"id": "org-1"})
 	require.NoError(t, err)
 	require.NotNil(t, ec)
 
@@ -237,7 +238,7 @@ func TestGetEntityCapabilities_NoAccess(t *testing.T) {
 	require.NoError(t, err)
 	defer postgres.Cleanup()
 
-	engine := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, postgres.DB)
 
 	// Policy grants only "org-2", not "org-99".
 	policy := &models.Policy{
@@ -254,10 +255,10 @@ func TestGetEntityCapabilities_NoAccess(t *testing.T) {
 		},
 	}
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 	require.NoError(t, registry.AddPolicy(policy))
 
-	ec, err := engine.GetEntityCapabilities(context.Background(), registry, "iot", "public", "organization", map[string]string{"id": "org-99"})
+	ec, err := eng.GetEntityCapabilities(context.Background(), registry, "iot", "public", "organization", map[string]string{"id": "org-99"})
 	require.NoError(t, err)
 	require.NotNil(t, ec)
 
@@ -270,11 +271,11 @@ func TestGetEntityCapabilities_UnknownSchema(t *testing.T) {
 	require.NoError(t, err)
 	defer postgres.Cleanup()
 
-	engine := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, postgres.DB)
 
-	registry := NewPolicyRegistry()
+	registry := engine.NewPolicyRegistry()
 
-	_, err = engine.GetEntityCapabilities(context.Background(), registry, "nonexistent", "nonexistent", "organisation", map[string]string{"id": "org-1"})
+	_, err = eng.GetEntityCapabilities(context.Background(), registry, "nonexistent", "nonexistent", "organisation", map[string]string{"id": "org-1"})
 	assert.Error(t, err, "should return an error for unknown schema/entity type")
 }
 
@@ -288,7 +289,7 @@ func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 	defer postgres.Cleanup()
 
 	db := postgres.DB
-	engine := setupIoTEngine(t, db)
+	eng := setupIoTEngine(t, db)
 
 	principalManager, err := NewPrincipalManager(db, nil)
 	require.NoError(t, err)
@@ -326,7 +327,7 @@ func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 	require.NoError(t, principalManager.CreatePrincipal(principal))
 	require.NoError(t, principalManager.GrantPolicy("user-global", "principal-policy", "admin"))
 
-	gc, err := engine.GetGlobalCapabilitiesForPrincipal(context.Background(), principalManager, policyManager, "user-global")
+	gc, err := GetGlobalCapabilitiesForPrincipal(context.Background(), eng, principalManager, policyManager, "user-global")
 	require.NoError(t, err)
 
 	assert.Contains(t, gc["iot.public.organization"], "write")

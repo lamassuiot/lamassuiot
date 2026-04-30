@@ -6,29 +6,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/authz"
+	"github.com/lamassuiot/authz/pkg/engine"
+	"github.com/lamassuiot/authz/pkg/service"
 	"github.com/sirupsen/logrus"
 )
 
 // CapabilitiesController handles capability-related endpoints.
 type CapabilitiesController struct {
-	engine           *authz.Engine
-	principalManager *authz.PrincipalManager
-	policyManager    *authz.PolicyManager
-	resolver         *authz.IdentityResolver
+	eng              *engine.Engine
+	principalManager *service.PrincipalManager
+	policyManager    *service.PolicyManager
+	resolver         *service.IdentityResolver
 	logger           *logrus.Entry
 }
 
 // NewCapabilitiesController creates a new CapabilitiesController.
 func NewCapabilitiesController(
-	engine *authz.Engine,
-	principalManager *authz.PrincipalManager,
-	policyManager *authz.PolicyManager,
-	resolver *authz.IdentityResolver,
+	eng *engine.Engine,
+	principalManager *service.PrincipalManager,
+	policyManager *service.PolicyManager,
+	resolver *service.IdentityResolver,
 	logger *logrus.Entry,
 ) *CapabilitiesController {
 	return &CapabilitiesController{
-		engine:           engine,
+		eng:              eng,
 		principalManager: principalManager,
 		policyManager:    policyManager,
 		resolver:         resolver,
@@ -61,8 +62,8 @@ func (c *CapabilitiesController) GetGlobalCapabilities(ctx *gin.Context) {
 
 	c.logger.WithFields(logrus.Fields{"principal_id": req.PrincipalID}).Debug("get global capabilities")
 
-	gc, err := c.engine.GetGlobalCapabilitiesForPrincipal(
-		ctx.Request.Context(), c.principalManager, c.policyManager, req.PrincipalID,
+	gc, err := service.GetGlobalCapabilitiesForPrincipal(
+		ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, req.PrincipalID,
 	)
 	if err != nil {
 		c.logger.WithFields(logrus.Fields{"error": err}).Error("get global capabilities failed")
@@ -108,17 +109,17 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 		return
 	}
 
-	merged := make(authz.GlobalCapabilities)
+	merged := make(engine.GlobalCapabilities)
 	for _, principalID := range matchedPrincipals {
-		gc, err := c.engine.GetGlobalCapabilitiesForPrincipal(
-			ctx.Request.Context(), c.principalManager, c.policyManager, principalID,
+		gc, err := service.GetGlobalCapabilitiesForPrincipal(
+			ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, principalID,
 		)
 		if err != nil {
 			c.logger.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get global capabilities failed")
 			ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to get global capabilities: " + err.Error()})
 			return
 		}
-		authz.MergeGlobalCapabilities(merged, gc)
+		engine.MergeGlobalCapabilities(merged, gc)
 	}
 
 	ctx.JSON(http.StatusOK, dto.GlobalCapabilitiesResponse{
@@ -153,13 +154,13 @@ func (c *CapabilitiesController) GetEntityCapabilities(ctx *gin.Context) {
 
 	c.logger.WithFields(logrus.Fields{"principal_id": req.PrincipalID, "query_count": len(req.Queries)}).Debug("get entity capabilities")
 
-	engineQueries, err := dtoQueriesToEngine(c.engine.GetSchemas(), req.Queries)
+	engineQueries, err := dtoQueriesToEngine(c.eng.GetSchemas(), req.Queries)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "Invalid entity key: " + err.Error()})
 		return
 	}
-	results, err := c.engine.GetEntityCapabilitiesBatchForPrincipal(
-		ctx.Request.Context(), c.principalManager, c.policyManager, req.PrincipalID, engineQueries,
+	results, err := service.GetEntityCapabilitiesBatchForPrincipal(
+		ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, req.PrincipalID, engineQueries,
 	)
 	if err != nil {
 		c.logger.WithFields(logrus.Fields{"error": err}).Error("get entity capabilities failed")
@@ -208,17 +209,17 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 		return
 	}
 
-	engineQueries, err := dtoQueriesToEngine(c.engine.GetSchemas(), req.Queries)
+	engineQueries, err := dtoQueriesToEngine(c.eng.GetSchemas(), req.Queries)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "Invalid entity key: " + err.Error()})
 		return
 	}
 
 	// Merge results across all matched principals with OR logic (position-aligned).
-	merged := make([]authz.EntityCapabilitiesResult, len(engineQueries))
+	merged := make([]engine.EntityCapabilitiesResult, len(engineQueries))
 	for i, q := range engineQueries {
-		merged[i] = authz.EntityCapabilitiesResult{
-			EntityCapabilities: authz.EntityCapabilities{
+		merged[i] = engine.EntityCapabilitiesResult{
+			EntityCapabilities: engine.EntityCapabilities{
 				Namespace:  q.Namespace,
 				SchemaName: q.SchemaName,
 				EntityType: q.EntityType,
@@ -229,8 +230,8 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 	}
 
 	for _, principalID := range matchedPrincipals {
-		batch, err := c.engine.GetEntityCapabilitiesBatchForPrincipal(
-			ctx.Request.Context(), c.principalManager, c.policyManager, principalID, engineQueries,
+		batch, err := service.GetEntityCapabilitiesBatchForPrincipal(
+			ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, principalID, engineQueries,
 		)
 		if err != nil {
 			c.logger.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get entity capabilities batch failed")
@@ -268,14 +269,14 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 
 // dtoQueriesToEngine converts DTO query slice to engine query slice, resolving any
 // plain-string entity keys against the schema registry.
-func dtoQueriesToEngine(schemas *authz.SchemaRegistry, qs []dto.EntityCapabilityQuery) ([]authz.EntityCapabilityQuery, error) {
-	out := make([]authz.EntityCapabilityQuery, len(qs))
+func dtoQueriesToEngine(schemas *engine.SchemaRegistry, qs []dto.EntityCapabilityQuery) ([]engine.EntityCapabilityQuery, error) {
+	out := make([]engine.EntityCapabilityQuery, len(qs))
 	for i, q := range qs {
 		key, err := resolveEntityKey(schemas, q.SchemaName, q.EntityType, q.EntityKey)
 		if err != nil {
 			return nil, fmt.Errorf("query %d: %w", i, err)
 		}
-		out[i] = authz.EntityCapabilityQuery{
+		out[i] = engine.EntityCapabilityQuery{
 			Namespace:  q.Namespace,
 			SchemaName: q.SchemaName,
 			EntityType: q.EntityType,
@@ -286,7 +287,7 @@ func dtoQueriesToEngine(schemas *authz.SchemaRegistry, qs []dto.EntityCapability
 }
 
 // engineResultsToDTO converts engine result slice to DTO result slice.
-func engineResultsToDTO(rs []authz.EntityCapabilitiesResult) []dto.EntityCapabilitiesResultDTO {
+func engineResultsToDTO(rs []engine.EntityCapabilitiesResult) []dto.EntityCapabilitiesResultDTO {
 	out := make([]dto.EntityCapabilitiesResultDTO, len(rs))
 	for i, r := range rs {
 		out[i] = dto.EntityCapabilitiesResultDTO{

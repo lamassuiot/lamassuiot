@@ -1,4 +1,4 @@
-package authz
+package engine
 
 import (
 	"encoding/json"
@@ -42,12 +42,10 @@ func (r *PolicyRegistry) Load(path string) error {
 		return fmt.Errorf("failed to parse policy JSON: %w", err)
 	}
 
-	// Allow empty policy arrays (0 policies)
 	if len(policies) == 0 {
 		return nil
 	}
 
-	// Validate and register policies
 	for i := range policies {
 		policy := &policies[i]
 		if err := r.validatePolicy(policy); err != nil {
@@ -86,19 +84,17 @@ func (r *PolicyRegistry) GetAll() []*models.Policy {
 	return r.policies
 }
 
-// validatePolicy checks if a policy definition is valid
 func (r *PolicyRegistry) validatePolicy(policy *models.Policy) error {
-	return validatePolicyStruct(policy)
+	return ValidatePolicyStruct(policy)
 }
 
-// validateRule checks if a rule definition is valid
 func (r *PolicyRegistry) validateRule(rule *models.Rule) error {
 	return validateRuleStruct(rule)
 }
 
-// validatePolicyStruct validates a policy structure.
-// Shared across policy registry and policy manager flows.
-func validatePolicyStruct(policy *models.Policy) error {
+// ValidatePolicyStruct validates a policy structure.
+// Exported so the service layer can reuse it for storage-time validation.
+func ValidatePolicyStruct(policy *models.Policy) error {
 	if policy.ID == "" {
 		return fmt.Errorf("policy ID is required")
 	}
@@ -120,7 +116,6 @@ func validatePolicyStruct(policy *models.Policy) error {
 	return nil
 }
 
-// validateRuleStruct validates a rule structure.
 func validateRuleStruct(rule *models.Rule) error {
 	if rule.Namespace == "" {
 		return fmt.Errorf("namespace is required")
@@ -147,12 +142,10 @@ func validateRuleStruct(rule *models.Rule) error {
 		return fmt.Errorf("entityType must be provided as schemaName + entityType, got: schemaName=%s entityType=%s", rule.SchemaName, rule.EntityType)
 	}
 
-	// Validate direct actions
 	if len(rule.Actions) == 0 && len(rule.Relations) == 0 && len(rule.DirectGrants) == 0 && len(rule.ColumnFilters) == 0 {
 		return fmt.Errorf("rule must define actions, relations, direct grants, or column filters")
 	}
 
-	// Validate column filters
 	validOperators := map[string]bool{"eq": true, "neq": true, "gt": true, "gte": true, "lt": true, "lte": true, "in": true, "like": true}
 	for i, cf := range rule.ColumnFilters {
 		if cf.Column == "" {
@@ -166,7 +159,6 @@ func validateRuleStruct(rule *models.Rule) error {
 		}
 	}
 
-	// Validate relation rules
 	for i := range rule.Relations {
 		if err := validateRelationRuleStruct(&rule.Relations[i], 0); err != nil {
 			return fmt.Errorf("invalid relation rule at index %d: %w", i, err)
@@ -217,13 +209,11 @@ func validateSimpleRelationPathRecursive(rel *models.RelationRule, visited map[s
 	return nil
 }
 
-// validateRelationRule validates a relation rule recursively
 func (r *PolicyRegistry) validateRelationRule(rel *models.RelationRule, parentNamespace string, depth int) error {
 	_ = parentNamespace
 	return validateRelationRuleStruct(rel, depth)
 }
 
-// validateRelationRuleStruct validates a relation rule recursively.
 func validateRelationRuleStruct(rel *models.RelationRule, depth int) error {
 	if depth > 10 {
 		return fmt.Errorf("relation nesting depth exceeds maximum of 10")
@@ -266,7 +256,6 @@ func validateRelationRuleStruct(rel *models.RelationRule, depth int) error {
 		return fmt.Errorf("at least one action must be defined in relation rule")
 	}
 
-	// Recursively validate nested relations - they use the same namespace
 	for i := range rel.Relations {
 		if err := validateRelationRuleStruct(&rel.Relations[i], depth+1); err != nil {
 			return fmt.Errorf("invalid nested relation at index %d: %w", i, err)
