@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/service"
+	lamassu "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -56,7 +58,10 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 		return
 	}
 
-	policies, err := ctrl.resolver.GetPoliciesForPrincipal(c.Request.Context(), req.PrincipalID)
+	reqCtx := enrichContextByPrincipalID(c.Request.Context(), req.PrincipalID)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to get principal policies",
@@ -74,7 +79,7 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 		return
 	}
 
-	allowed, err := ctrl.engine.Authorize(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
+	allowed, err := ctrl.engine.Authorize(reqCtx, policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Authorization check failed",
@@ -122,7 +127,10 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 		return
 	}
 
-	policies, err := ctrl.resolver.GetPoliciesForPrincipal(c.Request.Context(), req.PrincipalID)
+	reqCtx := enrichContextByPrincipalID(c.Request.Context(), req.PrincipalID)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to get principal policies",
@@ -131,7 +139,7 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 		return
 	}
 
-	filterSQL, err := ctrl.engine.GetListFilter(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.EntityType)
+	filterSQL, err := ctrl.engine.GetListFilter(reqCtx, policies, req.Namespace, req.SchemaName, req.EntityType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to generate filter",
@@ -178,7 +186,10 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 		return
 	}
 
-	policies, matchedPrincipals, err := ctrl.resolver.Resolve(c.Request.Context(), req.AuthMaterial, req.AuthType)
+	reqCtx := enrichContextByAuthMaterial(c.Request.Context(), req.AuthType, req.AuthMaterial)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	policies, matchedPrincipals, err := ctrl.resolver.Resolve(reqCtx, req.AuthMaterial, req.AuthType)
 	if err != nil {
 		if errors.Is(err, service.ErrNoMatch) {
 			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
@@ -194,6 +205,9 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 		return
 	}
 
+	reqCtx = enrichContextWithMatchedPrincipals(reqCtx, matchedPrincipals)
+	c.Request = c.Request.WithContext(reqCtx)
+
 	entityKey, err := resolveEntityKey(ctrl.engine.GetSchemas(), req.SchemaName, req.EntityType, req.EntityKey)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
@@ -203,7 +217,7 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 		return
 	}
 
-	allowed, err := ctrl.engine.Authorize(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
+	allowed, err := ctrl.engine.Authorize(reqCtx, policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Authorization check failed",
@@ -253,7 +267,10 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 		return
 	}
 
-	policies, matchedPrincipals, err := ctrl.resolver.Resolve(c.Request.Context(), req.AuthMaterial, req.AuthType)
+	reqCtx := enrichContextByAuthMaterial(c.Request.Context(), req.AuthType, req.AuthMaterial)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	policies, matchedPrincipals, err := ctrl.resolver.Resolve(reqCtx, req.AuthMaterial, req.AuthType)
 	if err != nil {
 		if errors.Is(err, service.ErrNoMatch) {
 			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
@@ -269,7 +286,10 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 		return
 	}
 
-	filterSQL, err := ctrl.engine.GetListFilter(c.Request.Context(), policies, req.Namespace, req.SchemaName, req.EntityType)
+	reqCtx = enrichContextWithMatchedPrincipals(reqCtx, matchedPrincipals)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	filterSQL, err := ctrl.engine.GetListFilter(reqCtx, policies, req.Namespace, req.SchemaName, req.EntityType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to generate filter",
@@ -341,4 +361,28 @@ func resolveEntityKey(schemas *engine.SchemaRegistry, schemaName, entityType str
 		return nil, fmt.Errorf("plain string entityKey is only valid for single-column PK schemas; use an object for composite PKs")
 	}
 	return map[string]string{schema.PrimaryKeys[0]: key.Str()}, nil
+}
+
+// enrichContextByPrincipalID stores a known principal ID into the context so that
+// helpers.ConfigureLogger picks it up in every downstream log entry.
+func enrichContextByPrincipalID(ctx context.Context, principalID string) context.Context {
+	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthType, "principal-id")
+	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthID, principalID)
+	return ctx
+}
+
+// enrichContextByAuthMaterial stores the credential type and material into the context
+// before principals are matched, so that even failed-match logs carry auth context.
+func enrichContextByAuthMaterial(ctx context.Context, authType string, authMaterial interface{}) context.Context {
+	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthType, authType)
+	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthContext, map[string]interface{}{
+		"credential": authMaterial,
+	})
+	return ctx
+}
+
+// enrichContextWithMatchedPrincipals adds the resolved principal IDs to the context
+// after a successful match, so downstream logs show who was authenticated.
+func enrichContextWithMatchedPrincipals(ctx context.Context, principalIDs []string) context.Context {
+	return context.WithValue(ctx, lamassu.LamassuContextKeyAuthID, strings.Join(principalIDs, ","))
 }

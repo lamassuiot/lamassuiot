@@ -13,11 +13,14 @@ import (
 
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/engine"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
 // ClientConfig holds configuration for the SDK client
 type ClientConfig struct {
 	BaseURL            string
+	Source             string // value for the x-lms-source header; context overrides at call time
 	TLSConfig          *tls.Config
 	InsecureSkipVerify bool
 	Timeout            time.Duration
@@ -25,9 +28,10 @@ type ClientConfig struct {
 }
 
 // DefaultConfig returns a default client configuration
-func DefaultConfig(baseURL string) *ClientConfig {
+func DefaultConfig(baseURL string, source string) *ClientConfig {
 	return &ClientConfig{
 		BaseURL:            baseURL,
+		Source:             source,
 		TLSConfig:          &tls.Config{},
 		InsecureSkipVerify: false,
 		Timeout:            30 * time.Second,
@@ -64,8 +68,9 @@ func NewClient(config *ClientConfig) (*Client, error) {
 
 	httpClient := &http.Client{
 		Timeout: config.Timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
+		Transport: &contextSourceRoundTripper{
+			transport:    &http.Transport{TLSClientConfig: tlsConfig},
+			staticSource: config.Source,
 		},
 	}
 
@@ -172,6 +177,25 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	}
 
 	return nil
+}
+
+// contextSourceRoundTripper injects x-lms-source on every outbound request.
+// The context value (LamassuContextKeySource) takes priority over staticSource.
+type contextSourceRoundTripper struct {
+	transport    http.RoundTripper
+	staticSource string
+}
+
+func (rt *contextSourceRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	src, _ := req.Context().Value(core.LamassuContextKeySource).(string)
+	if src == "" {
+		src = rt.staticSource
+	}
+	if src != "" {
+		req = req.Clone(req.Context())
+		req.Header.Set(models.HttpSourceHeader, src)
+	}
+	return rt.transport.RoundTrip(req)
 }
 
 // APIError represents an error from the API

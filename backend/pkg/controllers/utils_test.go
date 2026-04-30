@@ -108,7 +108,7 @@ func TestFilterQuery_StringArrayContainsIgnoreCase(t *testing.T) {
 	q.Add("filter", "extensions.extended_key_usage[ct_ic]clientauth")
 	req.URL.RawQuery = q.Encode()
 
-	qp, err := FilterQuery(req, resources.CertificateFilterableFields)
+	qp, err := FilterQuery(nil, req, resources.CertificateFilterableFields)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
