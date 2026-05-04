@@ -39,11 +39,15 @@ type rawPKIMessage struct {
 
 // rawPKIMessageFull captures all four top-level fields of a PKIMessage so that
 // the controller can verify incoming signature-based protection.
+//
+// RFC 4210 uses DEFINITIONS IMPLICIT TAGS, so:
+//   - protection [0] PKIProtection → EXPLICIT [0] BIT STRING (explicit per gocmp/OpenSSL convention)
+//   - extraCerts [1] SEQUENCE OF  → IMPLICIT [1] (tag replaces SEQUENCE OF, no extra wrapper)
 type rawPKIMessageFull struct {
 	Header     asn1.RawValue
 	Body       asn1.RawValue
 	Protection asn1.RawValue   `asn1:"optional,explicit,tag:0"`
-	ExtraCerts []asn1.RawValue `asn1:"optional,explicit,tag:1"`
+	ExtraCerts []asn1.RawValue `asn1:"optional,tag:1"`
 }
 
 type requestPKIHeader struct {
