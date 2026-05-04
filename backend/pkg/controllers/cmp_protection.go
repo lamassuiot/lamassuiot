@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-
 type responsePKIMessage struct {
 	Header     responsePKIHeader
 	Body       asn1.RawValue
@@ -48,9 +47,21 @@ func verifyRequestProtection(full rawPKIMessageFull) error {
 		return fmt.Errorf("protection present but extraCerts is empty: cannot identify EE certificate")
 	}
 
-	eeCert, err := x509.ParseCertificate(full.ExtraCerts[0].FullBytes)
+	ec0 := full.ExtraCerts[0]
+	// Go's asn1 decoder strips the implicit [1] tag and iterates the content as
+	// SEQUENCE OF.  Each element is a RawValue where:
+	//   - If there is NO extra wrapper: FullBytes = Certificate DER; Bytes = cert content
+	//   - If OpenSSL adds an extra SEQUENCE wrapper: FullBytes = wrapper SEQUENCE;
+	//     Bytes = Certificate DER
+	// So we try FullBytes first (no-wrapper case), and fall back to Bytes (wrapped case).
+	eeCert, err := x509.ParseCertificate(ec0.FullBytes)
 	if err != nil {
-		return fmt.Errorf("parse EE certificate from extraCerts[0]: %w", err)
+		var err2 error
+		eeCert, err2 = x509.ParseCertificate(ec0.Bytes)
+		if err2 != nil {
+			return fmt.Errorf("parse EE certificate from extraCerts[0] (fb=%d,b=%d): fb_err=%v, b_err=%v",
+				len(ec0.FullBytes), len(ec0.Bytes), err, err2)
+		}
 	}
 
 	payload, err := marshalProtectedPayload(full.Header.FullBytes, full.Body.FullBytes)
