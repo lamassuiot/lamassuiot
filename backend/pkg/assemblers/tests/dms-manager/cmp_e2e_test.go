@@ -202,6 +202,7 @@ func cmpRunEnroll(ctx context.Context, serverAddr, dmsID, signerKey, signerCert,
 		"-cmd", "ir",
 		"-cert", signerCert,
 		"-key", signerKey,
+		"-extracerts", signerCert, // include signer cert in extraCerts so server can verify signature
 		"-csr", deviceCSR,
 		"-newkey", deviceKey,
 		"-reqout", filepath.Join(dir, "request.der"),
