@@ -1,0 +1,25 @@
+PKCS-9
+    { iso(1) member-body(2) us(840) rsadsi(113549) pkcs(1) pkcs-9(9)
+      modules(0) pkcs-9(1) }
+
+DEFINITIONS IMPLICIT TAGS ::=
+
+BEGIN
+
+IMPORTS
+    ATTRIBUTE
+    FROM PKIX-CommonTypes-2009
+        { iso(1) identified-organization(3) dod(6) internet(1) security(5)
+          mechanisms(5) pkix(7) id-mod(0) id-mod-pkixCommon-02(57) } ;
+
+pkcs-9 OBJECT IDENTIFIER ::=
+    { iso(1) member-body(2) us(840) rsadsi(113549) pkcs(1) 9 }
+
+id-localKeyId OBJECT IDENTIFIER ::= { pkcs-9 21 }
+
+localKeyId ATTRIBUTE ::= {
+    TYPE OCTET STRING
+    IDENTIFIED BY id-localKeyId
+}
+
+END
