@@ -76,14 +76,15 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, caStorageConf, km
 
 // keyEntry accumulates all data needed to build a models.Key record.
 type keyEntry struct {
-	engineID   string
-	keyID      string // subject_key_id == KMS key_id (SHA-256 hex of PKIX public key)
-	algorithm  string
-	size       int
-	publicKey  string // base64(PEM "PUBLIC KEY")
-	name       string // common name of first CA cert using this key
-	creationTS time.Time
-	serials    []string // serial numbers of all CA certs using this key
+	engineID    string
+	keyID       string // subject_key_id == KMS key_id (SHA-256 hex of PKIX public key)
+	algorithm   string
+	size        int
+	publicKey   string // base64(PEM "PUBLIC KEY")
+	name        string // common name of first CA cert using this key
+	creationTS  time.Time
+	serials     []string // serial numbers of all CA certs using this key
+	conflictErr string   // non-empty if the entry cannot be migrated safely
 }
 
 // collectKeys scans MANAGED and IMPORTED_WITH_KEY CA certs and groups them by key.
@@ -103,6 +104,13 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACer
 
 		keyID := cert.SubjectKeyID
 		if entry, ok := keyMap[keyID]; ok {
+			if cert.EngineID != entry.engineID && entry.conflictErr == "" {
+				entry.conflictErr = fmt.Sprintf(
+					"key %s is referenced by CA certificates with conflicting engine_ids (%q vs %q); "+
+						"cannot determine the correct engine — resolve the conflict manually",
+					keyID, entry.engineID, cert.EngineID,
+				)
+			}
 			entry.serials = append(entry.serials, cert.SerialNumber)
 		} else {
 			x509Cert := (*x509.Certificate)(cert.Certificate)
@@ -162,6 +170,12 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACer
 // It returns the number of inserted (or would-insert in dry-run), skipped, and failed keys.
 func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMSKeysRepo, keyMap map[string]*keyEntry, dryRun bool) (inserted, skipped, failed int) {
 	for _, entry := range keyMap {
+		if entry.conflictErr != "" {
+			logger.Errorf("skipping key %s: %s", entry.keyID, entry.conflictErr)
+			failed++
+			continue
+		}
+
 		exists, _, err := kmsStorage.SelectExistsByKeyID(ctx, entry.keyID)
 		if err != nil {
 			logger.Errorf("could not check key %s in KMS storage: %s", entry.keyID, err)

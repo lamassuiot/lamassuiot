@@ -457,6 +457,48 @@ func TestCollectKeys_SharedKey_GroupsBothSerials(t *testing.T) {
 	}
 }
 
+func TestCollectKeys_SharedKey_EngineIDMismatch_KeepsFirstAndGroupsSerials(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := key.Public()
+	ts := time.Now()
+
+	ca1 := makeCACert(t, "ca-8a", "serial-8a", "engine-a", models.CertificateTypeManaged, pub, 2048, models.KeyType(x509.RSA), "SharedKeyCA1", ts)
+	ca2 := makeCACert(t, "ca-8b", "serial-8b", "engine-b", models.CertificateTypeManaged, pub, 2048, models.KeyType(x509.RSA), "SharedKeyCA2", ts)
+
+	keyMap, err := collectKeys(context.Background(), silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca1, ca2}})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if len(keyMap) != 1 {
+		t.Fatalf("expected 1 key entry despite engine_id mismatch, got %d", len(keyMap))
+	}
+	entry := keyMap[ca1.Certificate.SubjectKeyID]
+	if entry.conflictErr == "" {
+		t.Error("expected conflictErr to be set on engine_id mismatch")
+	}
+	if len(entry.serials) != 2 {
+		t.Errorf("expected both serials grouped, got %d", len(entry.serials))
+	}
+}
+
+func TestRunMigration_EngineIDConflict_CountsAsFailed(t *testing.T) {
+	entry := newKeyEntryFromRSA(t, "engine-a", "serial-1", "MyCA")
+	entry.conflictErr = "conflicting engine_ids"
+	kms := newMockKMSStorage()
+
+	ins, skip, fail := runMigration(context.Background(), silentLogger(), kms, map[string]*keyEntry{entry.keyID: entry}, false)
+
+	if ins != 0 || skip != 0 || fail != 1 {
+		t.Errorf("counts: ins=%d skip=%d fail=%d, want 0/0/1", ins, skip, fail)
+	}
+	if len(kms.inserted) != 0 {
+		t.Error("no insert should happen for a conflicted key")
+	}
+}
+
 func TestCollectKeys_UnsupportedKeyType_IsSkipped(t *testing.T) {
 	// Ed25519 is not RSA or ECDSA; the type switch should skip it.
 	edPub, _, err := ed25519.GenerateKey(rand.Reader)
