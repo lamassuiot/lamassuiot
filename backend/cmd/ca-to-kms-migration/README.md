@@ -148,7 +148,7 @@ On the next `helm upgrade` the Job will run automatically before any Deployment 
 ## Running Tests
 
 ```bash
-go test ./backend/cmd/ca-to-kms-migration/...
+go test ./backend/pkg/migration/catokms/...
 ```
 
 The tests use in-memory mock storage implementations and require no external dependencies (no Docker, no database).
