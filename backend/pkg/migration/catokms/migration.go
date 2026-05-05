@@ -2,6 +2,8 @@ package catokms
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -104,6 +106,21 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACer
 			entry.serials = append(entry.serials, cert.SerialNumber)
 		} else {
 			x509Cert := (*x509.Certificate)(cert.Certificate)
+
+			var algorithm string
+			var size int
+			switch pub := x509Cert.PublicKey.(type) {
+			case *rsa.PublicKey:
+				algorithm = "RSA"
+				size = pub.N.BitLen()
+			case *ecdsa.PublicKey:
+				algorithm = "ECDSA"
+				size = pub.Params().BitSize
+			default:
+				logger.Warnf("skipping CA %s: unsupported public key type %T", ca.ID, x509Cert.PublicKey)
+				return
+			}
+
 			pubKeyDER, err := x509.MarshalPKIXPublicKey(x509Cert.PublicKey)
 			if err != nil {
 				logger.Errorf("could not marshal public key for CA %s: %s", ca.ID, err)
@@ -115,8 +132,8 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACer
 			keyMap[keyID] = &keyEntry{
 				engineID:   cert.EngineID,
 				keyID:      keyID,
-				algorithm:  cert.KeyMetadata.Type.String(),
-				size:       cert.KeyMetadata.Bits,
+				algorithm:  algorithm,
+				size:       size,
 				publicKey:  pubKeyB64,
 				name:       cert.Subject.CommonName,
 				creationTS: cert.ValidFrom,

@@ -3,6 +3,7 @@ package catokms
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -453,6 +454,27 @@ func TestCollectKeys_SharedKey_GroupsBothSerials(t *testing.T) {
 	entry := keyMap[ca1.Certificate.SubjectKeyID]
 	if len(entry.serials) != 2 {
 		t.Errorf("expected 2 serials for shared key, got %d", len(entry.serials))
+	}
+}
+
+func TestCollectKeys_UnsupportedKeyType_IsSkipped(t *testing.T) {
+	// Ed25519 is not RSA or ECDSA; the type switch should skip it.
+	edPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Build a cert whose PublicKey is ed25519 (unsupported by the migration).
+	// We reuse makeCACert with an RSA key bit-size=0 placeholder since makeCACert
+	// replaces parsedCert.PublicKey with the supplied pub value.
+	ca := makeCACert(t, "ca-ed", "serial-ed", "engine-a", models.CertificateTypeManaged,
+		edPub, 0, models.KeyType(x509.UnknownPublicKeyAlgorithm), "Ed25519CA", time.Now())
+
+	keyMap, err := collectKeys(context.Background(), silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca}})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if len(keyMap) != 0 {
+		t.Fatal("cert with unsupported public key type should be skipped")
 	}
 }
 
