@@ -99,19 +99,19 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACer
 			return
 		}
 
-		x509Cert := (*x509.Certificate)(cert.Certificate)
-		pubKeyDER, err := x509.MarshalPKIXPublicKey(x509Cert.PublicKey)
-		if err != nil {
-			logger.Errorf("could not marshal public key for CA %s: %s", ca.ID, err)
-			return
-		}
-		pubKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubKeyDER})
-		pubKeyB64 := base64.StdEncoding.EncodeToString(pubKeyPEM)
-
 		keyID := cert.SubjectKeyID
 		if entry, ok := keyMap[keyID]; ok {
 			entry.serials = append(entry.serials, cert.SerialNumber)
 		} else {
+			x509Cert := (*x509.Certificate)(cert.Certificate)
+			pubKeyDER, err := x509.MarshalPKIXPublicKey(x509Cert.PublicKey)
+			if err != nil {
+				logger.Errorf("could not marshal public key for CA %s: %s", ca.ID, err)
+				return
+			}
+			pubKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubKeyDER})
+			pubKeyB64 := base64.StdEncoding.EncodeToString(pubKeyPEM)
+
 			keyMap[keyID] = &keyEntry{
 				engineID:   cert.EngineID,
 				keyID:      keyID,
