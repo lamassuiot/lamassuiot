@@ -28,27 +28,24 @@ The operation is **idempotent**: if a key already exists in the KMS database it 
 
 ## Configuration
 
-The tool uses the same config-loading mechanism as all other Lamassu services. Point the `LAMASSU_CONFIG_FILE` environment variable at a YAML file with the following structure:
+The tool reuses the standard KMS service config layout. Point the `LAMASSU_CONFIG_FILE` environment variable at a YAML file:
 
 ```yaml
-log_level: info   # debug | info | warn | error
+logs:
+  level: info   # debug | info | warn | error
 
-ca_storage:
+storage:
+  log_level: info
   provider: postgres
-  hostname: <ca-db-host>
-  port: 5432
-  username: <user>
-  password: <password>
-
-kms_storage:
-  provider: postgres
-  hostname: <kms-db-host>
+  hostname: <db-host>
   port: 5432
   username: <user>
   password: <password>
 ```
 
-> **Note**: The `hostname` field (not `host`) must be used. The database name is fixed internally: the CA engine always connects to the `ca` database and the KMS engine always connects to the `kms` database.
+The CA and KMS databases are assumed to live on the same Postgres server. The tool connects to each database automatically — `ca` for reading CA certificates and `kms` for writing key records — so only one connection config is needed.
+
+> **Note**: The `hostname` field (not `host`) must be used.
 
 ## Usage
 

@@ -17,14 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Config holds the storage configurations for both the CA and KMS databases.
-// It can be loaded directly via cconfig.LoadConfig[catokms.Config] in any caller.
-type Config struct {
-	LogLevel   cconfig.LogLevel               `mapstructure:"log_level"`
-	CAStorage  cconfig.PluggableStorageEngine `mapstructure:"ca_storage"`
-	KMSStorage cconfig.PluggableStorageEngine `mapstructure:"kms_storage"`
-}
-
 // Result summarises the outcome of a migration run.
 type Result struct {
 	Inserted int
@@ -46,23 +38,20 @@ func Migrate(ctx context.Context, logger *log.Entry, caStorage storage.CACertifi
 	return Result{Inserted: ins, Skipped: skip, Failed: fail}, nil
 }
 
-// MigrateWithConfig builds storage engines from the supplied configs and runs the migration.
-// Convenient for callers that hold a Config struct (e.g. Lambda handlers reading from SSM or env).
-func MigrateWithConfig(ctx context.Context, logger *log.Entry, caStorageConf, kmsStorageConf cconfig.PluggableStorageEngine, dryRun bool) (Result, error) {
-	caEngine, err := storagebuilder.BuildStorageEngine(logger.WithField("db", "ca"), caStorageConf)
+// MigrateWithConfig builds CA and KMS storage from a single Postgres config and runs the
+// migration. Both databases ("ca" and "kms") are expected on the same server; the engine
+// connects to each automatically. Pass the KMSConfig.Storage field from the standard
+// Lamassu service config.
+func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconfig.PluggableStorageEngine, dryRun bool) (Result, error) {
+	engine, err := storagebuilder.BuildStorageEngine(logger, storageConf)
 	if err != nil {
-		return Result{}, fmt.Errorf("build CA storage engine: %w", err)
+		return Result{}, fmt.Errorf("build storage engine: %w", err)
 	}
-	caStorage, err := caEngine.GetCAStorage()
+	caStorage, err := engine.GetCAStorage()
 	if err != nil {
 		return Result{}, fmt.Errorf("get CA storage: %w", err)
 	}
-
-	kmsEngine, err := storagebuilder.BuildStorageEngine(logger.WithField("db", "kms"), kmsStorageConf)
-	if err != nil {
-		return Result{}, fmt.Errorf("build KMS storage engine: %w", err)
-	}
-	kmsStorage, err := kmsEngine.GetKMSStorage()
+	kmsStorage, err := engine.GetKMSStorage()
 	if err != nil {
 		return Result{}, fmt.Errorf("get KMS storage: %w", err)
 	}
