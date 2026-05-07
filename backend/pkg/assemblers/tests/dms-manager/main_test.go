@@ -2319,7 +2319,7 @@ func TestESTEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/CombinedMTLSAndWebhook",
+			name: "OK/CombinedClientCertificateAndWebhook",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
@@ -2343,7 +2343,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
@@ -2402,7 +2402,7 @@ func TestESTEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "Err/CombinedMTLSAndWebhook-WebhookDenied",
+			name: "Err/CombinedClientCertificateAndWebhook-WebhookDenied",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
@@ -2426,7 +2426,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
@@ -2481,7 +2481,7 @@ func TestESTEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "Err/CombinedMTLSAndWebhook-InvalidCert",
+			name: "Err/CombinedClientCertificateAndWebhook-InvalidCert",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
@@ -2504,14 +2504,14 @@ func TestESTEnroll(t *testing.T) {
 				}
 				defer cleanup()
 
-				// webhook should never be reached since mTLS check fails first
+				// webhook should never be reached since client certificate check fails first
 				router.POST("/verify", func(c *gin.Context) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						// only bootstrapCA trusted, but cert will be signed by differentCA
 						ValidationCAs:        []string{bootstrapCA.ID},
@@ -2565,7 +2565,7 @@ func TestESTEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "Err/CombinedMTLSAndWebhook-NoCert",
+			name: "Err/CombinedClientCertificateAndWebhook-NoCert",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
@@ -2589,7 +2589,7 @@ func TestESTEnroll(t *testing.T) {
 
 				_, err = createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
@@ -2608,7 +2608,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 
-				// enroll with no client certificate - should be rejected at mTLS step
+				// enroll with no client certificate - should be rejected at client certificate step
 				estCli := est.Client{
 					Host:               fmt.Sprintf("localhost:%d", dmsMgr.Port),
 					Certificates:       []*x509.Certificate{},
@@ -4056,7 +4056,7 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/CombinedMTLSAndWebhook",
+			name: "OK/CombinedClientCertificateAndWebhook",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
@@ -4075,7 +4075,7 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
@@ -4117,7 +4117,7 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "Err/CombinedMTLSAndWebhook-WebhookDenied",
+			name: "Err/CombinedClientCertificateAndWebhook-WebhookDenied",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
@@ -4136,7 +4136,7 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": false})
 				})
 
-				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
@@ -4176,7 +4176,7 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "Err/CombinedMTLSAndWebhook-InvalidCert",
+			name: "Err/CombinedClientCertificateAndWebhook-InvalidCert",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
@@ -4191,12 +4191,12 @@ func TestESTReEnroll(t *testing.T) {
 				}
 				defer cleanup()
 
-				// webhook should never be reached since mTLS fails first
+				// webhook should never be reached since client certificate check fails first
 				router.POST("/verify", func(c *gin.Context) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
@@ -4237,7 +4237,7 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "Err/CombinedMTLSAndWebhook-NoCert",
+			name: "Err/CombinedClientCertificateAndWebhook-NoCert",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
@@ -4256,7 +4256,7 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
@@ -4275,7 +4275,7 @@ func TestESTReEnroll(t *testing.T) {
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
-				// No client cert presented - should be rejected at the mTLS step
+				// No client cert presented - should be rejected at the client certificate step
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
 					AdditionalPathSegment: dms.ID,

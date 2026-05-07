@@ -304,9 +304,9 @@ func getESTLogFormatter() logrus.Formatter {
 	return &formatter
 }
 
-// validateMTLSEnrollment validates the client certificate chain against the DMS's configured
-// mTLS validation CAs and performs a revocation check. clientCerts must be non-empty.
-func (svc DMSManagerServiceBackend) validateMTLSEnrollment(ctx context.Context, lFunc *logrus.Entry, estAuthOptions models.EnrollmentOptionsESTRFC7030, clientCerts []*x509.Certificate) error {
+// validateClientCertificateEnrollment validates the client certificate chain against the DMS's configured
+// client certificate validation CAs and performs a revocation check. clientCerts must be non-empty.
+func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx context.Context, lFunc *logrus.Entry, estAuthOptions models.EnrollmentOptionsESTRFC7030, clientCerts []*x509.Certificate) error {
 	leafClientCert := clientCerts[0]
 
 	lFunc = lFunc.WithField("auth-status", "verifying")
@@ -369,10 +369,10 @@ func (svc DMSManagerServiceBackend) validateMTLSEnrollment(ctx context.Context, 
 	return nil
 }
 
-// validateMTLSReenrollment validates the presented client certificate for re-enrollment.
+// validateClientCertificateReenrollment validates the presented client certificate for re-enrollment.
 // It checks against the enrollment CA first, then falls back to additional validation CAs,
 // and finally verifies expiry and revocation status.
-func (svc DMSManagerServiceBackend) validateMTLSReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate) error {
+func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate) error {
 	leafCert := clientCerts[0]
 
 	lFunc = lFunc.WithField("auth-status", "verifying")
@@ -557,7 +557,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			lFunc.Errorf("aborting enrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateMTLSEnrollment(ctx, lFunc, estAuthOptions, clientCerts); err != nil {
+		if err = svc.validateClientCertificateEnrollment(ctx, lFunc, estAuthOptions, clientCerts); err != nil {
 			return nil, err
 		}
 		lFunc = lFunc.WithField("auth-status", "verified")
@@ -577,24 +577,24 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		lFunc = lFunc.WithField("auth-status", "verified")
 		lFunc.Infof("external webhook authorized enrollment")
 
-	case models.ESTAuthModeMTLSAndWebhook:
-		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeMTLSAndWebhook)
-		lFunc.Infof("combined auth: starting mTLS validation (step 1/2)")
+	case models.ESTAuthModeClientCertificateAndWebhook:
+		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificateAndWebhook)
+		lFunc.Infof("combined auth: starting client certificate validation (step 1/2)")
 		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
 		if !hasValue || len(clientCerts) == 0 {
 			lFunc = lFunc.WithField("auth-status", "failed")
 			lFunc.Errorf("aborting enrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateMTLSEnrollment(ctx, lFunc, estAuthOptions, clientCerts); err != nil {
+		if err = svc.validateClientCertificateEnrollment(ctx, lFunc, estAuthOptions, clientCerts); err != nil {
 			return nil, err
 		}
-		lFunc.Infof("combined auth: mTLS validation passed. Starting webhook validation (step 2/2)")
+		lFunc.Infof("combined auth: client certificate validation passed. Starting webhook validation (step 2/2)")
 		if err = invokeEnrollmentWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps); err != nil {
 			return nil, err
 		}
 		lFunc = lFunc.WithField("auth-status", "verified")
-		lFunc.Infof("combined auth: both mTLS and webhook validations passed")
+		lFunc.Infof("combined auth: both client certificate and webhook validations passed")
 
 	default:
 		lFunc.Errorf("aborting enrollment. DMS is not correctly configured. No auth method configured. Specify an authentication method")
@@ -786,7 +786,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			lFunc.Errorf("aborting reenrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateMTLSReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
+		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
 			return nil, err
 		}
 
@@ -796,22 +796,22 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			return nil, err
 		}
 
-	case models.ESTAuthModeMTLSAndWebhook:
-		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeMTLSAndWebhook)
-		lFunc.Infof("combined auth: starting mTLS validation (step 1/2)")
+	case models.ESTAuthModeClientCertificateAndWebhook:
+		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificateAndWebhook)
+		lFunc.Infof("combined auth: starting client certificate validation (step 1/2)")
 		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
 		if !hasValue || len(clientCerts) == 0 {
 			lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateMTLSReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
+		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
 			return nil, err
 		}
-		lFunc.Infof("combined auth: mTLS validation passed. Starting webhook validation (step 2/2)")
+		lFunc.Infof("combined auth: client certificate validation passed. Starting webhook validation (step 2/2)")
 		if err = invokeEnrollmentWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps); err != nil {
 			return nil, err
 		}
-		lFunc.Infof("combined auth: both mTLS and webhook validations passed")
+		lFunc.Infof("combined auth: both client certificate and webhook validations passed")
 
 	default:
 		lFunc.Warnf("allowing reenroll: using NO AUTH mode")

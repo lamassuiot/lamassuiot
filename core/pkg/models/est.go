@@ -5,10 +5,10 @@ import "crypto/x509"
 type ESTAuthMode string
 
 const (
-	ESTAuthModeClientCertificate ESTAuthMode = "CLIENT_CERTIFICATE"
-	ESTAuthModeNoAuth            ESTAuthMode = "NO_AUTH"
-	ESTAuthModeExternalWebhook   ESTAuthMode = "EXTERNAL_WEBHOOK"
-	ESTAuthModeMTLSAndWebhook    ESTAuthMode = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK"
+	ESTAuthModeClientCertificate           ESTAuthMode = "CLIENT_CERTIFICATE"
+	ESTAuthModeExternalWebhook             ESTAuthMode = "EXTERNAL_WEBHOOK"
+	ESTAuthModeClientCertificateAndWebhook ESTAuthMode = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK"
+	ESTAuthModeNoAuth                      ESTAuthMode = "NO_AUTH"
 )
 
 type ESTServerAuthOptionsClientCertificate struct {
