@@ -369,6 +369,95 @@ func (svc DMSManagerServiceBackend) validateMTLSEnrollment(ctx context.Context, 
 	return nil
 }
 
+// validateMTLSReenrollment validates the presented client certificate for re-enrollment.
+// It checks against the enrollment CA first, then falls back to additional validation CAs,
+// and finally verifies expiry and revocation status.
+func (svc DMSManagerServiceBackend) validateMTLSReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate) error {
+	leafCert := clientCerts[0]
+
+	lFunc = lFunc.WithField("auth-status", "verifying")
+	lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", leafCert.Subject.CommonName, helpers.SerialNumberToHexString(leafCert.SerialNumber), leafCert.Issuer.CommonName))
+	lFunc.Debugf("presented client certificate")
+
+	validCertificate := false
+	var validationCA *x509.Certificate
+
+	lFunc.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.Certificate.SerialNumber)
+	if err := helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), leafCert, false); err != nil {
+		lFunc.Warnf("invalid validation using enroll CA: %s", err)
+	} else {
+		lFunc.Infof("certificate validated. Revocation and Expiration (if needed) check will be performed next")
+		validationCA = (*x509.Certificate)(enrollCA.Certificate.Certificate)
+		validCertificate = true
+	}
+
+	if !validCertificate {
+		aValCAsCtr := len(reEnrollSettings.AdditionalValidationCAs)
+		lFunc.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
+		lFunc.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
+
+		for idx, caID := range reEnrollSettings.AdditionalValidationCAs {
+			lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
+			ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
+			if err != nil {
+				lFunc.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
+				continue
+			}
+			if err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), leafCert, false); err != nil {
+				lFunc.Debugf("[%d/%d] invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
+			} else {
+				lFunc.Debugf("[%d/%d] OK validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
+				validCertificate = true
+				break
+			}
+		}
+	}
+
+	if !validCertificate {
+		caAki := ""
+		if len(leafCert.AuthorityKeyId) > 0 {
+			caAki = string(leafCert.AuthorityKeyId)
+		}
+		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment process. Unknown CA:\nCN: %s\nAKI:%s", leafCert.Issuer.CommonName, caAki)
+		return errs.ErrDMSEnrollInvalidCert
+	}
+
+	if reEnrollSettings.EnableExpiredRenewal {
+		lFunc.Warnf("DMS configured to allow reenrollment with expired certificates")
+	} else {
+		lFunc.Info("DMS configured to NOT allow reenrollment with expired certificates")
+	}
+
+	now := time.Now()
+	if now.After(leafCert.NotAfter) {
+		if reEnrollSettings.EnableExpiredRenewal {
+			lFunc.Warnf("presented an expired certificate: %s", now.Sub(leafCert.NotBefore))
+		} else {
+			lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. device has a valid but expired certificate")
+			return fmt.Errorf("expired certificate")
+		}
+	}
+
+	lFunc.Infof("checking certificate revocation status")
+	couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, leafCert, validationCA)
+	if err != nil {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. error while checking certificate revocation status: %s", err)
+		return err
+	}
+
+	if couldCheckRevocation {
+		if isRevoked {
+			lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. certificate is revoked")
+			return fmt.Errorf("certificate is revoked")
+		}
+		lFunc.Infof("certificate is not revoked")
+	} else {
+		lFunc.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
+	}
+
+	return nil
+}
+
 // invokeEnrollmentWebhook calls the configured external webhook and returns an error if the
 // webhook denies enrollment or cannot be reached (fail-closed).
 func invokeEnrollmentWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.WebhookCall, csr *x509.CertificateRequest, aps string) error {
@@ -688,113 +777,43 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
 
-	if enrollSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.ESTAuthModeClientCertificate ||
-		enrollSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.ESTAuthModeMTLSAndWebhook {
+	authMode := enrollSettings.EnrollmentOptionsESTRFC7030.AuthMode
+	switch authMode {
+	case models.ESTAuthModeClientCertificate:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificate)
 		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
 		if !hasValue || len(clientCerts) == 0 {
 			lFunc.Errorf("aborting reenrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-
-		leafCert := clientCerts[0]
-
-		lFunc = lFunc.WithField("auth-status", "verifying")
-		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", leafCert.Subject.CommonName, helpers.SerialNumberToHexString(leafCert.SerialNumber), leafCert.Issuer.CommonName))
-		lFunc.Debugf("presented client certificate")
-
-		validCertificate := false
-		var validationCA *x509.Certificate
-
-		//check if certificate is a certificate issued by Enroll CA
-		lFunc.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.Certificate.SerialNumber)
-		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), leafCert, false)
-		if err != nil {
-			lFunc.Warnf("invalid validation using enroll CA: %s", err)
-		} else {
-			lFunc.Infof("certificate validated. Revocation and Expiration (if needed) check will be performed next")
-			validationCA = (*x509.Certificate)(enrollCA.Certificate.Certificate)
-			validCertificate = true
-		}
-
-		//try secondary validation with additional CAs
-		if !validCertificate {
-
-			aValCAsCtr := len(reEnrollSettings.AdditionalValidationCAs)
-			lFunc.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
-			lFunc.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
-
-			//check if certificate is a certificate issued by Extra Val CAs
-			for idx, caID := range reEnrollSettings.AdditionalValidationCAs {
-				lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
-				ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
-				if err != nil {
-					lFunc.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
-					continue
-				}
-
-				err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), leafCert, false)
-				if err != nil {
-					lFunc.Debugf("[%d/%d] invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
-				} else {
-					lFunc.Debugf("[%d/%d] OK validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
-					validCertificate = true
-					break
-				}
-			}
-		}
-
-		//abort reenrollment process. No CA signed the client certificate
-		if !validCertificate {
-			caAki := ""
-			if len(leafCert.AuthorityKeyId) > 0 {
-				caAki = string(leafCert.AuthorityKeyId)
-			}
-
-			lFunc = lFunc.WithField("auth-status", "failed")
-			lFunc.Errorf("aborting reenrollment process. Unknown CA:\nCN: %s\nAKI:%s", leafCert.Issuer.CommonName, caAki)
-			return nil, errs.ErrDMSEnrollInvalidCert
-		}
-
-		if reEnrollSettings.EnableExpiredRenewal {
-			lFunc.Warnf("DMS configured to allow reenrollment with expired certificates")
-		} else {
-			lFunc.Info("DMS configured to NOT allow reenrollment with expired certificates")
-		}
-
-		//Check if EXPIRED
-		now := time.Now()
-		if now.After(leafCert.NotAfter) {
-			if reEnrollSettings.EnableExpiredRenewal {
-				lFunc.Warnf("presented an expired certificate: %s", now.Sub(leafCert.NotBefore))
-			} else {
-				lFunc = lFunc.WithField("auth-status", "failed")
-				lFunc.Errorf("aborting reenrollment. device has a valid but expired certificate")
-				return nil, fmt.Errorf("expired certificate")
-			}
-		}
-
-		//checks against Lamassu, external OCSP or CRL
-		lFunc.Infof("checking certificate revocation status")
-		couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, leafCert, (*x509.Certificate)(validationCA))
-		if err != nil {
-			lFunc = lFunc.WithField("auth-status", "failed")
-			lFunc.Errorf("aborting reenrollment. could not check certificate revocation status: %s", err)
-			lFunc.Errorf("error while checking certificate revocation status: %s", err)
+		if err = svc.validateMTLSReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
 			return nil, err
 		}
 
-		if couldCheckRevocation {
-			if isRevoked {
-				lFunc = lFunc.WithField("auth-status", "failed")
-				lFunc.Errorf("aborting enrollment. certificate is revoked")
-				return nil, fmt.Errorf("certificate is revoked")
-			}
-			lFunc.Infof("certificate is not revoked")
-		} else {
-			lFunc.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
+	case models.ESTAuthModeExternalWebhook:
+		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeExternalWebhook)
+		if err = invokeEnrollmentWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps); err != nil {
+			return nil, err
 		}
-	} else {
+
+	case models.ESTAuthModeMTLSAndWebhook:
+		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeMTLSAndWebhook)
+		lFunc.Infof("combined auth: starting mTLS validation (step 1/2)")
+		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
+		if !hasValue || len(clientCerts) == 0 {
+			lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. No client certificate was presented")
+			return nil, errs.ErrDMSAuthModeNotSupported
+		}
+		if err = svc.validateMTLSReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
+			return nil, err
+		}
+		lFunc.Infof("combined auth: mTLS validation passed. Starting webhook validation (step 2/2)")
+		if err = invokeEnrollmentWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps); err != nil {
+			return nil, err
+		}
+		lFunc.Infof("combined auth: both mTLS and webhook validations passed")
+
+	default:
 		lFunc.Warnf("allowing reenroll: using NO AUTH mode")
 	}
 

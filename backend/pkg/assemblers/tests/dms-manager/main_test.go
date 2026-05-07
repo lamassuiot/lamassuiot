@@ -3934,6 +3934,365 @@ func TestESTReEnroll(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "OK/ExternalWebhook",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeExternalWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					Name: "myHook",
+					Url:  url + "/verify",
+					Config: models.WebhookCallHttpClient{
+						ValidateServerCert: false,
+						LogLevel:           string(config.Debug),
+						AuthMode:           config.NoAuth,
+					},
+				}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				// No client cert needed for external-webhook-only reenrollment
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while reenrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "Err/ExternalWebhook-WebhookDenied",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": false})
+				})
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeExternalWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					Name: "myHook",
+					Url:  url + "/verify",
+					Config: models.WebhookCallHttpClient{
+						ValidateServerCert: false,
+						LogLevel:           string(config.Debug),
+						AuthMode:           config.NoAuth,
+					},
+				}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+				if !strings.Contains(err.Error(), "external webhook denied enrollment") {
+					t.Fatalf("error should contain 'external webhook denied enrollment'. Got error %s", err.Error())
+				}
+			},
+		},
+		{
+			name: "OK/CombinedMTLSAndWebhook",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					Name: "myHook",
+					Url:  url + "/verify",
+					Config: models.WebhookCallHttpClient{
+						ValidateServerCert: false,
+						LogLevel:           string(config.Debug),
+						AuthMode:           config.NoAuth,
+					},
+				}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS to combined auth mode: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while reenrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "Err/CombinedMTLSAndWebhook-WebhookDenied",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": false})
+				})
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					Name: "myHook",
+					Url:  url + "/verify",
+					Config: models.WebhookCallHttpClient{
+						ValidateServerCert: false,
+						LogLevel:           string(config.Debug),
+						AuthMode:           config.NoAuth,
+					},
+				}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS to combined auth mode: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+				if !strings.Contains(err.Error(), "external webhook denied enrollment") {
+					t.Fatalf("error should contain 'external webhook denied enrollment'. Got error %s", err.Error())
+				}
+			},
+		},
+		{
+			name: "Err/CombinedMTLSAndWebhook-InvalidCert",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				// webhook should never be reached since mTLS fails first
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					Name: "myHook",
+					Url:  url + "/verify",
+					Config: models.WebhookCallHttpClient{
+						ValidateServerCert: false,
+						LogLevel:           string(config.Debug),
+						AuthMode:           config.NoAuth,
+					},
+				}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS to combined auth mode: %s", err)
+				}
+
+				// present a self-signed cert (not from the enroll CA)
+				fakeKey, _ := chelpers.GenerateRSAKey(2048)
+				fakeCert, _ := chelpers.GenerateSelfSignedCertificate(fakeKey, deviceCrt.Subject.CommonName)
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{fakeCert},
+					PrivateKey:            fakeKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+			},
+		},
+		{
+			name: "Err/CombinedMTLSAndWebhook-NoCert",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeMTLSAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					Name: "myHook",
+					Url:  url + "/verify",
+					Config: models.WebhookCallHttpClient{
+						ValidateServerCert: false,
+						LogLevel:           string(config.Debug),
+						AuthMode:           config.NoAuth,
+					},
+				}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS to combined auth mode: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				// No client cert presented - should be rejected at the mTLS step
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+			},
+		},
 	}
 
 	for _, tc := range testcases {
