@@ -73,7 +73,7 @@ type EnrollmentSettings struct {
 type EnrollmentOptionsESTRFC7030 struct {
 	AuthMode                   ESTAuthMode                  `json:"auth_mode"`
 	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
-	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook"`
+	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook_settings"`
 }
 
 type AuthOptionsClientCertificate struct {
