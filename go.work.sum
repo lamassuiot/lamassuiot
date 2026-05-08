@@ -622,6 +622,7 @@ github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.14/go.mod h1:jyoemRAktfCyZR9b
 github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.10/go.mod h1:3HKuexPDcwLWPaqpW2UR/9n8N/u/3CKcGAzSs8p8u8g=
 github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.4/go.mod h1:l4bdfCD7XyyZA9BolKBo1eLqgaJxl0/x91PL4Yqe0ao=
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.4/go.mod h1:yDmJgqOiH4EA8Hndnv4KwAo8jCGTSnM5ASG1nBI+toA=
+github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4/go.mod h1:ZWy7j6v1vWGmPReu0iSGvRiise4YI5SkR3OHKTZ6Wuc=
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.15/go.mod h1:CetW7bDE00QoGEmPUoZuRog07SGVAUVW6LFpNP0YfIg=
 github.com/aws/aws-sdk-go-v2/service/dynamodb v1.53.2/go.mod h1:bz4cZH7uK5fLxQbj7hL4MFDL+pjReC9en/nM2Wfwxsk=
 github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.32.6/go.mod h1:r2DJVcbGPv7oJGoPICCQJ+4ci5oSGjdXtdscnJIQBfk=

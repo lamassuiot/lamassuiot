@@ -23,7 +23,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -310,7 +309,7 @@ func TestESTEnroll(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -1478,6 +1477,252 @@ func TestESTEnroll(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "OK/CombinedClientCertAndWebhook",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateExternalWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
+						ChainLevelValidation: -1,
+						ValidationCAs:        []string{bootstrapCA.ID},
+					}
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+						Name: "myHook",
+						Url:  url + "/verify",
+						Config: models.WebhookCallHttpClient{
+							ValidateServerCert: false,
+							LogLevel:           string(config.Debug),
+							AuthMode:           config.NoAuth,
+						},
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              bootstrapCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: bootstrapCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+			},
+		},
+		{
+			name: "Err/CombinedClientCertOK_WebhookDenied",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				// Webhook always denies
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": false})
+				})
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateExternalWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
+						ChainLevelValidation: -1,
+						ValidationCAs:        []string{bootstrapCA.ID},
+					}
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+						Name: "myHook",
+						Url:  url + "/verify",
+						Config: models.WebhookCallHttpClient{
+							ValidateServerCert: false,
+							LogLevel:           string(config.Debug),
+							AuthMode:           config.NoAuth,
+						},
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              bootstrapCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: bootstrapCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				if !strings.Contains(err.Error(), "external webhook denied enrollment") {
+					t.Fatalf("error should contain 'external webhook denied enrollment'. Got error %s", err.Error())
+				}
+			},
+		},
+		{
+			name: "Err/CombinedInvalidCert_WebhookOK",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				// Create a CA that is NOT in the validation list
+				untrustedCA, err := createCA("untrusted", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create untrusted CA: %s", err)
+				}
+
+				// A different CA used for validation
+				trustedCA, err := createCA("trusted", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create trusted CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				// Webhook always approves
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateExternalWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
+						ChainLevelValidation: -1,
+						ValidationCAs:        []string{trustedCA.ID}, // Only trustedCA is in the validation list
+					}
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+						Name: "myHook",
+						Url:  url + "/verify",
+						Config: models.WebhookCallHttpClient{
+							ValidateServerCert: false,
+							LogLevel:           string(config.Debug),
+							AuthMode:           config.NoAuth,
+						},
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				// Sign the boot cert with untrustedCA (not in the DMS validation list)
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              untrustedCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: untrustedCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+			},
+		},
 		// TODO: Find a way of testing this. As of now, this causes a problem since the Testing Instance is launched under
 		// dev.lamassu.test domain. Then the DMS requests an OCSP/CRL request to https://dev.lamassu.test/api/va/crl/xxxx which
 		// is unreachable. We need a way of proxying dev.lamassu.test => localhost:xxxx (each test has a random port).
@@ -2373,7 +2618,7 @@ func TestESTGetCACerts(t *testing.T) {
 					EnrollmentProtocol: models.EST,
 					EnrollmentCA:       "",
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -2606,7 +2851,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -3010,7 +3255,7 @@ func TestESTReEnroll(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -3650,7 +3895,7 @@ func TestGetAllDMS(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},

@@ -13,7 +13,6 @@ import (
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -58,7 +57,7 @@ func TestBindIDEvent(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},

@@ -10,7 +10,6 @@ import (
 
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -64,7 +63,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 				EnrollmentProtocol: models.EST,
 				EnrollmentCA:       enrollCA.ID,
 				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+					AuthMode: models.ESTAuthModeClientCertificate,
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ChainLevelValidation: -1,
 						ValidationCAs:        []string{bootstrapCA.ID},
