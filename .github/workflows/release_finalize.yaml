@@ -247,6 +247,7 @@ jobs:
             alerts,
             aws-connector,
             lamassu-db-migration,
+            ca-to-kms-migration,
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
