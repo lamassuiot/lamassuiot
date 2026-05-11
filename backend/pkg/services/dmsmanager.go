@@ -822,6 +822,14 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		} else {
 			lFunc.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
 		}
+
+		if authMode == models.ESTAuthModeClientCertificateExternalWebhook {
+			estAuthOptions := enrollSettings.EnrollmentOptionsESTRFC7030
+			if err := svc.authenticateWithExternalWebhook(ctx, lFunc, estAuthOptions, csr, aps); err != nil {
+				lFunc.Errorf("aborting reenrollment. external webhook validation failed: %s", err)
+				return nil, err
+			}
+		}
 	} else {
 		lFunc.Warnf("allowing reenroll: using NO AUTH mode")
 	}
