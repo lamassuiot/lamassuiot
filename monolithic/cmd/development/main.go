@@ -456,7 +456,8 @@ func main() {
 				"CBOMKIT_FRONTEND_URL_CORS=http://localhost:8000,http://localhost:9002",
 				"CBOMKIT_OPA_API_BASE=http://host.docker.internal:8181", // http://opa:8181
 			},
-			ExtraHosts: []string{"host.docker.internal:host-gateway"},
+			ExposedPorts: []string{"8081/tcp"},
+			ExtraHosts:   []string{"host.docker.internal:host-gateway"},
 			Labels: map[string]string{
 				"group": "lamassuiot-monolithic",
 			},
@@ -473,6 +474,7 @@ func main() {
 		})
 
 		cbomAPIPort, _ := strconv.Atoi(cbomKitAPIContainer.GetPort("8081/tcp"))
+		fmt.Printf(" 	-- CBOMkit API port: %d\n", cbomAPIPort)
 
 		_, container, _, err = dockerrunner.RunDocker(dockertest.RunOptions{
 			Repository: "ghcr.io/cbomkit/cbomkit-frontend", // image
