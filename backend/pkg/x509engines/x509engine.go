@@ -48,37 +48,8 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 		return nil, err
 	}
 
-	template, _ := engine.createRootCATemplate(lFunc, ctx, signer, keyID, subject, validity)
-
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, template, template, signer.Public(), signer)
-	if err != nil {
-		lFunc.Errorf("could not sign certificate: %s", err)
-		return nil, err
-	}
-
-	certificate, err := x509.ParseCertificate(certificateBytes)
-	if err != nil {
-		lFunc.Errorf("could not parse signed certificate %s", err)
-		return nil, err
-	}
-
-	return certificate, nil
-}
-
-func (engine X509Engine) CreateChameleonRootCA(ctx context.Context, deltaSigner, baseSigner crypto.Signer, deltaKeyID, baseKeyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-	lFunc.Errorf("CreateChameleonRootCA: not supported in standard Go build (requires PQC fork)")
-	return nil, fmt.Errorf("chameleon certificates require a PQC-enabled Go build")
-}
-
-// Private method to avoid code duplication when creating Root CAs (traditional and hybrid)
-func (engine X509Engine) createRootCATemplate(lFunc *logrus.Entry, ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	sn, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		lFunc.Errorf("could not generate serial number: %v", err)
-		return nil, err
-	}
+	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
 
 	var caExpiration time.Time
 	if validity.Type == models.Duration {
@@ -111,19 +82,16 @@ func (engine X509Engine) createRootCATemplate(lFunc *logrus.Entry, ctx context.C
 	// Add OCSP and CRL distribution points
 	engine.addDistributionPoints(&template, rawHex)
 
-	return &template, nil
-}
-
-func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-
-	certificateTemplate, err := engine.createCertificateTemplateFromCSR(ctx, lFunc, csr, ca, profile)
+	// Apply issuance profile to template
+	err := engine.applyIssuanceProfileToTemplate(ctx, &template, profile, time.Now())
 	if err != nil {
+		lFunc.Errorf("could not apply issuance profile to CA template: %s", err)
 		return nil, err
 	}
 
-	// Sign the certificate
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, certificateTemplate, ca, csr.PublicKey, caSigner)
+	entropy := software.NewLamassuEntropy(ctx)
+
+	certificateBytes, err := x509.CreateCertificate(entropy, &template, &template, signer.Public(), signer)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate: %s", err)
 		return nil, err
@@ -138,37 +106,18 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	return certificate, nil
 }
 
-func (engine X509Engine) SignChameleonCertificateRequest(ctx context.Context, deltaCsr, baseCsr *x509.CertificateRequest, ca *x509.Certificate, deltaCaSigner, baseCaSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
-	return nil, fmt.Errorf("SignChameleonCertificateRequest: requires PQC-enabled Go build")
+func (engine X509Engine) CreateChameleonRootCA(ctx context.Context, deltaSigner, baseSigner crypto.Signer, deltaKeyID, baseKeyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Errorf("CreateChameleonRootCA: not supported in standard Go build (requires PQC fork)")
+	return nil, fmt.Errorf("chameleon certificates require a PQC-enabled Go build")
 }
 
-func (engine X509Engine) createCertificateTemplateFromCSR(ctx context.Context, lFunc *logrus.Entry, csr *x509.CertificateRequest, ca *x509.Certificate, profile models.IssuanceProfile) (*x509.Certificate, error) {
-	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
-	if profile.CryptoEnforcement.Enabled {
-		// Check CSR Public Key Algorithm
-		if rsa, ok := csr.PublicKey.(*rsa.PublicKey); ok {
-			if !profile.CryptoEnforcement.AllowRSAKeys {
-				lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
-				return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
-			} else if profile.CryptoEnforcement.AllowedRSAKeySizes != nil {
-				if !slices.Contains(profile.CryptoEnforcement.AllowedRSAKeySizes, rsa.N.BitLen()) {
-					lFunc.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
-					return nil, fmt.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
-				}
-			}
-		}
+func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
-		if ecdsa, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
-			if !profile.CryptoEnforcement.AllowECDSAKeys {
-				lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
-				return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
-			} else if profile.CryptoEnforcement.AllowedECDSAKeySizes != nil {
-				if !slices.Contains(profile.CryptoEnforcement.AllowedECDSAKeySizes, ecdsa.Params().BitSize) {
-					lFunc.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
-					return nil, fmt.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
-				}
-			}
-		}
+	// Validate CSR public key against crypto enforcement rules
+	if err := engine.validateCryptoEnforcement(ctx, csr.PublicKey, profile.CryptoEnforcement); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -233,7 +182,26 @@ func (engine X509Engine) createCertificateTemplateFromCSR(ctx context.Context, l
 		return nil, err
 	}
 
-	return &certificateTemplate, nil
+	entropy := software.NewLamassuEntropy(ctx)
+
+	// Sign the certificate
+	certificateBytes, err := x509.CreateCertificate(entropy, &certificateTemplate, ca, csr.PublicKey, caSigner)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate: %s", err)
+		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse signed certificate %s", err)
+		return nil, err
+	}
+
+	return certificate, nil
+}
+
+func (engine X509Engine) SignChameleonCertificateRequest(ctx context.Context, deltaCsr, baseCsr *x509.CertificateRequest, ca *x509.Certificate, deltaCaSigner, baseCaSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
+	return nil, fmt.Errorf("SignChameleonCertificateRequest: requires PQC-enabled Go build")
 }
 
 func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSigner crypto.Signer, subject models.Subject) (*x509.CertificateRequest, error) {
