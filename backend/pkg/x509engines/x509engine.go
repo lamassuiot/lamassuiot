@@ -117,7 +117,7 @@ func (engine X509Engine) createRootCATemplate(lFunc *logrus.Entry, ctx context.C
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
-	certificateTemplate, err := engine.createCertificateTemplateFromCSR(lFunc, csr, ca, profile)
+	certificateTemplate, err := engine.createCertificateTemplateFromCSR(ctx, lFunc, csr, ca, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (engine X509Engine) SignChameleonCertificateRequest(ctx context.Context, de
 	return nil, fmt.Errorf("SignChameleonCertificateRequest: requires PQC-enabled Go build")
 }
 
-func (engine X509Engine) createCertificateTemplateFromCSR(lFunc *logrus.Entry, csr *x509.CertificateRequest, ca *x509.Certificate, profile models.IssuanceProfile) (*x509.Certificate, error) {
+func (engine X509Engine) createCertificateTemplateFromCSR(ctx context.Context, lFunc *logrus.Entry, csr *x509.CertificateRequest, ca *x509.Certificate, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
 	if profile.CryptoEnforcement.Enabled {
 		// Check CSR Public Key Algorithm

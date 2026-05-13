@@ -89,7 +89,7 @@ func (r *caHttpRoutes) CreateHybridCA(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.CreateHybridCA(ctx, services.CreateHybridCAInput{
+	ca, err := r.svc.CreateHybridCA(ctx.Request.Context(), services.CreateHybridCAInput{
 		CreateCAInput: services.CreateCAInput{
 			ParentID:     requestBody.ParentID,
 			ID:           requestBody.ID,

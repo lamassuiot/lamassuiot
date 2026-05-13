@@ -65,7 +65,7 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 
 	// Validate hash function
 	var hashSize int
-	if kmsKeyAlg == x509.MLDSA.String() || kmsKeyAlg == x509.Ed25519.String() {
+	if kmsKeyAlg == models.MLDSA.String() || kmsKeyAlg == x509.Ed25519.String() {
 		hashSize = 0	
 	} else {
 		if !hashFunc.Available() {
@@ -103,7 +103,7 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 			// RSA PKCS#1 v1.5 signature scheme (default)
 			signAlg = fmt.Sprintf("RSASSA_PKCS1_V1_5_SHA_%d", hashSize)
 		}
-	case x509.MLDSA.String():
+	case models.MLDSA.String():
 		signAlg = fmt.Sprintf("MLDSA_%d_PURE", s.key.Size)
 
 	case x509.Ed25519.String():
