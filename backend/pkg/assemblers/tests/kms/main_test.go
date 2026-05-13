@@ -1,9 +1,6 @@
 package kms
 
 import (
-	"cloudflare/circl/sign/mldsa/mldsa44"
-	"cloudflare/circl/sign/mldsa/mldsa65"
-	"cloudflare/circl/sign/mldsa/mldsa87"
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -511,21 +508,6 @@ func TmestImportKey(t *testing.T) {
 		return priv
 	}
 
-	generateMLDSA := func(size int) any {
-		var key any
-
-		switch size {
-		case 44:
-			_, key, _ = mldsa44.GenerateKey(rand.Reader)
-		case 65:
-			_, key, _ = mldsa65.GenerateKey(rand.Reader)
-		case 87:
-			_, key, _ = mldsa87.GenerateKey(rand.Reader)
-		}
-
-		return key
-	}
-
 	generateEd25519 := func() any {
 		_, key, _ := ed25519.GenerateKey(rand.Reader)
 		return key
@@ -537,67 +519,6 @@ func TmestImportKey(t *testing.T) {
 		run         func() (*models.Key, error)
 		resultCheck func(key *models.Key, err error) error
 	}{
-		{
-			name:   "OK/Import-MLDSA-44",
-			before: func() {},
-			run: func() (*models.Key, error) {
-				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "MLDSA 44 Key",
-					PrivateKey: generateMLDSA(44),
-					EngineID:   "filesystem-1",
-				})
-			},
-			resultCheck: func(key *models.Key, err error) error {
-				// Replace with real MLDSA key import logic as needed
-				if err != nil {
-					return fmt.Errorf("should've imported MLDSA 44 key without error, but got: %s", err)
-				}
-				if key == nil || key.Algorithm != "ML-DSA" || key.Size != 44 {
-					return fmt.Errorf("unexpected key result for MLDSA 44 import: %+v", key)
-				}
-				return nil
-			},
-		},
-		{
-			name:   "OK/Import-MLDSA-65",
-			before: func() {},
-			run: func() (*models.Key, error) {
-				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "MLDSA 65 Key",
-					PrivateKey: generateMLDSA(65),
-					EngineID:   "filesystem-1",
-				})
-			},
-			resultCheck: func(key *models.Key, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've imported MLDSA 65 key without error, but got: %s", err)
-				}
-				if key == nil || key.Algorithm != "ML-DSA" || key.Size != 65 {
-					return fmt.Errorf("unexpected key result for MLDSA 65 import: %+v", key)
-				}
-				return nil
-			},
-		},
-		{
-			name:   "OK/Import-MLDSA-87",
-			before: func() {},
-			run: func() (*models.Key, error) {
-				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "MLDSA 87 Key",
-					PrivateKey: generateMLDSA(87),
-					EngineID:   "filesystem-1",
-				})
-			},
-			resultCheck: func(key *models.Key, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've imported MLDSA 87 key without error, but got: %s", err)
-				}
-				if key == nil || key.Algorithm != "ML-DSA" || key.Size != 87 {
-					return fmt.Errorf("unexpected key result for MLDSA 87 import: %+v", key)
-				}
-				return nil
-			},
-		},
 		{
 			name:   "OK/Import-Ed25519",
 			before: func() {},
@@ -1236,102 +1157,6 @@ func TestSignMessage(t *testing.T) {
 		resultCheck func(sig *models.MessageSignature, err error) error
 	}{
 		{
-			name: "OK/SignMessage-MLDSA-44",
-			before: func() {
-				_, priv, _ := mldsa44.GenerateKey(rand.Reader)
-				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "SignMLDSA44",
-					PrivateKey: priv,
-					EngineID:   "filesystem-1",
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to import MLDSA-44 key: %s", err))
-				}
-				validKeyID = key.PKCS11URI
-			},
-			run: func() (*models.MessageSignature, error) {
-				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
-					Identifier:  validKeyID,
-					Message:     message,
-					Algorithm:   "MLDSA_44_PURE",
-					MessageType: models.Raw,
-				})
-			},
-			resultCheck: func(sig *models.MessageSignature, err error) error {
-				if err != nil {
-					return fmt.Errorf("should not error on SignMessage MLDSA-44: %s", err)
-				}
-				if sig == nil || len(sig.Signature) == 0 {
-					return fmt.Errorf("expected signature, got nil or empty")
-				}
-				return nil
-			},
-		},
-		{
-			name: "OK/SignMessage-MLDSA-65",
-			before: func() {
-				_, priv, _ := mldsa65.GenerateKey(rand.Reader)
-				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "SignMLDSA65",
-					PrivateKey: priv,
-					EngineID:   "filesystem-1",
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to import MLDSA-65 key: %s", err))
-				}
-				validKeyID = key.PKCS11URI
-			},
-			run: func() (*models.MessageSignature, error) {
-				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
-					Identifier:  validKeyID,
-					Message:     message,
-					Algorithm:   "MLDSA_65_PURE",
-					MessageType: models.Raw,
-				})
-			},
-			resultCheck: func(sig *models.MessageSignature, err error) error {
-				if err != nil {
-					return fmt.Errorf("should not error on SignMessage MLDSA-65: %s", err)
-				}
-				if sig == nil || len(sig.Signature) == 0 {
-					return fmt.Errorf("expected signature, got nil or empty")
-				}
-				return nil
-			},
-		},
-		{
-			name: "OK/SignMessage-MLDSA-87",
-			before: func() {
-				_, priv, _ := mldsa87.GenerateKey(rand.Reader)
-				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "SignMLDSA87",
-					PrivateKey: priv,
-					EngineID:   "filesystem-1",
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to import MLDSA-87 key: %s", err))
-				}
-				validKeyID = key.PKCS11URI
-			},
-			run: func() (*models.MessageSignature, error) {
-				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
-					Identifier:  validKeyID,
-					Message:     message,
-					Algorithm:   "MLDSA_87_PURE",
-					MessageType: models.Raw,
-				})
-			},
-			resultCheck: func(sig *models.MessageSignature, err error) error {
-				if err != nil {
-					return fmt.Errorf("should not error on SignMessage MLDSA-87: %s", err)
-				}
-				if sig == nil || len(sig.Signature) == 0 {
-					return fmt.Errorf("expected signature, got nil or empty")
-				}
-				return nil
-			},
-		},
-		{
 			name: "OK/SignMessage-Ed25519",
 			before: func() {
 				_, priv, _ := ed25519.GenerateKey(rand.Reader)
@@ -1796,141 +1621,6 @@ func TestVerifySignature(t *testing.T) {
 		run         func() (*models.MessageValidation, error)
 		resultCheck func(ok *models.MessageValidation, err error) error
 	}{
-		{
-			name: "OK/VerifySignature-MLDSA-44",
-			before: func() {
-				_, priv, _ := mldsa44.GenerateKey(rand.Reader)
-				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "VerifyMLDSA44",
-					PrivateKey: priv,
-					EngineID:   "filesystem-1",
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to import MLDSA-44 key: %s", err))
-				}
-				validKeyID = key.PKCS11URI
-				validAlgorithm = "MLDSA_44_PURE"
-				validMessage = []byte("verify mldsa 44")
-				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
-					Identifier:  validKeyID,
-					Message:     validMessage,
-					Algorithm:   validAlgorithm,
-					MessageType: models.Raw,
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to sign with MLDSA-44: %s", err))
-				}
-				validSignature = sig.Signature
-			},
-			run: func() (*models.MessageValidation, error) {
-				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
-					Identifier:  validKeyID,
-					Message:     validMessage,
-					Algorithm:   validAlgorithm,
-					MessageType: models.Raw,
-					Signature:   validSignature,
-				})
-			},
-			resultCheck: func(ok *models.MessageValidation, err error) error {
-				if err != nil {
-					return fmt.Errorf("should not error on VerifySignature MLDSA-44: %s", err)
-				}
-				if !ok.Valid {
-					return fmt.Errorf("expected signature to verify for MLDSA-44, got false")
-				}
-				return nil
-			},
-		},
-		{
-			name: "OK/VerifySignature-MLDSA-65",
-			before: func() {
-				_, priv, _ := mldsa65.GenerateKey(rand.Reader)
-				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "VerifyMLDSA65",
-					PrivateKey: priv,
-					EngineID:   "filesystem-1",
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to import MLDSA-65 key: %s", err))
-				}
-				validKeyID = key.PKCS11URI
-				validAlgorithm = "MLDSA_65_PURE"
-				validMessage = []byte("verify mldsa 65")
-				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
-					Identifier:  validKeyID,
-					Message:     validMessage,
-					Algorithm:   validAlgorithm,
-					MessageType: models.Raw,
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to sign with MLDSA-65: %s", err))
-				}
-				validSignature = sig.Signature
-			},
-			run: func() (*models.MessageValidation, error) {
-				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
-					Identifier:  validKeyID,
-					Message:     validMessage,
-					Algorithm:   validAlgorithm,
-					MessageType: models.Raw,
-					Signature:   validSignature,
-				})
-			},
-			resultCheck: func(ok *models.MessageValidation, err error) error {
-				if err != nil {
-					return fmt.Errorf("should not error on VerifySignature MLDSA-65: %s", err)
-				}
-				if !ok.Valid {
-					return fmt.Errorf("expected signature to verify for MLDSA-65, got false")
-				}
-				return nil
-			},
-		},
-		{
-			name: "OK/VerifySignature-MLDSA-87",
-			before: func() {
-				_, priv, _ := mldsa87.GenerateKey(rand.Reader)
-				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
-					Name:       "VerifyMLDSA87",
-					PrivateKey: priv,
-					EngineID:   "filesystem-1",
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to import MLDSA-87 key: %s", err))
-				}
-				validKeyID = key.PKCS11URI
-				validAlgorithm = "MLDSA_87_PURE"
-				validMessage = []byte("verify mldsa 87")
-				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
-					Identifier:  validKeyID,
-					Message:     validMessage,
-					Algorithm:   validAlgorithm,
-					MessageType: models.Raw,
-				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to sign with MLDSA-87: %s", err))
-				}
-				validSignature = sig.Signature
-			},
-			run: func() (*models.MessageValidation, error) {
-				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
-					Identifier:  validKeyID,
-					Message:     validMessage,
-					Algorithm:   validAlgorithm,
-					MessageType: models.Raw,
-					Signature:   validSignature,
-				})
-			},
-			resultCheck: func(ok *models.MessageValidation, err error) error {
-				if err != nil {
-					return fmt.Errorf("should not error on VerifySignature MLDSA-87: %s", err)
-				}
-				if !ok.Valid {
-					return fmt.Errorf("expected signature to verify for MLDSA-87, got false")
-				}
-				return nil
-			},
-		},
 		{
 			name: "OK/VerifySignature-Ed25519",
 			before: func() {

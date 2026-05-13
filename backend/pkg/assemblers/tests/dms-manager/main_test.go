@@ -2036,7 +2036,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into ECDSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv, nil, nil)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -2118,7 +2118,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into ECDSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv, nil, nil)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -2205,7 +2205,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into ECDSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv, nil, nil)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -2378,7 +2378,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into ECDSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv, nil, nil)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
