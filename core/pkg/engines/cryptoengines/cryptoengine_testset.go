@@ -3,7 +3,7 @@ package cryptoengines
 import (
 	"context"
 
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa65"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
