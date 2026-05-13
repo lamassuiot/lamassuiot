@@ -467,9 +467,17 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 			lFunc.Error("invalid MLDSA key size")
 			return nil, errors.New("invalid MLDSA key size")
 		}
-		keyID, signer, err = engineInstance.CreateMLDSAPrivateKey(input.Size)
+		keyID, signer, err = engineInstance.CreateMLDSAPrivateKey(ctx, input.Size)
+		if err != nil {
+			lFunc.Errorf("error creating ML-DSA private key: %s", err)
+			return nil, err
+		}
 	case "Ed25519":
 		keyID, signer, err = engineInstance.CreateEd25519PrivateKey()
+		if err != nil {
+			lFunc.Errorf("error creating Ed25519 private key: %s", err)
+			return nil, err
+		}
 	default:
 		lFunc.Errorf("unsupported algorithm: %s", input.Algorithm)
 		return nil, errors.New("unknown or unsupported algorithm")

@@ -222,7 +222,7 @@ func TestCreateRootCA(t *testing.T) {
 			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
-			})
+			}, models.IssuanceProfile{})
 			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
@@ -409,6 +409,7 @@ func TestRootCAExtendedKeyUsage(t *testing.T) {
 			}
 		})
 	}
+}
 
 func TestCreateSubordinateCA(t *testing.T) {
 	// Setup
@@ -444,7 +445,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
@@ -462,7 +463,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -480,7 +481,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertMLDSA, err := x509Engine.CreateRootCA(ctx, caSignerMLDSA, keyMLDSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -498,7 +499,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertEd25519, err := x509Engine.CreateRootCA(ctx, caSignerEd25519, keyEd25519.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -792,7 +793,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
@@ -811,7 +812,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -830,7 +831,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateMLDSA, err := x509Engine.CreateRootCA(ctx, caSignerMLDSA, keyMLDSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -849,7 +850,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateEd25519, err := x509Engine.CreateRootCA(ctx, caSignerEd25519, keyEd25519.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -1314,4 +1315,3 @@ func TestSignCertificateRequest(t *testing.T) {
 		})
 	}
 }
-
