@@ -108,8 +108,80 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 
 func (engine X509Engine) CreateChameleonRootCA(ctx context.Context, deltaSigner, baseSigner crypto.Signer, deltaKeyID, baseKeyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-	lFunc.Errorf("CreateChameleonRootCA: not supported in standard Go build (requires PQC fork)")
-	return nil, fmt.Errorf("chameleon certificates require a PQC-enabled Go build")
+
+	// Create the certificate templates
+	deltaTemplate, _ := engine.createRootCATemplate(lFunc, ctx, deltaSigner, deltaKeyID, subject, validity)
+	baseTemplate, _ := engine.createRootCATemplate(lFunc, ctx, baseSigner, baseKeyID, subject, validity)
+
+	// Synchronize timestamps so they don't differ (createRootCATemplate calls time.Now() each time)
+	baseTemplate.NotBefore = deltaTemplate.NotBefore
+	baseTemplate.NotAfter = deltaTemplate.NotAfter
+
+	// Synchronize CRL/OCSP URLs: use base URLs for both templates so that the
+	// reconstructed delta cert (which inherits base cert's extensions) has matching TBS.
+	deltaTemplate.CRLDistributionPoints = baseTemplate.CRLDistributionPoints
+	deltaTemplate.OCSPServer = baseTemplate.OCSPServer
+
+	// Create the chameleon base certificate
+	certificateBytes, err := x509.CreateChameleonCertificate(rand.Reader, deltaTemplate, baseTemplate, deltaTemplate, baseTemplate, deltaSigner.Public(), baseSigner.Public(), deltaSigner, baseSigner)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate: %s", err)
+		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse signed certificate %s", err)
+		return nil, err
+	}
+
+	return certificate, nil
+}
+
+// Private method to avoid code duplication when creating Root CAs (traditional and hybrid)
+func (engine X509Engine) createRootCATemplate(lFunc *logrus.Entry, ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	sn, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		lFunc.Errorf("could not generate serial number: %v", err)
+		return nil, err
+	}
+
+	var caExpiration time.Time
+	if validity.Type == models.Duration {
+		caExpiration = time.Now().Add(time.Duration(validity.Duration))
+	} else {
+		caExpiration = validity.Time
+	}
+
+	lFunc.Debugf("generated serial number for root CA: %s", helpers.SerialNumberToHexString(sn))
+	lFunc.Debugf("validity of root CA: %s", caExpiration)
+	lFunc.Debugf("key ID of root CA: %s", keyID)
+	lFunc.Debugf("subject of root CA: %s", subject)
+
+	rawHex, _ := hex.DecodeString(keyID)
+
+	template := x509.Certificate{
+		SerialNumber:          sn,
+		Subject:               chelpers.SubjectToPkixName(subject),
+		NotBefore:             time.Now(),
+		NotAfter:              caExpiration,
+		AuthorityKeyId:        rawHex,
+		SubjectKeyId:          rawHex,
+		OCSPServer:            []string{},
+		CRLDistributionPoints: []string{},
+		KeyUsage:              x509.KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+		ExtKeyUsage:           []x509.ExtKeyUsage{},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+
+	for _, domain := range engine.vaDomains {
+		template.OCSPServer = append(template.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
+		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, keyID))
+	}
+
+	return &template, nil
 }
 
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
@@ -186,6 +258,53 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 
 	// Sign the certificate
 	certificateBytes, err := x509.CreateCertificate(entropy, &certificateTemplate, ca, csr.PublicKey, caSigner)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate: %s", err)
+		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse signed certificate %s", err)
+		return nil, err
+	}
+
+	return certificate, nil
+}
+
+func (engine X509Engine) CreateChameleonSubordinateCA(ctx context.Context, deltaSigner, baseSigner crypto.Signer, deltaKeyID, baseKeyID string, subject models.Subject, validity models.Validity, parentDeltaCert, parentBaseCert *x509.Certificate, parentDeltaSigner, parentBaseSigner crypto.Signer) (*x509.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+
+	deltaTemplate, err := engine.createRootCATemplate(lFunc, ctx, deltaSigner, deltaKeyID, subject, validity)
+	if err != nil {
+		return nil, err
+	}
+	baseTemplate, err := engine.createRootCATemplate(lFunc, ctx, baseSigner, baseKeyID, subject, validity)
+	if err != nil {
+		return nil, err
+	}
+
+	// Synchronize validity: if timestamps differ between templates (because
+	// createRootCATemplate calls time.Now() each time), the DCD will encode validity.
+	// ReconstructDeltaCertificate does not restore validity, causing TBS mismatch.
+	baseTemplate.NotBefore = deltaTemplate.NotBefore
+	baseTemplate.NotAfter = deltaTemplate.NotAfter
+
+	// Synchronize CRL/OCSP URLs: these are derived from keyID and will differ between
+	// delta and base templates. Since they are not stored in the DCD, the reconstructed
+	// delta cert inherits the base cert's URLs. Use base URLs for both so TBS matches.
+	deltaTemplate.CRLDistributionPoints = baseTemplate.CRLDistributionPoints
+	deltaTemplate.OCSPServer = baseTemplate.OCSPServer
+
+	// Both parents must share the same SubjectKeyId so that CreateCertificate's
+	// automatic AKID override (parent.SubjectKeyId → authorityKeyId) produces the
+	// same AKID value in both the delta and base certificates.
+	// Clone parentDeltaCert so we don't mutate the caller's value.
+	parentDeltaCertClone := *parentDeltaCert
+	parentDeltaCertClone.SubjectKeyId = parentBaseCert.SubjectKeyId
+	parentDeltaCert = &parentDeltaCertClone
+
+	certificateBytes, err := x509.CreateChameleonCertificate(rand.Reader, deltaTemplate, baseTemplate, parentDeltaCert, parentBaseCert, deltaSigner.Public(), baseSigner.Public(), parentDeltaSigner, parentBaseSigner)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate: %s", err)
 		return nil, err

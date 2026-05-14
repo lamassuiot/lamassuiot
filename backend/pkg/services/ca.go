@@ -898,7 +898,92 @@ func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input servic
 			Level: 0,
 		}
 	} else {
-		return nil, fmt.Errorf("chameleon subordinate CAs are not yet supported")
+		exists, parentCACert, err := svc.caStorage.SelectExistsByID(ctx, input.CreateCAInput.ParentID)
+		if err != nil {
+			lFunc.Errorf("could not check if parent CA %s exists: %s", input.CreateCAInput.ParentID, err)
+			return nil, err
+		}
+		if !exists {
+			lFunc.Errorf("parent CA %s does not exist", input.CreateCAInput.ParentID)
+			return nil, errs.ErrCANotFound
+		}
+
+		chameleonMetaRaw, ok := parentCACert.Metadata["lamassu.io/certificate/chameleon"]
+		if !ok {
+			return nil, fmt.Errorf("parent CA does not have chameleon metadata")
+		}
+		chameleonMeta := chameleonMetaRaw.(map[string]interface{})
+		parentBaseSkid := chameleonMeta["base"].(map[string]interface{})["skid"].(string)
+		parentDeltaSkid := chameleonMeta["delta"].(map[string]interface{})["skid"].(string)
+
+		parentBaseKey, err := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: parentBaseSkid})
+		if err != nil {
+			lFunc.Errorf("could not get parent base key %s: %s", parentBaseSkid, err)
+			return nil, err
+		}
+		parentDeltaKey, err := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: parentDeltaSkid})
+		if err != nil {
+			lFunc.Errorf("could not get parent delta key %s: %s", parentDeltaSkid, err)
+			return nil, err
+		}
+
+		parentBaseSigner := NewKMSCryptoSigner(ctx, *parentBaseKey, svc.kmsService)
+		parentDeltaSigner := NewKMSCryptoSigner(ctx, *parentDeltaKey, svc.kmsService)
+
+		parentBaseCert := (*x509.Certificate)(parentCACert.Certificate.Certificate)
+		parentDeltaCert, err := x509.ReconstructDeltaCertificate(parentBaseCert)
+		if err != nil {
+			lFunc.Errorf("could not reconstruct parent delta certificate: %s", err)
+			return nil, err
+		}
+
+		deltaKey, err = svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
+			Algorithm: input.InnerKeyMetadata.Type.String(),
+			Size:      input.InnerKeyMetadata.Bits,
+			EngineID:  input.CreateCAInput.EngineID,
+			Name:      fmt.Sprintf("Delta Key For Hybrid CA CN=%s", input.CreateCAInput.Subject.CommonName),
+		})
+		if err != nil {
+			lFunc.Errorf("could not create delta key for CA %s: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		baseKey, err = svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
+			Algorithm: input.CreateCAInput.KeyMetadata.Type.String(),
+			Size:      input.CreateCAInput.KeyMetadata.Bits,
+			EngineID:  input.CreateCAInput.EngineID,
+			Name:      fmt.Sprintf("Base Key For Hybrid CA CN=%s", input.CreateCAInput.Subject.CommonName),
+		})
+		if err != nil {
+			lFunc.Errorf("could not create base key for CA %s: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		deltaSigner := NewKMSCryptoSigner(ctx, *deltaKey, svc.kmsService)
+		baseSigner := NewKMSCryptoSigner(ctx, *baseKey, svc.kmsService)
+
+		deltaSkid = deltaKey.KeyID
+		deltaAkid = parentDeltaKey.KeyID
+		baseSkid = baseKey.KeyID
+		baseAkid = parentBaseKey.KeyID
+		baseEngineID = baseKey.EngineID
+
+		ca, err = engine.CreateChameleonSubordinateCA(ctx, deltaSigner, baseSigner, deltaSkid, baseSkid, input.CreateCAInput.Subject, input.CreateCAInput.CAExpiration, parentDeltaCert, parentBaseCert, parentDeltaSigner, parentBaseSigner)
+		if err != nil {
+			lFunc.Errorf("could not create CA %s certificate: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		caLevel = parentCACert.Level + 1
+		issuerCAMeta = models.IssuerCAMetadata{
+			SN:    parentCACert.Certificate.SerialNumber,
+			ID:    parentCACert.ID,
+			Level: parentCACert.Level,
+		}
+	}
+
+	if input.CreateCAInput.Metadata == nil {
+		input.CreateCAInput.Metadata = map[string]interface{}{}
 	}
 
 	// TODO -> revisit key names

@@ -7,7 +7,6 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"os"
 	"path/filepath"
@@ -41,52 +40,19 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 	}
 
 	meta := helpers.MergeMaps(&defaultMeta, &conf.Metadata)
+	engine := software.NewSoftwareCryptoEngine(lGo)
+
 	return &FilesystemCryptoEngine{
 		logger:           lGo,
-		softCryptoEngine: software.NewSoftwareCryptoEngine(lGo),
+		softCryptoEngine: engine,
 		storageDirectory: conf.Config.StorageDirectory,
 		config: models.CryptoEngineInfo{
-			Type:          models.Golang,
-			SecurityLevel: models.SL0,
-			Provider:      "Golang",
-			Name:          runtime.Version(),
-			Metadata:      *meta,
-			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
-				{
-					Type: models.KeyType(x509.RSA),
-					Sizes: []int{
-						1024,
-						2048,
-						3072,
-						4096,
-						7680,
-						15360,
-					},
-				},
-				{
-					Type: models.KeyType(x509.ECDSA),
-					Sizes: []int{
-						224,
-						256,
-						384,
-						521,
-					},
-				},
-				{
-					Type: models.MLDSA,
-					Sizes: []int{
-						44,
-						65,
-						87,
-					},
-				},
-				{
-					Type:  models.KeyType(x509.Ed25519),
-					Sizes: []int{
-						256,
-					},
-				},
-			},
+			Type:              models.Golang,
+			SecurityLevel:     models.SL0,
+			Provider:          "Golang",
+			Name:              runtime.Version(),
+			Metadata:          *meta,
+			SupportedKeyTypes: engine.GetEngineConfig().SupportedKeyTypes,
 		},
 	}, nil
 }
