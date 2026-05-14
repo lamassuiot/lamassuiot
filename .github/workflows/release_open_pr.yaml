@@ -1,5 +1,9 @@
 name: "Release Workflow - Open Pull Request with release notes"
 
+permissions:
+  contents: write
+  pull-requests: write
+
 on:
   workflow_dispatch:
     inputs:

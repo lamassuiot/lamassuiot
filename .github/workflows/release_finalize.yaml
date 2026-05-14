@@ -1,6 +1,9 @@
 # .github/workflows/release_finalize.yml
 name: Finalize Release
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -56,6 +59,8 @@ jobs:
     name: Bump Module Versions
     needs: extract_version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,6 +143,8 @@ jobs:
     name: Create Global Tag & Release
     needs: finalize
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -190,6 +197,8 @@ jobs:
     needs: [create_global_release, finalize]
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: write
     strategy:
       matrix:
         module: ${{ fromJson(needs.finalize.outputs.json_modules) }}
@@ -216,6 +225,8 @@ jobs:
     needs: [create_module_release, finalize]
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
