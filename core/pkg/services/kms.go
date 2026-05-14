@@ -39,7 +39,7 @@ type GetKeysInput struct {
 
 type CreateKeyInput struct {
 	Algorithm string `validate:"required"`
-	Size      int    `validate:"required"`
+	Size      int
 	EngineID  string
 	Name      string `validate:"required"`
 	Tags      []string

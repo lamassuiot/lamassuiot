@@ -7,7 +7,6 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -41,37 +40,19 @@ func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadat
 	awsConf.HTTPClient = httpCli
 
 	smCli := secretsmanager.NewFromConfig(awsConf)
+	engine := software.NewSoftwareCryptoEngine(lAWSSM)
 
 	return &AWSSecretsManagerCryptoEngine{
 		logger:           lAWSSM,
-		softCryptoEngine: software.NewSoftwareCryptoEngine(lAWSSM),
+		softCryptoEngine: engine,
 		smngerCli:        smCli,
 		config: models.CryptoEngineInfo{
-			Type:          models.AWSSecretsManager,
-			SecurityLevel: models.SL1,
-			Provider:      "Amazon Web Services",
-			Name:          "Secrets Manager",
-			Metadata:      metadata,
-			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
-				{
-					Type: models.KeyType(x509.RSA),
-					Sizes: []int{
-						1024,
-						2048,
-						3072,
-						4096,
-					},
-				},
-				{
-					Type: models.KeyType(x509.ECDSA),
-					Sizes: []int{
-						224,
-						256,
-						384,
-						521,
-					},
-				},
-			},
+			Type:              models.AWSSecretsManager,
+			SecurityLevel:     models.SL1,
+			Provider:          "Amazon Web Services",
+			Name:              "Secrets Manager",
+			Metadata:          metadata,
+			SupportedKeyTypes: engine.GetEngineConfig().SupportedKeyTypes,
 		},
 	}, nil
 }

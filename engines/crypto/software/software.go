@@ -3,9 +3,6 @@ package software
 import (
 	"context"
 
-	"cloudflare/circl/sign/mldsa/mldsa44"
-	"cloudflare/circl/sign/mldsa/mldsa65"
-	"cloudflare/circl/sign/mldsa/mldsa87"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -21,6 +18,12 @@ import (
 	"fmt"
 	"io"
 
+	circlSign "cloudflare/circl/sign"
+	"cloudflare/circl/sign/mldsa/mldsa44"
+	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa87"
+
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -51,6 +54,53 @@ func NewSoftwareCryptoEngine(logger *logrus.Entry) *SoftwareCryptoEngine {
 	return &SoftwareCryptoEngine{
 		logger: logger,
 	}
+}
+
+func (p *SoftwareCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
+	return models.CryptoEngineInfo{
+		Type:          models.Golang,
+		SecurityLevel: models.SL1,
+		Provider:      "Go standard library",
+		Name:          "Software Crypto Engine",
+		Metadata:      map[string]any{},
+		SupportedKeyTypes: []models.SupportedKeyTypeInfo{
+			{
+				Type: models.KeyType(x509.RSA),
+				Sizes: []int{
+					1024,
+					2048,
+					3072,
+					4096,
+					7680,
+					15360,
+				},
+			},
+			{
+				Type: models.KeyType(x509.ECDSA),
+				Sizes: []int{
+					224,
+					256,
+					384,
+					521,
+				},
+			},
+			{
+				Type: models.MLDSA,
+				Sizes: []int{
+					44,
+					65,
+					87,
+				},
+			},
+			{
+				Type: models.KeyType(x509.Ed25519),
+				Sizes: []int{
+					256,
+				},
+			},
+		},
+	}
+
 }
 
 // CreateRSAPrivateKey creates a RSA private key with the specified key size
@@ -174,10 +224,8 @@ func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(key interface{}) (
 
 func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key any) (string, error) {
 	p.logger.Debugf("extracting and encoding public key")
-	var pubkeyBytes []byte
-	var err error
 
-	pubkeyBytes, err = x509.MarshalPKIXPublicKey(key)
+	pubkeyBytes, err := x509.MarshalPKIXPublicKey(key)
 	if err != nil {
 		p.logger.Errorf("could not marshal public key: %s", err)
 		return "", err
@@ -200,7 +248,7 @@ func (p *SoftwareCryptoEngine) ParsePrivateKey(pemBytes []byte) (crypto.Signer, 
 		return nil, fmt.Errorf("no key found")
 	}
 
-	// First try to parse as PKCS8
+	// ParsePKCS8PrivateKey handles RSA, ECDSA, Ed25519, and stdlib-circl ML-DSA keys.
 	genericKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
 		// If it fails, try to parse as PKCS1
@@ -219,13 +267,9 @@ func (p *SoftwareCryptoEngine) ParsePrivateKey(pemBytes []byte) (crypto.Signer, 
 		return key, nil
 	case *ecdsa.PrivateKey:
 		return key, nil
-	case *mldsa44.PrivateKey:
-		return key, nil
-	case *mldsa65.PrivateKey:
-		return key, nil
-	case *mldsa87.PrivateKey:
-		return key, nil
 	case ed25519.PrivateKey:
+		return key, nil
+	case circlSign.PrivateKey:
 		return key, nil
 	default:
 		return nil, errors.New("unsupported key type")

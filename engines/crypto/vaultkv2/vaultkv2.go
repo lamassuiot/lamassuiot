@@ -7,7 +7,6 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -112,30 +111,12 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapt
 
 func (engine *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
 	return models.CryptoEngineInfo{
-		Type:          models.VaultKV2,
-		SecurityLevel: models.SL1,
-		Provider:      "Hashicorp",
-		Name:          "Key Value - V2",
-		Metadata:      map[string]any{},
-		SupportedKeyTypes: []models.SupportedKeyTypeInfo{
-			{
-				Type: models.KeyType(x509.RSA),
-				Sizes: []int{
-					2048,
-					3072,
-					4096,
-				},
-			},
-			{
-				Type: models.KeyType(x509.ECDSA),
-				Sizes: []int{
-					224,
-					256,
-					384,
-					521,
-				},
-			},
-		},
+		Type:              models.VaultKV2,
+		SecurityLevel:     models.SL1,
+		Provider:          "Hashicorp",
+		Name:              "Key Value - V2",
+		Metadata:          map[string]any{},
+		SupportedKeyTypes: engine.softCryptoEngine.GetEngineConfig().SupportedKeyTypes,
 	}
 }
 

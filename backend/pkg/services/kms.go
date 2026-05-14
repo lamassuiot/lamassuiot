@@ -399,11 +399,6 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	if input.Algorithm == "" || input.Size == 0 {
-		lFunc.Error("algorithm and size are required")
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	var engine *cryptoengines.CryptoEngine
 	engineID := ""
 	var ok bool
@@ -428,21 +423,32 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		signer crypto.Signer
 	)
 
-	err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
-	if err != nil {
-		lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
-		return nil, err
-	}
-
 	switch input.Algorithm {
 	case "RSA":
-		bits := input.Size
-		keyID, signer, err = engineInstance.CreateRSAPrivateKey(ctx, bits)
+		if input.Size == 0 {
+			lFunc.Error("size is required for RSA keys")
+			return nil, errs.ErrValidateBadRequest
+		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.CreateRSAPrivateKey(ctx, input.Size)
 		if err != nil {
 			lFunc.Errorf("error creating RSA private key: %s", err)
 			return nil, errors.New("failed to create RSA private key")
 		}
 	case "ECDSA":
+		if input.Size == 0 {
+			lFunc.Error("size is required for ECDSA keys")
+			return nil, errs.ErrValidateBadRequest
+		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
 		var curve elliptic.Curve
 		switch input.Size {
 		case 224:
@@ -467,12 +473,23 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 			lFunc.Error("invalid MLDSA key size")
 			return nil, errors.New("invalid MLDSA key size")
 		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
 		keyID, signer, err = engineInstance.CreateMLDSAPrivateKey(ctx, input.Size)
 		if err != nil {
 			lFunc.Errorf("error creating ML-DSA private key: %s", err)
 			return nil, err
 		}
 	case "Ed25519":
+		input.Size = ed25519.PublicKeySize * 8
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
 		keyID, signer, err = engineInstance.CreateEd25519PrivateKey()
 		if err != nil {
 			lFunc.Errorf("error creating Ed25519 private key: %s", err)

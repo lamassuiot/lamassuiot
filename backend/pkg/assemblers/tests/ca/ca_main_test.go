@@ -1330,20 +1330,16 @@ func TestCreateHybridCA(t *testing.T) {
 
 				// Reconstruct the delta certificate
 				baseCert := (*x509.Certificate)(createdCA.Certificate.Certificate)
-				var deltaCert *x509.Certificate
-				_ = baseCert
-				err = fmt.Errorf("ReconstructDeltaCertificate: requires PQC-enabled Go build")
+				deltaCert, err := x509.ReconstructDeltaCertificate(baseCert)
 				if err != nil {
-					return fmt.Errorf("could not get raw delta ertificate")
+					return fmt.Errorf("could not get raw delta certificate: %s", err)
 				}
 
 				// Reconstruct the parent certificates
 				baseParentCert := (*x509.Certificate)(parentCA.Certificate.Certificate)
-				var deltaParentCert *x509.Certificate
-				_ = baseParentCert
-				err = fmt.Errorf("ReconstructDeltaCertificate: requires PQC-enabled Go build")
+				deltaParentCert, err := x509.ReconstructDeltaCertificate(baseParentCert)
 				if err != nil {
-					return fmt.Errorf("could not get raw delta certificate")
+					return fmt.Errorf("could not get raw delta parent certificate: %s", err)
 				}
 
 				err = baseParentCert.CheckSignature(baseParentCert.SignatureAlgorithm, baseCert.RawTBSCertificate, baseCert.Signature)
@@ -1351,9 +1347,9 @@ func TestCreateHybridCA(t *testing.T) {
 					fmt.Println(err)
 					return fmt.Errorf("could not validate base certificate signature")
 				}
-				err = deltaCert.CheckSignatureFrom(deltaParentCert)
+				err = deltaParentCert.CheckSignature(deltaCert.SignatureAlgorithm, deltaCert.RawTBSCertificate, deltaCert.Signature)
 				if err != nil {
-					return fmt.Errorf("could not validate delta certificate signature")
+					return fmt.Errorf("could not validate delta certificate signature: %s", err)
 				}
 
 				return nil
