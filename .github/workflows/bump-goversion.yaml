@@ -1,5 +1,9 @@
 name: Bump Go Version
 
+permissions:
+  contents: write
+  pull-requests: write
+
 on:
   workflow_dispatch:
     inputs:
