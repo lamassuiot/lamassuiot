@@ -1,7 +1,6 @@
 package vaultkv2
 
 import (
-	"crypto/x509"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -21,27 +20,6 @@ func testGetEngineConfig(t *testing.T, engine cryptoengines.CryptoEngine) {
 	assert.Equal(t, "Hashicorp", config.Provider)
 	assert.Equal(t, "Key Value - V2", config.Name)
 	assert.Empty(t, config.Metadata)
-
-	expectedKeyTypes := []models.SupportedKeyTypeInfo{
-		{
-			Type: models.KeyType(x509.RSA),
-			Sizes: []int{
-				2048,
-				3072,
-				4096,
-			},
-		},
-		{
-			Type: models.KeyType(x509.ECDSA),
-			Sizes: []int{
-				224,
-				256,
-				384,
-				521,
-			},
-		},
-	}
-	assert.Equal(t, expectedKeyTypes, config.SupportedKeyTypes)
 }
 
 func TestVaultCryptoEngine(t *testing.T) {

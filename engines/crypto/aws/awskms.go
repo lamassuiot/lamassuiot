@@ -74,6 +74,7 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 				{
 					Type: models.KeyType(x509.ECDSA),
 					Sizes: []int{
+						224,
 						256,
 						384,
 						521,
