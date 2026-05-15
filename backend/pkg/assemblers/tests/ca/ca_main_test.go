@@ -110,7 +110,7 @@ func TestCreateCA(t *testing.T) {
 				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
-					KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 					ProfileID:    profile.ID,
@@ -1130,7 +1130,7 @@ func TestCreateHybridCA(t *testing.T) {
 	parentCA, err := serverTest.CA.Service.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 		CreateCAInput: services.CreateCAInput{
 			ID:           "1111-2222-3333",
-			KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 			Subject:      models.Subject{CommonName: "TestCA"},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 			ProfileID:    parentProfile.ID,
@@ -1161,7 +1161,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata:      models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -1181,7 +1181,7 @@ func TestCreateHybridCA(t *testing.T) {
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
-						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 						Subject:      models.Subject{CommonName: "TestCA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
@@ -1217,7 +1217,7 @@ func TestCreateHybridCA(t *testing.T) {
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
-						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 						Subject:      models.Subject{CommonName: "TestCA"},
 						CAExpiration: models.Validity{Type: models.Time, Time: tCA},
 						ProfileID:    profile2.ID,
@@ -1245,7 +1245,7 @@ func TestCreateHybridCA(t *testing.T) {
 				_, err := svc.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
-						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 						Subject:      models.Subject{CommonName: "TestCA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
@@ -1263,7 +1263,7 @@ func TestCreateHybridCA(t *testing.T) {
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
-						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 						Subject:      models.Subject{CommonName: "TestCA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
@@ -1291,7 +1291,7 @@ func TestCreateHybridCA(t *testing.T) {
 				parentCA, err = svc.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           "1111-2222-3333",
-						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 						Subject:      models.Subject{CommonName: "Parent CA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
@@ -1314,7 +1314,7 @@ func TestCreateHybridCA(t *testing.T) {
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
 						ParentID:     parentCA.ID,
-						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 						Subject:      models.Subject{CommonName: "Subordinate CA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
@@ -1363,7 +1363,7 @@ func TestCreateHybridCA(t *testing.T) {
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
-						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
 						Subject:      models.Subject{CommonName: "TestCA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
@@ -4248,7 +4248,7 @@ func TestImportCA(t *testing.T) {
 			}
 			key = eccKey
 			pubKey = &eccKey.PublicKey
-		case models.MLDSAPublicKeyAlgorithm:
+		case x509.MLDSA:
 			mldsaKey, err := chelpers.GenerateMLDSAKey(65)
 			if err != nil {
 				return nil, nil, err
@@ -4440,7 +4440,7 @@ func TestImportCA(t *testing.T) {
 			name:   "OK/ImportingCAWithMLDSAKey",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				ca, key, err := generateSelfSignedCA(models.MLDSAPublicKeyAlgorithm)
+				ca, key, err := generateSelfSignedCA(x509.MLDSA)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)

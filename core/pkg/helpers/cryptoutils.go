@@ -137,7 +137,7 @@ func generateKey(keyType x509.PublicKeyAlgorithm) (crypto.Signer, crypto.PublicK
 		}
 		key = eccKey
 		pubKey = &eccKey.PublicKey
-	case cmodels.MLDSAPublicKeyAlgorithm:
+	case x509.MLDSA:
 		mldsaKey, err := GenerateMLDSAKey(65)
 		if err != nil {
 			return nil, nil, err
