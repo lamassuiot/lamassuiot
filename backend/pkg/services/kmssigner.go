@@ -65,8 +65,8 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 
 	// Validate hash function
 	var hashSize int
-	if kmsKeyAlg == models.MLDSA.String() || kmsKeyAlg == x509.Ed25519.String() {
-		hashSize = 0	
+	if kmsKeyAlg == x509.MLDSA.String() || kmsKeyAlg == x509.Ed25519.String() {
+		hashSize = 0
 	} else {
 		if !hashFunc.Available() {
 			return nil, fmt.Errorf("hash function %v is not available", hashFunc)
@@ -103,7 +103,8 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 			// RSA PKCS#1 v1.5 signature scheme (default)
 			signAlg = fmt.Sprintf("RSASSA_PKCS1_V1_5_SHA_%d", hashSize)
 		}
-	case models.MLDSA.String():
+
+	case x509.MLDSA.String():
 		signAlg = fmt.Sprintf("MLDSA_%d_PURE", s.key.Size)
 
 	case x509.Ed25519.String():

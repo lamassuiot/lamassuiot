@@ -176,7 +176,7 @@ func TestCreateRootCA(t *testing.T) {
 			caId:    "rootCA-MLDSA_44",
 			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
-				Type: models.MLDSA,
+				Type: models.KeyType(x509.MLDSA),
 				Bits: 44,
 			},
 			expirationTime: expirationTime,
@@ -554,7 +554,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 			parentCASigner:  caSignerRSA,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
-				Type: models.MLDSA,
+				Type: models.KeyType(x509.MLDSA),
 				Bits: 44,
 			},
 			expirationTime: expirationTime,
@@ -602,7 +602,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 			parentCASigner:  caSignerEC,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
-				Type: models.MLDSA,
+				Type: models.KeyType(x509.MLDSA),
 				Bits: 65,
 			},
 			expirationTime: expirationTime,
@@ -650,7 +650,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 			parentCASigner:  caSignerMLDSA,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
-				Type: models.MLDSA,
+				Type: models.KeyType(x509.MLDSA),
 				Bits: 87,
 			},
 			expirationTime: expirationTime,
@@ -698,7 +698,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 			parentCASigner:  caSignerEd25519,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
-				Type: models.MLDSA,
+				Type: models.KeyType(x509.MLDSA),
 				Bits: 87,
 			},
 			expirationTime: expirationTime,
@@ -1037,7 +1037,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			profile:       certProfile,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
+			keyType:       models.KeyType(x509.MLDSA),
 			key: func() any {
 				key, _ := chelpers.GenerateMLDSAKey(65)
 				return key
@@ -1051,7 +1051,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			profile:       certProfile,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
+			keyType:       models.KeyType(x509.MLDSA),
 			key: func() any {
 				key, _ := chelpers.GenerateMLDSAKey(65)
 				return key
@@ -1065,7 +1065,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			profile:       certProfile,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
+			keyType:       models.KeyType(x509.MLDSA),
 			key: func() any {
 				key, _ := chelpers.GenerateMLDSAKey(65)
 				return key
@@ -1079,7 +1079,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			profile:       certProfile,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
+			keyType:       models.KeyType(x509.MLDSA),
 			key: func() any {
 				key, _ := chelpers.GenerateMLDSAKey(65)
 				return key
