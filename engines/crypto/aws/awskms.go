@@ -262,6 +262,16 @@ func (p *AWSKMSCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensio
 }
 
 // TODO -> Add implementation (if possible)
+func (p *AWSKMSCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if possible)
+func (p *AWSKMSCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if possible)
 func (p *AWSKMSCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
 	return "", nil, errors.New("awskms: unsupported key type (Ed25519)")
 }
@@ -344,6 +354,16 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (strin
 // TODO -> Add implementation (if posible)
 func (p *AWSKMSCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AWSKMSCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AWSKMSCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (Composite-ML-DSA-RSA)")
 }
 
 // TODO -> Add implementation (if posible)
