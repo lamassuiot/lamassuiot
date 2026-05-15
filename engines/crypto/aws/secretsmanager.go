@@ -151,6 +151,16 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(ctx context.C
 }
 
 // TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
 func (p *AWSSecretsManagerCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
 	return "", nil, errors.New("awskms: unsupported key type (Ed25519)")
 }
@@ -185,6 +195,16 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(ctx context.C
 // TODO -> Add implementation (if posible)
 func (engine *AWSSecretsManagerCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (Composite-ML-DSA-RSA)")
 }
 
 // TODO -> Add implementation (if posible)
