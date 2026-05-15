@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/slhdsa"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -11,6 +12,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,6 +39,17 @@ func SharedTestCreateECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 
 func SharedTestCreateMLDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	keyID, signer, err := engine.CreateMLDSAPrivateKey(context.Background(), 44)
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+}
+
+func SharedTestCreateSLHDSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	// paramSet 1 = slhdsa.SHA2_128s
+	keyID, signer, err := engine.CreateSLHDSAPrivateKey(context.Background(), 1)
 	assert.NoError(t, err)
 
 	signer2, err := engine.GetPrivateKeyByID(keyID)
@@ -207,6 +220,20 @@ func SharedTestMLDSASignature(t *testing.T, engine CryptoEngine) {
 	assert.Equal(t, signer.Public(), signer2.Public())
 }
 
+func SharedTestSLHDSASignature(t *testing.T, engine CryptoEngine) {
+	// paramSet 5 = slhdsa.SHA2_256s
+	keyID, signer, err := engine.CreateSLHDSAPrivateKey(context.Background(), 5)
+	assert.NoError(t, err)
+
+	_, err = signer.Sign(rand.Reader, []byte("message to sign"), crypto.Hash(0))
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+}
+
 func SharedTestImportRSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	key, err := rsa.GenerateKey(rand.Reader, 3072)
 	assert.NoError(t, err)
@@ -246,6 +273,59 @@ func SharedTestImportMLDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 
 	importedPubKey := importedSigner.Public().(*mldsa65.PublicKey)
 	assert.Equal(t, pubKey.A, importedPubKey.A)
+}
+
+func SharedTestImportSLHDSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	_, priv, err := slhdsa.GenerateKey(rand.Reader, slhdsa.SHA2_128s)
+	assert.NoError(t, err)
+
+	pubKey := priv.Public().(slhdsa.PublicKey)
+
+	_, importedSigner, err := engine.ImportSLHDSAPrivateKey(priv)
+	assert.NoError(t, err)
+
+	importedPubKey := importedSigner.Public().(slhdsa.PublicKey)
+	assert.Equal(t, pubKey, importedPubKey)
+}
+
+func SharedTestCreateCompositeMLDSARSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	// variant 1 = MLDSA44-RSA2048-PSS-SHA256
+	keyID, signer, err := engine.CreateCompositeMLDSARSAPrivateKey(context.Background(), 1)
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+}
+
+func SharedTestCompositeMLDSARSASignature(t *testing.T, engine CryptoEngine) {
+	// variant 3 = MLDSA65-RSA3072-PSS-SHA512
+	keyID, signer, err := engine.CreateCompositeMLDSARSAPrivateKey(context.Background(), 3)
+	assert.NoError(t, err)
+
+	_, err = signer.Sign(rand.Reader, []byte("message to sign"), crypto.Hash(0))
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+}
+
+func SharedTestImportCompositeMLDSARSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	// variant 1 = MLDSA44-RSA2048-PSS-SHA256
+	algo := x509.CompositeAlgorithms[0]
+	_, priv, err := algo.GenerateCompositeKey(rand.Reader)
+	assert.NoError(t, err)
+
+	pubKey := priv.Public().(*x509.CompositePublicKey)
+
+	_, importedSigner, err := engine.ImportCompositeMLDSARSAPrivateKey(priv)
+	assert.NoError(t, err)
+
+	importedPubKey := importedSigner.Public().(*x509.CompositePublicKey)
+	assert.Equal(t, pubKey, importedPubKey)
 }
 
 func SharedTestImportEd25519PrivateKey(t *testing.T, engine CryptoEngine) {

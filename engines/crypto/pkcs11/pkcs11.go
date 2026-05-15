@@ -264,6 +264,16 @@ func (hsmContext *pkcs11EngineContext) CreateMLDSAPrivateKey(ctx context.Context
 }
 
 // TODO -> Add implementation (if posible)
+func (hsmContext *pkcs11EngineContext) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (hsmContext *pkcs11EngineContext) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
 func (p *pkcs11EngineContext) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("awskms: unsupported key type (Ed25519)")
 }
@@ -325,6 +335,16 @@ func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(key *ecdsa.PrivateK
 // TODO -> Add implementation (if posible)
 func (hsmContext *pkcs11EngineContext) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("pkcs11: unsupported key type (ML-DSA")
+}
+
+// TODO -> Add implementation (if posible)
+func (hsmContext *pkcs11EngineContext) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (hsmContext *pkcs11EngineContext) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (Composite-ML-DSA-RSA)")
 }
 
 // TODO -> Add implementation (if posible)

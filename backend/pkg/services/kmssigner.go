@@ -65,7 +65,7 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 
 	// Validate hash function
 	var hashSize int
-	if kmsKeyAlg == x509.MLDSA.String() || kmsKeyAlg == x509.Ed25519.String() {
+	if kmsKeyAlg == x509.MLDSA.String() || kmsKeyAlg == x509.SLHDSA.String() || kmsKeyAlg == x509.CompositeMLDSARSA.String() || kmsKeyAlg == x509.Ed25519.String() {
 		hashSize = 0
 	} else {
 		if !hashFunc.Available() {
@@ -106,6 +106,12 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 
 	case x509.MLDSA.String():
 		signAlg = fmt.Sprintf("MLDSA_%d_PURE", s.key.Size)
+
+	case x509.SLHDSA.String():
+		signAlg = "SLHDSA_PURE"
+
+	case x509.CompositeMLDSARSA.String():
+		signAlg = "COMPOSITE_MLDSA_RSA_PURE"
 
 	case x509.Ed25519.String():
 		// Ed25519 uses its own hash internally, doesn't need external hash specification

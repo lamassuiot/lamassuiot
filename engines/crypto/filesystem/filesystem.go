@@ -200,6 +200,58 @@ func (engine *FilesystemCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (
 	return keyID, signer, nil
 }
 
+func (engine *FilesystemCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	engine.logger.Debugf("creating SLH-DSA paramSet=%v private key", paramSet)
+
+	_, key, err := engine.softCryptoEngine.CreateSLHDSAPrivateKey(ctx, paramSet)
+	if err != nil {
+		engine.logger.Errorf("could not create SLH-DSA paramSet=%v private key: %s", paramSet, err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("SLH-DSA paramSet=%v key successfully generated", paramSet)
+	return engine.importKey(key)
+}
+
+func (engine *FilesystemCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing SLH-DSA private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import SLH-DSA key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("SLH-DSA key successfully imported")
+	return keyID, signer, nil
+}
+
+func (engine *FilesystemCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	engine.logger.Debugf("creating Composite-ML-DSA-RSA variant=%v private key", variant)
+
+	_, key, err := engine.softCryptoEngine.CreateCompositeMLDSARSAPrivateKey(ctx, variant)
+	if err != nil {
+		engine.logger.Errorf("could not create Composite-ML-DSA-RSA variant=%v private key: %s", variant, err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("Composite-ML-DSA-RSA variant=%v key successfully generated", variant)
+	return engine.importKey(key)
+}
+
+func (engine *FilesystemCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing Composite-ML-DSA-RSA private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import Composite-ML-DSA-RSA key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("Composite-ML-DSA-RSA key successfully imported")
+	return keyID, signer, nil
+}
+
 func (engine *FilesystemCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing E25519 private key")
 

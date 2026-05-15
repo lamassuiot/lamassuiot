@@ -209,6 +209,16 @@ func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(ctx context.Context, dimensi
 }
 
 // TODO -> Add implementation (if posible)
+func (engine *VaultKV2Engine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *VaultKV2Engine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
 func (engine *VaultKV2Engine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
 	return "", nil, errors.New("vaultvk2: unsupported key type (Ed25519)")
 }
@@ -242,6 +252,16 @@ func (engine *VaultKV2Engine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (stri
 // TODO -> Add implementation (if posible)
 func (engine *VaultKV2Engine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *VaultKV2Engine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *VaultKV2Engine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (Composite-ML-DSA-RSA)")
 }
 
 // TODO -> Add implementation (if posible)
