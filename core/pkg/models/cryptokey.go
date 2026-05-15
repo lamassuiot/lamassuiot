@@ -15,13 +15,6 @@ const (
 
 type KeyType x509.PublicKeyAlgorithm
 
-// MLDSAPublicKeyAlgorithm is the x509.PublicKeyAlgorithm value for ML-DSA.
-// Standard Go crypto/x509 does not yet define x509.MLDSA; we provide it here.
-const MLDSAPublicKeyAlgorithm = x509.PublicKeyAlgorithm(5)
-
-// MLDSA is the KeyType for ML-DSA (Module-Lattice-Based Digital Signature Algorithm).
-const MLDSA = KeyType(MLDSAPublicKeyAlgorithm)
-
 type KeyMetadata struct {
 	KeyID string  `json:"key_id"`
 	Type  KeyType `json:"type" gorm:"serializer:text"`
