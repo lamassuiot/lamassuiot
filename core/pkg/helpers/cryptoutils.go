@@ -4,6 +4,7 @@ import (
 	"cloudflare/circl/sign/mldsa/mldsa44"
 	"cloudflare/circl/sign/mldsa/mldsa65"
 	"cloudflare/circl/sign/mldsa/mldsa87"
+	"cloudflare/circl/sign/slhdsa"
 
 	"crypto"
 	"crypto/ecdsa"
@@ -144,6 +145,20 @@ func generateKey(keyType x509.PublicKeyAlgorithm) (crypto.Signer, crypto.PublicK
 		}
 		key = mldsaKey
 		pubKey = mldsaKey.Public()
+	case x509.SLHDSA:
+		slhdsaKey, err := GenerateSLHDSAKey(1) // SHA2_128s
+		if err != nil {
+			return nil, nil, err
+		}
+		key = slhdsaKey
+		pubKey = slhdsaKey.Public()
+	case x509.CompositeMLDSARSA:
+		compKey, err := GenerateCompositeMLDSARSAKey(1) // MLDSA44-RSA2048-PSS-SHA256
+		if err != nil {
+			return nil, nil, err
+		}
+		key = compKey
+		pubKey = compKey.Public()
 	case x509.Ed25519:
 		ed25519Key, err := GenerateEd25519Key()
 		if err != nil {
@@ -347,6 +362,26 @@ func GenerateMLDSAKey(dimensions int) (crypto.Signer, error) {
 		err = errors.New("unsupported dimensions")
 	}
 	return key, err
+}
+
+func GenerateSLHDSAKey(paramSet int) (crypto.Signer, error) {
+	_, priv, err := slhdsa.GenerateKey(rand.Reader, slhdsa.ID(paramSet))
+	if err != nil {
+		return nil, err
+	}
+	return priv, nil
+}
+
+func GenerateCompositeMLDSARSAKey(variant int) (crypto.Signer, error) {
+	if variant < 1 || variant > len(x509.CompositeAlgorithms) {
+		return nil, fmt.Errorf("invalid composite variant %v (use 1-%d)", variant, len(x509.CompositeAlgorithms))
+	}
+	algo := x509.CompositeAlgorithms[variant-1]
+	_, sk, err := algo.GenerateCompositeKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return sk, nil
 }
 
 func GenerateEd25519Key() (crypto.Signer, error) {
