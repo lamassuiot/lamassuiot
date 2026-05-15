@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -39,37 +40,19 @@ func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadat
 	awsConf.HTTPClient = httpCli
 
 	smCli := secretsmanager.NewFromConfig(awsConf)
+	engine := software.NewSoftwareCryptoEngine(lAWSSM)
 
 	return &AWSSecretsManagerCryptoEngine{
 		logger:           lAWSSM,
-		softCryptoEngine: software.NewSoftwareCryptoEngine(lAWSSM),
+		softCryptoEngine: engine,
 		smngerCli:        smCli,
 		config: models.CryptoEngineInfo{
-			Type:          models.AWSSecretsManager,
-			SecurityLevel: models.SL1,
-			Provider:      "Amazon Web Services",
-			Name:          "Secrets Manager",
-			Metadata:      metadata,
-			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
-				{
-					Type: models.KeyType(x509.RSA),
-					Sizes: []int{
-						1024,
-						2048,
-						3072,
-						4096,
-					},
-				},
-				{
-					Type: models.KeyType(x509.ECDSA),
-					Sizes: []int{
-						224,
-						256,
-						384,
-						521,
-					},
-				},
-			},
+			Type:              models.AWSSecretsManager,
+			SecurityLevel:     models.SL1,
+			Provider:          "Amazon Web Services",
+			Name:              "Secrets Manager",
+			Metadata:          metadata,
+			SupportedKeyTypes: engine.GetEngineConfig().SupportedKeyTypes,
 		},
 	}, nil
 }
@@ -158,6 +141,26 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(ctx context.C
 	return engine.importKey(key)
 }
 
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AWSSecretsManagerCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (Ed25519)")
+}
+
 func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 
@@ -182,6 +185,26 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.Pr
 
 	engine.logger.Debugf("ECDSA key successfully imported")
 	return keyID, signer, nil
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (Ed25519)")
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (string, crypto.Signer, error) {

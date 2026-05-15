@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 
@@ -20,9 +21,17 @@ type CryptoEngine interface {
 
 	CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error)
 	CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error)
+	CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error)
+	CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error)
+	CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error)
+	CreateEd25519PrivateKey() (string, crypto.Signer, error)
 
 	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
 	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
+	ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
+	ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
+	ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
+	ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error)
 
 	DeleteKey(keyID string) error
 
