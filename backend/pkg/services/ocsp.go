@@ -59,13 +59,18 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 
 	// construct response template
 	rtemplate := ocsp.Response{
-		Status:           status,
-		SerialNumber:     req.SerialNumber,
-		Certificate:      (*x509.Certificate)(ca.Certificate.Certificate),
-		RevocationReason: int(crt.RevocationReason),
-		IssuerHash:       req.HashAlgorithm,
-		RevokedAt:        revokedAt,
-		ThisUpdate:       time.Now().AddDate(0, 0, -1).UTC(),
+		Status:       status,
+		SerialNumber: req.SerialNumber,
+		Certificate:  (*x509.Certificate)(ca.Certificate.Certificate),
+		RevocationReason: func() int {
+			if crt.RevocationReason != nil {
+				return int(*crt.RevocationReason)
+			}
+			return 0
+		}(),
+		IssuerHash: req.HashAlgorithm,
+		RevokedAt:  revokedAt,
+		ThisUpdate: time.Now().AddDate(0, 0, -1).UTC(),
 		//adding 1 day after the current date. This ocsp library sets the default date to epoch which makes ocsp clients freak out.
 		NextUpdate: time.Now().AddDate(0, 0, 1).UTC(),
 	}

@@ -43,7 +43,10 @@ func (p *RevocationReason) UnmarshalText(text []byte) (err error) {
 	return fmt.Errorf("unsupported revocation code")
 }
 
-func (c RevocationReason) String() string {
+func (c *RevocationReason) String() string {
+	if c == nil {
+		return ""
+	}
 	r, err := c.MarshalText()
 	if err != nil {
 		return "-"

@@ -421,7 +421,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.
 
 	switch input.Certificate.Status {
 	case models.StatusRevoked:
-		if input.Certificate.RevocationReason == ocsp.CertificateHold {
+		if input.Certificate.RevocationReason != nil && *input.Certificate.RevocationReason == ocsp.CertificateHold {
 			status = types.CertificateStatusInactive
 		} else {
 			status = types.CertificateStatusRevoked
