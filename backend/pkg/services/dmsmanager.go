@@ -820,8 +820,14 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		}
 		lFunc.Infof("combined auth: both client certificate and webhook validations passed")
 
+	case models.ESTAuthModeNoAuth:
+		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeNoAuth)
+		lFunc = lFunc.WithField("auth-status", "verified")
+		lFunc = lFunc.WithField("auth-uri", "NoAuth")
+		lFunc.Warnf("DMS is configured with NoAuth, allowing reenrollment")
+
 	default:
-		lFunc.Warnf("allowing reenroll: using NO AUTH mode")
+		lFunc.Errorf("aborting reenrollment. DMS is not correctly configured. No auth method configured. Specify an authentication method")
 	}
 
 	lFunc = lFunc.WithField("auth-status", "verified")
