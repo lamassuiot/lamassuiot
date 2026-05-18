@@ -3831,7 +3831,7 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				newCsr2, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt2.Subject.CommonName}, deviceKey1)
+				newCsr2, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt2.Subject.CommonName}, deviceKey2)
 
 				estCli = pemESTClient{
 					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms2.ID),
@@ -3839,9 +3839,23 @@ func TestESTReEnroll(t *testing.T) {
 					key:          deviceKey2,
 				}
 
-				_, err = estCli.ReEnroll(newCsr2)
+				newCrt2, err := estCli.ReEnroll(newCsr2)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				priv2, ok := deviceKey2.(*rsa.PrivateKey)
+				if !ok {
+					t.Fatalf("could not cast deviceKey2 into RSA")
+				}
+
+				valid2, err := chelpers.ValidateCertAndPrivKey(newCrt2, priv2, nil)
+				if err != nil {
+					t.Fatalf("could not validate new certificate against deviceKey2: %s", err)
+				}
+
+				if !valid2 {
+					t.Fatalf("new certificate public key does not match deviceKey2")
 				}
 
 				crt2, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
