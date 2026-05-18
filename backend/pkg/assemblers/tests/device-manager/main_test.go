@@ -18,7 +18,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 )
 
 func StartDeviceManagerServiceTestServer(t *testing.T, withDMSManager, withEventBus bool) (*tests.DeviceManagerTestServer, *tests.TestServer, error) {
@@ -843,7 +842,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -1165,7 +1164,7 @@ func TestDecommissionDevice(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
