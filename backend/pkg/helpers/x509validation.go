@@ -3,6 +3,7 @@ package helpers
 import (
 	"crypto/x509"
 	"fmt"
+	"time"
 )
 
 func ValidateCertificate(ca, cert *x509.Certificate, considerExpiration bool) error {
@@ -14,6 +15,13 @@ func ValidateCertificates(ca *x509.Certificate, certs []*x509.Certificate, consi
 		return fmt.Errorf("no certificates provided for validation")
 	}
 
+	leafCert := certs[0]
+
+	// Always reject future-dated certificates.
+	if time.Now().Before(leafCert.NotBefore) {
+		return fmt.Errorf("certificate is not yet valid (NotBefore=%s)", leafCert.NotBefore.UTC().Format(time.RFC3339))
+	}
+
 	caPool := x509.NewCertPool()
 	caPool.AddCert(ca)
 
@@ -21,8 +29,6 @@ func ValidateCertificates(ca *x509.Certificate, certs []*x509.Certificate, consi
 		Roots:     caPool,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 	}
-
-	leafCert := certs[0]
 
 	if !considerExpiration {
 		opts.CurrentTime = leafCert.NotBefore //set to same date as certificate, otherwise expired certificates will trigger Verify error
