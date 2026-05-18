@@ -396,7 +396,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 	}
 
 	if !couldCheckRevocation {
-		lFunc.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
+		lFunc.Infof("could not verify certificate revocation status. Assuming certificate as not revoked")
 		return nil
 	}
 
