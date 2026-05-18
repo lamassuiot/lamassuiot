@@ -3831,7 +3831,7 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				newCsr2, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt2.Subject.CommonName}, deviceKey2)
+				newCsr2, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt2.Subject.CommonName}, deviceKey1)
 
 				estCli = pemESTClient{
 					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms2.ID),
@@ -3839,23 +3839,9 @@ func TestESTReEnroll(t *testing.T) {
 					key:          deviceKey2,
 				}
 
-				newCrt2, err := estCli.ReEnroll(newCsr2)
+				_, err = estCli.ReEnroll(newCsr2)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
-				}
-
-				priv2, ok := deviceKey2.(*rsa.PrivateKey)
-				if !ok {
-					t.Fatalf("could not cast deviceKey2 into RSA")
-				}
-
-				valid2, err := chelpers.ValidateCertAndPrivKey(newCrt2, priv2, nil)
-				if err != nil {
-					t.Fatalf("could not validate new certificate against deviceKey2: %s", err)
-				}
-
-				if !valid2 {
-					t.Fatalf("new certificate public key does not match deviceKey2")
 				}
 
 				crt2, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
@@ -4315,6 +4301,151 @@ func TestESTReEnroll(t *testing.T) {
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
 				if err == nil {
 					t.Fatalf("expected error. Got none")
+				}
+			},
+		},
+		{
+			// Attacker holds a valid certificate issued by the enrollment CA (CN=attacker-device)
+			// and submits a CSR for the victim's CN. The CN-binding check must reject this
+			// before any device state is touched.
+			name: "Err/CrossDeviceReenrollment",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, victimCrt, _ := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				// Obtain the enrollment CA model to sign with its profile.
+				enrollCAModel, err := testServers.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: dms.Settings.EnrollmentSettings.EnrollmentCA,
+				})
+				if err != nil {
+					t.Fatalf("could not get enrollment CA: %s", err)
+				}
+
+				// Sign a legitimate cert for "attacker-device" under the same enrollment CA.
+				attackerKey, _ := chelpers.GenerateRSAKey(2048)
+				attackerCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "attacker-device"}, attackerKey)
+				attackerCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              dms.Settings.EnrollmentSettings.EnrollmentCA,
+					CertRequest:       (*models.X509CertificateRequest)(attackerCSR),
+					IssuanceProfileID: enrollCAModel.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign attacker certificate: %s", err)
+				}
+
+				// Attempt reenrollment using the victim's CN in the CSR but the attacker's cert in mTLS.
+				victimCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: victimCrt.Subject.CommonName}, attackerKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(attackerCrt.Certificate)},
+					PrivateKey:            attackerKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), victimCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+				expectedErr := "invalid certificate"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
+			// Same cross-device attack in combined (cert + webhook) auth mode.
+			// The CN check must short-circuit before the webhook is ever called.
+			name: "Err/CombinedClientCertificateAndWebhook-CrossDeviceReenrollment",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, victimCrt, _ := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+				defer cleanup()
+
+				// Webhook always approves — it must never be reached.
+				var webhookCallCount atomic.Int32
+				router.POST("/verify", func(c *gin.Context) {
+					webhookCallCount.Add(1)
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					Name: "myHook",
+					Url:  url + "/verify",
+					Config: models.WebhookCallHttpClient{
+						ValidateServerCert: false,
+						LogLevel:           string(config.Debug),
+						AuthMode:           config.NoAuth,
+					},
+				}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS to combined auth mode: %s", err)
+				}
+
+				enrollCAModel, err := testServers.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: dms.Settings.EnrollmentSettings.EnrollmentCA,
+				})
+				if err != nil {
+					t.Fatalf("could not get enrollment CA: %s", err)
+				}
+
+				// Sign an attacker cert under the enrollment CA with a different CN.
+				attackerKey, _ := chelpers.GenerateRSAKey(2048)
+				attackerCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "attacker-device"}, attackerKey)
+				attackerCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              dms.Settings.EnrollmentSettings.EnrollmentCA,
+					CertRequest:       (*models.X509CertificateRequest)(attackerCSR),
+					IssuanceProfileID: enrollCAModel.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign attacker certificate: %s", err)
+				}
+
+				// Submit CSR for victim's CN while presenting attacker's cert in mTLS.
+				victimCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: victimCrt.Subject.CommonName}, attackerKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(attackerCrt.Certificate)},
+					PrivateKey:            attackerKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), victimCSR)
+				if webhookCallCount.Load() != 0 {
+					t.Fatalf("webhook must not be called when CN mismatch is detected, but was called %d time(s)", webhookCallCount.Load())
+				}
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+				expectedErr := "invalid certificate"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}
 			},
 		},

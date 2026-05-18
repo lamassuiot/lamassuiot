@@ -368,14 +368,20 @@ func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx cont
 }
 
 // validateClientCertificateReenrollment validates the presented client certificate for re-enrollment.
-// It checks against the enrollment CA first, then falls back to additional validation CAs,
+// It checks that the certificate's CommonName matches the CSR subject, then checks against the
+// enrollment CA first, then falls back to additional validation CAs,
 // and finally verifies expiry and revocation status.
-func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate) error {
+func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate, csrSubjectCN string) error {
 	leafCert := clientCerts[0]
 
 	lFunc = lFunc.WithField("auth-status", "verifying")
 	lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", leafCert.Subject.CommonName, helpers.SerialNumberToHexString(leafCert.SerialNumber), leafCert.Issuer.CommonName))
 	lFunc.Debugf("presented client certificate")
+
+	if leafCert.Subject.CommonName != csrSubjectCN {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. certificate CommonName '%s' does not match CSR subject CommonName '%s'", leafCert.Subject.CommonName, csrSubjectCN)
+		return errs.ErrDMSEnrollInvalidCert
+	}
 
 	validationCA := svc.findReenrollmentValidationCA(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, leafCert)
 	if validationCA == nil {
@@ -794,7 +800,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			lFunc.Errorf("aborting reenrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
+		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName); err != nil {
 			return nil, err
 		}
 
@@ -812,7 +818,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts); err != nil {
+		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName); err != nil {
 			return nil, err
 		}
 		lFunc.Infof("combined auth: client certificate validation passed. Starting webhook validation (step 2/2)")
