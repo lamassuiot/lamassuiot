@@ -464,11 +464,12 @@ func checkReenrollmentExpiry(lFunc *logrus.Entry, leafCert *x509.Certificate, re
 	return nil
 }
 
-// invokeEnrollmentWebhook calls the configured external webhook and returns an error if the
-// webhook denies enrollment or cannot be reached (fail-closed).
-func invokeEnrollmentWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.WebhookCall, csr *x509.CertificateRequest, aps string) error {
+// invokeWebhook calls the configured external webhook and returns an error if the
+// webhook denies the operation or cannot be reached (fail-closed).
+// operation should be "enrollment" or "reenrollment" and is used in log messages and errors.
+func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.WebhookCall, csr *x509.CertificateRequest, aps string, operation string) error {
 	lFunc = lFunc.WithField("auth-status", "verifying")
-	lFunc.Infof("verifying enrollment using external webhook: %s. Calling webhook %s", webhookConf.Name, webhookConf.Url)
+	lFunc.Infof("verifying %s using external webhook: %s. Calling webhook %s", operation, webhookConf.Name, webhookConf.Url)
 
 	webhookRequestBodyHeaders := make(map[string]string)
 	requestURL := ""
@@ -501,22 +502,22 @@ func invokeEnrollmentWebhook(ctx context.Context, lFunc *logrus.Entry, webhookCo
 
 	resp, err := webhookclient.InvokeJSONWebhook[webhookResponse](lFunc, webhookConf, webhookRequestBody)
 	if err != nil {
-		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. got error while calling external webhook: %s", err)
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, err)
 		return fmt.Errorf("error while calling external webhook: %s", err)
 	}
 
 	lFunc.Debugf("webhook response: %v", resp)
 	if resp == nil {
-		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. external webhook didn't return a response")
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
 		return fmt.Errorf("external webhook didn't return a response")
 	}
 
 	if !resp.Authorized {
-		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. external webhook denied enrollment")
-		return fmt.Errorf("external webhook denied enrollment")
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
+		return fmt.Errorf("external webhook denied %s", operation)
 	}
 
-	lFunc.WithField("auth-uri", webhookConf.Name).Infof("webhook authorized enrollment")
+	lFunc.WithField("auth-uri", webhookConf.Name).Infof("webhook authorized %s", operation)
 	return nil
 }
 
@@ -578,7 +579,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 	case models.ESTAuthModeExternalWebhook:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeExternalWebhook)
-		if err = invokeEnrollmentWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps); err != nil {
+		if err = invokeWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps, "enrollment"); err != nil {
 			return nil, err
 		}
 		lFunc = lFunc.WithField("auth-status", "verified")
@@ -597,7 +598,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			return nil, err
 		}
 		lFunc.Infof("combined auth: client certificate validation passed. Starting webhook validation (step 2/2)")
-		if err = invokeEnrollmentWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps); err != nil {
+		if err = invokeWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps, "enrollment"); err != nil {
 			return nil, err
 		}
 		lFunc = lFunc.WithField("auth-status", "verified")
@@ -799,7 +800,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	case models.ESTAuthModeExternalWebhook:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeExternalWebhook)
-		if err = invokeEnrollmentWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps); err != nil {
+		if err = invokeWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
 			return nil, err
 		}
 
@@ -815,7 +816,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			return nil, err
 		}
 		lFunc.Infof("combined auth: client certificate validation passed. Starting webhook validation (step 2/2)")
-		if err = invokeEnrollmentWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps); err != nil {
+		if err = invokeWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
 			return nil, err
 		}
 		lFunc.Infof("combined auth: both client certificate and webhook validations passed")
