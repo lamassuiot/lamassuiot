@@ -414,7 +414,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, leafCert *x509.Certificate) *x509.Certificate {
 	enrollCACert := (*x509.Certificate)(enrollCA.Certificate.Certificate)
 
-	lFunc.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.Certificate.SerialNumber)
+	lFunc.Debugf("validating client certificate using EST Enrollment CA which has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.Certificate.SerialNumber)
 	if err := helpers.ValidateCertificate(enrollCACert, leafCert, false); err == nil {
 		lFunc.Infof("certificate validated. Revocation and Expiration (if needed) check will be performed next")
 		return enrollCACert

@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2504,7 +2505,9 @@ func TestESTEnroll(t *testing.T) {
 				defer cleanup()
 
 				// webhook should never be reached since client certificate check fails first
+				var webhookCallCount atomic.Int32
 				router.POST("/verify", func(c *gin.Context) {
+					webhookCallCount.Add(1)
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
@@ -2555,6 +2558,9 @@ func TestESTEnroll(t *testing.T) {
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				if webhookCallCount.Load() != 0 {
+					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
+				}
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -2586,7 +2592,7 @@ func TestESTEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				_, err = createDMS(func(in *services.CreateDMSInput) {
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
@@ -2609,10 +2615,11 @@ func TestESTEnroll(t *testing.T) {
 
 				// enroll with no client certificate - should be rejected at client certificate step
 				estCli := est.Client{
-					Host:               fmt.Sprintf("localhost:%d", dmsMgr.Port),
-					Certificates:       []*x509.Certificate{},
-					PrivateKey:         nil,
-					InsecureSkipVerify: true,
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
 				}
 
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
@@ -4049,8 +4056,8 @@ func TestESTReEnroll(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error. Got none")
 				}
-				if !strings.Contains(err.Error(), "external webhook denied enrollment") {
-					t.Fatalf("error should contain 'external webhook denied enrollment'. Got error %s", err.Error())
+				if !strings.Contains(err.Error(), "external webhook denied reenrollment") {
+					t.Fatalf("error should contain 'external webhook denied reenrollment'. Got error %s", err.Error())
 				}
 			},
 		},
@@ -4169,8 +4176,8 @@ func TestESTReEnroll(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error. Got none")
 				}
-				if !strings.Contains(err.Error(), "external webhook denied enrollment") {
-					t.Fatalf("error should contain 'external webhook denied enrollment'. Got error %s", err.Error())
+				if !strings.Contains(err.Error(), "external webhook denied reenrollment") {
+					t.Fatalf("error should contain 'external webhook denied reenrollment'. Got error %s", err.Error())
 				}
 			},
 		},
@@ -4191,7 +4198,9 @@ func TestESTReEnroll(t *testing.T) {
 				defer cleanup()
 
 				// webhook should never be reached since client certificate check fails first
+				var webhookCallCount atomic.Int32
 				router.POST("/verify", func(c *gin.Context) {
+					webhookCallCount.Add(1)
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
@@ -4227,6 +4236,9 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				_, err = estCli.Reenroll(context.Background(), newCsr)
+				if webhookCallCount.Load() != 0 {
+					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
+				}
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
