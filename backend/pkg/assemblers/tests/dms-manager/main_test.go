@@ -1478,6 +1478,80 @@ func TestESTEnroll(t *testing.T) {
 				}
 			},
 		},
+		{
+			// The webhook handler blocks indefinitely; the DMS service enforces a
+			// configurable context deadline on webhook calls (set to 2s here to stay
+			// well below the server's 10s WriteTimeout), so enrollment must be
+			// rejected with a timeout error.
+			name: "Err/ExternalWebHookTimeout",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				router, url, cleanup, err := tests.StartWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					// Block until the request context is cancelled (server shutdown)
+					// or the fallback timer fires, simulating a hung webhook that
+					// never responds before the configured CallTimeout fires.
+					select {
+					case <-c.Request.Context().Done():
+					case <-time.After(30 * time.Second):
+					}
+				})
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+						Name: "myHook",
+						Url:  url + "/verify",
+						Config: models.WebhookCallHttpClient{
+							ValidateServerCert: false,
+							LogLevel:           string(config.Debug),
+							AuthMode:           config.NoAuth,
+							// Use a short timeout so it fires well before the server's
+							// 10-second WriteTimeout, avoiding a TLS connection race.
+							CallTimeout: models.TimeDuration(2 * time.Second),
+						},
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				if !strings.Contains(err.Error(), "external webhook authorization timed out or was canceled") {
+					t.Fatalf("error should contain 'external webhook authorization timed out or was canceled'. Got error %s", err.Error())
+				}
+			},
+		},
 		// TODO: Find a way of testing this. As of now, this causes a problem since the Testing Instance is launched under
 		// dev.lamassu.test domain. Then the DMS requests an OCSP/CRL request to https://dev.lamassu.test/api/va/crl/xxxx which
 		// is unreachable. We need a way of proxying dev.lamassu.test => localhost:xxxx (each test has a random port).
