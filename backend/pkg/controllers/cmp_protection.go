@@ -36,11 +36,23 @@ type rawResponsePKIMessage struct {
 // extraCerts (the EE's protection certificate per RFC 9483 §3.2) to verify
 // the Protection BitString over DER(header) || DER(body).
 //
-// Returns nil when verification succeeds, or an error describing the failure.
-// If the incoming message carries no protection (protection bytes empty), this
-// function returns nil immediately — protection is optional at the EE layer.
-func verifyRequestProtection(full rawPKIMessageFull) error {
+// If required is true, the function returns an error when the incoming message
+// carries no protection field. If required is false, an unprotected message is
+// accepted as-is and the function returns nil immediately.
+//
+// MAC-based protection algorithms (id-PasswordBasedMac, id-DHBasedMac) are
+// always rejected regardless of the required flag — only signature-based
+// protection (RSA, ECDSA, Ed25519) is supported.
+func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.ObjectIdentifier, required bool) error {
+	// Reject MAC-based protection algorithms unconditionally.
+	if protectionAlgOID.Equal(oidPasswordBasedMac) || protectionAlgOID.Equal(oidDHBasedMac) {
+		return fmt.Errorf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)
+	}
+
 	if len(full.Protection.Bytes) == 0 {
+		if required {
+			return fmt.Errorf("request protection absent: DMS configuration requires signature-protected CMP requests")
+		}
 		return nil
 	}
 	if len(full.ExtraCerts) == 0 {
@@ -88,17 +100,30 @@ func verifyRequestProtection(full rawPKIMessageFull) error {
 	}
 	protBytes := innerBitString.Bytes[1:] // skip unused-bits byte
 
+	// Derive the hash from the protectionAlg OID declared in the header.
+	// This ensures we use the same hash the sender used when signing.
+	hashAlg, err := hashFromSignatureAlgOID(protectionAlgOID)
+	if err != nil {
+		return fmt.Errorf("protection algorithm: %w", err)
+	}
+
 	switch pub := eeCert.PublicKey.(type) {
 	case *ecdsa.PublicKey:
-		digest := crypto.SHA256.New()
-		digest.Write(payload)
-		if !ecdsa.VerifyASN1(pub, digest.Sum(nil), protBytes) {
+		if hashAlg == 0 {
+			return fmt.Errorf("protection verification failed: ECDSA requires a hash algorithm")
+		}
+		h := hashAlg.New()
+		h.Write(payload)
+		if !ecdsa.VerifyASN1(pub, h.Sum(nil), protBytes) {
 			return fmt.Errorf("protection verification failed: invalid ECDSA signature")
 		}
 	case *rsa.PublicKey:
-		digest := crypto.SHA256.New()
-		digest.Write(payload)
-		if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest.Sum(nil), protBytes); err != nil {
+		if hashAlg == 0 {
+			return fmt.Errorf("protection verification failed: RSA requires a hash algorithm")
+		}
+		h := hashAlg.New()
+		h.Write(payload)
+		if err := rsa.VerifyPKCS1v15(pub, hashAlg, h.Sum(nil), protBytes); err != nil {
 			return fmt.Errorf("protection verification failed: %w", err)
 		}
 	case ed25519.PublicKey:
@@ -245,18 +270,50 @@ func signCMPPayload(signer crypto.Signer, hash crypto.Hash, payload []byte) ([]b
 	return sig, nil
 }
 
+// cmpProtectionAlgorithm selects the best signature algorithm and hash for
+// response protection based on the signer's key type and size.
+// For ECDSA it matches the hash to the curve size per RFC 9481 §2.
 func cmpProtectionAlgorithm(signer crypto.Signer) (pkix.AlgorithmIdentifier, crypto.Hash, error) {
-	switch signer.Public().(type) {
+	switch pub := signer.Public().(type) {
 	case *rsa.PublicKey:
-		return pkix.AlgorithmIdentifier{
-			Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11},
-			Parameters: asn1.NullRawValue,
-		}, crypto.SHA256, nil
+		// RSA: SHA-256 is MUST per RFC 9481; use SHA-384/512 for keys > 3072/7680 bits.
+		bits := pub.N.BitLen()
+		switch {
+		case bits > 7680:
+			return pkix.AlgorithmIdentifier{
+				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 13}, // sha512WithRSA
+				Parameters: asn1.NullRawValue,
+			}, crypto.SHA512, nil
+		case bits > 3072:
+			return pkix.AlgorithmIdentifier{
+				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 12}, // sha384WithRSA
+				Parameters: asn1.NullRawValue,
+			}, crypto.SHA384, nil
+		default:
+			return pkix.AlgorithmIdentifier{
+				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11}, // sha256WithRSA
+				Parameters: asn1.NullRawValue,
+			}, crypto.SHA256, nil
+		}
 	case *ecdsa.PublicKey:
-		return pkix.AlgorithmIdentifier{
-			Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2},
-			Parameters: asn1.NullRawValue,
-		}, crypto.SHA256, nil
+		// ECDSA: match hash to curve per RFC 9481 §2.
+		switch pub.Curve.Params().BitSize {
+		case 521:
+			return pkix.AlgorithmIdentifier{
+				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 4}, // ecdsaWithSHA512
+				Parameters: asn1.NullRawValue,
+			}, crypto.SHA512, nil
+		case 384:
+			return pkix.AlgorithmIdentifier{
+				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 3}, // ecdsaWithSHA384
+				Parameters: asn1.NullRawValue,
+			}, crypto.SHA384, nil
+		default: // P-256 and anything else
+			return pkix.AlgorithmIdentifier{
+				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}, // ecdsaWithSHA256
+				Parameters: asn1.NullRawValue,
+			}, crypto.SHA256, nil
+		}
 	case ed25519.PublicKey:
 		return pkix.AlgorithmIdentifier{
 			Algorithm: asn1.ObjectIdentifier{1, 3, 101, 112},

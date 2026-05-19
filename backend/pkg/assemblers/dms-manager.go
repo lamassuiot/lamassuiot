@@ -3,6 +3,7 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
@@ -55,9 +56,26 @@ func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSSer
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
 	}
 
+	cmptxStorage, err := createCMPTransactionStorageInstance(lStorage, conf.Storage)
+	if err != nil {
+		return nil, fmt.Errorf("could not create CMP transaction storage instance: %s", err)
+	}
+
+	// Background janitor: delete expired CMP transactions periodically.
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			if dErr := cmptxStorage.DeleteExpired(context.Background()); dErr != nil {
+				lStorage.Warnf("CMP tx DeleteExpired: %v", dErr)
+			}
+		}
+	}()
+
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
+		CMPTransactionStorage: cmptxStorage,
 		KMSClient:             kmsService,
 		CAClient:              caService,
 		DevManagerCli:         deviceService,
@@ -84,6 +102,18 @@ func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSSer
 	}
 
 	return &svc, nil
+}
+
+func createCMPTransactionStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CMPTransactionRepo, error) {
+	engine, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not create storage engine: %s", err)
+	}
+	cmptxStorage, err := engine.GetCMPTransactionStorage()
+	if err != nil {
+		return nil, fmt.Errorf("could not get CMP transaction storage: %s", err)
+	}
+	return cmptxStorage, nil
 }
 
 func createDMSStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.DMSRepo, error) {

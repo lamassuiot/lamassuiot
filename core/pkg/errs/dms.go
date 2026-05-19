@@ -11,4 +11,9 @@ var (
 	ErrDMSInvalidAuthMode      error = errors.New("DMS invalid auth mode")
 	ErrDMSAuthModeNotSupported error = errors.New("DMS auth mode not supported")
 	ErrDMSEnrollInvalidCert    error = errors.New("invalid certificate")
+
+	// ErrCMPTransactionAlreadyExists is returned by CMPTransactionRepo.Insert when a live
+	// transaction with the same transactionID already exists in the store.
+	// The CMP controller maps this to PKIFailureInfo transactionIdInUse (21) per RFC 4210 §5.1.1.
+	ErrCMPTransactionAlreadyExists error = errors.New("CMP transactionID already in use")
 )

@@ -936,6 +936,73 @@ func PopulateSampleData(
 		}
 	}
 
+	// Step 7: Create a CMP-based DMS with a KMS-backed protection certificate.
+	// The protection certificate is an end-entity cert with DigitalSignature
+	// key usage whose private key lives in the KMS; the RA signs all CMP
+	// response messages with it (RFC 9483 §3.2).
+	if generatedCAID != "" {
+		logger.Info("Creating CMP protection certificate and DMS...")
+
+		protectionCert, protErr := caService.CreateCertificate(ctx, services.CreateCertificateInput{
+			CAID:    generatedCAID,
+			KeySpec: services.CertificateKeySpec{Type: models.KeyType(x509.ECDSA), Bits: 256},
+			Subject: models.Subject{CommonName: "cmp-ra-protection"},
+			IssuanceProfile: &models.IssuanceProfile{
+				Name:     "CMP RA Protection",
+				Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(3650 * 24 * time.Hour)},
+				KeyUsage: models.X509KeyUsage(x509.KeyUsageDigitalSignature),
+			},
+			Metadata: map[string]any{"sample": true, "purpose": "cmp-protection"},
+		})
+		if protErr != nil {
+			logger.Warnf("Could not create CMP protection certificate: %v", protErr)
+		} else {
+			logger.Infof("Created CMP protection certificate: serial=%s", protectionCert.SerialNumber)
+
+			cmpDMSInput := services.CreateDMSInput{
+				ID:   "sample-cmp-dms",
+				Name: "Sample CMP DMS",
+				Metadata: map[string]interface{}{
+					"description": "Sample CMP DMS for RFC 4210/9483 testing",
+					"sample":      true,
+				},
+				Settings: models.DMSSettings{
+					EnrollmentSettings: models.EnrollmentSettings{
+						EnrollmentProtocol: models.CMP,
+						EnrollmentCA:       generatedCAID,
+						DeviceProvisionProfile: models.DeviceProvisionProfile{
+							Icon:      "ShieldCheck",
+							IconColor: "#004466",
+							Metadata:  map[string]interface{}{"sample": true},
+							Tags:      []string{"sample", "cmp"},
+						},
+						RegistrationMode: models.JITP,
+						EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+							AuthMode:                          models.CMPAuthModeClientCertificate,
+							ProtectionCertificateSerialNumber: protectionCert.SerialNumber,
+						},
+					},
+					ReEnrollmentSettings: models.ReEnrollmentSettings{
+						AdditionalValidationCAs:     []string{},
+						PreventiveReEnrollmentDelta: models.TimeDuration(7 * 24 * time.Hour),
+						CriticalReEnrollmentDelta:   models.TimeDuration(24 * time.Hour),
+					},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeEnrollmentCA:    true,
+						IncludeLamassuSystemCA: true,
+					},
+				},
+			}
+
+			cmpDMS, cmpErr := dmsService.CreateDMS(ctx, cmpDMSInput)
+			if cmpErr != nil {
+				logger.Warnf("Could not create CMP DMS (may already exist): %v", cmpErr)
+			} else {
+				logger.Infof("Created sample CMP DMS: %s", cmpDMS.ID)
+			}
+		}
+	}
+
 	logger.Info("Sample data population completed")
 	return nil
 }
