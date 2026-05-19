@@ -49,8 +49,8 @@ var oidImplicitConfirm = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 13}
 // MAC-based protection algorithm OIDs that are explicitly rejected.
 // Only signature-based protection (RSA, ECDSA, Ed25519) is accepted.
 var (
-	oidPasswordBasedMac = asn1.ObjectIdentifier{1, 2, 840, 113533, 7, 66, 13}  // id-PasswordBasedMac  RFC 4210
-	oidDHBasedMac       = asn1.ObjectIdentifier{1, 2, 840, 113533, 7, 66, 30}  // id-DHBasedMac        RFC 4210
+	oidPasswordBasedMac = asn1.ObjectIdentifier{1, 2, 840, 113533, 7, 66, 13} // id-PasswordBasedMac  RFC 4210
+	oidDHBasedMac       = asn1.ObjectIdentifier{1, 2, 840, 113533, 7, 66, 30} // id-DHBasedMac        RFC 4210
 )
 
 // hashFromSignatureAlgOID maps a signature algorithm OID to the hash function
@@ -110,10 +110,10 @@ type requestPKIHeader struct {
 	Sender           asn1.RawValue
 	Recipient        asn1.RawValue
 	ProtectionAlgOID asn1.ObjectIdentifier // parsed from [1] protectionAlg; empty when absent
-	TransactionID    []byte          `asn1:"optional,explicit,tag:4,omitempty"`
-	SenderNonce      []byte          `asn1:"optional,explicit,tag:5,omitempty"`
-	RecipNonce       []byte          `asn1:"optional,explicit,tag:6,omitempty"`
-	GeneralInfo      []asn1.RawValue // decoded from [8] EXPLICIT SEQUENCE; empty when absent
+	TransactionID    []byte                `asn1:"optional,explicit,tag:4,omitempty"`
+	SenderNonce      []byte                `asn1:"optional,explicit,tag:5,omitempty"`
+	RecipNonce       []byte                `asn1:"optional,explicit,tag:6,omitempty"`
+	GeneralInfo      []asn1.RawValue       // decoded from [8] EXPLICIT SEQUENCE; empty when absent
 
 	// ResponseSenderNonce, if non-nil, is used as the SenderNonce on the
 	// outbound response instead of generating a fresh random nonce.  This
@@ -347,9 +347,10 @@ func marshalRevRepBody(status cmp.PKIStatus) ([]byte, error) {
 
 // decodeRevReqContent parses the RevReqContent from an rr body.
 // RevReqContent ::= SEQUENCE OF RevDetails
-// RevDetails    ::= SEQUENCE {
-//     certDetails     CertTemplate,
-//     crlEntryDetails Extensions OPTIONAL }
+//
+//	RevDetails    ::= SEQUENCE {
+//	    certDetails     CertTemplate,
+//	    crlEntryDetails Extensions OPTIONAL }
 //
 // We extract the serialNumber ([1] context-specific INTEGER in CertTemplate)
 // and the optional CRL reason from crlEntryDetails.
