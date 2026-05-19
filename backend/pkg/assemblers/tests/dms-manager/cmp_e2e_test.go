@@ -96,6 +96,37 @@ func cmpCreateProtectionCert(t *testing.T, ctx context.Context, ts *tests.TestSe
 	return cert
 }
 
+// cmpIssueSigner provisions a bootstrap CA in Lamassu and issues an EE
+// certificate from it for the device to use as the CMP signer (extraCerts[0]).
+// The bootstrap CA's ID is returned so the test can wire it into the DMS
+// AuthOptionsMTLS.ValidationCAs list and exercise the real trust path.
+func cmpIssueSigner(t *testing.T, ctx context.Context, ts *tests.TestServer, dir, signerCN string) (keyPath, certPath, bootstrapCAID string) {
+	t.Helper()
+
+	bootstrapCA := cmpCreateCA(t, ctx, ts, "cmp-bootstrap-"+signerCN)
+
+	key, err := chelpers.GenerateECDSAKey(elliptic.P256())
+	require.NoError(t, err)
+	csr, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: signerCN}, key)
+	require.NoError(t, err)
+
+	issued, err := ts.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+		CAID:              bootstrapCA.ID,
+		CertRequest:       (*models.X509CertificateRequest)(csr),
+		IssuanceProfileID: bootstrapCA.ProfileID,
+	})
+	require.NoError(t, err)
+
+	keyPEM, err := chelpers.PrivateKeyToPEM(key)
+	require.NoError(t, err)
+
+	keyPath = filepath.Join(dir, "signer.key")
+	certPath = filepath.Join(dir, "signer.crt")
+	require.NoError(t, os.WriteFile(keyPath, []byte(keyPEM), 0o600))
+	require.NoError(t, os.WriteFile(certPath, []byte(chelpers.CertificateToPEM((*x509.Certificate)(issued.Certificate))), 0o600))
+	return keyPath, certPath, bootstrapCA.ID
+}
+
 func cmpCreateDMS(t *testing.T, ctx context.Context, dmsMgr *tests.DMSManagerTestServer, id, enrollCAID string, lwcOpts models.EnrollmentOptionsLWCRFC9483) *models.DMS {
 	t.Helper()
 
@@ -147,24 +178,6 @@ func cmpPreRegisterDevice(t *testing.T, ctx context.Context, ts *tests.TestServe
 		IconColor: "#004466",
 	})
 	require.NoError(t, err)
-}
-
-// cmpWriteSignerFiles writes a fresh self-signed signer key+cert to dir.
-func cmpWriteSignerFiles(t *testing.T, dir string) (keyPath, certPath string) {
-	t.Helper()
-
-	key, err := chelpers.GenerateECDSAKey(elliptic.P256())
-	require.NoError(t, err)
-	cert, err := chelpers.GenerateSelfSignedCertificate(key, "cmp-signer")
-	require.NoError(t, err)
-	keyPEM, err := chelpers.PrivateKeyToPEM(key)
-	require.NoError(t, err)
-
-	keyPath = filepath.Join(dir, "signer.key")
-	certPath = filepath.Join(dir, "signer.crt")
-	require.NoError(t, os.WriteFile(keyPath, []byte(keyPEM), 0o600))
-	require.NoError(t, os.WriteFile(certPath, []byte(chelpers.CertificateToPEM(cert)), 0o600))
-	return keyPath, certPath
 }
 
 // cmpWriteDeviceFiles writes a fresh device key+CSR to dir.
@@ -369,12 +382,24 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 
 			serial := tc.buildSerial(t, f)
 
+			// Provision a real bootstrap CA + signer cert so the DMS can
+			// configure ValidationCAs and the server-side signer-cert chain
+			// validation passes for the success case. Both protection-failure
+			// subcases also need this — without a chain-valid signer the
+			// server now rejects IR before any response-side handling, and
+			// the failure surface we want to assert is openssl's response
+			// validation, not server-side auth.
+			signerKey, signerCert, bootstrapCAID := cmpIssueSigner(t, f.ctx, f.testServers, dir, fmt.Sprintf("signer-%s", tc.name))
+
 			dms := cmpCreateDMS(t, f.ctx, f.dmsMgr,
 				fmt.Sprintf("cmp-dms-%s", tc.name),
 				f.enrollCA.ID,
 				models.EnrollmentOptionsLWCRFC9483{
 					AuthMode:                          models.CMPAuthModeClientCertificate,
 					ProtectionCertificateSerialNumber: serial,
+					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
+						ValidationCAs: []string{bootstrapCAID},
+					},
 				},
 			)
 
@@ -383,7 +408,6 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 			deviceID := fmt.Sprintf("device-%s", tc.name)
 			cmpPreRegisterDevice(t, f.ctx, f.testServers, deviceID, dms.ID)
 
-			signerKey, signerCert := cmpWriteSignerFiles(t, dir)
 			deviceKey, deviceCSR := cmpWriteDeviceFiles(t, dir, deviceID)
 			certOut := filepath.Join(dir, "issued.crt")
 
@@ -420,12 +444,22 @@ func TestCMPE2ERevokedDeviceCert(t *testing.T) {
 	f := newCMPTestFixture(t)
 	dir := t.TempDir()
 
+	// Provision a real bootstrap CA + signer cert. The bootstrap CA is wired
+	// into AuthOptionsMTLS.ValidationCAs so the server-side signer-cert chain
+	// validation passes for the initial IR — the KUR side then trusts the
+	// device's previously-issued cert via the enrollment CA, mirroring the
+	// EST reenrollment trust model.
+	signerKey, signerCert, bootstrapCAID := cmpIssueSigner(t, f.ctx, f.testServers, dir, "signer-revoked-client")
+
 	// Build DMS with a KMS-backed protection cert so the server signs responses.
 	protCert := cmpCreateProtectionCert(t, f.ctx, f.testServers)
 	dms := cmpCreateDMS(t, f.ctx, f.dmsMgr, "cmp-dms-revoked-client", f.enrollCA.ID,
 		models.EnrollmentOptionsLWCRFC9483{
 			AuthMode:                          models.CMPAuthModeClientCertificate,
 			ProtectionCertificateSerialNumber: protCert.SerialNumber,
+			AuthOptionsMTLS: models.AuthOptionsClientCertificate{
+				ValidationCAs: []string{bootstrapCAID},
+			},
 		},
 	)
 
@@ -441,7 +475,6 @@ func TestCMPE2ERevokedDeviceCert(t *testing.T) {
 	cmpPreRegisterDevice(t, f.ctx, f.testServers, deviceID, dms.ID)
 
 	// Step 1: initial enrollment (IR).
-	signerKey, signerCert := cmpWriteSignerFiles(t, dir)
 	deviceKey, deviceCSR := cmpWriteDeviceFiles(t, dir, deviceID)
 	certOut := filepath.Join(dir, "issued.crt")
 
@@ -454,9 +487,11 @@ func TestCMPE2ERevokedDeviceCert(t *testing.T) {
 	issuedCert, err := chelpers.ReadCertificateFromFile(certOut)
 	require.NoError(t, err)
 
-	// Step 2: revoke the issued device cert.
+	// Step 2: revoke the issued device cert. Lamassu indexes certificates by
+	// the lowercase hex serial number, not the big.Int decimal string, so we
+	// convert via the shared helper to match how the service stores it.
 	_, err = f.testServers.CA.Service.UpdateCertificateStatus(f.ctx, services.UpdateCertificateStatusInput{
-		SerialNumber:     issuedCert.SerialNumber.String(),
+		SerialNumber:     dmshelpers.SerialNumberToHexString(issuedCert.SerialNumber),
 		NewStatus:        models.StatusRevoked,
 		RevocationReason: models.RevocationReason(1), // KeyCompromise
 	})

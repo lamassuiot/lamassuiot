@@ -5,12 +5,61 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
+
+// cmpSignerCertFromContext returns the EE certificate the CMP handler stashed
+// after successfully verifying signature-based protection on the incoming
+// PKIMessage (extraCerts[0] per RFC 9483 §3.2). It returns nil when the
+// request was unprotected — the controller only stashes a cert when one
+// authenticated the message.
+func cmpSignerCertFromContext(ctx context.Context) *x509.Certificate {
+	v := ctx.Value(string(identityextractors.IdentityExtractorCMPSignerCertificate))
+	if v == nil {
+		return nil
+	}
+	cert, _ := v.(*x509.Certificate)
+	return cert
+}
+
+// validateCMPSignerAgainstCAs chains signerCert against each CA in candidateCAIDs
+// (in order) and returns the first matching CA on success. Each candidate ID is
+// resolved via the CA client; unknown or failing IDs are logged and skipped.
+// When allowExpired is true the chain check is run with the cert's NotBefore as
+// "now", so expiry alone won't fail validation — callers that want to apply a
+// stricter expiry policy must enforce it separately.
+func (svc DMSManagerServiceBackend) validateCMPSignerAgainstCAs(
+	ctx context.Context,
+	lFunc *logrus.Entry,
+	signerCert *x509.Certificate,
+	candidateCAIDs []string,
+	allowExpired bool,
+) (*x509.Certificate, error) {
+	for _, caID := range candidateCAIDs {
+		ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
+		if err != nil {
+			lFunc.Warnf("could not load validation CA '%s': %s", caID, err)
+			continue
+		}
+		caCert := (*x509.Certificate)(ca.Certificate.Certificate)
+		if err := helpers.ValidateCertificate(caCert, signerCert, !allowExpired); err != nil {
+			lFunc.Debugf("CMP signer cert SN=%s does not chain to CA '%s' (CN=%s): %s",
+				helpers.SerialNumberToHexString(signerCert.SerialNumber), caID, caCert.Subject.CommonName, err)
+			continue
+		}
+		lFunc.Debugf("CMP signer cert SN=%s validated against CA '%s' (CN=%s)",
+			helpers.SerialNumberToHexString(signerCert.SerialNumber), caID, caCert.Subject.CommonName)
+		return caCert, nil
+	}
+	return nil, errs.ErrDMSEnrollInvalidCert
+}
 
 func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
@@ -29,6 +78,44 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		enrollCA = cmpCA
 	}
 	lFunc = lFunc.WithField("dms", dms.ID)
+
+	// Authenticate the CMP signer cert (extraCerts[0]) against ValidationCAs,
+	// mirroring the EST mTLS auth path. When the request was unprotected the
+	// controller leaves no cert in the context — we honour that as "skip
+	// validation", consistent with the EnforceRequestProtection=false escape
+	// hatch. To require validation, operators set EnforceRequestProtection=true
+	// and configure ValidationCAs.
+	cmpOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
+		lFunc = lFunc.WithField("auth-method", "CMP_SIGNER_CERTIFICATE")
+		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s",
+			signerCert.Subject.CommonName,
+			helpers.SerialNumberToHexString(signerCert.SerialNumber),
+			signerCert.Issuer.CommonName))
+
+		validationCA, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signerCert,
+			cmpOpts.AuthOptionsMTLS.ValidationCAs, cmpOpts.AuthOptionsMTLS.AllowExpired)
+		if err != nil {
+			lFunc.Errorf("aborting CMP enrollment. signer cert not authorized for this DMS: %s", err)
+			return nil, errs.ErrDMSEnrollInvalidCert
+		}
+
+		couldCheck, isRevoked, err := svc.checkCertificateRevocation(ctx, signerCert, validationCA)
+		if err != nil {
+			lFunc.Errorf("aborting CMP enrollment. revocation check failed: %s", err)
+			return nil, err
+		}
+		if couldCheck && isRevoked {
+			lFunc.Errorf("aborting CMP enrollment. signer certificate is revoked")
+			return nil, fmt.Errorf("certificate is revoked")
+		}
+		if !couldCheck {
+			lFunc.Warnf("could not check revocation for signer cert; assuming not revoked")
+		}
+		lFunc.Infof("CMP signer cert authenticated")
+	} else {
+		lFunc.Warnf("CMP enrollment received without signature-based protection: ValidationCAs not applied")
+	}
 
 	var existingDevice *models.Device
 	existingDevice, err = svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: csr.Subject.CommonName})
@@ -122,6 +209,58 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 		return nil, fmt.Errorf("revoked certificate")
 	}
 
+	// Authenticate the CMP signer cert (extraCerts[0]) for KUR.
+	//
+	// Per RFC 9483 §4.1.3 the KUR signer cert MUST be the cert being updated,
+	// so we enforce signer-cert == device's active identity-slot cert by serial.
+	// We then chain-validate the signer against the EnrollmentCA, falling back
+	// to ReEnrollmentSettings.AdditionalValidationCAs to support migrations
+	// where the current cert was issued by a different CA (same model as EST
+	// reenroll). Finally we run the same OCSP/CRL/Lamassu-status revocation
+	// check EST does.
+	//
+	// When the request was unprotected the controller leaves no cert in
+	// context — we honour that as "skip validation" so EnforceRequestProtection
+	// remains the single switch between protected and unprotected operation.
+	reEnrollSettings := dms.Settings.ReEnrollmentSettings
+	if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
+		lFunc = lFunc.WithField("auth-method", "CMP_SIGNER_CERTIFICATE")
+		signerSN := helpers.SerialNumberToHexString(signerCert.SerialNumber)
+		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s",
+			signerCert.Subject.CommonName, signerSN, signerCert.Issuer.CommonName))
+
+		// RFC 9483 §4.1.3 binding: signer must equal the cert being updated.
+		if signerSN != currentDeviceCertSN {
+			lFunc.Errorf("aborting reenrollment. CMP signer cert SN=%s does not match device's active cert SN=%s (RFC 9483 §4.1.3)",
+				signerSN, currentDeviceCertSN)
+			return nil, fmt.Errorf("CMP signer certificate does not match device's active certificate")
+		}
+
+		candidateCAIDs := append([]string{enrollCA}, reEnrollSettings.AdditionalValidationCAs...)
+		validationCA, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signerCert,
+			candidateCAIDs, reEnrollSettings.EnableExpiredRenewal)
+		if err != nil {
+			lFunc.Errorf("aborting reenrollment. CMP signer cert not authorized: %s", err)
+			return nil, errs.ErrDMSEnrollInvalidCert
+		}
+
+		couldCheck, isRevoked, err := svc.checkCertificateRevocation(ctx, signerCert, validationCA)
+		if err != nil {
+			lFunc.Errorf("aborting reenrollment. revocation check failed: %s", err)
+			return nil, err
+		}
+		if couldCheck && isRevoked {
+			lFunc.Errorf("aborting reenrollment. signer certificate is revoked")
+			return nil, fmt.Errorf("certificate is revoked")
+		}
+		if !couldCheck {
+			lFunc.Warnf("could not check revocation for signer cert; assuming not revoked")
+		}
+		lFunc.Infof("CMP signer cert authenticated for reenrollment")
+	} else {
+		lFunc.Warnf("CMP reenrollment received without signature-based protection: ValidationCAs not applied")
+	}
+
 	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollCA)
 	if err != nil {
 		return nil, err
@@ -149,7 +288,6 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 		return nil, err
 	}
 
-	reEnrollSettings := dms.Settings.ReEnrollmentSettings
 	if currentDeviceCert.Status == models.StatusActive && reEnrollSettings.RevokeOnReEnrollment {
 		_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 			SerialNumber:     currentDeviceCertSN,

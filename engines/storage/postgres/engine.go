@@ -162,7 +162,7 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 
 func (s *PostgresStorageEngine) GetCMPTransactionStorage() (storage.CMPTransactionRepo, error) {
 	if s.CMPTx == nil {
-		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DMS_DB_NAME)
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DMS_SCHEMA)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client for CMP transactions: %s", err)
 		}

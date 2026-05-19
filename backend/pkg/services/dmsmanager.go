@@ -72,6 +72,27 @@ func (svc *DMSManagerServiceBackend) GetCMPTransactionRepo() storage.CMPTransact
 	return svc.cmptxStorage
 }
 
+// GetCMPTransactionsByDMS lists CMP transactions belonging to the given DMS,
+// honouring the standard pagination/sort/filter parameters. It verifies the
+// DMS exists first so callers get a 404 when targeting a bogus ID rather than
+// an empty list that could hide a typo. Both in-flight and stale rows are
+// included; expiry filtering is intentionally NOT applied at this layer
+// (operators want stale rows visible for diagnosis).
+func (svc DMSManagerServiceBackend) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	exists, _, err := svc.dmsStorage.SelectExists(ctx, input.DMSID)
+	if err != nil {
+		lFunc.Errorf("could not check DMS %s exists: %s", input.DMSID, err)
+		return "", err
+	}
+	if !exists {
+		return "", errs.ErrDMSNotFound
+	}
+
+	return svc.cmptxStorage.SelectAllByDMS(ctx, input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters)
+}
+
 // ensureDeviceRegistered applies JITP registration logic given a device that may or may not exist.
 // If device is nil and the DMS is configured with JITP, the device is created.
 // If device is nil and JITP is disabled, an error is returned.

@@ -30,4 +30,5 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	rv1.PATCH("/dms/:id/metadata", dmsAuthzMw.AuthzCheck("update"), routes.UpdateDMSMetadata)
 	rv1.DELETE("/dms/:id", dmsAuthzMw.AuthzCheck("delete"), routes.DeleteDMS)
 	rv1.POST("/dms/bind-identity", dmsAuthzMw.AuthzCheck("bind-identity"), routes.BindIdentityToDevice)
+	rv1.GET("/dms/:id/cmp/transactions", dmsAuthzMw.AuthzCheck("read"), routes.GetCMPTransactionsByDMS)
 }

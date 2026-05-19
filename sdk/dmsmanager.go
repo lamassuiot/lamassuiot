@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -91,6 +92,33 @@ func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllIn
 	url := cli.baseUrl + "/v1/dms"
 
 	return IterGet[models.DMS, *resources.GetDMSsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+// GetCMPTransactionsByDMS streams CMP transactions for the given DMS. The
+// service-level domain type is storage.CMPTransaction, but the wire format
+// is resources.CMPTransactionResponse — we translate per row via a wrapper
+// applyFunc so the SDK consumer sees domain objects regardless of transport.
+func (cli *dmsManagerClient) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
+	url := cli.baseUrl + "/v1/dms/" + input.DMSID + "/cmp/transactions"
+	wrap := func(item resources.CMPTransactionResponse) {
+		if input.ApplyFunc != nil {
+			input.ApplyFunc(storage.CMPTransaction{
+				TransactionID:  item.TransactionID,
+				DMSID:          item.DMSID,
+				State:          storage.CMPTransactionState(item.State),
+				IsReenrollment: item.IsReenrollment,
+				CreatedAt:      item.CreatedAt,
+				ExpiresAt:      item.ExpiresAt,
+				ErrorMessage:   item.ErrorMessage,
+			})
+		}
+	}
+	return IterGet[resources.CMPTransactionResponse, *resources.GetCMPTransactionsResponse](
+		ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, wrap,
+		map[int][]error{
+			404: {errs.ErrDMSNotFound},
+		},
+	)
 }
 
 func (cli *dmsManagerClient) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {

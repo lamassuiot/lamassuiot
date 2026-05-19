@@ -68,6 +68,11 @@ func (m *MockDMSManagerService) GetAll(ctx context.Context, input services.GetAl
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockDMSManagerService) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
+	args := m.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockDMSManagerService) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.BindIdentityToDeviceOutput), args.Error(1)

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -125,12 +126,23 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		return
 	}
 
-	// Verify signature-based protection on the incoming request.
-	if err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlgOID, enrollOpts.EnforceRequestProtection); err != nil {
+	// Verify signature-based protection on the incoming request. When the
+	// request is protected, the parsed EE signer cert (extraCerts[0]) is
+	// returned and stashed on the request context so downstream service
+	// methods (LWCEnroll, LWCReenroll) can apply ValidationCAs, RFC 9483
+	// §4.1.3 signer binding, and revocation checks — mirroring the EST
+	// mTLS auth path. When the request is unprotected and protection is
+	// not enforced, signerCert is nil and no further auth is applied.
+	signerCert, err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlgOID, enrollOpts.EnforceRequestProtection)
+	if err != nil {
 		lFunc.Warnf("protection verification failed: %v", err)
 		r.rejectWithError(ctx, &reqHeader, cmp.PKIStatus(2),
 			fmt.Sprintf("protection verification failed: %v", err), dmsID)
 		return
+	}
+	if signerCert != nil {
+		reqCtx := context.WithValue(ctx.Request.Context(), string(identityextractors.IdentityExtractorCMPSignerCertificate), signerCert)
+		ctx.Request = ctx.Request.WithContext(reqCtx)
 	}
 
 	// Dispatch on body CHOICE tag
@@ -278,15 +290,17 @@ func (r *cmpHttpRoutes) issueAndStore(
 		if !implicitConfirm {
 			header.ResponseSenderNonce = senderNonce
 		}
+		certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
 		if storeErr := r.store.Insert(issuanceCtx, storage.CMPTransaction{
-			TransactionID:  txHex,
-			DMSID:          dmsID,
-			State:          storage.CMPTransactionStateIssued,
-			CertDER:        cert.Raw,
-			IsReenrollment: params.isReenrollment,
-			SentNonce:      senderNonce,
-			ExpiresAt:      time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
-			CreatedAt:      time.Now(),
+			TransactionID:    txHex,
+			DMSID:            dmsID,
+			State:            storage.CMPTransactionStateIssued,
+			CertSerialNumber: certSerial,
+			CertDER:          cert.Raw,
+			IsReenrollment:   params.isReenrollment,
+			SentNonce:        senderNonce,
+			ExpiresAt:        time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
+			CreatedAt:        time.Now(),
 		}); storeErr != nil {
 			if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 				lFunc.Warnf("duplicate transactionID %s", txHex)
@@ -331,6 +345,13 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		return
 	}
 
+	// Transition the CMP transaction to REVOKED for audit visibility.
+	if r.store != nil {
+		if markErr := r.store.MarkRevokedByCertSerial(ctx.Request.Context(), serialHex); markErr != nil {
+			lFunc.Warnf("rr: failed to mark transaction as revoked: %v", markErr)
+		}
+	}
+
 	rpDER, err := marshalRevRepBody(cmp.PKIStatus(0))
 	if err != nil {
 		lFunc.Errorf("rr: build rp body: %v", err)
@@ -360,14 +381,15 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "internal error: transaction store unavailable", dmsID)
 		return
 	}
-	tx, ok, err := r.store.SelectAndDelete(ctx.Request.Context(), hex.EncodeToString(header.TransactionID))
+	txHex := hex.EncodeToString(header.TransactionID)
+	tx, ok, err := r.store.Select(ctx.Request.Context(), txHex)
 	if err != nil {
 		lFunc.Errorf("certConf: lookup transaction: %v", err)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "internal error", dmsID)
 		return
 	}
 	if !ok {
-		lFunc.Warnf("certConf: unknown transactionID %s", hex.EncodeToString(header.TransactionID))
+		lFunc.Warnf("certConf: unknown transactionID %s", txHex)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "unknown transactionID", dmsID)
 		return
 	}
@@ -395,7 +417,11 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		lFunc.Debugf("certConf: entry %d certReqId=%d hash OK", i, s.CertReqID)
 	}
 
-	lFunc.Infof("certConf verified, sending pkiConf")
+	lFunc.Infof("certConf verified, transitioning to CONFIRMED")
+	if _, _, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex); confirmErr != nil {
+		lFunc.Warnf("certConf: failed to confirm transaction (continuing): %v", confirmErr)
+	}
+
 	pkiConfDER, err := marshalPKIConfBody()
 	if err != nil {
 		lFunc.Errorf("certConf: build pkiConf: %v", err)
@@ -498,15 +524,15 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			return
 		}
 
-		// When implicit confirm, delete the transaction row after successful
-		// delivery — no certConf message will arrive to clean it up.
+		// When implicit confirm, transition the transaction to CONFIRMED —
+		// no certConf message will arrive to do it later.
 		// RFC 4210 §5.2.8: once the server grants implicit confirmation the
 		// transaction is complete upon cert delivery.
 		if implicitConfirm {
-			if _, _, delErr := r.store.SelectAndDelete(ctx.Request.Context(), txHex); delErr != nil {
-				lFunc.Warnf("pollReq: failed to delete tx after implicit-confirm delivery: %v", delErr)
+			if _, _, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex); confirmErr != nil {
+				lFunc.Warnf("pollReq: failed to confirm tx after implicit-confirm delivery: %v", confirmErr)
 			} else {
-				lFunc.Debugf("pollReq: tx %s deleted (implicit confirm)", txHex)
+				lFunc.Debugf("pollReq: tx %s confirmed (implicit confirm)", txHex)
 			}
 		}
 
