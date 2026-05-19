@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	cmpmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
@@ -135,6 +136,42 @@ func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]storag
 }
 
 func (s *inMemoryCMPStore) DeleteExpired(_ context.Context) error { return nil }
+
+func (s *inMemoryCMPStore) Confirm(_ context.Context, id string) (storage.CMPTransaction, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, ok := s.txs[id]
+	if !ok || tx.State != storage.CMPTransactionStateIssued {
+		return storage.CMPTransaction{}, false, nil
+	}
+	tx.State = storage.CMPTransactionStateConfirmed
+	tx.ConfirmedAt = time.Now()
+	s.txs[id] = tx
+	return tx, true, nil
+}
+
+func (s *inMemoryCMPStore) MarkRevokedByCertSerial(_ context.Context, certSerial string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, tx := range s.txs {
+		if tx.CertSerialNumber == certSerial && tx.State == storage.CMPTransactionStateConfirmed {
+			tx.State = storage.CMPTransactionStateRevoked
+			s.txs[id] = tx
+		}
+	}
+	return nil
+}
+
+func (s *inMemoryCMPStore) SelectAllByDMS(_ context.Context, dmsID string, _ bool, applyFunc func(storage.CMPTransaction), _ *resources.QueryParameters) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, tx := range s.txs {
+		if tx.DMSID == dmsID {
+			applyFunc(tx)
+		}
+	}
+	return "", nil
+}
 
 // mockServiceWithStore wraps a MockLightweightCMPService and exposes a
 // CMPTransactionRepo via cmpTransactionStorer so NewCMPHttpRoutes picks it up.
