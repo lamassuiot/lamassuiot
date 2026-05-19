@@ -27,6 +27,7 @@ type DMSManagerMiddleware func(services.DMSManagerService) services.DMSManagerSe
 type DMSManagerServiceBackend struct {
 	service          services.DMSManagerService
 	dmsStorage       storage.DMSRepo
+	cmptxStorage     storage.CMPTransactionRepo
 	deviceManagerCli services.DeviceManagerService
 	kmsClient        services.KMSService
 	caClient         services.CAService
@@ -40,12 +41,14 @@ type DMSManagerBuilder struct {
 	CAClient              services.CAService
 	KMSClient             services.KMSService
 	DMSStorage            storage.DMSRepo
+	CMPTransactionStorage storage.CMPTransactionRepo
 	DownstreamCertificate *x509.Certificate
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
 	svc := &DMSManagerServiceBackend{
 		dmsStorage:       builder.DMSStorage,
+		cmptxStorage:     builder.CMPTransactionStorage,
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
 		logger:           builder.Logger,
@@ -60,6 +63,13 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 
 func (svc *DMSManagerServiceBackend) SetService(service services.DMSManagerService) {
 	svc.service = service
+}
+
+// GetCMPTransactionRepo exposes the persistent CMP transaction store so that
+// the HTTP controller layer can access it without polluting the DMSManagerService
+// interface.  Controllers type-assert the service to CMPTransactionStorer.
+func (svc *DMSManagerServiceBackend) GetCMPTransactionRepo() storage.CMPTransactionRepo {
+	return svc.cmptxStorage
 }
 
 // ensureDeviceRegistered applies JITP registration logic given a device that may or may not exist.
@@ -97,9 +107,7 @@ func (svc DMSManagerServiceBackend) ensureDeviceRegistered(ctx context.Context, 
 	return device, nil
 }
 
-func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) ([]*x509.Certificate, crypto.Signer, error) {
-	ctx := context.Background()
-
+func (svc DMSManagerServiceBackend) LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error) {
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, aps)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not look up DMS '%s': %w", aps, err)
@@ -110,7 +118,10 @@ func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) ([]*x50
 
 	protectionCertSN := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ProtectionCertificateSerialNumber
 	if protectionCertSN == "" {
-		return nil, nil, fmt.Errorf("protection_certificate not configured for DMS '%s'", aps)
+		// No protection cert configured: the DMS opts out of response signing.
+		// (nil chain, nil signer, nil error) signals "send unprotected response"
+		// to the controller — distinct from a true error such as KMS unreachable.
+		return nil, nil, nil
 	}
 
 	cert, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: protectionCertSN})
@@ -121,17 +132,39 @@ func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) ([]*x50
 	caSigner := NewCertificateSigner(ctx, cert, svc.kmsClient)
 	leaf := (*x509.Certificate)(cert.Certificate)
 
-	// Fetch the issuer chain for the protection certificate so that the
-	// controller can populate extraCerts with the full chain.
-	chain := []*x509.Certificate{leaf}
-	if cert.IssuerCAMetadata.ID != "" {
-		issuerCA, caErr := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: cert.IssuerCAMetadata.ID})
-		if caErr == nil && issuerCA != nil {
-			chain = append(chain, (*x509.Certificate)(issuerCA.Certificate.Certificate))
-		}
-	}
-
+	chain := append([]*x509.Certificate{leaf}, svc.walkCAChain(ctx, cert.IssuerCAMetadata.ID)...)
 	return chain, caSigner, nil
+}
+
+// walkCAChain returns the issuer CA chain starting at startCAID and walking up
+// to the root. Returns an empty slice when startCAID is empty.
+// A maximum depth of 10 guards against pathological loops in misconfigured CA
+// hierarchies; in practice CA hierarchies are at most a few levels deep.
+func (svc DMSManagerServiceBackend) walkCAChain(ctx context.Context, startCAID string) []*x509.Certificate {
+	const maxDepth = 10
+	chain := make([]*x509.Certificate, 0, maxDepth)
+	currentID := startCAID
+	visited := make(map[string]struct{}, maxDepth)
+
+	for i := 0; i < maxDepth && currentID != ""; i++ {
+		if _, seen := visited[currentID]; seen {
+			break
+		}
+		visited[currentID] = struct{}{}
+
+		ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: currentID})
+		if err != nil || ca == nil {
+			break
+		}
+		chain = append(chain, (*x509.Certificate)(ca.Certificate.Certificate))
+
+		// Stop when the CA is self-signed (root) or no parent is recorded.
+		if ca.Certificate.IssuerCAMetadata.ID == "" || ca.Certificate.IssuerCAMetadata.ID == currentID {
+			break
+		}
+		currentID = ca.Certificate.IssuerCAMetadata.ID
+	}
+	return chain
 }
 
 func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {

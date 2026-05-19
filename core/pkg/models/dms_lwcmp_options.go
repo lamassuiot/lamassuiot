@@ -3,13 +3,20 @@ package models
 // EnrollmentOptionsLWCRFC9483 holds CMP-specific enrollment settings as defined
 // by RFC 9483 (Lightweight CMP Profile) and RFC 4210.
 type EnrollmentOptionsLWCRFC9483 struct {
-	// ConfirmationMode controls whether the EE must send an explicit certConf
-	// message (EXPLICIT) or whether confirmation is implied (IMPLICIT).
+	// AcceptImplicit controls whether the server is willing to skip the
+	// certConf round-trip when the EE asks for implicit confirmation
+	// (id-it-implicitConfirm OID in the request's generalInfo).
+	//
+	// When true and the EE requested it, the server omits the certConf step
+	// and includes id-it-implicitConfirm in the response generalInfo.
+	// When false, the server always requires explicit certConf even if the
+	// EE asked for implicit (the OID is dropped silently).
+	//
 	// RFC 9483 §4.1.1 / RFC 4210 §5.2.8.
-	ConfirmationMode CMPConfirmationMode `json:"confirmation_mode"`
+	AcceptImplicit bool `json:"accept_implicit"`
 
 	// ConfirmationTimeout is the maximum duration the server waits for a
-	// certConf message when ConfirmationMode is EXPLICIT.
+	// certConf message when explicit confirmation is required.
 	// RFC 4210 §5.2.8.
 	ConfirmationTimeout TimeDuration `json:"confirmation_timeout"`
 
@@ -28,16 +35,26 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// ProtectionCertificateSerialNumber is the serial number of the end-entity certificate
 	// whose key the RA uses to sign CMP response messages (signature-based PKIMessage protection).
 	// The key associated with the certificate must be stored in the KMS.
-	// If empty, CMP responses are sent unprotected.
 	ProtectionCertificateSerialNumber string `json:"protection_certificate"`
+
+	// EnforceRequestProtection controls whether incoming CMP requests MUST carry
+	// signature-based protection. When true, requests without a Protection field
+	// are rejected with a CMP error. When false (default), unprotected requests
+	// are accepted (e.g. for testing or clients that do not support request signing).
+	EnforceRequestProtection bool `json:"enforce_request_protection"`
+
+	// EnforcePOPO controls whether the Proof-Of-Possession (POPO) signature inside
+	// the CRMF CertReqMsg MUST be verified. RFC 9483 §4.1 requires POPO for ir/cr
+	// unless the request is protected by an authorized RA (raVerified) or possession
+	// is proven out-of-band (e.g. mTLS provides proof-of-identity+possession at the
+	// transport layer). For KUR, the message-level protection IS the POPO per
+	// RFC 9483 §4.1.3; when EnforcePOPO is true an unprotected KUR is rejected.
+	// Set to false when mTLS or another transport-level mechanism already proves
+	// possession so the inner CRMF self-signature is redundant.
+	// Defaults to false (Go zero value); set to true to enforce verification.
+	EnforcePOPO bool `json:"enforce_popo"`
+
 }
-
-type CMPConfirmationMode string
-
-const (
-	CMPConfirmationModeImplicit CMPConfirmationMode = "IMPLICIT"
-	CMPConfirmationModeExplicit CMPConfirmationMode = "EXPLICIT"
-)
 
 type CMPAuthMode string
 

@@ -10,7 +10,7 @@ The library `zjj/gocmpm` does not exist — the correct import is `github.com/zj
 From `backend/`, run `go get github.com/zjj/gocmp` then `go work sync` at the workspace root. This adds `gocmp` and its transitive deps (`gmsm`, `golibkit`) to `backend/go.mod`.
 
 ### 2. Add CMP enrollment protocol enum
-In `core/pkg/models/dms.go`, add the constant `CMP_RFC4210 EnrollmentProto = "CMP_RFC4210"` alongside the existing `EST_RFC7030` value.
+In `core/pkg/models/dms.go`, add the constant `CMP EnrollmentProto = "CMP_RFC9483"` alongside the existing `EST_RFC7030` value.
 
 ### 3. Create custom ASN.1 CMP types
 Create `backend/pkg/controllers/cmp_asn1.go` defining the raw structures needed for server-side parsing and the unimplemented body types:

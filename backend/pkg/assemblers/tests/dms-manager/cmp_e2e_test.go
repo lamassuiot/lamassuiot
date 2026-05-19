@@ -314,7 +314,7 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 					// which was populated with protSerial above.
 					provider, ok := f.dmsMgr.Service.(services.LightweightCMPProtectionProvider)
 					require.True(t, ok, "service must implement LightweightCMPProtectionProvider")
-					chain, _, err := provider.LWCProtectionCredentials(dmsID)
+					chain, _, err := provider.LWCProtectionCredentials(f.ctx, dmsID)
 					require.NoError(t, err)
 
 					path := filepath.Join(dir, "protection.crt")
@@ -432,7 +432,7 @@ func TestCMPE2ERevokedDeviceCert(t *testing.T) {
 	// Obtain the protection cert so openssl can pin it.
 	provider, ok := f.dmsMgr.Service.(services.LightweightCMPProtectionProvider)
 	require.True(t, ok)
-	chain2, _, err := provider.LWCProtectionCredentials(dms.ID)
+	chain2, _, err := provider.LWCProtectionCredentials(f.ctx, dms.ID)
 	require.NoError(t, err)
 	srvcertPath := filepath.Join(dir, "protection.crt")
 	require.NoError(t, os.WriteFile(srvcertPath, []byte(chelpers.CertificateToPEM(chain2[0])), 0o600))

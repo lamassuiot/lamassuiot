@@ -71,13 +71,13 @@ type LightweightCMPService interface {
 
 // LightweightCMPProtectionProvider exposes the credentials used to apply
 // signature-based protection to CMP responses.
-// LWCProtectionCredentials returns the full certificate chain (leaf first)
-// and the crypto.Signer for the leaf certificate's private key.
+// LWCProtectionCredentials returns the full certificate chain (leaf first,
+// root last) and the crypto.Signer for the leaf certificate's private key.
 // The chain is placed in the extraCerts field of all protected responses so
 // that EE clients can verify the RA's signature without pre-configuring the
 // RA certificate.
 type LightweightCMPProtectionProvider interface {
-	LWCProtectionCredentials(aps string) ([]*x509.Certificate, crypto.Signer, error)
+	LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error)
 }
 
 // LWCEnrollmentOptions is returned by LWCGetEnrollmentOptions and carries the
