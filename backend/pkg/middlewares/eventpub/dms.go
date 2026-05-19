@@ -106,6 +106,10 @@ func (mw dmsEventPublisher) GetAll(ctx context.Context, input services.GetAllInp
 	return mw.next.GetAll(ctx, input)
 }
 
+func (mw dmsEventPublisher) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
+	return mw.next.GetCMPTransactionsByDMS(ctx, input)
+}
+
 func (mw dmsEventPublisher) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return mw.next.CACerts(ctx, aps)
 }

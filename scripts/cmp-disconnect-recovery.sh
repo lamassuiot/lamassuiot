@@ -33,10 +33,11 @@
 ################################################################################
 set -euo pipefail
 
-DMS_ID="${1:-${DMS_ID:-CMP}}"
+DMS_ID="${1:-${DMS_ID:-sample-cmp-dms}}"
 SERVER="${2:-${SERVER:-http://localhost:8080}}"
 CMP_PATH="/api/dmsmanager/.well-known/cmp/p/${DMS_ID}"
-WORKDIR=$(mktemp -d)
+WORKDIR="${WORKDIR:-/tmp/cmp-recovery}"
+mkdir -p "${WORKDIR}"
 DEVICE_CN="cmp-recover-$(date +%s)"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 POLLREQ_CLIENT="${SCRIPT_DIR}/cmp_pollreq.py"
@@ -127,13 +128,18 @@ if [ -n "${PROT_SERIAL}" ] && [ "${PROT_SERIAL}" != "null" ]; then
 fi
 
 # ── Step 2: bootstrap credentials + device key ───────────────────────────────
+#
+# The DMS Manager now chain-validates the CMP signer cert against
+# client_certificate_settings.validation_cas (RFC-9483 mirror of EST mTLS
+# auth). We provision a fresh bootstrap CA via the Lamassu API and patch the
+# DMS to trust it; the helper writes signer.key + signer.crt into WORKDIR.
 echo ""
-echo "[2/6] Generating bootstrap signer + device key..."
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "${WORKDIR}/signer.key" 2>/dev/null
-openssl req -new -x509 -key "${WORKDIR}/signer.key" -out "${WORKDIR}/signer.crt" \
-    -subj "/CN=bootstrap-signer-recover" -days 1 2>/dev/null
+echo "[2/6] Provisioning bootstrap CA + signer (registered as ValidationCA)..."
+# shellcheck source=cmp-bootstrap-setup.sh
+. "${SCRIPT_DIR}/cmp-bootstrap-setup.sh"
+cmp_bootstrap_setup "${SERVER}" "${DMS_ID}" "${WORKDIR}" || fail "bootstrap setup failed"
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "${WORKDIR}/device.key" 2>/dev/null
-ok "signer + device keys ready"
+ok "bootstrap CA ${BOOTSTRAP_CA_ID} + signer + device keys ready"
 
 # ── Step 3: send IR and forcibly drop the connection mid-flight ─────────────
 echo ""

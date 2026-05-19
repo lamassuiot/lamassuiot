@@ -29,25 +29,42 @@ const (
 	// cert but the CA rejected the request. The reason is stored in
 	// ErrorMessage so pollReq can surface a meaningful CMP error to the EE.
 	CMPTransactionStateIssueFailed CMPTransactionState = "ISSUE_FAILED"
+	// CMPTransactionStateConfirmed means the EE sent a valid certConf and the
+	// server responded with pkiConf. The enrollment is complete. Rows in this
+	// state are retained for audit/UI visibility and are NOT swept by
+	// DeleteExpired.
+	CMPTransactionStateConfirmed CMPTransactionState = "CONFIRMED"
+	// CMPTransactionStateRevoked means the certificate that was enrolled in
+	// this transaction has been subsequently revoked (via CMP rr or other
+	// channel). The row persists for audit visibility.
+	CMPTransactionStateRevoked CMPTransactionState = "REVOKED"
 )
 
-// CMPTransaction holds the server-side state for one in-flight CMP enrollment
+// CMPTransaction holds the server-side state for one CMP enrollment
 // transaction, keyed by the hex-encoded transactionID from the PKIHeader.
 //
-// Two lifecycles are supported:
+// Full lifecycle:
 //   - Sync issuance (default): the row is inserted directly with State=ISSUED
-//     and CertDER populated. It exists between the IP/CP/KUP response and the
-//     EE's certConf, or until ExpiresAt.
+//     and CertDER populated. It persists through certConf → CONFIRMED, and
+//     optionally through revocation → REVOKED.
 //   - Async issuance (RFC 9483 §4.4): the row is inserted with State=PENDING
 //     and empty CertDER. A background worker calls LWCEnroll/LWCReenroll,
 //     populates CertDER and transitions to ISSUED (or sets ErrorMessage and
 //     transitions to ISSUE_FAILED). The EE retrieves the cert via pollReq.
+//
+// Terminal states (CONFIRMED, REVOKED) are retained for audit visibility and
+// are NOT subject to TTL-based deletion.
 type CMPTransaction struct {
 	// TransactionID is the hex-encoded bytes from the CMP PKIHeader transactionID
 	// field. Used as PRIMARY KEY; uniqueness enforced at DB level.
 	TransactionID string
 	// DMSID is the DMS this enrollment belongs to (path param from the request).
 	DMSID string
+	// CertSerialNumber is the hex-encoded serial number of the issued cert,
+	// extracted from CertDER at insertion time. Stored as a denormalized column
+	// to allow efficient lookup when a revocation arrives by serial.
+	// Empty when State == PENDING.
+	CertSerialNumber string
 	// CertDER is the raw DER of the issued certificate that the client must
 	// confirm. Stored so the server can verify the certHash in certConf.
 	// Empty when State == PENDING.
@@ -69,23 +86,31 @@ type CMPTransaction struct {
 	// IsReenrollment is true when the original request was kur (re-enrollment),
 	// false for ir/cr. The async worker uses this to choose LWCReenroll vs LWCEnroll.
 	IsReenrollment bool
+	// ConfirmedAt records when the certConf was received and validated. Zero
+	// value for non-confirmed transactions.
+	ConfirmedAt time.Time
 	// ExpiresAt is the absolute deadline after which the transaction is
-	// considered stale and eligible for deletion. Derived from the DMS's
-	// confirmation_timeout setting, defaulting to 5 minutes.
+	// considered stale and eligible for deletion. Only applies to in-flight
+	// states (PENDING, ISSUED, ISSUE_FAILED). Terminal states ignore this.
 	ExpiresAt time.Time
 	// CreatedAt records when the transaction was first persisted.
 	CreatedAt time.Time
 }
 
-// CMPTransactionRepo is the persistence interface for CMP in-flight transactions.
+// CMPTransactionRepo is the persistence interface for CMP enrollment transactions.
 //
-// Because CMP transaction state is ephemeral protocol data (not business domain
-// data), the interface is intentionally minimal: no pagination, filtering, or
-// statistics — just the operations the CMP controller and async worker need.
+// Transactions progress through the following states:
+//
+//	PENDING → ISSUED → CONFIRMED → (optionally) REVOKED
+//	                → ISSUE_FAILED
+//
+// Terminal states (CONFIRMED, REVOKED, ISSUE_FAILED) are retained indefinitely
+// for audit visibility; only in-flight states (PENDING, ISSUED) are subject to
+// TTL-based expiration.
 type CMPTransactionRepo interface {
-	// Exists reports whether a non-expired transaction with the given hex
-	// transactionID is present. It is a read-only check used to reject
-	// replayed requests before any enrollment side-effects occur.
+	// Exists reports whether an active (non-expired, non-terminal) transaction
+	// with the given hex transactionID is present. It is a read-only check
+	// used to reject replayed requests before any enrollment side-effects occur.
 	Exists(ctx context.Context, transactionID string) (bool, error)
 
 	// Insert persists a new transaction.
@@ -94,17 +119,22 @@ type CMPTransactionRepo interface {
 	// (RFC 4210 §5.1.1 transactionIdInUse).
 	Insert(ctx context.Context, tx CMPTransaction) error
 
-	// Select reads a transaction by its hex transactionID without deleting it.
+	// Select reads a transaction by its hex transactionID without modifying it.
 	// Used by pollReq, which may be called multiple times on the same row.
 	// Returns (zero, false, nil) when the transactionID is not found or has
-	// already expired.
+	// already expired (for in-flight states).
 	Select(ctx context.Context, transactionID string) (CMPTransaction, bool, error)
 
 	// SelectAndDelete atomically fetches and removes a transaction by its hex
-	// transactionID. The deletion is unconditional — whether the certConf is
-	// accepted or rejected, the transaction is spent. Returns (zero, false, nil)
-	// when the transactionID is not found or has already expired.
+	// transactionID. Retained for backward-compat but should be replaced by
+	// Confirm in new code paths.
 	SelectAndDelete(ctx context.Context, transactionID string) (CMPTransaction, bool, error)
+
+	// Confirm atomically transitions a transaction from ISSUED to CONFIRMED,
+	// recording the confirmation timestamp. Returns the row and true if the
+	// transition succeeded; (zero, false, nil) if the row was not found or
+	// was not in ISSUED state.
+	Confirm(ctx context.Context, transactionID string) (CMPTransaction, bool, error)
 
 	// UpdateState transitions a transaction's State (and, when ISSUED, its
 	// CertDER) atomically. Used by the async-issuance worker to record the
@@ -113,15 +143,33 @@ type CMPTransactionRepo interface {
 	// racing the worker); the caller treats that as a no-op.
 	UpdateState(ctx context.Context, transactionID string, state CMPTransactionState, certDER []byte, errorMessage string) error
 
+	// MarkRevokedByCertSerial transitions any CONFIRMED transaction with the
+	// given certificate serial number to REVOKED. This is called after a
+	// successful CMP revocation request so the UI can show the full lifecycle.
+	// No-op if no matching transaction is found.
+	MarkRevokedByCertSerial(ctx context.Context, certSerialNumber string) error
+
 	// SelectPending returns up to `limit` PENDING transactions whose ExpiresAt
 	// is in the future, oldest first. The async worker uses this to find rows
 	// it must process. Returns an empty slice when no work is queued.
 	SelectPending(ctx context.Context, limit int) ([]CMPTransaction, error)
 
-	// DeleteExpired removes all transactions whose ExpiresAt is in the past.
-	// Should be called periodically (e.g., every confirmation_timeout interval)
-	// by a background goroutine in the controller.
+	// DeleteExpired removes in-flight transactions (PENDING, ISSUED,
+	// ISSUE_FAILED) whose ExpiresAt is in the past. Terminal states
+	// (CONFIRMED, REVOKED) are never deleted by this method.
+	// Should be called periodically by a background goroutine.
 	DeleteExpired(ctx context.Context) error
+
+	// SelectAllByDMS streams every transaction belonging to the given DMS,
+	// honouring the standard query parameters (pagination, sort, filter). The
+	// applyFunc is invoked once per row in result order; the returned bookmark
+	// identifies the next page (empty when the cursor is exhausted). When
+	// exhaustiveRun is true the repo iterates all pages internally and only
+	// returns once every matching row has been delivered.
+	//
+	// This method returns ALL states (including terminal CONFIRMED/REVOKED)
+	// so the management UI can display both active and completed transactions.
+	SelectAllByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(CMPTransaction), queryParams *resources.QueryParameters) (string, error)
 }
 
 type DMSRepo interface {

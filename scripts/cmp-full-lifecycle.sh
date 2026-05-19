@@ -37,11 +37,19 @@
 set -euo pipefail
 
 # ── Parameters ─────────────────────────────────────────────────────────────────
-DMS_ID="${1:-${DMS_ID:-CMP}}"
+DMS_ID="${1:-${DMS_ID:-sample-cmp-dms}}"
 SERVER="${2:-${SERVER:-http://localhost:8080}}"
 CMP_PATH="/api/dmsmanager/.well-known/cmp/p/${DMS_ID}"
-WORKDIR=$(mktemp -d)
+WORKDIR="${WORKDIR:-/tmp/cmp-lifecycle}"
+mkdir -p "${WORKDIR}"
 DEVICE_CN="cmp-device-$(date +%s)"
+
+# Source bootstrap setup helper (provisions a CA + signer cert and patches the
+# DMS's client_certificate_settings.validation_cas). With the new server-side
+# CMP signer-cert chain validation, a self-signed signer is no longer accepted.
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=cmp-bootstrap-setup.sh
+. "${SCRIPT_DIR}/cmp-bootstrap-setup.sh"
 
 # Colour helpers (no-op when not a terminal)
 if [ -t 1 ]; then
@@ -129,17 +137,19 @@ else
     SRVCERT_FLAG="-srvcert ${WORKDIR}/srvcert.pem"
 fi
 
-# ── Step 2: Generate bootstrap signer credentials (for IR) ─────────────────────
+# ── Step 2: Provision bootstrap CA + signer (registered with the DMS) ─────────
 echo ""
-echo "[2/5] Generating bootstrap signer credential (self-signed, for IR)..."
+echo "[2/5] Provisioning bootstrap CA + signer cert (registered as ValidationCA)..."
 
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
-    -out "${WORKDIR}/signer.key" 2>/dev/null
-openssl req -new -x509 -key "${WORKDIR}/signer.key" \
-    -out "${WORKDIR}/signer.crt" \
-    -subj "/CN=bootstrap-signer" \
-    -days 1 2>/dev/null
-ok "signer.key + signer.crt (CN=bootstrap-signer, 1 day, self-signed)"
+cmp_bootstrap_setup "${SERVER}" "${DMS_ID}" "${WORKDIR}" \
+    || fail "Bootstrap setup failed"
+
+ok "bootstrap CA ${BOOTSTRAP_CA_ID} added to DMS validation_cas"
+ok "signer.key + signer.crt issued by bootstrap CA"
+
+# Refresh DMS_JSON so any later reads see the updated validation_cas.
+DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
+    || fail "Cannot re-fetch DMS ${DMS_ID} after bootstrap setup"
 
 # Generate device key (the key whose cert we want the CA to issue)
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
@@ -255,8 +265,11 @@ echo ""
 echo "  Files preserved in: ${WORKDIR}"
 echo ""
 echo "  Notes:"
-echo "    - signer.crt is self-signed (bootstrap); the DMS accepts it because"
-echo "      client_certificate_settings.chain_level_validation=0 (any cert)."
+echo "    - signer.crt is issued by bootstrap CA ${BOOTSTRAP_CA_ID}, which was"
+echo "      provisioned in Lamassu and added to the DMS's"
+echo "      client_certificate_settings.validation_cas before the IR. The"
+echo "      DMS Manager chain-validates the CMP signer cert against this list"
+echo "      (mirroring EST mTLS authentication)."
 echo "    - POPO is generated automatically by openssl when -newkey != -key."
 echo "    - -extracerts is required: openssl omits EE cert from extraCerts"
 echo "      unless explicitly listed (RFC 9483 §3.3 / openssl behaviour)."
