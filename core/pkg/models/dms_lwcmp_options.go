@@ -53,7 +53,6 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// possession so the inner CRMF self-signature is redundant.
 	// Defaults to false (Go zero value); set to true to enforce verification.
 	EnforcePOPO bool `json:"enforce_popo"`
-
 }
 
 type CMPAuthMode string
