@@ -22,15 +22,19 @@ const cmpPEMBlockType = "CMP Request"
 // samplesDir is the directory containing the reference CMP message files.
 const samplesDir = "cmp_message_samples"
 
-// --- PEM + rawPKIMessage parsing ---
+// ---------------------------------------------------------------------------
+// PEM + rawPKIMessage parsing
+// ---------------------------------------------------------------------------
 
-// TestParsePEMEncodedCMPMessages is the primary table-driven test for the
-// cmp_message_samples files. It validates:
-//   - PEM block type
-//   - ASN.1 unmarshal into rawPKIMessage
-//   - PKIHeader PVNO
-//   - PKIBody tag, ASN.1 class, and compound flag
-//   - Subject CN extractable from the CertReqMessages body
+// TestParsePEMEncodedCMPMessages validates that real CMP messages captured from
+// production OpenSSL-based clients can be correctly decoded through the full
+// parsing pipeline. For each reference sample it verifies:
+//   - The PEM block type is "CMP Request" (RFC 6712 §3).
+//   - The DER payload unmarshals into rawPKIMessage without error.
+//   - PKIHeader carries pvno=cmp2000 (2) per RFC 9480 §2.20.
+//   - PKIBody CHOICE tag matches the expected operation (ir, cr, etc.).
+//   - The Subject CN is extractable from the first CertTemplate, proving the
+//     manual ASN.1 peeling is compatible with EXPLICIT-tagged real-world messages.
 func TestParsePEMEncodedCMPMessages(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -96,10 +100,14 @@ func TestParsePEMEncodedCMPMessages(t *testing.T) {
 	}
 }
 
-// --- Body-tag semantics ---
+// ---------------------------------------------------------------------------
+// Body-tag semantics
+// ---------------------------------------------------------------------------
 
-// TestParseCMPBodyTagMeaning documents the mapping from file extension to the
-// expected RFC 4210 PKIBody CHOICE tag.
+// TestParseCMPBodyTagMeaning verifies the correlation between sample file
+// extensions and the RFC 4210 §5.1.2 PKIBody CHOICE tag numbers. This acts as
+// a regression test ensuring that the test harness correctly identifies the
+// message type stored in each fixture file.
 func TestParseCMPBodyTagMeaning(t *testing.T) {
 	tests := []struct {
 		file    string
@@ -126,10 +134,17 @@ func TestParseCMPBodyTagMeaning(t *testing.T) {
 	}
 }
 
-// --- Negative / error cases ---
+// ---------------------------------------------------------------------------
+// Negative / error cases
+// ---------------------------------------------------------------------------
 
-// TestParseCMPPEM_Errors covers invalid inputs that must be rejected at the
-// PEM-decode or ASN.1-unmarshal stage.
+// TestParseCMPPEM_Errors covers the set of invalid inputs that the CMP parsing
+// pipeline must reject before reaching business logic. These include:
+//   - Empty or non-PEM input → nil block (no panic).
+//   - Wrong PEM block type (e.g. "CERTIFICATE") → type mismatch detection.
+//   - Garbage DER content inside a correctly typed PEM block → ASN.1 unmarshal error.
+//   - Truncated DER (only the SEQUENCE header) → structural error.
+//   - Garbage body bytes passed to rewrapBodyAsSequence → graceful failure.
 func TestParseCMPPEM_Errors(t *testing.T) {
 	t.Run("empty input yields nil PEM block", func(t *testing.T) {
 		block, _ := pem.Decode([]byte{})
@@ -199,10 +214,14 @@ func TestParseCMPPEM_Errors(t *testing.T) {
 	})
 }
 
-// --- Internal helper unit tests ---
+// ---------------------------------------------------------------------------
+// Internal helper unit tests
+// ---------------------------------------------------------------------------
 
-// TestCMPASN1Helpers exercises the low-level encoding helpers introduced in
-// cmp_asn1.go without requiring a live service.
+// TestCMPASN1Helpers exercises the low-level ASN.1 encoding/decoding helpers
+// defined in cmp_asn1.go in isolation (no HTTP handler, no mock service).
+// Covers: rewrapBodyAsSequence, certHashSHA256, marshalPKIConfBody,
+// marshalErrorBody, marshalCertRepBody (both IP and CP tags), and hashesEqual.
 func TestCMPASN1Helpers(t *testing.T) {
 	t.Run("rewrapBodyAsSequence adds UNIVERSAL SEQUENCE header", func(t *testing.T) {
 		content := []byte{0x02, 0x01, 0x00} // INTEGER(0)
@@ -308,12 +327,15 @@ func TestCMPASN1Helpers(t *testing.T) {
 	})
 }
 
-// --- TransactionIDPresentInSamples verifies that the raw header DER contains
-// the expected 16-byte opaque transaction-id value used by the test fixtures.
-// This is kept separate because gocmp's PKIHeader decodes it as empty for
-// samples that use EXPLICIT rather than IMPLICIT tag encoding for SenderKID
-// (which causes subsequent optional-field parsing to stall).  The raw bytes
-// prove the values are present in the wire format.
+// ---------------------------------------------------------------------------
+// TransactionID presence in raw DER
+// ---------------------------------------------------------------------------
+
+// TestTransactionIDPresentInRawHeaderBytes verifies that the raw header DER of
+// each reference sample contains the expected 16-byte opaque transactionID.
+// This confirms our manual ASN.1 peeling extracts the transactionID correctly
+// despite gocmp’s PKIHeader decoder failing on samples using EXPLICIT tagging
+// for SenderKID (which stalls its optional-field parser).
 func TestTransactionIDPresentInRawHeaderBytes(t *testing.T) {
 	// Transaction IDs extracted via manual asn1.RawValue peeling (hex).
 	tests := []struct {
@@ -345,15 +367,14 @@ func TestTransactionIDPresentInRawHeaderBytes(t *testing.T) {
 	}
 }
 
-// --- SenderNonce presence (raw header scanning) ---
+// ---------------------------------------------------------------------------
+// SenderNonce presence
+// ---------------------------------------------------------------------------
 
-// TestSenderNoncePresentInSamples verifies that each sample PKIHeader carries a
-// SenderNonce [5] EXPLICIT OCTET STRING. The caf-pki-local-agent echoes it as
-// RecipNonce in every response; a missing nonce breaks replay protection.
-//
-// Note: gocmp's PKIHeader cannot decode SenderNonce from EXPLICIT-tagged
-// samples (SenderKID offset stalls optional-field parsing), so we scan the raw
-// PKIHeader SEQUENCE bytes instead of reading msg.Header.SenderNonce directly.
+// TestSenderNoncePresentInSamples verifies that each fixture PKIHeader carries
+// a non-empty SenderNonce [5] EXPLICIT OCTET STRING. The server echoes this
+// value as RecipNonce in every response to provide replay protection per
+// RFC 4210 §5.1.1. A missing nonce would break the certConf handshake.
 func TestSenderNoncePresentInSamples(t *testing.T) {
 	tests := []struct{ file string }{
 		{"0001.ip"},
@@ -414,15 +435,14 @@ func pkiHeaderFieldIsNonce(headerBytes []byte, tag int) bool {
 	return false
 }
 
-// --- CertReqID from samples (manual ASN.1 peeling) ---
+// ---------------------------------------------------------------------------
+// CertReqID extraction
+// ---------------------------------------------------------------------------
 
-// TestCertReqIDFromSamples verifies that the certReqId field is a valid
-// non-negative integer in each sample. The server echoes it back inside the
-// IP/CP response so the client can match the issued certificate to its request.
-//
-// decodeCertReqMessages (which uses gocmp with IMPLICIT-only tag expectations)
-// cannot decode these EXPLICIT-tagged samples from real CMP clients. We use
-// the same manual ASN.1 peeling approach as extractSubjectCNFromBody instead.
+// TestCertReqIDFromSamples verifies that the certReqId INTEGER field is a valid
+// non-negative value in each reference sample. The server MUST echo this back
+// in the CertResponse inside IP/CP so that the client can correlate issued
+// certificates with their requests (RFC 4211 §6).
 func TestCertReqIDFromSamples(t *testing.T) {
 	tests := []struct{ file string }{
 		{"0001.ip"},
@@ -447,12 +467,14 @@ func TestCertReqIDFromSamples(t *testing.T) {
 	}
 }
 
-// --- PublicKey parseability from samples (manual ASN.1 peeling) ---
+// ---------------------------------------------------------------------------
+// PublicKey parseability
+// ---------------------------------------------------------------------------
 
-// TestCertTemplatePublicKeyFromSamples verifies that the PublicKey field inside
-// the CertTemplate is a valid PKIX SubjectPublicKeyInfo. The caf-pki-local-agent
-// calls x509.ParsePKIXPublicKey on it before issuing a certificate; an
-// unparseable key causes enrollment to fail.
+// TestCertTemplatePublicKeyFromSamples verifies that the SubjectPublicKeyInfo
+// bytes extracted from CertTemplate [6] in each fixture are parseable by
+// x509.ParsePKIXPublicKey. This exercises the wrapSequenceDER re-wrapping
+// logic needed because IMPLICIT tagging strips the outer SEQUENCE TLV.
 func TestCertTemplatePublicKeyFromSamples(t *testing.T) {
 	tests := []struct{ file string }{
 		{"0001.ip"},
@@ -481,13 +503,152 @@ func TestCertTemplatePublicKeyFromSamples(t *testing.T) {
 	}
 }
 
-// --- buildResponseHeader nonce/transaction echoing ---
+// ---------------------------------------------------------------------------
+// Async-issuance ASN.1 helpers (pollReq / pollRep / waiting status)
+// ---------------------------------------------------------------------------
 
-// TestBuildResponseHeader verifies the three invariants the caf-pki-local-agent
-// relies on when processing a CMP response:
-//  1. TransactionID is echoed unchanged (correlation).
-//  2. RecipNonce is set to the request SenderNonce (replay protection).
-//  3. A fresh SenderNonce is generated (different from RecipNonce).
+// TestMarshalCertRepWaitingBody verifies that the "waiting" CertRepMessage:
+//   - is a UNIVERSAL SEQUENCE (the body content the controller wraps with [1] for ip),
+//   - carries exactly one CertResponse whose PKIStatus is 3 (waiting),
+//   - has NO CertifiedKeyPair (because there is no cert yet),
+//   - echoes the certReqId provided by the EE so the client correlates the response.
+//
+// This is the wire shape RFC 9483 §4.4 requires the RA to emit on the initial
+// ip/cp/kup response when the cert is not yet ready.
+func TestMarshalCertRepWaitingBody(t *testing.T) {
+	der, err := marshalCertRepWaitingBody(7)
+	require.NoError(t, err)
+	require.NotEmpty(t, der)
+
+	// CertRepMessage ::= SEQUENCE { response SEQUENCE OF CertResponse } per
+	// RFC 4210 §5.3.4. Walk: outer SEQUENCE → inner SEQUENCE OF → first entry.
+
+	// 1. Outer SEQUENCE (CertRepMessage struct).
+	var certRepMsg asn1.RawValue
+	_, err = asn1.Unmarshal(der, &certRepMsg)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.TagSequence, certRepMsg.Tag)
+	assert.Equal(t, asn1.ClassUniversal, certRepMsg.Class)
+	assert.True(t, certRepMsg.IsCompound)
+
+	// 2. response field: SEQUENCE OF CertResponse.
+	var responseSeqOf asn1.RawValue
+	_, err = asn1.Unmarshal(certRepMsg.Bytes, &responseSeqOf)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.TagSequence, responseSeqOf.Tag, "response field is SEQUENCE OF")
+
+	// 3. First CertResponse entry.
+	var firstResp asn1.RawValue
+	_, err = asn1.Unmarshal(responseSeqOf.Bytes, &firstResp)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.TagSequence, firstResp.Tag, "CertResponse is SEQUENCE")
+
+	// 4. certReqId = 7.
+	var certReqID int
+	rest, err := asn1.Unmarshal(firstResp.Bytes, &certReqID)
+	require.NoError(t, err)
+	assert.Equal(t, 7, certReqID, "certReqId must be echoed from the EE's request")
+
+	// 5. PKIStatusInfo SEQUENCE → status = 3 (waiting).
+	var statusInfo asn1.RawValue
+	leftover, err := asn1.Unmarshal(rest, &statusInfo)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.TagSequence, statusInfo.Tag)
+
+	var status int
+	_, err = asn1.Unmarshal(statusInfo.Bytes, &status)
+	require.NoError(t, err)
+	assert.Equal(t, pkiStatusWaiting, status,
+		"PKIStatus in waiting body must be 3 per RFC 4210 §5.2.3")
+
+	// 6. No CertifiedKeyPair — leftover after PKIStatusInfo must be empty.
+	assert.Empty(t, leftover, "waiting CertResponse must NOT carry CertifiedKeyPair")
+}
+
+// TestMarshalPollRepBody verifies the wire shape of pollRep:
+//   - SEQUENCE OF { certReqId INTEGER, checkAfter INTEGER }
+//   - both fields carry the values the caller supplied
+//   - exactly one entry per RFC 4210 §5.3.22 (single outstanding certReqId)
+func TestMarshalPollRepBody(t *testing.T) {
+	der, err := marshalPollRepBody(5, 60)
+	require.NoError(t, err)
+
+	var outer asn1.RawValue
+	_, err = asn1.Unmarshal(der, &outer)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.TagSequence, outer.Tag, "PollRepContent is SEQUENCE OF")
+
+	var entry asn1.RawValue
+	rest, err := asn1.Unmarshal(outer.Bytes, &entry)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.TagSequence, entry.Tag)
+	assert.Empty(t, rest, "exactly one entry expected")
+
+	var got pollRepEntry
+	_, err = asn1.Unmarshal(entry.FullBytes, &got)
+	require.NoError(t, err)
+	assert.Equal(t, 5, got.CertReqID, "certReqId echoed from EE's pollReq")
+	assert.Equal(t, 60, got.CheckAfter, "checkAfter passed through as seconds")
+}
+
+// TestDecodePollReqContent_RoundTrip verifies that a hand-built PollReqContent
+// (SEQUENCE OF SEQUENCE { certReqId }) decodes back to the same certReqId.
+// PollReqContent is a top-level SEQUENCE OF — NOT wrapped in an outer struct,
+// per RFC 4210 §5.3.22. Marshaling a slice directly produces SEQUENCE OF;
+// wrapping in a struct would add a spurious outer SEQUENCE.
+func TestDecodePollReqContent_RoundTrip(t *testing.T) {
+	type pollReqEntry struct {
+		CertReqID int
+	}
+	der, err := asn1.Marshal([]pollReqEntry{{CertReqID: 42}})
+	require.NoError(t, err)
+
+	got, err := decodePollReqContent(der)
+	require.NoError(t, err)
+	assert.Equal(t, 42, got, "decoded certReqId must match the encoded one")
+}
+
+// TestDecodePollReqContent_RejectsMalformed verifies that callers don't have
+// to themselves filter junk before invoking decodePollReqContent.
+func TestDecodePollReqContent_RejectsMalformed(t *testing.T) {
+	t.Run("garbage bytes", func(t *testing.T) {
+		_, err := decodePollReqContent([]byte{0xFF, 0xFE, 0xFD})
+		assert.Error(t, err)
+	})
+
+	t.Run("not a SEQUENCE", func(t *testing.T) {
+		// An INTEGER instead of a SEQUENCE.
+		notSeq, _ := asn1.Marshal(7)
+		_, err := decodePollReqContent(notSeq)
+		assert.Error(t, err)
+	})
+
+	t.Run("empty SEQUENCE has no certReqId entry", func(t *testing.T) {
+		emptySeq, _ := asn1.Marshal(asn1.RawValue{
+			Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true,
+		})
+		_, err := decodePollReqContent(emptySeq)
+		assert.Error(t, err)
+	})
+}
+
+// TestCmpTagToString_PollMessages keeps the tag→string mapping in sync with
+// the new constants — broken logging fields are easy to miss in code review,
+// hard to find in production.
+func TestCmpTagToString_PollMessages(t *testing.T) {
+	assert.Equal(t, "pollReq", cmpTagToString(cmpBodyTagPollReq))
+	assert.Equal(t, "pollRep", cmpTagToString(cmpBodyTagPollRep))
+}
+
+// ---------------------------------------------------------------------------
+// Response header construction
+// ---------------------------------------------------------------------------
+
+// TestBuildResponseHeader verifies the three critical invariants the EE
+// relies on when processing a CMP response (RFC 4210 §5.1.1):
+//  1. TransactionID is echoed unchanged → enables request/response correlation.
+//  2. RecipNonce equals request SenderNonce → proves freshness (replay protection).
+//  3. A new SenderNonce is generated → starts the nonce chain for certConf.
 func TestBuildResponseHeader(t *testing.T) {
 	req := requestPKIHeader{
 		PVNO:          pvnoCMP2000,

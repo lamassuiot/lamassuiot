@@ -69,8 +69,8 @@ type MockLightweightCMPServiceWithProtection struct {
 	MockLightweightCMPService
 }
 
-func (m *MockLightweightCMPServiceWithProtection) LWCProtectionCredentials(aps string) ([]*x509.Certificate, crypto.Signer, error) {
-	args := m.Called(aps)
+func (m *MockLightweightCMPServiceWithProtection) LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error) {
+	args := m.Called(ctx, aps)
 	certs, _ := args.Get(0).([]*x509.Certificate)
 	signer, _ := args.Get(1).(crypto.Signer)
 	return certs, signer, args.Error(2)
