@@ -143,10 +143,10 @@ func (mw DmsAuditEventPublisher) LWCGetEnrollmentOptions(ctx context.Context, ap
 	return mw.next.LWCGetEnrollmentOptions(ctx, aps)
 }
 
-func (mw DmsAuditEventPublisher) LWCProtectionCredentials(aps string) ([]*x509.Certificate, crypto.Signer, error) {
+func (mw DmsAuditEventPublisher) LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error) {
 	provider, ok := mw.next.(services.LightweightCMPProtectionProvider)
 	if !ok {
 		return nil, nil, fmt.Errorf("cmp protection credentials not available")
 	}
-	return provider.LWCProtectionCredentials(aps)
+	return provider.LWCProtectionCredentials(ctx, aps)
 }

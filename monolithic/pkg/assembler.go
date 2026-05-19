@@ -379,7 +379,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ReadHeaderTimeout: time.Second * 10,
 			}
 
-			log.Fatal(serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"))
+			if err := serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"); err != nil {
+				log.Printf("HTTPS gateway stopped: %v", err)
+			}
 		}()
 
 		go func() {
@@ -389,7 +391,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ReadHeaderTimeout: time.Second * 10,
 			}
 
-			log.Fatal(serverHttp.Serve(listenerHttp))
+			if err := serverHttp.Serve(listenerHttp); err != nil {
+				log.Printf("HTTP gateway stopped: %v", err)
+			}
 		}()
 
 		return usedHttpPort, usedHttpsPort, nil
