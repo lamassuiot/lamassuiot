@@ -36,27 +36,31 @@ type rawResponsePKIMessage struct {
 // extraCerts (the EE's protection certificate per RFC 9483 §3.2) to verify
 // the Protection BitString over DER(header) || DER(body).
 //
+// On success it returns the parsed EE certificate so the caller can apply
+// further trust checks (ValidationCAs, revocation, RFC 9483 §4.1.3 signer
+// binding). When the message carries no protection and required is false,
+// the function returns (nil, nil) to signal "unprotected, accepted".
+//
 // If required is true, the function returns an error when the incoming message
-// carries no protection field. If required is false, an unprotected message is
-// accepted as-is and the function returns nil immediately.
+// carries no protection field.
 //
 // MAC-based protection algorithms (id-PasswordBasedMac, id-DHBasedMac) are
 // always rejected regardless of the required flag — only signature-based
 // protection (RSA, ECDSA, Ed25519) is supported.
-func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.ObjectIdentifier, required bool) error {
+func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.ObjectIdentifier, required bool) (*x509.Certificate, error) {
 	// Reject MAC-based protection algorithms unconditionally.
 	if protectionAlgOID.Equal(oidPasswordBasedMac) || protectionAlgOID.Equal(oidDHBasedMac) {
-		return fmt.Errorf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)
+		return nil, fmt.Errorf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)
 	}
 
 	if len(full.Protection.Bytes) == 0 {
 		if required {
-			return fmt.Errorf("request protection absent: DMS configuration requires signature-protected CMP requests")
+			return nil, fmt.Errorf("request protection absent: DMS configuration requires signature-protected CMP requests")
 		}
-		return nil
+		return nil, nil
 	}
 	if len(full.ExtraCerts) == 0 {
-		return fmt.Errorf("protection present but extraCerts is empty: cannot identify EE certificate")
+		return nil, fmt.Errorf("protection present but extraCerts is empty: cannot identify EE certificate")
 	}
 
 	ec0 := full.ExtraCerts[0]
@@ -71,14 +75,14 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.Objec
 		var err2 error
 		eeCert, err2 = x509.ParseCertificate(ec0.Bytes)
 		if err2 != nil {
-			return fmt.Errorf("parse EE certificate from extraCerts[0] (fb=%d,b=%d): fb_err=%v, b_err=%v",
+			return nil, fmt.Errorf("parse EE certificate from extraCerts[0] (fb=%d,b=%d): fb_err=%v, b_err=%v",
 				len(ec0.FullBytes), len(ec0.Bytes), err, err2)
 		}
 	}
 
 	payload, err := marshalProtectedPayload(full.Header.FullBytes, full.Body.FullBytes)
 	if err != nil {
-		return fmt.Errorf("marshal protected payload for verification: %w", err)
+		return nil, fmt.Errorf("marshal protected payload for verification: %w", err)
 	}
 
 	// full.Protection is decoded from the [0] EXPLICIT wrapper as a RawValue.
@@ -88,15 +92,15 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.Objec
 	// We need one more level of unmarshalling to reach the actual signature.
 	var innerBitString asn1.RawValue
 	if _, err := asn1.Unmarshal(full.Protection.Bytes, &innerBitString); err != nil {
-		return fmt.Errorf("parse protection BitString: %w", err)
+		return nil, fmt.Errorf("parse protection BitString: %w", err)
 	}
 	if innerBitString.Tag != asn1.TagBitString {
-		return fmt.Errorf("protection field is not a BitString (tag=%d)", innerBitString.Tag)
+		return nil, fmt.Errorf("protection field is not a BitString (tag=%d)", innerBitString.Tag)
 	}
 	// innerBitString.Bytes = [unused_bits_count, sig_octets...]
 	// For whole-byte signatures unused_bits_count is always 0x00.
 	if len(innerBitString.Bytes) < 1 {
-		return fmt.Errorf("protection BitString is empty")
+		return nil, fmt.Errorf("protection BitString is empty")
 	}
 	protBytes := innerBitString.Bytes[1:] // skip unused-bits byte
 
@@ -104,37 +108,37 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.Objec
 	// This ensures we use the same hash the sender used when signing.
 	hashAlg, err := hashFromSignatureAlgOID(protectionAlgOID)
 	if err != nil {
-		return fmt.Errorf("protection algorithm: %w", err)
+		return nil, fmt.Errorf("protection algorithm: %w", err)
 	}
 
 	switch pub := eeCert.PublicKey.(type) {
 	case *ecdsa.PublicKey:
 		if hashAlg == 0 {
-			return fmt.Errorf("protection verification failed: ECDSA requires a hash algorithm")
+			return nil, fmt.Errorf("protection verification failed: ECDSA requires a hash algorithm")
 		}
 		h := hashAlg.New()
 		h.Write(payload)
 		if !ecdsa.VerifyASN1(pub, h.Sum(nil), protBytes) {
-			return fmt.Errorf("protection verification failed: invalid ECDSA signature")
+			return nil, fmt.Errorf("protection verification failed: invalid ECDSA signature")
 		}
 	case *rsa.PublicKey:
 		if hashAlg == 0 {
-			return fmt.Errorf("protection verification failed: RSA requires a hash algorithm")
+			return nil, fmt.Errorf("protection verification failed: RSA requires a hash algorithm")
 		}
 		h := hashAlg.New()
 		h.Write(payload)
 		if err := rsa.VerifyPKCS1v15(pub, hashAlg, h.Sum(nil), protBytes); err != nil {
-			return fmt.Errorf("protection verification failed: %w", err)
+			return nil, fmt.Errorf("protection verification failed: %w", err)
 		}
 	case ed25519.PublicKey:
 		if !ed25519.Verify(pub, payload, protBytes) {
-			return fmt.Errorf("protection verification failed: invalid Ed25519 signature")
+			return nil, fmt.Errorf("protection verification failed: invalid Ed25519 signature")
 		}
 	default:
-		return fmt.Errorf("unsupported EE public key type for protection verification: %T", pub)
+		return nil, fmt.Errorf("unsupported EE public key type for protection verification: %T", pub)
 	}
 
-	return nil
+	return eeCert, nil
 }
 
 func marshalProtectedResponse(

@@ -11,6 +11,14 @@ import (
 
 const (
 	IdentityExtractorClientCertificate IdentityExtractor = "CLIENT_CERTIFICATE"
+
+	// IdentityExtractorCMPSignerCertificate carries the end-entity certificate
+	// parsed from the protected CMP request's extraCerts[0] (RFC 9483 §3.2).
+	// It is set on the request context by the CMP HTTP handler after a
+	// successful signature-protection verification and consumed by
+	// LWCEnroll/LWCReenroll to apply ValidationCAs and revocation checks,
+	// mirroring the EST mTLS auth path.
+	IdentityExtractorCMPSignerCertificate IdentityExtractor = "CMP_SIGNER_CERTIFICATE"
 )
 
 type ClientCertificateExtractor struct {
