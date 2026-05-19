@@ -7,7 +7,8 @@ import (
 	"fmt"
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
@@ -187,10 +188,23 @@ func (mw dmsEventPublisher) LWCGetEnrollmentOptions(ctx context.Context, aps str
 	return mw.next.LWCGetEnrollmentOptions(ctx, aps)
 }
 
-func (mw dmsEventPublisher) LWCProtectionCredentials(aps string) ([]*x509.Certificate, crypto.Signer, error) {
+func (mw dmsEventPublisher) LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error) {
 	provider, ok := mw.next.(services.LightweightCMPProtectionProvider)
 	if !ok {
 		return nil, nil, fmt.Errorf("cmp protection credentials not available")
 	}
-	return provider.LWCProtectionCredentials(aps)
+	return provider.LWCProtectionCredentials(ctx, aps)
+}
+
+// GetCMPTransactionRepo forwards the optional cmpTransactionStorer interface
+// through the middleware chain so the HTTP controller can reach the backend repo
+// regardless of how many middleware layers are stacked.
+func (mw dmsEventPublisher) GetCMPTransactionRepo() storage.CMPTransactionRepo {
+	type repoProvider interface {
+		GetCMPTransactionRepo() storage.CMPTransactionRepo
+	}
+	if p, ok := mw.next.(repoProvider); ok {
+		return p.GetCMPTransactionRepo()
+	}
+	return nil
 }

@@ -158,6 +158,22 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 	return s.DMS, nil
 }
 
+func (s *PostgresStorageEngine) GetCMPTransactionStorage() (storage.CMPTransactionRepo, error) {
+	if s.CMPTx == nil {
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DMS_DB_NAME)
+		if err != nil {
+			return nil, fmt.Errorf("could not create postgres client for CMP transactions: %s", err)
+		}
+
+		cmptxStore, err := NewCMPTransactionRepository(s.logger, psqlCli)
+		if err != nil {
+			return nil, fmt.Errorf("could not initialize postgres CMP transaction client: %s", err)
+		}
+		s.CMPTx = cmptxStore
+	}
+	return s.CMPTx, nil
+}
+
 func (s *PostgresStorageEngine) GetEnventsStorage() (storage.EventRepository, error) {
 	if s.Events == nil {
 		s.initialiceSubscriptionsStorage()
