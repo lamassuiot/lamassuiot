@@ -817,28 +817,15 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
 
-	authMode := enrollSettings.EnrollmentOptionsESTRFC7030.AuthMode
-	switch authMode {
-	case models.ESTAuthModeClientCertificate:
-		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificate)
-		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
-		if !hasValue || len(clientCerts) == 0 {
-			lFunc.Errorf("aborting reenrollment. No client certificate was presented")
-			return nil, errs.ErrDMSAuthModeNotSupported
-		}
-		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName); err != nil {
-			return nil, err
-		}
-
-	case models.ESTAuthModeNoAuth:
-		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeNoAuth)
-		lFunc = lFunc.WithField("auth-status", "verified")
-		lFunc = lFunc.WithField("auth-uri", "NoAuth")
-		lFunc.Warnf("DMS is configured with NoAuth, allowing reenrollment")
-
-	default:
-		lFunc.Errorf("aborting reenrollment. DMS is not correctly configured. No auth method configured. Specify an authentication method")
+	// Always require client certificate for authentication in reenrollment, even if enrollment doesn't require it, as EST RFC7030 recommends.
+	lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificate)
+	clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
+	if !hasValue || len(clientCerts) == 0 {
+		lFunc.Errorf("aborting reenrollment. No client certificate was presented")
 		return nil, errs.ErrDMSAuthModeNotSupported
+	}
+	if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName); err != nil {
+		return nil, err
 	}
 
 	lFunc = lFunc.WithField("auth-status", "verified")
