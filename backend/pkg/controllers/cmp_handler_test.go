@@ -190,7 +190,6 @@ func postCMP(t *testing.T, router *gin.Engine, dmsID string, derMsg []byte) *htt
 	return w
 }
 
-
 // ---------------------------------------------------------------------------
 // PKIMessage builder helpers
 // ---------------------------------------------------------------------------
@@ -886,7 +885,7 @@ func TestHandleCMP_ImplicitConfirm_NoCertConf(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			AcceptImplicit:   true,
+			AcceptImplicit: true,
 		}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
@@ -921,7 +920,8 @@ func TestHandleCMP_ImplicitConfirm_NoCertConf(t *testing.T) {
 
 // TestHandleCMP_ExplicitConfirm_CertConfSucceeds verifies the baseline
 // explicit confirmation flow (RFC 4210 §5.2.8):
-//   ir → IP (enroll succeeds, transaction stored) → certConf (hash matches) → pkiConf
+//
+//	ir → IP (enroll succeeds, transaction stored) → certConf (hash matches) → pkiConf
 //
 // The test validates:
 //   - IR produces an IP response (tag 1).
@@ -932,7 +932,7 @@ func TestHandleCMP_ExplicitConfirm_CertConfSucceeds(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit:   false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1029,7 +1029,7 @@ func TestHandleCMP_ProtectionVerification_NoProtection(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit:   false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1226,7 +1226,8 @@ func injectProtectionAlgOID(t *testing.T, msgDER []byte, algOID asn1.ObjectIdent
 
 // TestHandleCMP_KUR_ExplicitConfirm verifies the full Key Update Request
 // (reenroll) flow with explicit confirmation:
-//   kur (tag 7) → kup (tag 8) → certConf (tag 24) → pkiConf (tag 19)
+//
+//	kur (tag 7) → kup (tag 8) → certConf (tag 24) → pkiConf (tag 19)
 //
 // KUR uses the same CertReqMessages structure as IR but with body tag 7.
 // The handler routes to LWCReenroll instead of LWCEnroll.
@@ -1235,7 +1236,7 @@ func TestHandleCMP_KUR_ExplicitConfirm(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit:   false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
 	svc.On("LWCReenroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1273,7 +1274,7 @@ func TestHandleCMP_KUR_ImplicitConfirm(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit:   true}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
 	svc.On("LWCReenroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1421,7 +1422,7 @@ func TestHandleCMP_DuplicateTransactionID(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit:   false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1459,7 +1460,7 @@ func TestHandleCMP_CertConf_WrongHash(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit:   false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1543,7 +1544,7 @@ func TestHandleCMP_CertConf_RecipNonceMismatch(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit:   false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1766,8 +1767,8 @@ func TestHandleCMP_POPO_ValidSignature(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      true,
-			AcceptImplicit:   true,
+			EnforcePOPO:    true,
+			AcceptImplicit: true,
 		}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
@@ -1799,8 +1800,8 @@ func TestHandleCMP_POPO_InvalidSignature(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      true,
-			AcceptImplicit:   true,
+			EnforcePOPO:    true,
+			AcceptImplicit: true,
 		}, nil)
 
 	router, _ := newTestRouterWithStore(svc)
@@ -1833,8 +1834,8 @@ func TestHandleCMP_POPO_Absent_Enforced(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      true,
-			AcceptImplicit:   true,
+			EnforcePOPO:    true,
+			AcceptImplicit: true,
 		}, nil)
 
 	router, _ := newTestRouterWithStore(svc)
@@ -1867,8 +1868,8 @@ func TestHandleCMP_POPO_Absent_NotEnforced(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      false,
-			AcceptImplicit:   true,
+			EnforcePOPO:    false,
+			AcceptImplicit: true,
 		}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
@@ -1902,8 +1903,8 @@ func TestHandleCMP_POPO_RAVerified(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      true,
-			AcceptImplicit:   true,
+			EnforcePOPO:    true,
+			AcceptImplicit: true,
 		}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
@@ -1936,8 +1937,8 @@ func TestHandleCMP_KUR_EnforcePOPO_RejectsUnprotected(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      true,
-			AcceptImplicit:   true,
+			EnforcePOPO:    true,
+			AcceptImplicit: true,
 		}, nil)
 
 	router, _ := newTestRouterWithStore(svc)
@@ -1970,8 +1971,8 @@ func TestHandleCMP_KUR_EnforcePOPO_AcceptsProtected(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      true,
-			AcceptImplicit:   true,
+			EnforcePOPO:    true,
+			AcceptImplicit: true,
 		}, nil)
 	svc.On("LWCReenroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
@@ -2004,8 +2005,8 @@ func TestHandleCMP_KUR_NoPOPO_NotEnforced(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforcePOPO:      false,
-			AcceptImplicit:   true,
+			EnforcePOPO:    false,
+			AcceptImplicit: true,
 		}, nil)
 	svc.On("LWCReenroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
@@ -2058,7 +2059,6 @@ func buildCRLReasonExtension(t *testing.T, reason int) []byte {
 
 	return extsDER
 }
-
 
 // ---------------------------------------------------------------------------
 // Polling / lost-response recovery (RFC 4210 §5.3.22) tests
