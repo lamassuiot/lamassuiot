@@ -637,6 +637,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 	default:
 		lFunc.Errorf("aborting enrollment. DMS is not correctly configured. No auth method configured. Specify an authentication method")
+		return nil, errs.ErrDMSAuthModeNotSupported
 	}
 
 	lFunc = lFunc.WithField("step", "CSRCheck")
@@ -829,29 +830,6 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			return nil, err
 		}
 
-	case models.ESTAuthModeExternalWebhook:
-		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeExternalWebhook)
-		if err = invokeWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
-			return nil, err
-		}
-
-	case models.ESTAuthModeClientCertificateAndWebhook:
-		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificateAndWebhook)
-		lFunc.Infof("combined auth: starting client certificate validation (step 1/2)")
-		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
-		if !hasValue || len(clientCerts) == 0 {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. No client certificate was presented")
-			return nil, errs.ErrDMSAuthModeNotSupported
-		}
-		if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName); err != nil {
-			return nil, err
-		}
-		lFunc.Infof("combined auth: client certificate validation passed. Starting webhook validation (step 2/2)")
-		if err = invokeWebhook(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
-			return nil, err
-		}
-		lFunc.Infof("combined auth: both client certificate and webhook validations passed")
-
 	case models.ESTAuthModeNoAuth:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeNoAuth)
 		lFunc = lFunc.WithField("auth-status", "verified")
@@ -860,6 +838,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	default:
 		lFunc.Errorf("aborting reenrollment. DMS is not correctly configured. No auth method configured. Specify an authentication method")
+		return nil, errs.ErrDMSAuthModeNotSupported
 	}
 
 	lFunc = lFunc.WithField("auth-status", "verified")
