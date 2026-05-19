@@ -179,23 +179,27 @@ func initializeSchema(db *gorm.DB) error {
 			PRIMARY KEY (key_id)
 		)`,
 
-		// CMP transactions table - stores pending enrollment transactions
-		// between the server's CP/KUP response and the EE's certConf confirmation,
-		// plus PENDING async-issuance transactions awaiting the worker (RFC 9483 §4.4).
+		// CMP transactions table - stores CMP enrollment transaction lifecycle.
+		// States: PENDING → ISSUED → CONFIRMED → REVOKED (or ISSUE_FAILED).
+		// Terminal states (CONFIRMED, REVOKED) are retained for audit.
 		`CREATE TABLE IF NOT EXISTS cmp_transactions (
 			transaction_id TEXT NOT NULL,
 			dms_id TEXT NOT NULL,
+			cert_serial_number TEXT NOT NULL DEFAULT '',
 			cert_der BLOB,
 			sent_nonce BLOB NOT NULL,
 			state TEXT NOT NULL DEFAULT 'ISSUED',
 			error_message TEXT NOT NULL DEFAULT '',
 			csr_der BLOB,
 			is_reenrollment BOOLEAN NOT NULL DEFAULT 0,
+			confirmed_at DATETIME,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY (transaction_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS cmp_transactions_state_created_idx ON cmp_transactions (state, created_at)`,
+		`CREATE INDEX IF NOT EXISTS cmp_transactions_cert_serial_idx ON cmp_transactions (cert_serial_number) WHERE cert_serial_number != '' AND state = 'CONFIRMED'`,
+		`CREATE INDEX IF NOT EXISTS cmp_transactions_state_idx ON cmp_transactions (state)`,
 	}
 
 	for _, stmt := range statements {

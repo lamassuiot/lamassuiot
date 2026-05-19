@@ -17,23 +17,29 @@
 ################################################################################
 set -euo pipefail
 
-DMS_ID="${1:-testcmp}"
-SERVER="http://localhost:8080"
+DMS_ID="${1:-${DMS_ID:-sample-cmp-dms}}"
+SERVER="${SERVER:-http://localhost:8080}"
 CMP_PATH="/api/dmsmanager/.well-known/cmp/p/${DMS_ID}"
-WORKDIR=$(mktemp -d)
+WORKDIR="${WORKDIR:-/tmp/cmp-drop-poll}"
+mkdir -p "${WORKDIR}"
 
 echo "=== CMP Drop-and-Poll Simulation ==="
 echo "Server:  ${SERVER}${CMP_PATH}"
 echo "Workdir: ${WORKDIR}"
 echo ""
 
-# --- Generate manufacturer (signer) credentials ---
-echo "[1/6] Generating manufacturer signer key+cert..."
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
-    -out "${WORKDIR}/signer.key" 2>/dev/null
-openssl req -new -x509 -key "${WORKDIR}/signer.key" \
-    -out "${WORKDIR}/signer.crt" -subj "/CN=test-manufacturer" \
-    -days 365 2>/dev/null
+# --- Provision bootstrap CA + signer (registered with the DMS) ---
+# The DMS Manager now chain-validates the CMP signer cert against
+# client_certificate_settings.validation_cas (RFC-9483 mirror of EST mTLS
+# auth). A self-signed signer would be rejected, so we provision a real
+# bootstrap CA via the Lamassu API and add it to the DMS first.
+echo "[1/6] Provisioning bootstrap CA + signer cert..."
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=cmp-bootstrap-setup.sh
+. "${SCRIPT_DIR}/cmp-bootstrap-setup.sh"
+cmp_bootstrap_setup "${SERVER}" "${DMS_ID}" "${WORKDIR}" \
+    || { echo "Bootstrap setup failed" >&2; exit 1; }
+echo "    bootstrap CA: ${BOOTSTRAP_CA_ID}"
 
 # --- Generate device key + CSR ---
 DEVICE_CN="iot-device-$(date +%s)"
