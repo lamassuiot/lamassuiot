@@ -88,6 +88,7 @@ func NewCMPReporter(cfg bconfig.DMSWFXConfig, logger *logrus.Entry) (CMPReporter
 	if timeout <= 0 {
 		timeout = defaultHTTPTimeout
 	}
+
 	httpClient.Timeout = timeout
 
 	client, err := wfxapi.NewClientWithResponses(baseURL, wfxapi.WithHTTPClient(httpClient))
@@ -218,7 +219,7 @@ func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition) (
 	}
 
 	body := wfxapi.PostJobsJSONRequestBody{
-		ClientID:   transition.SubjectCommonName,
+		ClientID:   transition.TransactionID,
 		Workflow:   r.workflowName,
 		Definition: buildJobDefinition(transition),
 	}

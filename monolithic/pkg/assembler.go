@@ -354,6 +354,18 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				var realProxy func(c *gin.Context)
 				foundPath := false
 				path := c.Param("proxyPath")
+
+				if c.Request.Method == http.MethodOptions {
+					realProxy = func(c *gin.Context) {
+						c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+						c.Writer.Header().Set("Access-Control-Allow-Methods", "*")
+						c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+						c.Writer.WriteHeader(http.StatusOK)
+					}
+					realProxy(c)
+					return
+				}
+
 				for _, route := range routeList {
 					if strings.HasPrefix(path, route) {
 						realProxy = routeMaps[route]

@@ -305,7 +305,7 @@ func main() {
 	fmt.Println("Async Messaging Engine")
 	adminPort := 0
 	eventBus := cconfig.EventBusEngine{
-		LogLevel: cconfig.Trace,
+		LogLevel: cconfig.None,
 		Enabled:  false,
 		Provider: cconfig.Amqp,
 		Config:   make(map[string]interface{}),
@@ -316,7 +316,7 @@ func main() {
 	if !*disableEventbus && *useInMemoryEventbus {
 		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
 		eventBus = cconfig.EventBusEngine{
-			LogLevel: cconfig.Trace,
+			LogLevel: cconfig.None,
 			Enabled:  true,
 			Provider: "inmemory", // Custom provider for monolithic
 			Config:   make(map[string]interface{}),
@@ -334,6 +334,7 @@ func main() {
 		}
 
 		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
+		eventBus.LogLevel = cconfig.None
 		// make a copy for DLQ using deep copy
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
@@ -352,7 +353,7 @@ func main() {
 		internalConfig := awsBaseCryptoEngine.Config
 
 		eventBus = cconfig.EventBusEngine{
-			LogLevel: cconfig.Trace,
+			LogLevel: cconfig.None,
 			Enabled:  true,
 			Provider: cconfig.AWSSqsSns,
 			Config:   internalConfig,
