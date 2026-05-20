@@ -26,7 +26,7 @@ func (p *RabbitMQSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 
 	return &subsystems.SubsystemBackend{
 		Config: config.EventBusEngine{
-			LogLevel: config.Trace,
+			LogLevel: config.None,
 			Enabled:  true,
 			Provider: config.Amqp,
 			Config:   eventBusConfig,
