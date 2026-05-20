@@ -212,11 +212,10 @@ func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, head
 	}
 
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     hex.EncodeToString(header.TransactionID),
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(body.Tag),
-		SubjectCommonName: cnFromSubjectDER(req.SubjectDER),
-		State:             cmpwfx.CMPStateValidated,
+		TransactionID: hex.EncodeToString(header.TransactionID),
+		DMSID:         dmsID,
+		RequestType:   cmpTagToString(body.Tag),
+		State:         cmpwfx.CMPStateValidated,
 		Metadata: map[string]any{
 			"certReqId": req.CertReqID,
 		},
@@ -263,11 +262,10 @@ func (r *cmpHttpRoutes) handleReenroll(ctx *gin.Context, lFunc *logrus.Entry, he
 	}
 
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     hex.EncodeToString(header.TransactionID),
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(body.Tag),
-		SubjectCommonName: cnFromSubjectDER(req.SubjectDER),
-		State:             cmpwfx.CMPStateValidated,
+		TransactionID: hex.EncodeToString(header.TransactionID),
+		DMSID:         dmsID,
+		RequestType:   cmpTagToString(body.Tag),
+		State:         cmpwfx.CMPStateValidated,
 		Metadata: map[string]any{
 			"certReqId": req.CertReqID,
 		},
@@ -537,16 +535,11 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		return
 	}
 	r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
-	var confirmedCN string
-	if cert, err := x509.ParseCertificate(tx.CertDER); err == nil {
-		confirmedCN = cert.Subject.CommonName
-	}
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		SubjectCommonName: confirmedCN,
-		CertSerialNumber:  tx.CertSerialNumber,
-		State:             cmpwfx.CMPStateConfirmed,
+		TransactionID:    txHex,
+		DMSID:            dmsID,
+		CertSerialNumber: tx.CertSerialNumber,
+		State:            cmpwfx.CMPStateConfirmed,
 	})
 }
 
@@ -1328,18 +1321,6 @@ func popoVerifySignature(data, sigBytes []byte, algID pkix.AlgorithmIdentifier, 
 	default:
 		return fmt.Errorf("POPO: unsupported public key type %T", pub)
 	}
-}
-
-// cnFromSubjectDER extracts the CommonName from a DER-encoded X.509 Subject.
-// Returns an empty string if the subject cannot be parsed or carries no CN.
-func cnFromSubjectDER(subjectDER []byte) string {
-	var rdns pkix.RDNSequence
-	if rest, err := asn1.Unmarshal(subjectDER, &rdns); err != nil || len(rest) > 0 {
-		return ""
-	}
-	var name pkix.Name
-	name.FillFromRDNSequence(&rdns)
-	return name.CommonName
 }
 
 // buildSyntheticCSR constructs a *x509.CertificateRequest from the Subject and
