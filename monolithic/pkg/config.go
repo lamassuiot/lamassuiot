@@ -31,6 +31,8 @@ type MonolithicConfig struct {
 	AWSIoTManager         MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
 	VAStorageDir          string                         `mapstructure:"va_storage_directory"`
 	UIPort                int                            `mapstructure:"ui_port"`
+	WfxPort               int                            `mapstructure:"wfx_port"`
+	WfxMgmtPort           int                            `mapstructure:"wfx_mgmt_port"`
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
 }
 
