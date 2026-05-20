@@ -15,6 +15,7 @@ type WebhookCallHttpClient struct {
 	ValidateServerCert bool                             `json:"validate_server_cert"`
 	LogLevel           string                           `json:"log_level"`
 	AuthMode           config.HTTPClientAuthMethod      `json:"auth_mode"`
+	CallTimeout        TimeDuration                     `json:"call_timeout,omitempty"`
 	OIDC               WebhookCallHttpClientOidcOptions `json:"oidc"`
 	ApiKey             WebhookCallHttpClientApiKey      `json:"apikey"`
 	MutualTLS          WebhookCallHttpClientMutualTLS   `json:"mtls"`
