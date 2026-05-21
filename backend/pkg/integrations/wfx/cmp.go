@@ -29,8 +29,6 @@ const (
 	CMPStateReceived          CMPState = "Received"
 	CMPStateParsed            CMPState = "Parsed"
 	CMPStateValidated         CMPState = "Validated"
-	CMPStateIssuing           CMPState = "Issuing"
-	CMPStateIssued            CMPState = "Issued"
 	CMPStateResponded         CMPState = "Responded"
 	CMPStateAwaitingCertConf  CMPState = "AwaitingCertConf"
 	CMPStateLogicallyComplete CMPState = "LogicallyComplete"
@@ -243,8 +241,6 @@ func defaultCMPWorkflow(name string) wfxapi.Workflow {
 		string(CMPStateReceived),
 		string(CMPStateParsed),
 		string(CMPStateValidated),
-		string(CMPStateIssuing),
-		string(CMPStateIssued),
 		string(CMPStateResponded),
 		string(CMPStateAwaitingCertConf),
 	}
@@ -272,9 +268,7 @@ func defaultCMPWorkflow(name string) wfxapi.Workflow {
 			{Name: string(CMPStateReceived), Description: "CMP request accepted by Lamassu"},
 			{Name: string(CMPStateParsed), Description: "PKIMessage and PKIHeader decoded"},
 			{Name: string(CMPStateValidated), Description: "Request protection and enrollment request validated"},
-			{Name: string(CMPStateIssuing), Description: "Synthetic CSR prepared and issuance in progress"},
-			{Name: string(CMPStateIssued), Description: "Certificate successfully issued"},
-			{Name: string(CMPStateResponded), Description: "IP or CP response emitted by Lamassu"},
+			{Name: string(CMPStateResponded), Description: "Certificate issued and IP or CP response emitted by Lamassu"},
 			{Name: string(CMPStateAwaitingCertConf), Description: "Explicit certConf still pending"},
 			{Name: string(CMPStateLogicallyComplete), Description: "Implicit confirmation granted"},
 			{Name: string(CMPStateConfirmed), Description: "certConf validated and pkiConf returned"},
@@ -284,11 +278,8 @@ func defaultCMPWorkflow(name string) wfxapi.Workflow {
 			{From: string(CMPStateReceived), To: string(CMPStateParsed), Eligible: wfxapi.WFX},
 			{From: string(CMPStateParsed), To: string(CMPStateValidated), Eligible: wfxapi.WFX},
 			{From: string(CMPStateParsed), To: string(CMPStateRejected), Eligible: wfxapi.WFX},
-			{From: string(CMPStateValidated), To: string(CMPStateIssuing), Eligible: wfxapi.WFX},
+			{From: string(CMPStateValidated), To: string(CMPStateResponded), Eligible: wfxapi.WFX},
 			{From: string(CMPStateValidated), To: string(CMPStateRejected), Eligible: wfxapi.WFX},
-			{From: string(CMPStateIssuing), To: string(CMPStateIssued), Eligible: wfxapi.WFX},
-			{From: string(CMPStateIssuing), To: string(CMPStateRejected), Eligible: wfxapi.WFX},
-			{From: string(CMPStateIssued), To: string(CMPStateResponded), Eligible: wfxapi.WFX},
 			{From: string(CMPStateResponded), To: string(CMPStateAwaitingCertConf), Eligible: wfxapi.WFX},
 			{From: string(CMPStateResponded), To: string(CMPStateLogicallyComplete), Eligible: wfxapi.WFX},
 			{From: string(CMPStateAwaitingCertConf), To: string(CMPStateConfirmed), Eligible: wfxapi.WFX},

@@ -327,18 +327,6 @@ func (r *cmpHttpRoutes) issueAndStore(
 		}
 	}
 
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(params.requestTag),
-		SubjectCommonName: csr.Subject.CommonName,
-		State:             cmpwfx.CMPStateIssuing,
-		Metadata: map[string]any{
-			"certReqId":      req.CertReqID,
-			"isReenrollment": params.isReenrollment,
-		},
-	})
-
 	// Detach from the HTTP connection so issuance completes even if the EE
 	// drops the TCP connection mid-request.
 	issuanceCtx := context.WithoutCancel(ctx.Request.Context())
@@ -349,19 +337,6 @@ func (r *cmpHttpRoutes) issueAndStore(
 		return
 	}
 	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
-
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(params.requestTag),
-		SubjectCommonName: csr.Subject.CommonName,
-		CertSerialNumber:  certSerial,
-		State:             cmpwfx.CMPStateIssued,
-		Metadata: map[string]any{
-			"certReqId":      req.CertReqID,
-			"isReenrollment": params.isReenrollment,
-		},
-	})
 
 	// Persist ISSUED row for lost-response recovery via pollReq.
 	if r.store != nil {
@@ -405,8 +380,9 @@ func (r *cmpHttpRoutes) issueAndStore(
 		CertSerialNumber:  certSerial,
 		State:             cmpwfx.CMPStateResponded,
 		Metadata: map[string]any{
-			"responseType": cmpTagToString(params.respTag),
-			"certReqId":    req.CertReqID,
+			"certReqId":      req.CertReqID,
+			"isReenrollment": params.isReenrollment,
+			"responseType":   cmpTagToString(params.respTag),
 		},
 	})
 	finalState := cmpwfx.CMPStateAwaitingCertConf
