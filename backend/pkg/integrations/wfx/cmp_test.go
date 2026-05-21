@@ -11,8 +11,8 @@ func TestDefaultCMPWorkflow(t *testing.T) {
 	workflow := defaultCMPWorkflow("test.workflow")
 
 	assert.Equal(t, "test.workflow", workflow.Name)
-	assert.Len(t, workflow.States, 10)
-	assert.Len(t, workflow.Transitions, 12)
+	assert.Len(t, workflow.States, 8)
+	assert.Len(t, workflow.Transitions, 9)
 	assert.Len(t, workflow.Groups, 2)
 
 	edges := map[string]wfxapi.EligibleEnum{}
@@ -22,8 +22,7 @@ func TestDefaultCMPWorkflow(t *testing.T) {
 
 	assert.Equal(t, wfxapi.WFX, edges["Received->Parsed"])
 	assert.Equal(t, wfxapi.WFX, edges["Parsed->Rejected"])
-	assert.Equal(t, wfxapi.WFX, edges["Validated->Issuing"])
-	assert.Equal(t, wfxapi.WFX, edges["Issued->Responded"])
+	assert.Equal(t, wfxapi.WFX, edges["Validated->Responded"])
 	assert.Equal(t, wfxapi.WFX, edges["Responded->AwaitingCertConf"])
 	assert.Equal(t, wfxapi.WFX, edges["Responded->LogicallyComplete"])
 	assert.Equal(t, wfxapi.WFX, edges["AwaitingCertConf->Confirmed"])
