@@ -475,6 +475,7 @@ func checkReenrollmentExpiry(lFunc *logrus.Entry, leafCert *x509.Certificate, re
 // operation should be "enrollment" or "reenrollment" and is used in log messages and errors.
 func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.WebhookCall, csr *x509.CertificateRequest, aps string, operation string) (*logrus.Entry, error) {
 	lFunc = lFunc.WithField("auth-status", "verifying")
+	lFunc = lFunc.WithField("auth-uri", webhookConf.Url)
 	lFunc.Infof("verifying %s using external webhook: %s. Calling webhook %s", operation, webhookConf.Name, webhookConf.Url)
 
 	webhookRequestBodyHeaders := make(map[string]string)
@@ -548,7 +549,6 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 		}
 	}
 
-	lFunc = lFunc.WithField("auth-uri", webhookConf.Name)
 	lFunc.Infof("webhook authorized %s", operation)
 	return lFunc, nil
 }
