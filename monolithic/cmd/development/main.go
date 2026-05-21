@@ -398,8 +398,9 @@ func main() {
 
 		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 			// Repository: "ghcr.io/siemens/wfx",
-			Repository: "custom-wfx-ui",
-			Tag:        "latest",
+			Repository:   "custom-wfx-ui",
+			Tag:          "latest",
+			ExposedPorts: []string{"9080/tcp", "9081/tcp"},
 			Env: []string{
 				"PGHOST=host.docker.internal",
 				"PGPORT=" + pgPort,
