@@ -2,8 +2,7 @@ import sys
 import base64
 import io
 import contextlib
-
-sys.path.insert(0, '/home/ubuntu/dev/lamassu/lamassuiot/pyasn1/myasn1')
+import argparse
 
 
 @contextlib.contextmanager
@@ -17,7 +16,7 @@ def _suppress_stdout():
 
 
 with _suppress_stdout():
-    from cmp_comp import PKIXCMP_2023
+    from myasn1.cmp_comp import PKIXCMP_2023
 
 PKIMessage = PKIXCMP_2023.PKIMessage
 
@@ -131,17 +130,27 @@ def to_asn1_hex(obj) -> str:
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
-    advanced = '--hex' in sys.argv
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    pem_path = args[0] if args else '/tmp/cmp-drop-poll/pollrep.der'
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description='Decode a CMP DER or PEM file using the generated PKIXCMP module.'
+    )
+    parser.add_argument('input', help='Path to the DER or PEM file to decode')
+    parser.add_argument(
+        '--hex',
+        action='store_true',
+        help='Include DER hex annotations in the rendered ASN.1 output',
+    )
+    return parser.parse_args()
 
-    der = load_pem_der(pem_path)
+def main():
+    args = parse_args()
+
+    der = load_pem_der(args.input)
 
     with _suppress_stdout():
         PKIMessage.from_der(der)
 
-    if advanced:
+    if args.hex:
         print(to_asn1_hex(PKIMessage))
     else:
         print(PKIMessage.to_asn1())
