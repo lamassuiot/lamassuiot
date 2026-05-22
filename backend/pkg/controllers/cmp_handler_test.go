@@ -105,7 +105,7 @@ func (s *inMemoryCMPStore) Select(_ context.Context, id string) (storage.CMPTran
 	return tx, true, nil
 }
 
-func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state storage.CMPTransactionState, certDER []byte, errorMessage string) error {
+func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
@@ -114,7 +114,7 @@ func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state stora
 		return nil
 	}
 	tx.State = state
-	tx.CertDER = certDER
+	tx.Certificate = cert
 	tx.ErrorMessage = errorMessage
 	s.txs[id] = tx
 	return nil
@@ -171,6 +171,33 @@ func (s *inMemoryCMPStore) SelectAllByDMS(_ context.Context, dmsID string, _ boo
 		}
 	}
 	return "", nil
+}
+
+func (s *inMemoryCMPStore) SelectExpiredIssued(_ context.Context, limit int) ([]storage.CMPTransaction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []storage.CMPTransaction
+	for _, tx := range s.txs {
+		if tx.State == storage.CMPTransactionStateIssued && time.Now().After(tx.ExpiresAt) {
+			out = append(out, tx)
+			if limit > 0 && len(out) >= limit {
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s *inMemoryCMPStore) MarkRevokedByTransactionID(_ context.Context, transactionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, ok := s.txs[transactionID]
+	if !ok {
+		return nil
+	}
+	tx.State = storage.CMPTransactionStateRevoked
+	s.txs[transactionID] = tx
+	return nil
 }
 
 // mockServiceWithStore wraps a MockLightweightCMPService and exposes a
@@ -949,7 +976,7 @@ func TestHandleCMP_ImplicitConfirm_NoCertConf(t *testing.T) {
 	assert.True(t, found, "implicit confirm must still insert an ISSUED row for pollReq recovery")
 	if found {
 		assert.Equal(t, storage.CMPTransactionStateIssued, storedTx.State)
-		assert.NotEmpty(t, storedTx.CertDER)
+		assert.NotNil(t, storedTx.Certificate)
 	}
 
 	svc.AssertExpectations(t)
@@ -987,7 +1014,8 @@ func TestHandleCMP_ExplicitConfirm_CertConfSucceeds(t *testing.T) {
 	storedTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "transaction must be stored after explicit-mode IR")
 
-	certConfDER := buildTestCertConf(t, txID, issuedCert.Raw, storedTx.SentNonce)
+	sentNonce, _ := hex.DecodeString(storedTx.SentNonce)
+	certConfDER := buildTestCertConf(t, txID, issuedCert.Raw, sentNonce)
 	confResp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
 	assert.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
@@ -1293,7 +1321,8 @@ func TestHandleCMP_KUR_ExplicitConfirm(t *testing.T) {
 	require.True(t, ok, "kur must store a pending transaction")
 
 	// CertConf with correct hash.
-	certConfDER := buildTestCertConf(t, txID, issuedCert.Raw, storedTx.SentNonce)
+	sentNonce, _ := hex.DecodeString(storedTx.SentNonce)
+	certConfDER := buildTestCertConf(t, txID, issuedCert.Raw, sentNonce)
 	confResp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
 	assert.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
@@ -1330,7 +1359,7 @@ func TestHandleCMP_KUR_ImplicitConfirm(t *testing.T) {
 	assert.True(t, found, "implicit confirm kur must still insert ISSUED row for pollReq recovery")
 	if found {
 		assert.Equal(t, storage.CMPTransactionStateIssued, storedTx.State)
-		assert.NotEmpty(t, storedTx.CertDER)
+		assert.NotNil(t, storedTx.Certificate)
 	}
 
 	svc.AssertExpectations(t)
@@ -1514,7 +1543,8 @@ func TestHandleCMP_CertConf_WrongHash(t *testing.T) {
 	require.True(t, ok)
 
 	// Build certConf with hash of wrongCert — mismatch.
-	certConfDER := buildTestCertConf(t, txID, wrongCert.Raw, storedTx.SentNonce)
+	sentNonce, _ := hex.DecodeString(storedTx.SentNonce)
+	certConfDER := buildTestCertConf(t, txID, wrongCert.Raw, sentNonce)
 	confResp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
 	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, confResp.Body.Bytes()),
@@ -2120,7 +2150,7 @@ func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 		TransactionID: hex.EncodeToString(txID),
 		DMSID:         "test-dms",
 		State:         storage.CMPTransactionStateIssued,
-		CertDER:       issuedCert.Raw,
+		Certificate:   (*models.X509Certificate)(issuedCert),
 		ExpiresAt:     time.Now().Add(5 * time.Minute),
 		CreatedAt:     time.Now(),
 	}))

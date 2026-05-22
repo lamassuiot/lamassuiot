@@ -7,6 +7,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -19,11 +20,11 @@ type cmpTransactionRow struct {
 	TransactionID     string    `gorm:"primaryKey;column:transaction_id"`
 	DMSID             string    `gorm:"column:dms_id;not null"`
 	CertSerialNumber  string    `gorm:"column:cert_serial_number;not null;default:''"`
-	CertDER           []byte    `gorm:"column:cert_der"`
-	SentNonce         []byte    `gorm:"column:sent_nonce;not null"`
+	Certificate       string    `gorm:"column:certificate"`              // base64-PEM text; empty for PENDING rows
+	SentNonce         string    `gorm:"column:sent_nonce;not null;default:''"`  // hex-encoded bytes
 	State             string    `gorm:"column:state;not null;default:ISSUED"`
 	ErrorMessage      string    `gorm:"column:error_message;not null;default:''"`
-	CSRDER            []byte    `gorm:"column:csr_der"`
+	CSR               string    `gorm:"column:csr"`                      // base64-PEM text; empty for ISSUED rows
 	IsReenrollment    bool      `gorm:"column:is_reenrollment;not null;default:false"`
 	RequestType       string    `gorm:"column:request_type;not null;default:''"`
 	SubjectCommonName string    `gorm:"column:subject_common_name;not null;default:''"`
@@ -31,6 +32,42 @@ type cmpTransactionRow struct {
 	ConfirmedAt       time.Time `gorm:"column:confirmed_at"`
 	ExpiresAt         time.Time `gorm:"column:expires_at;not null"`
 	CreatedAt         time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func certToString(c *models.X509Certificate) string {
+	if c == nil {
+		return ""
+	}
+	return c.String()
+}
+
+func stringToCert(s string) *models.X509Certificate {
+	if s == "" {
+		return nil
+	}
+	var c models.X509Certificate
+	if err := c.Scan(s); err != nil {
+		return nil
+	}
+	return &c
+}
+
+func csrToString(c *models.X509CertificateRequest) string {
+	if c == nil {
+		return ""
+	}
+	return c.String()
+}
+
+func stringToCSR(s string) *models.X509CertificateRequest {
+	if s == "" {
+		return nil
+	}
+	var c models.X509CertificateRequest
+	if err := c.Scan(s); err != nil {
+		return nil
+	}
+	return &c
 }
 
 func (cmpTransactionRow) TableName() string { return "cmp_transactions" }
@@ -101,11 +138,11 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 		TransactionID:     tx.TransactionID,
 		DMSID:             tx.DMSID,
 		CertSerialNumber:  tx.CertSerialNumber,
-		CertDER:           tx.CertDER,
+		Certificate:       certToString(tx.Certificate),
 		SentNonce:         tx.SentNonce,
 		State:             string(state),
 		ErrorMessage:      tx.ErrorMessage,
-		CSRDER:            tx.CSRDER,
+		CSR:               csrToString(tx.CSR),
 		IsReenrollment:    tx.IsReenrollment,
 		RequestType:       tx.RequestType,
 		SubjectCommonName: tx.SubjectCommonName,
@@ -189,10 +226,10 @@ func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, tra
 // CertDER (when issuing succeeded) or ErrorMessage (when it failed). A row
 // that has already expired or been deleted by another worker is silently
 // ignored — the caller sees nil error and treats the operation as a no-op.
-func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transactionID string, state storage.CMPTransactionState, certDER []byte, errorMessage string) error {
+func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transactionID string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string) error {
 	updates := map[string]interface{}{
 		"state":         string(state),
-		"cert_der":      certDER,
+		"certificate":   certToString(cert),
 		"error_message": errorMessage,
 	}
 	result := s.db.WithContext(ctx).
@@ -381,11 +418,11 @@ func rowToDomain(row cmpTransactionRow) storage.CMPTransaction {
 		TransactionID:     row.TransactionID,
 		DMSID:             row.DMSID,
 		CertSerialNumber:  row.CertSerialNumber,
-		CertDER:           row.CertDER,
+		Certificate:       stringToCert(row.Certificate),
 		SentNonce:         row.SentNonce,
 		State:             storage.CMPTransactionState(row.State),
 		ErrorMessage:      row.ErrorMessage,
-		CSRDER:            row.CSRDER,
+		CSR:               stringToCSR(row.CSR),
 		IsReenrollment:    row.IsReenrollment,
 		RequestType:       row.RequestType,
 		SubjectCommonName: row.SubjectCommonName,
