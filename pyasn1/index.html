@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CMP ASN.1 Inspector</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.5/full/pyodide.js"></script>
+  <style>
+    body { font-family: monospace; padding: 1rem; background: #1e1e1e; color: #d4d4d4; }
+    h2 { color: #9cdcfe; }
+    #drop-zone {
+      border: 2px dashed #555; border-radius: 6px; padding: 2rem;
+      text-align: center; color: #888; cursor: pointer; margin-bottom: 1rem;
+    }
+    #drop-zone.drag-over { border-color: #9cdcfe; color: #9cdcfe; }
+    #controls { margin-bottom: 1rem; }
+    label { color: #ce9178; margin-right: 1rem; }
+    #output {
+      white-space: pre; background: #252526; border: 1px solid #3c3c3c;
+      padding: 1rem; border-radius: 4px; overflow: auto; max-height: 80vh;
+      font-size: 0.85rem;
+    }
+    #status { color: #4ec9b0; margin-bottom: 0.5rem; }
+    #error  { color: #f48771; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h2>CMP PKIMessage Inspector</h2>
+  <div id="drop-zone">Drop a .der or .pem file here, or click to browse
+    <input type="file" id="file-input" style="display:none" accept=".der,.pem,.p7,.bin" />
+  </div>
+  <div id="controls">
+    <label><input type="checkbox" id="hex-mode" /> Hex-annotated output</label>
+  </div>
+  <div id="status">Loading Pyodide…</div>
+  <div id="error"></div>
+  <pre id="output"></pre>
+
+<script type="module">
+const status  = document.getElementById('status');
+const errDiv  = document.getElementById('error');
+const output  = document.getElementById('output');
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+// ----- load Pyodide + pycrate -----
+const pyodide = await loadPyodide();
+status.textContent = 'Installing pycrate…';
+await pyodide.loadPackage('micropip');
+await pyodide.runPythonAsync(`
+import micropip
+await micropip.install('pycrate')
+`);
+status.textContent = 'Loading CMP module…';
+
+// Fetch the compiled ASN.1 module and make it available to Python
+const cmpResp = await fetch('./myasn1/cmp_comp.py');
+const cmpSrc  = await cmpResp.text();
+pyodide.FS.writeFile('/cmp_comp.py', cmpSrc);
+
+await pyodide.runPythonAsync(`
+import sys, io, contextlib
+sys.path.insert(0, '/')
+
+@contextlib.contextmanager
+def _suppress():
+    old = sys.stdout
+    sys.stdout = io.StringIO()
+    try: yield
+    finally: sys.stdout = old
+
+with _suppress():
+    from cmp_comp import PKIXCMP_2023
+
+PKIMessage = PKIXCMP_2023.PKIMessage
+`);
+
+status.textContent = 'Ready — drop a DER/PEM file.';
+
+// ----- helpers -----
+function loadPemDer(bytes) {
+  const text = new TextDecoder('ascii', { fatal: false }).decode(bytes).trimStart();
+  if (text.startsWith('-----')) {
+    const b64 = text.split('\n')
+      .filter(l => !l.startsWith('-----') && l.trim())
+      .join('');
+    const bin = atob(b64);
+    return Uint8Array.from(bin, c => c.charCodeAt(0));
+  }
+  return new Uint8Array(bytes);
+}
+
+async function parse(bytes) {
+  const der = loadPemDer(bytes);
+  pyodide.globals.set('_der_bytes', der);
+  const hexMode = document.getElementById('hex-mode').checked;
+
+  return await pyodide.runPythonAsync(`
+import sys, io, contextlib, base64
+
+@contextlib.contextmanager
+def _suppress():
+    old = sys.stdout
+    sys.stdout = io.StringIO()
+    try: yield
+    finally: sys.stdout = old
+
+der = bytes(_der_bytes)
+with _suppress():
+    PKIMessage.from_der(der)
+
+if ${hexMode ? 'True' : 'False'}:
+    # inline hex renderer (same logic as main.py)
+    def _fmt_hex(data):
+        h = data.hex().upper()
+        return ' '.join(h[i:i+2] for i in range(0, len(h), 2))
+
+    def _try_hex(obj):
+        try: return _fmt_hex(obj.to_der())
+        except: return '??'
+
+    def _render_obj(obj, val):
+        obj._val = val
+        hex_str = _try_hex(obj)
+        cls = type(obj).__name__
+        if cls in ('SEQ', 'SET'):    return _render_seq(obj, val, hex_str)
+        elif cls == 'CHOICE':        return _render_choice(obj, val, hex_str)
+        elif cls in ('SEQ_OF','SET_OF'): return _render_seqof(obj, val, hex_str)
+        else: return f'{obj._to_asn1()}  -- hex: {hex_str} --'
+
+    def _render_seq(obj, val, hex_str):
+        if not val: return f'{{ }}  -- hex: {hex_str} --'
+        parts = []
+        for ident in obj._cont:
+            if ident not in val: continue
+            child = obj._cont[ident]
+            _par = child._parent; child._parent = obj
+            rendered = _render_obj(child, val[ident])
+            child._parent = _par
+            parts.append(f'  {ident} {rendered.replace(chr(10), chr(10)+"  ")},\\n')
+        if parts: parts[-1] = parts[-1][:-2]
+        return f'{{  -- hex: {hex_str} --\\n' + ''.join(parts) + '\\n}'
+
+    def _render_choice(obj, val, hex_str):
+        ident, inner_val = val
+        if ident not in obj._cont:
+            raw = inner_val.hex().upper() if isinstance(inner_val,(bytes,bytearray)) else str(inner_val)
+            return f"{ident} : '{raw}'H  -- hex: {hex_str} --"
+        child = obj._cont[ident]
+        _par = child._parent; child._parent = obj
+        rendered = _render_obj(child, inner_val)
+        child._parent = _par
+        return f'{ident} : {rendered}'
+
+    def _render_seqof(obj, val, hex_str):
+        if not val: return f'{{ }}  -- hex: {hex_str} --'
+        parts = []
+        _par = obj._cont._parent; obj._cont._parent = obj
+        for item_val in val:
+            rendered = _render_obj(obj._cont, item_val)
+            parts.append(f'  {rendered.replace(chr(10), chr(10)+"  ")},\\n')
+        obj._cont._parent = _par
+        if parts: parts[-1] = parts[-1][:-2]
+        return f'{{  -- hex: {hex_str} --\\n' + ''.join(parts) + '\\n}'
+
+    result = _render_obj(PKIMessage, PKIMessage._val)
+else:
+    result = PKIMessage.to_asn1()
+
+result
+`);
+}
+
+// ----- file handling -----
+async function handleFile(file) {
+  errDiv.textContent = '';
+  output.textContent  = '';
+  status.textContent  = `Parsing ${file.name}…`;
+  try {
+    const buf = await file.arrayBuffer();
+    const result = await parse(buf);
+    output.textContent = result;
+    status.textContent = `Parsed ${file.name} (${buf.byteLength} bytes)`;
+  } catch (e) {
+    errDiv.textContent = String(e);
+    status.textContent = 'Parse failed.';
+  }
+}
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => e.target.files[0] && handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+</script>
+</body>
+</html>
