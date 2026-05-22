@@ -74,9 +74,6 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	}
 
 	enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA
-	if cmpCA := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.EnrollmentCA; cmpCA != "" {
-		enrollCA = cmpCA
-	}
 	lFunc = lFunc.WithField("dms", dms.ID)
 
 	// Authenticate the CMP signer cert (extraCerts[0]) against ValidationCAs,
@@ -178,9 +175,6 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 
 	enrollSettings := dms.Settings.EnrollmentSettings
 	enrollCA := enrollSettings.EnrollmentCA
-	if cmpCA := enrollSettings.EnrollmentOptionsLWCRFC9483.EnrollmentCA; cmpCA != "" {
-		enrollCA = cmpCA
-	}
 
 	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: csr.Subject.CommonName,

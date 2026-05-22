@@ -86,6 +86,17 @@ type CMPTransaction struct {
 	// IsReenrollment is true when the original request was kur (re-enrollment),
 	// false for ir/cr. The async worker uses this to choose LWCReenroll vs LWCEnroll.
 	IsReenrollment bool
+	// RequestType is the CMP body type that initiated the transaction: "ir"
+	// (Initialization Request), "cr" (Certification Request), or "kur" (Key
+	// Update Request). IsReenrollment is derivable from this ("kur" → true);
+	// RequestType is the finer-grained record used by the UI to surface
+	// whether a first-time enrollment was an ir or cr.
+	RequestType string
+	// SubjectCommonName is the CommonName from the enrollment request's
+	// CertTemplate (i.e. the device ID). Stored at insertion time so the
+	// management UI can render device-keyed transaction listings without
+	// reparsing the cert DER.
+	SubjectCommonName string
 	// ConfirmedAt records when the certConf was received and validated. Zero
 	// value for non-confirmed transactions.
 	ConfirmedAt time.Time
@@ -148,6 +159,20 @@ type CMPTransactionRepo interface {
 	// successful CMP revocation request so the UI can show the full lifecycle.
 	// No-op if no matching transaction is found.
 	MarkRevokedByCertSerial(ctx context.Context, certSerialNumber string) error
+
+	// SelectExpiredIssued returns up to `limit` transactions in ISSUED state
+	// whose ExpiresAt is in the past, oldest first. The CMP confirmation
+	// monitor uses this to find certificates that were issued but never
+	// confirmed by the EE within the window the DMS allows; those certs
+	// are revoked at the CA layer and the row is then transitioned via
+	// MarkRevokedByTransactionID for audit visibility.
+	SelectExpiredIssued(ctx context.Context, limit int) ([]CMPTransaction, error)
+
+	// MarkRevokedByTransactionID transitions a transaction (in any state) to
+	// REVOKED, keyed by its hex transactionID. Used by the confirmation
+	// monitor after it revokes the underlying certificate at the CA, so the
+	// row persists in REVOKED state for audit. No-op if the row is not found.
+	MarkRevokedByTransactionID(ctx context.Context, transactionID string) error
 
 	// SelectPending returns up to `limit` PENDING transactions whose ExpiresAt
 	// is in the future, oldest first. The async worker uses this to find rows

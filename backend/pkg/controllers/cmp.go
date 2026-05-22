@@ -345,15 +345,17 @@ func (r *cmpHttpRoutes) issueAndStore(
 			header.ResponseSenderNonce = senderNonce
 		}
 		if storeErr := r.store.Insert(issuanceCtx, storage.CMPTransaction{
-			TransactionID:    txHex,
-			DMSID:            dmsID,
-			State:            storage.CMPTransactionStateIssued,
-			CertSerialNumber: certSerial,
-			CertDER:          cert.Raw,
-			IsReenrollment:   params.isReenrollment,
-			SentNonce:        senderNonce,
-			ExpiresAt:        time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
-			CreatedAt:        time.Now(),
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			State:             storage.CMPTransactionStateIssued,
+			CertSerialNumber:  certSerial,
+			CertDER:           cert.Raw,
+			IsReenrollment:    params.isReenrollment,
+			RequestType:       cmpTagToString(params.requestTag),
+			SubjectCommonName: csr.Subject.CommonName,
+			SentNonce:         senderNonce,
+			ExpiresAt:         time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
+			CreatedAt:         time.Now(),
 		}); storeErr != nil {
 			if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 				lFunc.Warnf("duplicate transactionID %s", txHex)
@@ -581,19 +583,26 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 
 	case storage.CMPTransactionStateIssued:
 		// Determine whether implicit confirm applies for this pollReq delivery.
-		// When implicit, no certConf will follow so we delete the row after
-		// responding. When explicit, the row stays for certConf to clean up.
+		// When implicit, no certConf will follow and the row is transitioned to
+		// CONFIRMED below. When explicit, the row stays in ISSUED awaiting certConf.
 		implicitConfirm := r.isImplicitConfirm(ctx.Request.Context(), header, dmsID)
 		header.ResponseImplicitConfirm = implicitConfirm
 
 		if !implicitConfirm {
-			// Explicit confirm: generate a fresh SenderNonce for the cert delivery
-			// so subsequent certConf has a nonce to echo. Persist it.
-			senderNonce := newNonce()
-			header.ResponseSenderNonce = senderNonce
-			if err := r.store.UpdateState(ctx.Request.Context(), txHex, storage.CMPTransactionStateIssued, tx.CertDER, ""); err != nil {
-				lFunc.Warnf("pollReq: failed to refresh tx state (continuing): %v", err)
-			}
+			// Explicit confirm: echo back the SenderNonce that was used in the
+			// original IR/CR/KUR response — the same one persisted in
+			// tx.SentNonce. handleCertConf will compare the EE's recipNonce
+			// against this value, so the nonce on the wire and the nonce in DB
+			// MUST match. In a clean IR → IP → certConf flow this happens
+			// naturally because the EE echoes what it just received; in the
+			// drop-and-recover flow (IR delivered but response lost, then
+			// pollReq) the EE only ever sees the nonce we send here, so it has
+			// to be the IR-time nonce or the certConf check fails. Generating a
+			// fresh nonce per pollRep would also work but only if we persisted
+			// it — UpdateState (cert_der + state + error_message) does not
+			// touch sent_nonce, so refreshing here would silently desync DB
+			// from wire and reject every subsequent certConf.
+			header.ResponseSenderNonce = tx.SentNonce
 		}
 
 		// Decide whether this delivery is an IP (ir-derived) or CP (cr/kur).
