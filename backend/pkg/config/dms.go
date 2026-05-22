@@ -20,6 +20,11 @@ type DMSconfig struct {
 	PublisherEventBus cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	Storage           cconfig.PluggableStorageEngine `mapstructure:"storage"`
 
+	// CMPConfirmationMonitoringJob controls the periodic sweep that revokes
+	// certificates issued via CMP whose confirmation window has elapsed
+	// without certConf — mirrors CertificateMonitoringJob in the CA config.
+	CMPConfirmationMonitoringJob cconfig.MonitoringJob `mapstructure:"cmp_confirmation_monitoring_job"`
+
 	KMSClient struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"kms_client"`

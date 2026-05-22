@@ -8,6 +8,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -110,6 +111,14 @@ func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSSer
 
 		//this utilizes the middlewares from within the DMS service (if svc.service.func is used instead of regular svc.func)
 		dmsSvc.SetService(svc)
+	}
+
+	if conf.CMPConfirmationMonitoringJob.Enabled {
+		lMonitor := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "CMP Confirmation Monitor")
+		lMonitor.Info("CMP Confirmation Monitoring is enabled")
+		monitorJob := jobs.NewCMPConfirmationMonitor(cmptxStorage, caService, lMonitor)
+		scheduler := jobs.NewJobScheduler(lMonitor, conf.CMPConfirmationMonitoringJob.Frequency, monitorJob)
+		scheduler.Start()
 	}
 
 	return &svc, nil

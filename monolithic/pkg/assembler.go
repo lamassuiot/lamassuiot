@@ -171,11 +171,12 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			Logs:                      svcLogs,
-			Server:                    svcServer,
-			PublisherEventBus:         conf.PublisherEventBus,
-			DownstreamCertificateFile: "proxy.crt",
-			Storage:                   conf.Storage,
+			Logs:                         svcLogs,
+			Server:                       svcServer,
+			PublisherEventBus:            conf.PublisherEventBus,
+			DownstreamCertificateFile:    "proxy.crt",
+			Storage:                      conf.Storage,
+			CMPConfirmationMonitoringJob: conf.Monitoring,
 			WFX: config.DMSWFXConfig{
 				Enabled: conf.WfxMgmtPort > 0,
 				HTTPClient: cconfig.HTTPClient{
