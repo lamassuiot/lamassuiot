@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"crypto/x509"
 	"encoding/hex"
 	"math/big"
 
@@ -157,7 +156,7 @@ func cmpTransactionToResponse(tx storage.CMPTransaction) resources.CMPTransactio
 		CreatedAt:         tx.CreatedAt,
 		ExpiresAt:         tx.ExpiresAt,
 		ErrorMessage:      tx.ErrorMessage,
-		HasCertificate:    len(tx.CertDER) > 0,
+		HasCertificate:    tx.Certificate != nil,
 	}
 	if !tx.ConfirmedAt.IsZero() {
 		t := tx.ConfirmedAt
@@ -165,10 +164,8 @@ func cmpTransactionToResponse(tx storage.CMPTransaction) resources.CMPTransactio
 	}
 	if tx.CertSerialNumber != "" {
 		resp.CertSerialNumber = tx.CertSerialNumber
-	} else if len(tx.CertDER) > 0 {
-		if cert, perr := x509.ParseCertificate(tx.CertDER); perr == nil {
-			resp.CertSerialNumber = serialNumberToHexLower(cert.SerialNumber)
-		}
+	} else if tx.Certificate != nil {
+		resp.CertSerialNumber = serialNumberToHexLower(tx.Certificate.SerialNumber)
 	}
 	return resp
 }

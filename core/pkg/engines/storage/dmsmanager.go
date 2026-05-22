@@ -65,24 +65,24 @@ type CMPTransaction struct {
 	// to allow efficient lookup when a revocation arrives by serial.
 	// Empty when State == PENDING.
 	CertSerialNumber string
-	// CertDER is the raw DER of the issued certificate that the client must
-	// confirm. Stored so the server can verify the certHash in certConf.
-	// Empty when State == PENDING.
-	CertDER []byte
-	// SentNonce is the senderNonce placed in the server's IP/CP/KUP response.
+	// Certificate is the issued certificate that the client must confirm.
+	// Stored so the server can verify the certHash in certConf.
+	// Nil when State == PENDING.
+	Certificate *models.X509Certificate
+	// SentNonce is the hex-encoded senderNonce placed in the server's IP/CP/KUP response.
 	// The client echoes it back as recipNonce in certConf; the server checks
 	// they match (RFC 4210 §5.1.1).
-	SentNonce []byte
+	SentNonce string
 	// State is the lifecycle state of this transaction; see CMPTransactionState.
 	State CMPTransactionState
 	// ErrorMessage holds the CA failure reason when State == ISSUE_FAILED.
 	// Empty otherwise.
 	ErrorMessage string
-	// CSRDER is the DER-encoded PKCS#10 CSR built from the EE's CertTemplate.
+	// CSR is the certificate request built from the EE's CertTemplate.
 	// Populated only when State == PENDING so the async worker can re-issue
 	// the call to LWCEnroll/LWCReenroll without keeping the original PKIMessage.
-	// Empty when State == ISSUED (the cert is stored instead).
-	CSRDER []byte
+	// Nil when State == ISSUED (the cert is stored instead).
+	CSR *models.X509CertificateRequest
 	// IsReenrollment is true when the original request was kur (re-enrollment),
 	// false for ir/cr. The async worker uses this to choose LWCReenroll vs LWCEnroll.
 	IsReenrollment bool
@@ -158,7 +158,7 @@ type CMPTransactionRepo interface {
 	// outcome of LWCEnroll. errorMessage is ignored when state != ISSUE_FAILED.
 	// Returns nil even if the row was already deleted (e.g., by DeleteExpired
 	// racing the worker); the caller treats that as a no-op.
-	UpdateState(ctx context.Context, transactionID string, state CMPTransactionState, certDER []byte, errorMessage string) error
+	UpdateState(ctx context.Context, transactionID string, state CMPTransactionState, cert *models.X509Certificate, errorMessage string) error
 
 	// MarkRevokedByCertSerial transitions any CONFIRMED transaction with the
 	// given certificate serial number to REVOKED. This is called after a
