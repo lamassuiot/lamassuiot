@@ -2,8 +2,10 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -33,13 +35,19 @@ type CMPConfirmationMonitor struct {
 	logger    *logrus.Entry
 	txStore   storage.CMPTransactionRepo
 	caService services.CAService
+	// wfx is optional — when nil, no WFX transitions are emitted (e.g. WFX
+	// integration disabled in config). When set, every expired-unconfirmed
+	// transaction is also pushed into the workflow as Rejected so the workflow
+	// view in WFX stays in sync with the Lamassu transaction table.
+	wfx cmpwfx.CMPReporter
 }
 
-func NewCMPConfirmationMonitor(txStore storage.CMPTransactionRepo, caService services.CAService, logger *logrus.Entry) *CMPConfirmationMonitor {
+func NewCMPConfirmationMonitor(txStore storage.CMPTransactionRepo, caService services.CAService, wfx cmpwfx.CMPReporter, logger *logrus.Entry) *CMPConfirmationMonitor {
 	return &CMPConfirmationMonitor{
 		logger:    logger,
 		txStore:   txStore,
 		caService: caService,
+		wfx:       wfx,
 	}
 }
 
@@ -90,7 +98,9 @@ func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *l
 		lFunc.Warnf("ISSUED transaction has no cert serial; marking REVOKED without CA revocation")
 		if err := m.txStore.MarkRevokedByTransactionID(ctx, tx.TransactionID); err != nil {
 			lFunc.Warnf("could not mark transaction REVOKED: %v", err)
+			return
 		}
+		m.reportRejected(ctx, lFunc, tx, "ISSUED transaction had no cert serial; row marked REVOKED without CA revocation")
 		return
 	}
 
@@ -115,5 +125,38 @@ func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *l
 		return
 	}
 
+	reason := fmt.Sprintf(
+		"certConf wait time expired at %s without receipt; certificate %s revoked with cessationOfOperation",
+		tx.ExpiresAt.UTC().Format(time.RFC3339), tx.CertSerialNumber,
+	)
+	m.reportRejected(ctx, lFunc, tx, reason)
+
 	lFunc.Infof("revoked unconfirmed cert and marked transaction REVOKED")
+}
+
+// reportRejected pushes a Rejected transition into WFX so the workflow view
+// reflects the revocation. The WFX call is best-effort: the Lamassu-side
+// revocation has already succeeded by the time we get here, so a WFX failure
+// must not turn into a job error — it's logged and dropped. Skipped silently
+// when WFX integration is disabled (m.wfx == nil).
+func (m *CMPConfirmationMonitor) reportRejected(ctx context.Context, lFunc *logrus.Entry, tx storage.CMPTransaction, reason string) {
+	if m.wfx == nil {
+		return
+	}
+	transition := cmpwfx.CMPTransition{
+		TransactionID:     tx.TransactionID,
+		DMSID:             tx.DMSID,
+		RequestType:       tx.RequestType,
+		SubjectCommonName: tx.SubjectCommonName,
+		CertSerialNumber:  tx.CertSerialNumber,
+		State:             cmpwfx.CMPStateRejected,
+		Reason:            reason,
+		Metadata: map[string]any{
+			"rejectionSource": "cmp-confirmation-monitor",
+			"expiresAt":       tx.ExpiresAt.UTC().Format(time.RFC3339),
+		},
+	}
+	if _, err := m.wfx.Emit(ctx, transition); err != nil {
+		lFunc.Warnf("could not emit WFX Rejected transition: %v", err)
+	}
 }
