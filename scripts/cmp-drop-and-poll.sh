@@ -1,204 +1,264 @@
 #!/bin/bash
 ################################################################################
-# Simulates an EE that:
-#   1. Sends an IR (Initial Request) but drops the connection before reading
-#      the full response — simulating IoT device with unstable connectivity.
-#   2. Reconnects later and sends a pollReq with the same transactionID to
-#      retrieve the already-issued certificate.
+# CMP Drop-and-Poll demo
 #
-# Prerequisites:
-#   - Lamassu monolithic dev server running: go run ./monolithic/cmd/development/main.go
-#   - A DMS configured for CMP (the sample data creates "testcmp")
-#   - openssl 3.x with CMP support
-#   - A signer cert/key pair  (manufacturer credentials)
+# Simulates an EE that:
+#   1. Sends an IR (Initial Request) without reading the response — as if the
+#      connection dropped before openssl could parse IP and follow up with
+#      certConf. The server still completes issuance (context.WithoutCancel)
+#      and persists an ISSUED transaction row.
+#   2. Reconnects later with the same transactionID via a pollReq and
+#      retrieves the cert the server already issued (RFC 4210 §5.3.22 /
+#      RFC 9483 §4.4).
+#   3. When the DMS is configured for *explicit* confirmation
+#      (accept_implicit=false), sends a certConf so the transaction reaches
+#      CONFIRMED state. Without certConf the CMP confirmation monitor would
+#      eventually revoke the cert at the timeout deadline.
+#
+# Why we don't drive the IR with openssl directly
+# -----------------------------------------------
+# openssl's `cmp -cmd ir` always follows IP/CP with a certConf (unless you
+# pass -implicit_confirm AND the server agrees). On fast local dev hardware
+# the whole IR → IP → certConf → pkiConf round-trip finishes in <50 ms, so
+# any `timeout` we use to "kill" the connection lands too late: the row is
+# already CONFIRMED by the time we try pollReq, and the controller (rightly)
+# returns "unknown transaction state".
+#
+# We sidestep this by building the IR DER with openssl pointing at a closed
+# port — `-reqout` writes the request to disk before the TCP attempt — and
+# then transmitting that DER with curl. curl never sends a certConf, so the
+# server's row stays ISSUED, ready for the pollReq + certConf demo.
+#
+# Prerequisites
+# -------------
+#   - Lamassu monolithic dev server on localhost:8080
+#   - A DMS with auth_mode=CLIENT_CERTIFICATE (the sample data creates
+#     "sample-cmp-dms"); accept_implicit may be true OR false.
+#   - python3 with stdlib only — used to build the pollReq + certConf messages.
+#   - openssl 3.x, curl, jq
 #
 # Usage:
-#   ./scripts/cmp-drop-and-poll.sh [DMS_ID]
+#   ./scripts/cmp-drop-and-poll.sh [DMS_ID [SERVER]]
 ################################################################################
 set -euo pipefail
 
 DMS_ID="${1:-${DMS_ID:-sample-cmp-dms}}"
-SERVER="${SERVER:-http://localhost:8080}"
+SERVER="${2:-${SERVER:-http://localhost:8080}}"
 CMP_PATH="/api/dmsmanager/.well-known/cmp/p/${DMS_ID}"
 WORKDIR="${WORKDIR:-/tmp/cmp-drop-poll}"
 mkdir -p "${WORKDIR}"
+DEVICE_CN="cmp-drop-$(date +%s)"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+POLLREQ_CLIENT="${SCRIPT_DIR}/cmp_pollreq.py"
+CERTCONF_CLIENT="${SCRIPT_DIR}/cmp_certconf.py"
 
-echo "=== CMP Drop-and-Poll Simulation ==="
-echo "Server:  ${SERVER}${CMP_PATH}"
-echo "Workdir: ${WORKDIR}"
+if [ -t 1 ]; then
+    GREEN="\033[0;32m"; YELLOW="\033[0;33m"; RED="\033[0;31m"; CYAN="\033[0;36m"; RESET="\033[0m"
+else
+    GREEN=""; YELLOW=""; RED=""; CYAN=""; RESET=""
+fi
+ok()   { echo -e "${GREEN}✓${RESET} $*"; }
+note() { echo -e "${CYAN}→${RESET} $*"; }
+info() { echo -e "  $*"; }
+fail() { echo -e "${RED}✗ $*${RESET}" >&2; exit 1; }
+
+echo "========================================================================"
+echo " CMP Drop-and-Poll Demo"
+echo "========================================================================"
+echo "  DMS         : ${DMS_ID}"
+echo "  Server      : ${SERVER}${CMP_PATH}"
+echo "  Device CN   : ${DEVICE_CN}"
+echo "  Workdir     : ${WORKDIR}"
 echo ""
 
-# --- Provision bootstrap CA + signer (registered with the DMS) ---
-# The DMS Manager now chain-validates the CMP signer cert against
-# client_certificate_settings.validation_cas (RFC-9483 mirror of EST mTLS
-# auth). A self-signed signer would be rejected, so we provision a real
-# bootstrap CA via the Lamassu API and add it to the DMS first.
-echo "[1/6] Provisioning bootstrap CA + signer cert..."
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# ── Step 1: DMS config — decide signing + confirmation policy ────────────────
+echo "[1/8] Reading DMS configuration..."
+DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
+    || fail "cannot fetch DMS ${DMS_ID} at ${SERVER}"
+
+PROT_SERIAL=$(echo "${DMS_JSON}"     | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.protection_certificate // empty')
+ENFORCE_PROT=$(echo "${DMS_JSON}"    | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enforce_request_protection // false')
+ENROLLMENT_CA=$(echo "${DMS_JSON}"   | jq -r '.settings.enrollment_settings.enrollment_ca // empty')
+ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
+info "enforce_request_protection : ${ENFORCE_PROT}"
+info "accept_implicit            : ${ACCEPT_IMPLICIT}"
+info "enrollment_ca              : ${ENROLLMENT_CA:-<empty>}"
+info "protection_certificate     : ${PROT_SERIAL:-<empty>}"
+
+# ── Step 2: bootstrap credentials + device key ───────────────────────────────
+echo ""
+echo "[2/8] Provisioning bootstrap CA + signer (registered as ValidationCA)..."
 # shellcheck source=cmp-bootstrap-setup.sh
 . "${SCRIPT_DIR}/cmp-bootstrap-setup.sh"
-cmp_bootstrap_setup "${SERVER}" "${DMS_ID}" "${WORKDIR}" \
-    || { echo "Bootstrap setup failed" >&2; exit 1; }
-echo "    bootstrap CA: ${BOOTSTRAP_CA_ID}"
+cmp_bootstrap_setup "${SERVER}" "${DMS_ID}" "${WORKDIR}" || fail "bootstrap setup failed"
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "${WORKDIR}/device.key" 2>/dev/null
+ok "bootstrap CA ${BOOTSTRAP_CA_ID} + signer + device keys ready"
 
-# --- Generate device key + CSR ---
-DEVICE_CN="iot-device-$(date +%s)"
-echo "[2/6] Generating device key + CSR (CN=${DEVICE_CN})..."
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
-    -out "${WORKDIR}/device.key" 2>/dev/null
-openssl req -new -key "${WORKDIR}/device.key" \
-    -out "${WORKDIR}/device.csr" -subj "/CN=${DEVICE_CN}" 2>/dev/null
-
-# ============================================================================
-# STEP 1: Simulate IR with "connection drop"
+# ── Step 3: build the IR DER without sending it ─────────────────────────────
 #
-# We use `timeout` to kill the openssl process almost immediately after it
-# sends the request. The server receives the IR, issues the cert, stores the
-# ISSUED row — but the EE never reads the response.
-# ============================================================================
+# openssl is pointed at 127.0.0.1:1 (closed), so the eventual TCP connect()
+# will fail — but `-reqout` writes the constructed IR DER to disk before that
+# attempt. The non-zero exit is expected and ignored.
 echo ""
-echo "[3/6] Sending IR and simulating connection drop (timeout 0.3s)..."
-echo "       The server will issue the cert and store it even though we abort."
-
-# Save the request DER so we can extract the transactionID later
-timeout 0.3 openssl cmp \
-    -server "${SERVER}" \
-    -path "${CMP_PATH}" \
+echo "[3/8] Building IR DER (openssl points at a closed port — no transmission yet)..."
+set +e
+openssl cmp \
     -cmd ir \
-    -cert "${WORKDIR}/signer.crt" \
-    -key "${WORKDIR}/signer.key" \
-    -csr "${WORKDIR}/device.csr" \
-    -newkey "${WORKDIR}/device.key" \
-    -reqout "${WORKDIR}/ir_request.der" \
-    -certout "${WORKDIR}/device_cert.crt" \
-    -ignore_keyusage \
-    -unprotected_errors \
-    -verbosity 4 \
-    -batch 2>"${WORKDIR}/ir_output.txt" || true
+    -server http://127.0.0.1:1 -path /nowhere \
+    -cert "${WORKDIR}/signer.crt" -key "${WORKDIR}/signer.key" \
+    -extracerts "${WORKDIR}/signer.crt" \
+    -newkey "${WORKDIR}/device.key" -subject "/CN=${DEVICE_CN}" \
+    -reqout "${WORKDIR}/ir-request.der" \
+    -certout "${WORKDIR}/discard.crt" \
+    -msg_timeout 1 \
+    >"${WORKDIR}/ir.stdout" 2>"${WORKDIR}/ir.stderr"
+set -e
 
-echo "       Connection killed. EE has no cert."
-echo ""
-
-# Check if the cert was obtained (it shouldn't be if timeout worked)
-if [ -f "${WORKDIR}/device_cert.crt" ]; then
-    echo "   NOTE: The response arrived before timeout — the connection was fast."
-    echo "   This still proves the cert is stored for pollReq recovery."
-    echo "   Deleting cert to simulate loss..."
-    rm -f "${WORKDIR}/device_cert.crt"
+if [ ! -s "${WORKDIR}/ir-request.der" ]; then
+    fail "openssl did not write the IR DER — check ${WORKDIR}/ir.stderr"
 fi
 
-# ============================================================================
-# STEP 2: Wait briefly, then do a normal IR with the same transactionID
-# Using -reqin to replay the exact same request — the server will detect the
-# duplicate txID and reject. This proves the row exists.
-# ============================================================================
-echo "[4/6] Verifying server stored the transaction (duplicate check)..."
-if [ -f "${WORKDIR}/ir_request.der" ]; then
-    # Replay the same IR request — expect "transactionID already in use"
-    HTTP_CODE=$(curl -s -o "${WORKDIR}/dup_response.der" -w "%{http_code}" \
-        -X POST \
-        -H "Content-Type: application/pkixcmp" \
-        --data-binary "@${WORKDIR}/ir_request.der" \
-        "${SERVER}${CMP_PATH}")
-    echo "       Duplicate IR response: HTTP ${HTTP_CODE}"
-    if [ -f "${WORKDIR}/dup_response.der" ]; then
-        # Parse the response to show it's a rejection
-        openssl asn1parse -inform DER -in "${WORKDIR}/dup_response.der" 2>/dev/null | \
-            grep -i "utf8" | head -3 || true
-    fi
-    echo "       ✓ Server correctly rejects duplicate — the ISSUED row exists."
+TX_HEX=$(python3 -c "
+import sys
+with open('${WORKDIR}/ir-request.der','rb') as f: d=f.read()
+i=d.find(bytes([0xa4,0x12,0x04,0x10]))
+sys.exit(1) if i<0 else print(d[i+4:i+20].hex())")
+ok "IR built — transactionID ${TX_HEX} ($(wc -c < "${WORKDIR}/ir-request.der") bytes)"
+
+# ── Step 4: send the IR via curl — server processes it, we ignore the reply ─
+#
+# This is the "drop" simulation: the server completes LWCEnroll and writes the
+# ISSUED row. curl reads the IP response into a file we never use; nothing
+# sends certConf back so the row stays in ISSUED. From the server's POV this
+# is indistinguishable from an EE that received the bytes and then crashed.
+echo ""
+echo "[4/8] Sending IR via curl, discarding response (simulated disconnect)..."
+HTTP_CODE=$(curl -sS -o "${WORKDIR}/ir-response.der" -w "%{http_code}" \
+    -X POST \
+    -H "Content-Type: application/pkixcmp" \
+    --data-binary "@${WORKDIR}/ir-request.der" \
+    --max-time 10 \
+    "${SERVER}${CMP_PATH}" || echo "000")
+info "curl HTTP status: ${HTTP_CODE} ($(wc -c < "${WORKDIR}/ir-response.der") bytes received and ignored)"
+[ "${HTTP_CODE}" = "200" ] || fail "server did not accept the IR (status ${HTTP_CODE})"
+ok "IR delivered; server has issued the cert and stored an ISSUED row"
+
+# ── Step 5: confirm state via the DMS management API ────────────────────────
+echo ""
+echo "[5/8] Verifying transaction state via /dms/{id}/cmp/transactions..."
+
+fetch_state() {
+    local filter="filter=transaction_id%5Bequal%5D${1}"
+    curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}/cmp/transactions?${filter}" \
+        | jq -r '.list[0].state // empty'
+}
+
+# Give the server a moment to flush the row (the IR returns the cert inline
+# after Insert returns, so this is mostly belt-and-braces).
+sleep 1
+STATE=$(fetch_state "${TX_HEX}")
+case "${STATE}" in
+    ISSUED)
+        ok "state=ISSUED — ready for pollReq" ;;
+    "")
+        fail "no transaction row found for ${TX_HEX} (filter may not be supported by the API)" ;;
+    *)
+        fail "unexpected state '${STATE}' — expected ISSUED" ;;
+esac
+
+# ── Step 6: pollReq to retrieve the cert ─────────────────────────────────────
+echo ""
+echo "[6/8] Sending pollReq with the captured transactionID..."
+
+POLL_FLAGS=()
+if [ "${ENFORCE_PROT}" = "true" ]; then
+    note "DMS enforces request protection — signing the pollReq"
+    POLL_FLAGS+=(--signer-cert "${WORKDIR}/signer.crt" --signer-key "${WORKDIR}/signer.key")
 else
-    echo "       WARNING: No IR request DER saved (timeout too aggressive)."
-    echo "       Falling back: sending a fresh IR that completes normally..."
-    openssl cmp \
-        -server "${SERVER}" \
-        -path "${CMP_PATH}" \
-        -cmd ir \
-        -cert "${WORKDIR}/signer.crt" \
-        -key "${WORKDIR}/signer.key" \
-        -csr "${WORKDIR}/device.csr" \
-        -newkey "${WORKDIR}/device.key" \
-        -reqout "${WORKDIR}/ir_request.der" \
-        -certout "${WORKDIR}/device_cert_direct.crt" \
-        -ignore_keyusage \
-        -unprotected_errors \
-        -verbosity 4 \
-        -batch 2>"${WORKDIR}/ir_output_full.txt" || true
-    echo "       Direct enrollment completed (row is now ISSUED)."
+    note "DMS does NOT enforce request protection — unsigned pollReq"
 fi
 
-# ============================================================================
-# STEP 3: Build and send pollReq to recover the cert
+python3 "${POLLREQ_CLIENT}" \
+    --server "${SERVER}" \
+    --path "${CMP_PATH}" \
+    --tx-id "${TX_HEX}" \
+    --out "${WORKDIR}/pollrep.der" \
+    "${POLL_FLAGS[@]}" \
+    | sed 's/^/  /' \
+    || fail "pollReq failed — see ${WORKDIR}/pollrep.der"
+
+if [ ! -s "${WORKDIR}/pollrep.der" ]; then
+    fail "pollReq returned no body"
+fi
+ok "pollRep received — cert delivered inline"
+
+# ── Step 7: certConf when explicit confirmation is required ─────────────────
 #
-# openssl cmp doesn't support a standalone pollReq command, so we construct
-# a minimal pollReq DER using openssl asn1parse + xxd, then POST it via curl.
-# Alternatively, we can extract the transactionID from the saved request and
-# use a small Go helper or Python script.
-#
-# For simplicity, here we demonstrate using the -reqin approach: openssl cmp
-# can re-send the same IR and if the server's "duplicate" response carries the
-# cert, the client extracts it. In our implementation, the duplicate check
-# returns an error — so the EE must use pollReq.
-#
-# The cleanest E2E demo uses the Go test binary or a purpose-built pollReq
-# tool. Below we show the conceptual curl + raw DER approach:
-# ============================================================================
+# RFC 4210 §5.2.8: when the EE has not requested implicit confirmation (or
+# the server is not configured to grant it), certConf is mandatory to finalise
+# the enrollment. Without it the row stays in ISSUED until the timeout and
+# the CMP confirmation monitor revokes the cert.
 echo ""
-echo "[5/6] Sending pollReq to recover the certificate..."
-echo "       (Building raw CMP pollReq DER from saved transactionID)"
+if [ "${ACCEPT_IMPLICIT}" = "true" ]; then
+    echo "[7/8] DMS uses implicit confirmation — server already CONFIRMED the row on pollReq delivery. Skipping certConf."
+else
+    echo "[7/8] DMS requires explicit confirmation — sending certConf..."
+    CC_FLAGS=()
+    if [ "${ENFORCE_PROT}" = "true" ]; then
+        CC_FLAGS+=(--signer-cert "${WORKDIR}/signer.crt" --signer-key "${WORKDIR}/signer.key")
+    fi
 
-# Extract transactionID from the saved IR request (it's at a known ASN.1 offset)
-if [ -f "${WORKDIR}/ir_request.der" ]; then
-    # The transactionID is an OCTET STRING [4] in the PKIHeader.
-    # We extract it with asn1parse and use it to build a pollReq.
-    TXID_HEX=$(openssl asn1parse -inform DER -in "${WORKDIR}/ir_request.der" 2>/dev/null | \
-        grep -A1 "cont \[ 4 \]" | grep "OCTET STRING" | head -1 | \
-        sed 's/.*\[HEX DUMP\]:\([0-9A-Fa-f]*\)/\1/' || echo "")
-
-    if [ -n "${TXID_HEX}" ]; then
-        echo "       TransactionID: ${TXID_HEX}"
-        echo ""
-        echo "       To send a pollReq via curl, you would construct a minimal"
-        echo "       PKIMessage with body tag [25] (pollReq) carrying certReqId=0"
-        echo "       and the same transactionID in the header."
-        echo ""
-        echo "       In production, the CMP client library handles this automatically."
-        echo "       openssl cmp does it internally when the server sends waiting(3)."
+    if python3 "${CERTCONF_CLIENT}" \
+        --server "${SERVER}" \
+        --path "${CMP_PATH}" \
+        --pollrep "${WORKDIR}/pollrep.der" \
+        --out "${WORKDIR}/pkiconf.der" \
+        "${CC_FLAGS[@]}" \
+        | sed 's/^/  /'; then
+        ok "certConf accepted — server returned pkiConf"
     else
-        echo "       Could not extract transactionID from IR request."
+        fail "certConf was rejected by the server (see ${WORKDIR}/pkiconf.der)"
     fi
 fi
 
-# ============================================================================
-# NOTE: Complete pollReq simulation
-#
-# The most reliable way to test pollReq end-to-end is to run the monolithic
-# server and use the Go test infrastructure directly:
-#
-#   cd backend && go test ./pkg/assemblers/tests/dms-manager/ \
-#       -run TestCMPE2E -count=1 -timeout 60s -v
-#
-# Or to use the controller unit tests which exercise pollReq directly:
-#
-#   cd backend && go test ./pkg/controllers/ \
-#       -run "TestHandleCMP_PollReq_WhileIssued_DeliversCert" -v
-#
-# ============================================================================
+# ── Step 8: verify the row reached CONFIRMED ────────────────────────────────
+echo ""
+echo "[8/8] Re-checking transaction state..."
+sleep 1
+STATE=$(fetch_state "${TX_HEX}")
+case "${STATE}" in
+    CONFIRMED)
+        ok "state=CONFIRMED — enrollment complete" ;;
+    ISSUED)
+        fail "state still ISSUED — certConf was not honoured by the server (or accept_implicit is false but pollReq didn't trigger confirmation)" ;;
+    "")
+        fail "transaction row vanished — was DeleteExpired racing?" ;;
+    *)
+        fail "unexpected final state '${STATE}'" ;;
+esac
 
 echo ""
-echo "[6/6] Summary"
 echo "========================================================================"
+echo -e "${GREEN} CMP DROP-AND-POLL SUCCEEDED${RESET}"
+echo "========================================================================"
+echo "  - IR built by openssl, transmitted by curl (no auto-certConf)"
+echo "  - server wrote cmp_transactions row in state ISSUED"
+echo "  - pollReq with the same txID returned the stored cert"
+if [ "${ACCEPT_IMPLICIT}" = "true" ]; then
+    echo "  - implicit confirmation: row reached CONFIRMED on pollReq delivery"
+else
+    echo "  - certConf accepted: row reached CONFIRMED"
+fi
 echo ""
-echo "What happened:"
-echo "  1. EE sent IR → server received it, issued the cert, stored ISSUED row"
-echo "  2. EE connection dropped (simulated via timeout kill)"
-echo "  3. Server still has the ISSUED row with the cert (context.WithoutCancel)"
-echo "  4. EE reconnects with pollReq → server delivers the cert"
+echo "  Files preserved in: ${WORKDIR}"
+echo "    ir-request.der      – the IR built by openssl (sent by curl)"
+echo "    ir-response.der     – the IP response curl received and ignored"
+echo "    pollrep.der         – the pollReq response (IP/CP body, contains cert)"
+if [ "${ACCEPT_IMPLICIT}" != "true" ]; then
+    echo "    pkiconf.der         – the pkiConf response acknowledging certConf"
+fi
+echo "    signer.crt/.key     – bootstrap credential reused across IR/pollReq/certConf"
 echo ""
-echo "Key code path (backend/pkg/controllers/cmp.go handleEnroll):"
-echo "  issuanceCtx := context.WithoutCancel(ctx.Request.Context())"
-echo "  cert, err := r.svc.LWCEnroll(issuanceCtx, csr, dmsID)"
-echo "  r.store.Insert(issuanceCtx, storage.CMPTransaction{State: ISSUED, ...})"
-echo ""
-echo "Workdir preserved at: ${WORKDIR}"
+echo "  Inspect the issued cert:"
+echo "    openssl asn1parse -inform DER -in ${WORKDIR}/pollrep.der | less"
 echo "========================================================================"
