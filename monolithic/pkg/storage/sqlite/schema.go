@@ -194,6 +194,7 @@ func initializeSchema(db *gorm.DB) error {
 			is_reenrollment BOOLEAN NOT NULL DEFAULT 0,
 			request_type TEXT NOT NULL DEFAULT '',
 			subject_common_name TEXT NOT NULL DEFAULT '',
+			wfx_job_id TEXT NOT NULL DEFAULT '',
 			confirmed_at DATETIME,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME NOT NULL,

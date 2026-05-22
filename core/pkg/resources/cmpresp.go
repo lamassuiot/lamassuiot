@@ -18,6 +18,7 @@ type CMPTransactionResponse struct {
 	IsReenrollment    bool       `json:"is_reenrollment"`
 	RequestType       string     `json:"request_type,omitempty"`
 	SubjectCommonName string     `json:"subject_common_name,omitempty"`
+	WFXJobID          string     `json:"wfx_job_id,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
 	ExpiresAt         time.Time  `json:"expires_at"`
 	ConfirmedAt       *time.Time `json:"confirmed_at,omitempty"`
