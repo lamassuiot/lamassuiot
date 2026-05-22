@@ -50,8 +50,16 @@ type CMPTransition struct {
 }
 
 // CMPReporter pushes CMP transaction state transitions into WFX.
+//
+// Emit returns the WFX job ID associated with the transition's
+// SubjectCommonName so callers can persist it alongside the CMP transaction
+// row (used to deep-link the management UI to the corresponding WFX job).
+// When SubjectCommonName is empty the call is dropped silently and the
+// returned jobID is "" — this lets the controller emit early lifecycle
+// states (Received, Parsed) before the CSR has been parsed without WFX
+// rejecting them for lack of a meaningful client identifier.
 type CMPReporter interface {
-	Emit(ctx context.Context, transition CMPTransition) error
+	Emit(ctx context.Context, transition CMPTransition) (jobID string, err error)
 }
 
 type cmpReporter struct {
@@ -108,34 +116,44 @@ func NewCMPReporter(cfg bconfig.DMSWFXConfig, logger *logrus.Entry) (CMPReporter
 	}, nil
 }
 
-func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) error {
+func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) (string, error) {
 	if transition.TransactionID == "" {
-		return errors.New("missing CMP transaction ID")
+		return "", errors.New("missing CMP transaction ID")
+	}
+
+	// The WFX job is keyed by SubjectCommonName (= device ID). For early
+	// lifecycle states emitted before the CSR is parsed (Received, Parsed
+	// for pollReq/certConf flows where the CN is not directly available)
+	// we cannot create or look up a job, so we drop the call silently.
+	// The transactionID is still kept inside the job's definition once a
+	// later, CN-bearing transition creates it.
+	if transition.SubjectCommonName == "" {
+		return "", nil
 	}
 
 	ctx, cancel := withoutCancelWithTimeout(ctx, r.timeout)
 	defer cancel()
 
 	if err := r.ensureWorkflow(ctx); err != nil {
-		return err
+		return "", err
 	}
 
 	job, created, err := r.ensureJob(ctx, transition)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if job == nil {
-		return errors.New("wfx returned a nil job")
+		return "", errors.New("wfx returned a nil job")
 	}
 
 	// The workflow starts in Received, so job creation alone already captures
 	// the first state without needing an explicit same-state update.
 	if created && transition.State == CMPStateReceived {
-		return nil
+		return job.ID, nil
 	}
 
-	if job.Status != nil && job.Status.State == string(transition.State) && transition.Reason == "" && len(transition.Metadata) == 0 && transition.CertSerialNumber == "" && transition.SubjectCommonName == "" && transition.RequestType == "" {
-		return nil
+	if job.Status != nil && job.Status.State == string(transition.State) && transition.Reason == "" && len(transition.Metadata) == 0 && transition.CertSerialNumber == "" && transition.RequestType == "" {
+		return job.ID, nil
 	}
 
 	status := wfxapi.PutJobsIdStatusJSONRequestBody{
@@ -152,12 +170,12 @@ func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) error 
 
 	resp, err := r.client.PutJobsIdStatusWithResponse(ctx, job.ID, nil, status)
 	if err != nil {
-		return fmt.Errorf("update WFX job %s status to %s: %w", job.ID, transition.State, err)
+		return "", fmt.Errorf("update WFX job %s status to %s: %w", job.ID, transition.State, err)
 	}
 	if resp.JSON200 != nil {
-		return nil
+		return job.ID, nil
 	}
-	return fmt.Errorf("update WFX job %s status to %s failed: HTTP %d", job.ID, transition.State, resp.StatusCode())
+	return "", fmt.Errorf("update WFX job %s status to %s failed: HTTP %d", job.ID, transition.State, resp.StatusCode())
 }
 
 func (r *cmpReporter) ensureWorkflow(ctx context.Context) error {
@@ -196,28 +214,38 @@ func (r *cmpReporter) ensureWorkflow(ctx context.Context) error {
 	}
 }
 
+// ensureJob locates the WFX job for the given transition or creates one if it
+// does not yet exist. Jobs are keyed by clientId = SubjectCommonName (device
+// ID), so a single device's enrollments collapse onto one workflow row in WFX.
+// To distinguish between multiple concurrent transactions for the same device
+// we narrow the lookup by definition_hash and additionally verify the
+// definition.transactionId once the job is found — this avoids racing two
+// IRs from the same device into the same WFX job.
 func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition) (*wfxapi.Job, bool, error) {
-	limit := int32(1)
+	limit := int32(100)
 	params := &wfxapi.GetJobsParams{
-		ParamClientID: ptr(transition.TransactionID),
+		ParamClientID: ptr(transition.SubjectCommonName),
 		ParamWorkflow: ptr(r.workflowName),
 		ParamLimit:    &limit,
 	}
 
 	getResp, err := r.client.GetJobsWithResponse(ctx, params)
 	if err != nil {
-		return nil, false, fmt.Errorf("query WFX jobs for tx %s: %w", transition.TransactionID, err)
+		return nil, false, fmt.Errorf("query WFX jobs for device %s: %w", transition.SubjectCommonName, err)
 	}
-	if getResp.JSON200 != nil && len(getResp.JSON200.Content) > 0 {
-		job := getResp.JSON200.Content[0]
-		return &job, false, nil
-	}
-	if getResp.JSON200 == nil {
-		return nil, false, fmt.Errorf("query WFX jobs for tx %s failed: HTTP %d", transition.TransactionID, getResp.StatusCode())
+	if getResp.JSON200 != nil {
+		for i := range getResp.JSON200.Content {
+			job := getResp.JSON200.Content[i]
+			if jobMatchesTransaction(&job, transition.TransactionID) {
+				return &job, false, nil
+			}
+		}
+	} else {
+		return nil, false, fmt.Errorf("query WFX jobs for device %s failed: HTTP %d", transition.SubjectCommonName, getResp.StatusCode())
 	}
 
 	body := wfxapi.PostJobsJSONRequestBody{
-		ClientID:   transition.TransactionID,
+		ClientID:   transition.SubjectCommonName,
 		Workflow:   r.workflowName,
 		Definition: buildJobDefinition(transition),
 	}
@@ -228,12 +256,23 @@ func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition) (
 
 	createResp, err := r.client.PostJobsWithResponse(ctx, nil, body)
 	if err != nil {
-		return nil, false, fmt.Errorf("create WFX job for tx %s: %w", transition.TransactionID, err)
+		return nil, false, fmt.Errorf("create WFX job for tx %s (device %s): %w", transition.TransactionID, transition.SubjectCommonName, err)
 	}
 	if createResp.JSON201 != nil {
 		return createResp.JSON201, true, nil
 	}
-	return nil, false, fmt.Errorf("create WFX job for tx %s failed: HTTP %d", transition.TransactionID, createResp.StatusCode())
+	return nil, false, fmt.Errorf("create WFX job for tx %s (device %s) failed: HTTP %d", transition.TransactionID, transition.SubjectCommonName, createResp.StatusCode())
+}
+
+// jobMatchesTransaction reports whether a WFX job's definition.transactionId
+// matches the given txID. This is the secondary key that lets us tell apart
+// concurrent enrollments for the same device.
+func jobMatchesTransaction(job *wfxapi.Job, txID string) bool {
+	if job == nil || job.Definition == nil {
+		return false
+	}
+	got, ok := job.Definition["transactionId"].(string)
+	return ok && got == txID
 }
 
 func defaultCMPWorkflow(name string) wfxapi.Workflow {

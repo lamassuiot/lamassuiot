@@ -97,6 +97,12 @@ type CMPTransaction struct {
 	// management UI can render device-keyed transaction listings without
 	// reparsing the cert DER.
 	SubjectCommonName string
+	// WFXJobID is the UUID of the WFX job that mirrors this CMP transaction.
+	// Empty when WFX integration is disabled, when the transaction did not
+	// reach a state with a known device CN, or when the WFX side rejected
+	// the create call. The management UI uses it to deep-link transaction
+	// rows to the corresponding workflow.
+	WFXJobID string
 	// ConfirmedAt records when the certConf was received and validated. Zero
 	// value for non-confirmed transactions.
 	ConfirmedAt time.Time
