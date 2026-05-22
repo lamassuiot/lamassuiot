@@ -1,21 +1,10 @@
-FROM ubuntu:22.04
-
 #################################################################################################
 #                                                                                               #
-# Install the Go fork                                                                           #
+# Use the custom go fork as a base image                                                        #
 #                                                                                               #
 #################################################################################################
 
-RUN apt-get update -y && apt-get install -y software-properties-common git
-RUN add-apt-repository ppa:longsleep/golang-backports
-RUN apt-get update -y && apt-get install -y golang-go
-
-WORKDIR /
-RUN git clone https://github.com/lamassuiot/pqc-cloudflare-go.git
-
-WORKDIR /pqc-cloudflare-go
-RUN cd src && ./make.bash
-ENV PATH "/pqc-cloudflare-go/bin:$PATH"
+FROM ghcr.io/lamassuiot/golang-pqc:latest
 
 #################################################################################################
 #                                                                                               #
