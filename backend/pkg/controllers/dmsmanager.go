@@ -153,6 +153,7 @@ func cmpTransactionToResponse(tx storage.CMPTransaction) resources.CMPTransactio
 		IsReenrollment:    tx.IsReenrollment,
 		RequestType:       tx.RequestType,
 		SubjectCommonName: tx.SubjectCommonName,
+		WFXJobID:          tx.WFXJobID,
 		CreatedAt:         tx.CreatedAt,
 		ExpiresAt:         tx.ExpiresAt,
 		ErrorMessage:      tx.ErrorMessage,

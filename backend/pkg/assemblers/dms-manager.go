@@ -116,7 +116,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSSer
 	if conf.CMPConfirmationMonitoringJob.Enabled {
 		lMonitor := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "CMP Confirmation Monitor")
 		lMonitor.Info("CMP Confirmation Monitoring is enabled")
-		monitorJob := jobs.NewCMPConfirmationMonitor(cmptxStorage, caService, lMonitor)
+		monitorJob := jobs.NewCMPConfirmationMonitor(cmptxStorage, caService, cmpReporter, lMonitor)
 		scheduler := jobs.NewJobScheduler(lMonitor, conf.CMPConfirmationMonitoringJob.Frequency, monitorJob)
 		scheduler.Start()
 	}

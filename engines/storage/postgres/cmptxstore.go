@@ -27,6 +27,7 @@ type cmpTransactionRow struct {
 	IsReenrollment    bool      `gorm:"column:is_reenrollment;not null;default:false"`
 	RequestType       string    `gorm:"column:request_type;not null;default:''"`
 	SubjectCommonName string    `gorm:"column:subject_common_name;not null;default:''"`
+	WFXJobID          string    `gorm:"column:wfx_job_id;not null;default:''"`
 	ConfirmedAt       time.Time `gorm:"column:confirmed_at"`
 	ExpiresAt         time.Time `gorm:"column:expires_at;not null"`
 	CreatedAt         time.Time `gorm:"column:created_at;autoCreateTime"`
@@ -108,6 +109,7 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 		IsReenrollment:    tx.IsReenrollment,
 		RequestType:       tx.RequestType,
 		SubjectCommonName: tx.SubjectCommonName,
+		WFXJobID:          tx.WFXJobID,
 		ExpiresAt:         tx.ExpiresAt,
 		CreatedAt:         tx.CreatedAt,
 	}
@@ -387,6 +389,7 @@ func rowToDomain(row cmpTransactionRow) storage.CMPTransaction {
 		IsReenrollment:    row.IsReenrollment,
 		RequestType:       row.RequestType,
 		SubjectCommonName: row.SubjectCommonName,
+		WFXJobID:          row.WFXJobID,
 		ConfirmedAt:       row.ConfirmedAt,
 		ExpiresAt:         row.ExpiresAt,
 		CreatedAt:         row.CreatedAt,
