@@ -20,10 +20,6 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// RFC 4210 §5.2.8.
 	ConfirmationTimeout TimeDuration `json:"confirmation_timeout"`
 
-	// EnrollmentCA is the ID of the CA used to sign certificates issued via
-	// this CMP profile. Overrides EnrollmentSettings.EnrollmentCA when set.
-	EnrollmentCA string `json:"enrollment_ca"`
-
 	// AuthMode selects how the RA authenticates the end-entity's CMP request.
 	// Currently only CLIENT_CERTIFICATE (mTLS / signature-based protection) is supported.
 	AuthMode CMPAuthMode `json:"auth_mode"`

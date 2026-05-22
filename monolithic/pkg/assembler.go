@@ -122,8 +122,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			Logs:    svcLogs,
+			Server:  svcServer,
 			CryptoEngineConfig: config.CryptoEngines{
 				LogLevel:      cconfig.Info,
 				DefaultEngine: conf.CryptoEngines[0].ID,
@@ -145,9 +145,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			OpenAPI:                  cconfig.OpenAPIConfig{Enabled: true},
+			Logs:                     svcLogs,
+			Server:                   svcServer,
 			PublisherEventBus:        conf.PublisherEventBus,
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
@@ -167,8 +167,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			Logs:    svcLogs,
+			Server:  svcServer,
 			FilesystemStorage: cconfig.FSStorageConfig{
 				ID:   "fs",
 				Type: cconfig.LocalFilesystem,
@@ -219,21 +219,14 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
-			PublisherEventBus:         conf.PublisherEventBus,
-			DownstreamCertificateFile: "proxy.crt",
-			Storage:                   conf.Storage,
-			AuthzClient:               authzClientConf,
+			OpenAPI:                      cconfig.OpenAPIConfig{Enabled: true},
+			Logs:                         svcLogs,
+			Server:                       svcServer,
+			PublisherEventBus:            conf.PublisherEventBus,
+			DownstreamCertificateFile:    "proxy.crt",
+			Storage:                      conf.Storage,
+			AuthzClient:                  authzClientConf,
+			CMPConfirmationMonitoringJob: conf.Monitoring,
 			WFX: config.DMSWFXConfig{
 				Enabled: conf.WfxMgmtPort > 0,
 				HTTPClient: cconfig.HTTPClient{

@@ -16,18 +16,20 @@ import (
 // cmpTransactionRow is the GORM model that maps to the cmp_transactions table.
 // It is intentionally kept private; callers use the domain type storage.CMPTransaction.
 type cmpTransactionRow struct {
-	TransactionID    string    `gorm:"primaryKey;column:transaction_id"`
-	DMSID            string    `gorm:"column:dms_id;not null"`
-	CertSerialNumber string    `gorm:"column:cert_serial_number;not null;default:''"`
-	CertDER          []byte    `gorm:"column:cert_der"`
-	SentNonce        []byte    `gorm:"column:sent_nonce;not null"`
-	State            string    `gorm:"column:state;not null;default:ISSUED"`
-	ErrorMessage     string    `gorm:"column:error_message;not null;default:''"`
-	CSRDER           []byte    `gorm:"column:csr_der"`
-	IsReenrollment   bool      `gorm:"column:is_reenrollment;not null;default:false"`
-	ConfirmedAt      time.Time `gorm:"column:confirmed_at"`
-	ExpiresAt        time.Time `gorm:"column:expires_at;not null"`
-	CreatedAt        time.Time `gorm:"column:created_at;autoCreateTime"`
+	TransactionID     string    `gorm:"primaryKey;column:transaction_id"`
+	DMSID             string    `gorm:"column:dms_id;not null"`
+	CertSerialNumber  string    `gorm:"column:cert_serial_number;not null;default:''"`
+	CertDER           []byte    `gorm:"column:cert_der"`
+	SentNonce         []byte    `gorm:"column:sent_nonce;not null"`
+	State             string    `gorm:"column:state;not null;default:ISSUED"`
+	ErrorMessage      string    `gorm:"column:error_message;not null;default:''"`
+	CSRDER            []byte    `gorm:"column:csr_der"`
+	IsReenrollment    bool      `gorm:"column:is_reenrollment;not null;default:false"`
+	RequestType       string    `gorm:"column:request_type;not null;default:''"`
+	SubjectCommonName string    `gorm:"column:subject_common_name;not null;default:''"`
+	ConfirmedAt       time.Time `gorm:"column:confirmed_at"`
+	ExpiresAt         time.Time `gorm:"column:expires_at;not null"`
+	CreatedAt         time.Time `gorm:"column:created_at;autoCreateTime"`
 }
 
 func (cmpTransactionRow) TableName() string { return "cmp_transactions" }
@@ -95,17 +97,19 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 		state = storage.CMPTransactionStateIssued
 	}
 	row := cmpTransactionRow{
-		TransactionID:    tx.TransactionID,
-		DMSID:            tx.DMSID,
-		CertSerialNumber: tx.CertSerialNumber,
-		CertDER:          tx.CertDER,
-		SentNonce:        tx.SentNonce,
-		State:            string(state),
-		ErrorMessage:     tx.ErrorMessage,
-		CSRDER:           tx.CSRDER,
-		IsReenrollment:   tx.IsReenrollment,
-		ExpiresAt:        tx.ExpiresAt,
-		CreatedAt:        tx.CreatedAt,
+		TransactionID:     tx.TransactionID,
+		DMSID:             tx.DMSID,
+		CertSerialNumber:  tx.CertSerialNumber,
+		CertDER:           tx.CertDER,
+		SentNonce:         tx.SentNonce,
+		State:             string(state),
+		ErrorMessage:      tx.ErrorMessage,
+		CSRDER:            tx.CSRDER,
+		IsReenrollment:    tx.IsReenrollment,
+		RequestType:       tx.RequestType,
+		SubjectCommonName: tx.SubjectCommonName,
+		ExpiresAt:         tx.ExpiresAt,
+		CreatedAt:         tx.CreatedAt,
 	}
 
 	// OnConflict(DoNothing) + RowsAffected==0 distinguishes a duplicate key
@@ -235,15 +239,17 @@ func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit
 	return out, nil
 }
 
-// DeleteExpired removes in-flight transactions (PENDING, ISSUED, ISSUE_FAILED)
-// whose expires_at is strictly before now(). Terminal states (CONFIRMED,
-// REVOKED) are never deleted by this method — they persist for audit.
+// DeleteExpired removes transient transactions (PENDING, ISSUE_FAILED) whose
+// expires_at is strictly before now(). ISSUED rows are NOT deleted here even
+// when expired — they represent a cert that was actually issued at the CA, so
+// the CMP confirmation monitor is responsible for processing them (revoke
+// the cert at the CA, transition the row to REVOKED). Terminal states
+// (CONFIRMED, REVOKED) are never deleted by this method.
 func (s *PostgresCMPTransactionStorage) DeleteExpired(ctx context.Context) error {
 	result := s.db.WithContext(ctx).
-		Where("expires_at < ? AND state IN (?,?,?)",
+		Where("expires_at < ? AND state IN (?,?)",
 			time.Now(),
 			string(storage.CMPTransactionStatePending),
-			string(storage.CMPTransactionStateIssued),
 			string(storage.CMPTransactionStateIssueFailed),
 		).
 		Delete(&cmpTransactionRow{})
@@ -283,6 +289,50 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 		return storage.CMPTransaction{}, false, nil
 	}
 	return rowToDomain(row), true, nil
+}
+
+// SelectExpiredIssued returns up to `limit` ISSUED transactions whose
+// expires_at has already passed, oldest first. These are enrollments that
+// were issued at the CA but never confirmed by the EE within the DMS
+// confirmation window. The confirmation monitor uses this to drive
+// revocation: each cert is revoked at the CA and then the row itself is
+// transitioned to REVOKED via MarkRevokedByTransactionID for audit.
+func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var rows []cmpTransactionRow
+	result := s.db.WithContext(ctx).
+		Where("state = ? AND expires_at <= ?", string(storage.CMPTransactionStateIssued), time.Now()).
+		Order("expires_at ASC").
+		Limit(limit).
+		Find(&rows)
+	if result.Error != nil {
+		s.logger.Errorf("cmp_transactions: select-expired-issued: %v", result.Error)
+		return nil, result.Error
+	}
+	out := make([]storage.CMPTransaction, len(rows))
+	for i, r := range rows {
+		out[i] = rowToDomain(r)
+	}
+	return out, nil
+}
+
+// MarkRevokedByTransactionID transitions the row identified by transactionID
+// to REVOKED unconditionally — unlike MarkRevokedByCertSerial (which only
+// touches CONFIRMED rows) and UpdateState (which only touches non-expired
+// rows), this method targets expired ISSUED rows so the confirmation
+// monitor can finalise them after revoking the cert at the CA.
+func (s *PostgresCMPTransactionStorage) MarkRevokedByTransactionID(ctx context.Context, transactionID string) error {
+	result := s.db.WithContext(ctx).
+		Model(&cmpTransactionRow{}).
+		Where("transaction_id = ?", transactionID).
+		Update("state", string(storage.CMPTransactionStateRevoked))
+	if result.Error != nil {
+		s.logger.Errorf("cmp_transactions: mark-revoked-by-tx %s: %v", transactionID, result.Error)
+		return result.Error
+	}
+	return nil
 }
 
 // MarkRevokedByCertSerial transitions any CONFIRMED transaction with the given
@@ -326,17 +376,19 @@ func (s *PostgresCMPTransactionStorage) SelectAllByDMS(
 
 func rowToDomain(row cmpTransactionRow) storage.CMPTransaction {
 	return storage.CMPTransaction{
-		TransactionID:    row.TransactionID,
-		DMSID:            row.DMSID,
-		CertSerialNumber: row.CertSerialNumber,
-		CertDER:          row.CertDER,
-		SentNonce:        row.SentNonce,
-		State:            storage.CMPTransactionState(row.State),
-		ErrorMessage:     row.ErrorMessage,
-		CSRDER:           row.CSRDER,
-		IsReenrollment:   row.IsReenrollment,
-		ConfirmedAt:      row.ConfirmedAt,
-		ExpiresAt:        row.ExpiresAt,
-		CreatedAt:        row.CreatedAt,
+		TransactionID:     row.TransactionID,
+		DMSID:             row.DMSID,
+		CertSerialNumber:  row.CertSerialNumber,
+		CertDER:           row.CertDER,
+		SentNonce:         row.SentNonce,
+		State:             storage.CMPTransactionState(row.State),
+		ErrorMessage:      row.ErrorMessage,
+		CSRDER:            row.CSRDER,
+		IsReenrollment:    row.IsReenrollment,
+		RequestType:       row.RequestType,
+		SubjectCommonName: row.SubjectCommonName,
+		ConfirmedAt:       row.ConfirmedAt,
+		ExpiresAt:         row.ExpiresAt,
+		CreatedAt:         row.CreatedAt,
 	}
 }
