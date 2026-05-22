@@ -192,6 +192,8 @@ func initializeSchema(db *gorm.DB) error {
 			error_message TEXT NOT NULL DEFAULT '',
 			csr_der BLOB,
 			is_reenrollment BOOLEAN NOT NULL DEFAULT 0,
+			request_type TEXT NOT NULL DEFAULT '',
+			subject_common_name TEXT NOT NULL DEFAULT '',
 			confirmed_at DATETIME,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME NOT NULL,

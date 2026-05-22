@@ -147,14 +147,16 @@ func (r *dmsManagerHttpRoutes) GetCMPTransactionsByDMS(ctx *gin.Context) {
 // to the cert detail page without having to ship the whole DER blob.
 func cmpTransactionToResponse(tx storage.CMPTransaction) resources.CMPTransactionResponse {
 	resp := resources.CMPTransactionResponse{
-		TransactionID:  tx.TransactionID,
-		DMSID:          tx.DMSID,
-		State:          string(tx.State),
-		IsReenrollment: tx.IsReenrollment,
-		CreatedAt:      tx.CreatedAt,
-		ExpiresAt:      tx.ExpiresAt,
-		ErrorMessage:   tx.ErrorMessage,
-		HasCertificate: len(tx.CertDER) > 0,
+		TransactionID:     tx.TransactionID,
+		DMSID:             tx.DMSID,
+		State:             string(tx.State),
+		IsReenrollment:    tx.IsReenrollment,
+		RequestType:       tx.RequestType,
+		SubjectCommonName: tx.SubjectCommonName,
+		CreatedAt:         tx.CreatedAt,
+		ExpiresAt:         tx.ExpiresAt,
+		ErrorMessage:      tx.ErrorMessage,
+		HasCertificate:    len(tx.CertDER) > 0,
 	}
 	if !tx.ConfirmedAt.IsZero() {
 		t := tx.ConfirmedAt

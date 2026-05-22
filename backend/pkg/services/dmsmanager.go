@@ -222,6 +222,12 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
+
+	if err := normalizeProtocolSettings(&input.Settings); err != nil {
+		lFunc.Errorf("invalid enrollment protocol for DMS '%s': %s", input.ID, err)
+		return nil, err
+	}
+
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	if exists, _, err := svc.dmsStorage.SelectExists(ctx, input.ID); err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
@@ -267,12 +273,35 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		return nil, errs.ErrDMSNotFound
 	}
 
+	if err := normalizeProtocolSettings(&input.DMS.Settings); err != nil {
+		lFunc.Errorf("invalid enrollment protocol for DMS '%s': %s", input.DMS.ID, err)
+		return nil, err
+	}
+
 	dms.Metadata = input.DMS.Metadata
 	dms.Name = input.DMS.Name
 	dms.Settings = input.DMS.Settings
 
 	lFunc.Debugf("updating DMS %s", input.DMS.ID)
 	return svc.dmsStorage.Update(ctx, dms)
+}
+
+// normalizeProtocolSettings enforces that a DMS uses exactly one enrollment
+// protocol (EST or CMP) and zeroes out the settings struct of the protocol
+// that is NOT selected. This is intentional: persisting stale config for an
+// unused protocol is misleading in the UI and ambiguous to operators. The
+// top-level EnrollmentSettings.EnrollmentCA is the single source of truth for
+// the issuing CA — there are no protocol-specific overrides.
+func normalizeProtocolSettings(settings *models.DMSSettings) error {
+	switch settings.EnrollmentSettings.EnrollmentProtocol {
+	case models.EST:
+		settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483 = models.EnrollmentOptionsLWCRFC9483{}
+	case models.CMP:
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
+	default:
+		return errs.ErrDMSInvalidProtocol
+	}
+	return nil
 }
 
 func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {

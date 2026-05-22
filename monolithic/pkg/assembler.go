@@ -213,9 +213,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
-			PublisherEventBus:         conf.PublisherEventBus,
-			DownstreamCertificateFile: "proxy.crt",
-			Storage:                   conf.Storage,
+			PublisherEventBus:            conf.PublisherEventBus,
+			DownstreamCertificateFile:    "proxy.crt",
+			Storage:                      conf.Storage,
+			CMPConfirmationMonitoringJob: conf.Monitoring,
 			WFX: config.DMSWFXConfig{
 				Enabled: conf.WfxMgmtPort > 0,
 				HTTPClient: cconfig.HTTPClient{
