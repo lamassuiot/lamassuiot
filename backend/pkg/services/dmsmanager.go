@@ -306,7 +306,7 @@ func getESTLogFormatter() logrus.Formatter {
 
 // validateClientCertificateEnrollment validates the client certificate chain against the DMS's configured
 // client certificate validation CAs and performs a revocation check. clientCerts must be non-empty.
-func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx context.Context, lFunc *logrus.Entry, estAuthOptions models.EnrollmentOptionsESTRFC7030, clientCerts []*x509.Certificate) error {
+func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx context.Context, lFunc *logrus.Entry, estAuthOptions models.EnrollmentOptionsESTRFC7030, clientCerts []*x509.Certificate) (*logrus.Entry, error) {
 	leafClientCert := clientCerts[0]
 	mtlsOpts := estAuthOptions.AuthOptionsMTLS
 
@@ -344,34 +344,34 @@ func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx cont
 
 	if validationCA == nil {
 		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. used certificate not authorized for this DMS")
-		return errs.ErrDMSEnrollInvalidCert
+		return nil, errs.ErrDMSEnrollInvalidCert
 	}
 
 	couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, leafClientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
 	if err != nil {
 		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. error while checking certificate revocation status: %s", err)
-		return err
+		return nil, err
 	}
 
 	if !couldCheckRevocation {
 		lFunc.Warnf("could not verify certificate revocation status. Assuming certificate as not-revoked")
-		return nil
+		return lFunc, nil
 	}
 
 	if isRevoked {
 		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. certificate is revoked")
-		return fmt.Errorf("certificate is revoked")
+		return nil, fmt.Errorf("certificate is revoked")
 	}
 
 	lFunc.Infof("certificate is not revoked")
-	return nil
+	return lFunc, nil
 }
 
 // validateClientCertificateReenrollment validates the presented client certificate for re-enrollment.
 // It checks that the certificate's CommonName matches the CSR subject, then checks against the
 // enrollment CA first, then falls back to additional validation CAs,
 // and finally verifies expiry and revocation status.
-func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate, csrSubjectCN string) error {
+func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate, csrSubjectCN string) (*logrus.Entry, error) {
 	leafCert := clientCerts[0]
 
 	lFunc = lFunc.WithField("auth-status", "verifying")
@@ -380,39 +380,39 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 
 	if leafCert.Subject.CommonName != csrSubjectCN {
 		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. certificate CommonName '%s' does not match CSR subject CommonName '%s'", leafCert.Subject.CommonName, csrSubjectCN)
-		return errs.ErrDMSEnrollInvalidCert
+		return nil, errs.ErrDMSEnrollInvalidCert
 	}
 
 	validationCA := svc.findReenrollmentValidationCA(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, leafCert)
 	if validationCA == nil {
 		caAki := string(leafCert.AuthorityKeyId)
 		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment process. Unknown CA:\nCN: %s\nAKI:%s", leafCert.Issuer.CommonName, caAki)
-		return errs.ErrDMSEnrollInvalidCert
+		return nil, errs.ErrDMSEnrollInvalidCert
 	}
 
 	if err := checkReenrollmentExpiry(lFunc, leafCert, reEnrollSettings); err != nil {
-		return err
+		return nil, err
 	}
 
 	lFunc.Infof("checking certificate revocation status")
 	couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, leafCert, validationCA)
 	if err != nil {
 		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. error while checking certificate revocation status: %s", err)
-		return err
+		return nil, err
 	}
 
 	if !couldCheckRevocation {
 		lFunc.Infof("could not verify certificate revocation status. Assuming certificate as not revoked")
-		return nil
+		return lFunc, nil
 	}
 
 	if isRevoked {
 		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. certificate is revoked")
-		return fmt.Errorf("certificate is revoked")
+		return nil, fmt.Errorf("certificate is revoked")
 	}
 
 	lFunc.Infof("certificate is not revoked")
-	return nil
+	return lFunc, nil
 }
 
 // findReenrollmentValidationCA tries the enrollment CA first, then each additional validation CA.
@@ -473,7 +473,7 @@ func checkReenrollmentExpiry(lFunc *logrus.Entry, leafCert *x509.Certificate, re
 // invokeWebhook calls the configured external webhook and returns an error if the
 // webhook denies the operation or cannot be reached (fail-closed).
 // operation should be "enrollment" or "reenrollment" and is used in log messages and errors.
-func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.WebhookCall, csr *x509.CertificateRequest, aps string, operation string) error {
+func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.WebhookCall, csr *x509.CertificateRequest, aps string, operation string) (*logrus.Entry, error) {
 	lFunc = lFunc.WithField("auth-status", "verifying")
 	lFunc.Infof("verifying %s using external webhook: %s. Calling webhook %s", operation, webhookConf.Name, webhookConf.Url)
 
@@ -530,26 +530,27 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 	select {
 	case <-webhookCtx.Done():
 		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook authorization did not complete before deadline: %s", operation, webhookCtx.Err())
-		return fmt.Errorf("external webhook authorization timed out or was canceled: %w", webhookCtx.Err())
+		return nil, fmt.Errorf("external webhook authorization timed out or was canceled: %w", webhookCtx.Err())
 	case result := <-webhookResultCh:
 		if result.err != nil {
 			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, result.err)
-			return fmt.Errorf("error while calling external webhook: %s", result.err)
+			return nil, fmt.Errorf("error while calling external webhook: %s", result.err)
 		}
 		resp := result.resp
 		lFunc.Debugf("webhook response: %v", resp)
 		if resp == nil {
 			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
-			return fmt.Errorf("external webhook didn't return a response")
+			return nil, fmt.Errorf("external webhook didn't return a response")
 		}
 		if !resp.Authorized {
 			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
-			return fmt.Errorf("external webhook denied %s", operation)
+			return nil, fmt.Errorf("external webhook denied %s", operation)
 		}
 	}
 
-	lFunc.WithField("auth-uri", webhookConf.Name).Infof("webhook authorized %s", operation)
-	return nil
+	lFunc = lFunc.WithField("auth-uri", webhookConf.Name)
+	lFunc.Infof("webhook authorized %s", operation)
+	return lFunc, nil
 }
 
 // Validation:
@@ -596,7 +597,8 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			lFunc.Errorf("aborting enrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateClientCertificateEnrollment(ctx, lFunc, estAuthOptions, clientCerts); err != nil {
+		lFunc, err = svc.validateClientCertificateEnrollment(ctx, lFunc, estAuthOptions, clientCerts)
+		if err != nil {
 			return nil, err
 		}
 		lFunc = lFunc.WithField("auth-status", "verified")
@@ -610,7 +612,8 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 	case models.ESTAuthModeExternalWebhook:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeExternalWebhook)
-		if err = invokeWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps, "enrollment"); err != nil {
+		lFunc, err = invokeWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps, "enrollment")
+		if err != nil {
 			return nil, err
 		}
 		lFunc = lFunc.WithField("auth-status", "verified")
@@ -625,11 +628,13 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			lFunc.Errorf("aborting enrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
 		}
-		if err = svc.validateClientCertificateEnrollment(ctx, lFunc, estAuthOptions, clientCerts); err != nil {
+		lFunc, err = svc.validateClientCertificateEnrollment(ctx, lFunc, estAuthOptions, clientCerts)
+		if err != nil {
 			return nil, err
 		}
 		lFunc.Infof("combined auth: client certificate validation passed. Starting webhook validation (step 2/2)")
-		if err = invokeWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps, "enrollment"); err != nil {
+		lFunc, err = invokeWebhook(ctx, lFunc, estAuthOptions.AuthOptionsExternalWebhook, csr, aps, "enrollment")
+		if err != nil {
 			return nil, err
 		}
 		lFunc = lFunc.WithField("auth-status", "verified")
@@ -824,7 +829,8 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		lFunc.Errorf("aborting reenrollment. No client certificate was presented")
 		return nil, errs.ErrDMSAuthModeNotSupported
 	}
-	if err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName); err != nil {
+	lFunc, err = svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName)
+	if err != nil {
 		return nil, err
 	}
 
