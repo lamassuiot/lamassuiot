@@ -3,7 +3,7 @@ import base64
 import io
 import contextlib
 
-sys.path.insert(0, '/home/ubuntu/dev/lamassu/lamassuiot/pyasn1/pycrate')
+sys.path.insert(0, '/home/ubuntu/dev/lamassu/lamassuiot/pyasn1/myasn1')
 
 
 @contextlib.contextmanager
@@ -17,7 +17,7 @@ def _suppress_stdout():
 
 
 with _suppress_stdout():
-    from cmp import PKIXCMP_2023
+    from cmp_comp import PKIXCMP_2023
 
 PKIMessage = PKIXCMP_2023.PKIMessage
 
@@ -27,10 +27,13 @@ PKIMessage = PKIXCMP_2023.PKIMessage
 # ---------------------------------------------------------------------------
 
 def load_pem_der(path: str) -> bytes:
-    with open(path) as f:
-        lines = f.read().splitlines()
-    b64 = ''.join(line for line in lines if not line.startswith('-----'))
-    return base64.b64decode(b64)
+    with open(path, 'rb') as f:
+        data = f.read()
+    if data.lstrip().startswith(b'-----'):
+        lines = data.decode('ascii').splitlines()
+        b64 = ''.join(line for line in lines if not line.startswith('-----'))
+        return base64.b64decode(b64)
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +134,7 @@ def to_asn1_hex(obj) -> str:
 def main():
     advanced = '--hex' in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    pem_path = args[0] if args else '../cmp.ir'
+    pem_path = args[0] if args else '/tmp/cmp-drop-poll/pollrep.der'
 
     der = load_pem_der(pem_path)
 
