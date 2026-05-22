@@ -128,20 +128,31 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	lFunc.Debugf("received CMP message body tag=%d", body.Tag)
 	txHex := hex.EncodeToString(reqHeader.TransactionID)
 
+	// WFX jobs are keyed by clientId = device CN, so we need the CN
+	// before the very first state emission. For enrollment requests
+	// (ir/cr/kur) the CN lives inside the CertReqMessage's CertTemplate;
+	// for follow-up requests (pollReq/certConf/rr) the CN comes from the
+	// already-persisted transaction row. Failure to extract is non-fatal:
+	// the Emit call drops the transition silently when CN is empty, which
+	// is the right behaviour for malformed bodies that we'll reject below.
+	deviceCN := r.resolveDeviceCN(ctx.Request.Context(), body, txHex)
+
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID: txHex,
-		DMSID:         dmsID,
-		RequestType:   cmpTagToString(body.Tag),
-		State:         cmpwfx.CMPStateReceived,
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(body.Tag),
+		SubjectCommonName: deviceCN,
+		State:             cmpwfx.CMPStateReceived,
 		Metadata: map[string]any{
 			"bodyTag": body.Tag,
 		},
 	})
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID: txHex,
-		DMSID:         dmsID,
-		RequestType:   cmpTagToString(body.Tag),
-		State:         cmpwfx.CMPStateParsed,
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(body.Tag),
+		SubjectCommonName: deviceCN,
+		State:             cmpwfx.CMPStateParsed,
 		Metadata: map[string]any{
 			"bodyTag": body.Tag,
 		},
@@ -211,11 +222,13 @@ func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, head
 		return
 	}
 
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID: hex.EncodeToString(header.TransactionID),
-		DMSID:         dmsID,
-		RequestType:   cmpTagToString(body.Tag),
-		State:         cmpwfx.CMPStateValidated,
+	deviceCN := extractCNFromSubjectDER(req.SubjectDER)
+	wfxJobID := r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     hex.EncodeToString(header.TransactionID),
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(body.Tag),
+		SubjectCommonName: deviceCN,
+		State:             cmpwfx.CMPStateValidated,
 		Metadata: map[string]any{
 			"certReqId": req.CertReqID,
 		},
@@ -231,6 +244,7 @@ func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, head
 		isReenrollment: false,
 		requestTag:     body.Tag,
 		respTag:        respTag,
+		wfxJobID:       wfxJobID,
 		enroll: func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
 			return r.svc.LWCEnroll(ctx, csr, dmsID)
 		},
@@ -261,11 +275,13 @@ func (r *cmpHttpRoutes) handleReenroll(ctx *gin.Context, lFunc *logrus.Entry, he
 		return
 	}
 
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID: hex.EncodeToString(header.TransactionID),
-		DMSID:         dmsID,
-		RequestType:   cmpTagToString(body.Tag),
-		State:         cmpwfx.CMPStateValidated,
+	deviceCN := extractCNFromSubjectDER(req.SubjectDER)
+	wfxJobID := r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     hex.EncodeToString(header.TransactionID),
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(body.Tag),
+		SubjectCommonName: deviceCN,
+		State:             cmpwfx.CMPStateValidated,
 		Metadata: map[string]any{
 			"certReqId": req.CertReqID,
 		},
@@ -275,6 +291,7 @@ func (r *cmpHttpRoutes) handleReenroll(ctx *gin.Context, lFunc *logrus.Entry, he
 		isReenrollment: true,
 		requestTag:     body.Tag,
 		respTag:        cmpBodyTagKUP,
+		wfxJobID:       wfxJobID,
 		enroll: func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
 			return r.svc.LWCReenroll(ctx, csr, dmsID)
 		},
@@ -286,7 +303,12 @@ type issueParams struct {
 	isReenrollment bool
 	requestTag     int
 	respTag        int
-	enroll         func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
+	// wfxJobID is the WFX job UUID resolved at the Validated emit (the
+	// first state emission that knows the device CN). Persisted onto the
+	// cmp_transactions row so the management UI can deep-link directly to
+	// the corresponding WFX workflow without a clientId-based round-trip.
+	wfxJobID string
+	enroll   func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
 }
 
 // issueAndStore is the shared enrollment pipeline: build CSR, check duplicate
@@ -353,6 +375,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 			IsReenrollment:    params.isReenrollment,
 			RequestType:       cmpTagToString(params.requestTag),
 			SubjectCommonName: csr.Subject.CommonName,
+			WFXJobID:          params.wfxJobID,
 			SentNonce:         senderNonce,
 			ExpiresAt:         time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
 			CreatedAt:         time.Now(),
@@ -665,17 +688,25 @@ func (r *cmpHttpRoutes) isImplicitConfirm(ctx context.Context, header requestPKI
 	return opts.AcceptImplicit
 }
 
-func (r *cmpHttpRoutes) reportCMPState(ctx context.Context, lFunc *logrus.Entry, transition cmpwfx.CMPTransition) {
+// reportCMPState fans the given transition out to WFX and returns the
+// resolved WFX job ID, which is "" when the integration is disabled, when
+// the transition was dropped (e.g. no SubjectCommonName yet), or when the
+// WFX call itself failed. Callers that need to persist the job ID (e.g.
+// issueAndStore) should capture the return value; others can ignore it.
+func (r *cmpHttpRoutes) reportCMPState(ctx context.Context, lFunc *logrus.Entry, transition cmpwfx.CMPTransition) string {
 	if r.wfx == nil || transition.TransactionID == "" {
-		return
+		return ""
 	}
 
 	if transition.Metadata == nil {
 		transition.Metadata = map[string]any{}
 	}
-	if err := r.wfx.Emit(ctx, transition); err != nil {
+	jobID, err := r.wfx.Emit(ctx, transition)
+	if err != nil {
 		lFunc.WithField("cmpState", transition.State).Warnf("WFX CMP transition export failed: %v", err)
+		return ""
 	}
+	return jobID
 }
 
 // hashesEqual compares two byte slices in constant time.
@@ -702,11 +733,24 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHead
 	var h requestPKIHeader
 	if header != nil {
 		h = *header
+		// Best-effort CN lookup: if a transaction row already exists for
+		// this txID we can route the Rejected transition to the matching
+		// WFX job. For brand-new requests rejected before the row is
+		// written there is no CN to find — Emit drops it silently, which
+		// is the correct behaviour (no useful WFX job to attach to).
+		txHex := hex.EncodeToString(header.TransactionID)
+		var deviceCN string
+		if r.store != nil {
+			if tx, ok, err := r.store.Select(ctx.Request.Context(), txHex); err == nil && ok {
+				deviceCN = tx.SubjectCommonName
+			}
+		}
 		r.reportCMPState(ctx.Request.Context(), r.logger, cmpwfx.CMPTransition{
-			TransactionID: hex.EncodeToString(header.TransactionID),
-			DMSID:         aps,
-			State:         cmpwfx.CMPStateRejected,
-			Reason:        reason,
+			TransactionID:     txHex,
+			DMSID:             aps,
+			SubjectCommonName: deviceCN,
+			State:             cmpwfx.CMPStateRejected,
+			Reason:            reason,
 		})
 	}
 	r.sendRawBody(ctx, r.logger, h, cmpBodyTagError, errBody, aps)
@@ -798,6 +842,58 @@ func newNonce() []byte {
 		return []byte("lamassu-cmp-nonce")
 	}
 	return b
+}
+
+// resolveDeviceCN returns the device CommonName associated with an incoming
+// CMP message. Used at the very start of HandleCMP — before any state is
+// emitted to WFX — to populate `clientId` on the WFX side. The lookup
+// strategy depends on the body type:
+//
+//   - ir/cr/kur: the CertReqMessage carries a CertTemplate whose Subject DER
+//     contains the CN; we decode only as much as needed to pull it out.
+//   - pollReq/certConf/rr: these reference an existing transaction, so we
+//     fall back to the persisted SubjectCommonName on the cmp_transactions
+//     row keyed by the request's transactionID.
+//
+// Returns "" on any error or unknown body tag — the caller must accept that
+// some malformed early-rejection paths won't appear in WFX (acceptable: a
+// malformed body has no useful device identity to track).
+func (r *cmpHttpRoutes) resolveDeviceCN(ctx context.Context, body asn1.RawValue, txHex string) string {
+	switch body.Tag {
+	case cmpBodyTagIR, cmpBodyTagCR, cmpBodyTagKUR:
+		req, err := decodeFirstCertReq(body.Bytes)
+		if err != nil {
+			return ""
+		}
+		return extractCNFromSubjectDER(req.SubjectDER)
+	case cmpBodyTagPollReq, cmpBodyTagCertConf, cmpBodyTagRR:
+		if r.store == nil || txHex == "" {
+			return ""
+		}
+		tx, ok, err := r.store.Select(ctx, txHex)
+		if err != nil || !ok {
+			return ""
+		}
+		return tx.SubjectCommonName
+	}
+	return ""
+}
+
+// extractCNFromSubjectDER pulls the CommonName attribute out of a DER-encoded
+// X.501 Name. CMP CertTemplates carry the Subject this way; full CSR parsing
+// would require synthesising the SPKI and signature too, which is unnecessary
+// just to read one attribute.
+func extractCNFromSubjectDER(subjectDER []byte) string {
+	if len(subjectDER) == 0 {
+		return ""
+	}
+	var rdn pkix.RDNSequence
+	if _, err := asn1.Unmarshal(subjectDER, &rdn); err != nil {
+		return ""
+	}
+	var name pkix.Name
+	name.FillFromRDNSequence(&rdn)
+	return name.CommonName
 }
 
 type firstCertReq struct {
