@@ -137,26 +137,34 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// is the right behaviour for malformed bodies that we'll reject below.
 	deviceCN := r.resolveDeviceCN(ctx.Request.Context(), body, txHex)
 
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(body.Tag),
-		SubjectCommonName: deviceCN,
-		State:             cmpwfx.CMPStateReceived,
-		Metadata: map[string]any{
-			"bodyTag": body.Tag,
-		},
-	})
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(body.Tag),
-		SubjectCommonName: deviceCN,
-		State:             cmpwfx.CMPStateParsed,
-		Metadata: map[string]any{
-			"bodyTag": body.Tag,
-		},
-	})
+	// Received and Parsed are only meaningful for enrollment-initiating
+	// messages (IR/CR/KUR). Follow-up messages (certConf, pollReq, rr)
+	// reference an already-created WFX job that is well past Parsed; emitting
+	// these states on such jobs would attempt an invalid backward transition
+	// (e.g. AwaitingCertConf → Received) which either gets rejected by WFX or
+	// silently resets the job to the wrong state.
+	if body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR || body.Tag == cmpBodyTagKUR {
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			RequestType:       cmpTagToString(body.Tag),
+			SubjectCommonName: deviceCN,
+			State:             cmpwfx.CMPStateReceived,
+			Metadata: map[string]any{
+				"bodyTag": body.Tag,
+			},
+		})
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			RequestType:       cmpTagToString(body.Tag),
+			SubjectCommonName: deviceCN,
+			State:             cmpwfx.CMPStateParsed,
+			Metadata: map[string]any{
+				"bodyTag": body.Tag,
+			},
+		})
+	}
 
 	// Fetch DMS enrollment options so we can make per-request decisions
 	// (request-protection enforcement, implicit-confirm mode, etc.).
@@ -371,12 +379,12 @@ func (r *cmpHttpRoutes) issueAndStore(
 			DMSID:             dmsID,
 			State:             storage.CMPTransactionStateIssued,
 			CertSerialNumber:  certSerial,
-			CertDER:           cert.Raw,
+			Certificate:       (*models.X509Certificate)(cert),
 			IsReenrollment:    params.isReenrollment,
 			RequestType:       cmpTagToString(params.requestTag),
 			SubjectCommonName: csr.Subject.CommonName,
 			WFXJobID:          params.wfxJobID,
-			SentNonce:         senderNonce,
+			SentNonce:         hex.EncodeToString(senderNonce),
 			ExpiresAt:         time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
 			CreatedAt:         time.Now(),
 		}); storeErr != nil {
@@ -502,14 +510,15 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	}
 
 	// RFC 4210 §5.1.1: the EE's recipNonce must equal the server's previous senderNonce.
-	if len(tx.SentNonce) > 0 && !bytes.Equal(header.RecipNonce, tx.SentNonce) {
-		lFunc.Errorf("certConf: recipNonce mismatch: got %x want %x", header.RecipNonce, tx.SentNonce)
+	sentNonce, _ := hex.DecodeString(tx.SentNonce)
+	if len(sentNonce) > 0 && !bytes.Equal(header.RecipNonce, sentNonce) {
+		lFunc.Errorf("certConf: recipNonce mismatch: got %x want %x", header.RecipNonce, sentNonce)
 		r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "recipNonce mismatch", dmsID)
 		return
 	}
 
 	for i, s := range statuses {
-		expected, hashErr := computeCertHash(tx.CertDER, s.HashAlgOID)
+		expected, hashErr := computeCertHash(tx.Certificate.Raw, s.HashAlgOID)
 		if hashErr != nil {
 			lFunc.Errorf("certConf: entry %d unsupported hashAlg %v: %v", i, s.HashAlgOID, hashErr)
 			r.rejectWithError(ctx, &header, cmp.PKIStatus(2),
@@ -537,10 +546,12 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	}
 	r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:    txHex,
-		DMSID:            dmsID,
-		CertSerialNumber: tx.CertSerialNumber,
-		State:            cmpwfx.CMPStateConfirmed,
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       tx.RequestType,
+		SubjectCommonName: tx.SubjectCommonName,
+		CertSerialNumber:  tx.CertSerialNumber,
+		State:             cmpwfx.CMPStateConfirmed,
 	})
 }
 
@@ -625,7 +636,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			// it — UpdateState (cert_der + state + error_message) does not
 			// touch sent_nonce, so refreshing here would silently desync DB
 			// from wire and reject every subsequent certConf.
-			header.ResponseSenderNonce = tx.SentNonce
+			header.ResponseSenderNonce, _ = hex.DecodeString(tx.SentNonce)
 		}
 
 		// Decide whether this delivery is an IP (ir-derived) or CP (cr/kur).
@@ -637,7 +648,11 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		if !tx.IsReenrollment {
 			respTag = cmpBodyTagIP
 		}
-		certRepDER, err := marshalCertRepBody(respTag, certReqID, tx.CertDER)
+		var txCertRaw []byte
+		if tx.Certificate != nil {
+			txCertRaw = tx.Certificate.Raw
+		}
+		certRepDER, err := marshalCertRepBody(respTag, certReqID, txCertRaw)
 		if err != nil {
 			lFunc.Errorf("pollReq: build cert rep body: %v", err)
 			r.rejectWithError(ctx, &header, cmp.PKIStatus(2), "cannot build response", dmsID)
