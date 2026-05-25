@@ -105,6 +105,16 @@ func (s *inMemoryCMPStore) Select(_ context.Context, id string) (storage.CMPTran
 	return tx, true, nil
 }
 
+func (s *inMemoryCMPStore) SelectIncludingExpired(_ context.Context, id string) (storage.CMPTransaction, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, ok := s.txs[id]
+	if !ok {
+		return storage.CMPTransaction{}, false, nil
+	}
+	return tx, true, nil
+}
+
 func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
