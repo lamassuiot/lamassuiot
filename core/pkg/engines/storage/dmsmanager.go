@@ -142,6 +142,13 @@ type CMPTransactionRepo interface {
 	// already expired (for in-flight states).
 	Select(ctx context.Context, transactionID string) (CMPTransaction, bool, error)
 
+	// SelectIncludingExpired returns the transaction row regardless of expiry
+	// or terminal state. Used by error-reporting paths (e.g. handleCertConf)
+	// to distinguish "transaction never existed" from "transaction is past
+	// ExpiresAt but not yet swept by the monitor" so the CMP error message
+	// can carry the accurate reason and PKIFailureInfo bit.
+	SelectIncludingExpired(ctx context.Context, transactionID string) (CMPTransaction, bool, error)
+
 	// SelectAndDelete atomically fetches and removes a transaction by its hex
 	// transactionID. Retained for backward-compat but should be replaced by
 	// Confirm in new code paths.
