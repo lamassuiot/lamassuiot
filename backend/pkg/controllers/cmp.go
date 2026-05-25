@@ -10,6 +10,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/asn1"
 	"encoding/hex"
 	"encoding/pem"
@@ -186,9 +187,9 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 			RequestType:       cmpTagToString(body.Tag),
 			SubjectCommonName: deviceCN,
 			State:             cmpwfx.CMPStateReceived,
-			Metadata: map[string]any{
+			Metadata: withCMPMessageB64(map[string]any{
 				"bodyTag": body.Tag,
-			},
+			}, cmpMetadataRequestB64, bodyBytes),
 		})
 		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 			TransactionID:     txHex,
@@ -247,7 +248,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	case cmpBodyTagRR:
 		r.handleRevoke(ctx, lFunc, reqHeader, body, dmsID)
 	case cmpBodyTagCertConf:
-		r.handleCertConf(ctx, lFunc, reqHeader, body, dmsID)
+		r.handleCertConf(ctx, lFunc, reqHeader, body, bodyBytes, dmsID)
 	case cmpBodyTagPollReq:
 		r.handlePoll(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
 	default:
@@ -452,7 +453,10 @@ func (r *cmpHttpRoutes) issueAndStore(
 		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build response", dmsID)
 		return
 	}
-	r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
+	responseDER := r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
+	if len(responseDER) == 0 {
+		return
+	}
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
@@ -460,11 +464,11 @@ func (r *cmpHttpRoutes) issueAndStore(
 		SubjectCommonName: csr.Subject.CommonName,
 		CertSerialNumber:  certSerial,
 		State:             cmpwfx.CMPStateResponded,
-		Metadata: map[string]any{
+		Metadata: withCMPMessageB64(map[string]any{
 			"certReqId":      req.CertReqID,
 			"isReenrollment": params.isReenrollment,
 			"responseType":   cmpTagToString(params.respTag),
-		},
+		}, cmpMetadataResponseB64, responseDER),
 	})
 	finalState := cmpwfx.CMPStateAwaitingCertConf
 	if implicitConfirm {
@@ -526,7 +530,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 
 // handleCertConf processes a certConf (24) body.
 // It verifies the SHA-256 certHash and responds with pkiConf (19).
-func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string) {
+func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, requestDER []byte, dmsID string) {
 	seqDER, err := rewrapBodyAsSequence(body.Bytes)
 	if err != nil {
 		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot decode certConf body", dmsID)
@@ -604,7 +608,10 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build pkiConf", dmsID)
 		return
 	}
-	r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
+	responseDER := r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
+	if len(responseDER) == 0 {
+		return
+	}
 	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
@@ -612,6 +619,11 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		SubjectCommonName: tx.SubjectCommonName,
 		CertSerialNumber:  tx.CertSerialNumber,
 		State:             cmpwfx.CMPStateConfirmed,
+		Metadata: withCMPMessageB64(
+			withCMPMessageB64(nil, cmpMetadataCertConfB64, requestDER),
+			cmpMetadataPKIConfB64,
+			responseDER,
+		),
 	})
 }
 
@@ -619,6 +631,13 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 // 60 seconds is the conventional minimum used by most CMP clients (incl.
 // openssl cmp) and avoids tight polling loops.
 const defaultPollIntervalSeconds = 60
+
+const (
+	cmpMetadataRequestB64  = "cmpRequestB64"
+	cmpMetadataResponseB64 = "cmpResponseB64"
+	cmpMetadataCertConfB64 = "certConfB64"
+	cmpMetadataPKIConfB64  = "pkiConfB64"
+)
 
 // handlePoll processes a pollReq (25) body per RFC 4210 §5.3.22 / RFC 9483 §4.4.
 // It looks up the transaction by transactionID (from the PKIHeader, not the
@@ -784,6 +803,17 @@ func (r *cmpHttpRoutes) reportCMPState(ctx context.Context, lFunc *logrus.Entry,
 	return jobID
 }
 
+func withCMPMessageB64(metadata map[string]any, key string, der []byte) map[string]any {
+	if key == "" || len(der) == 0 {
+		return metadata
+	}
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	metadata[key] = base64.StdEncoding.EncodeToString(der)
+	return metadata
+}
+
 // hashesEqual compares two byte slices in constant time.
 func hashesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
@@ -833,7 +863,7 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHead
 
 // sendRawBody assembles a PKIMessage from a pre-encoded body CHOICE DER and
 // writes the result as application/pkixcmp to the Gin context.
-func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHeader requestPKIHeader, bodyTag int, bodyDER []byte, aps string) {
+func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHeader requestPKIHeader, bodyTag int, bodyDER []byte, aps string) []byte {
 	sendResponse := func(respDER []byte) {
 		lFunc.Infof("CMP response (tag=%d) PEM:\n%s", bodyTag,
 			pem.EncodeToMemory(&pem.Block{Type: "CMP MESSAGE", Bytes: respDER}))
@@ -846,7 +876,7 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 			if credErr != nil {
 				lFunc.Errorf("load cmp protection credentials: %v", credErr)
 				ctx.Status(http.StatusInternalServerError)
-				return
+				return nil
 			}
 			// (nil chain, nil signer, nil err) means the DMS opted out of response
 			// signing (no protection_certificate configured) — fall through to the
@@ -856,10 +886,10 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 				if err != nil {
 					lFunc.Errorf("marshal protected response PKIMessage: %v", err)
 					ctx.Status(http.StatusInternalServerError)
-					return
+					return nil
 				}
 				sendResponse(respDER)
-				return
+				return respDER
 			}
 		}
 	}
@@ -868,9 +898,10 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 	if err != nil {
 		lFunc.Errorf("marshal response PKIMessage: %v", err)
 		ctx.Status(http.StatusInternalServerError)
-		return
+		return nil
 	}
 	sendResponse(respDER)
+	return respDER
 }
 
 // buildResponseHeader constructs a response PKIHeader mirroring the
