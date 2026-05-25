@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/asn1"
 	"encoding/hex"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -209,6 +211,45 @@ type mockServiceWithStore struct {
 
 func (m *mockServiceWithStore) GetCMPTransactionRepo() storage.CMPTransactionRepo { return m.store }
 
+type captureWFXReporter struct {
+	mu          sync.Mutex
+	transitions []cmpwfx.CMPTransition
+}
+
+func (r *captureWFXReporter) Emit(_ context.Context, transition cmpwfx.CMPTransition) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cloned := transition
+	if transition.Metadata != nil {
+		cloned.Metadata = make(map[string]any, len(transition.Metadata))
+		for key, value := range transition.Metadata {
+			cloned.Metadata[key] = value
+		}
+	}
+	r.transitions = append(r.transitions, cloned)
+	return "job-1", nil
+}
+
+func (r *captureWFXReporter) TransitionByState(state cmpwfx.CMPState) (cmpwfx.CMPTransition, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, transition := range r.transitions {
+		if transition.State == state {
+			return transition, true
+		}
+	}
+	return cmpwfx.CMPTransition{}, false
+}
+
+type mockServiceWithStoreAndWFX struct {
+	*cmpmock.MockLightweightCMPService
+	store storage.CMPTransactionRepo
+	wfx   cmpwfx.CMPReporter
+}
+
+func (m *mockServiceWithStoreAndWFX) GetCMPTransactionRepo() storage.CMPTransactionRepo { return m.store }
+func (m *mockServiceWithStoreAndWFX) GetCMPWFXReporter() cmpwfx.CMPReporter { return m.wfx }
+
 func newTestRouterWithStore(svc *cmpmock.MockLightweightCMPService) (*gin.Engine, *inMemoryCMPStore) {
 	store := newInMemoryCMPStore()
 	wrapped := &mockServiceWithStore{MockLightweightCMPService: svc, store: store}
@@ -218,6 +259,21 @@ func newTestRouterWithStore(svc *cmpmock.MockLightweightCMPService) (*gin.Engine
 	routes := NewCMPHttpRoutes(logger, wrapped)
 	r.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
 	return r, store
+}
+
+func newTestRouterWithStoreAndWFX(svc *cmpmock.MockLightweightCMPService, reporter cmpwfx.CMPReporter) (*gin.Engine, *inMemoryCMPStore) {
+	store := newInMemoryCMPStore()
+	wrapped := &mockServiceWithStoreAndWFX{MockLightweightCMPService: svc, store: store, wfx: reporter}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	logger := logrus.NewEntry(logrus.New())
+	routes := NewCMPHttpRoutes(logger, wrapped)
+	r.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
+	return r, store
+}
+
+func cmpMessageB64String(der []byte) string {
+	return base64.StdEncoding.EncodeToString(der)
 }
 
 // mockProtectionServiceWithStore combines LightweightCMPProtectionProvider and
@@ -1020,6 +1076,48 @@ func TestHandleCMP_ExplicitConfirm_CertConfSucceeds(t *testing.T) {
 	require.Equal(t, http.StatusOK, confResp.Code)
 	assert.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
 		"certConf with correct hash must receive pkiConf")
+
+	svc.AssertExpectations(t)
+}
+
+func TestHandleCMP_WFXStoresCMPPayloads(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "device-wfx-payloads")
+
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+		Return(issuedCert, nil)
+
+	reporter := &captureWFXReporter{}
+	router, store := newTestRouterWithStoreAndWFX(svc, reporter)
+	txID := make([]byte, 16)
+	rand.Read(txID)
+
+	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-wfx-payloads", TransactionID: txID})
+	irResp := postCMP(t, router, "test-dms", irDER)
+	require.Equal(t, http.StatusOK, irResp.Code)
+
+	storedTx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok, "transaction must be stored after explicit-mode IR")
+
+	sentNonce, _ := hex.DecodeString(storedTx.SentNonce)
+	certConfDER := buildTestCertConf(t, txID, issuedCert.Raw, sentNonce)
+	confResp := postCMP(t, router, "test-dms", certConfDER)
+	require.Equal(t, http.StatusOK, confResp.Code)
+
+	receivedTransition, ok := reporter.TransitionByState(cmpwfx.CMPStateReceived)
+	require.True(t, ok, "received transition must be emitted")
+	assert.Equal(t, cmpMessageB64String(irDER), receivedTransition.Metadata[cmpMetadataRequestB64])
+
+	respondedTransition, ok := reporter.TransitionByState(cmpwfx.CMPStateResponded)
+	require.True(t, ok, "responded transition must be emitted")
+	assert.Equal(t, cmpMessageB64String(irResp.Body.Bytes()), respondedTransition.Metadata[cmpMetadataResponseB64])
+
+	confirmedTransition, ok := reporter.TransitionByState(cmpwfx.CMPStateConfirmed)
+	require.True(t, ok, "confirmed transition must be emitted")
+	assert.Equal(t, cmpMessageB64String(certConfDER), confirmedTransition.Metadata[cmpMetadataCertConfB64])
+	assert.Equal(t, cmpMessageB64String(confResp.Body.Bytes()), confirmedTransition.Metadata[cmpMetadataPKIConfB64])
 
 	svc.AssertExpectations(t)
 }
