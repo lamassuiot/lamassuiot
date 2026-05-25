@@ -191,6 +191,26 @@ func (s *PostgresCMPTransactionStorage) Select(ctx context.Context, transactionI
 	return rowToDomain(row), true, nil
 }
 
+// SelectIncludingExpired reads a transaction by ID with NO state or expiry
+// filtering. Used by error-reporting paths that need to tell apart "row never
+// existed" from "row past ExpiresAt but not yet swept by the monitor". Callers
+// must not act on the returned row's contents for issuance decisions — Select
+// is the right method for those.
+func (s *PostgresCMPTransactionStorage) SelectIncludingExpired(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
+	var row cmpTransactionRow
+	result := s.db.WithContext(ctx).
+		Where("transaction_id = ?", transactionID).
+		First(&row)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return storage.CMPTransaction{}, false, nil
+		}
+		s.logger.Errorf("cmp_transactions: select-any %s: %v", transactionID, result.Error)
+		return storage.CMPTransaction{}, false, result.Error
+	}
+	return rowToDomain(row), true, nil
+}
+
 // SelectAndDelete atomically fetches and deletes a transaction by its hex
 // transactionID. Using DELETE ... RETURNING * is a single round-trip and fully
 // atomic under Postgres's default READ COMMITTED isolation — no separate SELECT

@@ -4,11 +4,11 @@ import (
 	"crypto"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
-	"hash"
-
-	"github.com/zjj/gocmp/cmp"
+	"time"
 )
 
 // CMP PKIBody CHOICE tag numbers (RFC 4210 §5.1.2 / RFC 9480).
@@ -27,14 +27,39 @@ const (
 	cmpBodyTagPollReq  = 25 // pollReq  – Polling Request   (RFC 4210 §5.3.22)
 	cmpBodyTagPollRep  = 26 // pollRep  – Polling Response  (RFC 4210 §5.3.22)
 
-	// pvnoCMP2000 is the protocol version for RFC 4210 (cmp2000 = 2).
-	// Servers MUST default to pvno=2 per RFC 9480 §2.20.
+	// pvnoCMP2000 is the protocol version for RFC 4210 / RFC 9810 (cmp2000 = 2).
+	// Default for messages that do not need cmp2021 syntax (RFC 9810 §7 line 3748).
 	pvnoCMP2000 = 2
+	// pvnoCMP2021 is the protocol version for RFC 9810 (cmp2021 = 3). MUST be
+	// used when EnvelopedData, hashAlg in CertStatus, POPOPrivKey with agreeMAC,
+	// or ckuann with RootCaKeyUpdateContent are present (RFC 9810 §7 line 3750).
+	pvnoCMP2021 = 3
 
 	// pkiStatusAccepted is RFC 4210 §5.2.3 PKIStatus value 0.
 	pkiStatusAccepted = 0
 	// pkiStatusRejection is RFC 4210 §5.2.3 PKIStatus value 2.
 	pkiStatusRejection = 2
+
+	// PKIFailureInfo bit positions (RFC 9810 §5.1.3 / Appendix B PKIFailureInfo
+	// BIT STRING enumeration). RFC 9483 §3.6.4 requires error responses to
+	// include a failInfo; the table below enumerates every bit the server can
+	// currently emit. Bit numbers are LITERAL RFC values — they are written on
+	// the wire and consumed by every other CMP implementation, so even a single
+	// off-by-one here means EEs see the wrong failure reason.
+	pkiFailureInfoBadAlg             = 0  // unrecognized or unsupported algorithm identifier
+	pkiFailureInfoBadMessageCheck    = 1  // integrity check (e.g. signature) failed
+	pkiFailureInfoBadRequest         = 2  // request not permitted / malformed for the server
+	pkiFailureInfoBadTime            = 3  // messageTime not sufficiently close to system time
+	pkiFailureInfoBadCertId          = 4  // no certificate could be found matching the request
+	pkiFailureInfoBadDataFormat      = 5  // the data submitted has the wrong format
+	pkiFailureInfoIncorrectData      = 7  // requester's data is incorrect (notary services)
+	pkiFailureInfoBadPOP             = 9  // proof-of-possession failed
+	pkiFailureInfoBadRecipientNonce  = 13 // recipNonce did not match the expected senderNonce
+	pkiFailureInfoBadSenderNonce     = 18 // sender nonce missing or too short (RFC 9483 §3.5)
+	pkiFailureInfoBadCertTemplate    = 19 // submitted CertTemplate is incomplete or invalid
+	pkiFailureInfoTransactionIDInUse = 21 // transactionID collides with an in-flight one (RFC 9810 §3.1)
+	pkiFailureInfoUnsupportedVersion = 22 // pvno not understood (RFC 9810 §7 / RFC 9483 §3.5)
+	pkiFailureInfoSystemFailure      = 25
 	// pkiStatusWaiting is RFC 4210 §5.2.3 PKIStatus value 3, sent on the initial
 	// ip/cp/kup response in async-issuance mode to tell the EE that the
 	// certificate is not yet available and it should poll for it later.
@@ -57,20 +82,22 @@ var (
 // used to digest the signed data. Ed25519 returns crypto.Hash(0) because it
 // hashes internally. Returns an error for unknown OIDs.
 //
+// SHA-1 and SHA-224 are deliberately NOT accepted: RFC 9481 §3 (MSG_SIG_ALG)
+// only lists SHA-256, SHA-384, SHA-512 (with RSA/ECDSA) and Ed25519. SHA-1 has
+// been deprecated for digital signatures by NIST and is no longer compliant.
+//
 // Used for incoming request-protection verification and response algorithm
 // selection.
 func hashFromSignatureAlgOID(oid asn1.ObjectIdentifier) (crypto.Hash, error) {
 	switch oid.String() {
-	case "1.2.840.113549.1.1.5": // sha1WithRSAEncryption
-		return crypto.SHA1, nil
 	case "1.2.840.113549.1.1.11": // sha256WithRSAEncryption
 		return crypto.SHA256, nil
 	case "1.2.840.113549.1.1.12": // sha384WithRSAEncryption
 		return crypto.SHA384, nil
 	case "1.2.840.113549.1.1.13": // sha512WithRSAEncryption
 		return crypto.SHA512, nil
-	case "1.2.840.10045.4.3.1": // ecdsaWithSHA224
-		return crypto.SHA224, nil
+	case "1.2.840.113549.1.1.10": // id-RSASSA-PSS — params carry hash/MGF (RFC 4055)
+		return 0, fmt.Errorf("RSASSA-PSS signature requires parameters to be parsed (use hashFromSignatureAlgID)")
 	case "1.2.840.10045.4.3.2": // ecdsaWithSHA256
 		return crypto.SHA256, nil
 	case "1.2.840.10045.4.3.3": // ecdsaWithSHA384
@@ -79,8 +106,57 @@ func hashFromSignatureAlgOID(oid asn1.ObjectIdentifier) (crypto.Hash, error) {
 		return crypto.SHA512, nil
 	case "1.3.101.112": // id-Ed25519
 		return crypto.Hash(0), nil
+	case "1.2.840.113549.1.1.5", // sha1WithRSAEncryption
+		"1.2.840.10045.4.1",   // ecdsa-with-SHA1
+		"1.2.840.10045.4.3.1": // ecdsa-with-SHA224
+		return 0, fmt.Errorf("signature algorithm %s is deprecated and not permitted by RFC 9481 §3 (MSG_SIG_ALG)", oid)
 	default:
 		return 0, fmt.Errorf("unsupported signature algorithm OID %s", oid)
+	}
+}
+
+// hashFromSignatureAlgID is the structural counterpart of
+// hashFromSignatureAlgOID that consults the AlgorithmIdentifier.Parameters
+// field for algorithms whose hash is encoded there (notably id-RSASSA-PSS,
+// RFC 4055 §3.1). For algorithms whose hash is implied by the OID it behaves
+// identically to hashFromSignatureAlgOID.
+func hashFromSignatureAlgID(algID pkix.AlgorithmIdentifier) (crypto.Hash, error) {
+	if algID.Algorithm.String() == "1.2.840.113549.1.1.10" {
+		// RSASSA-PSS-params ::= SEQUENCE {
+		//   hashAlgorithm [0] AlgorithmIdentifier DEFAULT sha1Identifier,
+		//   ... (MGF, saltLength, trailerField — not needed for hash selection)
+		// }
+		// Per RFC 4055, the DEFAULT for hashAlgorithm is SHA-1; we reject the
+		// default because SHA-1 is not permitted (RFC 9481 §3).
+		var pssParams struct {
+			HashAlgorithm pkix.AlgorithmIdentifier `asn1:"optional,explicit,tag:0"`
+		}
+		if len(algID.Parameters.FullBytes) > 0 {
+			if _, err := asn1.Unmarshal(algID.Parameters.FullBytes, &pssParams); err != nil {
+				return 0, fmt.Errorf("RSASSA-PSS parameters: %w", err)
+			}
+		}
+		if len(pssParams.HashAlgorithm.Algorithm) == 0 {
+			return 0, fmt.Errorf("RSASSA-PSS without explicit hashAlgorithm defaults to SHA-1, which is not permitted (RFC 9481 §3)")
+		}
+		return hashFromHashAlgOID(pssParams.HashAlgorithm.Algorithm)
+	}
+	return hashFromSignatureAlgOID(algID.Algorithm)
+}
+
+// hashFromHashAlgOID maps a hash algorithm OID (e.g. id-sha256) to crypto.Hash.
+// Distinct from hashFromSignatureAlgOID, which expects composite signature
+// algorithm OIDs (e.g. ecdsa-with-SHA256).
+func hashFromHashAlgOID(oid asn1.ObjectIdentifier) (crypto.Hash, error) {
+	switch oid.String() {
+	case "2.16.840.1.101.3.4.2.1":
+		return crypto.SHA256, nil
+	case "2.16.840.1.101.3.4.2.2":
+		return crypto.SHA384, nil
+	case "2.16.840.1.101.3.4.2.3":
+		return crypto.SHA512, nil
+	default:
+		return 0, fmt.Errorf("unsupported hash algorithm OID %s", oid)
 	}
 }
 
@@ -106,14 +182,16 @@ type rawPKIMessageFull struct {
 }
 
 type requestPKIHeader struct {
-	PVNO             int
-	Sender           asn1.RawValue
-	Recipient        asn1.RawValue
-	ProtectionAlgOID asn1.ObjectIdentifier // parsed from [1] protectionAlg; empty when absent
-	TransactionID    []byte                `asn1:"optional,explicit,tag:4,omitempty"`
-	SenderNonce      []byte                `asn1:"optional,explicit,tag:5,omitempty"`
-	RecipNonce       []byte                `asn1:"optional,explicit,tag:6,omitempty"`
-	GeneralInfo      []asn1.RawValue       // decoded from [8] EXPLICIT SEQUENCE; empty when absent
+	PVNO          int
+	Sender        asn1.RawValue
+	Recipient     asn1.RawValue
+	MessageTime   time.Time                // optional [0] GeneralizedTime; zero when absent (RFC 9483 §3.1)
+	ProtectionAlg pkix.AlgorithmIdentifier // full algorithm identifier including parameters (RFC 4055 PSS)
+	SenderKID     []byte                   // optional [2] OCTET STRING — SubjectKeyIdentifier (RFC 9483 §3.1)
+	TransactionID []byte                   `asn1:"optional,explicit,tag:4,omitempty"`
+	SenderNonce   []byte                   `asn1:"optional,explicit,tag:5,omitempty"`
+	RecipNonce    []byte                   `asn1:"optional,explicit,tag:6,omitempty"`
+	GeneralInfo   []asn1.RawValue          // decoded from [8] EXPLICIT SEQUENCE; empty when absent
 
 	// ResponseSenderNonce, if non-nil, is used as the SenderNonce on the
 	// outbound response instead of generating a fresh random nonce.  This
@@ -145,7 +223,7 @@ type requestPKIHeader struct {
 type certStatusASN1 struct {
 	CertHash   []byte
 	CertReqID  int
-	StatusInfo cmp.PKIStatusInfo `asn1:"optional"`
+	StatusInfo PKIStatusInfo `asn1:"optional"`
 	// HashAlgOID is the algorithm OID from the optional hashAlg [0] field.
 	// Empty (nil) means SHA-256 per default.
 	HashAlgOID asn1.ObjectIdentifier
@@ -161,7 +239,7 @@ type certStatusASN1 struct {
 //	}
 type serverCertResponse struct {
 	CertReqID        int
-	Status           cmp.PKIStatusInfo
+	Status           PKIStatusInfo
 	CertifiedKeyPair asn1.RawValue `asn1:"optional"`
 }
 
@@ -225,7 +303,7 @@ func marshalCertRepBody(bodyTag, certReqID int, certDER []byte) ([]byte, error) 
 	}
 	certResp := serverCertResponse{
 		CertReqID:        certReqID,
-		Status:           cmp.PKIStatusInfo{Status: cmp.PKIStatus(0)}, // accepted
+		Status:           PKIStatusInfo{Status: PKIStatus(0)}, // accepted
 		CertifiedKeyPair: asn1.RawValue{FullBytes: ckpDER},
 	}
 	msg := serverCertRepMessage{Responses: []serverCertResponse{certResp}}
@@ -248,7 +326,7 @@ func marshalPKIConfBody() ([]byte, error) {
 func marshalCertRepWaitingBody(certReqID int) ([]byte, error) {
 	certResp := serverCertResponse{
 		CertReqID: certReqID,
-		Status:    cmp.PKIStatusInfo{Status: cmp.PKIStatus(pkiStatusWaiting)},
+		Status:    PKIStatusInfo{Status: PKIStatus(pkiStatusWaiting)},
 		// CertifiedKeyPair intentionally omitted (zero value of RawValue) — the
 		// asn1:"optional" tag means it disappears from the wire encoding.
 	}
@@ -319,27 +397,52 @@ func decodePollReqContent(bodyBytes []byte) (int, error) {
 }
 
 // marshalErrorBody produces the raw ErrorMsgContent DER. The PKIBody wrapper is
-// added by sendRawBody.
-func marshalErrorBody(status cmp.PKIStatus, reason string) ([]byte, error) {
-	errMsg := cmp.ErrorMsgContent{
-		PKIStatusInfo: cmp.PKIStatusInfo{
+// added by sendRawBody. When failInfoBits is non-empty, the corresponding bits
+// of the PKIFailureInfo BIT STRING are set (RFC 4210 §5.1.3 / RFC 9483 §3.6.4
+// — error responses SHOULD carry a failInfo).
+func marshalErrorBody(status PKIStatus, reason string, failInfoBits ...int) ([]byte, error) {
+	errMsg := ErrorMsgContent{
+		PKIStatusInfo: PKIStatusInfo{
 			Status: status,
-			StatusString: cmp.PKIFreeText{
+			StatusString: PKIFreeText{
 				asn1.RawValue{Tag: asn1.TagUTF8String, Bytes: []byte(reason)},
 			},
+			FailInfo: encodePKIFailureInfo(failInfoBits),
 		},
 	}
 	return asn1.Marshal(errMsg)
 }
 
+// encodePKIFailureInfo packs the given bit positions (RFC 4210 §5.1.3) into a
+// DER-encodable BIT STRING. An empty input returns the zero value, which
+// asn1:"optional,omitempty" elides from the wire.
+func encodePKIFailureInfo(bits []int) asn1.BitString {
+	if len(bits) == 0 {
+		return asn1.BitString{}
+	}
+	highest := 0
+	for _, b := range bits {
+		if b > highest {
+			highest = b
+		}
+	}
+	nbytes := highest/8 + 1
+	buf := make([]byte, nbytes)
+	for _, b := range bits {
+		// BIT STRING numbering: bit 0 is the MSB of the first byte.
+		buf[b/8] |= 0x80 >> (uint(b) % 8)
+	}
+	return asn1.BitString{Bytes: buf, BitLength: highest + 1}
+}
+
 // marshalRevRepBody produces the raw RevRepContent DER for an rp (tag 12) body.
 // RevRepContent ::= SEQUENCE { status SEQUENCE OF PKIStatusInfo, ... }
-func marshalRevRepBody(status cmp.PKIStatus) ([]byte, error) {
+func marshalRevRepBody(status PKIStatus) ([]byte, error) {
 	type revRepContent struct {
-		Status []cmp.PKIStatusInfo
+		Status []PKIStatusInfo
 	}
 	return asn1.Marshal(revRepContent{
-		Status: []cmp.PKIStatusInfo{
+		Status: []PKIStatusInfo{
 			{Status: status},
 		},
 	})
@@ -490,21 +593,27 @@ func certHashSHA256(certDER []byte) []byte {
 }
 
 // computeCertHash computes the certHash over certDER using the algorithm
-// indicated by hashAlgOID. When hashAlgOID is nil/empty, SHA-256 is used
-// per the default in RFC 9481 §3.3.
+// indicated by hashAlgOID. When hashAlgOID is nil/empty, the hash is chosen
+// based on the issued certificate's signature algorithm per RFC 9481 §3.3:
 //
-// Supported OIDs:
-//   - 2.16.840.1.101.3.4.2.1  SHA-256 (default)
+//   - ECDSA-with-SHA384 / RSA-PSS-SHA384-issued → SHA-384
+//   - ECDSA-with-SHA512 / RSA-PSS-SHA512-issued → SHA-512
+//   - Ed25519-issued                            → SHA-512 (RFC 9481 §3.3
+//     restricts EdDSA to a 512-bit certHash)
+//   - everything else                           → SHA-256
+//
+// Per RFC 9481 §3 SHA-1 is deprecated for digital signatures and is no longer
+// accepted, so we omit the id-sha1 OID branch.
+//
+// Supported hashAlg OIDs:
+//   - 2.16.840.1.101.3.4.2.1  SHA-256
 //   - 2.16.840.1.101.3.4.2.2  SHA-384
 //   - 2.16.840.1.101.3.4.2.3  SHA-512
-//   - 1.3.14.3.2.26           SHA-1 (legacy, accepted)
 func computeCertHash(certDER []byte, hashAlgOID asn1.ObjectIdentifier) ([]byte, error) {
 	if len(hashAlgOID) == 0 {
-		h := sha256.Sum256(certDER)
-		return h[:], nil
+		return defaultCertHash(certDER)
 	}
 
-	var hasher hash.Hash
 	switch hashAlgOID.String() {
 	case "2.16.840.1.101.3.4.2.1": // id-sha256
 		h := sha256.Sum256(certDER)
@@ -515,12 +624,39 @@ func computeCertHash(certDER []byte, hashAlgOID asn1.ObjectIdentifier) ([]byte, 
 	case "2.16.840.1.101.3.4.2.3": // id-sha512
 		h := sha512.Sum512(certDER)
 		return h[:], nil
-	case "1.3.14.3.2.26": // id-sha1
-		hasher = crypto.SHA1.New()
 	default:
 		return nil, fmt.Errorf("unsupported certHash algorithm OID %s", hashAlgOID)
 	}
+}
 
-	hasher.Write(certDER)
-	return hasher.Sum(nil), nil
+// defaultCertHash picks the certHash algorithm per RFC 9481 §3.3 when the
+// CertStatus does not include an explicit hashAlg [0] field. The rule keys
+// the digest off the certificate's own signatureAlgorithm so an EE that
+// follows the defaulting rule for a SHA-384-signed ECDSA cert gets the same
+// expected hash as the server.
+func defaultCertHash(certDER []byte) ([]byte, error) {
+	cert, err := x509.ParseCertificate(certDER)
+	if err != nil {
+		// If the certificate is unparseable, fall back to SHA-256 — the
+		// historical default — instead of dropping the certConf entirely.
+		h := sha256.Sum256(certDER)
+		return h[:], nil
+	}
+
+	switch cert.SignatureAlgorithm {
+	case x509.ECDSAWithSHA384,
+		x509.SHA384WithRSA,
+		x509.SHA384WithRSAPSS:
+		h := sha512.Sum384(certDER)
+		return h[:], nil
+	case x509.ECDSAWithSHA512,
+		x509.SHA512WithRSA,
+		x509.SHA512WithRSAPSS,
+		x509.PureEd25519:
+		h := sha512.Sum512(certDER)
+		return h[:], nil
+	default:
+		h := sha256.Sum256(certDER)
+		return h[:], nil
+	}
 }

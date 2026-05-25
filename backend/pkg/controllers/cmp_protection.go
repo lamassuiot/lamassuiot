@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -31,6 +32,24 @@ type rawResponsePKIMessage struct {
 	ExtraCerts []asn1.RawValue `asn1:"optional,explicit,tag:1"`
 }
 
+// protectionAlgError flags a verifyRequestProtection failure rooted in the
+// protection AlgorithmIdentifier itself (unknown OID, deprecated hash, or
+// MAC-based protection). The CMP HTTP handler uses isProtectionAlgError to
+// map these into the PKIFailureInfo badAlg bit per RFC 9810 §5.1.3.
+type protectionAlgError struct {
+	msg string
+}
+
+func (e *protectionAlgError) Error() string { return e.msg }
+
+// isProtectionAlgError reports whether err originates from a rejected
+// AlgorithmIdentifier. Used to choose between badAlg (0) and badMessageCheck
+// (1) when emitting PKIFailureInfo on verification failures.
+func isProtectionAlgError(err error) bool {
+	var pae *protectionAlgError
+	return errors.As(err, &pae)
+}
+
 // verifyRequestProtection verifies the signature-based protection of an
 // incoming PKIMessage. It uses the public key from the first certificate in
 // extraCerts (the EE's protection certificate per RFC 9483 §3.2) to verify
@@ -47,10 +66,17 @@ type rawResponsePKIMessage struct {
 // MAC-based protection algorithms (id-PasswordBasedMac, id-DHBasedMac) are
 // always rejected regardless of the required flag — only signature-based
 // protection (RSA, ECDSA, Ed25519) is supported.
-func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.ObjectIdentifier, required bool) (*x509.Certificate, error) {
+//
+// The error returned implements errAlgUnsupported when the rejection is due to
+// the protection AlgorithmIdentifier itself (unknown OID, deprecated hash,
+// MAC-based) so callers can map it to PKIFailureInfo badAlg per RFC 9810
+// §5.1.3 / RFC 9483 §3.6.4.
+func verifyRequestProtection(full rawPKIMessageFull, protectionAlg pkix.AlgorithmIdentifier, required bool) (*x509.Certificate, error) {
+	protectionAlgOID := protectionAlg.Algorithm
+
 	// Reject MAC-based protection algorithms unconditionally.
 	if protectionAlgOID.Equal(oidPasswordBasedMac) || protectionAlgOID.Equal(oidDHBasedMac) {
-		return nil, fmt.Errorf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)
+		return nil, &protectionAlgError{msg: fmt.Sprintf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)}
 	}
 
 	if len(full.Protection.Bytes) == 0 {
@@ -104,11 +130,12 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlgOID asn1.Objec
 	}
 	protBytes := innerBitString.Bytes[1:] // skip unused-bits byte
 
-	// Derive the hash from the protectionAlg OID declared in the header.
-	// This ensures we use the same hash the sender used when signing.
-	hashAlg, err := hashFromSignatureAlgOID(protectionAlgOID)
+	// Derive the hash from the protectionAlg AlgorithmIdentifier declared in
+	// the header. For PSS the hash lives inside Parameters, so we must inspect
+	// the full AlgorithmIdentifier rather than the OID alone.
+	hashAlg, err := hashFromSignatureAlgID(protectionAlg)
 	if err != nil {
-		return nil, fmt.Errorf("protection algorithm: %w", err)
+		return nil, &protectionAlgError{msg: fmt.Sprintf("protection algorithm: %v", err)}
 	}
 
 	switch pub := eeCert.PublicKey.(type) {
@@ -161,6 +188,13 @@ func marshalProtectedResponse(
 	respHeader := buildResponseHeader(reqHeader)
 	respHeader.MessageTime = time.Now().UTC().Round(time.Second)
 	respHeader.ProtectionAlg = protectionAlg
+	// RFC 9483 §3.1 line 740: "For signature-based protection, MUST be used
+	// and contain the value of the SubjectKeyIdentifier if present in the CMP
+	// protection certificate". Emit only when the protection cert carries one
+	// — RFC 9810 leaves senderKID OPTIONAL when the cert has no SKI extension.
+	if len(leaf.SubjectKeyId) > 0 {
+		respHeader.SenderKID = leaf.SubjectKeyId
+	}
 	respSender, err := generalNameDirectoryName(leaf.Subject)
 	if err != nil {
 		return nil, fmt.Errorf("marshal cmp sender general name: %w", err)

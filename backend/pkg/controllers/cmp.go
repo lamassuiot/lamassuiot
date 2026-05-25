@@ -91,14 +91,14 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// Identify DMS from path /:id
 	dmsID := ctx.Param("id")
 	if dmsID == "" {
-		r.rejectWithError(ctx, nil, PKIStatus(2), "missing DMS id", "")
+		r.rejectWithError(ctx, nil, PKIStatus(2), "missing DMS id", "", pkiFailureInfoBadRequest)
 		return
 	}
 
 	// Read DER body
 	bodyBytes, err := io.ReadAll(ctx.Request.Body)
 	if err != nil || len(bodyBytes) == 0 {
-		r.rejectWithError(ctx, nil, PKIStatus(2), "cannot read request body", dmsID)
+		r.rejectWithError(ctx, nil, PKIStatus(2), "cannot read request body", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	var fullMsg rawPKIMessageFull
 	if _, err := asn1.Unmarshal(bodyBytes, &fullMsg); err != nil {
 		lFunc.Warnf("failed to unmarshal PKIMessage: %v", err)
-		r.rejectWithError(ctx, nil, PKIStatus(2), "malformed PKIMessage", dmsID)
+		r.rejectWithError(ctx, nil, PKIStatus(2), "malformed PKIMessage", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	reqHeader, err := decodeRequestHeader(header.FullBytes)
 	if err != nil {
 		lFunc.Warnf("failed to decode PKIHeader: %v", err)
-		r.rejectWithError(ctx, nil, PKIStatus(2), "malformed PKIHeader", dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, nil, PKIStatus(2), "malformed PKIHeader", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
@@ -130,20 +130,20 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		return
 	}
 
-	// RFC 9483 §3.5 line 949: transactionID MUST be present.
+	// RFC 9483 §3.5 line 949: transactionID MUST be present. (failInfo: badDataFormat)
 	// RFC 9483 §3.1 line 747: first message MUST carry 128 bits of random data.
 	if len(reqHeader.TransactionID) == 0 {
 		lFunc.Warnf("transactionID missing from PKIHeader")
 		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
 			"transactionID is required (RFC 9483 §3.5)",
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 	if len(reqHeader.TransactionID) < 16 {
 		lFunc.Warnf("transactionID too short (%d bytes, need >=16)", len(reqHeader.TransactionID))
 		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
 			"transactionID must contain at least 128 bits of data (RFC 9483 §3.1)",
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
@@ -208,7 +208,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	enrollOpts, err := r.svc.LWCGetEnrollmentOptions(ctx.Request.Context(), dmsID)
 	if err != nil {
 		lFunc.Errorf("could not load enrollment options for DMS '%s': %v", dmsID, err)
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), "could not load DMS configuration", dmsID)
+		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), "could not load DMS configuration", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 
@@ -254,7 +254,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	default:
 		lFunc.Warnf("unsupported CMP body tag %d", body.Tag)
 		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
-			fmt.Sprintf("unsupported body tag %d", body.Tag), dmsID)
+			fmt.Sprintf("unsupported body tag %d", body.Tag), dmsID, pkiFailureInfoBadRequest)
 	}
 }
 
@@ -264,7 +264,7 @@ func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, head
 	req, err := decodeFirstCertReq(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("ir/cr: decode CertReqMessage: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
@@ -328,7 +328,7 @@ func (r *cmpHttpRoutes) handleReenroll(ctx *gin.Context, lFunc *logrus.Entry, he
 	req, err := decodeFirstCertReq(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("kur: decode CertReqMessage: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
@@ -383,7 +383,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER)
 	if err != nil {
 		lFunc.Errorf("synthesize CSR: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build CSR from CertTemplate", dmsID)
+		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, pkiFailureInfoBadCertTemplate)
 		return
 	}
 	lFunc = lFunc.WithField("cn", csr.Subject.CommonName)
@@ -397,11 +397,11 @@ func (r *cmpHttpRoutes) issueAndStore(
 	if r.store != nil {
 		if exists, err := r.store.Exists(ctx.Request.Context(), txHex); err != nil {
 			lFunc.Errorf("check existing txID: %v", err)
-			r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID)
+			r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
 			return
 		} else if exists {
 			lFunc.Warnf("duplicate transactionID %s (pre-enroll check)", txHex)
-			r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID)
+			r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
 			return
 		}
 	}
@@ -412,7 +412,12 @@ func (r *cmpHttpRoutes) issueAndStore(
 	cert, err := params.enroll(issuanceCtx, csr)
 	if err != nil {
 		lFunc.Errorf("enroll failed: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), err.Error(), dmsID)
+		// CA-layer rejections cover a wide range of conditions (policy
+		// violation, signing-key unavailability, revocation, etc.). Without
+		// structured error categorisation from the service layer we map all
+		// CA failures to systemFailure, which is the broadest "server-side
+		// inability to complete the request" bit (RFC 9810 §5.1.3).
+		r.rejectWithError(ctx, header, PKIStatus(2), err.Error(), dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
@@ -439,7 +444,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 		}); storeErr != nil {
 			if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 				lFunc.Warnf("duplicate transactionID %s", txHex)
-				r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID)
+				r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
 				return
 			}
 			lFunc.Errorf("store transaction: %v", storeErr)
@@ -450,7 +455,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	certRepDER, err := marshalCertRepBody(params.respTag, req.CertReqID, cert.Raw)
 	if err != nil {
 		lFunc.Errorf("build cert rep body: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build response", dmsID)
+		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 	responseDER := r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
@@ -494,7 +499,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	serialBytes, reason, err := decodeRevReqContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("rr: decode RevReqContent: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed RevReqContent", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed RevReqContent", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
@@ -508,7 +513,11 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		Reason:       models.RevocationReason(reason),
 	}); err != nil {
 		lFunc.Errorf("rr: revoke failed: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), err.Error(), dmsID)
+		// Service-layer revoke failures are not categorised; map them to
+		// systemFailure as the broadest "server can't fulfil the request"
+		// bit (RFC 9810 §5.1.3). When the service surfaces structured error
+		// kinds, this should be refined (e.g. badCertId for unknown serial).
+		r.rejectWithError(ctx, &header, PKIStatus(2), err.Error(), dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 
@@ -522,7 +531,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	rpDER, err := marshalRevRepBody(PKIStatus(0))
 	if err != nil {
 		lFunc.Errorf("rr: build rp body: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build rp response", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build rp response", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 	r.sendRawBody(ctx, lFunc, header, cmpBodyTagRP, rpDER, dmsID)
@@ -533,19 +542,19 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, requestDER []byte, dmsID string) {
 	seqDER, err := rewrapBodyAsSequence(body.Bytes)
 	if err != nil {
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot decode certConf body", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot decode certConf body", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 	statuses, err := decodeCertConfStatuses(seqDER)
 	if err != nil {
 		lFunc.Errorf("certConf: decode: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed certConf", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed certConf", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 
 	if r.store == nil {
 		lFunc.Errorf("certConf: transaction store not available")
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: transaction store unavailable", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: transaction store unavailable", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 	txHex := hex.EncodeToString(header.TransactionID)
@@ -563,9 +572,13 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		if expiredTx, found, exErr := r.store.SelectIncludingExpired(ctx.Request.Context(), txHex); exErr == nil && found {
 			lFunc.Warnf("certConf: transaction %s expired at %s (state=%s)",
 				txHex, expiredTx.ExpiresAt.Format(time.RFC3339), expiredTx.State)
+			// The transaction once existed but its confirmation window has
+			// elapsed — RFC 9810 §5.1.3 incorrectData is "for notary services"
+			// and does not apply. badRequest is the closest fit: the request
+			// is no longer permitted at the current state of the transaction.
 			r.rejectWithError(ctx, &header, PKIStatus(2),
 				"transaction expired: confirmation_timeout exceeded", dmsID,
-				pkiFailureInfoIncorrectData)
+				pkiFailureInfoBadRequest)
 			return
 		}
 		lFunc.Warnf("certConf: unknown transactionID %s", txHex)
@@ -573,25 +586,47 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		return
 	}
 
-	// RFC 4210 §5.1.1: the EE's recipNonce must equal the server's previous senderNonce.
+	// RFC 9810 §5.1.1 / RFC 9483 §3.1 line 753: the EE's recipNonce on a
+	// follow-up message MUST equal the server's previous senderNonce. The
+	// dedicated PKIFailureInfo bit for this is badRecipientNonce (13).
 	sentNonce, _ := hex.DecodeString(tx.SentNonce)
 	if len(sentNonce) > 0 && !bytes.Equal(header.RecipNonce, sentNonce) {
 		lFunc.Errorf("certConf: recipNonce mismatch: got %x want %x", header.RecipNonce, sentNonce)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "recipNonce mismatch", dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "recipNonce mismatch", dmsID, pkiFailureInfoBadRecipientNonce)
 		return
 	}
 
 	for i, s := range statuses {
+		// RFC 9810 §5.3.18: "If hashAlg is used, the CMP version indicated by
+		// the certConf message header must be cmp2021(3)." When the EE declares
+		// pvno=2 yet includes hashAlg, the payload's data format is inconsistent
+		// with the declared version. We use badDataFormat — not unsupportedVersion
+		// — because the server DOES support pvno=2; the EE simply put cmp2021-only
+		// syntax in a cmp2000-declared message. (RFC 9810 §7 reserves
+		// unsupportedVersion for the case where the server doesn't support the
+		// declared version at all.)
+		if len(s.HashAlgOID) > 0 && header.PVNO != pvnoCMP2021 {
+			lFunc.Warnf("certConf: entry %d carries hashAlg %v but pvno=%d (RFC 9810 §5.3.18 requires cmp2021)",
+				i, s.HashAlgOID, header.PVNO)
+			r.rejectWithError(ctx, &header, PKIStatus(2),
+				"CertStatus.hashAlg requires cmp2021(3) (RFC 9810 §5.3.18)",
+				dmsID, pkiFailureInfoBadDataFormat)
+			return
+		}
 		expected, hashErr := computeCertHash(tx.Certificate.Raw, s.HashAlgOID)
 		if hashErr != nil {
 			lFunc.Errorf("certConf: entry %d unsupported hashAlg %v: %v", i, s.HashAlgOID, hashErr)
 			r.rejectWithError(ctx, &header, PKIStatus(2),
-				fmt.Sprintf("unsupported certConf hashAlg OID %v", s.HashAlgOID), dmsID, pkiFailureInfoBadRequest)
+				fmt.Sprintf("unsupported certConf hashAlg OID %v", s.HashAlgOID), dmsID, pkiFailureInfoBadAlg)
 			return
 		}
 		if !hashesEqual(s.CertHash, expected) {
 			lFunc.Errorf("certConf: entry %d certHash mismatch", i)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "certHash mismatch", dmsID, pkiFailureInfoBadRequest)
+			// The EE's claimed certHash does not match the issued cert — they
+			// are confirming a different certificate. badCertId (4) says
+			// "no certificate could be found matching the provided criteria"
+			// which fits more precisely than the generic badRequest.
+			r.rejectWithError(ctx, &header, PKIStatus(2), "certHash mismatch", dmsID, pkiFailureInfoBadCertId)
 			return
 		}
 		lFunc.Debugf("certConf: entry %d certReqId=%d hash OK", i, s.CertReqID)
@@ -605,7 +640,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	pkiConfDER, err := marshalPKIConfBody()
 	if err != nil {
 		lFunc.Errorf("certConf: build pkiConf: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build pkiConf", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build pkiConf", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 	responseDER := r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
@@ -656,14 +691,14 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 	certReqID, err := decodePollReqContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("pollReq: decode: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed pollReq", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed pollReq", dmsID, pkiFailureInfoBadDataFormat)
 		return
 	}
 	lFunc = lFunc.WithField("certReqId", certReqID)
 
 	if r.store == nil {
 		lFunc.Errorf("pollReq: transaction store not available")
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: transaction store unavailable", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: transaction store unavailable", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 
@@ -671,12 +706,12 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 	tx, ok, err := r.store.Select(ctx.Request.Context(), txHex)
 	if err != nil {
 		lFunc.Errorf("pollReq: lookup transaction: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
 	if !ok {
 		lFunc.Warnf("pollReq: unknown transactionID %s", txHex)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "unknown transactionID", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "unknown transactionID", dmsID, pkiFailureInfoBadRequest)
 		return
 	}
 
@@ -688,7 +723,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		repDER, err := marshalPollRepBody(certReqID, checkAfter)
 		if err != nil {
 			lFunc.Errorf("pollReq: build pollRep: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build pollRep", dmsID)
+			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build pollRep", dmsID, pkiFailureInfoSystemFailure)
 			return
 		}
 		lFunc.Infof("pollReq: tx %s still PENDING, replying pollRep(checkAfter=%ds)", txHex, checkAfter)
@@ -734,7 +769,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		certRepDER, err := marshalCertRepBody(respTag, certReqID, txCertRaw)
 		if err != nil {
 			lFunc.Errorf("pollReq: build cert rep body: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID)
+			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
 			return
 		}
 
@@ -759,11 +794,14 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			reason = "issuance failed"
 		}
 		lFunc.Warnf("pollReq: tx %s ISSUE_FAILED, returning CMP error: %s", txHex, reason)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID)
+		// CA-layer issuance failure surfaced via pollReq — same rationale as
+		// the inline enroll-error path above (systemFailure until structured
+		// service-layer error categories exist).
+		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID, pkiFailureInfoSystemFailure)
 
 	default:
 		lFunc.Errorf("pollReq: tx %s has unknown state %q", txHex, tx.State)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: unknown transaction state", dmsID)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: unknown transaction state", dmsID, pkiFailureInfoSystemFailure)
 	}
 }
 
@@ -1254,9 +1292,19 @@ func decodeRequestHeader(headerDER []byte) (requestPKIHeader, error) {
 				}
 			}
 		case 2:
-			// senderKID [2] OCTET STRING OPTIONAL (IMPLICIT, RFC 9483 §3.1).
-			// field.Bytes holds the OCTET STRING content directly.
-			header.SenderKID = field.Bytes
+			// senderKID [2] OCTET STRING OPTIONAL (RFC 9483 §3.1).
+			// The CMP ASN.1 module declares IMPLICIT TAGS, but OpenSSL-derived
+			// clients (and this server's own response builder) emit the [2]
+			// wrapper EXPLICITLY around the inner OCTET STRING TLV — matching
+			// the same convention used for transactionID/senderNonce. We try
+			// the EXPLICIT form first and fall back to the literal-IMPLICIT
+			// form so we interoperate with both wire conventions.
+			var kid []byte
+			if _, e := asn1.Unmarshal(field.Bytes, &kid); e == nil {
+				header.SenderKID = kid
+			} else {
+				header.SenderKID = field.Bytes
+			}
 		case 4:
 			header.TransactionID, err = decodeExplicitOctetString(field.Bytes, "transactionID")
 		case 5:
@@ -1521,9 +1569,12 @@ func checkPOPOSigningKey(certReqDER, poposkContent, pubKeyDER []byte) error {
 }
 
 // popoVerifySignature verifies a raw signature over data using the algorithm
-// identified by algID. Supports RSA PKCS#1v15, ECDSA, and Ed25519.
+// identified by algID. Supports RSA PKCS#1v15, RSASSA-PSS, ECDSA, and Ed25519.
 func popoVerifySignature(data, sigBytes []byte, algID pkix.AlgorithmIdentifier, pub crypto.PublicKey) error {
-	hashAlg, err := hashFromSignatureAlgOID(algID.Algorithm)
+	// Use the AlgorithmIdentifier-aware helper so that id-RSASSA-PSS
+	// (OID 1.2.840.113549.1.1.10) resolves its hash from the Parameters
+	// SEQUENCE per RFC 4055 §3.1; the OID-only variant rejects PSS.
+	hashAlg, err := hashFromSignatureAlgID(algID)
 	if err != nil {
 		return fmt.Errorf("POPO: %w", err)
 	}
@@ -1535,7 +1586,18 @@ func popoVerifySignature(data, sigBytes []byte, algID pkix.AlgorithmIdentifier, 
 		}
 		h := hashAlg.New()
 		h.Write(data)
-		if err := rsa.VerifyPKCS1v15(pub, hashAlg, h.Sum(nil), sigBytes); err != nil {
+		digest := h.Sum(nil)
+		// RFC 4055 §3.1: id-RSASSA-PSS uses RSA-PSS, not PKCS#1 v1.5.
+		// PSSOptions{SaltLength: PSSSaltLengthAuto} lets crypto/rsa derive
+		// the saltLength from the signature, matching what RFC 9481-compliant
+		// clients (OpenSSL, BouncyCastle, etc.) produce.
+		if algID.Algorithm.Equal(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 10}) {
+			if err := rsa.VerifyPSS(pub, hashAlg, digest, sigBytes, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto}); err != nil {
+				return fmt.Errorf("POPO: RSA-PSS signature verification failed: %w", err)
+			}
+			return nil
+		}
+		if err := rsa.VerifyPKCS1v15(pub, hashAlg, digest, sigBytes); err != nil {
 			return fmt.Errorf("POPO: RSA signature verification failed: %w", err)
 		}
 		return nil
