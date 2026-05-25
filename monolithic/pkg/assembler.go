@@ -213,10 +213,25 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
-			PublisherEventBus:         conf.PublisherEventBus,
-			DownstreamCertificateFile: "proxy.crt",
-			Storage:                   conf.Storage,
-		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
+			PublisherEventBus:            conf.PublisherEventBus,
+			DownstreamCertificateFile:    "proxy.crt",
+			Storage:                      conf.Storage,
+			CMPConfirmationMonitoringJob: conf.Monitoring,
+			WFX: config.DMSWFXConfig{
+				Enabled: conf.WfxMgmtPort > 0,
+				HTTPClient: cconfig.HTTPClient{
+					LogLevel: cconfig.Info,
+					AuthMode: cconfig.NoAuth,
+					HTTPConnection: cconfig.HTTPConnection{
+						Protocol: cconfig.HTTP,
+						BasicConnection: cconfig.BasicConnection{
+							Hostname: "127.0.0.1",
+							Port:     conf.WfxMgmtPort,
+						},
+					},
+				},
+			},
+		}, kmsSDKBuilder("DMS Manager", models.DMSManagerSource), caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
@@ -331,12 +346,27 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+		if conf.WfxPort > 0 {
+			addRouteMap("wfx", "/api/wfx/", conf.WfxPort)
+		}
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
 			proxy := func(c *gin.Context) {
 				var realProxy func(c *gin.Context)
 				foundPath := false
 				path := c.Param("proxyPath")
+
+				if c.Request.Method == http.MethodOptions {
+					realProxy = func(c *gin.Context) {
+						c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+						c.Writer.Header().Set("Access-Control-Allow-Methods", "*")
+						c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+						c.Writer.WriteHeader(http.StatusOK)
+					}
+					realProxy(c)
+					return
+				}
+
 				for _, route := range routeList {
 					if strings.HasPrefix(path, route) {
 						realProxy = routeMaps[route]
@@ -379,7 +409,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ReadHeaderTimeout: time.Second * 10,
 			}
 
-			log.Fatal(serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"))
+			if err := serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"); err != nil {
+				log.Printf("HTTPS gateway stopped: %v", err)
+			}
 		}()
 
 		go func() {
@@ -389,7 +421,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ReadHeaderTimeout: time.Second * 10,
 			}
 
-			log.Fatal(serverHttp.Serve(listenerHttp))
+			if err := serverHttp.Serve(listenerHttp); err != nil {
+				log.Printf("HTTP gateway stopped: %v", err)
+			}
 		}()
 
 		return usedHttpPort, usedHttpsPort, nil

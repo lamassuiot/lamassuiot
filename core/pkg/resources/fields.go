@@ -65,6 +65,20 @@ var DMSFilterableFields = map[string]FilterFieldType{
 	"settings":      JsonFilterFieldType,
 }
 
+// CMPTransactionFilterableFields maps query-string field names to their type
+// for the GET /v1/dms/:id/cmp/transactions endpoint. The DB column names
+// (snake_case) are used directly so the controller's FilterQuery helper can
+// translate operands to SQL without an extra alias layer.
+var CMPTransactionFilterableFields = map[string]FilterFieldType{
+	"transaction_id":      StringFilterFieldType,
+	"state":               EnumFilterFieldType,
+	"is_reenrollment":     EnumFilterFieldType,
+	"request_type":        EnumFilterFieldType,
+	"subject_common_name": StringFilterFieldType,
+	"created_at":          DateFilterFieldType,
+	"expires_at":          DateFilterFieldType,
+}
+
 var DeviceFilterableFields = map[string]FilterFieldType{
 	"id":                 StringFilterFieldType,
 	"dms_owner":          StringFilterFieldType,

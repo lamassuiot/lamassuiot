@@ -11,6 +11,7 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
 	NewESTHttpRoutes(logger, httpGrp, svc)
+	NewCMPHTTPLayer(logger, httpGrp, svc)
 
 	rv1 := httpGrp.Group("/v1")
 
@@ -23,5 +24,6 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	rv1.PATCH("/dms/:id/metadata", routes.UpdateDMSMetadata)
 	rv1.DELETE("/dms/:id", routes.DeleteDMS)
 	rv1.POST("/dms/bind-identity", routes.BindIdentityToDevice)
+	rv1.GET("/dms/:id/cmp/transactions", routes.GetCMPTransactionsByDMS)
 
 }

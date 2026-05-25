@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -93,6 +94,33 @@ func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllIn
 	return IterGet[models.DMS, *resources.GetDMSsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
+// GetCMPTransactionsByDMS streams CMP transactions for the given DMS. The
+// service-level domain type is storage.CMPTransaction, but the wire format
+// is resources.CMPTransactionResponse — we translate per row via a wrapper
+// applyFunc so the SDK consumer sees domain objects regardless of transport.
+func (cli *dmsManagerClient) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
+	url := cli.baseUrl + "/v1/dms/" + input.DMSID + "/cmp/transactions"
+	wrap := func(item resources.CMPTransactionResponse) {
+		if input.ApplyFunc != nil {
+			input.ApplyFunc(storage.CMPTransaction{
+				TransactionID:  item.TransactionID,
+				DMSID:          item.DMSID,
+				State:          storage.CMPTransactionState(item.State),
+				IsReenrollment: item.IsReenrollment,
+				CreatedAt:      item.CreatedAt,
+				ExpiresAt:      item.ExpiresAt,
+				ErrorMessage:   item.ErrorMessage,
+			})
+		}
+	}
+	return IterGet[resources.CMPTransactionResponse, *resources.GetCMPTransactionsResponse](
+		ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, wrap,
+		map[int][]error{
+			404: {errs.ErrDMSNotFound},
+		},
+	)
+}
+
 func (cli *dmsManagerClient) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the estCli instead")
 }
@@ -107,6 +135,38 @@ func (cli *dmsManagerClient) Reenroll(ctx context.Context, csr *x509.Certificate
 
 func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return nil, nil, fmt.Errorf("not supported, use the estCli instead")
+}
+
+func (cli *dmsManagerClient) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
+	return fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCGetCertReqTemplate(ctx context.Context, input services.GetCertReqTemplateInput) (*services.CertReqTemplateOutput, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCGetEnrollmentOptions(ctx context.Context, aps string) (*services.LWCEnrollmentOptions, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
 }
 
 func (cli *dmsManagerClient) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {

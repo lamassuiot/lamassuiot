@@ -3,9 +3,12 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -19,8 +22,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
-	service, err := AssembleDMSManagerService(conf, caService, deviceService)
+func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
+	service, err := AssembleDMSManagerService(conf, kmsService, caService, deviceService)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
@@ -38,7 +41,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 	return service, port, nil
 }
 
-func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
+func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
 	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", conf.OtelConfig)
 
 	lSvc := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
@@ -55,9 +58,37 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
 	}
 
+	cmptxStorage, err := createCMPTransactionStorageInstance(lStorage, conf.Storage)
+	if err != nil {
+		return nil, fmt.Errorf("could not create CMP transaction storage instance: %s", err)
+	}
+
+	// Background janitor: delete expired CMP transactions periodically.
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			if dErr := cmptxStorage.DeleteExpired(context.Background()); dErr != nil {
+				lStorage.Warnf("CMP tx DeleteExpired: %v", dErr)
+			}
+		}
+	}()
+
+	var cmpReporter cmpwfx.CMPReporter
+	if conf.WFX.Enabled {
+		lWFX := chelpers.SetupLogger(conf.WFX.LogLevel, "DMS Manager", "WFX")
+		cmpReporter, err = cmpwfx.NewCMPReporter(conf.WFX, lWFX)
+		if err != nil {
+			return nil, fmt.Errorf("could not create CMP WFX reporter: %s", err)
+		}
+	}
+
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
+		CMPTransactionStorage: cmptxStorage,
+		CMPWFXReporter:        cmpReporter,
+		KMSClient:             kmsService,
 		CAClient:              caService,
 		DevManagerCli:         deviceService,
 		DownstreamCertificate: downCert,
@@ -82,7 +113,27 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		dmsSvc.SetService(svc)
 	}
 
+	if conf.CMPConfirmationMonitoringJob.Enabled {
+		lMonitor := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "CMP Confirmation Monitor")
+		lMonitor.Info("CMP Confirmation Monitoring is enabled")
+		monitorJob := jobs.NewCMPConfirmationMonitor(cmptxStorage, caService, cmpReporter, lMonitor)
+		scheduler := jobs.NewJobScheduler(lMonitor, conf.CMPConfirmationMonitoringJob.Frequency, monitorJob)
+		scheduler.Start()
+	}
+
 	return &svc, nil
+}
+
+func createCMPTransactionStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CMPTransactionRepo, error) {
+	engine, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not create storage engine: %s", err)
+	}
+	cmptxStorage, err := engine.GetCMPTransactionStorage()
+	if err != nil {
+		return nil, fmt.Errorf("could not get CMP transaction storage: %s", err)
+	}
+	return cmptxStorage, nil
 }
 
 func createDMSStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.DMSRepo, error) {

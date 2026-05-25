@@ -3,12 +3,15 @@ package services
 import (
 	"context"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
 type DMSManagerService interface {
 	ESTService
+	LightweightCMPService
+
 	GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error)
 	CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error)
 	UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error)
@@ -18,6 +21,12 @@ type DMSManagerService interface {
 	DeleteDMS(ctx context.Context, input DeleteDMSInput) error
 
 	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
+
+	// GetCMPTransactionsByDMS lists CMP enrollment transactions for the given
+	// DMS, applying the standard pagination/sort/filter machinery. Both
+	// in-flight (PENDING/ISSUED) and stale rows are returned so operators
+	// can inspect failed or abandoned enrollments.
+	GetCMPTransactionsByDMS(ctx context.Context, input GetCMPTransactionsByDMSInput) (string, error)
 }
 
 type GetDMSStatsInput struct {
@@ -56,4 +65,9 @@ type BindIdentityToDeviceInput struct {
 	DeviceID                string
 	CertificateSerialNumber string
 	BindMode                models.DeviceEventType
+}
+
+type GetCMPTransactionsByDMSInput struct {
+	DMSID string `validate:"required"`
+	resources.ListInput[storage.CMPTransaction]
 }

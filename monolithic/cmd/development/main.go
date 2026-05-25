@@ -241,7 +241,7 @@ func main() {
 	} else {
 		fmt.Println(">> launching docker: Postgres ...")
 		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
+		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "wfx"})
 		backend, err := posgresSubsystem.Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
@@ -305,7 +305,7 @@ func main() {
 	fmt.Println("Async Messaging Engine")
 	adminPort := 0
 	eventBus := cconfig.EventBusEngine{
-		LogLevel: cconfig.Trace,
+		LogLevel: cconfig.None,
 		Enabled:  false,
 		Provider: cconfig.Amqp,
 		Config:   make(map[string]interface{}),
@@ -316,7 +316,7 @@ func main() {
 	if !*disableEventbus && *useInMemoryEventbus {
 		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
 		eventBus = cconfig.EventBusEngine{
-			LogLevel: cconfig.Trace,
+			LogLevel: cconfig.None,
 			Enabled:  true,
 			Provider: "inmemory", // Custom provider for monolithic
 			Config:   make(map[string]interface{}),
@@ -334,6 +334,7 @@ func main() {
 		}
 
 		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
+		eventBus.LogLevel = cconfig.None
 		// make a copy for DLQ using deep copy
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
@@ -352,7 +353,7 @@ func main() {
 		internalConfig := awsBaseCryptoEngine.Config
 
 		eventBus = cconfig.EventBusEngine{
-			LogLevel: cconfig.Trace,
+			LogLevel: cconfig.None,
 			Enabled:  true,
 			Provider: cconfig.AWSSqsSns,
 			Config:   internalConfig,
@@ -360,6 +361,8 @@ func main() {
 	}
 
 	var uiPort int
+	var wfxClientPort int
+	var wfxMgmtPort int
 	fmt.Printf(">> UI Enabled : %v\n", !*disableUI)
 
 	cloudConnectors := "[]"
@@ -385,6 +388,54 @@ func main() {
 			containerCleanup()
 			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
 		}
+	}
+
+	if !*useSqlite {
+		fmt.Println(">> launching docker: wfx ...")
+		pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
+		pgUser := storageConfig.Config["username"].(string)
+		pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
+
+		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
+			// Repository: "ghcr.io/siemens/wfx",
+			Repository:   "custom-wfx-ui",
+			Tag:          "latest",
+			ExposedPorts: []string{"9080/tcp", "9081/tcp"},
+			Env: []string{
+				"PGHOST=host.docker.internal",
+				"PGPORT=" + pgPort,
+				"PGUSER=" + pgUser,
+				"PGPASSWORD=" + pgPassword,
+				"PGDATABASE=wfx",
+				"WFX_STORAGE=postgres",
+				"WFX_CLIENT_HOST=0.0.0.0",
+				"WFX_CLIENT_PORT=9080",
+				"WFX_MGMT_HOST=0.0.0.0",
+				"WFX_MGMT_PORT=9081",
+				"WFX_LOG_FORMAT=json",
+				"WFX_LOG_LEVEL=debug",
+			},
+			Labels: map[string]string{
+				"group": "lamassuiot-monolithic",
+			},
+		}, func(hc *docker.HostConfig) {
+			hc.AutoRemove = true
+			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"9080/tcp": {{HostIP: "0.0.0.0", HostPort: "9080"}}, //South - Device API
+				"9081/tcp": {{HostIP: "0.0.0.0", HostPort: "9081"}}, //North - Management API
+			}
+		})
+		if err != nil {
+			if wfxCleanup != nil {
+				wfxCleanup()
+			}
+			log.Fatalf("could not launch wfx: %s", err)
+		}
+		wfxClientPort, _ = strconv.Atoi(wfxContainer.GetPort("9080/tcp"))
+		wfxMgmtPort, _ = strconv.Atoi(wfxContainer.GetPort("9081/tcp"))
+		fmt.Printf(" \t-- wfx client port: %d\n", wfxClientPort)
+		fmt.Printf(" \t-- wfx mgmt port: %d\n", wfxMgmtPort)
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
@@ -454,6 +505,8 @@ func main() {
 		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,
+		WfxPort:               wfxClientPort,
+		WfxMgmtPort:           wfxMgmtPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,
