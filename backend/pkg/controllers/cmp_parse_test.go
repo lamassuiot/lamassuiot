@@ -272,6 +272,48 @@ func TestCMPASN1Helpers(t *testing.T) {
 		assert.True(t, rv.IsCompound)
 	})
 
+	t.Run("marshalErrorBody emits PKIFailureInfo BIT STRING when bits set", func(t *testing.T) {
+		// incorrectData (bit 7) → first BIT STRING content byte 0x01.
+		der, err := marshalErrorBody(2, "transaction expired", pkiFailureInfoIncorrectData)
+		require.NoError(t, err)
+
+		// Round-trip through gocmp's ErrorMsgContent to confirm the FailInfo
+		// field is populated with the expected bit.
+		var msg ErrorMsgContent
+		_, err = asn1.Unmarshal(der, &msg)
+		require.NoError(t, err)
+		require.NotEmpty(t, msg.PKIStatusInfo.FailInfo.Bytes,
+			"expected non-empty failInfo BIT STRING content")
+		assert.Equal(t, 8, msg.PKIStatusInfo.FailInfo.BitLength,
+			"highest bit set is 7 → bit length should be 8")
+		assert.Equal(t, byte(0x01), msg.PKIStatusInfo.FailInfo.Bytes[0],
+			"bit 7 lives in 0x01 of the first byte")
+	})
+
+	t.Run("marshalErrorBody omits FailInfo when no bits supplied", func(t *testing.T) {
+		// No bits → asn1:"optional,omitempty" should elide the BIT STRING
+		// entirely. Callers that don't pass failInfoBits (e.g. legacy
+		// rejection paths) must keep producing the smaller, pre-RFC9483
+		// shape so the wire size is identical to the prior baseline.
+		der, err := marshalErrorBody(2, "no failinfo here")
+		require.NoError(t, err)
+
+		var msg ErrorMsgContent
+		_, err = asn1.Unmarshal(der, &msg)
+		require.NoError(t, err)
+		assert.Empty(t, msg.PKIStatusInfo.FailInfo.Bytes,
+			"failInfo BIT STRING content must be absent when no bits supplied")
+		assert.Equal(t, 0, msg.PKIStatusInfo.FailInfo.BitLength)
+	})
+
+	t.Run("encodePKIFailureInfo handles multi-byte positions", func(t *testing.T) {
+		// systemFailure(25) sits in the 4th byte (bit 25 → byte 3, bit 1 of that byte).
+		bs := encodePKIFailureInfo([]int{pkiFailureInfoSystemFailure})
+		require.Len(t, bs.Bytes, 4)
+		assert.Equal(t, 26, bs.BitLength)
+		assert.Equal(t, byte(0x40), bs.Bytes[3], "bit 25 → 0x80>>1 = 0x40 in the 4th byte")
+	})
+
 	t.Run("marshalCertRepBody (IP, tag 1) produces raw CertRepMessage sequence", func(t *testing.T) {
 		// Minimal DER certificate for testing - any valid SEQUENCE will do.
 		fakeCertDER, _ := asn1.Marshal(asn1.RawValue{
