@@ -604,6 +604,40 @@ func MigrationTest_CA_20260331120000_add_certificate_extensions(t *testing.T, lo
 	assert.Equal(t, int64(0), versionSchemaColumnCount)
 }
 
+func MigrationTest_CA_20260520120000_update_certificate_type_values(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert rows with legacy type values before applying migration
+	for _, tc := range []struct{ serial, typ string }{
+		{"type-test-managed", "MANAGED"},
+		{"type-test-imported", "IMPORTED"},
+		{"type-test-external", "EXTERNAL"},
+	} {
+		err := con.Exec(`INSERT INTO certificates
+			(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id)
+			VALUES(?, '{}', ?, 'test-issuer-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test', '', '', '', '', '', '2024-11-25 09:45:48+00', '2025-09-21 11:45:44+00', '0001-01-01 00:00:00+00', 'Unspecified', ?, 'test-engine')`,
+			tc.serial, tc.serial, tc.typ).Error
+		if err != nil {
+			t.Fatalf("failed to insert certificate with type %s: %v", tc.typ, err)
+		}
+	}
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	expected := map[string]string{
+		"type-test-managed":  "MANAGED",
+		"type-test-imported": "IMPORTED_WITH_KEY",
+		"type-test-external": "IMPORTED_WITHOUT_KEY",
+	}
+
+	for serial, wantType := range expected {
+		var result map[string]any
+		tx := con.Raw(`SELECT "type" FROM certificates WHERE serial_number = ?`, serial).Scan(&result)
+		if tx.RowsAffected != 1 {
+			t.Fatalf("expected 1 row for serial %s, got %d", serial, tx.RowsAffected)
+		}
+		assert.Equal(t, wantType, result["type"], "serial_number=%s", serial)
+	}
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -701,5 +735,10 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20260331120000_add_certificate_extensions(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260331120000_add_certificate_extensions")
+	}
+
+	MigrationTest_CA_20260520120000_update_certificate_type_values(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260520120000_update_certificate_type_values")
 	}
 }
