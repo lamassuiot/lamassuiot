@@ -2662,7 +2662,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 				defer cleanup()
 
+				var webhookCallCount atomic.Int32
 				router.POST("/verify", func(c *gin.Context) {
+					webhookCallCount.Add(1)
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
@@ -2700,6 +2702,9 @@ func TestESTEnroll(t *testing.T) {
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "device-no-cert"}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				if webhookCallCount.Load() != 0 {
+					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
+				}
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -4272,7 +4277,9 @@ func TestESTReEnroll(t *testing.T) {
 				defer cleanup()
 
 				// webhook should never be reached since mTLS fails first
+				var webhookCallCount atomic.Int32
 				router.POST("/verify", func(c *gin.Context) {
+					webhookCallCount.Add(1)
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
@@ -4308,6 +4315,9 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				_, err = estCli.Reenroll(context.Background(), newCsr)
+				if webhookCallCount.Load() != 0 {
+					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
+				}
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -4332,7 +4342,9 @@ func TestESTReEnroll(t *testing.T) {
 				}
 				defer cleanup()
 
+				var webhookCallCount atomic.Int32
 				router.POST("/verify", func(c *gin.Context) {
+					webhookCallCount.Add(1)
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
@@ -4365,6 +4377,9 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				_, err = estCli.Reenroll(context.Background(), newCsr)
+				if webhookCallCount.Load() != 0 {
+					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
+				}
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
