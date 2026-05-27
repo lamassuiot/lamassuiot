@@ -14,25 +14,34 @@ type mlkemHandle struct {
 
 func (h *mlkemHandle) Public() crypto.PublicKey { return h.meta.PublicKey }
 
+// --- crypto.Encapsulator ---
+
+func (h *mlkemHandle) Bytes() []byte {
+	switch ek := h.meta.PublicKey.(type) {
+	case *mlkem.EncapsulationKey768:
+		return ek.Bytes()
+	case *mlkem.EncapsulationKey1024:
+		return ek.Bytes()
+	}
+	panic(fmt.Sprintf("soft: mlkemHandle has non-ML-KEM public key %T", h.meta.PublicKey))
+}
+
+func (h *mlkemHandle) Encapsulate() (sharedSecret, ciphertext []byte) {
+	sharedSecret, ciphertext, err := h.EncapsulateContext(context.Background())
+	if err != nil {
+		panic(fmt.Sprintf("soft: encapsulate failed: %v", err))
+	}
+	return sharedSecret, ciphertext
+}
+
 // --- crypto.Decapsulator ---
+
+func (h *mlkemHandle) Encapsulator() crypto.Encapsulator {
+	return h
+}
 
 func (h *mlkemHandle) Decapsulate(ciphertext []byte) ([]byte, error) {
 	return h.decapsulate(context.Background(), ciphertext)
-}
-
-// Encapsulator returns the standard-library public encapsulation key. The
-// handle itself does NOT implement crypto.Encapsulator (which requires
-// Bytes() on the public key); this method exposes the real public object
-// so callers can use it directly with crypto/tls and any consumer of
-// crypto.Encapsulator.
-func (h *mlkemHandle) Encapsulator() crypto.Encapsulator {
-	switch ek := h.meta.PublicKey.(type) {
-	case *mlkem.EncapsulationKey768:
-		return ek
-	case *mlkem.EncapsulationKey1024:
-		return ek
-	}
-	panic(fmt.Sprintf("soft: mlkemHandle has non-ML-KEM public key %T", h.meta.PublicKey))
 }
 
 // --- cryptoenginesv2.Decapsulator (context-aware) ---
