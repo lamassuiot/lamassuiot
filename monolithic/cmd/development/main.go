@@ -503,8 +503,6 @@ func main() {
 		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,
-		WfxPort:               wfxClientPort,
-		WfxMgmtPort:           wfxMgmtPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,

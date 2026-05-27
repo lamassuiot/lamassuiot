@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"os"
 
@@ -49,7 +52,7 @@ func main() {
 			operations: []cryptoenginesv2.Operation{
 				cryptoenginesv2.OpSign,
 			},
-			verify: verifySignSHA256,
+			verify: verifyRSAPSSSignSHA256,
 		},
 		{
 			name:      "RSA OAEP wrap and decrypt",
@@ -96,6 +99,23 @@ func main() {
 			},
 			verify: verifyMLKEMRoundTrip,
 		},
+		{
+			name:      "HMAC-SHA-256 compute and verify",
+			algorithm: "HMAC_SHA_256",
+			operations: []cryptoenginesv2.Operation{
+				cryptoenginesv2.OpMAC,
+				cryptoenginesv2.OpVerifyMAC,
+			},
+			verify: verifyHMACSHA256,
+		},
+		{
+			name:      "ECDH P-256 key agreement",
+			algorithm: "ECDH_NIST_P256",
+			operations: []cryptoenginesv2.Operation{
+				cryptoenginesv2.OpAgreeKey,
+			},
+			verify: verifyECDHP256Agree,
+		},
 	}
 
 	for _, tc := range cases {
@@ -138,6 +158,14 @@ func printCapabilities(key cryptoenginesv2.KeyHandle) {
 	fmt.Println("symmetric cipher support:", supported(okSymmetricCipher(key) && hasOperation(ops, cryptoenginesv2.OpEncrypt)))
 	fmt.Println("MACer support:", supported(okMACer(key) && hasOperation(ops, cryptoenginesv2.OpMAC)))
 	fmt.Println("key agreement support:", supported(okKeyAgreementer(key) && hasOperation(ops, cryptoenginesv2.OpAgreeKey)))
+}
+
+func hexShort(b []byte) string {
+	const show = 16
+	if len(b) <= show {
+		return hex.EncodeToString(b)
+	}
+	return hex.EncodeToString(b[:show]) + fmt.Sprintf("... (%d bytes)", len(b))
 }
 
 func supported(ok bool) string {
@@ -207,13 +235,57 @@ func verifySignSHA256(ctx context.Context, key cryptoenginesv2.KeyHandle) error 
 		return fmt.Errorf("key does not implement Signer")
 	}
 
-	sum := sha256.Sum256([]byte("hello world"))
-	signature, err := signer.SignContext(ctx, sum[:], nil)
+	msg := []byte("hello RSA PKCS1v15")
+	sum := sha256.Sum256(msg)
+	signature, err := signer.SignContext(ctx, sum[:], crypto.SHA256)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("signature bytes: %d\n", len(signature))
+	pub, ok := key.Metadata().PublicKey.(*rsa.PublicKey)
+	if !ok || pub == nil {
+		return fmt.Errorf("missing RSA public key")
+	}
+	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, sum[:], signature); err != nil {
+		return fmt.Errorf("RSA PKCS1v15 verification failed: %w", err)
+	}
+
+	fmt.Printf("msg:       %s\n", msg)
+	fmt.Printf("digest:    %s\n", hexShort(sum[:]))
+	fmt.Printf("signature: %s\n", hexShort(signature))
+	return nil
+}
+
+func verifyRSAPSSSignSHA256(ctx context.Context, key cryptoenginesv2.KeyHandle) error {
+	signer, ok := key.(cryptoenginesv2.Signer)
+	if !ok {
+		return fmt.Errorf("key does not implement Signer")
+	}
+
+	msg := []byte("hello RSA PSS")
+	sum := sha256.Sum256(msg)
+	signature, err := signer.SignContext(ctx, sum[:], &rsa.PSSOptions{
+		SaltLength: rsa.PSSSaltLengthAuto,
+		Hash:       crypto.SHA256,
+	})
+	if err != nil {
+		return err
+	}
+
+	pub, ok := key.Metadata().PublicKey.(*rsa.PublicKey)
+	if !ok || pub == nil {
+		return fmt.Errorf("missing RSA public key")
+	}
+	if err := rsa.VerifyPSS(pub, crypto.SHA256, sum[:], signature, &rsa.PSSOptions{
+		SaltLength: rsa.PSSSaltLengthAuto,
+		Hash:       crypto.SHA256,
+	}); err != nil {
+		return fmt.Errorf("RSA PSS verification failed: %w", err)
+	}
+
+	fmt.Printf("msg:       %s\n", msg)
+	fmt.Printf("digest:    %s\n", hexShort(sum[:]))
+	fmt.Printf("signature: %s\n", hexShort(signature))
 	return nil
 }
 
@@ -259,7 +331,10 @@ func verifyRSAOAEPWrapAndDecrypt(ctx context.Context, key cryptoenginesv2.KeyHan
 		return fmt.Errorf("decrypt mismatch")
 	}
 
-	fmt.Printf("wrapped bytes: %d\n", len(wrapped))
+	fmt.Printf("plaintext:  %s\n", plaintext)
+	fmt.Printf("wrapped:    %s\n", hexShort(wrapped))
+	fmt.Printf("ciphertext: %s\n", hexShort(ciphertext))
+	fmt.Printf("decrypted:  %s\n", decrypted)
 	return nil
 }
 
@@ -285,7 +360,8 @@ func verifyMLKEMRoundTrip(ctx context.Context, key cryptoenginesv2.KeyHandle) er
 		return fmt.Errorf("shared secret mismatch")
 	}
 
-	fmt.Printf("shared secret bytes: %d\n", len(sharedSecret))
+	fmt.Printf("ciphertext:    %s\n", hexShort(ciphertext))
+	fmt.Printf("shared secret: %s\n", hexShort(sharedSecret))
 	return nil
 }
 
@@ -309,7 +385,9 @@ func verifyECDSASignSHA256(ctx context.Context, key cryptoenginesv2.KeyHandle) e
 		return fmt.Errorf("ecdsa verification failed")
 	}
 
-	fmt.Printf("signature bytes: %d\n", len(signature))
+	fmt.Printf("msg:       %s\n", []byte("hello ecdsa p256"))
+	fmt.Printf("digest:    %s\n", hexShort(sum[:]))
+	fmt.Printf("signature: %s\n", hexShort(signature))
 	return nil
 }
 
@@ -333,7 +411,9 @@ func verifyECDSASignSHA384(ctx context.Context, key cryptoenginesv2.KeyHandle) e
 		return fmt.Errorf("ecdsa verification failed")
 	}
 
-	fmt.Printf("signature bytes: %d\n", len(signature))
+	fmt.Printf("msg:       %s\n", []byte("hello ecdsa p384"))
+	fmt.Printf("digest:    %s\n", hexShort(sum[:]))
+	fmt.Printf("signature: %s\n", hexShort(signature))
 	return nil
 }
 
@@ -362,7 +442,73 @@ func verifyAESGCMRoundTrip(ctx context.Context, key cryptoenginesv2.KeyHandle) e
 		return fmt.Errorf("aes round-trip mismatch")
 	}
 
-	fmt.Printf("ciphertext bytes: %d\n", len(ciphertext.Bytes))
+	fmt.Printf("plaintext:  %s\n", plaintext)
+	fmt.Printf("nonce:      %s\n", hexShort(ciphertext.Nonce))
+	fmt.Printf("ciphertext: %s\n", hexShort(ciphertext.Bytes))
+	fmt.Printf("decrypted:  %s\n", decrypted)
+	return nil
+}
+
+func verifyHMACSHA256(ctx context.Context, key cryptoenginesv2.KeyHandle) error {
+	macer, ok := key.(cryptoenginesv2.MACer)
+	if !ok {
+		return fmt.Errorf("key does not implement MACer")
+	}
+
+	msg := []byte("hello HMAC SHA-256")
+	mac, err := macer.MAC(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("MAC: %w", err)
+	}
+
+	if err := macer.VerifyMAC(ctx, msg, mac); err != nil {
+		return fmt.Errorf("VerifyMAC: %w", err)
+	}
+
+	// Tampered message must fail verification.
+	tampered := append([]byte(nil), msg...)
+	tampered[0] ^= 0xff
+	if err := macer.VerifyMAC(ctx, tampered, mac); err == nil {
+		return fmt.Errorf("VerifyMAC accepted tampered message")
+	}
+
+	fmt.Printf("msg: %s\n", msg)
+	fmt.Printf("MAC: %s\n", hexShort(mac))
+	return nil
+}
+
+func verifyECDHP256Agree(ctx context.Context, key cryptoenginesv2.KeyHandle) error {
+	agreementer, ok := key.(cryptoenginesv2.KeyAgreementer)
+	if !ok {
+		return fmt.Errorf("key does not implement KeyAgreementer")
+	}
+
+	// Generate an ephemeral peer key locally to test interop.
+	peerPriv, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate peer key: %w", err)
+	}
+
+	shared, err := agreementer.Agree(ctx, peerPriv.PublicKey())
+	if err != nil {
+		return fmt.Errorf("Agree: %w", err)
+	}
+
+	// Verify from the peer's side using raw ECDH with the handle's public key.
+	pub, ok := key.Metadata().PublicKey.(*ecdh.PublicKey)
+	if !ok || pub == nil {
+		return fmt.Errorf("missing ECDH public key")
+	}
+	peerShared, err := peerPriv.ECDH(pub)
+	if err != nil {
+		return fmt.Errorf("peer ECDH: %w", err)
+	}
+
+	if !bytes.Equal(shared, peerShared) {
+		return fmt.Errorf("shared secret mismatch")
+	}
+
+	fmt.Printf("shared secret: %s\n", hexShort(shared))
 	return nil
 }
 

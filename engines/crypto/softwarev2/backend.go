@@ -202,19 +202,17 @@ func (b *Backend) newHandle(meta cryptoenginesv2.KeyMetadata, uri string) (crypt
 		return &ecdsaHandle{handleBase: base}, nil
 	// case cryptoenginesv2.FamilyEdDSA:
 	// 	return &ed25519Handle{handleBase: base}, nil
-	// case cryptoenginesv2.FamilyECDH:
-	// 	return &ecdhHandle{handleBase: base}, nil
+	case cryptoenginesv2.FamilyECDH:
+		return &ecdhHandle{handleBase: base}, nil
 	case cryptoenginesv2.FamilyMLKEM:
 		return &mlkemHandle{handleBase: base}, nil
 	case cryptoenginesv2.FamilyAES:
 		return &aesHandle{handleBase: base}, nil
-	// case cryptoenginesv2.FamilyHMAC:
-	// 	return &hmacHandle{handleBase: base}, nil
+	case cryptoenginesv2.FamilyHMAC:
+		return &hmacHandle{handleBase: base}, nil
 	default:
 		return nil, fmt.Errorf("soft: unsupported algorithm family %q for %s", family, meta.Algorithm)
 	}
-
-	return nil, fmt.Errorf("soft: no handle implementation for algorithm %q", meta.Algorithm)
 }
 
 func blobURI(id cryptoenginesv2.KeyID) string { return "soft:blob/" + string(id) }
