@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/mlkem"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -92,9 +91,10 @@ func main() {
 			name:      "ML-KEM decapsulation",
 			algorithm: "ML_KEM_768",
 			operations: []cryptoenginesv2.Operation{
+				cryptoenginesv2.OpEncapsulate,
 				cryptoenginesv2.OpDecapsulate,
 			},
-			verify: verifyMLKEMDecapsulation,
+			verify: verifyMLKEMRoundTrip,
 		},
 	}
 
@@ -263,25 +263,20 @@ func verifyRSAOAEPWrapAndDecrypt(ctx context.Context, key cryptoenginesv2.KeyHan
 	return nil
 }
 
-func verifyMLKEMDecapsulation(ctx context.Context, key cryptoenginesv2.KeyHandle) error {
+func verifyMLKEMRoundTrip(ctx context.Context, key cryptoenginesv2.KeyHandle) error {
+	encapsulator, ok := key.(cryptoenginesv2.Encapsulator)
+	if !ok {
+		return fmt.Errorf("key does not implement Encapsulator")
+	}
 	decapsulator, ok := key.(cryptoenginesv2.Decapsulator)
 	if !ok {
 		return fmt.Errorf("key does not implement Decapsulator")
 	}
 
-	var (
-		sharedSecret []byte
-		ciphertext   []byte
-	)
-	switch ek := key.Metadata().PublicKey.(type) {
-	case *mlkem.EncapsulationKey768:
-		sharedSecret, ciphertext = ek.Encapsulate()
-	case *mlkem.EncapsulationKey1024:
-		sharedSecret, ciphertext = ek.Encapsulate()
-	default:
-		return fmt.Errorf("unsupported ML-KEM public key type %T", key.Metadata().PublicKey)
+	sharedSecret, ciphertext, err := encapsulator.EncapsulateContext(ctx)
+	if err != nil {
+		return err
 	}
-
 	decapsulated, err := decapsulator.DecapsulateContext(ctx, ciphertext)
 	if err != nil {
 		return err
