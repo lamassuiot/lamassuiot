@@ -12,6 +12,7 @@ use (
 	./engines/crypto/filesystem
 	./engines/crypto/pkcs11
 	./engines/crypto/software
+	./engines/crypto/softwarev2
 	./engines/crypto/vaultkv2
 	./engines/eventbus/amqp
 	./engines/eventbus/aws
