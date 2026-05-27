@@ -15,19 +15,21 @@ jobs:
       - name: Validate tag input
         run: |
           TAG="${{ github.event.inputs.tag }}"
-          if [ -z "$TAG" ]; then
-            echo "TAG=dev" >> $GITHUB_ENV
-          else
-            if [ "$TAG" = "latest" ]; then
-              echo "Error: tag 'latest' is not allowed."
-              exit 1
-            fi
-            if echo "$TAG" | grep -qE '^[0-9]'; then
-              echo "Error: tag must not start with a number (got '$TAG')."
-              exit 1
-            fi
-            echo "TAG=$TAG" >> $GITHUB_ENV
+          TAG="${TAG:-dev}"
+
+          # Disallow reserved tag
+          if [[ "${TAG,,}" == "latest" ]]; then
+            echo "Error: tag 'latest' is not allowed." >&2
+            exit 1
           fi
+
+          # Docker tag allowlist + prevents newline/env injection
+          if ! [[ "$TAG" =~ ^[A-Za-z_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Error: tag must match ^[A-Za-z_][A-Za-z0-9_.-]{0,127}$ (got '$TAG')." >&2
+            exit 1
+          fi
+
+          printf 'TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
 
   build_docker_image:
     needs: validate_tag
