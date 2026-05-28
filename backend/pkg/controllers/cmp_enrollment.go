@@ -47,10 +47,19 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		}
 	}
 
+	respTag := variant.respTagFor(body.Tag)
+
 	req, err := decodeFirstCertReq(body.Bytes)
 	if err != nil {
-		lFunc.Errorf("%s: decode CertReqMessage: %v", variant.logPrefix, err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID, pkiFailureInfoBadDataFormat)
+		var certRej *certRequestRejection
+		if errors.As(err, &certRej) {
+			// Cert-request-level rejection: respond with ip/cp body per RFC 9483 §4.1.
+			lFunc.Warnf("%s: cert request rejected: %v", variant.logPrefix, err)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, certRej)
+		} else {
+			lFunc.Errorf("%s: decode CertReqMessage: %v", variant.logPrefix, err)
+			r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID, pkiFailureInfoBadDataFormat)
+		}
 		return
 	}
 
@@ -61,9 +70,11 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	if variant.verifyInnerPOPO {
 		if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, enrollOpts.EnforcePOPO); err != nil {
 			lFunc.Warnf("%s: POPO verification failed: %v", variant.logPrefix, err)
-			r.rejectWithError(ctx, &header, PKIStatus(2),
-				fmt.Sprintf("proof of possession verification failed: %v", err),
-				dmsID, pkiFailureInfoBadPOP)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+				CertReqID:   req.CertReqID,
+				Reason:      fmt.Sprintf("proof of possession verification failed: %v", err),
+				FailInfoBit: pkiFailureInfoBadPOP,
+			})
 			return
 		}
 	}
@@ -80,7 +91,6 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		},
 	})
 
-	respTag := variant.respTagFor(body.Tag)
 	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
 		isReenrollment: variant.isReenrollment,
 		requestTag:     body.Tag,

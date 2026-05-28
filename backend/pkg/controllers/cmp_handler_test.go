@@ -958,6 +958,77 @@ func injectSenderInHeader(t *testing.T, headerDER []byte, subject pkix.Name) []b
 	return newHeaderDER
 }
 
+// parseCertRepRejection parses the first CertResponse from a CertRepMessage
+// (ip/cp/kup body) and returns its statusString reason text and failInfo.
+// Used to verify cert-request-level rejections that use ip/cp body instead
+// of the error body type (RFC 9483 §4.1).
+//
+// Wire layout (DER):
+//
+//	PKIMessage SEQUENCE {
+//	  header, body [tag] {
+//	    CertRepMessage SEQUENCE {           ← certRepMsgSeq
+//	      Responses SEQUENCE OF {           ← responsesSeq
+//	        CertResponse SEQUENCE {         ← certRespSeq
+//	          certReqId INTEGER,
+//	          PKIStatusInfo SEQUENCE { ... }
+//	        }
+//	      }
+//	    }
+//	  }
+//	}
+func parseCertRepRejection(t *testing.T, responseDER []byte) (reason string, failInfo asn1.BitString) {
+	t.Helper()
+	var msg rawPKIMessage
+	_, err := asn1.Unmarshal(responseDER, &msg)
+	require.NoError(t, err, "response must be a valid DER PKIMessage")
+
+	// msg.Body.Bytes = content inside [bodyTag]; first TLV is CertRepMessage SEQUENCE.
+	var certRepMsgSeq asn1.RawValue
+	_, err = asn1.Unmarshal(msg.Body.Bytes, &certRepMsgSeq)
+	require.NoError(t, err, "parse CertRepMessage")
+
+	// certRepMsgSeq.Bytes = Responses (SEQUENCE OF CertResponse).
+	var responsesSeq asn1.RawValue
+	_, err = asn1.Unmarshal(certRepMsgSeq.Bytes, &responsesSeq)
+	require.NoError(t, err, "parse Responses SEQUENCE OF")
+
+	// responsesSeq.Bytes = first CertResponse SEQUENCE.
+	var certRespSeq asn1.RawValue
+	_, err = asn1.Unmarshal(responsesSeq.Bytes, &certRespSeq)
+	require.NoError(t, err, "parse CertResponse")
+
+	// Inside CertResponse: certReqId INTEGER, PKIStatusInfo SEQUENCE.
+	rest := certRespSeq.Bytes
+	var certReqIDRaw asn1.RawValue
+	rest, err = asn1.Unmarshal(rest, &certReqIDRaw)
+	require.NoError(t, err, "parse certReqId")
+
+	var psiRaw asn1.RawValue
+	_, err = asn1.Unmarshal(rest, &psiRaw)
+	require.NoError(t, err, "parse PKIStatusInfo")
+
+	// Walk PKIStatusInfo: status INTEGER, statusString? SEQUENCE OF UTF8String, failInfo? BIT STRING
+	psiContent := psiRaw.Bytes
+	var statusRaw asn1.RawValue
+	psiContent, err = asn1.Unmarshal(psiContent, &statusRaw)
+	require.NoError(t, err, "parse status INTEGER")
+	for len(psiContent) > 0 {
+		var field asn1.RawValue
+		psiContent, err = asn1.Unmarshal(psiContent, &field)
+		if err != nil {
+			break
+		}
+		if field.Tag == asn1.TagSequence && field.Class == asn1.ClassUniversal && len(reason) == 0 {
+			reason = scanFirstUTF8String(field.Bytes)
+		}
+		if field.Tag == asn1.TagBitString && field.Class == asn1.ClassUniversal {
+			_, _ = asn1.Unmarshal(field.FullBytes, &failInfo)
+		}
+	}
+	return
+}
+
 // parseCMPResponseTag returns the body CHOICE tag from a DER-encoded PKIMessage.
 func parseCMPResponseTag(t *testing.T, body []byte) int {
 	t.Helper()
@@ -2129,10 +2200,11 @@ func TestHandleCMP_POPO_InvalidSignature(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
-		"IR with corrupt POPO signature must be rejected")
-	assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "proof of possession",
-		"error must reference POPO failure")
+	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"IR with corrupt POPO signature must be rejected via ip CertRepMessage")
+	reason, fi := parseCertRepRejection(t, resp.Body.Bytes())
+	assert.Contains(t, reason, "proof of possession", "statusString must reference POPO failure")
+	assert.True(t, bitSet(fi, pkiFailureInfoBadPOP), "failInfo must set badPOP (9)")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
 }
@@ -2163,10 +2235,11 @@ func TestHandleCMP_POPO_Absent_Enforced(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
-		"IR without POPO must be rejected when EnforcePOPO=true")
-	assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "proof of possession",
-		"error must reference POPO requirement")
+	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"IR without POPO must be rejected via ip CertRepMessage when EnforcePOPO=true")
+	reason, fi := parseCertRepRejection(t, resp.Body.Bytes())
+	assert.Contains(t, reason, "proof of possession", "statusString must reference POPO requirement")
+	assert.True(t, bitSet(fi, pkiFailureInfoBadPOP), "failInfo must set badPOP (9)")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
 }

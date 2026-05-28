@@ -288,6 +288,38 @@ func marshalCertifiedKeyPair(certOrEncCertDER []byte) ([]byte, error) {
 	})
 }
 
+// certRequestRejection is returned by decodeFirstCertReq (and POPO checks) when
+// the failure is a cert-request-level protocol violation rather than a
+// wire-format decode error. The handler routes these to an ip/cp CertRepMessage
+// with PKIStatus rejection (RFC 9483 §4.1 / RFC 9810 §5.2.3) rather than
+// using the error body type.
+type certRequestRejection struct {
+	CertReqID   int
+	Reason      string
+	FailInfoBit int
+}
+
+func (e *certRequestRejection) Error() string { return e.Reason }
+
+// marshalCertRepRejectionBody assembles a CertRepMessage with a single
+// CertResponse whose status is rejection. Used for cert-request-level failures
+// (bad certReqId, missing subject, bad POP, etc.) where RFC 9483 §4.1 requires
+// an ip/cp response body rather than an error body.
+func marshalCertRepRejectionBody(certReqID int, reason string, failInfoBit int) ([]byte, error) {
+	certResp := serverCertResponse{
+		CertReqID: certReqID,
+		Status: PKIStatusInfo{
+			Status: PKIStatus(pkiStatusRejection),
+			StatusString: PKIFreeText{
+				asn1.RawValue{Tag: asn1.TagUTF8String, Bytes: []byte(reason)},
+			},
+			FailInfo: encodePKIFailureInfo([]int{failInfoBit}),
+		},
+	}
+	msg := serverCertRepMessage{Responses: []serverCertResponse{certResp}}
+	return asn1.Marshal(msg)
+}
+
 // marshalCertRepBody assembles the raw CertRepMessage DER. The PKIBody
 // context-specific wrapper is added by sendRawBody.
 // certReqID is the certReqId from the corresponding CertRequest.

@@ -608,7 +608,8 @@ func TestC6_FailInfo_ProtectionVerificationFailure_BadMessageCheck(t *testing.T)
 }
 
 // TestC6_FailInfo_POPOFailure_BadPOP — POPO verification failure MUST set
-// badPOP (bit 9) per RFC 9810 §5.1.3.
+// badPOP (bit 9) per RFC 9810 §5.1.3. The response uses an ip CertRepMessage
+// body (not the error body) per RFC 9483 §4.1.
 func TestC6_FailInfo_POPOFailure_BadPOP(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
@@ -622,9 +623,10 @@ func TestC6_FailInfo_POPOFailure_BadPOP(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"POPO failure must respond with ip CertRepMessage (RFC 9483 §4.1)")
 
-	bs := parseFailInfoBitString(t, resp.Body.Bytes())
+	_, bs := parseCertRepRejection(t, resp.Body.Bytes())
 	assert.True(t, bitSet(bs, pkiFailureInfoBadPOP),
 		"POPO failure MUST set badPOP (9) per RFC 9810 §5.1.3")
 

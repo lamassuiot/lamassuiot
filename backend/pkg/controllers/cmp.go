@@ -161,6 +161,16 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		return
 	}
 
+	// RFC 9483 §3.1: recipNonce MUST be absent in the initial request of a
+	// transaction (ir/cr). If the EE set it, reject per §3.5 badRecipientNonce.
+	if (body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR) && len(reqHeader.RecipNonce) > 0 {
+		lFunc.Warnf("recipNonce present on initial %s message", cmpTagToString(body.Tag))
+		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
+			"recipNonce must be absent in the initial request (RFC 9483 §3.1)",
+			dmsID, pkiFailureInfoBadRecipientNonce)
+		return
+	}
+
 	lFunc = lFunc.
 		WithField("dms", dmsID).
 		WithField("bodyTag", body.Tag).
@@ -729,6 +739,20 @@ func hashesEqual(a, b []byte) bool {
 //	sends a CMP Error PKIMessage response.
 //
 // header may be nil if the incoming PKIMessage header could not be parsed.
+// rejectCertRequest sends an ip/cp/kup body with a single CertResponse whose
+// status is rejection. Use this for cert-request-level failures (bad POP,
+// missing subject, invalid certReqId, etc.) where RFC 9483 §4.1 requires the
+// CertRepMessage body type rather than the error body type.
+func (r *cmpHttpRoutes) rejectCertRequest(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, respTag int, dmsID string, rej *certRequestRejection) {
+	body, err := marshalCertRepRejectionBody(rej.CertReqID, rej.Reason, rej.FailInfoBit)
+	if err != nil {
+		lFunc.Errorf("build cert rep rejection body: %v", err)
+		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), rej.Reason, dmsID, rej.FailInfoBit)
+		return
+	}
+	r.sendRawBody(ctx, lFunc, header, respTag, body, dmsID)
+}
+
 func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHeader, status PKIStatus, reason string, aps string, failInfoBits ...int) {
 	errBody, err := marshalErrorBody(status, reason, failInfoBits...)
 	if err != nil {
@@ -961,8 +985,17 @@ func decodeFirstCertReq(bodyBytes []byte) (*firstCertReq, error) {
 	}
 
 	var crMsg asn1.RawValue
-	if _, err := asn1.Unmarshal(crMsgsSeq.Bytes, &crMsg); err != nil {
+	crMsgsRest, err := asn1.Unmarshal(crMsgsSeq.Bytes, &crMsg)
+	if err != nil {
 		return nil, fmt.Errorf("CertReqMsg: %w", err)
+	}
+	// RFC 9483 §4.1: exactly one CertReqMsg is allowed per ir/cr/kur.
+	if len(crMsgsRest) > 0 {
+		return nil, &certRequestRejection{
+			CertReqID:   0,
+			Reason:      "ir/cr/kur must contain exactly one CertReqMsg (RFC 9483 §4.1)",
+			FailInfoBit: pkiFailureInfoBadRequest,
+		}
 	}
 
 	var certReqSeq asn1.RawValue
@@ -992,6 +1025,14 @@ func decodeFirstCertReq(bodyBytes []byte) (*firstCertReq, error) {
 	var certReqID int
 	if _, err := asn1.Unmarshal(certReqIDRaw.FullBytes, &certReqID); err != nil {
 		return nil, fmt.Errorf("parse certReqId: %w", err)
+	}
+	// RFC 9483 §4.1: certReqId MUST be 0.
+	if certReqID != 0 {
+		return nil, &certRequestRejection{
+			CertReqID:   certReqID,
+			Reason:      fmt.Sprintf("certReqId must be 0 (RFC 9483 §4.1), got %d", certReqID),
+			FailInfoBit: pkiFailureInfoBadRequest,
+		}
 	}
 
 	var certTemplate asn1.RawValue
@@ -1027,10 +1068,18 @@ func decodeFirstCertReq(bodyBytes []byte) (*firstCertReq, error) {
 	}
 
 	if len(subjectDER) == 0 {
-		return nil, fmt.Errorf("Subject [5] field not found in CertTemplate")
+		return nil, &certRequestRejection{
+			CertReqID:   certReqID,
+			Reason:      "subject field is required in CertTemplate (RFC 9483 §4.1.3)",
+			FailInfoBit: pkiFailureInfoBadCertTemplate,
+		}
 	}
 	if len(publicKeyDER) == 0 {
-		return nil, fmt.Errorf("PublicKey [6] field not found in CertTemplate")
+		return nil, &certRequestRejection{
+			CertReqID:   certReqID,
+			Reason:      "publicKey field is required in CertTemplate (RFC 9483 §4.1.3)",
+			FailInfoBit: pkiFailureInfoBadCertTemplate,
+		}
 	}
 
 	return &firstCertReq{
