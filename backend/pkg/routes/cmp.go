@@ -18,12 +18,16 @@ import (
 //
 // A content-type guard middleware rejects requests that do not carry the
 // application/pkixcmp media type (RFC 6712 §3.1).
-func NewCMPHTTPLayer(logger *logrus.Entry, rg *gin.RouterGroup, svc services.LightweightCMPService) {
-	routes := controllers.NewCMPHttpRoutes(logger, svc)
+func NewCMPHTTPLayer(logger *logrus.Entry, rg *gin.RouterGroup, svc services.LightweightCMPService) error {
+	routes, err := controllers.NewCMPHttpRoutes(logger, svc)
+	if err != nil {
+		return err
+	}
 
 	cmpGrp := rg.Group("/.well-known/cmp")
 	cmpGrp.Use(requirePKIXCMP())
 	cmpGrp.POST("/p/:id", routes.HandleCMP)
+	return nil
 }
 
 // requirePKIXCMP is a Gin middleware that rejects requests whose Content-Type

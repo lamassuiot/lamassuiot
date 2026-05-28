@@ -63,7 +63,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 				EnrollmentProtocol: models.EST,
 				EnrollmentCA:       enrollCA.ID,
 				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+					AuthMode: models.EnrollmentAuthModeClientCertificate,
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ChainLevelValidation: -1,
 						ValidationCAs:        []string{bootstrapCA.ID},

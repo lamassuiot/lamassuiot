@@ -3,6 +3,16 @@ package models
 // EnrollmentOptionsLWCRFC9483 holds CMP-specific enrollment settings as defined
 // by RFC 9483 (Lightweight CMP Profile) and RFC 4210.
 type EnrollmentOptionsLWCRFC9483 struct {
+	// AuthMode / AuthOptionsMTLS / AuthOptionsExternalWebhook are the shared
+	// enrollment authentication policy. CMP supports the same four modes as EST
+	// — NO_AUTH, CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, and both — validated by
+	// the same authenticator. For CMP, CLIENT_CERTIFICATE means the
+	// signature-based message-protection signer cert (extraCerts[0], RFC 9483
+	// §3.2) rather than a transport mTLS cert.
+	AuthMode                   EnrollmentAuthMode           `json:"auth_mode"`
+	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
+	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook"`
+
 	// AcceptImplicit controls whether the server is willing to skip the
 	// certConf round-trip when the EE asks for implicit confirmation
 	// (id-it-implicitConfirm OID in the request's generalInfo).
@@ -20,24 +30,19 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// RFC 4210 §5.2.8.
 	ConfirmationTimeout TimeDuration `json:"confirmation_timeout"`
 
-	// AuthMode selects how the RA authenticates the end-entity's CMP request.
-	// Currently only CLIENT_CERTIFICATE (mTLS / signature-based protection) is supported.
-	AuthMode CMPAuthMode `json:"auth_mode"`
-
-	// AuthOptionsMTLS holds the parameters used when AuthMode is CLIENT_CERTIFICATE.
-	// Reuses the same structure as the EST mTLS auth option.
-	AuthOptionsMTLS AuthOptionsClientCertificate `json:"client_certificate_settings"`
+	// ApprovalTimeout is how long a phased-workflow transaction waits in
+	// PENDING for an administrator to approve (or reject) issuance before it
+	// is swept by DeleteExpired. Only meaningful when Workflow=phased.
+	// When unset/zero the controller falls back to a 7-day default — long
+	// enough that an operator has a chance to act, much longer than the
+	// per-device certConf window. RFC 4210 §5.3.22 leaves the polling/approval
+	// window to server policy.
+	ApprovalTimeout TimeDuration `json:"approval_timeout,omitempty"`
 
 	// ProtectionCertificateSerialNumber is the serial number of the end-entity certificate
 	// whose key the RA uses to sign CMP response messages (signature-based PKIMessage protection).
 	// The key associated with the certificate must be stored in the KMS.
 	ProtectionCertificateSerialNumber string `json:"protection_certificate"`
-
-	// EnforceRequestProtection controls whether incoming CMP requests MUST carry
-	// signature-based protection. When true, requests without a Protection field
-	// are rejected with a CMP error. When false (default), unprotected requests
-	// are accepted (e.g. for testing or clients that do not support request signing).
-	EnforceRequestProtection bool `json:"enforce_request_protection"`
 
 	// EnforcePOPO controls whether the Proof-Of-Possession (POPO) signature inside
 	// the CRMF CertReqMsg MUST be verified. RFC 9483 §4.1 requires POPO for ir/cr
@@ -49,10 +54,36 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// possession so the inner CRMF self-signature is redundant.
 	// Defaults to false (Go zero value); set to true to enforce verification.
 	EnforcePOPO bool `json:"enforce_popo"`
+
+	// Workflow selects the CMP transaction lifecycle the DMS follows:
+	//   - CMPWorkflowDirect (default): the cert is issued and returned inline
+	//     in response to the ir/cr/kur.
+	//   - CMPWorkflowPhased: the request is accepted but issuance is deferred
+	//     until a PKI administrator approves it. The server returns a "waiting"
+	//     response (RFC 9483 §4.4 / RFC 4210 §5.3.22) and the EE retrieves the
+	//     certificate via pollReq once approval has happened.
+	// Empty is treated as CMPWorkflowDirect.
+	Workflow CMPWorkflow `json:"workflow,omitempty"`
 }
 
-type CMPAuthMode string
+// AuthSettings returns the shared authentication policy for this CMP DMS.
+func (o EnrollmentOptionsLWCRFC9483) AuthSettings() EnrollmentAuthSettings {
+	return EnrollmentAuthSettings{
+		AuthMode:                   o.AuthMode,
+		AuthOptionsMTLS:            o.AuthOptionsMTLS,
+		AuthOptionsExternalWebhook: o.AuthOptionsExternalWebhook,
+	}
+}
+
+// CMPWorkflow selects the CMP transaction lifecycle a DMS follows. See the
+// Workflow field on EnrollmentOptionsLWCRFC9483.
+type CMPWorkflow string
 
 const (
-	CMPAuthModeClientCertificate CMPAuthMode = "CLIENT_CERTIFICATE"
+	// CMPWorkflowDirect issues the certificate inline (synchronous). This is
+	// the default when Workflow is empty.
+	CMPWorkflowDirect CMPWorkflow = "direct"
+	// CMPWorkflowPhased defers issuance until an administrator approves the
+	// transaction; the EE polls for the certificate.
+	CMPWorkflowPhased CMPWorkflow = "phased"
 )

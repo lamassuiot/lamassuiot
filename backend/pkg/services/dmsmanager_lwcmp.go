@@ -7,6 +7,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -76,42 +77,28 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA
 	lFunc = lFunc.WithField("dms", dms.ID)
 
-	// Authenticate the CMP signer cert (extraCerts[0]) against ValidationCAs,
-	// mirroring the EST mTLS auth path. When the request was unprotected the
-	// controller leaves no cert in the context — we honour that as "skip
-	// validation", consistent with the EnforceRequestProtection=false escape
-	// hatch. To require validation, operators set EnforceRequestProtection=true
-	// and configure ValidationCAs.
+	// CMP presents the client identity as the signature-based message-protection
+	// signer cert (extraCerts[0], RFC 9483 §3.2), present only when the request
+	// was protected. The same four auth modes as EST apply, run by the shared
+	// authenticator. auth_mode is the single source of truth: selecting
+	// CLIENT_CERTIFICATE or the combined mode requires a signer cert, and the
+	// controller also derives its wire-level protection requirement from
+	// auth_mode (no separate enforce_request_protection knob exists).
 	cmpOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
-	if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
-		lFunc = lFunc.WithField("auth-method", "CMP_SIGNER_CERTIFICATE")
-		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s",
-			signerCert.Subject.CommonName,
-			helpers.SerialNumberToHexString(signerCert.SerialNumber),
-			signerCert.Issuer.CommonName))
 
-		validationCA, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signerCert,
-			cmpOpts.AuthOptionsMTLS.ValidationCAs, cmpOpts.AuthOptionsMTLS.AllowExpired)
-		if err != nil {
-			lFunc.Errorf("aborting CMP enrollment. signer cert not authorized for this DMS: %s", err)
-			return nil, errs.ErrDMSEnrollInvalidCert
+	// Skip authentication when the context signals pre-authenticated (phased
+	// workflow: the original IR was validated at submission; the admin approval
+	// step has no CMP signer cert in context).
+	if preAuth, _ := ctx.Value(core.LamassuContextKeyPreAuthenticated).(bool); !preAuth {
+		var signerChain []*x509.Certificate
+		if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
+			signerChain = []*x509.Certificate{signerCert}
 		}
-
-		couldCheck, isRevoked, err := svc.checkCertificateRevocation(ctx, signerCert, validationCA)
-		if err != nil {
-			lFunc.Errorf("aborting CMP enrollment. revocation check failed: %s", err)
+		if err := svc.authenticateEnrollment(ctx, lFunc, cmpOpts.AuthSettings(), signerChain, csr, aps, "enrollment"); err != nil {
 			return nil, err
 		}
-		if couldCheck && isRevoked {
-			lFunc.Errorf("aborting CMP enrollment. signer certificate is revoked")
-			return nil, fmt.Errorf("certificate is revoked")
-		}
-		if !couldCheck {
-			lFunc.Warnf("could not check revocation for signer cert; assuming not revoked")
-		}
-		lFunc.Infof("CMP signer cert authenticated")
 	} else {
-		lFunc.Warnf("CMP enrollment received without signature-based protection: ValidationCAs not applied")
+		lFunc.Infof("skipping enrollment authentication (pre-authenticated phased transaction)")
 	}
 
 	var existingDevice *models.Device
@@ -122,6 +109,37 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	}
 
 	enrollSettings := dms.Settings.EnrollmentSettings
+
+	// Mirror the EST enrollment guards (see Enroll): a device already registered
+	// to another DMS is rejected, and re-enrolling an existing device requires
+	// EnableReplaceableEnrollment (the superseded cert is then revoked).
+	if existingDevice != nil {
+		if existingDevice.DMSOwner != dms.ID {
+			lFunc.Errorf("aborting enrollment. device '%s' is registered with DMS '%s'", csr.Subject.CommonName, existingDevice.DMSOwner)
+			return nil, fmt.Errorf("device already registered to another DMS")
+		}
+		if !enrollSettings.EnableReplaceableEnrollment {
+			lFunc.Debugf("aborting enrollment. DMS forbids new enrollments. consider switching NewEnrollment option ON in the DMS")
+			return nil, fmt.Errorf("forbiddenNewEnrollment")
+		}
+		lFunc.Debugf("DMS allows replaceable enrollment. Continuing for device '%s'", csr.Subject.CommonName)
+		// Revoke the superseded active certificate once the new one is issued.
+		if existingDevice.IdentitySlot != nil {
+			supersededSN := existingDevice.IdentitySlot.Secrets[existingDevice.IdentitySlot.ActiveVersion]
+			defer func() {
+				if _, revErr := svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+					SerialNumber:     supersededSN,
+					NewStatus:        models.StatusRevoked,
+					RevocationReason: ocsp.Superseded,
+				}); revErr != nil {
+					lFunc.Warnf("could not revoke superseded certificate %s: %s", supersededSN, revErr)
+				} else {
+					lFunc.Infof("revoked superseded certificate %s", supersededSN)
+				}
+			}()
+		}
+	}
+
 	device, err := svc.ensureDeviceRegistered(ctx, lFunc, enrollSettings, dms.ID, csr.Subject.CommonName, existingDevice)
 	if err != nil {
 		return nil, err
@@ -214,8 +232,11 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 	// check EST does.
 	//
 	// When the request was unprotected the controller leaves no cert in
-	// context — we honour that as "skip validation" so EnforceRequestProtection
-	// remains the single switch between protected and unprotected operation.
+	// context — we honour that as "skip validation" here. For the non-cert
+	// auth modes (NO_AUTH, EXTERNAL_WEBHOOK) the controller accepts unprotected
+	// messages; for the cert modes (CLIENT_CERTIFICATE, combined) the
+	// controller already rejected this request at the wire layer per auth_mode,
+	// so we never reach this branch without a signer.
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
 	if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
 		lFunc = lFunc.WithField("auth-method", "CMP_SIGNER_CERTIFICATE")

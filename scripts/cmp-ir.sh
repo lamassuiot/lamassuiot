@@ -4,10 +4,10 @@
 #
 # Exercises the complete CMP device lifecycle against a Lamassu DMS configured
 # with:
-#   - enforce_request_protection: true
+#   - auth_mode: CLIENT_CERTIFICATE (requires signed protection; accepts any
+#     client cert at chain_level 0)
 #   - enforce_popo: true
 #   - accept_implicit: true
-#   - auth_mode: CLIENT_CERTIFICATE (accepts any client cert at chain_level 0)
 #
 # Flow:
 #   1. Fetch the RA protection certificate from the Lamassu CA API (so the
@@ -75,12 +75,20 @@ DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
     || fail "Cannot reach ${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}"
 
 PROTECTION_SERIAL=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.protection_certificate // empty')
-ENFORCE_PROTECTION=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enforce_request_protection // false')
+AUTH_MODE=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.auth_mode // "NO_AUTH"')
 ENFORCE_POPO=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enforce_popo // false')
 ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
 ENROLLMENT_CA=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enrollment_ca // empty')
 
-info "enforce_request_protection : ${ENFORCE_PROTECTION}"
+# Protection is required when auth_mode demands a client certificate.
+if [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE" ] || [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK" ]; then
+    ENFORCE_PROTECTION="true"
+else
+    ENFORCE_PROTECTION="false"
+fi
+
+info "auth_mode                  : ${AUTH_MODE}"
+info "requires protection        : ${ENFORCE_PROTECTION}"
 info "enforce_popo               : ${ENFORCE_POPO}"
 info "accept_implicit            : ${ACCEPT_IMPLICIT}"
 info "enrollment_ca              : ${ENROLLMENT_CA}"
@@ -251,7 +259,8 @@ echo "  ──────  ──────────  ──────�
 printf "  IR      issued      %s\n" "${DEVICE_SERIAL}"
 echo ""
 echo "  DMS config:"
-echo "    enforce_request_protection : ${ENFORCE_PROTECTION}"
+echo "    auth_mode                  : ${AUTH_MODE}"
+    echo "    requires protection        : ${ENFORCE_PROTECTION}"
 echo "    enforce_popo               : ${ENFORCE_POPO}"
 echo "    accept_implicit            : ${ACCEPT_IMPLICIT}"
 echo ""

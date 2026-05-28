@@ -33,7 +33,7 @@ Examples
         --pollrep pollrep.der \
         --signer-cert signer.crt --signer-key signer.key
 
-    # Unprotected certConf (only when enforce_request_protection=false)
+    # Unprotected certConf (only when auth_mode is NO_AUTH or EXTERNAL_WEBHOOK)
     ./cmp_certconf.py \
         --path /api/dmsmanager/.well-known/cmp/p/MyDMS \
         --pollrep pollrep.der

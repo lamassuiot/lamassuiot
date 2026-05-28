@@ -1,9 +1,30 @@
 package models
 
+// EnrollmentAuthSettings is the protocol-agnostic authentication policy shared
+// by EST and CMP enrollment. The auth *mechanism* differs by protocol (EST
+// presents an mTLS client certificate; CMP presents the signature-based
+// message-protection signer certificate), but the policy — which mode, which
+// ValidationCAs, which webhook — is identical, so both protocols expose it via
+// AuthSettings() and run the same authenticator.
+type EnrollmentAuthSettings struct {
+	AuthMode                   EnrollmentAuthMode
+	AuthOptionsMTLS            AuthOptionsClientCertificate
+	AuthOptionsExternalWebhook WebhookCall
+}
+
 type EnrollmentOptionsESTRFC7030 struct {
-	AuthMode                   ESTAuthMode                  `json:"auth_mode"`
+	AuthMode                   EnrollmentAuthMode           `json:"auth_mode"`
 	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
 	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook"`
+}
+
+// AuthSettings returns the shared authentication policy for this EST DMS.
+func (o EnrollmentOptionsESTRFC7030) AuthSettings() EnrollmentAuthSettings {
+	return EnrollmentAuthSettings{
+		AuthMode:                   o.AuthMode,
+		AuthOptionsMTLS:            o.AuthOptionsMTLS,
+		AuthOptionsExternalWebhook: o.AuthOptionsExternalWebhook,
+	}
 }
 
 type ReEnrollmentSettings struct {

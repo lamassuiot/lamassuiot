@@ -155,17 +155,37 @@ type CMPTransactionRepo interface {
 	SelectAndDelete(ctx context.Context, transactionID string) (CMPTransaction, bool, error)
 
 	// Confirm atomically transitions a transaction from ISSUED to CONFIRMED,
-	// recording the confirmation timestamp. Returns the row and true if the
-	// transition succeeded; (zero, false, nil) if the row was not found or
-	// was not in ISSUED state.
-	Confirm(ctx context.Context, transactionID string) (CMPTransaction, bool, error)
+	// recording the confirmation timestamp. The returned priorState is the
+	// state the row was in BEFORE the update was attempted (or empty when no
+	// row exists), letting callers distinguish:
+	//   - (row, ISSUED, true,  nil) → transition succeeded
+	//   - (zero, REVOKED,  false, nil) → row was already revoked (race with
+	//                                    the confirmation monitor; the cert
+	//                                    is no longer valid on the wire)
+	//   - (zero, CONFIRMED,false, nil) → row was already confirmed (idempotent
+	//                                    replay of certConf is allowed)
+	//   - (zero, "",       false, nil) → row not found
+	//   - (zero, "",       false, err) → DB error
+	// This signature is what the CMP controller uses to close the
+	// handleCertConf-vs-confirmation-monitor split-brain race described in the
+	// audit (cmp.go: handleCertConf, handlePoll implicit-confirm).
+	Confirm(ctx context.Context, transactionID string) (CMPTransaction, CMPTransactionState, bool, error)
 
 	// UpdateState transitions a transaction's State (and, when ISSUED, its
-	// CertDER) atomically. Used by the async-issuance worker to record the
-	// outcome of LWCEnroll. errorMessage is ignored when state != ISSUE_FAILED.
-	// Returns nil even if the row was already deleted (e.g., by DeleteExpired
-	// racing the worker); the caller treats that as a no-op.
-	UpdateState(ctx context.Context, transactionID string, state CMPTransactionState, cert *models.X509Certificate, errorMessage string) error
+	// certificate) atomically, and re-bases ExpiresAt to the supplied
+	// deadline. errorMessage is recorded on ISSUE_FAILED transitions.
+	//
+	// The update is keyed only by transactionID — staleness is NOT filtered
+	// here because two callers explicitly need to write past-expiry rows:
+	// the confirmation monitor transitions expired PENDING rows to
+	// ISSUE_FAILED for audit, and the admin approval path can race the
+	// monitor by a few ms across the original deadline (rejecting would
+	// orphan an already-issued cert). Service-layer callers that need a
+	// staleness precondition MUST enforce it before calling UpdateState.
+	//
+	// Returns (true, nil) when a row was updated, (false, nil) when no row
+	// exists with the given transactionID, (false, err) on any DB error.
+	UpdateState(ctx context.Context, transactionID string, state CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error)
 
 	// MarkRevokedByCertSerial transitions any CONFIRMED transaction with the
 	// given certificate serial number to REVOKED. This is called after a
@@ -192,9 +212,22 @@ type CMPTransactionRepo interface {
 	// it must process. Returns an empty slice when no work is queued.
 	SelectPending(ctx context.Context, limit int) ([]CMPTransaction, error)
 
-	// DeleteExpired removes in-flight transactions (PENDING, ISSUED,
-	// ISSUE_FAILED) whose ExpiresAt is in the past. Terminal states
-	// (CONFIRMED, REVOKED) are never deleted by this method.
+	// SelectExpiredPending returns up to `limit` PENDING transactions whose
+	// ExpiresAt has already elapsed, oldest first. The CMP confirmation
+	// monitor uses this to find phased-workflow requests an administrator
+	// never acted on; those rows are transitioned to ISSUE_FAILED with a
+	// reason via UpdateState so pollReq can surface the cause to the EE
+	// and the operator retains an audit trail.
+	SelectExpiredPending(ctx context.Context, limit int) ([]CMPTransaction, error)
+
+	// DeleteExpired removes ISSUE_FAILED transactions whose ExpiresAt is in
+	// the past — that is, rows that have already been transitioned to a
+	// non-fatal failure state and have outlived their retention window.
+	// PENDING rows are intentionally NOT deleted here: when their approval
+	// window elapses they are transitioned to ISSUE_FAILED (with a fresh
+	// retention TTL) by the confirmation monitor so the rejection is visible
+	// to operators and to subsequent pollReqs. Terminal states (CONFIRMED,
+	// REVOKED) and live ISSUED rows are likewise untouched.
 	// Should be called periodically by a background goroutine.
 	DeleteExpired(ctx context.Context) error
 

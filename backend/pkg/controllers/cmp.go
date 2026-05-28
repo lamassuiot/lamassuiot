@@ -10,11 +10,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
 	"encoding/asn1"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,7 +23,6 @@ import (
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -33,6 +31,21 @@ import (
 // cmpTxTTL is the fallback lifetime of a pending CMP transaction waiting for
 // certConf, used when the DMS does not configure ConfirmationTimeout.
 const cmpTxTTL = 5 * time.Minute
+
+// cmpApprovalTTL is how long a phased-workflow transaction waits in PENDING for
+// an administrator to approve issuance before it is swept by DeleteExpired.
+// It is far longer than the certConf window (cmpTxTTL) because approval is a
+// human action, not an automated device round-trip — a 5-minute window would
+// delete the request before an operator could ever act on it.
+const cmpApprovalTTL = 7 * 24 * time.Hour
+
+// cmpCtxKey is the type for context keys set by the CMP handler, avoiding
+// collisions with other packages' context values.
+type cmpCtxKey string
+
+// cmpWorkflowCtxKey carries the resolved WFX workflow name for the current
+// request so reportCMPState can route every transition to the right workflow.
+const cmpWorkflowCtxKey cmpCtxKey = "cmp-workflow-name"
 
 // confirmationTimeoutOrDefault returns the configured DMS confirmation timeout
 // when positive, falling back to cmpTxTTL otherwise. RFC 4210 §5.2.8 specifies
@@ -43,6 +56,16 @@ func confirmationTimeoutOrDefault(t models.TimeDuration) time.Duration {
 		return d
 	}
 	return cmpTxTTL
+}
+
+// approvalTimeoutOrDefault returns the configured DMS approval timeout when
+// positive, falling back to cmpApprovalTTL otherwise. Used only on the phased
+// workflow PENDING insertion.
+func approvalTimeoutOrDefault(t models.TimeDuration) time.Duration {
+	if d := time.Duration(t); d > 0 {
+		return d
+	}
+	return cmpApprovalTTL
 }
 
 // cmpTransactionStorer is implemented by DMSManagerServiceBackend and lets
@@ -64,20 +87,29 @@ type cmpHttpRoutes struct {
 	wfx    cmpwfx.CMPReporter
 }
 
-// NewCMPHttpRoutes creates and initialises the CMP HTTP handler, backed by
-// a DB-persisted transaction store retrieved from the service via type assertion.
-func NewCMPHttpRoutes(logger *logrus.Entry, svc services.LightweightCMPService) *cmpHttpRoutes {
-	var repo storage.CMPTransactionRepo
-	var reporter cmpwfx.CMPReporter
-	if storer, ok := svc.(cmpTransactionStorer); ok {
-		repo = storer.GetCMPTransactionRepo()
-	} else {
-		logger.Warn("CMP: service does not implement cmpTransactionStorer; transaction store will be nil")
+// NewCMPHttpRoutes creates and initialises the CMP HTTP handler.
+//
+// The persistent transaction store is REQUIRED: every CMP transaction needs
+// idempotency (RFC 9810 §3.1 transactionIdInUse) and lost-response recovery
+// (RFC 4210 §5.3.22 pollReq), neither of which can be honoured without it.
+// The constructor extracts the store via the cmpTransactionStorer interface
+// and returns an error if the service does not expose one — silently running
+// without a store (the previous behaviour) would have let production traffic
+// bypass duplicate-tx detection entirely.
+func NewCMPHttpRoutes(logger *logrus.Entry, svc services.LightweightCMPService) (*cmpHttpRoutes, error) {
+	storer, ok := svc.(cmpTransactionStorer)
+	if !ok {
+		return nil, fmt.Errorf("CMP: service %T does not implement cmpTransactionStorer; a persistent transaction store is required", svc)
 	}
+	repo := storer.GetCMPTransactionRepo()
+	if repo == nil {
+		return nil, fmt.Errorf("CMP: service %T returned a nil CMPTransactionRepo; a persistent transaction store is required", svc)
+	}
+	var reporter cmpwfx.CMPReporter
 	if provider, ok := svc.(cmpWFXReporterProvider); ok {
 		reporter = provider.GetCMPWFXReporter()
 	}
-	return &cmpHttpRoutes{svc: svc, logger: logger, store: repo, wfx: reporter}
+	return &cmpHttpRoutes{svc: svc, logger: logger, store: repo, wfx: reporter}, nil
 }
 
 // HandleCMP handles all inbound CMP messages posted to /.well-known/cmp/p/:id.
@@ -120,40 +152,12 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		return
 	}
 
-	// RFC 9810 §7 / RFC 9483 §3.5: pvno MUST be cmp2000(2) or cmp2021(3); any
-	// other value triggers an error response with the unsupportedVersion bit.
-	if reqHeader.PVNO != pvnoCMP2000 && reqHeader.PVNO != pvnoCMP2021 {
-		lFunc.Warnf("unsupported pvno=%d", reqHeader.PVNO)
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
-			fmt.Sprintf("unsupported protocol version %d (must be cmp2000(2) or cmp2021(3))", reqHeader.PVNO),
-			dmsID, pkiFailureInfoUnsupportedVersion)
-		return
-	}
-
-	// RFC 9483 §3.5 line 949: transactionID MUST be present. (failInfo: badDataFormat)
-	// RFC 9483 §3.1 line 747: first message MUST carry 128 bits of random data.
-	if len(reqHeader.TransactionID) == 0 {
-		lFunc.Warnf("transactionID missing from PKIHeader")
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
-			"transactionID is required (RFC 9483 §3.5)",
-			dmsID, pkiFailureInfoBadDataFormat)
-		return
-	}
-	if len(reqHeader.TransactionID) < 16 {
-		lFunc.Warnf("transactionID too short (%d bytes, need >=16)", len(reqHeader.TransactionID))
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
-			"transactionID must contain at least 128 bits of data (RFC 9483 §3.1)",
-			dmsID, pkiFailureInfoBadDataFormat)
-		return
-	}
-
-	// RFC 9483 §3.5 line 959: senderNonce MUST be present and MUST contain at
-	// least 128 bits of data. failInfo: badSenderNonce.
-	if len(reqHeader.SenderNonce) < 16 {
-		lFunc.Warnf("senderNonce missing or too short (%d bytes)", len(reqHeader.SenderNonce))
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
-			"senderNonce must be present and contain at least 128 bits (RFC 9483 §3.5)",
-			dmsID, pkiFailureInfoBadSenderNonce)
+	// Run wire-level envelope validation (pvno, transactionID, senderNonce,
+	// messageTime drift). See cmp_validator.go — extracted so the controller
+	// stays a dispatcher and each rule is unit-testable in isolation.
+	if rej := validateRequestEnvelope(reqHeader, time.Now()); rej != nil {
+		lFunc.Warnf("envelope validation: %s", rej.reason)
+		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
 		return
 	}
 
@@ -174,12 +178,29 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// is the right behaviour for malformed bodies that we'll reject below.
 	deviceCN := r.resolveDeviceCN(ctx.Request.Context(), body, txHex)
 
-	// Received and Parsed are only meaningful for enrollment-initiating
-	// messages (IR/CR/KUR). Follow-up messages (certConf, pollReq, rr)
-	// reference an already-created WFX job that is well past Parsed; emitting
-	// these states on such jobs would attempt an invalid backward transition
-	// (e.g. AwaitingCertConf → Received) which either gets rejected by WFX or
-	// silently resets the job to the wrong state.
+	// Fetch DMS enrollment options so we can make per-request decisions
+	// (request-protection enforcement, implicit-confirm mode, workflow
+	// selection, etc.). Loaded before the first WFX emission so the device's
+	// job is created in the DMS's chosen workflow (direct vs phased).
+	enrollOpts, err := r.svc.LWCGetEnrollmentOptions(ctx.Request.Context(), dmsID)
+	if err != nil {
+		lFunc.Errorf("could not load enrollment options for DMS '%s': %v", dmsID, err)
+		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), "could not load DMS configuration", dmsID, pkiFailureInfoSystemFailure)
+		return
+	}
+
+	// Stash the resolved WFX workflow name on the request context so every
+	// reportCMPState call for this request lands in (and only transitions
+	// within) the DMS's selected workflow.
+	workflowName := cmpwfx.WorkflowNameFor(enrollOpts.Workflow)
+	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), cmpWorkflowCtxKey, workflowName))
+
+	// Received is only meaningful for enrollment-initiating messages
+	// (IR/CR/KUR). Follow-up messages (certConf, pollReq, rr) reference an
+	// already-created WFX job that is well past Received; emitting it on such
+	// jobs would attempt an invalid backward transition (e.g. AwaitingCertConf
+	// → Received) which either gets rejected by WFX or silently resets the job
+	// to the wrong state.
 	if body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR || body.Tag == cmpBodyTagKUR {
 		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 			TransactionID:     txHex,
@@ -191,25 +212,6 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 				"bodyTag": body.Tag,
 			}, cmpMetadataRequestB64, bodyBytes),
 		})
-		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-			TransactionID:     txHex,
-			DMSID:             dmsID,
-			RequestType:       cmpTagToString(body.Tag),
-			SubjectCommonName: deviceCN,
-			State:             cmpwfx.CMPStateParsed,
-			Metadata: map[string]any{
-				"bodyTag": body.Tag,
-			},
-		})
-	}
-
-	// Fetch DMS enrollment options so we can make per-request decisions
-	// (request-protection enforcement, implicit-confirm mode, etc.).
-	enrollOpts, err := r.svc.LWCGetEnrollmentOptions(ctx.Request.Context(), dmsID)
-	if err != nil {
-		lFunc.Errorf("could not load enrollment options for DMS '%s': %v", dmsID, err)
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), "could not load DMS configuration", dmsID, pkiFailureInfoSystemFailure)
-		return
 	}
 
 	// Verify signature-based protection on the incoming request. When the
@@ -217,9 +219,16 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// returned and stashed on the request context so downstream service
 	// methods (LWCEnroll, LWCReenroll) can apply ValidationCAs, RFC 9483
 	// §4.1.3 signer binding, and revocation checks — mirroring the EST
-	// mTLS auth path. When the request is unprotected and protection is
-	// not enforced, signerCert is nil and no further auth is applied.
-	signerCert, err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlg, enrollOpts.EnforceRequestProtection)
+	// mTLS auth path.
+	//
+	// Whether an *unprotected* message is rejected at the wire layer is
+	// derived from the DMS's auth_mode: CLIENT_CERTIFICATE and the combined
+	// mode require a signer cert (and therefore protection); the other modes
+	// (NO_AUTH, EXTERNAL_WEBHOOK) accept unsigned messages. auth_mode is the
+	// single source of truth for the protection requirement — there is no
+	// separate enforce_request_protection knob.
+	requireProtection := enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificate || enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificateAndWebhook
+	signerCert, err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlg, requireProtection)
 	if err != nil {
 		lFunc.Warnf("protection verification failed: %v", err)
 		// Map error category to PKIFailureInfo per RFC 9810 §5.1.3 / RFC 9483
@@ -235,6 +244,16 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		return
 	}
 	if signerCert != nil {
+		// RFC 9483 §3.5: with signature-based protection, the sender field MUST
+		// match the subject of the protection cert. Without this check, a
+		// captured & forwarded message with a tampered sender field would pass
+		// validation despite naming an identity other than the protection
+		// cert's subject (badMessageCheck per the RFC's failInfo mapping).
+		if rej := verifySenderMatchesProtectionCert(reqHeader.Sender, signerCert); rej != nil {
+			lFunc.Warnf("sender/subject mismatch: %s", rej.reason)
+			r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
+			return
+		}
 		reqCtx := context.WithValue(ctx.Request.Context(), string(identityextractors.IdentityExtractorCMPSignerCertificate), signerCert)
 		ctx.Request = ctx.Request.WithContext(reqCtx)
 	}
@@ -242,9 +261,9 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// Dispatch on body CHOICE tag
 	switch body.Tag {
 	case cmpBodyTagIR, cmpBodyTagCR:
-		r.handleEnroll(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
+		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantInitial)
 	case cmpBodyTagKUR:
-		r.handleReenroll(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
+		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantUpdate)
 	case cmpBodyTagRR:
 		r.handleRevoke(ctx, lFunc, reqHeader, body, dmsID)
 	case cmpBodyTagCertConf:
@@ -258,240 +277,11 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	}
 }
 
-// handleEnroll processes an ir (0) or cr (2) body.
-// Both ir and cr route to svc.LWCEnroll; the DMS enrollment policy governs access.
-func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483) {
-	req, err := decodeFirstCertReq(body.Bytes)
-	if err != nil {
-		lFunc.Errorf("ir/cr: decode CertReqMessage: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID, pkiFailureInfoBadDataFormat)
-		return
-	}
-
-	// Verify inner POPO (RFC 9483 §4.1 / RFC 4211 §4.1 clause 3).
-	// RFC 9810 §5.1.3 maps POP verification failures to PKIFailureInfo badPOP (9).
-	if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, enrollOpts.EnforcePOPO); err != nil {
-		lFunc.Warnf("ir/cr: POPO verification failed: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2),
-			fmt.Sprintf("proof of possession verification failed: %v", err),
-			dmsID, pkiFailureInfoBadPOP)
-		return
-	}
-
-	deviceCN := extractCNFromSubjectDER(req.SubjectDER)
-	wfxJobID := r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     hex.EncodeToString(header.TransactionID),
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(body.Tag),
-		SubjectCommonName: deviceCN,
-		State:             cmpwfx.CMPStateValidated,
-		Metadata: map[string]any{
-			"certReqId": req.CertReqID,
-		},
-	})
-
-	// Respond IP (tag 1) for ir, CP (tag 3) for cr
-	respTag := cmpBodyTagCP
-	if body.Tag == cmpBodyTagIR {
-		respTag = cmpBodyTagIP
-	}
-
-	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
-		isReenrollment: false,
-		requestTag:     body.Tag,
-		respTag:        respTag,
-		wfxJobID:       wfxJobID,
-		enroll: func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-			return r.svc.LWCEnroll(ctx, csr, dmsID)
-		},
-	})
-}
-
-// handleReenroll processes a kur (7) body and responds with kup (8).
-//
-// Per RFC 9483 §4.1.3, KUR message-level protection MUST use the certificate
-// being updated — making the message protection itself a proof of possession
-// of the old key. When EnforcePOPO is true we therefore require that the
-// incoming KUR carries valid signature-based message protection; an unprotected
-// KUR is rejected because there is no other way to prove possession.
-func (r *cmpHttpRoutes) handleReenroll(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483) {
-	if enrollOpts.EnforcePOPO {
-		if len(header.ProtectionAlg.Algorithm) == 0 {
-			lFunc.Warnf("kur: POPO enforcement requires message-level protection (RFC 9483 §4.1.3)")
-			r.rejectWithError(ctx, &header, PKIStatus(2),
-				"KUR requires message-level signature protection as proof of possession (RFC 9483 §4.1.3)",
-				dmsID, pkiFailureInfoBadPOP)
-			return
-		}
-	}
-
-	req, err := decodeFirstCertReq(body.Bytes)
-	if err != nil {
-		lFunc.Errorf("kur: decode CertReqMessage: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID, pkiFailureInfoBadDataFormat)
-		return
-	}
-
-	deviceCN := extractCNFromSubjectDER(req.SubjectDER)
-	wfxJobID := r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     hex.EncodeToString(header.TransactionID),
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(body.Tag),
-		SubjectCommonName: deviceCN,
-		State:             cmpwfx.CMPStateValidated,
-		Metadata: map[string]any{
-			"certReqId": req.CertReqID,
-		},
-	})
-
-	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
-		isReenrollment: true,
-		requestTag:     body.Tag,
-		respTag:        cmpBodyTagKUP,
-		wfxJobID:       wfxJobID,
-		enroll: func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-			return r.svc.LWCReenroll(ctx, csr, dmsID)
-		},
-	})
-}
-
-// issueParams holds the per-operation differences between ir/cr and kur flows.
-type issueParams struct {
-	isReenrollment bool
-	requestTag     int
-	respTag        int
-	// wfxJobID is the WFX job UUID resolved at the Validated emit (the
-	// first state emission that knows the device CN). Persisted onto the
-	// cmp_transactions row so the management UI can deep-link directly to
-	// the corresponding WFX workflow without a clientId-based round-trip.
-	wfxJobID string
-	enroll   func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
-}
-
-// issueAndStore is the shared enrollment pipeline: build CSR, check duplicate
-// transactionID, call the CA, persist the ISSUED row for lost-response
-// recovery, and respond with the cert.
-func (r *cmpHttpRoutes) issueAndStore(
-	ctx *gin.Context,
-	lFunc *logrus.Entry,
-	header *requestPKIHeader,
-	req *firstCertReq,
-	dmsID string,
-	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
-	params issueParams,
-) {
-	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER)
-	if err != nil {
-		lFunc.Errorf("synthesize CSR: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, pkiFailureInfoBadCertTemplate)
-		return
-	}
-	lFunc = lFunc.WithField("cn", csr.Subject.CommonName)
-	lFunc.Infof("enrollment request CN=%s (reenroll=%v)", csr.Subject.CommonName, params.isReenrollment)
-
-	implicitConfirm := r.isImplicitConfirm(ctx.Request.Context(), *header, dmsID)
-	header.ResponseImplicitConfirm = implicitConfirm
-
-	// Early duplicate-transactionID check before calling the CA.
-	txHex := hex.EncodeToString(header.TransactionID)
-	if r.store != nil {
-		if exists, err := r.store.Exists(ctx.Request.Context(), txHex); err != nil {
-			lFunc.Errorf("check existing txID: %v", err)
-			r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
-			return
-		} else if exists {
-			lFunc.Warnf("duplicate transactionID %s (pre-enroll check)", txHex)
-			r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
-			return
-		}
-	}
-
-	// Detach from the HTTP connection so issuance completes even if the EE
-	// drops the TCP connection mid-request.
-	issuanceCtx := context.WithoutCancel(ctx.Request.Context())
-	cert, err := params.enroll(issuanceCtx, csr)
-	if err != nil {
-		lFunc.Errorf("enroll failed: %v", err)
-		// CA-layer rejections cover a wide range of conditions (policy
-		// violation, signing-key unavailability, revocation, etc.). Without
-		// structured error categorisation from the service layer we map all
-		// CA failures to systemFailure, which is the broadest "server-side
-		// inability to complete the request" bit (RFC 9810 §5.1.3).
-		r.rejectWithError(ctx, header, PKIStatus(2), err.Error(), dmsID, pkiFailureInfoSystemFailure)
-		return
-	}
-	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
-
-	// Persist ISSUED row for lost-response recovery via pollReq.
-	if r.store != nil {
-		senderNonce := newNonce()
-		if !implicitConfirm {
-			header.ResponseSenderNonce = senderNonce
-		}
-		if storeErr := r.store.Insert(issuanceCtx, storage.CMPTransaction{
-			TransactionID:     txHex,
-			DMSID:             dmsID,
-			State:             storage.CMPTransactionStateIssued,
-			CertSerialNumber:  certSerial,
-			Certificate:       (*models.X509Certificate)(cert),
-			IsReenrollment:    params.isReenrollment,
-			RequestType:       cmpTagToString(params.requestTag),
-			SubjectCommonName: csr.Subject.CommonName,
-			WFXJobID:          params.wfxJobID,
-			SentNonce:         hex.EncodeToString(senderNonce),
-			ExpiresAt:         time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
-			CreatedAt:         time.Now(),
-		}); storeErr != nil {
-			if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
-				lFunc.Warnf("duplicate transactionID %s", txHex)
-				r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
-				return
-			}
-			lFunc.Errorf("store transaction: %v", storeErr)
-			lFunc.Warnf("failed to persist ISSUED row (cert delivered inline): %v", storeErr)
-		}
-	}
-
-	certRepDER, err := marshalCertRepBody(params.respTag, req.CertReqID, cert.Raw)
-	if err != nil {
-		lFunc.Errorf("build cert rep body: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
-		return
-	}
-	responseDER := r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
-	if len(responseDER) == 0 {
-		return
-	}
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(params.requestTag),
-		SubjectCommonName: csr.Subject.CommonName,
-		CertSerialNumber:  certSerial,
-		State:             cmpwfx.CMPStateResponded,
-		Metadata: withCMPMessageB64(map[string]any{
-			"certReqId":      req.CertReqID,
-			"isReenrollment": params.isReenrollment,
-			"responseType":   cmpTagToString(params.respTag),
-		}, cmpMetadataResponseB64, responseDER),
-	})
-	finalState := cmpwfx.CMPStateAwaitingCertConf
-	if implicitConfirm {
-		finalState = cmpwfx.CMPStateLogicallyComplete
-	}
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		RequestType:       cmpTagToString(params.requestTag),
-		SubjectCommonName: csr.Subject.CommonName,
-		CertSerialNumber:  certSerial,
-		State:             finalState,
-		Metadata: map[string]any{
-			"responseType":    cmpTagToString(params.respTag),
-			"implicitConfirm": implicitConfirm,
-		},
-	})
-}
+// The enrollment pipeline lives in cmp_enrollment.go (audit A2 extraction):
+// handleEnrollment, issueAndStore, deferForApproval, enrollmentVariantInitial,
+// enrollmentVariantUpdate, issueParams. Methods on *cmpHttpRoutes from that
+// file are part of the same package so HandleCMP can dispatch to them
+// directly.
 
 // handleRevoke processes an rr (11) body.
 // It extracts the serial number from the CertTemplate and calls LWCRevokeCertificate.
@@ -522,10 +312,8 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	}
 
 	// Transition the CMP transaction to REVOKED for audit visibility.
-	if r.store != nil {
-		if markErr := r.store.MarkRevokedByCertSerial(ctx.Request.Context(), serialHex); markErr != nil {
-			lFunc.Warnf("rr: failed to mark transaction as revoked: %v", markErr)
-		}
+	if markErr := r.store.MarkRevokedByCertSerial(ctx.Request.Context(), serialHex); markErr != nil {
+		lFunc.Warnf("rr: failed to mark transaction as revoked: %v", markErr)
 	}
 
 	rpDER, err := marshalRevRepBody(PKIStatus(0))
@@ -552,11 +340,6 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		return
 	}
 
-	if r.store == nil {
-		lFunc.Errorf("certConf: transaction store not available")
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: transaction store unavailable", dmsID, pkiFailureInfoSystemFailure)
-		return
-	}
 	txHex := hex.EncodeToString(header.TransactionID)
 	tx, ok, err := r.store.Select(ctx.Request.Context(), txHex)
 	if err != nil {
@@ -633,8 +416,34 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	}
 
 	lFunc.Infof("certConf verified, transitioning to CONFIRMED")
-	if _, _, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex); confirmErr != nil {
-		lFunc.Warnf("certConf: failed to confirm transaction (continuing): %v", confirmErr)
+	_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex)
+	if confirmErr != nil {
+		lFunc.Errorf("certConf: confirm storage error: %v", confirmErr)
+		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: storage", dmsID, pkiFailureInfoSystemFailure)
+		return
+	}
+	if !updated {
+		switch prior {
+		case storage.CMPTransactionStateRevoked:
+			// Race we MUST surface (audit S1): between this handler's Select
+			// and Confirm, the confirmation monitor revoked the cert at the
+			// CA. The EE believes enrollment succeeded but the cert is gone.
+			// Reject so the EE re-enrolls instead of acting on a dead cert.
+			lFunc.Warnf("certConf: tx %s already REVOKED — race with confirmation monitor", txHex)
+			r.rejectWithError(ctx, &header, PKIStatus(2),
+				"certificate was revoked before confirmation was processed", dmsID, pkiFailureInfoBadRequest)
+			return
+		case storage.CMPTransactionStateConfirmed:
+			// Idempotent replay: certConf is allowed to be re-delivered if
+			// the original pkiConf was lost in flight. Fall through to send
+			// a fresh pkiConf without re-emitting the WFX Confirmed state.
+			lFunc.Infof("certConf: tx %s already CONFIRMED — treating as idempotent replay", txHex)
+		default:
+			lFunc.Errorf("certConf: tx %s in unexpected prior state %q for confirmation", txHex, prior)
+			r.rejectWithError(ctx, &header, PKIStatus(2),
+				fmt.Sprintf("transaction in unexpected state %q for confirmation", prior), dmsID, pkiFailureInfoBadRequest)
+			return
+		}
 	}
 
 	pkiConfDER, err := marshalPKIConfBody()
@@ -647,19 +456,25 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	if len(responseDER) == 0 {
 		return
 	}
-	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
-		TransactionID:     txHex,
-		DMSID:             dmsID,
-		RequestType:       tx.RequestType,
-		SubjectCommonName: tx.SubjectCommonName,
-		CertSerialNumber:  tx.CertSerialNumber,
-		State:             cmpwfx.CMPStateConfirmed,
-		Metadata: withCMPMessageB64(
-			withCMPMessageB64(nil, cmpMetadataCertConfB64, requestDER),
-			cmpMetadataPKIConfB64,
-			responseDER,
-		),
-	})
+	// Only emit the WFX Confirmed transition when this call actually performed
+	// the state change. An idempotent replay (prior was already CONFIRMED) has
+	// already produced this transition once; re-emitting it would create a
+	// spurious entry in the workflow timeline.
+	if updated {
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			RequestType:       tx.RequestType,
+			SubjectCommonName: tx.SubjectCommonName,
+			CertSerialNumber:  tx.CertSerialNumber,
+			State:             cmpwfx.CMPStateConfirmed,
+			Metadata: withCMPMessageB64(
+				withCMPMessageB64(nil, cmpMetadataCertConfB64, requestDER),
+				cmpMetadataPKIConfB64,
+				responseDER,
+			),
+		})
+	}
 }
 
 // defaultPollIntervalSeconds is the checkAfter hint sent in pollRep messages.
@@ -695,12 +510,6 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		return
 	}
 	lFunc = lFunc.WithField("certReqId", certReqID)
-
-	if r.store == nil {
-		lFunc.Errorf("pollReq: transaction store not available")
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: transaction store unavailable", dmsID, pkiFailureInfoSystemFailure)
-		return
-	}
 
 	txHex := hex.EncodeToString(header.TransactionID)
 	tx, ok, err := r.store.Select(ctx.Request.Context(), txHex)
@@ -777,15 +586,59 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// no certConf message will arrive to do it later.
 		// RFC 4210 §5.2.8: once the server grants implicit confirmation the
 		// transaction is complete upon cert delivery.
+		//
+		// We MUST inspect the prior state: between our Select above and this
+		// Confirm, the confirmation monitor could have revoked the row, and
+		// silently dropping that race lets the EE walk away with a cert that
+		// Lamassu and the CA both consider invalid (audit S2).
 		if implicitConfirm {
-			if _, _, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex); confirmErr != nil {
-				lFunc.Warnf("pollReq: failed to confirm tx after implicit-confirm delivery: %v", confirmErr)
-			} else {
-				lFunc.Debugf("pollReq: tx %s confirmed (implicit confirm)", txHex)
+			_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex)
+			if confirmErr != nil {
+				lFunc.Errorf("pollReq: confirm storage error: %v", confirmErr)
+				r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: storage", dmsID, pkiFailureInfoSystemFailure)
+				return
+			}
+			if !updated {
+				if prior == storage.CMPTransactionStateRevoked {
+					lFunc.Warnf("pollReq: tx %s already REVOKED — race with confirmation monitor", txHex)
+					r.rejectWithError(ctx, &header, PKIStatus(2),
+						"certificate was revoked before implicit confirmation could be processed", dmsID, pkiFailureInfoBadRequest)
+					return
+				}
+				// prior == CONFIRMED is fine (idempotent pollReq replay); any
+				// other state should be impossible here because we entered
+				// this branch via tx.State == ISSUED above.
+				lFunc.Debugf("pollReq: tx %s already in state %q (idempotent replay)", txHex, prior)
 			}
 		}
 
 		lFunc.Infof("pollReq: tx %s ISSUED, delivering cert via %s (implicitConfirm=%v)", txHex, cmpTagToString(respTag), implicitConfirm)
+		r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
+
+	case storage.CMPTransactionStateConfirmed:
+		// Lost-response recovery for implicit-confirm enrollments: the IR
+		// already drove the row to CONFIRMED at IP delivery (RFC 4210 §5.2.8),
+		// but the EE never received the IP. The pollReq retries; we re-deliver
+		// the cert and leave the row in CONFIRMED. No certConf will follow and
+		// no nonce echo is needed.
+		respTag := cmpBodyTagCP
+		if !tx.IsReenrollment {
+			respTag = cmpBodyTagIP
+		}
+		var txCertRaw []byte
+		if tx.Certificate != nil {
+			txCertRaw = tx.Certificate.Raw
+		}
+		certRepDER, err := marshalCertRepBody(respTag, certReqID, txCertRaw)
+		if err != nil {
+			lFunc.Errorf("pollReq: build cert rep body for CONFIRMED row: %v", err)
+			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+			return
+		}
+		// Echo the implicit-confirm OID so the EE sees the same negotiation it
+		// originally received on the lost IP — keeps the protocol view consistent.
+		header.ResponseImplicitConfirm = true
+		lFunc.Infof("pollReq: tx %s CONFIRMED (implicit), re-delivering cert via %s", txHex, cmpTagToString(respTag))
 		r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
 
 	case storage.CMPTransactionStateIssueFailed:
@@ -828,6 +681,15 @@ func (r *cmpHttpRoutes) isImplicitConfirm(ctx context.Context, header requestPKI
 func (r *cmpHttpRoutes) reportCMPState(ctx context.Context, lFunc *logrus.Entry, transition cmpwfx.CMPTransition) string {
 	if r.wfx == nil || transition.TransactionID == "" {
 		return ""
+	}
+
+	// Route the transition to the DMS's selected workflow (stashed on the
+	// context at the top of HandleCMP). Leaving Workflow empty would fall back
+	// to the reporter's default workflow, which is wrong for phased DMSs.
+	if transition.Workflow == "" {
+		if wf, ok := ctx.Value(cmpWorkflowCtxKey).(string); ok {
+			transition.Workflow = wf
+		}
 	}
 
 	if transition.Metadata == nil {
@@ -883,10 +745,8 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHead
 		// is the correct behaviour (no useful WFX job to attach to).
 		txHex := hex.EncodeToString(header.TransactionID)
 		var deviceCN string
-		if r.store != nil {
-			if tx, ok, err := r.store.Select(ctx.Request.Context(), txHex); err == nil && ok {
-				deviceCN = tx.SubjectCommonName
-			}
+		if tx, ok, err := r.store.Select(ctx.Request.Context(), txHex); err == nil && ok {
+			deviceCN = tx.SubjectCommonName
 		}
 		r.reportCMPState(ctx.Request.Context(), r.logger, cmpwfx.CMPTransition{
 			TransactionID:     txHex,
@@ -949,7 +809,7 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 // the server supports it (we support both cmp2000(2) and cmp2021(3)). Per RFC
 // 9483 §3.1 line 725 messageTime SHOULD be present on responses for time-sync
 // purposes — we always emit it.
-func buildResponseHeader(req requestPKIHeader) responsePKIHeader {
+func buildResponseHeader(req requestPKIHeader) (responsePKIHeader, error) {
 	sender := defaultSenderGeneralName()
 	if len(req.Recipient.FullBytes) > 0 {
 		sender = asn1.RawValue{FullBytes: req.Recipient.FullBytes}
@@ -962,7 +822,11 @@ func buildResponseHeader(req requestPKIHeader) responsePKIHeader {
 
 	respSenderNonce := req.ResponseSenderNonce
 	if len(respSenderNonce) == 0 {
-		respSenderNonce = newNonce()
+		var err error
+		respSenderNonce, err = newNonce()
+		if err != nil {
+			return responsePKIHeader{}, err
+		}
 	}
 
 	// RFC 9810 §7: echo the received pvno when supported. Fall back to cmp2000
@@ -988,16 +852,19 @@ func buildResponseHeader(req requestPKIHeader) responsePKIHeader {
 		RecipNonce:    req.SenderNonce,
 		SenderNonce:   respSenderNonce,
 		GeneralInfo:   generalInfo,
-	}
+	}, nil
 }
 
-// newNonce generates a 16-byte cryptographically random nonce.
-func newNonce() []byte {
+// newNonce generates a 16-byte cryptographically random nonce. Returns an
+// error if the CSPRNG fails — callers MUST surface the failure rather than
+// substitute a deterministic value, because a non-random nonce breaks the
+// RFC 4210 §5.1.1 freshness property (replayable transactions).
+func newNonce() ([]byte, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		return []byte("lamassu-cmp-nonce")
+		return nil, fmt.Errorf("CMP nonce CSPRNG read: %w", err)
 	}
-	return b
+	return b, nil
 }
 
 // resolveDeviceCN returns the device CommonName associated with an incoming
@@ -1023,7 +890,7 @@ func (r *cmpHttpRoutes) resolveDeviceCN(ctx context.Context, body asn1.RawValue,
 		}
 		return extractCNFromSubjectDER(req.SubjectDER)
 	case cmpBodyTagPollReq, cmpBodyTagCertConf, cmpBodyTagRR:
-		if r.store == nil || txHex == "" {
+		if txHex == "" {
 			return ""
 		}
 		tx, ok, err := r.store.Select(ctx, txHex)
