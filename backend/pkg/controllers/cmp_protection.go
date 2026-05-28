@@ -90,14 +90,24 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlg pkix.Algorith
 	}
 
 	ec0 := full.ExtraCerts[0]
-	// Go's asn1 decoder strips the implicit [1] tag and iterates the content as
-	// SEQUENCE OF.  Each element is a RawValue where:
-	//   - If there is NO extra wrapper: FullBytes = Certificate DER; Bytes = cert content
-	//   - If OpenSSL adds an extra SEQUENCE wrapper: FullBytes = wrapper SEQUENCE;
-	//     Bytes = Certificate DER
-	// So we try FullBytes first (no-wrapper case), and fall back to Bytes (wrapped case).
+	// extraCerts is usually encoded as [1] EXPLICIT { SEQUENCE OF Certificate }.
+	// When Go decodes that into []asn1.RawValue, ExtraCerts[0] may be the whole
+	// SEQUENCE OF wrapper rather than the first certificate. Try:
+	// 1. ec0.FullBytes as a certificate
+	// 2. the first element inside ec0.Bytes
+	// 3. ec0.Bytes directly as a legacy fallback
 	eeCert, err := x509.ParseCertificate(ec0.FullBytes)
 	if err != nil {
+		// ec0 is likely the SEQUENCE OF wrapper; extract the first element.
+		var firstCert asn1.RawValue
+		if _, e := asn1.Unmarshal(ec0.Bytes, &firstCert); e == nil {
+			if c, e2 := x509.ParseCertificate(firstCert.FullBytes); e2 == nil {
+				eeCert = c
+				err = nil
+			}
+		}
+	}
+	if eeCert == nil {
 		var err2 error
 		eeCert, err2 = x509.ParseCertificate(ec0.Bytes)
 		if err2 != nil {
@@ -154,8 +164,19 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlg pkix.Algorith
 		}
 		h := hashAlg.New()
 		h.Write(payload)
-		if err := rsa.VerifyPKCS1v15(pub, hashAlg, h.Sum(nil), protBytes); err != nil {
-			return nil, fmt.Errorf("protection verification failed: %w", err)
+		digest := h.Sum(nil)
+		if protectionAlg.Algorithm.String() == "1.2.840.113549.1.1.10" {
+			// RSASSA-PSS: accept any valid salt length the signer chose.
+			if err := rsa.VerifyPSS(pub, hashAlg, digest, protBytes, &rsa.PSSOptions{
+				SaltLength: rsa.PSSSaltLengthAuto,
+				Hash:       hashAlg,
+			}); err != nil {
+				return nil, fmt.Errorf("protection verification failed: %w", err)
+			}
+		} else {
+			if err := rsa.VerifyPKCS1v15(pub, hashAlg, digest, protBytes); err != nil {
+				return nil, fmt.Errorf("protection verification failed: %w", err)
+			}
 		}
 	case ed25519.PublicKey:
 		if !ed25519.Verify(pub, payload, protBytes) {
