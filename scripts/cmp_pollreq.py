@@ -16,7 +16,7 @@ We avoid the `cryptography` and `pyasn1` Python deps:
 Examples
 --------
 
-# Send an unprotected pollReq (only works when DMS has enforce_request_protection=false)
+# Send an unprotected pollReq (only works when DMS auth_mode is NO_AUTH or EXTERNAL_WEBHOOK)
 ./cmp_pollreq.py \
     --path /api/dmsmanager/.well-known/cmp/p/MyDMS \
     --tx-id 8591e6c360f6c5f24d1c9ec8e6dc0a8e
@@ -90,6 +90,55 @@ def context_explicit(tag_num: int, content: bytes) -> bytes:
     return tlv(0xA0 | tag_num, content)
 
 
+def _read_tlv(data: bytes, offset: int) -> tuple[int, bytes, int]:
+    """Parse one DER TLV starting at offset.
+
+    Returns (tag_byte, content_bytes, next_offset). Supports definite-length
+    short/long forms; that's enough for X.509/CMP.
+    """
+    tag = data[offset]
+    length_byte = data[offset + 1]
+    if length_byte < 0x80:
+        length = length_byte
+        content_start = offset + 2
+    else:
+        n = length_byte & 0x7F
+        length = int.from_bytes(data[offset + 2 : offset + 2 + n], "big")
+        content_start = offset + 2 + n
+    return tag, data[content_start : content_start + length], content_start + length
+
+
+def extract_subject_der(cert_der: bytes) -> bytes:
+    """Return the DER-encoded Subject Name SEQUENCE from an X.509 certificate.
+
+    Walks Certificate → tbsCertificate → skips version/serial/signature/issuer/
+    validity → returns subject as a full TLV (i.e. the SEQUENCE including
+    its outer tag/length). Used to build the CMP PKIHeader `sender` field so
+    it equals the protection cert's subject — RFC 9483 §3.5 binding.
+    """
+    # outer Certificate SEQUENCE
+    _, tbs, _ = _read_tlv(cert_der, 0)
+    # tbsCertificate SEQUENCE
+    _, tbs_content, _ = _read_tlv(tbs, 0)
+
+    cursor = 0
+    # Optional [0] EXPLICIT version (context-specific, constructed, tag 0)
+    if tbs_content[cursor] == 0xA0:
+        _, _, cursor = _read_tlv(tbs_content, cursor)
+    # serialNumber INTEGER
+    _, _, cursor = _read_tlv(tbs_content, cursor)
+    # signature AlgorithmIdentifier SEQUENCE
+    _, _, cursor = _read_tlv(tbs_content, cursor)
+    # issuer Name SEQUENCE
+    _, _, cursor = _read_tlv(tbs_content, cursor)
+    # validity SEQUENCE
+    _, _, cursor = _read_tlv(tbs_content, cursor)
+    # subject Name SEQUENCE — return its full TLV slice
+    subject_start = cursor
+    _, _, subject_end = _read_tlv(tbs_content, cursor)
+    return tbs_content[subject_start:subject_end]
+
+
 def oid(dotted: str) -> bytes:
     """ASN.1 OBJECT IDENTIFIER encoding from a dotted-decimal string."""
     parts = [int(x) for x in dotted.split(".")]
@@ -127,23 +176,35 @@ BODY_TAG_NAMES = {
 }
 
 
-def build_pkiheader(tx_id: bytes, signed: bool) -> bytes:
+def build_pkiheader(tx_id: bytes, signed: bool, sender_subject_der: bytes | None = None) -> bytes:
     """Build PKIHeader with the minimum fields the controller expects.
 
-    sender / recipient are empty DirectoryNames (GeneralName CHOICE [4]).
+    When signed, RFC 9483 §3.5 requires the sender field to carry the protection
+    cert's Subject as a directoryName; the server rejects mismatched senders
+    with badMessageCheck. Callers signing a request MUST pass the signer cert's
+    Subject DER via sender_subject_der; an unsigned request keeps the NULL-DN
+    fallback because no §3.5 binding applies.
+
     transactionID and senderNonce are mandatory for the controller's parser.
     protectionAlg [1] EXPLICIT is included only when we will sign the message
     so verifyRequestProtection() doesn't reject us with "wrong alg".
     """
     pvno = integer(2)
-    # GeneralName CHOICE [4] directoryName — empty RDNSequence is SEQUENCE {}
+    # GeneralName CHOICE [4] directoryName — empty RDNSequence (NULL-DN) when
+    # no protection cert is in play, or the signer cert's Subject when signed.
+    if sender_subject_der is not None:
+        sender_name = context_explicit(4, sender_subject_der)
+    else:
+        sender_name = context_explicit(4, sequence())
+    # Recipient stays NULL-DN: RFC 9483 §3.1 allows it when the EE does not
+    # know the responder's name. The server does not enforce a recipient match.
     empty_name = context_explicit(4, sequence())
 
     tx_field = context_explicit(4, octet_string(tx_id))
     nonce = secrets.token_bytes(16)
     nonce_field = context_explicit(5, octet_string(nonce))
 
-    fields = [pvno, empty_name, empty_name]
+    fields = [pvno, sender_name, empty_name]
 
     if signed:
         # protectionAlg [1] EXPLICIT AlgorithmIdentifier{ ecdsa-with-SHA256 }
@@ -200,13 +261,19 @@ def build_pollreq_message(
 ) -> bytes:
     """Assemble the complete PKIMessage DER, signed if a key is provided."""
     signed = bool(signer_key_pem)
-    header = build_pkiheader(tx_id, signed=signed)
+    sender_subject_der: bytes | None = None
+    cert_der: bytes | None = None
+    if signed:
+        # Extract the signer cert's Subject Name DER so the PKIHeader sender
+        # field matches the protection cert (RFC 9483 §3.5).
+        cert_der = pem_cert_to_der(signer_cert_pem)
+        sender_subject_der = extract_subject_der(cert_der)
+    header = build_pkiheader(tx_id, signed=signed, sender_subject_der=sender_subject_der)
     body = build_pollreq_body(cert_req_id)
 
     if not signed:
         return sequence(header, body)
 
-    cert_der = pem_cert_to_der(signer_cert_pem)
     sig_der = sign_protected_part(signer_key_pem, header, body)
 
     # Protection [0] EXPLICIT BIT STRING

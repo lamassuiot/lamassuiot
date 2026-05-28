@@ -961,8 +961,9 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 						},
 						RegistrationMode: models.JITP,
 						EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
-							AuthMode:                          models.CMPAuthModeClientCertificate,
+							AuthMode:                          models.EnrollmentAuthModeClientCertificate,
 							ProtectionCertificateSerialNumber: protectionCert.SerialNumber,
+							EnforcePOPO:                       true,
 						},
 					},
 					ReEnrollmentSettings: models.ReEnrollmentSettings{

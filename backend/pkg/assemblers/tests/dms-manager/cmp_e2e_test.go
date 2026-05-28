@@ -395,7 +395,7 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 				fmt.Sprintf("cmp-dms-%s", tc.name),
 				f.enrollCA.ID,
 				models.EnrollmentOptionsLWCRFC9483{
-					AuthMode:                          models.CMPAuthModeClientCertificate,
+					AuthMode:                          models.EnrollmentAuthModeClientCertificate,
 					ProtectionCertificateSerialNumber: serial,
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ValidationCAs: []string{bootstrapCAID},
@@ -455,7 +455,7 @@ func TestCMPE2ERevokedDeviceCert(t *testing.T) {
 	protCert := cmpCreateProtectionCert(t, f.ctx, f.testServers)
 	dms := cmpCreateDMS(t, f.ctx, f.dmsMgr, "cmp-dms-revoked-client", f.enrollCA.ID,
 		models.EnrollmentOptionsLWCRFC9483{
-			AuthMode:                          models.CMPAuthModeClientCertificate,
+			AuthMode:                          models.EnrollmentAuthModeClientCertificate,
 			ProtectionCertificateSerialNumber: protCert.SerialNumber,
 			AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 				ValidationCAs: []string{bootstrapCAID},

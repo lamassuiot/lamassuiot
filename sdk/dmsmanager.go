@@ -121,6 +121,63 @@ func (cli *dmsManagerClient) GetCMPTransactionsByDMS(ctx context.Context, input 
 	)
 }
 
+// ApproveCMPTransaction approves a PENDING phased-workflow transaction, issuing
+// the certificate and returning the updated transaction. The wire format is
+// resources.CMPTransactionResponse; we translate it back to the domain type.
+func (cli *dmsManagerClient) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*storage.CMPTransaction, error) {
+	url := cli.baseUrl + "/v1/dms/" + input.DMSID + "/cmp/transactions/" + input.TransactionID + "/approve"
+	resp, err := Post[resources.CMPTransactionResponse](ctx, cli.httpClient, url, struct{}{}, map[int][]error{
+		404: {errs.ErrCMPTransactionNotFound},
+		409: {errs.ErrCMPTransactionNotPending},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &storage.CMPTransaction{
+		TransactionID:     resp.TransactionID,
+		DMSID:             resp.DMSID,
+		State:             storage.CMPTransactionState(resp.State),
+		IsReenrollment:    resp.IsReenrollment,
+		RequestType:       resp.RequestType,
+		SubjectCommonName: resp.SubjectCommonName,
+		CertSerialNumber:  resp.CertSerialNumber,
+		WFXJobID:          resp.WFXJobID,
+		CreatedAt:         resp.CreatedAt,
+		ExpiresAt:         resp.ExpiresAt,
+		ErrorMessage:      resp.ErrorMessage,
+	}, nil
+}
+
+// RejectCMPTransaction denies a PENDING phased-workflow transaction. The row
+// transitions to ISSUE_FAILED carrying the reason, which pollReq surfaces to
+// the EE as an error PKIMessage. Same wire shape as ApproveCMPTransaction.
+func (cli *dmsManagerClient) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*storage.CMPTransaction, error) {
+	url := cli.baseUrl + "/v1/dms/" + input.DMSID + "/cmp/transactions/" + input.TransactionID + "/reject"
+	body := struct {
+		Reason string `json:"reason,omitempty"`
+	}{Reason: input.Reason}
+	resp, err := Post[resources.CMPTransactionResponse](ctx, cli.httpClient, url, body, map[int][]error{
+		404: {errs.ErrCMPTransactionNotFound},
+		409: {errs.ErrCMPTransactionNotPending},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &storage.CMPTransaction{
+		TransactionID:     resp.TransactionID,
+		DMSID:             resp.DMSID,
+		State:             storage.CMPTransactionState(resp.State),
+		IsReenrollment:    resp.IsReenrollment,
+		RequestType:       resp.RequestType,
+		SubjectCommonName: resp.SubjectCommonName,
+		CertSerialNumber:  resp.CertSerialNumber,
+		WFXJobID:          resp.WFXJobID,
+		CreatedAt:         resp.CreatedAt,
+		ExpiresAt:         resp.ExpiresAt,
+		ErrorMessage:      resp.ErrorMessage,
+	}, nil
+}
+
 func (cli *dmsManagerClient) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the estCli instead")
 }

@@ -27,6 +27,22 @@ type DMSManagerService interface {
 	// in-flight (PENDING/ISSUED) and stale rows are returned so operators
 	// can inspect failed or abandoned enrollments.
 	GetCMPTransactionsByDMS(ctx context.Context, input GetCMPTransactionsByDMSInput) (string, error)
+
+	// ApproveCMPTransaction releases a PENDING transaction in the phased
+	// (admin-gated) workflow: it issues the certificate from the stored CSR and
+	// transitions the transaction to ISSUED so the EE can retrieve it via
+	// pollReq. Returns the updated transaction. Errors with
+	// ErrCMPTransactionNotFound / ErrCMPTransactionNotPending when the
+	// transaction is missing, belongs to another DMS, or is not awaiting
+	// approval.
+	ApproveCMPTransaction(ctx context.Context, input ApproveCMPTransactionInput) (*storage.CMPTransaction, error)
+
+	// RejectCMPTransaction denies a PENDING transaction in the phased
+	// (admin-gated) workflow without issuing a certificate. The row moves to
+	// ISSUE_FAILED carrying the rejection reason, which pollReq surfaces back
+	// to the EE as an error PKIMessage. Same error semantics as
+	// ApproveCMPTransaction.
+	RejectCMPTransaction(ctx context.Context, input RejectCMPTransactionInput) (*storage.CMPTransaction, error)
 }
 
 type GetDMSStatsInput struct {
@@ -70,4 +86,18 @@ type BindIdentityToDeviceInput struct {
 type GetCMPTransactionsByDMSInput struct {
 	DMSID string `validate:"required"`
 	resources.ListInput[storage.CMPTransaction]
+}
+
+type ApproveCMPTransactionInput struct {
+	DMSID         string `validate:"required"`
+	TransactionID string `validate:"required"`
+}
+
+type RejectCMPTransactionInput struct {
+	DMSID         string `validate:"required"`
+	TransactionID string `validate:"required"`
+	// Reason is the administrator-supplied reason. Free-form text; an empty
+	// value falls back to a generic message so pollReq always surfaces a
+	// meaningful explanation to the EE.
+	Reason string
 }

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/hex"
+	"errors"
 	"math/big"
 
 	"github.com/gin-gonic/gin"
@@ -178,6 +179,81 @@ func serialNumberToHexLower(sn *big.Int) string {
 		return ""
 	}
 	return hex.EncodeToString(sn.Bytes())
+}
+
+type uriCMPTransactionParam struct {
+	ID            string `uri:"id" binding:"required"`
+	TransactionID string `uri:"txid" binding:"required"`
+}
+
+// ApproveCMPTransaction approves a PENDING phased-workflow CMP transaction,
+// issuing the certificate so the EE can retrieve it via pollReq.
+func (r *dmsManagerHttpRoutes) ApproveCMPTransaction(ctx *gin.Context) {
+	var params uriCMPTransactionParam
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	tx, err := r.svc.ApproveCMPTransaction(ctx.Request.Context(), services.ApproveCMPTransactionInput{
+		DMSID:         params.ID,
+		TransactionID: params.TransactionID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, errs.ErrDMSNotFound), errors.Is(err, errs.ErrCMPTransactionNotFound):
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errors.Is(err, errs.ErrCMPTransactionNotPending):
+			ctx.JSON(409, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, cmpTransactionToResponse(*tx))
+}
+
+// RejectCMPTransaction denies a PENDING phased-workflow CMP transaction. Body
+// is OPTIONAL — when present it must be JSON of the form {"reason": "..."}.
+// The transaction transitions to ISSUE_FAILED carrying the reason; the EE
+// learns of it on the next pollReq.
+func (r *dmsManagerHttpRoutes) RejectCMPTransaction(ctx *gin.Context) {
+	var params uriCMPTransactionParam
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	// An empty/missing body is fine — the service substitutes a default reason.
+	if ctx.Request.ContentLength > 0 {
+		if err := ctx.ShouldBindJSON(&body); err != nil {
+			ctx.JSON(400, gin.H{"err": err.Error()})
+			return
+		}
+	}
+
+	tx, err := r.svc.RejectCMPTransaction(ctx.Request.Context(), services.RejectCMPTransactionInput{
+		DMSID:         params.ID,
+		TransactionID: params.TransactionID,
+		Reason:        body.Reason,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, errs.ErrDMSNotFound), errors.Is(err, errs.ErrCMPTransactionNotFound):
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errors.Is(err, errs.ErrCMPTransactionNotPending):
+			ctx.JSON(409, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, cmpTransactionToResponse(*tx))
 }
 
 func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {

@@ -10,14 +10,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc services.DMSManagerService, authzConf config.AuthzClient) {
+func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc services.DMSManagerService, authzConf config.AuthzClient) error {
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
 	remoteEngine := newRemoteAuthzEngine(authzConf, models.DMSManagerSource, logger)
 	dmsAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "dmsmanager", "dms", logger)
 
 	NewESTHttpRoutes(logger, httpGrp, svc)
-	NewCMPHTTPLayer(logger, httpGrp, svc)
+	if err := NewCMPHTTPLayer(logger, httpGrp, svc); err != nil {
+		return err
+	}
 
 	rv1 := httpGrp.Group("/v1")
 
@@ -31,4 +33,8 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	rv1.DELETE("/dms/:id", dmsAuthzMw.AuthzCheck("delete"), routes.DeleteDMS)
 	rv1.POST("/dms/bind-identity", dmsAuthzMw.AuthzCheck("bind-identity"), routes.BindIdentityToDevice)
 	rv1.GET("/dms/:id/cmp/transactions", dmsAuthzMw.AuthzCheck("read"), routes.GetCMPTransactionsByDMS)
+	rv1.POST("/dms/:id/cmp/transactions/:txid/approve", dmsAuthzMw.AuthzCheck("update"), routes.ApproveCMPTransaction)
+	rv1.POST("/dms/:id/cmp/transactions/:txid/reject", dmsAuthzMw.AuthzCheck("update"), routes.RejectCMPTransaction)
+
+	return nil
 }

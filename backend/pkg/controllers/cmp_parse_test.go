@@ -698,7 +698,8 @@ func TestBuildResponseHeader(t *testing.T) {
 		SenderNonce:   []byte{0xAA, 0xBB, 0xCC, 0xDD},
 	}
 
-	resp := buildResponseHeader(req)
+	resp, err := buildResponseHeader(req)
+	require.NoError(t, err)
 
 	assert.Equal(t, pvnoCMP2000, resp.PVNO, "response PVNO must be cmp2000 (2)")
 

@@ -17,4 +17,13 @@ var (
 	// transaction with the same transactionID already exists in the store.
 	// The CMP controller maps this to PKIFailureInfo transactionIdInUse (21) per RFC 4210 §5.1.1.
 	ErrCMPTransactionAlreadyExists error = errors.New("CMP transactionID already in use")
+
+	// ErrCMPTransactionNotFound is returned when an admin action targets a CMP
+	// transaction that does not exist (or does not belong to the given DMS).
+	ErrCMPTransactionNotFound error = errors.New("CMP transaction not found")
+
+	// ErrCMPTransactionNotPending is returned when an admin tries to approve a
+	// CMP transaction that is not awaiting approval (i.e. not in PENDING state,
+	// or already expired).
+	ErrCMPTransactionNotPending error = errors.New("CMP transaction is not awaiting approval")
 )

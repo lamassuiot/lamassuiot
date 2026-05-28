@@ -63,11 +63,17 @@ DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
 
 ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
 CONFIRM_TIMEOUT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.confirmation_timeout // "0s"')
-ENFORCE_PROT=$(echo "${DMS_JSON}"    | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enforce_request_protection // false')
+AUTH_MODE=$(echo "${DMS_JSON}"       | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.auth_mode // "NO_AUTH"')
+if [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE" ] || [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK" ]; then
+    ENFORCE_PROT="true"
+else
+    ENFORCE_PROT="false"
+fi
 
 info "accept_implicit            : ${ACCEPT_IMPLICIT}"
 info "confirmation_timeout       : ${CONFIRM_TIMEOUT} (0s ⇒ server default 5m)"
-info "enforce_request_protection : ${ENFORCE_PROT}"
+info "auth_mode                  : ${AUTH_MODE}"
+info "requires protection        : ${ENFORCE_PROT}"
 
 if [ "${ACCEPT_IMPLICIT}" = "true" ]; then
     fail "DMS ${DMS_ID} has accept_implicit=true. This test needs explicit confirmation — the server would auto-confirm and never enforce the timeout. PATCH the DMS to accept_implicit=false and re-run."
