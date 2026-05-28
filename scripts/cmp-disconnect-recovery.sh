@@ -23,9 +23,9 @@
 #   - openssl 3.x, curl, jq
 #   - psql in the postgres container (for the DB-state sanity check)
 #
-# The DMS's `enforce_request_protection` and `enforce_popo` settings can be
-# either ON or OFF — the script signs the pollReq when signing credentials
-# are available and falls back to unprotected pollReq otherwise.
+# The DMS's auth_mode determines whether protection is required. When
+# auth_mode is CLIENT_CERTIFICATE or the combined mode, pollReq must be
+# signed — the script detects this and signs accordingly.
 #
 # Usage
 # -----
@@ -94,10 +94,16 @@ DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
     || fail "cannot fetch DMS ${DMS_ID} at ${SERVER}"
 
 PROT_SERIAL=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.protection_certificate // empty')
-ENFORCE_PROT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enforce_request_protection // false')
+AUTH_MODE=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.auth_mode // "NO_AUTH"')
 ENROLLMENT_CA=$(echo "${DMS_JSON}"  | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enrollment_ca // empty')
 ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
-info "enforce_request_protection : ${ENFORCE_PROT}"
+if [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE" ] || [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK" ]; then
+    ENFORCE_PROT="true"
+else
+    ENFORCE_PROT="false"
+fi
+info "auth_mode                  : ${AUTH_MODE}"
+info "requires protection        : ${ENFORCE_PROT}"
 info "accept_implicit            : ${ACCEPT_IMPLICIT}"
 info "enrollment_ca              : ${ENROLLMENT_CA:-<empty>}"
 info "protection_certificate     : ${PROT_SERIAL:-<empty>}"

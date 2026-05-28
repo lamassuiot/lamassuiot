@@ -310,7 +310,7 @@ func TestESTEnroll(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.EnrollmentAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -2417,7 +2417,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
@@ -2500,7 +2500,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
@@ -2587,7 +2587,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						// only bootstrapCA trusted, but cert will be signed by differentCA
 						ValidationCAs:        []string{bootstrapCA.ID},
@@ -2668,7 +2668,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
@@ -2763,7 +2763,7 @@ func TestESTGetCACerts(t *testing.T) {
 					EnrollmentProtocol: models.EST,
 					EnrollmentCA:       "",
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.EnrollmentAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -2996,7 +2996,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.EnrollmentAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -3400,7 +3400,7 @@ func TestESTReEnroll(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.EnrollmentAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -4040,7 +4040,7 @@ func TestGetAllDMS(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.EnrollmentAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},

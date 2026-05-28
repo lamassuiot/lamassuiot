@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	cmpmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
@@ -586,19 +587,20 @@ func TestC6_FailInfo_ProtectionVerificationFailure_BadMessageCheck(t *testing.T)
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-c6-bad-sig"})
 	signedIR := signCMPMessage(t, irDER, signerCert, signerKey)
 
-	// Corrupt the protection BitString by flipping a payload byte AFTER signing.
-	// We do this by mangling the last byte of the response — but easier: mangle
-	// a byte in the body of the signed message that the signature covered.
-	corrupted := make([]byte, len(signedIR))
-	copy(corrupted, signedIR)
-	// Find a known body byte (body is after header; mutate a deep byte).
-	corrupted[len(corrupted)/2] ^= 0xFF
+	// Corrupt the protection signature itself by flipping the last byte of the
+	// outer SEQUENCE — that byte is inside the protection [0] BIT STRING
+	// payload (the signature octets), which is NOT covered by the signature
+	// computation but IS what the server verifies against the EE pubkey.
+	// Flipping it invalidates the signature without corrupting any ASN.1 tags
+	// or lengths, so the message parses cleanly and the failure mode is
+	// guaranteed to be "bad signature → badMessageCheck" rather than
+	// "malformed → badDataFormat".
+	corrupted := corruptProtectionSignature(t, signedIR)
 
 	resp := postCMP(t, router, "test-dms", corrupted)
 	require.Equal(t, http.StatusOK, resp.Code)
-	if parseCMPResponseTag(t, resp.Body.Bytes()) != cmpBodyTagError {
-		t.Skip("corrupted bytes happened to land in non-signed region; rerun")
-	}
+	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"corrupted protection signature must yield CMP error body")
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
 	assert.True(t, bitSet(bs, pkiFailureInfoBadMessageCheck),
@@ -1192,4 +1194,347 @@ func TestFailInfo_AllErrorResponsesCarryFailInfo(t *testing.T) {
 		bs := parseFailInfoBitString(t, resp.Body.Bytes())
 		assert.NotZero(t, bs.BitLength, "error response must carry failInfo")
 	})
+}
+
+// ---------------------------------------------------------------------------
+// CMP v3 (cmp2021) drop-and-poll end-to-end flow
+//
+// RFC 9810 §5.3.22 PollReqContent / PollRepContent are unchanged between
+// cmp2000 and cmp2021, but §7 (version negotiation) requires the server to
+// echo the request's pvno on every response in the same transaction. The
+// tests below walk a complete enrollment under pvno=3, with the IP response
+// "dropped" between the initial issuance and the EE's recovery pollReq.
+// They verify:
+//
+//   1. The IR (pvno=3) is accepted and an ISSUED row is persisted.
+//   2. The pollReq (pvno=3) re-delivers the cert under pvno=3, NOT pvno=2.
+//   3. The senderNonce on the redelivered IP equals the one persisted on
+//      the original ISSUED row, so the subsequent certConf round-trip can
+//      match recipNonce against the stored sentNonce.
+//   4. certConf (pvno=3) completes the transaction with pkiConf (pvno=3).
+// ---------------------------------------------------------------------------
+
+// buildBodyTaggedSequenceContent wraps a content payload in a
+// [tag] context-specific IsCompound TLV. Used to build pollReq[25],
+// certConf[24] etc. bodies without going through buildTest* helpers.
+func buildBodyTaggedSequenceContent(t *testing.T, tag int, content []byte) []byte {
+	t.Helper()
+	der, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassContextSpecific,
+		Tag:        tag,
+		IsCompound: true,
+		Bytes:      content,
+	})
+	require.NoError(t, err)
+	return der
+}
+
+// wrapAsUniversalSequence wraps a content payload in a UNIVERSAL SEQUENCE.
+func wrapAsUniversalSequence(t *testing.T, content []byte) []byte {
+	t.Helper()
+	der, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassUniversal,
+		Tag:        asn1.TagSequence,
+		IsCompound: true,
+		Bytes:      content,
+	})
+	require.NoError(t, err)
+	return der
+}
+
+// buildPollReqWithHeader assembles a pollReq PKIMessage using a fully-
+// controlled header. The body carries a single certReqId entry per the
+// single-cert-per-transaction convention this server expects.
+func buildPollReqWithHeader(t *testing.T, headerDER []byte, certReqID int) []byte {
+	t.Helper()
+	type pollReqEntry struct {
+		CertReqID int
+	}
+	pollReqContent, err := asn1.Marshal([]pollReqEntry{{CertReqID: certReqID}})
+	require.NoError(t, err)
+	bodyDER := buildBodyTaggedSequenceContent(t, cmpBodyTagPollReq, pollReqContent)
+	return wrapAsUniversalSequence(t, concatBytes(headerDER, bodyDER))
+}
+
+// buildCertConfWithHeader assembles a certConf PKIMessage using a fully-
+// controlled header. The certHash is SHA-256 of certDER (default per
+// RFC 9481 §3.3 — no hashAlg field included).
+func buildCertConfWithHeader(t *testing.T, headerDER []byte, certDER []byte) []byte {
+	t.Helper()
+	hash := sha256.Sum256(certDER)
+	certStatusDER, err := asn1.Marshal(struct {
+		CertHash  []byte
+		CertReqID int
+	}{
+		CertHash:  hash[:],
+		CertReqID: 0,
+	})
+	require.NoError(t, err)
+	certConfContent := wrapAsUniversalSequence(t, certStatusDER)
+	bodyDER := buildBodyTaggedSequenceContent(t, cmpBodyTagCertConf, certConfContent)
+	return wrapAsUniversalSequence(t, concatBytes(headerDER, bodyDER))
+}
+
+// parseResponseSenderNonce extracts the senderNonce [5] OCTET STRING from a
+// response header. Used to verify the pollReq-redelivery path echoes the
+// originally-persisted senderNonce so certConf can still match against it.
+func parseResponseSenderNonce(t *testing.T, responseDER []byte) []byte {
+	t.Helper()
+	type rawMsg struct {
+		Header asn1.RawValue
+		Body   asn1.RawValue
+	}
+	var msg rawMsg
+	_, err := asn1.Unmarshal(responseDER, &msg)
+	require.NoError(t, err)
+
+	var headerSeq asn1.RawValue
+	_, err = asn1.Unmarshal(msg.Header.FullBytes, &headerSeq)
+	require.NoError(t, err)
+
+	remaining := headerSeq.Bytes
+	for i := 0; i < 3; i++ {
+		var f asn1.RawValue
+		remaining, err = asn1.Unmarshal(remaining, &f)
+		require.NoError(t, err)
+	}
+	for len(remaining) > 0 {
+		var f asn1.RawValue
+		remaining, err = asn1.Unmarshal(remaining, &f)
+		require.NoError(t, err)
+		if f.Class == asn1.ClassContextSpecific && f.Tag == 5 {
+			var inner []byte
+			if _, err := asn1.Unmarshal(f.Bytes, &inner); err == nil {
+				return inner
+			}
+		}
+	}
+	return nil
+}
+
+// TestCMPv3_DropAndPoll_ExplicitConfirm — the canonical lost-response
+// recovery flow, but every wire message uses pvno=3 (cmp2021).
+//
+// Walks the full transaction:
+//
+//	1. EE → IR (pvno=3) → server issues, replies IP (pvno=3, dropped).
+//	2. EE → pollReq (pvno=3, same txID) → server redelivers cert in IP
+//	   (pvno=3, with the same senderNonce as the original IP).
+//	3. EE → certConf (pvno=3, recipNonce = stored sentNonce) → server
+//	   replies pkiConf (pvno=3) and transitions tx to CONFIRMED.
+//
+// RFC 9810 §7 line 3754 anchors the pvno-echo requirement; this test
+// exercises it across every step of the drop-recover flow.
+func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "v3-drop-poll-device")
+
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+		Return(issuedCert, nil)
+
+	router, store := newTestRouterWithStore(svc)
+
+	txID := make([]byte, 16)
+	_, err := rand.Read(txID)
+	require.NoError(t, err)
+
+	// Step 1: IR with pvno=3. The response from this call is the IP that
+	// (in the dropped-response scenario) the EE never receives.
+	irHeader := buildHeaderDERCustom(t, headerOpts{
+		PVNO:          intPtr(pvnoCMP2021),
+		TransactionID: txID,
+	})
+	irDER := buildIRWithHeader(t, irHeader, "v3-drop-poll-device")
+
+	irResp := postCMP(t, router, "test-dms", irDER)
+	require.Equal(t, http.StatusOK, irResp.Code)
+	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()),
+		"IR must produce an IP response")
+	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()),
+		"IP response under cmp2021 IR MUST carry pvno=3 (RFC 9810 §7)")
+
+	// The ISSUED row must exist with a persisted sentNonce — that nonce is
+	// what the pollReq-recovery branch will need to echo on the redelivered
+	// IP so the subsequent certConf can match recipNonce against it.
+	storedTx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok, "IR must persist the ISSUED row for pollReq recovery")
+	require.Equal(t, storage.CMPTransactionStateIssued, storedTx.State)
+	persistedSentNonce, err := hex.DecodeString(storedTx.SentNonce)
+	require.NoError(t, err)
+	require.Len(t, persistedSentNonce, 16, "stored sentNonce must be 128 bits")
+
+	// At this point the IP response from step 1 is "dropped" (we simply
+	// discard it). The EE moves on to the recovery branch.
+
+	// Step 2: pollReq with pvno=3 referencing the same transactionID. The
+	// server must redeliver the cert in an IP body — NOT a pollRep —
+	// because the row is ISSUED, not PENDING.
+	pollHeader := buildHeaderDERCustom(t, headerOpts{
+		PVNO:          intPtr(pvnoCMP2021),
+		TransactionID: txID,
+	})
+	pollDER := buildPollReqWithHeader(t, pollHeader, 0)
+
+	pollResp := postCMP(t, router, "test-dms", pollDER)
+	require.Equal(t, http.StatusOK, pollResp.Code)
+	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
+		"ISSUED-state pollReq must deliver the cert via IP, not pollRep")
+	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
+		"pollReq under cmp2021 MUST receive a cmp2021 response (RFC 9810 §7)")
+
+	// CRITICAL: the senderNonce on the redelivered IP must equal the
+	// original sentNonce so the EE-side certConf with recipNonce can match.
+	// Generating a fresh nonce per pollRep without persisting it would
+	// silently desync DB from wire and break every subsequent certConf.
+	redeliveredSenderNonce := parseResponseSenderNonce(t, pollResp.Body.Bytes())
+	assert.Equal(t, persistedSentNonce, redeliveredSenderNonce,
+		"pollReq redelivery MUST echo the originally-persisted sentNonce — "+
+			"otherwise certConf recipNonce will mismatch")
+
+	// Tx is still ISSUED — pollReq does not consume it.
+	storedAfterPoll, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok, "pollReq delivery must not delete the ISSUED row")
+	assert.Equal(t, storage.CMPTransactionStateIssued, storedAfterPoll.State,
+		"pollReq must not transition tx state in explicit-confirm mode")
+
+	// Step 3: certConf with pvno=3, recipNonce = the persisted sentNonce.
+	certConfHeader := buildHeaderDERCustom(t, headerOpts{
+		PVNO:          intPtr(pvnoCMP2021),
+		TransactionID: txID,
+		RecipNonce:    persistedSentNonce,
+	})
+	certConfDER := buildCertConfWithHeader(t, certConfHeader, issuedCert.Raw)
+
+	confResp := postCMP(t, router, "test-dms", certConfDER)
+	require.Equal(t, http.StatusOK, confResp.Code)
+	require.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
+		"certConf with valid certHash + recipNonce MUST yield pkiConf")
+	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, confResp.Body.Bytes()),
+		"pkiConf MUST carry pvno=3 to match the cmp2021 transaction")
+
+	// Tx is now CONFIRMED.
+	finalTx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok)
+	assert.Equal(t, storage.CMPTransactionStateConfirmed, finalTx.State,
+		"successful certConf must transition tx to CONFIRMED")
+
+	svc.AssertExpectations(t)
+}
+
+// TestCMPv3_DropAndPoll_ImplicitConfirm — same drop-recover scenario but
+// the DMS accepts implicit confirmation and the EE includes the
+// id-it-implicitConfirm OID. In implicit mode no certConf round-trip is
+// expected; the pollReq-redelivered IP is the terminal message and the
+// server transitions the tx to CONFIRMED on delivery (RFC 4210 §5.2.8).
+func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "v3-drop-poll-implicit")
+
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+		Return(issuedCert, nil)
+
+	router, store := newTestRouterWithStore(svc)
+
+	txID := make([]byte, 16)
+	_, err := rand.Read(txID)
+	require.NoError(t, err)
+
+	// Step 1: IR with pvno=3 + implicitConfirm. Original IP dropped.
+	irHeader := buildHeaderDERCustom(t, headerOpts{
+		PVNO:                intPtr(pvnoCMP2021),
+		TransactionID:       txID,
+		WithImplicitConfirm: true,
+	})
+	irDER := buildIRWithHeader(t, irHeader, "v3-drop-poll-implicit")
+
+	irResp := postCMP(t, router, "test-dms", irDER)
+	require.Equal(t, http.StatusOK, irResp.Code)
+	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
+	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()))
+
+	// Row is born CONFIRMED in implicit-confirm mode — RFC 4210 §5.2.8 says
+	// the transaction is complete upon IP delivery. The row persists in
+	// CONFIRMED so a lost-IP pollReq can still recover the cert (see the
+	// pollReq case below), and the confirmation monitor never touches it.
+	stored, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok, "implicit-confirm IR must persist a row for pollReq recovery")
+	require.Equal(t, storage.CMPTransactionStateConfirmed, stored.State,
+		"implicit-confirm row is finalised at IP delivery, not at pollReq")
+
+	// Step 2: pollReq with pvno=3 + implicitConfirm (same as IR). The
+	// server redelivers the cert and, because the DMS grants implicit
+	// confirmation, transitions the row to CONFIRMED right away.
+	pollHeader := buildHeaderDERCustom(t, headerOpts{
+		PVNO:                intPtr(pvnoCMP2021),
+		TransactionID:       txID,
+		WithImplicitConfirm: true,
+	})
+	pollDER := buildPollReqWithHeader(t, pollHeader, 0)
+
+	pollResp := postCMP(t, router, "test-dms", pollDER)
+	require.Equal(t, http.StatusOK, pollResp.Code)
+	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
+		"implicit-confirm pollReq against ISSUED row must deliver the cert via IP")
+	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
+		"redelivered IP MUST carry pvno=3 to match the cmp2021 transaction")
+
+	// Row stays CONFIRMED — already finalised at IR time. pollReq just
+	// re-delivered the cert; it never demotes nor re-runs the finalisation.
+	finalTx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok)
+	assert.Equal(t, storage.CMPTransactionStateConfirmed, finalTx.State,
+		"implicit-confirm row must stay CONFIRMED across pollReq replays")
+
+	svc.AssertExpectations(t)
+}
+
+// TestCMPv3_PollReq_PVNOMismatch_ResponseEchoesPollPVNO — RFC 9810 §7 line
+// 3754: "the version of the response message MUST be the same as the
+// received version". If the EE somehow sends an IR with pvno=2 and then a
+// pollReq with pvno=3 (legal per the spec — only the request matters), the
+// server MUST honour the pollReq's declared version in its response.
+//
+// This documents the wire behaviour at the pvno boundary even though a
+// well-behaved EE would keep pvno consistent across a single transaction.
+func TestCMPv3_PollReq_PVNOMismatch_ResponseEchoesPollPVNO(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "v3-pvno-mismatch")
+
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+		Return(issuedCert, nil)
+
+	router, store := newTestRouterWithStore(svc)
+
+	txID := make([]byte, 16)
+	_, _ = rand.Read(txID)
+
+	// Step 1: IR with pvno=2.
+	irHeader := buildHeaderDERCustom(t, headerOpts{
+		PVNO:          intPtr(pvnoCMP2000),
+		TransactionID: txID,
+	})
+	irDER := buildIRWithHeader(t, irHeader, "v3-pvno-mismatch")
+	irResp := postCMP(t, router, "test-dms", irDER)
+	require.Equal(t, http.StatusOK, irResp.Code)
+	assert.Equal(t, pvnoCMP2000, parseResponsePVNO(t, irResp.Body.Bytes()))
+
+	_, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok)
+
+	// Step 2: pollReq with pvno=3 — server MUST echo pvno=3 on the redelivery.
+	pollHeader := buildHeaderDERCustom(t, headerOpts{
+		PVNO:          intPtr(pvnoCMP2021),
+		TransactionID: txID,
+	})
+	pollDER := buildPollReqWithHeader(t, pollHeader, 0)
+	pollResp := postCMP(t, router, "test-dms", pollDER)
+	require.Equal(t, http.StatusOK, pollResp.Code)
+	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
+		"pollReq pvno is what determines the response pvno (RFC 9810 §7)")
 }

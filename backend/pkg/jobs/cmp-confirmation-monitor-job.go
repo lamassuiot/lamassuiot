@@ -19,6 +19,12 @@ import (
 // single multi-minute revocation burst that starves the CA service.
 const cmpConfirmationBatchSize = 100
 
+// cmpExpiredPendingRetention is how long an expired PENDING row sticks around
+// in ISSUE_FAILED state after the approval window elapses. Long enough for
+// operators to notice and for a polling EE to receive the rejection reason,
+// short enough that DeleteExpired keeps the table bounded.
+const cmpExpiredPendingRetention = 7 * 24 * time.Hour
+
 // CMPConfirmationMonitor scans CMP transactions in ISSUED state whose
 // confirmation window has elapsed without the EE sending certConf (or
 // completing pollReq → certConf for explicit-confirm DMSs). Per RFC 4210 §5.2.8
@@ -58,20 +64,31 @@ func (m *CMPConfirmationMonitor) Run() {
 	start := time.Now()
 	lFunc.Info("starting periodic CMP confirmation-timeout check")
 
-	txs, err := m.txStore.SelectExpiredIssued(ctx, cmpConfirmationBatchSize)
+	// 1) Expired ISSUED — certs issued but never confirmed by the EE. Revoke
+	// at the CA, mark the row REVOKED.
+	issuedTxs, err := m.txStore.SelectExpiredIssued(ctx, cmpConfirmationBatchSize)
 	if err != nil {
 		lFunc.Errorf("could not list expired ISSUED CMP transactions: %v", err)
-		return
+	} else if len(issuedTxs) > 0 {
+		lFunc.Infof("found %d expired ISSUED CMP transaction(s) to revoke", len(issuedTxs))
+		for _, tx := range issuedTxs {
+			m.revokeUnconfirmed(ctx, lFunc, tx)
+		}
 	}
 
-	if len(txs) == 0 {
-		lFunc.Debugf("no expired ISSUED transactions; nothing to revoke. Took %s", time.Since(start))
-		return
-	}
-
-	lFunc.Infof("found %d expired ISSUED CMP transaction(s) to revoke", len(txs))
-	for _, tx := range txs {
-		m.revokeUnconfirmed(ctx, lFunc, tx)
+	// 2) Expired PENDING — phased-workflow requests the admin never acted on.
+	// Transition to ISSUE_FAILED with a descriptive reason and a fresh
+	// retention TTL so DeleteExpired sweeps them later. This keeps the
+	// rejection visible to operators and lets a stragglers' pollReq see the
+	// real cause instead of "unknown transactionID".
+	pendingTxs, err := m.txStore.SelectExpiredPending(ctx, cmpConfirmationBatchSize)
+	if err != nil {
+		lFunc.Errorf("could not list expired PENDING CMP transactions: %v", err)
+	} else if len(pendingTxs) > 0 {
+		lFunc.Infof("found %d expired PENDING CMP transaction(s) to mark ISSUE_FAILED", len(pendingTxs))
+		for _, tx := range pendingTxs {
+			m.expireUnapproved(ctx, lFunc, tx)
+		}
 	}
 
 	lFunc.Infof("ended CMP confirmation-timeout check. Took %s", time.Since(start))
@@ -132,6 +149,43 @@ func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *l
 	m.reportRejected(ctx, lFunc, tx, reason)
 
 	lFunc.Infof("revoked unconfirmed cert and marked transaction REVOKED")
+}
+
+// expireUnapproved handles a single PENDING+expired transaction by
+// transitioning it to ISSUE_FAILED with a reason describing the approval
+// timeout. The row is given a retention TTL (cmpExpiredPendingRetention) so
+// DeleteExpired eventually sweeps it; until then a late pollReq sees the
+// rejection via the existing ISSUE_FAILED branch in handlePoll and operators
+// can inspect the row in the management UI.
+func (m *CMPConfirmationMonitor) expireUnapproved(ctx context.Context, lFunc *logrus.Entry, tx storage.CMPTransaction) {
+	lFunc = lFunc.
+		WithField("cmp-tx", tx.TransactionID).
+		WithField("dms", tx.DMSID).
+		WithField("device-cn", tx.SubjectCommonName)
+
+	reason := fmt.Sprintf(
+		"approval window expired at %s without administrator action",
+		tx.ExpiresAt.UTC().Format(time.RFC3339),
+	)
+	updated, err := m.txStore.UpdateState(
+		ctx, tx.TransactionID,
+		storage.CMPTransactionStateIssueFailed,
+		nil, reason,
+		time.Now().Add(cmpExpiredPendingRetention),
+	)
+	if err != nil {
+		lFunc.Warnf("could not mark expired PENDING transaction as ISSUE_FAILED: %v", err)
+		return
+	}
+	if !updated {
+		// Concurrent admin action (approve/reject) reached the row before us;
+		// no further work is needed.
+		lFunc.Debugf("expired PENDING transaction already transitioned by another worker")
+		return
+	}
+
+	m.reportRejected(ctx, lFunc, tx, reason)
+	lFunc.Infof("marked expired PENDING transaction ISSUE_FAILED (approval timeout)")
 }
 
 // reportRejected pushes a Rejected transition into WFX so the workflow view

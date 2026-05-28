@@ -111,6 +111,14 @@ func (mw dmsEventPublisher) GetCMPTransactionsByDMS(ctx context.Context, input s
 	return mw.next.GetCMPTransactionsByDMS(ctx, input)
 }
 
+func (mw dmsEventPublisher) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*storage.CMPTransaction, error) {
+	return mw.next.ApproveCMPTransaction(ctx, input)
+}
+
+func (mw dmsEventPublisher) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*storage.CMPTransaction, error) {
+	return mw.next.RejectCMPTransaction(ctx, input)
+}
+
 func (mw dmsEventPublisher) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return mw.next.CACerts(ctx, aps)
 }

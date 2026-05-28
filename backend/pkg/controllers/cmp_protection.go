@@ -185,7 +185,10 @@ func marshalProtectedResponse(
 		return nil, err
 	}
 
-	respHeader := buildResponseHeader(reqHeader)
+	respHeader, err := buildResponseHeader(reqHeader)
+	if err != nil {
+		return nil, fmt.Errorf("build response header: %w", err)
+	}
 	respHeader.MessageTime = time.Now().UTC().Round(time.Second)
 	respHeader.ProtectionAlg = protectionAlg
 	// RFC 9483 §3.1 line 740: "For signature-based protection, MUST be used
@@ -264,7 +267,10 @@ func generalNameDirectoryName(name pkix.Name) (asn1.RawValue, error) {
 }
 
 func marshalUnprotectedResponse(reqHeader requestPKIHeader, bodyTag int, bodyDER []byte) ([]byte, error) {
-	respHeader := buildResponseHeader(reqHeader)
+	respHeader, err := buildResponseHeader(reqHeader)
+	if err != nil {
+		return nil, fmt.Errorf("build response header: %w", err)
+	}
 	return asn1.Marshal(responsePKIMessage{
 		Header: respHeader,
 		Body: asn1.RawValue{
