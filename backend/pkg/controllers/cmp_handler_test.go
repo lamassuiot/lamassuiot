@@ -40,14 +40,20 @@ import (
 // ---------------------------------------------------------------------------
 
 // newTestRouter sets up a Gin test engine with the CMP handler bound to
-// /.well-known/cmp/p/:id. The service has NO transaction store — suitable for
-// tests that only exercise the immediate response path (e.g. protection
-// verification that rejects before enrollment).
-func newTestRouter(svc services.LightweightCMPService) *gin.Engine {
+// /.well-known/cmp/p/:id. A minimal in-memory transaction store is always
+// attached because NewCMPHttpRoutes now requires one (audit A5 — running
+// without a store silently disabled duplicate-tx detection in production).
+// Tests that don't exercise the store path simply ignore it.
+func newTestRouter(svc *cmpmock.MockLightweightCMPService) *gin.Engine {
+	store := newInMemoryCMPStore()
+	wrapped := &mockServiceWithStore{MockLightweightCMPService: svc, store: store}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	logger := logrus.NewEntry(logrus.New())
-	routes := NewCMPHttpRoutes(logger, svc)
+	routes, err := NewCMPHttpRoutes(logger, wrapped)
+	if err != nil {
+		panic(err)
+	}
 	r.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
 	return r
 }
@@ -117,19 +123,20 @@ func (s *inMemoryCMPStore) SelectIncludingExpired(_ context.Context, id string) 
 	return tx, true, nil
 }
 
-func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string) error {
+func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
 	if !ok {
-		// Mirror Postgres impl semantics: silent no-op when row is gone.
-		return nil
+		// Mirror Postgres impl semantics: report not-updated, no error.
+		return false, nil
 	}
 	tx.State = state
 	tx.Certificate = cert
 	tx.ErrorMessage = errorMessage
+	tx.ExpiresAt = expiresAt
 	s.txs[id] = tx
-	return nil
+	return true, nil
 }
 
 func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]storage.CMPTransaction, error) {
@@ -149,17 +156,21 @@ func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]storag
 
 func (s *inMemoryCMPStore) DeleteExpired(_ context.Context) error { return nil }
 
-func (s *inMemoryCMPStore) Confirm(_ context.Context, id string) (storage.CMPTransaction, bool, error) {
+func (s *inMemoryCMPStore) Confirm(_ context.Context, id string) (storage.CMPTransaction, storage.CMPTransactionState, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
-	if !ok || tx.State != storage.CMPTransactionStateIssued {
-		return storage.CMPTransaction{}, false, nil
+	if !ok {
+		return storage.CMPTransaction{}, "", false, nil
+	}
+	prior := tx.State
+	if tx.State != storage.CMPTransactionStateIssued {
+		return storage.CMPTransaction{}, prior, false, nil
 	}
 	tx.State = storage.CMPTransactionStateConfirmed
 	tx.ConfirmedAt = time.Now()
 	s.txs[id] = tx
-	return tx, true, nil
+	return tx, prior, true, nil
 }
 
 func (s *inMemoryCMPStore) MarkRevokedByCertSerial(_ context.Context, certSerial string) error {
@@ -191,6 +202,21 @@ func (s *inMemoryCMPStore) SelectExpiredIssued(_ context.Context, limit int) ([]
 	var out []storage.CMPTransaction
 	for _, tx := range s.txs {
 		if tx.State == storage.CMPTransactionStateIssued && time.Now().After(tx.ExpiresAt) {
+			out = append(out, tx)
+			if limit > 0 && len(out) >= limit {
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s *inMemoryCMPStore) SelectExpiredPending(_ context.Context, limit int) ([]storage.CMPTransaction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []storage.CMPTransaction
+	for _, tx := range s.txs {
+		if tx.State == storage.CMPTransactionStatePending && time.Now().After(tx.ExpiresAt) {
 			out = append(out, tx)
 			if limit > 0 && len(out) >= limit {
 				break
@@ -266,7 +292,10 @@ func newTestRouterWithStore(svc *cmpmock.MockLightweightCMPService) (*gin.Engine
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	logger := logrus.NewEntry(logrus.New())
-	routes := NewCMPHttpRoutes(logger, wrapped)
+	routes, err := NewCMPHttpRoutes(logger, wrapped)
+	if err != nil {
+		panic(err)
+	}
 	r.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
 	return r, store
 }
@@ -277,7 +306,10 @@ func newTestRouterWithStoreAndWFX(svc *cmpmock.MockLightweightCMPService, report
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	logger := logrus.NewEntry(logrus.New())
-	routes := NewCMPHttpRoutes(logger, wrapped)
+	routes, err := NewCMPHttpRoutes(logger, wrapped)
+	if err != nil {
+		panic(err)
+	}
 	r.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
 	return r, store
 }
@@ -303,7 +335,10 @@ func newTestRouterWithProtectionAndStore(svc *cmpmock.MockLightweightCMPServiceW
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	logger := logrus.NewEntry(logrus.New())
-	routes := NewCMPHttpRoutes(logger, wrapped)
+	routes, err := NewCMPHttpRoutes(logger, wrapped)
+	if err != nil {
+		panic(err)
+	}
 	r.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
 	return r, store
 }
@@ -734,10 +769,17 @@ func signCMPMessage(t *testing.T, msgDER []byte, signerCert *x509.Certificate, s
 	_, err := asn1.Unmarshal(msgDER, &rawMsg)
 	require.NoError(t, err)
 
+	// Rewrite the sender [1] field to carry the signer certificate's Subject,
+	// matching what production EEs must put on the wire: with signature-based
+	// protection, RFC 9483 §3.5 requires the header sender to equal the
+	// protection certificate's subject. The validator now enforces that, so
+	// fixtures must mirror reality or every signed test would fail spuriously.
+	headerDER := injectSenderInHeader(t, rawMsg.Header.FullBytes, signerCert.Subject)
+
 	// Inject protectionAlg [1] EXPLICIT AlgorithmIdentifier into the header.
 	// Peel the original header SEQUENCE and insert protectionAlg after the first
 	// 3 mandatory fields (pvno, sender, recipient) per RFC 4210 §5.1.1.
-	headerDER := injectProtectionAlgInHeader(t, rawMsg.Header.FullBytes,
+	headerDER = injectProtectionAlgInHeader(t, headerDER,
 		asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}) // ecdsaWithSHA256
 	rawMsg.Header = asn1.RawValue{FullBytes: headerDER}
 
@@ -811,6 +853,101 @@ func injectProtectionAlgInHeader(t *testing.T, headerDER []byte, algOID asn1.Obj
 	require.NoError(t, err)
 
 	newContent := concatBytes(firstThree, protAlgField, remaining)
+	newHeaderDER, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassUniversal,
+		Tag:        asn1.TagSequence,
+		IsCompound: true,
+		Bytes:      newContent,
+	})
+	require.NoError(t, err)
+	return newHeaderDER
+}
+
+// corruptProtectionSignature flips a bit inside the Protection [0] BIT STRING
+// of a DER-encoded PKIMessage so the EE-computed signature stops matching its
+// own pubkey, while keeping all ASN.1 tags, lengths and lower-level structure
+// valid. Used by tests that need to assert "signature verification failed"
+// rather than "message could not be parsed".
+func corruptProtectionSignature(t *testing.T, signedDER []byte) []byte {
+	t.Helper()
+
+	var outer asn1.RawValue
+	_, err := asn1.Unmarshal(signedDER, &outer)
+	require.NoError(t, err)
+	require.Equal(t, asn1.TagSequence, outer.Tag, "expected outer SEQUENCE")
+
+	// Walk fields of the outer SEQUENCE looking for [0] EXPLICIT (protection).
+	remaining := outer.Bytes
+	out := make([]byte, 0, len(signedDER))
+	var rebuilt []byte
+	flipped := false
+	for len(remaining) > 0 {
+		var field asn1.RawValue
+		rest, err := asn1.Unmarshal(remaining, &field)
+		require.NoError(t, err)
+		consumed := len(remaining) - len(rest)
+
+		if !flipped && field.Class == asn1.ClassContextSpecific && field.Tag == 0 {
+			// field.FullBytes is the [0] EXPLICIT TLV; the last byte is the
+			// last byte of the inner BIT STRING content (signature octet).
+			// Flip it.
+			mutated := make([]byte, len(field.FullBytes))
+			copy(mutated, field.FullBytes)
+			mutated[len(mutated)-1] ^= 0xFF
+			rebuilt = append(rebuilt, mutated...)
+			flipped = true
+		} else {
+			rebuilt = append(rebuilt, field.FullBytes...)
+		}
+		remaining = rest
+		_ = consumed
+	}
+	require.True(t, flipped, "protection [0] field not found in signed PKIMessage")
+
+	wrapped, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassUniversal,
+		Tag:        asn1.TagSequence,
+		IsCompound: true,
+		Bytes:      rebuilt,
+	})
+	require.NoError(t, err)
+	return append(out, wrapped...)
+}
+
+// injectSenderInHeader replaces the sender [1] field of a DER-encoded PKIHeader
+// with a directoryName GeneralName carrying the given subject's RDNSequence.
+// The PKIHeader has three mandatory fields (pvno, sender, recipient); we peel
+// the first one, swap the second, and keep the remainder.
+func injectSenderInHeader(t *testing.T, headerDER []byte, subject pkix.Name) []byte {
+	t.Helper()
+
+	var headerSeq asn1.RawValue
+	_, err := asn1.Unmarshal(headerDER, &headerSeq)
+	require.NoError(t, err)
+
+	// pvno (first TLV) — keep as-is.
+	remaining := headerSeq.Bytes
+	var pvnoField asn1.RawValue
+	remaining, err = asn1.Unmarshal(remaining, &pvnoField)
+	require.NoError(t, err)
+
+	// sender (second TLV) — discard original, build replacement.
+	var oldSender asn1.RawValue
+	remaining, err = asn1.Unmarshal(remaining, &oldSender)
+	require.NoError(t, err)
+
+	// Build new sender as directoryName [4] EXPLICIT Name (= RDNSequence).
+	rdnDER, err := asn1.Marshal(subject.ToRDNSequence())
+	require.NoError(t, err)
+	newSenderDER, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassContextSpecific,
+		Tag:        4,
+		IsCompound: true,
+		Bytes:      rdnDER,
+	})
+	require.NoError(t, err)
+
+	newContent := concatBytes(pvnoField.FullBytes, newSenderDER, remaining)
 	newHeaderDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassUniversal,
 		Tag:        asn1.TagSequence,
@@ -1037,11 +1174,14 @@ func TestHandleCMP_ImplicitConfirm_NoCertConf(t *testing.T) {
 	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()),
 		"ir with implicitConfirm must receive IP response")
 
-	// Verify the ISSUED transaction WAS inserted for lost-response recovery.
+	// Row is born CONFIRMED in implicit-confirm mode (RFC 4210 §5.2.8 — the
+	// transaction is complete upon IP delivery). The row persists for
+	// lost-response recovery via pollReq; the confirmation monitor never
+	// touches CONFIRMED rows so the cert is not erroneously revoked.
 	storedTx, found := store.Peek(hex.EncodeToString(txID))
-	assert.True(t, found, "implicit confirm must still insert an ISSUED row for pollReq recovery")
+	assert.True(t, found, "implicit confirm must persist a row for pollReq recovery")
 	if found {
-		assert.Equal(t, storage.CMPTransactionStateIssued, storedTx.State)
+		assert.Equal(t, storage.CMPTransactionStateConfirmed, storedTx.State)
 		assert.NotNil(t, storedTx.Certificate)
 	}
 
@@ -1139,7 +1279,7 @@ func TestHandleCMP_WFXStoresCMPPayloads(t *testing.T) {
 // TestHandleCMP_ProtectionVerification_ValidSignature verifies that a CMP
 // message with valid ECDSA-SHA256 signature-based protection (RFC 4210 §5.1.3)
 // is accepted by the handler. The protection is verified against the EE
-// certificate in extraCerts[0]. With EnforceRequestProtection=false, a valid
+// certificate in extraCerts[0]. With auth_mode is permissive (NO_AUTH / empty), a valid
 // signature is accepted opportunistically but not required.
 func TestHandleCMP_ProtectionVerification_ValidSignature(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-sig-valid")
@@ -1147,7 +1287,7 @@ func TestHandleCMP_ProtectionVerification_ValidSignature(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{EnforceRequestProtection: false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 
@@ -1175,7 +1315,7 @@ func TestHandleCMP_ProtectionVerification_InvalidSignature(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{EnforceRequestProtection: false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
 	// LWCEnroll must NOT be called when signature verification fails.
 
 	router := newTestRouter(svc)
@@ -1195,7 +1335,7 @@ func TestHandleCMP_ProtectionVerification_InvalidSignature(t *testing.T) {
 
 // TestHandleCMP_ProtectionVerification_NoProtection verifies that an
 // unprotected CMP message (no protection field, no extraCerts) is accepted
-// when EnforceRequestProtection=false. In this mode, transport-layer mTLS
+// when auth_mode is permissive (NO_AUTH / empty). In this mode, transport-layer mTLS
 // is the authentication mechanism; message-level protection is optional.
 func TestHandleCMP_ProtectionVerification_NoProtection(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-no-prot")
@@ -1231,7 +1371,7 @@ func TestHandleCMP_Response_ExtraCertsContainsChain(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPServiceWithProtection{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{EnforceRequestProtection: false}, nil)
+		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
 	// Protection provider returns a 2-cert chain: [leaf, issuer].
@@ -1251,11 +1391,11 @@ func TestHandleCMP_Response_ExtraCertsContainsChain(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Cycle 5: EnforceRequestProtection
+// Cycle 5: Wire-level protection required by auth_mode
 // ---------------------------------------------------------------------------
 
 // TestHandleCMP_EnforceProtection_RejectsUnprotected verifies that when the
-// DMS sets EnforceRequestProtection=true, any CMP message without a valid
+// DMS sets auth_mode is CLIENT_CERTIFICATE / combined, any CMP message without a valid
 // protection field is rejected with a CMP error (tag 23) mentioning
 // "protection". This mode is used when the DMS requires message-level
 // authentication and mTLS alone is not sufficient.
@@ -1263,7 +1403,7 @@ func TestHandleCMP_EnforceProtection_RejectsUnprotected(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforceRequestProtection: true,
+			AuthMode: models.EnrollmentAuthModeClientCertificate,
 		}, nil)
 
 	router, _ := newTestRouterWithStore(svc)
@@ -1280,7 +1420,7 @@ func TestHandleCMP_EnforceProtection_RejectsUnprotected(t *testing.T) {
 }
 
 // TestHandleCMP_EnforceProtection_AcceptsSignedRequest verifies that
-// EnforceRequestProtection=true accepts a correctly signed message. This is
+// auth_mode is CLIENT_CERTIFICATE / combined accepts a correctly signed message. This is
 // the positive counterpart to TestHandleCMP_EnforceProtection_RejectsUnprotected
 // — a valid ECDSA-SHA256 protection passes the gate and the enrollment proceeds.
 func TestHandleCMP_EnforceProtection_AcceptsSignedRequest(t *testing.T) {
@@ -1290,7 +1430,7 @@ func TestHandleCMP_EnforceProtection_AcceptsSignedRequest(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
-			EnforceRequestProtection: true,
+			AuthMode: models.EnrollmentAuthModeClientCertificate,
 		}, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
 		Return(issuedCert, nil)
@@ -1313,7 +1453,7 @@ func TestHandleCMP_EnforceProtection_AcceptsSignedRequest(t *testing.T) {
 
 // TestHandleCMP_MACProtection_Rejected verifies that MAC-based protection
 // algorithms (id-PasswordBasedMac RFC 4210, id-DHBasedMac) are ALWAYS rejected
-// regardless of EnforceRequestProtection. Only signature-based protection
+// regardless of the DMS's auth_mode. Only signature-based protection
 // (RSA, ECDSA, Ed25519) is accepted. This prevents weaker shared-secret
 // authentication from bypassing the PKI trust model.
 func TestHandleCMP_MACProtection_Rejected(t *testing.T) {
@@ -1462,11 +1602,12 @@ func TestHandleCMP_KUR_ImplicitConfirm(t *testing.T) {
 	assert.Equal(t, cmpBodyTagKUP, parseCMPResponseTag(t, kurResp.Body.Bytes()),
 		"implicit-confirm kur must receive kup response")
 
-	// ISSUED row is stored for lost-response recovery even with implicit confirm.
+	// CONFIRMED row stored for lost-response recovery — see RFC 4210 §5.2.8
+	// rationale on the ir companion test. Same behaviour for kur.
 	storedTx, found := store.Peek(hex.EncodeToString(txID))
-	assert.True(t, found, "implicit confirm kur must still insert ISSUED row for pollReq recovery")
+	assert.True(t, found, "implicit confirm kur must persist a row for pollReq recovery")
 	if found {
-		assert.Equal(t, storage.CMPTransactionStateIssued, storedTx.State)
+		assert.Equal(t, storage.CMPTransactionStateConfirmed, storedTx.State)
 		assert.NotNil(t, storedTx.Certificate)
 	}
 
@@ -2329,4 +2470,70 @@ func TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	assert.Equal(t, cmpBodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
 		"ISSUE_FAILED state must produce a CMP error body, not pollRep")
+}
+
+// TestHandleCMP_PhasedWorkflow_DefersIssuance verifies that a DMS configured
+// with the phased (admin-gated) workflow does NOT issue inline: the IR is
+// parked as a PENDING transaction carrying the CSR, the EE receives an IP
+// "waiting" response, and LWCEnroll is never called (issuance is deferred
+// until an administrator approves). RFC 9483 §4.4 / RFC 4210 §5.3.22.
+func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+		Return(&models.EnrollmentOptionsLWCRFC9483{
+			Workflow: models.CMPWorkflowPhased,
+		}, nil)
+	// NOTE: LWCEnroll is intentionally NOT registered — if the phased path
+	// wrongly issues inline, the mock panics on an unexpected call.
+
+	router, store := newTestRouterWithStore(svc)
+	txID := make([]byte, 16)
+	rand.Read(txID)
+
+	irDER, _, _ := buildTestIR(t, testIROptions{CN: "phased-device", TransactionID: txID})
+	resp := postCMP(t, router, "test-dms", irDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"phased IR must receive an IP (waiting) response")
+
+	storedTx, found := store.Peek(hex.EncodeToString(txID))
+	require.True(t, found, "phased workflow must persist a PENDING transaction row")
+	assert.Equal(t, storage.CMPTransactionStatePending, storedTx.State,
+		"phased transaction must be PENDING (not ISSUED) until approved")
+	assert.Nil(t, storedTx.Certificate, "no certificate is issued before approval")
+	assert.NotNil(t, storedTx.CSR, "the CSR must be stored so approval can issue later")
+
+	svc.AssertExpectations(t)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep verifies that
+// while a phased transaction is awaiting approval, a pollReq receives a
+// pollRep(checkAfter) telling the EE to retry — the standard polling loop.
+func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T) {
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+		Return(&models.EnrollmentOptionsLWCRFC9483{
+			Workflow: models.CMPWorkflowPhased,
+		}, nil)
+
+	router, store := newTestRouterWithStore(svc)
+	txID := make([]byte, 16)
+	rand.Read(txID)
+
+	// Park a PENDING transaction via the phased IR path.
+	irDER, _, _ := buildTestIR(t, testIROptions{CN: "phased-poll-device", TransactionID: txID})
+	require.Equal(t, http.StatusOK, postCMP(t, router, "test-dms", irDER).Code)
+	if tx, ok := store.Peek(hex.EncodeToString(txID)); ok {
+		require.Equal(t, storage.CMPTransactionStatePending, tx.State)
+	}
+
+	// pollReq while still PENDING → pollRep.
+	pollDER := buildTestPollReq(t, txID, 0)
+	resp := postCMP(t, router, "test-dms", pollDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, cmpBodyTagPollRep, parseResponseBodyTag(t, resp.Body.Bytes()),
+		"pollReq on a PENDING (awaiting-approval) transaction must return pollRep")
+
+	svc.AssertExpectations(t)
 }

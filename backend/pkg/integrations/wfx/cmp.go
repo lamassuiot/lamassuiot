@@ -10,15 +10,25 @@ import (
 	"time"
 
 	bconfig "github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	wfxapi "github.com/siemens/wfx/generated/api"
 	"github.com/sirupsen/logrus"
 )
 
 const (
-	// DefaultCMPWorkflowName is the immutable WFX workflow used to mirror the
-	// Lamassu CMP transaction FSM.
-	DefaultCMPWorkflowName = "lamassu.cmp.transaction.v1"
+	// CMPWorkflowNameDirect is the WFX workflow mirroring the synchronous CMP
+	// transaction FSM: the certificate is issued and returned inline.
+	CMPWorkflowNameDirect = "lamassu.cmp.transaction.direct.v1"
+
+	// CMPWorkflowNamePhased is the WFX workflow mirroring the admin-gated CMP
+	// transaction FSM: after validation the request waits in AwaitingApproval
+	// until an administrator approves issuance.
+	CMPWorkflowNamePhased = "lamassu.cmp.transaction.phased.v1"
+
+	// DefaultCMPWorkflowName is the workflow used when a DMS (or the WFX config)
+	// does not specify one. Defaults to the direct (synchronous) workflow.
+	DefaultCMPWorkflowName = CMPWorkflowNameDirect
 
 	defaultHTTPTimeout = 10 * time.Second
 )
@@ -27,14 +37,35 @@ type CMPState string
 
 const (
 	CMPStateReceived          CMPState = "Received"
-	CMPStateParsed            CMPState = "Parsed"
 	CMPStateValidated         CMPState = "Validated"
+	CMPStateAwaitingApproval  CMPState = "AwaitingApproval"
 	CMPStateResponded         CMPState = "Responded"
 	CMPStateAwaitingCertConf  CMPState = "AwaitingCertConf"
 	CMPStateLogicallyComplete CMPState = "LogicallyComplete"
 	CMPStateConfirmed         CMPState = "Confirmed"
 	CMPStateRejected          CMPState = "Rejected"
 )
+
+// CMP transaction actors. WFX's own Eligible enum only distinguishes CLIENT
+// from WFX, and in Lamassu every transition is performed by the backend (the
+// device's ir and the PKI's ip are both notified through the server), so the
+// WFX eligibility is always WFX. The semantically meaningful actor — who the
+// transition logically belongs to — is carried in the transition Description
+// field instead, where the management UI reads it to label each edge.
+const (
+	CMPActorDevice = "device"
+	CMPActorPKI    = "PKI"
+	CMPActorAdmin  = "admin"
+)
+
+// WorkflowNameFor maps a DMS's CMP workflow selection to the WFX workflow name.
+// An empty/unknown selection falls back to the direct workflow.
+func WorkflowNameFor(selection models.CMPWorkflow) string {
+	if selection == models.CMPWorkflowPhased {
+		return CMPWorkflowNamePhased
+	}
+	return CMPWorkflowNameDirect
+}
 
 // CMPTransition is the WFX-side projection of one CMP transaction state
 // transition.
@@ -47,6 +78,11 @@ type CMPTransition struct {
 	State             CMPState
 	Reason            string
 	Metadata          map[string]any
+	// Workflow is the WFX workflow name this transition belongs to. When empty
+	// the reporter falls back to its configured default workflow. Set it from
+	// the DMS's workflow selection so a device's job is created in (and only
+	// transitions within) the matching direct/phased workflow.
+	Workflow string
 }
 
 // CMPReporter pushes CMP transaction state transitions into WFX.
@@ -55,9 +91,9 @@ type CMPTransition struct {
 // SubjectCommonName so callers can persist it alongside the CMP transaction
 // row (used to deep-link the management UI to the corresponding WFX job).
 // When SubjectCommonName is empty the call is dropped silently and the
-// returned jobID is "" — this lets the controller emit early lifecycle
-// states (Received, Parsed) before the CSR has been parsed without WFX
-// rejecting them for lack of a meaningful client identifier.
+// returned jobID is "" — this lets the controller emit the early Received
+// lifecycle state before the CSR has been parsed without WFX rejecting it
+// for lack of a meaningful client identifier.
 type CMPReporter interface {
 	Emit(ctx context.Context, transition CMPTransition) (jobID string, err error)
 }
@@ -69,8 +105,8 @@ type cmpReporter struct {
 	tags         []string
 	timeout      time.Duration
 
-	workflowMu      sync.Mutex
-	workflowEnsured bool
+	workflowMu       sync.Mutex
+	ensuredWorkflows map[string]struct{}
 }
 
 func NewCMPReporter(cfg bconfig.DMSWFXConfig, logger *logrus.Entry) (CMPReporter, error) {
@@ -108,12 +144,23 @@ func NewCMPReporter(cfg bconfig.DMSWFXConfig, logger *logrus.Entry) (CMPReporter
 	}
 
 	return &cmpReporter{
-		client:       client,
-		logger:       logger.WithField("component", "cmp-wfx"),
-		workflowName: workflowName,
-		tags:         append([]string(nil), cfg.Tags...),
-		timeout:      timeout,
+		client:           client,
+		logger:           logger.WithField("component", "cmp-wfx"),
+		workflowName:     workflowName,
+		tags:             append([]string(nil), cfg.Tags...),
+		timeout:          timeout,
+		ensuredWorkflows: map[string]struct{}{},
 	}, nil
+}
+
+// resolveWorkflowName returns the workflow a transition belongs to: the
+// transition's own Workflow when set, otherwise the reporter's configured
+// default.
+func (r *cmpReporter) resolveWorkflowName(transition CMPTransition) string {
+	if transition.Workflow != "" {
+		return transition.Workflow
+	}
+	return r.workflowName
 }
 
 func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) (string, error) {
@@ -134,11 +181,12 @@ func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) (strin
 	ctx, cancel := withoutCancelWithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	if err := r.ensureWorkflow(ctx); err != nil {
+	workflowName := r.resolveWorkflowName(transition)
+	if err := r.ensureWorkflow(ctx, workflowName); err != nil {
 		return "", err
 	}
 
-	job, created, err := r.ensureJob(ctx, transition)
+	job, _, err := r.ensureJob(ctx, transition, workflowName)
 	if err != nil {
 		return "", err
 	}
@@ -146,12 +194,17 @@ func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) (strin
 		return "", errors.New("wfx returned a nil job")
 	}
 
-	// The workflow starts in Received, so job creation alone already captures
-	// the first state without needing an explicit same-state update.
-	if created && transition.State == CMPStateReceived {
-		return job.ID, nil
-	}
-
+	// Same-state suppression: if the job is already in this exact state and the
+	// transition carries no diagnostic payload (no reason, metadata, cert
+	// serial, request type), there is nothing to push.
+	//
+	// IMPORTANT: this MUST be checked even on a freshly-created job, because
+	// the workflow starts in CMPStateReceived. The previous "if created &&
+	// transition.State == CMPStateReceived" early return dropped the very
+	// first PUT /status call — which is exactly the one that attaches the
+	// inbound IR/CR/KUR DER (cmpRequestB64) to the Received state's context.
+	// The result was that the dashboard's per-snapshot ASN.1 viewer never had
+	// any payload to show on the Received state.
 	if job.Status != nil && job.Status.State == string(transition.State) && transition.Reason == "" && len(transition.Metadata) == 0 && transition.CertSerialNumber == "" && transition.RequestType == "" {
 		return job.ID, nil
 	}
@@ -178,39 +231,39 @@ func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) (strin
 	return "", fmt.Errorf("update WFX job %s status to %s failed: HTTP %d", job.ID, transition.State, resp.StatusCode())
 }
 
-func (r *cmpReporter) ensureWorkflow(ctx context.Context) error {
+func (r *cmpReporter) ensureWorkflow(ctx context.Context, name string) error {
 	r.workflowMu.Lock()
 	defer r.workflowMu.Unlock()
 
-	if r.workflowEnsured {
+	if _, ok := r.ensuredWorkflows[name]; ok {
 		return nil
 	}
 
-	getResp, err := r.client.GetWorkflowsNameWithResponse(ctx, r.workflowName, nil)
+	getResp, err := r.client.GetWorkflowsNameWithResponse(ctx, name, nil)
 	if err != nil {
-		return fmt.Errorf("lookup WFX workflow %q: %w", r.workflowName, err)
+		return fmt.Errorf("lookup WFX workflow %q: %w", name, err)
 	}
 	if getResp.JSON200 != nil {
-		r.workflowEnsured = true
+		r.ensuredWorkflows[name] = struct{}{}
 		return nil
 	}
 	if getResp.StatusCode() != http.StatusNotFound {
-		return fmt.Errorf("lookup WFX workflow %q returned HTTP %d", r.workflowName, getResp.StatusCode())
+		return fmt.Errorf("lookup WFX workflow %q returned HTTP %d", name, getResp.StatusCode())
 	}
 
-	createResp, err := r.client.PostWorkflowsWithResponse(ctx, nil, wfxapi.PostWorkflowsJSONRequestBody(defaultCMPWorkflow(r.workflowName)))
+	createResp, err := r.client.PostWorkflowsWithResponse(ctx, nil, wfxapi.PostWorkflowsJSONRequestBody(cmpWorkflowForName(name)))
 	if err != nil {
-		return fmt.Errorf("create WFX workflow %q: %w", r.workflowName, err)
+		return fmt.Errorf("create WFX workflow %q: %w", name, err)
 	}
 	switch {
 	case createResp.JSON201 != nil:
-		r.workflowEnsured = true
+		r.ensuredWorkflows[name] = struct{}{}
 		return nil
 	case createResp.JSON400 != nil && workflowAlreadyExists(createResp.JSON400):
-		r.workflowEnsured = true
+		r.ensuredWorkflows[name] = struct{}{}
 		return nil
 	default:
-		return fmt.Errorf("create WFX workflow %q failed: HTTP %d", r.workflowName, createResp.StatusCode())
+		return fmt.Errorf("create WFX workflow %q failed: HTTP %d", name, createResp.StatusCode())
 	}
 }
 
@@ -221,11 +274,11 @@ func (r *cmpReporter) ensureWorkflow(ctx context.Context) error {
 // we narrow the lookup by definition_hash and additionally verify the
 // definition.transactionId once the job is found — this avoids racing two
 // IRs from the same device into the same WFX job.
-func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition) (*wfxapi.Job, bool, error) {
+func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition, workflowName string) (*wfxapi.Job, bool, error) {
 	limit := int32(100)
 	params := &wfxapi.GetJobsParams{
 		ParamClientID: ptr(transition.SubjectCommonName),
-		ParamWorkflow: ptr(r.workflowName),
+		ParamWorkflow: ptr(workflowName),
 		ParamLimit:    &limit,
 	}
 
@@ -246,7 +299,7 @@ func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition) (
 
 	body := wfxapi.PostJobsJSONRequestBody{
 		ClientID:   transition.SubjectCommonName,
-		Workflow:   r.workflowName,
+		Workflow:   workflowName,
 		Definition: buildJobDefinition(transition),
 	}
 	if len(r.tags) > 0 {
@@ -275,56 +328,111 @@ func jobMatchesTransaction(job *wfxapi.Job, txID string) bool {
 	return ok && got == txID
 }
 
-func defaultCMPWorkflow(name string) wfxapi.Workflow {
-	activeStates := []string{
-		string(CMPStateReceived),
-		string(CMPStateParsed),
-		string(CMPStateValidated),
-		string(CMPStateResponded),
-		string(CMPStateAwaitingCertConf),
+// cmpWorkflowForName returns the WFX workflow definition matching the given
+// name. Unknown names default to the direct (synchronous) workflow.
+func cmpWorkflowForName(name string) wfxapi.Workflow {
+	if name == CMPWorkflowNamePhased {
+		return phasedCMPWorkflow(name)
 	}
-	terminalStates := []string{
-		string(CMPStateLogicallyComplete),
-		string(CMPStateConfirmed),
-		string(CMPStateRejected),
+	return directCMPWorkflow(name)
+}
+
+// cmpEdge builds a transition. Every CMP transition is performed by the backend
+// (WFX-eligible); the logical actor (device/PKI/admin) is carried in the
+// Description so the management UI can label the edge.
+func cmpEdge(from, to CMPState, actor string) wfxapi.Transition {
+	return wfxapi.Transition{
+		From:        string(from),
+		To:          string(to),
+		Eligible:    wfxapi.WFX,
+		Description: actor,
 	}
+}
+
+// commonCMPStates are the states shared by the direct and phased workflows.
+func commonCMPStates() []wfxapi.State {
+	return []wfxapi.State{
+		{Name: string(CMPStateReceived), Description: "CMP request accepted and PKIMessage decoded by Lamassu"},
+		{Name: string(CMPStateValidated), Description: "Request protection and enrollment request validated"},
+		{Name: string(CMPStateResponded), Description: "Certificate issued and IP or CP response emitted by Lamassu"},
+		{Name: string(CMPStateAwaitingCertConf), Description: "Explicit certConf still pending"},
+		{Name: string(CMPStateLogicallyComplete), Description: "Implicit confirmation granted"},
+		{Name: string(CMPStateConfirmed), Description: "certConf validated and pkiConf returned"},
+		{Name: string(CMPStateRejected), Description: "Transaction rejected or failed"},
+	}
+}
+
+// terminalCMPStates are the end states shared by every CMP workflow.
+func terminalCMPStates() []string {
+	return []string{string(CMPStateLogicallyComplete), string(CMPStateConfirmed), string(CMPStateRejected)}
+}
+
+// assembleCMPWorkflow builds a workflow from the parts that vary between
+// variants — the active-state list, any states beyond the common set, and the
+// transition list — sharing the common states, terminal states, and group
+// scaffolding. The transition list is kept explicit per variant so the
+// state machine stays auditable against the RFC.
+func assembleCMPWorkflow(name, description string, activeStates []string, extraStates []wfxapi.State, transitions []wfxapi.Transition) wfxapi.Workflow {
 	return wfxapi.Workflow{
 		Name:        name,
-		Description: "Lamassu CMP enrollment transaction lifecycle",
-		Groups: []wfxapi.Group{
-			{
-				Name:        "ACTIVE",
-				Description: "CMP transactions still in-flight on the server side",
-				States:      activeStates,
-			},
-			{
-				Name:        "TERMINAL",
-				Description: "CMP transactions that reached a terminal outcome",
-				States:      terminalStates,
-			},
-		},
-		States: []wfxapi.State{
-			{Name: string(CMPStateReceived), Description: "CMP request accepted by Lamassu"},
-			{Name: string(CMPStateParsed), Description: "PKIMessage and PKIHeader decoded"},
-			{Name: string(CMPStateValidated), Description: "Request protection and enrollment request validated"},
-			{Name: string(CMPStateResponded), Description: "Certificate issued and IP or CP response emitted by Lamassu"},
-			{Name: string(CMPStateAwaitingCertConf), Description: "Explicit certConf still pending"},
-			{Name: string(CMPStateLogicallyComplete), Description: "Implicit confirmation granted"},
-			{Name: string(CMPStateConfirmed), Description: "certConf validated and pkiConf returned"},
-			{Name: string(CMPStateRejected), Description: "Transaction rejected or failed"},
-		},
-		Transitions: []wfxapi.Transition{
-			{From: string(CMPStateReceived), To: string(CMPStateParsed), Eligible: wfxapi.WFX},
-			{From: string(CMPStateParsed), To: string(CMPStateValidated), Eligible: wfxapi.WFX},
-			{From: string(CMPStateParsed), To: string(CMPStateRejected), Eligible: wfxapi.WFX},
-			{From: string(CMPStateValidated), To: string(CMPStateResponded), Eligible: wfxapi.WFX},
-			{From: string(CMPStateValidated), To: string(CMPStateRejected), Eligible: wfxapi.WFX},
-			{From: string(CMPStateResponded), To: string(CMPStateAwaitingCertConf), Eligible: wfxapi.WFX},
-			{From: string(CMPStateResponded), To: string(CMPStateLogicallyComplete), Eligible: wfxapi.WFX},
-			{From: string(CMPStateAwaitingCertConf), To: string(CMPStateConfirmed), Eligible: wfxapi.WFX},
-			{From: string(CMPStateAwaitingCertConf), To: string(CMPStateRejected), Eligible: wfxapi.WFX},
-		},
+		Description: description,
+		Groups:      cmpGroups(activeStates, terminalCMPStates()),
+		States:      append(commonCMPStates(), extraStates...),
+		Transitions: transitions,
 	}
+}
+
+func cmpGroups(active, terminal []string) []wfxapi.Group {
+	return []wfxapi.Group{
+		{Name: "ACTIVE", Description: "CMP transactions still in-flight on the server side", States: active},
+		{Name: "TERMINAL", Description: "CMP transactions that reached a terminal outcome", States: terminal},
+	}
+}
+
+// directCMPWorkflow is the synchronous lifecycle: the certificate is issued and
+// returned inline in response to the ir/cr/kur.
+func directCMPWorkflow(name string) wfxapi.Workflow {
+	return assembleCMPWorkflow(name,
+		"Lamassu CMP enrollment transaction lifecycle (direct, synchronous issuance)",
+		[]string{string(CMPStateReceived), string(CMPStateValidated), string(CMPStateResponded), string(CMPStateAwaitingCertConf)},
+		nil,
+		[]wfxapi.Transition{
+			cmpEdge(CMPStateReceived, CMPStateValidated, CMPActorPKI),
+			cmpEdge(CMPStateReceived, CMPStateRejected, CMPActorPKI),
+			cmpEdge(CMPStateValidated, CMPStateResponded, CMPActorPKI),
+			cmpEdge(CMPStateValidated, CMPStateRejected, CMPActorPKI),
+			cmpEdge(CMPStateResponded, CMPStateAwaitingCertConf, CMPActorPKI),
+			cmpEdge(CMPStateResponded, CMPStateLogicallyComplete, CMPActorPKI),
+			cmpEdge(CMPStateAwaitingCertConf, CMPStateConfirmed, CMPActorDevice),
+			cmpEdge(CMPStateAwaitingCertConf, CMPStateRejected, CMPActorPKI),
+		},
+	)
+}
+
+// phasedCMPWorkflow is the admin-gated lifecycle: after validation the request
+// parks in AwaitingApproval and only an administrator can release it into
+// Responded (issuance) or Rejected. Until then the EE receives a "waiting"
+// response and polls (RFC 9483 §4.4 / RFC 4210 §5.3.22).
+func phasedCMPWorkflow(name string) wfxapi.Workflow {
+	return assembleCMPWorkflow(name,
+		"Lamassu CMP enrollment transaction lifecycle (phased, admin-approved issuance)",
+		[]string{string(CMPStateReceived), string(CMPStateValidated), string(CMPStateAwaitingApproval), string(CMPStateResponded), string(CMPStateAwaitingCertConf)},
+		[]wfxapi.State{{Name: string(CMPStateAwaitingApproval), Description: "Awaiting administrator approval before issuance"}},
+		[]wfxapi.Transition{
+			cmpEdge(CMPStateReceived, CMPStateValidated, CMPActorPKI),
+			cmpEdge(CMPStateReceived, CMPStateRejected, CMPActorPKI),
+			cmpEdge(CMPStateValidated, CMPStateAwaitingApproval, CMPActorPKI),
+			cmpEdge(CMPStateValidated, CMPStateRejected, CMPActorPKI),
+			// The admin-only gate: only an administrator can approve or reject a
+			// parked request.
+			cmpEdge(CMPStateAwaitingApproval, CMPStateResponded, CMPActorAdmin),
+			cmpEdge(CMPStateAwaitingApproval, CMPStateRejected, CMPActorAdmin),
+			cmpEdge(CMPStateResponded, CMPStateAwaitingCertConf, CMPActorPKI),
+			cmpEdge(CMPStateResponded, CMPStateLogicallyComplete, CMPActorPKI),
+			cmpEdge(CMPStateAwaitingCertConf, CMPStateConfirmed, CMPActorDevice),
+			cmpEdge(CMPStateAwaitingCertConf, CMPStateRejected, CMPActorPKI),
+		},
+	)
 }
 
 func buildJobDefinition(transition CMPTransition) map[string]any {

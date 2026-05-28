@@ -63,7 +63,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 				EnrollmentProtocol: models.EST,
 				EnrollmentCA:       enrollCA.ID,
 				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+					AuthMode: models.EnrollmentAuthModeClientCertificate,
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ChainLevelValidation: -1,
 						ValidationCAs:        []string{bootstrapCA.ID},
@@ -81,7 +81,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 			},
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
 				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+					AuthMode: models.EnrollmentAuthModeClientCertificate,
 				},
 				AdditionalValidationCAs:     []string{},
 				ReEnrollmentDelta:           models.TimeDuration(24 * 365 * time.Hour), // Allow re-enrollment any time within a year
@@ -249,7 +249,7 @@ func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
 			},
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
 				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+					AuthMode: models.EnrollmentAuthModeClientCertificate,
 				},
 				ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -342,7 +342,7 @@ func TestBindIdentityToDevice_MultipleBindings_TracksLatestExpiration(t *testing
 			},
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
 				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+					AuthMode: models.EnrollmentAuthModeClientCertificate,
 				},
 				ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),

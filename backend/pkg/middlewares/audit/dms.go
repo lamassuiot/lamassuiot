@@ -8,6 +8,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
@@ -58,6 +59,14 @@ func (mw DmsAuditEventPublisher) GetAll(ctx context.Context, input services.GetA
 
 func (mw DmsAuditEventPublisher) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
 	return mw.next.GetCMPTransactionsByDMS(ctx, input)
+}
+
+func (mw DmsAuditEventPublisher) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*storage.CMPTransaction, error) {
+	return mw.next.ApproveCMPTransaction(ctx, input)
+}
+
+func (mw DmsAuditEventPublisher) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*storage.CMPTransaction, error) {
+	return mw.next.RejectCMPTransaction(ctx, input)
 }
 
 func (mw DmsAuditEventPublisher) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {

@@ -14,4 +14,10 @@ const (
 	LamassuContextKeyEventSubject string = "lamassu.io/ctx/cloudevent/subject"
 
 	LamassuContextKeyMatchedPrincipals string = "lamassu.io/ctx/matched-principals"
+
+	// LamassuContextKeyPreAuthenticated signals that the request's enrollment
+	// authentication was already performed at submission time (e.g. phased
+	// workflow: the original IR was authenticated; the admin-approval step
+	// should not re-run client-cert validation since no CMP signer is present).
+	LamassuContextKeyPreAuthenticated string = "lamassu.io/ctx/pre-authenticated"
 )

@@ -20,11 +20,11 @@ type cmpTransactionRow struct {
 	TransactionID     string    `gorm:"primaryKey;column:transaction_id"`
 	DMSID             string    `gorm:"column:dms_id;not null"`
 	CertSerialNumber  string    `gorm:"column:cert_serial_number;not null;default:''"`
-	Certificate       string    `gorm:"column:certificate"`              // base64-PEM text; empty for PENDING rows
-	SentNonce         string    `gorm:"column:sent_nonce;not null;default:''"`  // hex-encoded bytes
+	Certificate       string    `gorm:"column:certificate"`                    // base64-PEM text; empty for PENDING rows
+	SentNonce         string    `gorm:"column:sent_nonce;not null;default:''"` // hex-encoded bytes
 	State             string    `gorm:"column:state;not null;default:ISSUED"`
 	ErrorMessage      string    `gorm:"column:error_message;not null;default:''"`
-	CSR               string    `gorm:"column:csr"`                      // base64-PEM text; empty for ISSUED rows
+	CSR               string    `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
 	IsReenrollment    bool      `gorm:"column:is_reenrollment;not null;default:false"`
 	RequestType       string    `gorm:"column:request_type;not null;default:''"`
 	SubjectCommonName string    `gorm:"column:subject_common_name;not null;default:''"`
@@ -93,20 +93,19 @@ func NewCMPTransactionRepository(logger *logrus.Entry, db *gorm.DB) (storage.CMP
 	return &PostgresCMPTransactionStorage{db: db, logger: logger, querier: querier}, nil
 }
 
-// Exists reports whether a non-expired transaction with the given hex
-// transactionID is present. It is a lightweight read-only check so the CMP
-// controller can reject replayed requests before triggering any enrollment
-// side-effects.
 // Exists reports whether an active (non-expired, non-terminal) transaction
 // with the given hex transactionID is present. Terminal states (CONFIRMED,
 // REVOKED) are excluded so a transactionID can be reused after completion.
+//
+// The expires_at comparison uses the database-side clock (NOW()) rather than
+// the application clock, so multiple concurrent requests see a consistent
+// notion of "expired" even under NTP slew or VM-clock correction.
 func (s *PostgresCMPTransactionStorage) Exists(ctx context.Context, transactionID string) (bool, error) {
 	var count int64
 	result := s.db.WithContext(ctx).
 		Model(&cmpTransactionRow{}).
-		Where("transaction_id = ? AND expires_at > ? AND state IN (?,?)",
+		Where("transaction_id = ? AND expires_at > "+nowExpr(s.db)+" AND state IN (?,?)",
 			transactionID,
-			time.Now(),
 			string(storage.CMPTransactionStatePending),
 			string(storage.CMPTransactionStateIssued),
 		).
@@ -116,6 +115,20 @@ func (s *PostgresCMPTransactionStorage) Exists(ctx context.Context, transactionI
 		return false, result.Error
 	}
 	return count > 0, nil
+}
+
+// nowExpr returns the SQL expression that yields "now" on the dialect of db.
+// Postgres and MySQL use NOW(); SQLite (used in tests / monolithic dev mode)
+// uses CURRENT_TIMESTAMP. Centralising this avoids application-side
+// time.Now() being interleaved with database-evaluated expires_at, which is
+// the root cause of the clock-skew TTL races flagged in the audit.
+func nowExpr(db *gorm.DB) string {
+	switch db.Dialector.Name() {
+	case "sqlite":
+		return "CURRENT_TIMESTAMP"
+	default:
+		return "NOW()"
+	}
 }
 
 // Insert persists a new CMP transaction.
@@ -147,6 +160,7 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 		RequestType:       tx.RequestType,
 		SubjectCommonName: tx.SubjectCommonName,
 		WFXJobID:          tx.WFXJobID,
+		ConfirmedAt:       tx.ConfirmedAt,
 		ExpiresAt:         tx.ExpiresAt,
 		CreatedAt:         tx.CreatedAt,
 	}
@@ -173,12 +187,11 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 func (s *PostgresCMPTransactionStorage) Select(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
 	var row cmpTransactionRow
 	result := s.db.WithContext(ctx).
-		Where("transaction_id = ? AND (state IN (?,?,?) OR expires_at > ?)",
+		Where("transaction_id = ? AND (state IN (?,?,?) OR expires_at > "+nowExpr(s.db)+")",
 			transactionID,
 			string(storage.CMPTransactionStateConfirmed),
 			string(storage.CMPTransactionStateRevoked),
 			string(storage.CMPTransactionStateIssueFailed),
-			time.Now(),
 		).
 		First(&row)
 	if result.Error != nil {
@@ -222,9 +235,9 @@ func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, tra
 	result := s.db.WithContext(ctx).
 		Raw(
 			`DELETE FROM cmp_transactions
-			  WHERE transaction_id = ? AND expires_at > ?
+			  WHERE transaction_id = ? AND expires_at > `+nowExpr(s.db)+`
 			  RETURNING *`,
-			transactionID, time.Now(),
+			transactionID,
 		).
 		Scan(&row)
 
@@ -243,24 +256,37 @@ func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, tra
 }
 
 // UpdateState transitions a transaction to a new state, atomically setting
-// CertDER (when issuing succeeded) or ErrorMessage (when it failed). A row
-// that has already expired or been deleted by another worker is silently
-// ignored — the caller sees nil error and treats the operation as a no-op.
-func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transactionID string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string) error {
+// the certificate (when issuance succeeded) or ErrorMessage (when it failed),
+// and re-bases ExpiresAt to the supplied deadline.
+//
+// The query is keyed solely by transaction_id — staleness is NOT filtered
+// here because two distinct callers need to write past-expiry rows:
+//   - the confirmation monitor transitions expired PENDING rows to
+//     ISSUE_FAILED so they remain auditable;
+//   - the admin approval path may race the monitor by a few ms across the
+//     original expires_at boundary; rejecting in that window would orphan
+//     a cert issued at the CA.
+//
+// Callers that need a staleness precondition MUST enforce it at the service
+// layer before calling UpdateState (see ApproveCMPTransaction). Returns
+// (true, nil) when a row was updated, (false, nil) when no row exists with
+// the given transaction_id.
+func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transactionID string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
 	updates := map[string]interface{}{
 		"state":         string(state),
 		"certificate":   certToString(cert),
 		"error_message": errorMessage,
+		"expires_at":    expiresAt,
 	}
 	result := s.db.WithContext(ctx).
 		Model(&cmpTransactionRow{}).
-		Where("transaction_id = ? AND expires_at > ?", transactionID, time.Now()).
+		Where("transaction_id = ?", transactionID).
 		Updates(updates)
 	if result.Error != nil {
 		s.logger.Errorf("cmp_transactions: update-state %s → %s: %v", transactionID, state, result.Error)
-		return result.Error
+		return false, result.Error
 	}
-	return nil
+	return result.RowsAffected > 0, nil
 }
 
 // SelectPending returns up to `limit` PENDING transactions whose ExpiresAt is
@@ -274,7 +300,7 @@ func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit
 		limit = 16
 	}
 	q := s.db.WithContext(ctx).
-		Where("state = ? AND expires_at > ?", string(storage.CMPTransactionStatePending), time.Now()).
+		Where("state = ? AND expires_at > "+nowExpr(s.db), string(storage.CMPTransactionStatePending)).
 		Order("created_at ASC").
 		Limit(limit)
 
@@ -298,17 +324,17 @@ func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit
 	return out, nil
 }
 
-// DeleteExpired removes transient transactions (PENDING, ISSUE_FAILED) whose
-// expires_at is strictly before now(). ISSUED rows are NOT deleted here even
-// when expired — they represent a cert that was actually issued at the CA, so
-// the CMP confirmation monitor is responsible for processing them (revoke
-// the cert at the CA, transition the row to REVOKED). Terminal states
-// (CONFIRMED, REVOKED) are never deleted by this method.
+// DeleteExpired removes ISSUE_FAILED transactions whose expires_at is in the
+// past. PENDING is intentionally NOT swept here — the confirmation monitor
+// transitions expired PENDING rows to ISSUE_FAILED (with a fresh retention
+// TTL) so the rejection is auditable and a later pollReq can surface the
+// reason to the EE. ISSUED rows are NOT deleted either — they represent a
+// cert that was actually issued at the CA, and the confirmation monitor
+// revokes them. Terminal states (CONFIRMED, REVOKED) are never deleted by
+// this method.
 func (s *PostgresCMPTransactionStorage) DeleteExpired(ctx context.Context) error {
 	result := s.db.WithContext(ctx).
-		Where("expires_at < ? AND state IN (?,?)",
-			time.Now(),
-			string(storage.CMPTransactionStatePending),
+		Where("expires_at < "+nowExpr(s.db)+" AND state = ?",
 			string(storage.CMPTransactionStateIssueFailed),
 		).
 		Delete(&cmpTransactionRow{})
@@ -322,32 +348,145 @@ func (s *PostgresCMPTransactionStorage) DeleteExpired(ctx context.Context) error
 	return nil
 }
 
-// Confirm atomically transitions a transaction from ISSUED to CONFIRMED,
-// recording the confirmation timestamp. Returns (row, true, nil) on success;
-// (zero, false, nil) if no ISSUED row was found for the given transactionID.
-func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
-	var row cmpTransactionRow
-	result := s.db.WithContext(ctx).
-		Raw(
-			`UPDATE cmp_transactions
-			  SET state = ?, confirmed_at = ?
-			  WHERE transaction_id = ? AND state = ?
-			  RETURNING *`,
-			string(storage.CMPTransactionStateConfirmed),
-			time.Now(),
-			transactionID,
-			string(storage.CMPTransactionStateIssued),
-		).
-		Scan(&row)
+// Confirm atomically transitions a transaction from ISSUED to CONFIRMED and
+// returns the prior state in the same DB round-trip. The prior state lets the
+// caller distinguish:
+//
+//   - prior == ISSUED, updated == true   → transition succeeded
+//   - prior == REVOKED, updated == false → cert already revoked by the
+//     confirmation monitor (race we must surface, not swallow)
+//   - prior == CONFIRMED, updated == false → idempotent replay of a certConf
+//   - prior == "" (zero), updated == false → row not found at all
+//
+// Implementation: a CTE captures the row state pre-update under FOR UPDATE so
+// the read/update pair is atomic, then the UPDATE conditionally fires only
+// when the state is still ISSUED. Both branches return one row to Scan.
+func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transactionID string) (storage.CMPTransaction, storage.CMPTransactionState, bool, error) {
+	type confirmRow struct {
+		cmpTransactionRow
+		PriorState string `gorm:"column:prior_state"`
+		Updated    bool   `gorm:"column:updated"`
+	}
 
-	if result.Error != nil {
-		s.logger.Errorf("cmp_transactions: confirm %s: %v", transactionID, result.Error)
-		return storage.CMPTransaction{}, false, result.Error
+	var row confirmRow
+
+	switch s.db.Dialector.Name() {
+	case "postgres", "mysql":
+		// CTE-based atomic read+update. The locked SELECT pins the row so a
+		// concurrent monitor-job revocation cannot slip between the prior-state
+		// read and the conditional update.
+		result := s.db.WithContext(ctx).
+			Raw(
+				`WITH prior AS (
+				    SELECT state FROM cmp_transactions
+				    WHERE transaction_id = ?
+				    FOR UPDATE
+				 ),
+				 updated AS (
+				    UPDATE cmp_transactions
+				    SET state = ?, confirmed_at = `+nowExpr(s.db)+`
+				    WHERE transaction_id = ? AND state = ?
+				    RETURNING *
+				 )
+				 SELECT u.*,
+				        p.state AS prior_state,
+				        (u.transaction_id IS NOT NULL) AS updated
+				   FROM prior p
+				   LEFT JOIN updated u ON true`,
+				transactionID,
+				string(storage.CMPTransactionStateConfirmed),
+				transactionID,
+				string(storage.CMPTransactionStateIssued),
+			).
+			Scan(&row)
+
+		if result.Error != nil {
+			s.logger.Errorf("cmp_transactions: confirm %s: %v", transactionID, result.Error)
+			return storage.CMPTransaction{}, "", false, result.Error
+		}
+		if result.RowsAffected == 0 {
+			// CTE returned nothing → row does not exist.
+			return storage.CMPTransaction{}, "", false, nil
+		}
+		prior := storage.CMPTransactionState(row.PriorState)
+		if !row.Updated {
+			return storage.CMPTransaction{}, prior, false, nil
+		}
+		return rowToDomain(row.cmpTransactionRow), prior, true, nil
+
+	default:
+		// SQLite (test / dev) has no CTE+UPDATE+RETURNING composition; we do the
+		// read+update in an explicit transaction. SQLite serialises writes
+		// per-database file so this is equally race-free for the single-process
+		// use cases it covers.
+		var prior storage.CMPTransactionState
+		var dataRow cmpTransactionRow
+		var updated bool
+		txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var current cmpTransactionRow
+			err := tx.Where("transaction_id = ?", transactionID).First(&current).Error
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil // prior stays ""; updated stays false
+				}
+				return err
+			}
+			prior = storage.CMPTransactionState(current.State)
+			if current.State != string(storage.CMPTransactionStateIssued) {
+				return nil
+			}
+			updates := map[string]interface{}{
+				"state":        string(storage.CMPTransactionStateConfirmed),
+				"confirmed_at": time.Now(),
+			}
+			if err := tx.Model(&current).Updates(updates).Error; err != nil {
+				return err
+			}
+			dataRow = current
+			dataRow.State = string(storage.CMPTransactionStateConfirmed)
+			updated = true
+			return nil
+		})
+		if txErr != nil {
+			s.logger.Errorf("cmp_transactions: confirm %s: %v", transactionID, txErr)
+			return storage.CMPTransaction{}, "", false, txErr
+		}
+		if !updated {
+			return storage.CMPTransaction{}, prior, false, nil
+		}
+		return rowToDomain(dataRow), prior, true, nil
 	}
-	if result.RowsAffected == 0 {
-		return storage.CMPTransaction{}, false, nil
+}
+
+// SelectExpiredPending returns up to `limit` PENDING transactions whose
+// expires_at has already passed, oldest first. The CMP confirmation
+// monitor uses this to find phased-workflow requests an administrator
+// never acted on. Symmetric to SelectExpiredIssued: same SKIP LOCKED
+// behaviour on Postgres/MySQL so two replicas don't double-process.
+func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+	if limit <= 0 {
+		limit = 100
 	}
-	return rowToDomain(row), true, nil
+	q := s.db.WithContext(ctx).
+		Where("state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStatePending)).
+		Order("expires_at ASC").
+		Limit(limit)
+
+	switch s.db.Dialector.Name() {
+	case "postgres", "mysql":
+		q = q.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
+	}
+
+	var rows []cmpTransactionRow
+	if result := q.Find(&rows); result.Error != nil {
+		s.logger.Errorf("cmp_transactions: select-expired-pending: %v", result.Error)
+		return nil, result.Error
+	}
+	out := make([]storage.CMPTransaction, len(rows))
+	for i, r := range rows {
+		out[i] = rowToDomain(r)
+	}
+	return out, nil
 }
 
 // SelectExpiredIssued returns up to `limit` ISSUED transactions whose
@@ -360,13 +499,23 @@ func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context,
 	if limit <= 0 {
 		limit = 100
 	}
-	var rows []cmpTransactionRow
-	result := s.db.WithContext(ctx).
-		Where("state = ? AND expires_at <= ?", string(storage.CMPTransactionStateIssued), time.Now()).
+	q := s.db.WithContext(ctx).
+		Where("state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStateIssued)).
 		Order("expires_at ASC").
-		Limit(limit).
-		Find(&rows)
-	if result.Error != nil {
+		Limit(limit)
+
+	// FOR UPDATE SKIP LOCKED ensures two backend replicas running the
+	// confirmation monitor concurrently each pick a disjoint set of rows
+	// rather than both racing to revoke the same certs at the CA
+	// (audit finding S4). SelectPending uses the same pattern; the omission
+	// here was the bug.
+	switch s.db.Dialector.Name() {
+	case "postgres", "mysql":
+		q = q.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
+	}
+
+	var rows []cmpTransactionRow
+	if result := q.Find(&rows); result.Error != nil {
 		s.logger.Errorf("cmp_transactions: select-expired-issued: %v", result.Error)
 		return nil, result.Error
 	}

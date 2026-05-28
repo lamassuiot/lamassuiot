@@ -33,7 +33,9 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, kmsService s
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service, conf.AuthzClient)
+	if err := routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service, conf.AuthzClient); err != nil {
+		return nil, -1, fmt.Errorf("could not register DMS Manager HTTP layer: %s", err)
+	}
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
