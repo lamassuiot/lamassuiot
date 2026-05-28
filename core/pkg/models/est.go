@@ -2,13 +2,13 @@ package models
 
 import "crypto/x509"
 
-type ESTAuthMode string
+type EnrollmentAuthMode string
 
 const (
-	ESTAuthModeClientCertificate           ESTAuthMode = "CLIENT_CERTIFICATE"
-	ESTAuthModeExternalWebhook             ESTAuthMode = "EXTERNAL_WEBHOOK"
-	ESTAuthModeClientCertificateAndWebhook ESTAuthMode = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK"
-	ESTAuthModeNoAuth                      ESTAuthMode = "NO_AUTH"
+	EnrollmentAuthModeClientCertificate           EnrollmentAuthMode = "CLIENT_CERTIFICATE"
+	EnrollmentAuthModeExternalWebhook             EnrollmentAuthMode = "EXTERNAL_WEBHOOK"
+	EnrollmentAuthModeClientCertificateAndWebhook EnrollmentAuthMode = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK"
+	EnrollmentAuthModeNoAuth                      EnrollmentAuthMode = "NO_AUTH"
 )
 
 type ESTServerAuthOptionsClientCertificate struct {
