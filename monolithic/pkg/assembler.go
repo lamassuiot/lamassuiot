@@ -329,9 +329,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
-		if conf.WfxPort > 0 {
-			addRouteMap("wfx", "/api/wfx/", conf.WfxPort)
-		}
+		// EST/CMP serve at /.well-known/* on the DMS upstream directly, so the
+		// full path is forwarded unchanged (targetPath == sourcePath).
+		registerRoute("DMS Manager - EST", "/.well-known/est", dmsPort, "/.well-known/est")
+		registerRoute("DMS Manager - CMP", "/.well-known/cmp", dmsPort, "/.well-known/cmp")
 
 		if conf.WfxNorthPort > 0 {
 			registerRoute("wfx NBI", "/api/wfx/nbi/", conf.WfxNorthPort, "/api/wfx/")
