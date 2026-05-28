@@ -286,7 +286,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		routeMaps := make(map[string]func(c *gin.Context))
 		routeList := make([]string, 0)
 
-		addRouteMap := func(serviceName, servicePath string, servicePort int) {
+		addRouteMap := func(serviceName, servicePath string, servicePort int, pathRewrite bool) {
 			subpath := servicePath
 			subpath = strings.TrimSuffix(subpath, "/")
 			color.Set(color.BgCyan)
@@ -300,8 +300,13 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				if err != nil {
 					panic(err)
 				}
-				proxyUrl := strings.TrimPrefix(c.Param("proxyPath"), subpath)
-				proxyUrl = strings.TrimSuffix(proxyUrl, "/")
+				var proxyUrl string
+				if pathRewrite {
+					proxyUrl = strings.TrimPrefix(c.Param("proxyPath"), subpath)
+					proxyUrl = strings.TrimSuffix(proxyUrl, "/")
+				} else {
+					proxyUrl = c.Param("proxyPath")
+				}
 				//emulate envoy config by generating rand request id as HTTP header to the upstream service
 				c.Request.Header.Add("x-request-id", uuid.NewString())
 				proxy := httputil.NewSingleHostReverseProxy(remote)
@@ -340,14 +345,16 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			proxy.ServeHTTP(c.Writer, c.Request)
 		}
 
-		addRouteMap("KMS", "/api/kms/", kmsPort)
-		addRouteMap("CA", "/api/ca/", caPort)
-		addRouteMap("Dev Manager", "/api/devmanager/", devPort)
-		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
-		addRouteMap("VA", "/api/va/", vaPort)
-		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+		addRouteMap("KMS", "/api/kms/", kmsPort, true)
+		addRouteMap("CA", "/api/ca/", caPort, true)
+		addRouteMap("Dev Manager", "/api/devmanager/", devPort, true)
+		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort, true)
+		addRouteMap("DMS Manager - EST", "/.well-known/est", dmsPort, false)
+		addRouteMap("DMS Manager - CMP", "/.well-known/cmp", dmsPort, false)
+		addRouteMap("VA", "/api/va/", vaPort, true)
+		addRouteMap("Alerts", "/api/alerts/", alertsPort, true)
 		if conf.WfxPort > 0 {
-			addRouteMap("wfx", "/api/wfx/", conf.WfxPort)
+			addRouteMap("wfx", "/api/wfx/", conf.WfxPort, true)
 		}
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
