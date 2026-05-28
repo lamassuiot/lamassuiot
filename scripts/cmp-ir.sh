@@ -36,7 +36,7 @@ set -euo pipefail
 # ── Parameters ─────────────────────────────────────────────────────────────────
 DMS_ID="${1:-${DMS_ID:-sample-cmp-dms}}"
 SERVER="${2:-${SERVER:-http://localhost:8080}}"
-CMP_PATH="/api/dmsmanager/.well-known/cmp/p/${DMS_ID}"
+CMP_PATH="/.well-known/cmp/p/${DMS_ID}"
 WORKDIR="${WORKDIR:-/tmp/cmp-lifecycle}"
 mkdir -p "${WORKDIR}"
 DEVICE_CN="cmp-device-$(date +%s)"
