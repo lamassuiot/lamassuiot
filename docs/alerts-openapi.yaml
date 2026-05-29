@@ -44,6 +44,41 @@ paths:
           description: Opaque bookmark token for next page retrieval
           schema:
             type: string
+        - name: sort_by
+          in: query
+          required: false
+          description: |
+            Field to sort by. Supported fields: `event_type`, `seen_at`, `counter`.
+          schema:
+            type: string
+            enum: [event_type, seen_at, counter]
+        - name: sort_mode
+          in: query
+          required: false
+          description: Sort direction.
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: filter
+          in: query
+          required: false
+          description: |
+            Filter expression. Repeat the parameter to combine multiple filters
+            (e.g. `filter=event_type[eq]:DEVICE-CREATED&filter=counter[gt]:5`).
+
+            **Supported fields and types:**
+            - `event_type` (string)
+            - `seen_at` (date)
+            - `counter` (number)
+
+            **Operators by type:**
+            - String: `eq`, `eq_ic`, `ne`, `ne_ic`, `ct`, `ct_ic`, `nc`, `nc_ic`
+            - Date: `eq`, `bf`, `af`
+            - Number: `eq`, `ne`, `lt`, `le`, `gt`, `ge`
+          schema:
+            type: string
+          explode: true
+          style: form
       responses:
         '200':
           description: Latest events grouped by type

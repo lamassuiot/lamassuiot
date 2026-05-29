@@ -45,7 +45,11 @@ func (mw *DeviceAuditEventPublisher) GetDeviceEvents(ctx context.Context, input 
 	return mw.next.GetDeviceEvents(ctx, input)
 }
 
-func (mw *DeviceAuditEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+func (mw *DeviceAuditEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (output *models.DeviceEvent, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateDeviceEventKey, input, err, output)
+	}()
+
 	return mw.next.CreateDeviceEvent(ctx, input)
 }
 

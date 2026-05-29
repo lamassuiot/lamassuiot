@@ -434,10 +434,10 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	}
 
 	if statusEvent != nil {
-		err = svc.persistDeviceEvent(ctx, device.ID, statusEventTS, *statusEvent)
-		if err != nil {
-			lFunc.Errorf("could not persist status event for device %s: %s", device.ID, err)
-			return nil, err
+		// Best-effort: the device row is already committed; failing here would leave the
+		// caller thinking the status change was rolled back when it wasn't. Log and proceed.
+		if eventErr := svc.persistDeviceEvent(ctx, device.ID, statusEventTS, *statusEvent); eventErr != nil {
+			lFunc.Errorf("could not persist status event for device %s (status change still applied): %s", device.ID, eventErr)
 		}
 	}
 
@@ -561,25 +561,21 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 		return nil, err
 	}
 
-	// Persist provisioning event
+	// Persist provisioning event (best-effort: identity slot is already committed).
 	now := time.Now()
 	if isFirstProvisioning {
-		err = svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
+		if eventErr := svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
 			EvenType:          models.DeviceEventTypeProvisioned,
 			EventDescriptions: fmt.Sprintf("Identity slot provisioned with status '%s'", newSlot.Status),
-		})
-		if err != nil {
-			lFunc.Errorf("could not persist provisioning event for device %s: %s", input.ID, err)
-			return nil, err
+		}); eventErr != nil {
+			lFunc.Errorf("could not persist provisioning event for device %s (slot change still applied): %s", input.ID, eventErr)
 		}
 	} else if slotStatusChanged {
-		err = svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
+		if eventErr := svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
 			EvenType:          models.DeviceEventTypeReProvisioned,
 			EventDescriptions: fmt.Sprintf("Identity Slot Status updated from '%s' to '%s'", oldSlotStatus, newSlot.Status),
-		})
-		if err != nil {
-			lFunc.Errorf("could not persist re-provisioning event for device %s: %s", input.ID, err)
-			return nil, err
+		}); eventErr != nil {
+			lFunc.Errorf("could not persist re-provisioning event for device %s (slot change still applied): %s", input.ID, eventErr)
 		}
 	}
 
@@ -623,13 +619,8 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 		return errs.ErrDeviceInvalidStatus
 	}
 
-	err = svc.devicesStorage.DeviceEvents().DeleteByDeviceID(ctx, id)
-	if err != nil {
-		lFunc.Errorf("could not delete events for device '%s': %s", id, err)
-		return err
-	}
-
 	lFunc.Debugf("deleting device '%s'", id)
+	// device_events rows are removed by the ON DELETE CASCADE FK on device_events.device_id.
 	err = svc.devicesStorage.Delete(ctx, id)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting device '%s' from storage engine: %s", id, err)

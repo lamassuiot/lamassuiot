@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -164,8 +165,9 @@ func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
 		return
 	}
 
-	// Content negotiation: if the client requests SSE, stream events in real time
-	if ctx.GetHeader("Accept") == "text/event-stream" {
+	// Content negotiation: if the client requests SSE, stream events in real time.
+	// Match any Accept header that includes text/event-stream (e.g. "text/event-stream, */*;q=0.5").
+	if strings.Contains(ctx.GetHeader("Accept"), "text/event-stream") {
 		r.streamDeviceEventsSSE(ctx, params.ID)
 		return
 	}
@@ -222,12 +224,36 @@ func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
 		return
 	}
 
+	// Normalize Source: external API callers are not allowed to impersonate
+	// internal service sources (service/*). Override to "api/external" unless
+	// the request comes from a trusted internal service (identified by the
+	// x-lms-source header matching a known service source).
+	source := requestBody.Source
+	if source == "" || strings.HasPrefix(source, "service/") {
+		internalSource := ctx.GetHeader("x-lms-source")
+		if internalSource != "" && strings.HasPrefix(internalSource, "service/") {
+			source = internalSource
+		} else {
+			source = "api/external"
+		}
+	}
+
+	// Normalize Timestamp: default to now; reject timestamps more than 5
+	// minutes in the future to prevent forging future events.
+	ts := requestBody.Timestamp
+	if ts.IsZero() {
+		ts = time.Now()
+	} else if ts.After(time.Now().Add(5 * time.Minute)) {
+		ctx.JSON(400, gin.H{"err": "timestamp cannot be more than 5 minutes in the future"})
+		return
+	}
+
 	event, err := r.svc.CreateDeviceEvent(ctx.Request.Context(), services.CreateDeviceEventInput{
 		DeviceID:         params.ID,
-		Timestamp:        requestBody.Timestamp,
+		Timestamp:        ts,
 		Type:             requestBody.Type,
 		Description:      requestBody.Description,
-		Source:           requestBody.Source,
+		Source:           source,
 		StructuredFields: requestBody.StructuredFields,
 	})
 	if err != nil {
@@ -659,7 +685,7 @@ func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 // Called when the client sends Accept: text/event-stream.
 func (r *devManagerHttpRoutes) streamDeviceEventsSSE(ctx *gin.Context, deviceID string) {
 	if r.sseHub == nil {
-		ctx.JSON(501, gin.H{"err": "SSE not enabled: event bus subscriber is not configured"})
+		ctx.JSON(501, gin.H{"err": "SSE is disabled by configuration or not supported in this deployment"})
 		return
 	}
 
