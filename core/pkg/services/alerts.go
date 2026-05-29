@@ -56,5 +56,5 @@ type GetEventByIDInput struct {
 }
 
 type UpdateEventRetentionSettingsInput struct {
-	AuditEventTTL string `validate:"required"`
+	AuditEventTTL models.TimeDuration `validate:"required"`
 }

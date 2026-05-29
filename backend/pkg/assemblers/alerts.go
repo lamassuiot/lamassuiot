@@ -62,7 +62,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	existingSettings, _ := retentionSettingsStore.Get(context.Background())
 	if existingSettings == nil {
 		_, err = retentionSettingsStore.Update(context.Background(), &models.EventRetentionSettings{
-			AuditEventTTL: defaultAudit,
+			AuditEventTTL: models.TimeDuration(defaultAudit),
 		})
 		if err != nil {
 			lSvc.Warnf("could not seed default event retention settings: %s", err)

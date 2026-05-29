@@ -114,5 +114,8 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 }
 
 func InitContext() context.Context {
-	return context.Background()
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthType, "system")
+	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthID, "system")
+	return ctx
 }

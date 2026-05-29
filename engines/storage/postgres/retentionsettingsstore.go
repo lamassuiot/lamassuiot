@@ -36,13 +36,13 @@ func (s *PostgresEventRetentionSettingsStore) Get(ctx context.Context) (*models.
 		return nil, fmt.Errorf("could not read event retention settings: %w", err)
 	}
 
-	auditTTL, err := time.ParseDuration(row.AuditEventTTL)
+	auditTTL, err := models.ParseDuration(row.AuditEventTTL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid audit_event_ttl %q: %w", row.AuditEventTTL, err)
 	}
 
 	return &models.EventRetentionSettings{
-		AuditEventTTL: auditTTL,
+		AuditEventTTL: models.TimeDuration(auditTTL),
 		UpdatedAt:     row.UpdatedAt,
 	}, nil
 }

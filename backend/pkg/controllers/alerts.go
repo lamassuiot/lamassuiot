@@ -190,13 +190,15 @@ func (r *alertsHttpRoutes) GetEventRetentionSettings(ctx *gin.Context) {
 }
 
 func (r *alertsHttpRoutes) UpdateEventRetentionSettings(ctx *gin.Context) {
-	var body services.UpdateEventRetentionSettingsInput
-	if err := ctx.BindJSON(&body); err != nil {
+	var requestBody resources.UpdateEventRetentionSettingsBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	settings, err := r.svc.UpdateEventRetentionSettings(ctx.Request.Context(), &body)
+	settings, err := r.svc.UpdateEventRetentionSettings(ctx.Request.Context(), &services.UpdateEventRetentionSettingsInput{
+		AuditEventTTL: requestBody.AuditEventTTL,
+	})
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

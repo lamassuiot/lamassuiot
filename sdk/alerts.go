@@ -77,7 +77,9 @@ func (cli *httpAlertsClient) GetEventRetentionSettings(ctx context.Context) (*mo
 }
 
 func (cli *httpAlertsClient) UpdateEventRetentionSettings(ctx context.Context, input *services.UpdateEventRetentionSettingsInput) (*models.EventRetentionSettings, error) {
-	settings, err := Put[models.EventRetentionSettings](ctx, cli.httpClient, cli.baseUrl+"/v1/config/event-retention", input, map[int][]error{})
+	settings, err := Put[models.EventRetentionSettings](ctx, cli.httpClient, cli.baseUrl+"/v1/config/event-retention", resources.UpdateEventRetentionSettingsBody{
+		AuditEventTTL: input.AuditEventTTL,
+	}, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}

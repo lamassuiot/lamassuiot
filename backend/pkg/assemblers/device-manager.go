@@ -6,6 +6,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -69,11 +70,14 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewDeviceEventPublisher(&eventpub.CloudEventPublisher{
+		cloudEventPublisher := &eventpub.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: serviceID,
 			Logger:    lMessaging,
-		})(svc)
+		}
+
+		svc = eventpub.NewDeviceEventPublisher(cloudEventPublisher)(svc)
+		svc = auditpub.NewDeviceAuditEventPublisher(*auditpub.NewAuditPublisher(cloudEventPublisher))(svc)
 
 		//this utilizes the middlewares from within the DeviceManager service (if svc.service.func is used instead of regular svc.func)
 		deviceSvc.SetService(svc)

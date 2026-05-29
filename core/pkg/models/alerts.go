@@ -15,8 +15,8 @@ type StoredEvent struct {
 }
 
 type EventRetentionSettings struct {
-	AuditEventTTL time.Duration `json:"audit_event_ttl"`
-	UpdatedAt     time.Time     `json:"updated_at"`
+	AuditEventTTL TimeDuration `json:"audit_event_ttl"`
+	UpdatedAt     time.Time    `json:"updated_at"`
 }
 
 type Subscription struct {

@@ -7,3 +7,7 @@ type SubscribeBody struct {
 	Conditions []models.SubscriptionCondition `json:"conditions"`
 	Channel    models.Channel                 `json:"channel"`
 }
+
+type UpdateEventRetentionSettingsBody struct {
+	AuditEventTTL models.TimeDuration `json:"audit_event_ttl"`
+}

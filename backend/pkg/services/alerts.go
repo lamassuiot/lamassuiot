@@ -81,7 +81,7 @@ func (svc *AlertsServiceBackend) storeEventInstance(ctx context.Context, input *
 		EventType:  input.Event.Type(),
 		Event:      input.Event,
 		ReceivedAt: now,
-		ExpiresAt:  now.Add(retentionSettings.AuditEventTTL),
+		ExpiresAt:  now.Add(time.Duration(retentionSettings.AuditEventTTL)),
 	}
 
 	_, err = svc.storedEventsStorage.Insert(ctx, ev)
@@ -187,13 +187,8 @@ func (svc *AlertsServiceBackend) GetEventRetentionSettings(ctx context.Context) 
 func (svc *AlertsServiceBackend) UpdateEventRetentionSettings(ctx context.Context, input *services.UpdateEventRetentionSettingsInput) (*models.EventRetentionSettings, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	auditTTL, err := time.ParseDuration(input.AuditEventTTL)
-	if err != nil {
-		return nil, err
-	}
-
 	settings, err := svc.retentionSettingsStore.Update(ctx, &models.EventRetentionSettings{
-		AuditEventTTL: auditTTL,
+		AuditEventTTL: input.AuditEventTTL,
 	})
 	if err != nil {
 		lFunc.Errorf("got unexpected error while updating retention settings: %s", err)
