@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
@@ -130,7 +131,19 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 				lSSE := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "SSE Hub")
 				sseHub = controllers.NewDeviceEventSSEHub(lSSE)
 
-				sseSubscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID+"-sse", lSSE)
+				// SSE needs fan-out across instances: every instance with connected
+				// SSE clients must receive every device.* event. With the underlying
+				// AMQP pubsub, serviceID becomes the queue suffix and instances
+				// sharing it form a competing-consumer group — only one instance
+				// would get each event, leaving SSE clients on the others silent.
+				// Append a per-process UUID so each instance binds its own queue
+				// to the exchange and they all receive the broadcast.
+				//
+				// Caveat: queues are declared durable by the eventbus layer, so
+				// queues from crashed/replaced instances linger until cleaned up
+				// out-of-band (operator tooling or RabbitMQ TTL policies).
+				sseServiceID := fmt.Sprintf("%s-sse-%s", serviceID, uuid.NewString())
+				sseSubscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, sseServiceID, lSSE)
 				if err != nil {
 					lSSE.Errorf("could not generate SSE Event Bus Subscriber: %s", err)
 					return nil, nil, err

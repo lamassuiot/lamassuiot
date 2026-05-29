@@ -59,6 +59,10 @@ const (
 	DeviceEventTypeShadowUpdated        DeviceEventType = "SHADOW-UPDATED"
 	DeviceEventTypeStatusUpdated        DeviceEventType = "STATUS-UPDATED"
 	DeviceEventTypeStatusDecommissioned DeviceEventType = "DECOMMISSIONED"
+	// DeviceEventTypeUnknown is emitted by the legacy-events migration when an
+	// event's `type` was missing in the old JSON column. Keep it in the enum so
+	// API responses for migrated rows don't violate the OpenAPI contract.
+	DeviceEventTypeUnknown DeviceEventType = "UNKNOWN"
 )
 
 type DeviceEvent struct {
