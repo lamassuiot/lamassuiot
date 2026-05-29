@@ -80,9 +80,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 
 	// Start periodic cleanup of expired stored events
 	cleanupInterval := conf.EventStorage.CleanupInterval
-	if cleanupInterval == 0 {
-		cleanupInterval = time.Hour
-	}
+
 	cleanupJob := jobs.NewAlertsEventCleanup(storedEventsStore, lJobs)
 	cleanupScheduler := jobs.NewJobScheduler(lJobs, cleanupInterval.String(), cleanupJob)
 	cleanupScheduler.Start()

@@ -250,6 +250,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
+			EventStorage: config.EventStorageConfig{
+				DefaultAuditEventTTL: time.Minute * 10,
+				CleanupInterval:      time.Second * 30,
+			},
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,
