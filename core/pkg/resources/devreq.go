@@ -25,7 +25,10 @@ type UpdateDeviceMetadataBody struct {
 }
 
 type CreateDeviceEventBody struct {
-	Timestamp        time.Time              `json:"event_ts"`
+	// omitzero (Go 1.24+) is required here: stdlib `omitempty` has no effect on
+	// time.Time because it's a struct, so the zero value would still be marshalled
+	// as "0001-01-01T00:00:00Z" if a client encoded this struct directly.
+	Timestamp        time.Time              `json:"event_ts,omitzero"`
 	Type             models.DeviceEventType `json:"type"`
 	Description      string                 `json:"description"`
 	Source           string                 `json:"source"`

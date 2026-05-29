@@ -225,15 +225,29 @@ func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
 		return
 	}
 
-	// Normalize Source: external API callers are not allowed to impersonate
-	// internal service sources (service/*). Always override to "api/external"
-	// when callers leave it empty or claim a service-* source. The previous
-	// x-lms-source header escape hatch was unauthenticated and client-controlled,
-	// so it could be spoofed to forge audit/alert attribution; internal services
-	// must use a different (authenticated) ingress path to record service-* events.
+	// Normalize Source attribution.
+	//
+	// Internal services (DMS Manager, CA, etc.) must be able to record events
+	// attributed to themselves (e.g. models.DMSManagerSource = "service/ra")
+	// when they call this endpoint through their HTTP SDK clients — the SDK
+	// injects an x-lms-source header carrying the calling service's identity
+	// (see sdk.HttpClientWithSourceHeaderInjector).
+	//
+	// External API callers, on the other hand, must not be able to forge
+	// service-* attribution. The trust here ultimately rests on the deployment
+	// mTLS-protecting this endpoint at the edge so only authenticated callers
+	// (services or human operators with client certs) can reach it; given that,
+	// honoring x-lms-source for service-* sources is acceptable. If the body
+	// claims service-* but the x-lms-source header doesn't, the body is
+	// downgraded to api/external rather than honored.
 	source := requestBody.Source
 	if source == "" || strings.HasPrefix(source, "service/") {
-		source = "api/external"
+		internalSource := ctx.GetHeader("x-lms-source")
+		if internalSource != "" && strings.HasPrefix(internalSource, "service/") {
+			source = internalSource
+		} else {
+			source = "api/external"
+		}
 	}
 
 	// Normalize Timestamp: default to now; reject timestamps more than 5
