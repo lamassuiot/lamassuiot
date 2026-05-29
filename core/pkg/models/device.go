@@ -37,7 +37,7 @@ type Device struct {
 	DMSOwner          string                    `json:"dms_owner"`
 	IdentitySlot      *Slot[string]             `json:"identity,omitempty" gorm:"serializer:json"`
 	ExtraSlots        map[string]*Slot[any]     `json:"slots" gorm:"serializer:json"`
-	Events            map[time.Time]DeviceEvent `json:"events,omitempty" gorm:"-"`
+	Events            map[time.Time]DeviceEvent `json:"-" gorm:"-"`
 }
 
 type Slot[E any] struct {

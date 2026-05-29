@@ -76,13 +76,21 @@ func (cli *deviceManagerClient) GetDeviceEvents(ctx context.Context, input servi
 }
 
 func (cli *deviceManagerClient) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
-	response, err := Post[*models.DeviceEvent](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.DeviceID+"/events", resources.CreateDeviceEventBody{
-		Timestamp:        input.Timestamp,
-		Type:             input.Type,
-		Description:      input.Description,
-		Source:           input.Source,
-		StructuredFields: input.StructuredFields,
-	}, map[int][]error{
+	// Build the body dynamically so we can omit event_ts when the caller leaves
+	// Timestamp at its zero value. Serializing time.Time{} would otherwise emit
+	// "0001-01-01T00:00:00Z" on the wire, defeating the server's
+	// "timestamp when omitted" contract.
+	body := map[string]any{
+		"type":              input.Type,
+		"description":       input.Description,
+		"source":            input.Source,
+		"structured_fields": input.StructuredFields,
+	}
+	if !input.Timestamp.IsZero() {
+		body["event_ts"] = input.Timestamp
+	}
+
+	response, err := Post[*models.DeviceEvent](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.DeviceID+"/events", body, map[int][]error{
 		400: {errs.ErrValidateBadRequest},
 		404: {errs.ErrDeviceNotFound},
 	})

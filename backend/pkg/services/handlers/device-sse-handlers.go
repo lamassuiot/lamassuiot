@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/cloudevents/sdk-go/v2/event"
@@ -41,16 +40,14 @@ func handleAnyDeviceEventForSSE(ctx context.Context, cloudEvent *event.Event, hu
 		return nil
 	}
 
-	// Forward the raw cloud event data as-is
-	var payload interface{}
-	if err := json.Unmarshal(cloudEvent.Data(), &payload); err != nil {
-		err = fmt.Errorf("could not decode cloud event data for SSE: %s", err)
-		l.Error(err)
-		return err
-	}
-
+	// Forward the raw cloud event data as-is. SSE streaming is a best-effort
+	// side channel, so we never NACK the cloud event from this handler — that
+	// would have the Watermill router retry and eventually DLQ the message,
+	// creating operational noise for what is at most a missed UI tick.
+	// Passing json.RawMessage also avoids a decode step that could fail on
+	// schema drift.
 	l.Debugf("pushing %s event to SSE hub for device %s", cloudEvent.Type(), deviceID)
-	hub.Publish(deviceID, cloudEvent.Type(), payload)
+	hub.Publish(deviceID, cloudEvent.Type(), json.RawMessage(cloudEvent.Data()))
 	return nil
 }
 
