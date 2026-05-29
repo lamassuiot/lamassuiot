@@ -154,6 +154,13 @@ func toDeviceEventRecord(deviceID string, eventTS time.Time, event models.Device
 		source = defaultDeviceEventSource
 	}
 
+	// Normalize nil → empty map so the row stores {} (matching the OpenAPI object schema)
+	// rather than JSON null, which would also surface inconsistently to API consumers.
+	structuredFields := event.StructuredFields
+	if structuredFields == nil {
+		structuredFields = map[string]any{}
+	}
+
 	return &models.DeviceEventRecord{
 		ID:               uuid.NewString(),
 		DeviceID:         deviceID,
@@ -161,7 +168,7 @@ func toDeviceEventRecord(deviceID string, eventTS time.Time, event models.Device
 		EventType:        string(event.EvenType),
 		Description:      event.EventDescriptions,
 		Source:           source,
-		StructuredFields: event.StructuredFields,
+		StructuredFields: structuredFields,
 	}
 }
 

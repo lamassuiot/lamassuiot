@@ -167,7 +167,8 @@ func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
 
 	// Content negotiation: if the client requests SSE, stream events in real time.
 	// Match any Accept header that includes text/event-stream (e.g. "text/event-stream, */*;q=0.5").
-	if strings.Contains(ctx.GetHeader("Accept"), "text/event-stream") {
+	// RFC 7231 declares media types case-insensitive, so normalize before matching.
+	if strings.Contains(strings.ToLower(ctx.GetHeader("Accept")), "text/event-stream") {
 		r.streamDeviceEventsSSE(ctx, params.ID)
 		return
 	}
@@ -225,17 +226,14 @@ func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
 	}
 
 	// Normalize Source: external API callers are not allowed to impersonate
-	// internal service sources (service/*). Override to "api/external" unless
-	// the request comes from a trusted internal service (identified by the
-	// x-lms-source header matching a known service source).
+	// internal service sources (service/*). Always override to "api/external"
+	// when callers leave it empty or claim a service-* source. The previous
+	// x-lms-source header escape hatch was unauthenticated and client-controlled,
+	// so it could be spoofed to forge audit/alert attribution; internal services
+	// must use a different (authenticated) ingress path to record service-* events.
 	source := requestBody.Source
 	if source == "" || strings.HasPrefix(source, "service/") {
-		internalSource := ctx.GetHeader("x-lms-source")
-		if internalSource != "" && strings.HasPrefix(internalSource, "service/") {
-			source = internalSource
-		} else {
-			source = "api/external"
-		}
+		source = "api/external"
 	}
 
 	// Normalize Timestamp: default to now; reject timestamps more than 5

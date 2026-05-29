@@ -231,10 +231,12 @@ paths:
                 $ref: '#/components/schemas/GetDeviceEventsResponse'
             text/event-stream:
               schema:
-                $ref: '#/components/schemas/DeviceEvent'
+                $ref: '#/components/schemas/DeviceSSEMessage'
               description: |
-                When negotiated via `Accept: text/event-stream`, each SSE message's
-                `data` field carries a single `DeviceEvent` JSON object.
+                When negotiated via `Accept: text/event-stream`, each SSE event's
+                JSON body is a `DeviceSSEMessage` envelope: an `event_type` string
+                (the CloudEvent type, e.g. `device.status.update`) and a `data`
+                field containing the underlying payload (typically a `DeviceEvent`).
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -1100,6 +1102,25 @@ components:
         structured_fields:
           type: object
           additionalProperties: true
+
+    DeviceSSEMessage:
+      type: object
+      description: |
+        Envelope streamed over Server-Sent Events for `/devices/{id}/events`.
+        `event_type` is the underlying CloudEvent type and `data` is the
+        event-specific payload (currently a `DeviceEvent` for device-event
+        streams, but may evolve to other shapes for other event types).
+      required: [event_type, data]
+      properties:
+        event_type:
+          type: string
+          description: CloudEvent type, e.g. `device.status.update`.
+        data:
+          description: Event payload. For device-event streams this is a DeviceEvent.
+          oneOf:
+            - $ref: '#/components/schemas/DeviceEvent'
+            - type: object
+              additionalProperties: true
 
     GetDeviceEventsResponse:
       type: object

@@ -76,15 +76,15 @@ var DeviceFilterableFields = map[string]FilterFieldType{
 }
 
 var DeviceEventFilterableFields = map[string]FilterFieldType{
-        "event_ts":          DateFilterFieldType,
-        "event_type":        EnumFilterFieldType,
-        "description":       StringFilterFieldType,
-        "source":            StringFilterFieldType,
-        "structured_fields": JsonFilterFieldType,
+	"event_ts":          DateFilterFieldType,
+	"event_type":        EnumFilterFieldType,
+	"description":       StringFilterFieldType,
+	"source":            StringFilterFieldType,
+	"structured_fields": JsonFilterFieldType,
 }
 
 var AlertFilterableFields = map[string]FilterFieldType{
-        "event_type": StringFilterFieldType,
-        "seen_at":    DateFilterFieldType,
-        "counter":    NumberFilterFieldType,
+	"event_type": StringFilterFieldType,
+	"seen_at":    DateFilterFieldType,
+	"counter":    NumberFilterFieldType,
 }
