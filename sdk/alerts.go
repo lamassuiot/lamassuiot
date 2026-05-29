@@ -52,6 +52,39 @@ func (cli *httpAlertsClient) HandleEvent(ctx context.Context, input *services.Ha
 	panic("This method is not intended to be called on the client side")
 }
 
+func (cli *httpAlertsClient) GetEvents(ctx context.Context, input *services.GetEventsInput) (string, error) {
+	url := cli.baseUrl + "/v1/events"
+	return IterGet[models.StoredEvent, *resources.GetItemsResponse[models.StoredEvent]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+func (cli *httpAlertsClient) GetEventByID(ctx context.Context, input *services.GetEventByIDInput) (*models.StoredEvent, error) {
+	url := fmt.Sprintf("%s/v1/events/%s", cli.baseUrl, input.ID)
+	ev, err := Get[models.StoredEvent](ctx, cli.httpClient, url, nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &ev, nil
+}
+
+func (cli *httpAlertsClient) GetEventRetentionSettings(ctx context.Context) (*models.EventRetentionSettings, error) {
+	settings, err := Get[models.EventRetentionSettings](ctx, cli.httpClient, cli.baseUrl+"/v1/config/event-retention", nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &settings, nil
+}
+
+func (cli *httpAlertsClient) UpdateEventRetentionSettings(ctx context.Context, input *services.UpdateEventRetentionSettingsInput) (*models.EventRetentionSettings, error) {
+	settings, err := Put[models.EventRetentionSettings](ctx, cli.httpClient, cli.baseUrl+"/v1/config/event-retention", input, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &settings, nil
+}
+
 func NewHttpAlertsClient(client *http.Client, url string) services.AlertsService {
 	baseURL := url
 	return &httpAlertsClient{

@@ -172,6 +172,24 @@ func (s *PostgresStorageEngine) GetSubscriptionsStorage() (storage.Subscriptions
 	return s.Subscriptions, nil
 }
 
+func (s *PostgresStorageEngine) GetStoredEventsStorage() (storage.StoredEventsRepository, error) {
+	if s.StoredEvents == nil {
+		if err := s.initialiceSubscriptionsStorage(); err != nil {
+			return nil, err
+		}
+	}
+	return s.StoredEvents, nil
+}
+
+func (s *PostgresStorageEngine) GetEventRetentionSettingsStorage() (storage.EventRetentionSettingsRepository, error) {
+	if s.EventRetentionSettings == nil {
+		if err := s.initialiceSubscriptionsStorage(); err != nil {
+			return nil, err
+		}
+	}
+	return s.EventRetentionSettings, nil
+}
+
 func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 	psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, ALERTS_DB_NAME)
 	if err != nil {
@@ -187,6 +205,20 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 
 	if s.Events == nil {
 		s.Events, err = NewEventsPostgresRepository(s.logger, psqlCli)
+		if err != nil {
+			return err
+		}
+	}
+
+	if s.StoredEvents == nil {
+		s.StoredEvents, err = NewStoredEventsPostgresRepository(s.logger, psqlCli)
+		if err != nil {
+			return err
+		}
+	}
+
+	if s.EventRetentionSettings == nil {
+		s.EventRetentionSettings, err = NewEventRetentionSettingsPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}

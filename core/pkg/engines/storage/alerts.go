@@ -19,3 +19,15 @@ type EventRepository interface {
 	InsertUpdateEvent(ctx context.Context, ev *models.AlertLatestEvent) (*models.AlertLatestEvent, error)
 	GetLatestEvents(ctx context.Context) ([]*models.AlertLatestEvent, error)
 }
+
+type StoredEventsRepository interface {
+	Insert(ctx context.Context, ev *models.StoredEvent) (*models.StoredEvent, error)
+	GetByID(ctx context.Context, id string) (bool, *models.StoredEvent, error)
+	GetAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.StoredEvent), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
+	DeleteExpired(ctx context.Context) (int64, error)
+}
+
+type EventRetentionSettingsRepository interface {
+	Get(ctx context.Context) (*models.EventRetentionSettings, error)
+	Update(ctx context.Context, settings *models.EventRetentionSettings) (*models.EventRetentionSettings, error)
+}

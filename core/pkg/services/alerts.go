@@ -5,6 +5,7 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
 type AlertsService interface {
@@ -14,6 +15,12 @@ type AlertsService interface {
 	Unsubscribe(ctx context.Context, input *UnsubscribeInput) ([]*models.Subscription, error)
 
 	GetLatestEventsPerEventType(ctx context.Context, input *GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error)
+
+	GetEvents(ctx context.Context, input *GetEventsInput) (string, error)
+	GetEventByID(ctx context.Context, input *GetEventByIDInput) (*models.StoredEvent, error)
+
+	GetEventRetentionSettings(ctx context.Context) (*models.EventRetentionSettings, error)
+	UpdateEventRetentionSettings(ctx context.Context, input *UpdateEventRetentionSettingsInput) (*models.EventRetentionSettings, error)
 }
 
 type HandleEventInput struct {
@@ -36,4 +43,18 @@ type SubscribeInput struct {
 type UnsubscribeInput struct {
 	UserID         string
 	SubscriptionID string
+}
+
+type GetEventsInput struct {
+	QueryParameters *resources.QueryParameters
+	ExhaustiveRun   bool
+	ApplyFunc       func(models.StoredEvent)
+}
+
+type GetEventByIDInput struct {
+	ID string `validate:"required"`
+}
+
+type UpdateEventRetentionSettingsInput struct {
+	AuditEventTTL string `validate:"required"`
 }

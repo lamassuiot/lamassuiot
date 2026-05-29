@@ -11,7 +11,13 @@ func NewAlertsHTTPLayer(router *gin.RouterGroup, svc services.AlertsService) {
 
 	rv1 := router.Group("/v1")
 
+	// registered before /:eventId to avoid route conflict
 	rv1.GET("/events/latest", routes.GetLatestEventsPerEventType)
+	rv1.GET("/events", routes.GetEvents)
+	rv1.GET("/events/:eventId", routes.GetEventByID)
+
+	rv1.GET("/config/event-retention", routes.GetEventRetentionSettings)
+	rv1.PUT("/config/event-retention", routes.UpdateEventRetentionSettings)
 
 	rv1.GET("/user/:userId/subscriptions", routes.GetUserSubscriptions)
 	rv1.POST("/user/:userId/subscribe", routes.Subscribe)

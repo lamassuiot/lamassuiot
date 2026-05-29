@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,25 +18,31 @@ import (
 )
 
 type AlertsServiceBackend struct {
-	subsStorage      storage.SubscriptionsRepository
-	eventStorage     storage.EventRepository
-	smtpServerConfig config.SMTPServer
-	logger           *logrus.Entry
+	subsStorage            storage.SubscriptionsRepository
+	eventStorage           storage.EventRepository
+	storedEventsStorage    storage.StoredEventsRepository
+	retentionSettingsStore storage.EventRetentionSettingsRepository
+	smtpServerConfig       config.SMTPServer
+	logger                 *logrus.Entry
 }
 
 type AlertsServiceBuilder struct {
-	SubsStorage      storage.SubscriptionsRepository
-	EventStorage     storage.EventRepository
-	SmtpServerConfig config.SMTPServer
-	Logger           *logrus.Entry
+	SubsStorage            storage.SubscriptionsRepository
+	EventStorage           storage.EventRepository
+	StoredEventsStorage    storage.StoredEventsRepository
+	RetentionSettingsStore storage.EventRetentionSettingsRepository
+	SmtpServerConfig       config.SMTPServer
+	Logger                 *logrus.Entry
 }
 
 func NewAlertsService(builder AlertsServiceBuilder) services.AlertsService {
 	return &AlertsServiceBackend{
-		subsStorage:      builder.SubsStorage,
-		eventStorage:     builder.EventStorage,
-		smtpServerConfig: builder.SmtpServerConfig,
-		logger:           builder.Logger,
+		subsStorage:            builder.SubsStorage,
+		eventStorage:           builder.EventStorage,
+		storedEventsStorage:    builder.StoredEventsStorage,
+		retentionSettingsStore: builder.RetentionSettingsStore,
+		smtpServerConfig:       builder.SmtpServerConfig,
+		logger:                 builder.Logger,
 	}
 }
 
@@ -58,6 +65,29 @@ func (svc *AlertsServiceBackend) storeLastEventInstance(ctx context.Context, inp
 	return err
 }
 
+func (svc *AlertsServiceBackend) storeEventInstance(ctx context.Context, input *services.HandleEventInput) error {
+	if !strings.HasPrefix(input.Event.Type(), "audit.") {
+		return nil
+	}
+
+	retentionSettings, err := svc.retentionSettingsStore.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	ev := &models.StoredEvent{
+		ID:         uuid.NewString(),
+		EventType:  input.Event.Type(),
+		Event:      input.Event,
+		ReceivedAt: now,
+		ExpiresAt:  now.Add(retentionSettings.AuditEventTTL),
+	}
+
+	_, err = svc.storedEventsStorage.Insert(ctx, ev)
+	return err
+}
+
 func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *services.HandleEventInput) error {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
@@ -65,6 +95,10 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *service
 	err := svc.storeLastEventInstance(ctx, input)
 	if err != nil {
 		lFunc.Errorf("could not insert/update latest event: %s", err)
+	}
+
+	if err := svc.storeEventInstance(ctx, input); err != nil {
+		lFunc.Errorf("could not store event instance: %s", err)
 	}
 
 	sendAlert := func(sub models.Subscription) {
@@ -108,6 +142,65 @@ func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context
 	}
 
 	return events, nil
+}
+
+func (svc *AlertsServiceBackend) GetEvents(ctx context.Context, input *services.GetEventsInput) (string, error) {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	nextBookmark, err := svc.storedEventsStorage.GetAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	if err != nil {
+		lFunc.Errorf("got unexpected error while reading stored events: %s", err)
+		return "", err
+	}
+
+	return nextBookmark, nil
+}
+
+func (svc *AlertsServiceBackend) GetEventByID(ctx context.Context, input *services.GetEventByIDInput) (*models.StoredEvent, error) {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	exists, ev, err := svc.storedEventsStorage.GetByID(ctx, input.ID)
+	if err != nil {
+		lFunc.Errorf("got unexpected error while reading stored event %s: %s", input.ID, err)
+		return nil, err
+	}
+
+	if !exists {
+		return nil, nil
+	}
+
+	return ev, nil
+}
+
+func (svc *AlertsServiceBackend) GetEventRetentionSettings(ctx context.Context) (*models.EventRetentionSettings, error) {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	settings, err := svc.retentionSettingsStore.Get(ctx)
+	if err != nil {
+		lFunc.Errorf("got unexpected error while reading retention settings: %s", err)
+		return nil, err
+	}
+
+	return settings, nil
+}
+
+func (svc *AlertsServiceBackend) UpdateEventRetentionSettings(ctx context.Context, input *services.UpdateEventRetentionSettingsInput) (*models.EventRetentionSettings, error) {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	auditTTL, err := time.ParseDuration(input.AuditEventTTL)
+	if err != nil {
+		return nil, err
+	}
+
+	settings, err := svc.retentionSettingsStore.Update(ctx, &models.EventRetentionSettings{
+		AuditEventTTL: auditTTL,
+	})
+	if err != nil {
+		lFunc.Errorf("got unexpected error while updating retention settings: %s", err)
+		return nil, err
+	}
+
+	return settings, nil
 }
 
 func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input *services.GetUserSubscriptionsInput) ([]*models.Subscription, error) {

@@ -6,6 +6,19 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 )
 
+type StoredEvent struct {
+	ID         string            `json:"id" gorm:"primaryKey"`
+	EventType  string            `json:"event_type"`
+	Event      cloudevents.Event `json:"event" gorm:"serializer:json"`
+	ReceivedAt time.Time         `json:"received_at"`
+	ExpiresAt  time.Time         `json:"expires_at"`
+}
+
+type EventRetentionSettings struct {
+	AuditEventTTL time.Duration `json:"audit_event_ttl"`
+	UpdatedAt     time.Time     `json:"updated_at"`
+}
+
 type Subscription struct {
 	ID               string                  `json:"id" gorm:"primaryKey"`
 	UserID           string                  `json:"user_id"`

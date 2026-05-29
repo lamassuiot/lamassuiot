@@ -42,6 +42,14 @@ func (m *MockStorageEngine) GetSubscriptionsStorage() (SubscriptionsRepository, 
 	return nil, nil
 }
 
+func (m *MockStorageEngine) GetStoredEventsStorage() (StoredEventsRepository, error) {
+	return nil, nil
+}
+
+func (m *MockStorageEngine) GetEventRetentionSettingsStorage() (EventRetentionSettingsRepository, error) {
+	return nil, nil
+}
+
 func (m *MockStorageEngine) GetVARoleStorage() (VARepo, error) {
 	return nil, nil
 }

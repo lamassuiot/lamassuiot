@@ -3,9 +3,11 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
@@ -45,18 +47,45 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "Alerts", "Service")
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Alerts", "Event Bus")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Alerts", "Storage")
+	lJobs := helpers.SetupLogger(conf.Logs.Level, "Alerts", "Jobs")
 
-	subStorage, eventStore, err := createAlertsStorageInstance(lStorage, conf.Storage)
+	subStorage, eventStore, storedEventsStore, retentionSettingsStore, err := createAlertsStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create alerts storage instance: %s", err)
 	}
 
+	// Seed default retention settings on first run
+	defaultAudit := conf.EventStorage.DefaultAuditEventTTL
+	if defaultAudit == 0 {
+		defaultAudit = 365 * 24 * time.Hour
+	}
+	existingSettings, _ := retentionSettingsStore.Get(context.Background())
+	if existingSettings == nil {
+		_, err = retentionSettingsStore.Update(context.Background(), &models.EventRetentionSettings{
+			AuditEventTTL: defaultAudit,
+		})
+		if err != nil {
+			lSvc.Warnf("could not seed default event retention settings: %s", err)
+		}
+	}
+
 	svc := lservices.NewAlertsService(lservices.AlertsServiceBuilder{
-		Logger:           lSvc,
-		SubsStorage:      subStorage,
-		EventStorage:     eventStore,
-		SmtpServerConfig: conf.SMTPConfig,
+		Logger:                 lSvc,
+		SubsStorage:            subStorage,
+		EventStorage:           eventStore,
+		StoredEventsStorage:    storedEventsStore,
+		RetentionSettingsStore: retentionSettingsStore,
+		SmtpServerConfig:       conf.SMTPConfig,
 	})
+
+	// Start periodic cleanup of expired stored events
+	cleanupInterval := conf.EventStorage.CleanupInterval
+	if cleanupInterval == 0 {
+		cleanupInterval = time.Hour
+	}
+	cleanupJob := jobs.NewAlertsEventCleanup(storedEventsStore, lJobs)
+	cleanupScheduler := jobs.NewJobScheduler(lJobs, cleanupInterval.String(), cleanupJob)
+	cleanupScheduler.Start()
 
 	if conf.SubscriberEventBus.Enabled {
 		if !conf.SubscriberDLQEventBus.Enabled {
@@ -91,21 +120,31 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	return &svc, nil
 }
 
-func createAlertsStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.SubscriptionsRepository, storage.EventRepository, error) {
+func createAlertsStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.SubscriptionsRepository, storage.EventRepository, storage.StoredEventsRepository, storage.EventRetentionSettingsRepository, error) {
 	engine, err := builder.BuildStorageEngine(logger, conf)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)
+		return nil, nil, nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
 
 	subStore, err := engine.GetSubscriptionsStorage()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not get subscriptions storage: %s", err)
+		return nil, nil, nil, nil, fmt.Errorf("could not get subscriptions storage: %s", err)
 	}
 
 	eventsStore, err := engine.GetEnventsStorage()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not get event storage: %s", err)
+		return nil, nil, nil, nil, fmt.Errorf("could not get event storage: %s", err)
 	}
 
-	return subStore, eventsStore, nil
+	storedEventsStore, err := engine.GetStoredEventsStorage()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("could not get stored events storage: %s", err)
+	}
+
+	retentionStore, err := engine.GetEventRetentionSettingsStorage()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("could not get event retention settings storage: %s", err)
+	}
+
+	return subStore, eventsStore, storedEventsStore, retentionStore, nil
 }

@@ -74,3 +74,10 @@ var DeviceFilterableFields = map[string]FilterFieldType{
 	"metadata":           JsonFilterFieldType,
 	"identity_slot":      JsonFilterFieldType,
 }
+
+var StoredEventFilterableFields = map[string]FilterFieldType{
+	"event_type":  StringFilterFieldType,
+	"received_at": DateFilterFieldType,
+	"expires_at":  DateFilterFieldType,
+	"event":       JsonFilterFieldType,
+}

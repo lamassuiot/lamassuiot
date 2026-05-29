@@ -4,7 +4,8 @@ info:
   version: 1.0.0
   description: |
     Alerts and notification subscription API for Lamassu IoT Platform.
-    Provides access to the latest events per event type and lets users manage
+    Provides access to the latest events per event type, a queryable historical
+    event log with configurable per-category retention, and lets users manage
     their alert subscriptions.
   contact:
     name: Lamassu IoT
@@ -12,6 +13,517 @@ info:
   license:
     name: Mozilla Public License 2.0
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
+
+servers:
+  - url: /api/alerts/v1
+    description: Alerts API v1
+
+tags:
+  - name: Events
+    description: Event inspection and query endpoints
+  - name: Config
+    description: Event retention configuration
+  - name: Subscriptions
+    description: Manage alert subscriptions per user
+
+paths:
+  /events/latest:
+    get:
+      tags: [Events]
+      summary: Get the latest event per event type
+      operationId: getLatestEvents
+      responses:
+        '200':
+          description: Latest events grouped by type
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertLatestEvent'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /events:
+    get:
+      tags: [Events]
+      summary: Query stored events
+      description: |
+        Returns a paginated, filterable list of all stored events.
+
+        **Category classification**: any CloudEvent whose `type` begins with
+        `audit.` is stored as category `audit`; all others are `general`.
+
+        **Filtering** uses the standard `?filter=field[op]=value` syntax:
+
+        | Field | Type | Supported operators |
+        |-------|------|---------------------|
+        | `event_type` | string | `eq`, `ne`, `ct`, `ct_ic`, `in`, `nin` |
+        | `received_at` | date | `af`, `bf` |
+        | `expires_at` | date | `af`, `bf` |
+        | `event` | JSON | `jsonpath` expression against the CloudEvent payload |
+
+        **Sorting**: `?sort_by=received_at&sort_mode=desc`
+
+        **Pagination**: `?page_size=50` and `?bookmark=<token>` from previous response.
+      operationId: getEvents
+      parameters:
+        - $ref: '#/components/parameters/Filter'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+      responses:
+        '200':
+          description: Paginated list of stored events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredEventList'
+        '400':
+          description: Invalid filter or sort parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /events/{eventId}:
+    get:
+      tags: [Events]
+      summary: Get a stored event by ID
+      operationId: getEventById
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: Stored event UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Stored event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredEvent'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /config/event-retention:
+    get:
+      tags: [Config]
+      summary: Get event retention settings
+      description: |
+        Returns the current TTL for each event category. Changes made via `PUT`
+        persist across service restarts.
+      operationId: getEventRetentionSettings
+      responses:
+        '200':
+          description: Current retention settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventRetentionSettings'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Config]
+      summary: Update event retention settings
+      description: |
+        Persists new TTL values to the database. The cleanup job will apply the
+        new TTLs on its next run.
+
+        TTL values must be valid Go duration strings, e.g. `"720h"`, `"8760h"`,
+        `"30m"`. Values are stored and returned as duration strings.
+      operationId: updateEventRetentionSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEventRetentionSettingsBody'
+            examples:
+              defaults:
+                summary: Default values
+                value:
+                  audit_event_ttl: "8760h"
+      responses:
+        '200':
+          description: Updated retention settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventRetentionSettings'
+        '400':
+          description: Invalid duration string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/{userId}/subscriptions:
+    get:
+      tags: [Subscriptions]
+      summary: List subscriptions for a user
+      operationId: getUserSubscriptions
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Invalid user identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/{userId}/subscribe:
+    post:
+      tags: [Subscriptions]
+      summary: Subscribe user to an event type
+      operationId: subscribeUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscribeBody'
+      responses:
+        '200':
+          description: Updated subscription list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Invalid request body or user identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/{userId}/unsubscribe/{subId}:
+    post:
+      tags: [Subscriptions]
+      summary: Unsubscribe user from an existing subscription
+      operationId: unsubscribeUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: subId
+          in: path
+          required: true
+          description: Subscription identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Updated subscription list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: User identifier
+      schema:
+        type: string
+
+    Filter:
+      name: filter
+      in: query
+      required: false
+      description: |
+        Filter expression in the form `field[op]=value`. Repeat for multiple
+        conditions (AND logic). Example: `?filter=category[eq]=audit`
+      schema:
+        type: string
+
+    SortBy:
+      name: sort_by
+      in: query
+      required: false
+      description: Field to sort by. Prefix with `[jsonpath]` for JSON fields.
+      schema:
+        type: string
+
+    SortMode:
+      name: sort_mode
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: asc
+
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 25
+
+    Bookmark:
+      name: bookmark
+      in: query
+      required: false
+      description: Pagination cursor returned by the previous response.
+      schema:
+        type: string
+
+  schemas:
+    StoredEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique stored-event identifier
+        event_type:
+          type: string
+          description: |
+            CloudEvent type. Only events whose type begins with `audit.` are
+            stored and returned by this API.
+          example: audit.ca.sign.certificate
+        event:
+          type: object
+          description: Full CloudEvent payload
+        received_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    StoredEventList:
+      type: object
+      properties:
+        next_bookmark:
+          type: string
+          description: Opaque cursor for the next page. Empty when no more pages.
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoredEvent'
+
+    EventRetentionSettings:
+      type: object
+      properties:
+        audit_event_ttl:
+          type: string
+          description: Retention TTL for audit events as a Go duration string.
+          example: "8760h"
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp of the last settings update.
+
+    UpdateEventRetentionSettingsBody:
+      type: object
+      required: [audit_event_ttl]
+      properties:
+        audit_event_ttl:
+          type: string
+          description: Go duration string, e.g. `"8760h"` for 1 year.
+          example: "8760h"
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Subscription identifier
+        user_id:
+          type: string
+        event_type:
+          $ref: '#/components/schemas/EventType'
+        subscription_ts:
+          type: string
+          format: date-time
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionCondition'
+        channel:
+          $ref: '#/components/schemas/Channel'
+
+    SubscriptionCondition:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/ConditionType'
+        condition:
+          type: string
+          description: Condition expression (JSON Schema, JSONPath, or JavaScript)
+
+    SubscribeBody:
+      type: object
+      required: [event_type, channel]
+      properties:
+        event_type:
+          $ref: '#/components/schemas/EventType'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionCondition'
+        channel:
+          $ref: '#/components/schemas/Channel'
+
+    Channel:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/ChannelType'
+        name:
+          type: string
+        config:
+          description: Channel specific configuration payload
+          oneOf:
+            - $ref: '#/components/schemas/EmailConfig'
+            - $ref: '#/components/schemas/MSTeamsChannelConfig'
+            - $ref: '#/components/schemas/WebhookChannelConfig'
+            - type: object
+              description: Generic config for other channel types
+
+    EmailConfig:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+
+    MSTeamsChannelConfig:
+      type: object
+      properties:
+        webhook_url:
+          type: string
+          format: uri
+
+    WebhookChannelConfig:
+      type: object
+      properties:
+        webhook_url:
+          type: string
+          format: uri
+        webhook_method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+
+    AlertLatestEvent:
+      type: object
+      properties:
+        event_type:
+          $ref: '#/components/schemas/EventType'
+        event:
+          type: object
+          description: CloudEvent payload for the latest event
+        seen_at:
+          type: string
+          format: date-time
+        counter:
+          type: integer
+
+    EventType:
+      type: string
+      description: Event type identifier
+
+    ConditionType:
+      type: string
+      enum: [JSON-SCHEMA, JSON-PATH, JAVASCRIPT]
+
+    ChannelType:
+      type: string
+      enum: [EMAIL, MSTEAMS, WEBHOOK]
+
+    Error:
+      type: object
+      properties:
+        err:
+          type: string
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+
+security:
+  - BearerAuth: []
+
 
 servers:
   - url: /api/alerts/v1

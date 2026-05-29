@@ -178,6 +178,28 @@ func initializeSchema(db *gorm.DB) error {
 			tags TEXT DEFAULT '[]',
 			PRIMARY KEY (key_id)
 		)`,
+
+		// Stored Events table - Final state (00000000000002_add_stored_events.sql)
+		`CREATE TABLE IF NOT EXISTS stored_events (
+			id TEXT NOT NULL,
+			event_type TEXT NOT NULL,
+			event TEXT NOT NULL,
+			received_at DATETIME NOT NULL,
+			expires_at DATETIME NOT NULL,
+			PRIMARY KEY (id)
+		)`,
+
+		// Event Retention Settings table - single-row config (id=1)
+		`CREATE TABLE IF NOT EXISTS event_retention_settings (
+			id INTEGER NOT NULL,
+			audit_event_ttl TEXT NOT NULL DEFAULT '8760h',
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			CHECK (id = 1)
+		)`,
+
+		// Seed default retention settings row
+		`INSERT OR IGNORE INTO event_retention_settings (id, audit_event_ttl) VALUES (1, '8760h')`,
 	}
 
 	for _, stmt := range statements {
