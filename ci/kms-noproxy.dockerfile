@@ -20,22 +20,19 @@ COPY vendor vendor
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
-RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
-
-##############
-
-ENV GOSUMDB=off
+# CGO must remain enabled: miekg/pkcs11 uses dlopen via CGO to load the PKCS11
+# module at runtime, so a purely static CGO_ENABLED=0 build is not possible.
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
-    CGO_ENABLED=0 GOOS=linux \
     go build \
       -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \
       -mod vendor \
-      -o ca-to-kms-migration \
-      backend/cmd/ca-to-kms-migration/main.go
+      -o kms \
+      backend/cmd/kms/main.go
 
-# gcr.io/distroless/static-debian12:nonroot provides:
-#   - a minimal (~2 MB) static-binary runtime with CA certificates and tzdata included
-#   - a pre-configured non-root user (UID/GID 65532) with no shell or package manager
-FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=builder /app/ca-to-kms-migration /ca-to-kms-migration
-ENTRYPOINT ["/ca-to-kms-migration"]
+# Runtime stage: distroless/cc provides glibc (required by the CGO-linked
+# binary) and ca-certificates, without including pkcs11-proxy.
+# Users who need pkcs11-proxy should deploy it as a sidecar and mount
+# libpkcs11-proxy.so via a shared volume, or use the kms.dockerfile variant.
+FROM gcr.io/distroless/cc-debian12:nonroot
+COPY --from=builder /app/kms /kms
+CMD ["/kms"]
