@@ -19,7 +19,7 @@ import (
 
 var deviceValidate *validator.Validate
 
-const defaultDeviceEventSource = "service/devmanager"
+const defaultDeviceEventSource = models.DeviceManagerSource
 
 type DeviceMiddleware func(services.DeviceManagerService) services.DeviceManagerService
 

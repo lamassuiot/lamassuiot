@@ -227,24 +227,17 @@ func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
 
 	// Normalize Source attribution.
 	//
-	// Internal services (DMS Manager, CA, etc.) must be able to record events
-	// attributed to themselves (e.g. models.DMSManagerSource = "service/ra")
-	// when they call this endpoint through their HTTP SDK clients — the SDK
-	// injects an x-lms-source header carrying the calling service's identity
-	// (see sdk.HttpClientWithSourceHeaderInjector).
+	// Priority: body > x-lms-source header > "api/external".
 	//
-	// External API callers, on the other hand, must not be able to forge
-	// service-* attribution. The trust here ultimately rests on the deployment
-	// mTLS-protecting this endpoint at the edge so only authenticated callers
-	// (services or human operators with client certs) can reach it; given that,
-	// honoring x-lms-source for service-* sources is acceptable. If the body
-	// claims service-* but the x-lms-source header doesn't, the body is
-	// downgraded to api/external rather than honored.
+	// Internal SDK clients (DMS Manager, CA, etc.) inject an x-lms-source
+	// header via sdk.HttpClientWithSourceHeaderInjector but leave the body
+	// field empty, so the header acts as the fallback for service-attributed
+	// events. Callers that provide an explicit source in the body bypass the
+	// header entirely.
 	source := requestBody.Source
-	if source == "" || strings.HasPrefix(source, "service/") {
-		internalSource := ctx.GetHeader("x-lms-source")
-		if internalSource != "" && strings.HasPrefix(internalSource, "service/") {
-			source = internalSource
+	if source == "" {
+		if ctx.GetHeader(models.HttpSourceHeader) != "" {
+			source = ctx.GetHeader(models.HttpSourceHeader)
 		} else {
 			source = "api/external"
 		}
