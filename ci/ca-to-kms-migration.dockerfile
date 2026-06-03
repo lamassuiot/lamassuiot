@@ -1,6 +1,11 @@
 FROM golang:1.26.2-bookworm AS builder
 WORKDIR /app
 
+# Copy workspace manifests first so the vendor step is cached independently
+# from version-only rebuilds (ARG SHA1VER/VERSION come later).
+COPY go.work go.work
+COPY go.work.sum go.work.sum
+
 COPY core core
 COPY shared shared
 COPY sdk sdk
@@ -8,42 +13,24 @@ COPY backend backend
 COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
+COPY vendor vendor
 
-COPY go.work go.work
-COPY go.work.sum go.work.sum
-
+# Build args are declared after vendoring so that a version-only change does
+# not bust the vendor cache layer.
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
-RUN go work vendor
-
-##############
-
-ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
-    CGO_ENABLED=0 go build \
-    -ldflags "-X main.version=$VERSION \
-    -X main.sha1ver=$SHA1VER \
-    -X main.buildTime=$now" \
-    -mod vendor \
-    -o ca-to-kms-migration \
-    backend/cmd/ca-to-kms-migration/main.go
+    CGO_ENABLED=0 GOOS=linux \
+    go build \
+      -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \
+      -mod vendor \
+      -o ca-to-kms-migration \
+      backend/cmd/ca-to-kms-migration/main.go
 
-FROM alpine:3.19
-
-RUN apk --no-cache add ca-certificates tzdata
-
-ARG USERNAME=migrate
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-
-RUN addgroup -g "$USER_GID" "$USERNAME" && \
-    adduser -D -u "$USER_UID" -G "$USERNAME" "$USERNAME"
-
-USER $USERNAME
-
-WORKDIR /home/$USERNAME
-
-COPY --from=builder /app/ca-to-kms-migration ./ca-to-kms-migration
-
-ENTRYPOINT ["./ca-to-kms-migration"]
+# gcr.io/distroless/static-debian12:nonroot provides:
+#   - a minimal (~2 MB) static-binary runtime with CA certificates and tzdata included
+#   - a pre-configured non-root user (UID/GID 65532) with no shell or package manager
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /app/ca-to-kms-migration /ca-to-kms-migration
+ENTRYPOINT ["/ca-to-kms-migration"]
