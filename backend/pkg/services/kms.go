@@ -17,6 +17,7 @@ import (
 	"time"
 
 	circlSign "cloudflare/circl/sign"
+	"cloudflare/circl/sign/slhdsa"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
@@ -635,6 +636,64 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		size = 256
 		algorithm = "Ed25519"
 		keyID, signer, err = engineInstance.ImportEd25519PrivateKey(k)
+	case circlSign.PrivateKey:
+		schemeName := k.Scheme().Name()
+		switch schemeName {
+		case "ML-DSA-44":
+			size = 44
+		case "ML-DSA-65":
+			size = 65
+		case "ML-DSA-87":
+			size = 87
+		}
+
+		if size != 0 {
+			algorithm = "ML-DSA"
+			err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+			if err != nil {
+				lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+				return nil, err
+			}
+			keyID, signer, err = engineInstance.ImportMLDSAPrivateKey(k)
+		} else if strings.HasPrefix(schemeName, "SLH-DSA-") {
+			algorithm = "SLH-DSA"
+			id, idErr := slhdsa.IDByName(schemeName)
+			if idErr != nil {
+				lFunc.Errorf("unsupported SLH-DSA scheme: %s", schemeName)
+				return nil, fmt.Errorf("unsupported SLH-DSA scheme: %s", schemeName)
+			}
+			size = int(id)
+
+			err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+			if err != nil {
+				lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+				return nil, err
+			}
+			keyID, signer, err = engineInstance.ImportSLHDSAPrivateKey(k)
+		} else {
+			lFunc.Errorf("unsupported circlSign key scheme: %s", schemeName)
+			return nil, fmt.Errorf("unsupported circlSign key scheme: %s", schemeName)
+		}
+	case *x509.CompositePrivateKey:
+		algorithm = "Composite-ML-DSA-RSA"
+		alg := k.Algorithm()
+		for i, ca := range x509.CompositeAlgorithms {
+			if ca == alg {
+				size = i + 1
+				break
+			}
+		}
+		if size == 0 {
+			lFunc.Errorf("unsupported composite algorithm")
+			return nil, errors.New("unsupported composite algorithm")
+		}
+
+		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.ImportCompositeMLDSARSAPrivateKey(k)
 	default:
 		lFunc.Errorf("unsupported private key type")
 		return nil, errors.New("unsupported private key type")

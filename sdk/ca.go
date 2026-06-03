@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	circlSign "cloudflare/circl/sign"
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -199,12 +200,11 @@ func (cli *httpCAClient) CreateHybridCA(ctx context.Context, input services.Crea
 	return response, nil
 }
 
-
 func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
 	if input.Key != nil {
 		switch input.Key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey:
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, circlSign.PrivateKey, *x509.CompositePrivateKey:
 			bytes, err := x509.MarshalPKCS8PrivateKey(input.Key)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal private key: %w", err)
