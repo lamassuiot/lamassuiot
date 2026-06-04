@@ -21,6 +21,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/storage v1.59.2 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.6 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0 // indirect

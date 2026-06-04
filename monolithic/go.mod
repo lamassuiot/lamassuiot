@@ -53,6 +53,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/storage v1.59.2 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect

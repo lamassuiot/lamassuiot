@@ -173,7 +173,7 @@ func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
 		return
 	}
 
-	queryParams, err := FilterQuery(ctx.Request, resources.DeviceEventFilterableFields)
+	queryParams, err := FilterQuery(ctx, ctx.Request, resources.DeviceEventFilterableFields)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
