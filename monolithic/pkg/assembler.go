@@ -179,6 +179,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,
+			SSEEnabled:            conf.SSEEnabled,
 		}, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)

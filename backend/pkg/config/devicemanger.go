@@ -10,6 +10,7 @@ type DeviceManagerConfig struct {
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
 	SubscriberDLQEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
 	Storage               cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
 	CAClient              struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
