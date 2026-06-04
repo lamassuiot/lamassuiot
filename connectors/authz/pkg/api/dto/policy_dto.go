@@ -1,6 +1,8 @@
 package dto
 
 import (
+	"time"
+
 	"github.com/lamassuiot/authz/pkg/models"
 )
 
@@ -25,6 +27,8 @@ type PolicyResponse struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Rules       []*models.Rule `json:"rules"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
 // PolicyListResponse represents a list of policies
@@ -50,6 +54,8 @@ func ToPolicyResponse(policy *models.Policy) *PolicyResponse {
 		Name:        policy.Name,
 		Description: policy.Description,
 		Rules:       policy.Rules,
+		CreatedAt:   policy.CreatedAt,
+		UpdatedAt:   policy.UpdatedAt,
 	}
 }
 

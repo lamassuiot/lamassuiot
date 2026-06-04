@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -128,7 +129,7 @@ func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/policies [get]
 func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
-	policies, err := ctrl.policyManager.ListPolicies(c.Request.Context())
+	policies, _, err := ctrl.policyManager.ListPolicies(c.Request.Context(), nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to list policies",
@@ -263,8 +264,9 @@ func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 // @Router /api/v1/policies/{id}/stats [get]
 func (ctrl *PolicyController) GetPolicyStats(c *gin.Context) {
 	policyID := c.Param("id")
+	ctx := c.Request.Context()
 
-	stats, err := ctrl.policyManager.GetPolicyStats(c.Request.Context(), policyID, ctrl.principalManager)
+	policy, err := ctrl.policyManager.GetPolicy(ctx, policyID)
 	if err != nil {
 		if err.Error() == "policy not found: "+policyID {
 			c.JSON(http.StatusNotFound, dto.ErrorResponse{
@@ -280,17 +282,18 @@ func (ctrl *PolicyController) GetPolicyStats(c *gin.Context) {
 		return
 	}
 
-	response := &dto.PolicyStatsResponse{
-		ID:             stats.ID,
-		Name:           stats.Name,
-		RuleCount:      stats.RuleCount,
-		PrincipalCount: stats.PrincipalCount,
-		SizeBytes:      stats.SizeBytes,
+	var principalCount int64
+	if ctrl.principalManager != nil {
+		principalCount, _ = ctrl.principalManager.CountPolicyPrincipals(policyID)
 	}
 
-	if !stats.LastModified.IsZero() {
-		response.LastModified = stats.LastModified.Format("2006-01-02T15:04:05Z07:00")
-	}
+	rulesJSON, _ := json.Marshal(policy.Rules)
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, &dto.PolicyStatsResponse{
+		ID:             policy.ID,
+		Name:           policy.Name,
+		RuleCount:      len(policy.Rules),
+		PrincipalCount: principalCount,
+		SizeBytes:      int64(len(rulesJSON)),
+	})
 }

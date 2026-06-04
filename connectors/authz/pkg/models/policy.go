@@ -4,7 +4,51 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
+
+// PolicyRecord is the GORM model that persists a Policy in the authz Postgres database.
+// The rules slice is stored as JSONB so it can be filtered with Postgres JSONPath operators.
+type PolicyRecord struct {
+	ID          string          `gorm:"primaryKey;size:255"          json:"id"`
+	Name        string          `gorm:"size:255;not null;index"       json:"name"`
+	Description string          `gorm:"size:1024;index"               json:"description,omitempty"`
+	Rules       json.RawMessage `gorm:"type:jsonb;not null"           json:"rules"`
+	CreatedAt   time.Time       `                                      json:"createdAt"`
+	UpdatedAt   time.Time       `                                      json:"updatedAt"`
+}
+
+func (PolicyRecord) TableName() string { return "policies" }
+
+// ToPolicy converts a PolicyRecord back into a Policy domain object.
+func (r *PolicyRecord) ToPolicy() (*Policy, error) {
+	var rules []*Rule
+	if err := json.Unmarshal(r.Rules, &rules); err != nil {
+		return nil, fmt.Errorf("unmarshal rules for policy %s: %w", r.ID, err)
+	}
+	return &Policy{
+		ID:          r.ID,
+		Name:        r.Name,
+		Description: r.Description,
+		Rules:       rules,
+		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
+	}, nil
+}
+
+// PolicyRecordFromPolicy builds a PolicyRecord from a Policy domain object.
+func PolicyRecordFromPolicy(p *Policy) (*PolicyRecord, error) {
+	raw, err := json.Marshal(p.Rules)
+	if err != nil {
+		return nil, fmt.Errorf("marshal rules for policy %s: %w", p.ID, err)
+	}
+	return &PolicyRecord{
+		ID:          p.ID,
+		Name:        p.Name,
+		Description: p.Description,
+		Rules:       raw,
+	}, nil
+}
 
 // ColumnFilter specifies a column-value condition that scopes rule access.
 // It is the attribute-based counterpart to DirectGrants: instead of granting
@@ -109,10 +153,12 @@ func (r RelationRule) MarshalJSON() ([]byte, error) {
 
 // Policy contains a collection of rules with metadata
 type Policy struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Rules       []*Rule `json:"rules"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Rules       []*Rule   `json:"rules"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // HasAction checks if a rule supports a specific action for direct access

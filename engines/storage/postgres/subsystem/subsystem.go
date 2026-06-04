@@ -35,7 +35,9 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 
 	for _, schemaName := range p.schemas {
 		m := postgres.NewMigrator(logger, postgresEngine.DB[schemaName])
-		m.MigrateToLatest()
+		if m != nil {
+			m.MigrateToLatest()
+		}
 	}
 
 	beforeEach := func() error {

@@ -6,18 +6,18 @@ import (
 
 	"github.com/lamassuiot/authz/pkg/api"
 	authzconfig "github.com/lamassuiot/authz/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
-	_ "gocloud.dev/blob/fileblob"
 )
 
 const readyToAuthz = `
- $$$$$$\  $$\   $$\ $$$$$$$$\ $$\   $$\       $$$$$$$$\ 
+ $$$$$$\  $$\   $$\ $$$$$$$$\ $$\   $$\       $$$$$$$$\
 $$  __$$\ $$ |  $$ |\__$$  __|$$ |  $$ |      \____$$  |
-$$ /  $$ |$$ |  $$ |   $$ |   $$ |  $$ |           $$  / 
-$$$$$$$$ |$$ |  $$ |   $$ |   $$$$$$$$ |$$$$$$\   $$  /  
-$$  __$$ |$$ |  $$ |   $$ |   $$  __$$ |\______| $$  /   
-$$ |  $$ |$$ |  $$ |   $$ |   $$ |  $$ |        $$  /    
-$$ |  $$ |\$$$$$$  |   $$ |   $$ |  $$ |       $$$$$$$$\ 
+$$ /  $$ |$$ |  $$ |   $$ |   $$ |  $$ |           $$  /
+$$$$$$$$ |$$ |  $$ |   $$ |   $$$$$$$$ |$$$$$$\   $$  /
+$$  __$$ |$$ |  $$ |   $$ |   $$  __$$ |\______| $$  /
+$$ |  $$ |$$ |  $$ |   $$ |   $$ |  $$ |        $$  /
+$$ |  $$ |\$$$$$$  |   $$ |   $$ |  $$ |       $$$$$$$$\
 \__|  \__| \______/    \__|   \__|  \__|       \________|`
 
 func main() {
@@ -32,14 +32,16 @@ func main() {
 	}
 
 	// Map pkg/config types to api.Config
-	credentials := make(map[string]api.CredentialConfig, len(appCfg.Credentials))
+	credentials := make(map[string]config.PluggableStorageEngine, len(appCfg.Credentials))
 	for name, cred := range appCfg.Credentials {
-		credentials[name] = api.CredentialConfig{
-			Username: cred.Username,
-			Password: cred.Password,
-			Host:     cred.Host,
-			Port:     cred.Port,
-			Database: cred.Database,
+		credentials[name] = config.PluggableStorageEngine{
+			Config: map[string]interface{}{
+				"username": cred.Username,
+				"password": cred.Password,
+				"host":     cred.Host,
+				"port":     cred.Port,
+				"database": cred.Database,
+			},
 		}
 	}
 
@@ -50,6 +52,15 @@ func main() {
 		Schemas:     appCfg.Schemas,
 		Credentials: credentials,
 		PreloadDir:  *preloadDir,
+		AuthzDB: config.PluggableStorageEngine{
+			Config: map[string]interface{}{
+				"username": appCfg.AuthzDB.Username,
+				"password": appCfg.AuthzDB.Password,
+				"host":     appCfg.AuthzDB.Host,
+				"port":     appCfg.AuthzDB.Port,
+				"database": appCfg.AuthzDB.Database,
+			},
+		},
 	}
 
 	logrus.Info("Database and Policy Store initialized")

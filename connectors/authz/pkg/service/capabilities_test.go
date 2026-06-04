@@ -6,11 +6,10 @@ import (
 
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/authz/pkg/store"
 	"github.com/lamassuiot/authz/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gocloud.dev/blob"
-	_ "gocloud.dev/blob/fileblob"
 	"gorm.io/gorm"
 )
 
@@ -291,15 +290,10 @@ func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 	db := postgres.DB
 	eng := setupIoTEngine(t, db)
 
-	principalManager, err := NewPrincipalManager(db, nil)
+	principalManager, err := NewPrincipalManager(db)
 	require.NoError(t, err)
 
-	tempDir := t.TempDir()
-	bucket, err := blob.OpenBucket(context.Background(), "file://"+tempDir)
-	require.NoError(t, err)
-	defer bucket.Close()
-
-	policyManager := NewPolicyManager(bucket)
+	policyManager := NewPolicyManager(store.NewInMemoryPolicyStore())
 
 	policy := &models.Policy{
 		ID:   "principal-policy",
