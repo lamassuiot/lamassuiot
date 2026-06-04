@@ -78,11 +78,15 @@ func (g *AuthorizationGraph) BuildFromPoliciesAndSchemas(policies *PolicyRegistr
 			}
 
 			if matchedSchemas == 0 && (rule.SchemaName == "*" || rule.EntityType == "*") {
-				return fmt.Errorf("wildcard rule matched no schemas: namespace=%s schemaName=%s entityType=%s",
+				// No schemas registered for this namespace yet — skip this rule rather than
+				// aborting the entire graph build. The namespace may be loaded later or may
+				// simply not be present in the current schema registry.
+				fmt.Printf("Warning: wildcard rule matched no schemas: namespace=%s schemaName=%s entityType=%s (skipping rule)\n",
 					rule.Namespace,
 					rule.SchemaName,
 					rule.EntityType,
 				)
+				continue
 			}
 		}
 	}
