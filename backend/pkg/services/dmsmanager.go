@@ -853,6 +853,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
+	reEnrollAuthSettings := reEnrollSettings.ReEnrollmentOptionsESTRFC7030
 
 	lFunc = lFunc.WithField("step", "Authenticating")
 	lFunc.Infof("starting authentication process")
@@ -860,7 +861,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	validateCert := func(ctx context.Context, lFunc *logrus.Entry, clientCerts []*x509.Certificate) (*logrus.Entry, error) {
 		return svc.validateClientCertificateReenrollment(ctx, lFunc, enrollCAID, enrollCA, reEnrollSettings, clientCerts, csr.Subject.CommonName)
 	}
-	lFunc, err = svc.authenticateEST(ctx, lFunc, enrollSettings.EnrollmentOptionsESTRFC7030, csr, aps, "reenrollment", validateCert)
+	lFunc, err = svc.authenticateEST(ctx, lFunc, reEnrollAuthSettings, csr, aps, "reenrollment", validateCert)
 	if err != nil {
 		return nil, err
 	}
