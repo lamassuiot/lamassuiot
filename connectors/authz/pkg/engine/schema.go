@@ -365,13 +365,24 @@ func (s *SchemaDefinition) NamespacedType() string {
 	return fmt.Sprintf("%s.%s.%s", s.ConfigSchema, s.SchemaName, s.EntityType)
 }
 
-// QualifiedTableName returns the fully qualified table name (schema.table)
+// QualifiedTableName returns the fully qualified table name (schema.table) for use in
+// FROM and JOIN clauses. Do NOT use this for qualifying column references in WHERE/ON
+// expressions — PostgreSQL does not support the three-part schema.table.column syntax.
+// Use ColumnQualifier() for that purpose.
 func (s *SchemaDefinition) QualifiedTableName() string {
 	if s.SchemaName == "" || s.SchemaName == "public" {
 		// For public schema or empty, just return table name (PostgreSQL default)
 		return s.TableName
 	}
 	return fmt.Sprintf("%s.%s", s.SchemaName, s.TableName)
+}
+
+// ColumnQualifier returns the table name to use when qualifying column references in
+// SQL WHERE/ON clauses (i.e. the "table" part of "table.column"). PostgreSQL does not
+// support the three-part schema.table.column syntax in expressions, so we always return
+// the unqualified table name here. The schema is resolved automatically via search_path.
+func (s *SchemaDefinition) ColumnQualifier() string {
+	return s.TableName
 }
 
 // GetFilterableField returns the FilterableField declaration for a column name, or nil if not declared.

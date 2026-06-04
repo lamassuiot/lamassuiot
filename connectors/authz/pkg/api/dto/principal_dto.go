@@ -20,7 +20,6 @@ type CreatePrincipalRequest struct {
 type UpdatePrincipalRequest struct {
 	Name        *string            `json:"name,omitempty"`
 	Description *string            `json:"description,omitempty" binding:"omitempty,max=1024"`
-	Enabled     *bool              `json:"enabled,omitempty"`
 	AuthConfig  *models.AuthConfig `json:"authConfig,omitempty"`
 	Active      *bool              `json:"active,omitempty"`
 }
@@ -31,7 +30,6 @@ type PrincipalResponse struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description,omitempty"`
 	Type        string             `json:"type"`
-	Enabled     bool               `json:"enabled"`
 	AuthConfig  *models.AuthConfig `json:"authConfig"`
 	Active      bool               `json:"active"`
 	CreatedAt   time.Time          `json:"createdAt"`

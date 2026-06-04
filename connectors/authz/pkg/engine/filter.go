@@ -69,7 +69,7 @@ func formatColumnFilterValue(v interface{}) string {
 // Multiple filters are ANDed together. Returns empty string if no filters.
 // Returns an error if a column is not declared as filterable in the schema.
 func buildColumnFilterConditions(schema *SchemaDefinition, cf []models.ColumnFilter) (string, error) {
-	return buildColumnFilterConditionsWithPrefix(schema, cf, schema.QualifiedTableName())
+	return buildColumnFilterConditionsWithPrefix(schema, cf, schema.ColumnQualifier())
 }
 
 // buildColumnFilterConditionsWithPrefix is like buildColumnFilterConditions but uses a custom
@@ -178,7 +178,7 @@ func (fg *FilterGenerator) GenerateListFilter(action, targetSchemaName, targetEn
 				}
 				// Qualify the column name with the table name to avoid ambiguity
 				result.Conditions = append(result.Conditions, fmt.Sprintf("%s.%s IN (%s)",
-					schema.QualifiedTableName(), schema.PrimaryKeys[0], strings.Join(quotedGrants, ", ")))
+					schema.ColumnQualifier(), schema.PrimaryKeys[0], strings.Join(quotedGrants, ", ")))
 			}
 		}
 
@@ -296,7 +296,7 @@ func (fg *FilterGenerator) GenerateCheckFilter(action, schemaName, entityType st
 
 	// Wrap access conditions in parentheses and AND with entity key check
 	accessCondition := "(" + strings.Join(result.Conditions, " OR ") + ")"
-	entityKeyCondition, err := schema.EntityKeyCondition(entityKey, schema.QualifiedTableName())
+	entityKeyCondition, err := schema.EntityKeyCondition(entityKey, schema.ColumnQualifier())
 	if err != nil {
 		return nil, fmt.Errorf("invalid entityKey: %w", err)
 	}
@@ -434,7 +434,7 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
-				targetSchema.QualifiedTableName(),
+				targetSchema.ColumnQualifier(),
 				edge.ForeignKey,
 				alias,
 				fromSchema.PrimaryKeys[0])
@@ -508,7 +508,7 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
-				targetSchema.QualifiedTableName(),
+				targetSchema.ColumnQualifier(),
 				edge.ForeignKey,
 				alias,
 				fromSchema.PrimaryKeys[0])
@@ -614,7 +614,7 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
-				targetSchema.QualifiedTableName(),
+				targetSchema.ColumnQualifier(),
 				edge.ForeignKey,
 				alias,
 				fromSchema.PrimaryKeys[0])
