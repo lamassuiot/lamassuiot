@@ -17,5 +17,5 @@ type SubscriptionsRepository interface {
 type EventRepository interface {
 	GetLatestEventByEventType(ctx context.Context, eventType models.EventType) (bool, *models.AlertLatestEvent, error)
 	InsertUpdateEvent(ctx context.Context, ev *models.AlertLatestEvent) (*models.AlertLatestEvent, error)
-	GetLatestEvents(ctx context.Context) ([]*models.AlertLatestEvent, error)
+	GetLatestEvents(ctx context.Context, req StorageListRequest[models.AlertLatestEvent]) (string, error)
 }
