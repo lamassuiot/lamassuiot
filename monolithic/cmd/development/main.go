@@ -99,6 +99,7 @@ func main() {
 	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem']")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
+	disableSSE := flag.Bool("disable-sse", false, "disable SSE streaming on device events endpoint")
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
 	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
@@ -469,6 +470,7 @@ func main() {
 		},
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
+		SSEEnabled:         !*disableSSE,
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),

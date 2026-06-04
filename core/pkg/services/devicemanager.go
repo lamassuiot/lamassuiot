@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -11,12 +12,18 @@ type DeviceManagerService interface {
 	GetDevicesStats(ctx context.Context, input GetDevicesStatsInput) (*models.DevicesStats, error)
 	CreateDevice(ctx context.Context, input CreateDeviceInput) (*models.Device, error)
 	GetDeviceByID(ctx context.Context, input GetDeviceByIDInput) (*models.Device, error)
+
 	GetDevices(ctx context.Context, input GetDevicesInput) (string, error)
 	GetDeviceByDMS(ctx context.Context, input GetDevicesByDMSInput) (string, error)
 	UpdateDeviceStatus(ctx context.Context, input UpdateDeviceStatusInput) (*models.Device, error)
 	UpdateDeviceIdentitySlot(ctx context.Context, input UpdateDeviceIdentitySlotInput) (*models.Device, error)
 	UpdateDeviceMetadata(ctx context.Context, input UpdateDeviceMetadataInput) (*models.Device, error)
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) error
+
+	// Device Event operations
+	GetDeviceEvents(ctx context.Context, input GetDeviceEventsInput) (string, error)
+	CreateDeviceEvent(ctx context.Context, input CreateDeviceEventInput) (*models.DeviceEvent, error)
+	
 
 	// Device Group operations
 	CreateDeviceGroup(ctx context.Context, input CreateDeviceGroupInput) (*models.DeviceGroup, error)
@@ -58,6 +65,20 @@ type GetDevicesByDMSInput struct {
 
 type GetDeviceByIDInput struct {
 	ID string `validate:"required"`
+}
+
+type GetDeviceEventsInput struct {
+	DeviceID string `validate:"required"`
+	resources.ListInput[models.DeviceEvent]
+}
+
+type CreateDeviceEventInput struct {
+	DeviceID         string `validate:"required"`
+	Timestamp        time.Time
+	Type             models.DeviceEventType `validate:"required"`
+	Description      string
+	Source           string
+	StructuredFields map[string]any
 }
 
 type UpdateDeviceStatusInput struct {

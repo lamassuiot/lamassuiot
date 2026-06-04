@@ -44,6 +44,21 @@ func (mw *deviceEventPublisher) GetDeviceByID(ctx context.Context, input service
 	return mw.next.GetDeviceByID(ctx, input)
 }
 
+func (mw *deviceEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
+}
+
+func (mw *deviceEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateDeviceEventKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s/event", input.DeviceID))
+
+	output, err := mw.next.CreateDeviceEvent(ctx, input)
+	if err == nil {
+		mw.eventMWPub.PublishCloudEvent(ctx, output)
+	}
+	return output, err
+}
+
 func (mw *deviceEventPublisher) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	return mw.next.GetDevices(ctx, input)
 }

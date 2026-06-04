@@ -14,6 +14,7 @@ type PostgresDeviceManagerStore struct {
 	db               *gorm.DB
 	querier          *postgresDBQuerier[models.Device]
 	deviceGroupsRepo storage.DeviceGroupsRepo
+	deviceEventsRepo storage.DeviceEventsRepo
 }
 
 func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceManagerRepo, error) {
@@ -28,10 +29,16 @@ func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.Devi
 		return nil, err
 	}
 
+	deviceEventsRepo, err := NewDeviceEventsRepository(logger, db)
+	if err != nil {
+		return nil, err
+	}
+
 	return &PostgresDeviceManagerStore{
 		db:               db,
 		querier:          querier,
 		deviceGroupsRepo: deviceGroupsRepo,
+		deviceEventsRepo: deviceEventsRepo,
 	}, nil
 }
 
@@ -72,4 +79,8 @@ func (db *PostgresDeviceManagerStore) Delete(ctx context.Context, ID string) err
 
 func (db *PostgresDeviceManagerStore) DeviceGroups() storage.DeviceGroupsRepo {
 	return db.deviceGroupsRepo
+}
+
+func (db *PostgresDeviceManagerStore) DeviceEvents() storage.DeviceEventsRepo {
+	return db.deviceEventsRepo
 }
