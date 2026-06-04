@@ -83,12 +83,13 @@ type AuthOptionsClientCertificate struct {
 }
 
 type ReEnrollmentSettings struct {
-	AdditionalValidationCAs     []string     `json:"additional_validation_cas"`
-	RevokeOnReEnrollment        bool         `json:"revoke_on_reenrollment"`
-	ReEnrollmentDelta           TimeDuration `json:"reenrollment_delta"`
-	EnableExpiredRenewal        bool         `json:"enable_expired_renewal"`
-	PreventiveReEnrollmentDelta TimeDuration `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalReEnrollmentDelta   TimeDuration `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	ReEnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"est_rfc7030_settings"`
+	AdditionalValidationCAs       []string                    `json:"additional_validation_cas"`
+	RevokeOnReEnrollment          bool                        `json:"revoke_on_reenrollment"`
+	ReEnrollmentDelta             TimeDuration                `json:"reenrollment_delta"`
+	EnableExpiredRenewal          bool                        `json:"enable_expired_renewal"`
+	PreventiveReEnrollmentDelta   TimeDuration                `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalReEnrollmentDelta     TimeDuration                `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
 }
 
 type CADistributionSettings struct {
