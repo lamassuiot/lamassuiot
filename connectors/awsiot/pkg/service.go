@@ -606,17 +606,18 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		return err
 	}
 
-	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
-		EvenType:          models.DeviceEventTypeShadowUpdated,
-		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
-	}
-
-	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-		ID:   input.DeviceID,
-		Slot: *device.IdentitySlot,
+	_, err = svc.DeviceSDK.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		DeviceID:    input.DeviceID,
+		Timestamp:   time.Now(),
+		Type:        models.DeviceEventTypeShadowUpdated,
+		Description: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
+		Source:      AWSIoTSource(svc.ConnectorID),
+		StructuredFields: map[string]any{
+			"actions": actions,
+		},
 	})
 	if err != nil {
-		lFunc.Errorf("could not update device metadata: %s", err)
+		lFunc.Errorf("could not create device event: %s", err)
 		return err
 	}
 
