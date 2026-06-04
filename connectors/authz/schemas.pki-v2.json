@@ -1,0 +1,335 @@
+[
+  {
+    "entityType": "event",
+    "tableName": "events",
+    "primaryKey": "event_type",
+    "atomicActions": [
+      "read"
+    ],
+    "globalActions": [
+      "ui"
+    ],
+    "relations": [],
+    "schemaName": "alerts",
+    "filterable": [
+      { "column": "event_type", "type": "string"    },
+      { "column": "event",      "type": "string"    },
+      { "column": "last_seen",  "type": "timestamp" },
+      { "column": "total_seen", "type": "int"       }
+    ]
+  },
+  {
+    "entityType": "subscription",
+    "tableName": "subscriptions",
+    "primaryKey": "id",
+    "atomicActions": [
+      "read",
+      "delete",
+      "update"
+    ],
+    "globalActions": [
+      "create",
+      "ui"
+    ],
+    "relations": [],
+    "schemaName": "alerts",
+    "filterable": [
+      { "column": "user_id",           "type": "string"    },
+      { "column": "event_type",        "type": "string"    },
+      { "column": "subscription_date", "type": "timestamp" },
+      { "column": "conditions",        "type": "string"    },
+      { "column": "channel",           "type": "string"    }
+    ]
+  },
+  {
+    "entityType": "ca_certificate",
+    "tableName": "ca_certificates",
+    "primaryKey": "id",
+    "atomicActions": [
+      "read",
+      "metadata-update",
+      "delete",
+      "sign",
+      "status-update",
+      "reissue"
+    ],
+    "globalActions": [
+      "create",
+      "ui"
+    ],
+    "relations": [
+      {
+        "name": "profile_id",
+        "targetEntity": "issuance_profile",
+        "foreignKey": "profile_id"
+      },
+      {
+        "name": "serial_number",
+        "targetEntity": "certificate",
+        "foreignKey": "serial_number"
+      }
+    ],
+    "schemaName": "ca",
+    "filterable": [
+      { "column": "serial_number", "type": "string"    },
+      { "column": "metadata",      "type": "jsonb"     },
+      { "column": "creation_ts",   "type": "timestamp" },
+      { "column": "level",         "type": "int"       },
+      { "column": "profile_id",    "type": "string"    }
+    ]
+  },
+  {
+    "entityType": "certificate",
+    "tableName": "certificates",
+    "primaryKey": "serial_number",
+    "atomicActions": [
+      "read",
+      "metadata-update",
+      "delete",
+      "status-update",
+      "status-update/revoke",
+      "status-update/reactivate"
+    ],
+    "globalActions": [
+      "import",
+      "ui"
+    ],
+    "relations": [
+      {
+        "name": "authority_key_id",
+        "targetEntity": "kms_key",
+        "foreignKey": "authority_key_id"
+      },
+      {
+        "name": "issuer_meta_id",
+        "targetEntity": "ca_certificate",
+        "foreignKey": "issuer_meta_id"
+      },
+      {
+        "name": "issuer_meta_serial_number",
+        "targetEntity": "ca_certificate",
+        "foreignKey": "issuer_meta_serial_number"
+      },
+      {
+        "name": "subject_common_name",
+        "targetEntity": "device",
+        "foreignKey": "subject_common_name"
+      }
+    ],
+    "schemaName": "ca",
+    "filterable": [
+      { "column": "metadata",                  "type": "jsonb"     },
+      { "column": "issuer_meta_serial_number", "type": "string"    },
+      { "column": "issuer_meta_id",            "type": "string"    },
+      { "column": "issuer_meta_level",         "type": "int"       },
+      { "column": "status",                    "type": "string"    },
+      { "column": "key_meta_type",             "type": "string"    },
+      { "column": "key_meta_bits",             "type": "int"       },
+      { "column": "key_meta_strength",         "type": "string"    },
+      { "column": "subject_common_name",       "type": "string"    },
+      { "column": "subject_organization",      "type": "string"    },
+      { "column": "subject_organization_unit", "type": "string"    },
+      { "column": "subject_country",           "type": "string"    },
+      { "column": "subject_state",             "type": "string"    },
+      { "column": "subject_locality",          "type": "string"    },
+      { "column": "valid_from",                "type": "timestamp" },
+      { "column": "valid_to",                  "type": "timestamp" },
+      { "column": "revocation_timestamp",      "type": "timestamp" },
+      { "column": "revocation_reason",         "type": "string"    },
+      { "column": "type",                      "type": "string"    },
+      { "column": "engine_id",                 "type": "string"    },
+      { "column": "subject_key_id",            "type": "string"    },
+      { "column": "is_ca",                     "type": "bool"      },
+      { "column": "authority_key_id",          "type": "string"    },
+      { "column": "issuer_common_name",        "type": "string"    },
+      { "column": "issuer_organization",       "type": "string"    },
+      { "column": "issuer_organization_unit",  "type": "string"    },
+      { "column": "issuer_country",            "type": "string"    },
+      { "column": "issuer_state",              "type": "string"    },
+      { "column": "issuer_locality",           "type": "string"    },
+      { "column": "version_schema",            "type": "string"    }
+    ]
+  },
+  {
+    "entityType": "issuance_profile",
+    "tableName": "issuance_profiles",
+    "primaryKey": "id",
+    "atomicActions": [
+      "read",
+      "update",
+      "delete"
+    ],
+    "globalActions": [
+      "create",
+      "ui"
+    ],
+    "relations": [],
+    "schemaName": "ca",
+    "filterable": [
+      { "column": "name",                                    "type": "string"    },
+      { "column": "description",                             "type": "string"    },
+      { "column": "validity_type",                           "type": "string"    },
+      { "column": "validity_time",                           "type": "timestamp" },
+      { "column": "validity_duration",                       "type": "string"    },
+      { "column": "sign_as_ca",                              "type": "bool"      },
+      { "column": "honor_key_usage",                         "type": "bool"      },
+      { "column": "key_usage",                               "type": "string"    },
+      { "column": "honor_extended_key_usages",               "type": "bool"      },
+      { "column": "extended_key_usages",                     "type": "string"    },
+      { "column": "honor_subject",                           "type": "bool"      },
+      { "column": "subject_common_name",                     "type": "string"    },
+      { "column": "subject_organization",                    "type": "string"    },
+      { "column": "subject_organization_unit",               "type": "string"    },
+      { "column": "subject_country",                         "type": "string"    },
+      { "column": "subject_state",                           "type": "string"    },
+      { "column": "subject_locality",                        "type": "string"    },
+      { "column": "honor_extensions",                        "type": "bool"      },
+      { "column": "crypto_enforcement_enabled",              "type": "bool"      },
+      { "column": "crypto_enforcement_allow_rsa_keys",       "type": "bool"      },
+      { "column": "crypto_enforcement_allowed_rsa_key_sizes","type": "string"    },
+      { "column": "crypto_enforcement_allow_ecdsa_keys",     "type": "bool"      },
+      { "column": "crypto_enforcement_allowed_ecdsa_key_sizes","type": "string"  }
+    ]
+  },
+  {
+    "entityType": "device_group",
+    "tableName": "device_groups",
+    "primaryKey": "id",
+    "atomicActions": [
+      "read",
+      "update",
+      "delete"
+    ],
+    "globalActions": [
+      "create",
+      "ui"
+    ],
+    "relations": [
+      {
+        "name": "parent_id",
+        "targetEntity": "device_group",
+        "foreignKey": "parent_id"
+      }
+    ],
+    "schemaName": "devicemanager",
+    "filterable": [
+      { "column": "name",        "type": "string"    },
+      { "column": "description", "type": "string"    },
+      { "column": "parent_id",   "type": "string"    },
+      { "column": "criteria",    "type": "jsonb"     },
+      { "column": "created_at",  "type": "timestamp" },
+      { "column": "updated_at",  "type": "timestamp" }
+    ]
+  },
+  {
+    "entityType": "device",
+    "tableName": "devices",
+    "primaryKey": "id",
+    "atomicActions": [
+      "read",
+      "delete",
+      "provision",
+      "decomission",
+      "metadata-update"
+    ],
+    "globalActions": [
+      "create",
+      "ui"
+    ],
+    "relations": [
+      {
+        "name": "dms_owner",
+        "targetEntity": "dms",
+        "foreignKey": "dms_owner"
+      }
+    ],
+    "schemaName": "devicemanager",
+    "filterable": [
+      { "column": "tags",                 "type": "string"    },
+      { "column": "status",               "type": "string"    },
+      { "column": "icon",                 "type": "string"    },
+      { "column": "icon_color",           "type": "string"    },
+      { "column": "creation_timestamp",   "type": "timestamp" },
+      { "column": "metadata",             "type": "jsonb"     },
+      { "column": "dms_owner",            "type": "string"    },
+      { "column": "identity_slot",        "type": "jsonb"     },
+      { "column": "extra_slots",          "type": "string"    },
+      { "column": "events",               "type": "string"    }
+    ]
+  },
+  {
+    "entityType": "dms",
+    "tableName": "dms",
+    "primaryKey": "id",
+    "atomicActions": [
+      "read",
+      "update",
+      "delete"
+    ],
+    "globalActions": [
+      "create",
+      "bind-identity",
+      "ui"
+    ],
+    "relations": [],
+    "schemaName": "dmsmanager",
+    "filterable": [
+      { "column": "name",          "type": "string"    },
+      { "column": "metadata",      "type": "jsonb"     },
+      { "column": "creation_date", "type": "timestamp" },
+      { "column": "settings",      "type": "jsonb"     }
+    ]
+  },
+  {
+    "entityType": "kms_key",
+    "tableName": "kms_keys",
+    "primaryKey": ["key_id", "engine_id"],
+    "atomicActions": [
+      "read",
+      "update",
+      "delete",
+      "sign"
+    ],
+    "globalActions": [
+      "create",
+      "ui"
+    ],
+    "relations": [],
+    "schemaName": "kms",
+    "filterable": [
+      { "column": "metadata",       "type": "jsonb"     },
+      { "column": "name",           "type": "string"    },
+      { "column": "algorithm",      "type": "string"    },
+      { "column": "size",           "type": "int"       },
+      { "column": "creation_ts",    "type": "timestamp" },
+      { "column": "engine_id",      "type": "string"    },
+      { "column": "aliases",        "type": "jsonb"     },
+      { "column": "has_private_key","type": "bool"      },
+      { "column": "tags",           "type": "jsonb"     }
+    ]
+  },
+  {
+    "entityType": "va_role",
+    "tableName": "va_role",
+    "primaryKey": "ca_ski",
+    "atomicActions": [
+      "read",
+      "update"
+    ],
+    "globalActions": [
+      "create",
+      "ui"
+    ],
+    "relations": [],
+    "schemaName": "va",
+    "filterable": [
+      { "column": "crl_refresh_interval",      "type": "string"    },
+      { "column": "crl_validity",              "type": "string"    },
+      { "column": "crl_subject_key_id_signer", "type": "string"    },
+      { "column": "crl_regenerate_on_revoke",  "type": "bool"      },
+      { "column": "latest_crl_version",        "type": "float"     },
+      { "column": "latest_crl_valid_from",     "type": "timestamp" },
+      { "column": "latest_crl_valid_until",    "type": "timestamp" }
+    ]
+  }
+]
