@@ -197,7 +197,10 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg config.PluggableStorageEn
 	port, _ := cfg.Config["port"].(int)
 	username, _ := cfg.Config["username"].(string)
 	password := string(cfg.Config["password"].(config.Password))
-	database := "authz"
+	database, _ := cfg.Config["database"].(string)
+	if database == "" {
+		database = "pki"
+	}
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable",
 		host, username, password, database, port)
