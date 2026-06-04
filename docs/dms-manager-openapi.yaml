@@ -596,6 +596,8 @@ components:
     ReEnrollmentSettings:
       type: object
       properties:
+        est_rfc7030_settings:
+          $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
         additional_validation_cas:
           type: array
           items:
