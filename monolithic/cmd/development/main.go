@@ -582,10 +582,6 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 	if !enabled || useSqlite {
 		return nil
 	}
-	pgHost, _ := storageConfig.Config["hostname"].(string)
-	pgPort, _ := storageConfig.Config["port"].(int)
-	pgUser, _ := storageConfig.Config["username"].(string)
-	pgPass := string(storageConfig.Config["password"].(cconfig.Password))
 
 	// Silently ignore preload dir if it doesn't exist
 	if preloadDir != "" {
@@ -596,19 +592,14 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 	}
 
 	return &api.Config{
-		Debug: true,
-		Port:  8888,
+		Debug:   true,
+		Port:    8888,
+		AuthzDB: storageConfig,
 		Schemas: map[string]string{
 			"pki": pkiSchema,
 		},
-		Credentials: map[string]api.CredentialConfig{
-			"pki": {
-				Username: pgUser,
-				Password: pgPass,
-				Host:     pgHost,
-				Port:     pgPort,
-				Database: "pki",
-			},
+		Credentials: map[string]cconfig.PluggableStorageEngine{
+			"pki": storageConfig,
 		},
 		PreloadDir: preloadDir,
 	}

@@ -5,7 +5,6 @@ import (
 
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/store"
-	"gocloud.dev/blob"
 	"gorm.io/gorm"
 )
 
@@ -15,10 +14,8 @@ type PrincipalManager struct {
 	matchService *store.MatchService
 }
 
-// NewPrincipalManager creates a PrincipalManager backed by the given SQLite/Postgres DB.
-// The bucket parameter is accepted for API compatibility but unused — policy storage is
-// handled by PolicyManager.
-func NewPrincipalManager(db *gorm.DB, _ *blob.Bucket) (*PrincipalManager, error) {
+// NewPrincipalManager creates a PrincipalManager backed by the given Postgres DB.
+func NewPrincipalManager(db *gorm.DB) (*PrincipalManager, error) {
 	s, err := store.NewGormPrincipalStore(db)
 	if err != nil {
 		return nil, err

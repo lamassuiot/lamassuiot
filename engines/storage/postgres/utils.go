@@ -145,7 +145,8 @@ func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
 	migrations.RegisterGoMigrations(schemaName)
 	m, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrationsFS)
 	if err != nil {
-		lMig.Fatalf("could not create migrator: %s", err)
+		lMig.Warnf("could not create migrator: %s", err)
+		return nil
 	}
 
 	return &migrator{

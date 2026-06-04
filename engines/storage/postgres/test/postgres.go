@@ -18,7 +18,9 @@ const (
 	passwd = "test"
 )
 
-func RunPostgresDocker(schemas map[string]string, exposeAsStandardPort bool) (func() error, *config.PostgresPSEConfig, error) {
+func RunPostgresDocker(pkiSchema map[string]string, exposeAsStandardPort bool) (func() error, *config.PostgresPSEConfig, error) {
+	extraDBs := []string{"authz"}
+
 	pwd, err := os.Getwd()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get working directory: %s", err)
@@ -42,7 +44,7 @@ func RunPostgresDocker(schemas map[string]string, exposeAsStandardPort bool) (fu
 	sqlStatements := "CREATE DATABASE pki;\n"
 	sqlStatements += "\\c pki\n" // Connect to pki database
 
-	for schemaName, schemaInitScript := range schemas {
+	for schemaName, schemaInitScript := range pkiSchema {
 		sqlStatements = sqlStatements + fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;\n", schemaName)
 		if schemaInitScript != "" {
 			initScript := "#!/bin/bash"
@@ -65,6 +67,10 @@ func RunPostgresDocker(schemas map[string]string, exposeAsStandardPort bool) (fu
 		}
 
 		idx++
+	}
+
+	for _, dbName := range extraDBs {
+		sqlStatements = sqlStatements + fmt.Sprintf("CREATE DATABASE %s;\n", dbName)
 	}
 
 	initFileName := "0_init.sql"

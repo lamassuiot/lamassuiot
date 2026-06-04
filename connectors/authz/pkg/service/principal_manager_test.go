@@ -18,8 +18,6 @@ import (
 	"github.com/lamassuiot/authz/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gocloud.dev/blob"
-	"gocloud.dev/blob/memblob"
 )
 
 func createTestCAAndLeafCerts(t *testing.T) (*x509.Certificate, *x509.Certificate, *rsa.PrivateKey) {
@@ -140,22 +138,12 @@ func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
 	assert.Empty(t, matched)
 }
 
-// setupTestBucket creates an in-memory blob bucket for testing
-func setupTestBucket(t *testing.T) *blob.Bucket {
-	return memblob.OpenBucket(nil)
-}
-
 func TestPrincipalManager_CreatePrincipal(t *testing.T) {
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
-
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Test creating a principal
@@ -182,10 +170,8 @@ func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	principal := &models.Principal{
@@ -211,12 +197,9 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
 	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Create a principal
@@ -250,12 +233,9 @@ func TestPrincipalManager_RevokePolicy(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
 	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Create principal and grant policy
@@ -284,12 +264,9 @@ func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
 	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Create principal
@@ -316,12 +293,9 @@ func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
 	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Create multiple principals
@@ -356,12 +330,9 @@ func TestPrincipalManager_DeletePrincipal(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
 	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Create principal and grant policies
@@ -394,12 +365,9 @@ func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
 	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Create principal
@@ -434,12 +402,9 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Cleanup()
 
-	// Create bucket
-	bucket := setupTestBucket(t)
-	defer bucket.Close()
 
 	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, bucket)
+	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
 
 	// Create active principals

@@ -13,6 +13,9 @@ type AppConfig struct {
 	LogFile     string                   `yaml:"log_file"`
 	Schemas     map[string]string        `yaml:"schemas"`
 	Credentials map[string]DBCredentials `yaml:"credentials"`
+	// AuthzDB is the Postgres database used to store principals, grants, and policies.
+	// It is separate from the per-schema engine databases in Credentials.
+	AuthzDB DBCredentials `yaml:"authz_db"`
 }
 
 // DBCredentials holds PostgreSQL connection parameters for a single database.

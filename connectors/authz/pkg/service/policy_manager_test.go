@@ -6,14 +6,11 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/authz/pkg/models"
-	"gocloud.dev/blob/memblob"
+	"github.com/lamassuiot/authz/pkg/store"
 )
 
 func TestPolicyManager_CreatePolicy_RejectsRepeatedVertexPath(t *testing.T) {
-	bucket := memblob.OpenBucket(nil)
-	defer bucket.Close()
-
-	manager := NewPolicyManager(bucket)
+	manager := NewPolicyManager(store.NewInMemoryPolicyStore())
 	policy := policyWithRepeatedVertexPath("create-invalid")
 
 	err := manager.CreatePolicy(context.Background(), policy)
@@ -27,10 +24,7 @@ func TestPolicyManager_CreatePolicy_RejectsRepeatedVertexPath(t *testing.T) {
 }
 
 func TestPolicyManager_UpdatePolicy_RejectsRepeatedVertexPath(t *testing.T) {
-	bucket := memblob.OpenBucket(nil)
-	defer bucket.Close()
-
-	manager := NewPolicyManager(bucket)
+	manager := NewPolicyManager(store.NewInMemoryPolicyStore())
 
 	validPolicy := &models.Policy{
 		ID:   "update-invalid",
@@ -61,10 +55,7 @@ func TestPolicyManager_UpdatePolicy_RejectsRepeatedVertexPath(t *testing.T) {
 }
 
 func TestPolicyManager_SearchPolicies(t *testing.T) {
-	bucket := memblob.OpenBucket(nil)
-	defer bucket.Close()
-
-	manager := NewPolicyManager(bucket)
+	manager := NewPolicyManager(store.NewInMemoryPolicyStore())
 
 	policies := []*models.Policy{
 		{ID: "alpha-001", Name: "Alpha Policy", Description: "handles alpha entities", Rules: []*models.Rule{{Namespace: "iot", SchemaName: "public", EntityType: "organization", Actions: []string{"read"}}}},
