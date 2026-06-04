@@ -157,6 +157,16 @@ func TestDMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20251217120000_metadata_text_to_jsonb")
 	}
+
+	migrationTest_DMS_20260113212700_settings_text_to_jsonb(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260113212700_settings_text_to_jsonb")
+	}
+
+	migrationTest_DMS_20260604110000_reenroll_auth_settings(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260604110000_reenroll_auth_settings")
+	}
 }
 
 func migrationTest_DMS_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -210,4 +220,79 @@ func migrationTest_DMS_20251217120000_metadata_text_to_jsonb(t *testing.T, logge
 		t.Fatalf("failed to query jsonb column: %v", tx.Error)
 	}
 	assert.Equal(t, "dms_value", keyValue)
+}
+
+func migrationTest_DMS_20260113212700_settings_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-with-settings', 'DMS With Settings', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE"}},"reenrollment_settings":{}}');
+	`)
+
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-empty-settings', 'DMS Empty Settings', '{}', '2024-11-25 10:46:28.914', '');
+	`)
+
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-null-settings', 'DMS Null Settings', '{}', '2024-11-25 10:46:28.914', NULL);
+	`)
+
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	var settings1 string
+	tx := con.Table("dms").Where("id = 'dms-with-settings'").Select("settings").Find(&settings1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select dms row: %v", tx.Error)
+	}
+	assert.Contains(t, settings1, `"enrollment_settings"`)
+
+	var settings2 string
+	tx = con.Table("dms").Where("id = 'dms-empty-settings'").Select("settings").Find(&settings2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select dms row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, settings2)
+
+	var settings3 string
+	tx = con.Table("dms").Where("id = 'dms-null-settings'").Select("settings").Find(&settings3)
+	if tx.Error != nil {
+		t.Fatalf("failed to select dms row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, settings3)
+
+	var authMode string
+	tx = con.Raw("SELECT settings->'enrollment_settings'->'est_rfc7030_settings'->>'auth_mode' FROM dms WHERE id = 'dms-with-settings'").Scan(&authMode)
+	if tx.Error != nil {
+		t.Fatalf("failed to query jsonb settings column: %v", tx.Error)
+	}
+	assert.Equal(t, "CLIENT_CERTIFICATE", authMode)
+}
+
+func migrationTest_DMS_20260604110000_reenroll_auth_settings(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-reenroll-backfill', 'DMS Reenroll Backfill', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com"}}},"reenrollment_settings":{"additional_validation_cas":[]}}');
+	`)
+
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-reenroll-existing', 'DMS Reenroll Existing', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"NO_AUTH"}},"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE"}}}');
+	`)
+
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	var backfilledAuth string
+	tx := con.Raw("SELECT settings->'reenrollment_settings'->'est_rfc7030_settings'->>'auth_mode' FROM dms WHERE id = 'dms-reenroll-backfill'").Scan(&backfilledAuth)
+	if tx.Error != nil {
+		t.Fatalf("failed to query backfilled reenroll auth mode: %v", tx.Error)
+	}
+	assert.Equal(t, "EXTERNAL_WEBHOOK", backfilledAuth)
+
+	var existingAuth string
+	tx = con.Raw("SELECT settings->'reenrollment_settings'->'est_rfc7030_settings'->>'auth_mode' FROM dms WHERE id = 'dms-reenroll-existing'").Scan(&existingAuth)
+	if tx.Error != nil {
+		t.Fatalf("failed to query existing reenroll auth mode: %v", tx.Error)
+	}
+	assert.Equal(t, "CLIENT_CERTIFICATE", existingAuth)
 }
