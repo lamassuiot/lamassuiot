@@ -1,7 +1,7 @@
 package pkg
 
 import (
-	"github.com/lamassuiot/authz/pkg/api"
+	authzconfig "github.com/lamassuiot/authz/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 )
@@ -36,7 +36,7 @@ type MonolithicConfig struct {
 	WfxSouthPort          int                            `mapstructure:"wfx_south_port"`
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
 	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
-	AuthzConfig           *api.Config                    `mapstructure:"authz"`
+	AuthzConfig           *authzconfig.AuthzConfig        `mapstructure:"authz"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {

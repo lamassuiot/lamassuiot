@@ -11,11 +11,11 @@ import (
 )
 
 type PolicyController struct {
-	policyManager    *service.PolicyManager
-	principalManager *service.PrincipalManager
+	policyManager    service.PolicyService
+	principalManager service.PrincipalService
 }
 
-func NewPolicyController(policyManager *service.PolicyManager, principalManager *service.PrincipalManager) *PolicyController {
+func NewPolicyController(policyManager service.PolicyService, principalManager service.PrincipalService) *PolicyController {
 	return &PolicyController{
 		policyManager:    policyManager,
 		principalManager: principalManager,
@@ -227,7 +227,7 @@ func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 	policyID := c.Param("id")
 
 	// Check if any principals have this policy
-	count, err := ctrl.principalManager.CountPolicyPrincipals(policyID)
+	count, err := ctrl.principalManager.CountPolicyPrincipals(c.Request.Context(), policyID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to check policy usage",
@@ -299,7 +299,7 @@ func (ctrl *PolicyController) GetPolicyStats(c *gin.Context) {
 
 	var principalCount int64
 	if ctrl.principalManager != nil {
-		principalCount, _ = ctrl.principalManager.CountPolicyPrincipals(policyID)
+		principalCount, _ = ctrl.principalManager.CountPolicyPrincipals(ctx, policyID)
 	}
 
 	rulesJSON, _ := json.Marshal(policy.Rules)

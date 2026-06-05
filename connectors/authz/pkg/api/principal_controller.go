@@ -10,10 +10,10 @@ import (
 )
 
 type PrincipalController struct {
-	manager *service.PrincipalManager
+	manager service.PrincipalService
 }
 
-func NewPrincipalController(manager *service.PrincipalManager) *PrincipalController {
+func NewPrincipalController(manager service.PrincipalService) *PrincipalController {
 	return &PrincipalController{manager: manager}
 }
 
@@ -54,7 +54,7 @@ func (ctrl *PrincipalController) CreatePrincipal(c *gin.Context) {
 		principal.Description = *req.Description
 	}
 
-	if err := ctrl.manager.CreatePrincipal(principal); err != nil {
+	if err := ctrl.manager.CreatePrincipal(c.Request.Context(), principal); err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to create principal",
 			Details: map[string]string{"error": err.Error()},
@@ -78,7 +78,7 @@ func (ctrl *PrincipalController) CreatePrincipal(c *gin.Context) {
 func (ctrl *PrincipalController) GetPrincipal(c *gin.Context) {
 	id := c.Param("id")
 
-	principal, err := ctrl.manager.GetPrincipal(id)
+	principal, err := ctrl.manager.GetPrincipal(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, dto.ErrorResponse{
 			Error:   "Principal not found",
@@ -114,7 +114,7 @@ func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
 		return
 	}
 
-	principals, err := ctrl.manager.ListPrincipals(queryParams)
+	principals, err := ctrl.manager.ListPrincipals(c.Request.Context(), queryParams)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to list principals",
@@ -158,7 +158,7 @@ func (ctrl *PrincipalController) UpdatePrincipal(c *gin.Context) {
 		return
 	}
 
-	principal, err := ctrl.manager.GetPrincipal(id)
+	principal, err := ctrl.manager.GetPrincipal(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, dto.ErrorResponse{
 			Error:   "Principal not found",
@@ -183,7 +183,7 @@ func (ctrl *PrincipalController) UpdatePrincipal(c *gin.Context) {
 	}
 
 	// Update principal
-	if err := ctrl.manager.UpdatePrincipal(principal); err != nil {
+	if err := ctrl.manager.UpdatePrincipal(c.Request.Context(), principal); err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to update principal",
 			Details: map[string]string{"error": err.Error()},
@@ -206,7 +206,7 @@ func (ctrl *PrincipalController) UpdatePrincipal(c *gin.Context) {
 func (ctrl *PrincipalController) DeletePrincipal(c *gin.Context) {
 	id := c.Param("id")
 
-	if err := ctrl.manager.DeletePrincipal(id); err != nil {
+	if err := ctrl.manager.DeletePrincipal(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to delete principal",
 			Details: map[string]string{"error": err.Error()},
@@ -242,7 +242,7 @@ func (ctrl *PrincipalController) GrantPolicy(c *gin.Context) {
 		return
 	}
 
-	if err := ctrl.manager.GrantPolicy(id, req.PolicyID, req.GrantedBy); err != nil {
+	if err := ctrl.manager.GrantPolicy(c.Request.Context(), id, req.PolicyID, req.GrantedBy); err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to grant policy",
 			Details: map[string]string{"error": err.Error()},
@@ -269,7 +269,7 @@ func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 	principalID := c.Param("id")
 	policyID := c.Param("policyId")
 
-	if err := ctrl.manager.RevokePolicy(principalID, policyID); err != nil {
+	if err := ctrl.manager.RevokePolicy(c.Request.Context(), principalID, policyID); err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to revoke policy",
 			Details: map[string]string{"error": err.Error()},
@@ -293,7 +293,7 @@ func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 	id := c.Param("id")
 
-	grants, err := ctrl.manager.GetPrincipalPolicies(id)
+	grants, err := ctrl.manager.GetPrincipalPolicies(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to get policies",

@@ -1,43 +1,20 @@
 package config
 
-import (
-	"fmt"
-	"os"
+import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 
-	"gopkg.in/yaml.v3"
-)
-
-// AppConfig is the top-level YAML configuration for the authz service.
-type AppConfig struct {
-	Debug       bool                     `yaml:"debug"`
-	LogFile     string                   `yaml:"log_file"`
-	Schemas     map[string]string        `yaml:"schemas"`
-	Credentials map[string]DBCredentials `yaml:"credentials"`
-	// AuthzDB is the Postgres database used to store principals, grants, and policies.
-	// It is separate from the per-schema engine databases in Credentials.
-	AuthzDB DBCredentials `yaml:"authz_db"`
-}
-
-// DBCredentials holds PostgreSQL connection parameters for a single database.
-type DBCredentials struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Database string `yaml:"database"`
-}
-
-// LoadAppConfig reads and parses the YAML config file at the given path.
-func LoadAppConfig(path string) (*AppConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
-	}
-
-	var cfg AppConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file %q: %w", path, err)
-	}
-
-	return &cfg, nil
+// AuthzConfig is the top-level configuration for the authz service.
+// Loaded via cconfig.LoadConfig[AuthzConfig](nil) — reads from LAMASSU_CONFIG_FILE env var
+// or falls back to /etc/lamassuiot/config.yml.
+type AuthzConfig struct {
+	OtelConfig         cconfig.OTELConfig             `mapstructure:"otel"`
+	Logs               cconfig.Logging                `mapstructure:"logs"`
+	Server             cconfig.HttpServer             `mapstructure:"server"`
+	PublisherEventBus  cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
+	SubscriberEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
+	Schemas            map[string]string              `mapstructure:"schemas"`
+	// Credentials holds per-schema engine Postgres connections (provider must be "postgres").
+	Credentials map[string]cconfig.PluggableStorageEngine `mapstructure:"credentials"`
+	// AuthzDB is the Postgres database for principals, grants, and policies.
+	AuthzDB    cconfig.PluggableStorageEngine `mapstructure:"authz_db"`
+	PreloadDir string                         `mapstructure:"preload_dir"`
 }

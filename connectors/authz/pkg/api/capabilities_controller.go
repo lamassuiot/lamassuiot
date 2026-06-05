@@ -14,8 +14,8 @@ import (
 // CapabilitiesController handles capability-related endpoints.
 type CapabilitiesController struct {
 	eng              *engine.Engine
-	principalManager *service.PrincipalManager
-	policyManager    *service.PolicyManager
+	principalManager service.PrincipalService
+	policyManager    service.PolicyService
 	resolver         *service.IdentityResolver
 	logger           *logrus.Entry
 }
@@ -23,8 +23,8 @@ type CapabilitiesController struct {
 // NewCapabilitiesController creates a new CapabilitiesController.
 func NewCapabilitiesController(
 	eng *engine.Engine,
-	principalManager *service.PrincipalManager,
-	policyManager *service.PolicyManager,
+	principalManager service.PrincipalService,
+	policyManager service.PolicyService,
 	resolver *service.IdentityResolver,
 	logger *logrus.Entry,
 ) *CapabilitiesController {
