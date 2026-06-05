@@ -15,6 +15,8 @@ import (
 	"github.com/lamassuiot/authz/pkg/engine"
 	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // ClientConfig holds configuration for the SDK client
@@ -187,14 +189,17 @@ type contextSourceRoundTripper struct {
 }
 
 func (rt *contextSourceRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+
 	src, _ := req.Context().Value(core.LamassuContextKeySource).(string)
 	if src == "" {
 		src = rt.staticSource
 	}
 	if src != "" {
-		req = req.Clone(req.Context())
 		req.Header.Set(models.HttpSourceHeader, src)
 	}
+
+	otel.GetTextMapPropagator().Inject(req.Context(), propagation.HeaderCarrier(req.Header))
 	return rt.transport.RoundTrip(req)
 }
 
