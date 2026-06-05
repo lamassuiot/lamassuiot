@@ -5,25 +5,25 @@
   "rules": [
     {
       "namespace": "authz",
-      "schemaName": "*",
-      "entityType": "*",
+      "schema_name": "*",
+      "entity_type": "*",
       "actions": [
         "*"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "pki",
-      "schemaName": "*",
-      "entityType": "*",
+      "schema_name": "*",
+      "entity_type": "*",
       "actions": [
         "*"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }

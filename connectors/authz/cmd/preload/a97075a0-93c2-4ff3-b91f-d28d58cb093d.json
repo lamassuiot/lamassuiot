@@ -5,8 +5,8 @@
   "rules": [
     {
       "namespace": "pki",
-      "schemaName": "devicemanager",
-      "entityType": "device_group",
+      "schema_name": "devicemanager",
+      "entity_type": "device_group",
       "actions": [
         "read",
         "update",
@@ -15,14 +15,14 @@
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "pki",
-      "schemaName": "devicemanager",
-      "entityType": "device",
+      "schema_name": "devicemanager",
+      "entity_type": "device",
       "actions": [
         "read",
         "delete",
@@ -33,7 +33,7 @@
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }

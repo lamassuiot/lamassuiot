@@ -5,8 +5,8 @@
   "rules": [
     {
       "namespace": "pki",
-      "schemaName": "ca",
-      "entityType": "ca_certificate",
+      "schema_name": "ca",
+      "entity_type": "ca_certificate",
       "actions": [
         "create",
         "status-update",
@@ -18,14 +18,14 @@
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "pki",
-      "schemaName": "ca",
-      "entityType": "certificate",
+      "schema_name": "ca",
+      "entity_type": "certificate",
       "actions": [
         "read",
         "delete",
@@ -37,14 +37,14 @@
         "metadata-update"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "pki",
-      "schemaName": "ca",
-      "entityType": "issuance_profile",
+      "schema_name": "ca",
+      "entity_type": "issuance_profile",
       "actions": [
         "read",
         "delete",
@@ -53,7 +53,7 @@
         "create"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }

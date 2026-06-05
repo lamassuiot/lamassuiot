@@ -5,21 +5,21 @@
   "rules": [
     {
       "namespace": "pki",
-      "schemaName": "alerts",
-      "entityType": "event",
+      "schema_name": "alerts",
+      "entity_type": "event",
       "actions": [
         "read",
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "pki",
-      "schemaName": "alerts",
-      "entityType": "subscription",
+      "schema_name": "alerts",
+      "entity_type": "subscription",
       "actions": [
         "read",
         "delete",
@@ -28,7 +28,7 @@
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }

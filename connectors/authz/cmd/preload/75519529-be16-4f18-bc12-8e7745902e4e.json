@@ -5,8 +5,8 @@
   "rules": [
     {
       "namespace": "pki",
-      "schemaName": "dmsmanager",
-      "entityType": "dms",
+      "schema_name": "dmsmanager",
+      "entity_type": "dms",
       "actions": [
         "read",
         "update",
@@ -16,7 +16,7 @@
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }
