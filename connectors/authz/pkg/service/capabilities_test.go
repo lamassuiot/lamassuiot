@@ -283,6 +283,8 @@ func TestGetEntityCapabilities_UnknownSchema(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
+	ctx := context.Background()
+
 	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
 	require.NoError(t, err)
 	defer postgres.Cleanup()
@@ -318,10 +320,10 @@ func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 			"issuer": "https://example.com",
 		},
 	}
-	require.NoError(t, principalManager.CreatePrincipal(principal))
-	require.NoError(t, principalManager.GrantPolicy("user-global", "principal-policy", "admin"))
+	require.NoError(t, principalManager.CreatePrincipal(ctx, principal))
+	require.NoError(t, principalManager.GrantPolicy(ctx, "user-global", "principal-policy", "admin"))
 
-	gc, err := GetGlobalCapabilitiesForPrincipal(context.Background(), eng, principalManager, policyManager, "user-global")
+	gc, err := GetGlobalCapabilitiesForPrincipal(ctx, eng, principalManager, policyManager, "user-global")
 	require.NoError(t, err)
 
 	assert.Contains(t, gc["iot.public.organization"], "write")

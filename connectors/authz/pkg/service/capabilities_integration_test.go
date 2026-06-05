@@ -17,6 +17,8 @@ import (
 // TestGetGlobalCapabilities_EndToEnd_JWT ensures the full flow of matching a JWT to a
 // principal and deriving global capabilities works correctly.
 func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
+	ctx := context.Background()
+
 	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
 	require.NoError(t, err)
 	defer postgres.Cleanup()
@@ -65,7 +67,7 @@ func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 		},
 		Active: true,
 	}
-	require.NoError(t, principalManager.CreatePrincipal(principal))
+	require.NoError(t, principalManager.CreatePrincipal(ctx, principal))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": "user-123",
@@ -91,6 +93,8 @@ func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 // TestGetEntityCapabilities_EndToEnd_JWT ensures the full flow of matching a JWT and then
 // querying atomic actions for a specific entity works correctly.
 func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
+	ctx := context.Background()
+
 	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
 	require.NoError(t, err)
 	defer postgres.Cleanup()
@@ -138,7 +142,7 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 		},
 		Active: true,
 	}
-	require.NoError(t, principalManager.CreatePrincipal(principal))
+	require.NoError(t, principalManager.CreatePrincipal(ctx, principal))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": "user-456",
@@ -172,6 +176,8 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 // TestGetCapabilities_MultiplePrincipalsMatched verifies that principal matching can return
 // more than one principal for the same auth material (OR logic precondition).
 func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
+	ctx := context.Background()
+
 	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
 	require.NoError(t, err)
 	defer postgres.Cleanup()
@@ -210,8 +216,8 @@ func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
 		},
 		Active: true,
 	}
-	require.NoError(t, principalManager.CreatePrincipal(principal1))
-	require.NoError(t, principalManager.CreatePrincipal(principal2))
+	require.NoError(t, principalManager.CreatePrincipal(ctx, principal1))
+	require.NoError(t, principalManager.CreatePrincipal(ctx, principal2))
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": "shared-user",
