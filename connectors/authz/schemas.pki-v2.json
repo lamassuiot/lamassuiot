@@ -1,16 +1,16 @@
 [
   {
-    "entityType": "event",
-    "tableName": "events",
-    "primaryKey": "event_type",
-    "atomicActions": [
+    "entity_type": "event",
+    "table_name": "events",
+    "primary_key": "event_type",
+    "atomic_actions": [
       "read"
     ],
-    "globalActions": [
+    "global_actions": [
       "ui"
     ],
     "relations": [],
-    "schemaName": "alerts",
+    "schema_name": "alerts",
     "filterable": [
       { "column": "event_type", "type": "string"    },
       { "column": "event",      "type": "string"    },
@@ -19,20 +19,20 @@
     ]
   },
   {
-    "entityType": "subscription",
-    "tableName": "subscriptions",
-    "primaryKey": "id",
-    "atomicActions": [
+    "entity_type": "subscription",
+    "table_name": "subscriptions",
+    "primary_key": "id",
+    "atomic_actions": [
       "read",
       "delete",
       "update"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "ui"
     ],
     "relations": [],
-    "schemaName": "alerts",
+    "schema_name": "alerts",
     "filterable": [
       { "column": "user_id",           "type": "string"    },
       { "column": "event_type",        "type": "string"    },
@@ -42,10 +42,10 @@
     ]
   },
   {
-    "entityType": "ca_certificate",
-    "tableName": "ca_certificates",
-    "primaryKey": "id",
-    "atomicActions": [
+    "entity_type": "ca_certificate",
+    "table_name": "ca_certificates",
+    "primary_key": "id",
+    "atomic_actions": [
       "read",
       "metadata-update",
       "delete",
@@ -53,23 +53,23 @@
       "status-update",
       "reissue"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "ui"
     ],
     "relations": [
       {
         "name": "profile_id",
-        "targetEntity": "issuance_profile",
-        "foreignKey": "profile_id"
+        "target_entity": "issuance_profile",
+        "foreign_key": "profile_id"
       },
       {
         "name": "serial_number",
-        "targetEntity": "certificate",
-        "foreignKey": "serial_number"
+        "target_entity": "certificate",
+        "foreign_key": "serial_number"
       }
     ],
-    "schemaName": "ca",
+    "schema_name": "ca",
     "filterable": [
       { "column": "serial_number", "type": "string"    },
       { "column": "metadata",      "type": "jsonb"     },
@@ -79,10 +79,10 @@
     ]
   },
   {
-    "entityType": "certificate",
-    "tableName": "certificates",
-    "primaryKey": "serial_number",
-    "atomicActions": [
+    "entity_type": "certificate",
+    "table_name": "certificates",
+    "primary_key": "serial_number",
+    "atomic_actions": [
       "read",
       "metadata-update",
       "delete",
@@ -90,33 +90,33 @@
       "status-update/revoke",
       "status-update/reactivate"
     ],
-    "globalActions": [
+    "global_actions": [
       "import",
       "ui"
     ],
     "relations": [
       {
         "name": "authority_key_id",
-        "targetEntity": "kms_key",
-        "foreignKey": "authority_key_id"
+        "target_entity": "kms_key",
+        "foreign_key": "authority_key_id"
       },
       {
         "name": "issuer_meta_id",
-        "targetEntity": "ca_certificate",
-        "foreignKey": "issuer_meta_id"
+        "target_entity": "ca_certificate",
+        "foreign_key": "issuer_meta_id"
       },
       {
         "name": "issuer_meta_serial_number",
-        "targetEntity": "ca_certificate",
-        "foreignKey": "issuer_meta_serial_number"
+        "target_entity": "ca_certificate",
+        "foreign_key": "issuer_meta_serial_number"
       },
       {
         "name": "subject_common_name",
-        "targetEntity": "device",
-        "foreignKey": "subject_common_name"
+        "target_entity": "device",
+        "foreign_key": "subject_common_name"
       }
     ],
-    "schemaName": "ca",
+    "schema_name": "ca",
     "filterable": [
       { "column": "metadata",                  "type": "jsonb"     },
       { "column": "issuer_meta_serial_number", "type": "string"    },
@@ -151,20 +151,20 @@
     ]
   },
   {
-    "entityType": "issuance_profile",
-    "tableName": "issuance_profiles",
-    "primaryKey": "id",
-    "atomicActions": [
+    "entity_type": "issuance_profile",
+    "table_name": "issuance_profiles",
+    "primary_key": "id",
+    "atomic_actions": [
       "read",
       "update",
       "delete"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "ui"
     ],
     "relations": [],
-    "schemaName": "ca",
+    "schema_name": "ca",
     "filterable": [
       { "column": "name",                                    "type": "string"    },
       { "column": "description",                             "type": "string"    },
@@ -192,20 +192,20 @@
     ]
   },
   {
-    "entityType": "device_group",
-    "tableName": "device_groups",
-    "primaryKey": "id",
-    "atomicActions": [
+    "entity_type": "device_group",
+    "table_name": "device_groups",
+    "primary_key": "id",
+    "atomic_actions": [
       "read",
       "update",
       "delete"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "ui"
     ],
     "relations": [],
-    "schemaName": "devicemanager",
+    "schema_name": "devicemanager",
     "filterable": [
       { "column": "name",        "type": "string"    },
       { "column": "description", "type": "string"    },
@@ -216,28 +216,28 @@
     ]
   },
   {
-    "entityType": "device",
-    "tableName": "devices",
-    "primaryKey": "id",
-    "atomicActions": [
+    "entity_type": "device",
+    "table_name": "devices",
+    "primary_key": "id",
+    "atomic_actions": [
       "read",
       "delete",
       "provision",
       "decomission",
       "metadata-update"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "ui"
     ],
     "relations": [
       {
         "name": "dms_owner",
-        "targetEntity": "dms",
-        "foreignKey": "dms_owner"
+        "target_entity": "dms",
+        "foreign_key": "dms_owner"
       }
     ],
-    "schemaName": "devicemanager",
+    "schema_name": "devicemanager",
     "filterable": [
       { "column": "tags",                 "type": "string"    },
       { "column": "status",               "type": "string"    },
@@ -252,21 +252,21 @@
     ]
   },
   {
-    "entityType": "dms",
-    "tableName": "dms",
-    "primaryKey": "id",
-    "atomicActions": [
+    "entity_type": "dms",
+    "table_name": "dms",
+    "primary_key": "id",
+    "atomic_actions": [
       "read",
       "update",
       "delete"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "bind-identity",
       "ui"
     ],
     "relations": [],
-    "schemaName": "dmsmanager",
+    "schema_name": "dmsmanager",
     "filterable": [
       { "column": "name",          "type": "string"    },
       { "column": "metadata",      "type": "jsonb"     },
@@ -275,21 +275,21 @@
     ]
   },
   {
-    "entityType": "kms_key",
-    "tableName": "kms_keys",
-    "primaryKey": ["key_id", "engine_id"],
-    "atomicActions": [
+    "entity_type": "kms_key",
+    "table_name": "kms_keys",
+    "primary_key": ["key_id", "engine_id"],
+    "atomic_actions": [
       "read",
       "update",
       "delete",
       "sign"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "ui"
     ],
     "relations": [],
-    "schemaName": "kms",
+    "schema_name": "kms",
     "filterable": [
       { "column": "metadata",       "type": "jsonb"     },
       { "column": "name",           "type": "string"    },
@@ -303,19 +303,19 @@
     ]
   },
   {
-    "entityType": "va_role",
-    "tableName": "va_role",
-    "primaryKey": "ca_ski",
-    "atomicActions": [
+    "entity_type": "va_role",
+    "table_name": "va_role",
+    "primary_key": "ca_ski",
+    "atomic_actions": [
       "read",
       "update"
     ],
-    "globalActions": [
+    "global_actions": [
       "create",
       "ui"
     ],
     "relations": [],
-    "schemaName": "va",
+    "schema_name": "va",
     "filterable": [
       { "column": "crl_refresh_interval",      "type": "string"    },
       { "column": "crl_validity",              "type": "string"    },
