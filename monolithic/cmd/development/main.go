@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -110,6 +111,7 @@ func main() {
 	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
 	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/authz/examples/iot/schemas.pki-v2.json", "path to PKI schema JSON file for authz service")
 	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
+	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -528,7 +530,7 @@ func main() {
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
-		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, *authzPkiSchema, *authzPreloadDir),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -630,7 +632,7 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
-func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, pkiSchema, preloadDir string) *authzconfig.AuthzConfig {
+func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, pkiSchema, preloadDir, bootstrapJSON string) *authzconfig.AuthzConfig {
 	if !enabled || useSqlite {
 		return nil
 	}
@@ -640,6 +642,16 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 		if _, err := os.Stat(preloadDir); os.IsNotExist(err) {
 			fmt.Printf(">> authz: preload directory %q not found, skipping preload\n", preloadDir)
 			preloadDir = ""
+		}
+	}
+
+	var bootstrap []authzconfig.BootstrapEntry
+	if bootstrapJSON != "" {
+		if err := json.Unmarshal([]byte(bootstrapJSON), &bootstrap); err != nil {
+			fmt.Printf(">> authz: invalid --authz-bootstrap JSON: %v\n", err)
+			bootstrap = nil
+		} else {
+			fmt.Printf(">> authz: loaded %d bootstrap entries from flag\n", len(bootstrap))
 		}
 	}
 
@@ -672,5 +684,6 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 			"pki": pkiDB,
 		},
 		PreloadDir: preloadDir,
+		Bootstrap:  bootstrap,
 	}
 }

@@ -1,18 +1,16 @@
 {
-  "id": "75519529-be16-4f18-bc12-8e7745902e4e",
-  "name": "DMS Manager - Full Access",
+  "id": "lamassu.03c50968-8b68-46b9-832b-37536816a045",
+  "name": "VA - Full Access",
   "description": "",
   "rules": [
     {
       "namespace": "pki",
-      "schema_name": "dmsmanager",
-      "entity_type": "dms",
+      "schema_name": "va",
+      "entity_type": "va_role",
       "actions": [
         "read",
         "update",
-        "delete",
         "create",
-        "bind-identity",
         "ui"
       ],
       "relations": [],

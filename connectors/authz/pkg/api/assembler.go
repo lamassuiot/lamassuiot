@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	authzconfig "github.com/lamassuiot/authz/pkg/config"
@@ -132,6 +133,13 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 		}
 	}
 
+	if len(conf.Bootstrap) > 0 {
+		lBootstrap := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Bootstrap")
+		if err := runBootstrap(context.Background(), principalManager, conf.Bootstrap, lBootstrap); err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("failed to run bootstrap: %w", err)
+		}
+	}
+
 	resolver := principalManager.NewIdentityResolver(policyManager)
 
 	return principalManager, eng, policyManager, resolver, nil
@@ -160,6 +168,10 @@ func preloadPolicies(ctx context.Context, pm *service.PolicyManager, dir string,
 		if err := json.Unmarshal(data, &policy); err != nil {
 			log.Warnf("Skipping preload file %s: invalid JSON: %v", filePath, err)
 			continue
+		}
+
+		if !strings.HasPrefix(policy.ID, "lamassu.") {
+			policy.ID = "lamassu." + policy.ID
 		}
 
 		if err := pm.CreatePolicy(ctx, &policy); err != nil {

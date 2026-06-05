@@ -1,14 +1,14 @@
 {
-  "id": "a6811b60-5f89-4ce7-badb-78ea234794d3",
-  "name": "SUPER ADMIN",
-  "description": "Full access",
+  "id": "lamassu.d5dea139-a704-432e-9870-973d56fffb90",
+  "name": "UI Access",
+  "description": "",
   "rules": [
     {
-      "namespace": "authz",
+      "namespace": "pki",
       "schema_name": "*",
       "entity_type": "*",
       "actions": [
-        "*"
+        "ui"
       ],
       "relations": [],
       "direct_grants": [
@@ -16,11 +16,11 @@
       ]
     },
     {
-      "namespace": "pki",
+      "namespace": "authz",
       "schema_name": "*",
       "entity_type": "*",
       "actions": [
-        "*"
+        "ui"
       ],
       "relations": [],
       "direct_grants": [

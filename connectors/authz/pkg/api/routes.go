@@ -52,7 +52,7 @@ func NewAuthzRoutes(
 		principals := v1.Group("/principals")
 		{
 			principals.GET("", authzMwPrincipals.AuthListCheck(), principalCtrl.ListPrincipals)
-			principals.POST("", principalCtrl.CreatePrincipal)
+			principals.POST("", authzMwPrincipals.AuthzCheck("create"), principalCtrl.CreatePrincipal)
 			principals.GET("/:id", authzMwPrincipals.AuthzCheck("read"), principalCtrl.GetPrincipal)
 			principals.PUT("/:id", authzMwPrincipals.AuthzCheck("update"), principalCtrl.UpdatePrincipal)
 			principals.DELETE("/:id", authzMwPrincipals.AuthzCheck("delete"), principalCtrl.DeletePrincipal)
@@ -66,7 +66,7 @@ func NewAuthzRoutes(
 		policies := v1.Group("/policies")
 		{
 			policies.GET("", authzMwPolicies.AuthListCheck(), policyCtrl.ListPolicies)
-			policies.POST("", policyCtrl.CreatePolicy)
+			policies.POST("", authzMwPolicies.AuthzCheck("create"), policyCtrl.CreatePolicy)
 			policies.GET("/search", authzMwPolicies.AuthListCheck(), policyCtrl.SearchPolicies)
 			policies.GET("/:id", authzMwPolicies.AuthzCheck("read"), policyCtrl.GetPolicy)
 			policies.PUT("/:id", authzMwPolicies.AuthzCheck("update"), policyCtrl.UpdatePolicy)

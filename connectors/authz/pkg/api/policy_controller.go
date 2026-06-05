@@ -257,6 +257,13 @@ func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 			})
 			return
 		}
+		if err.Error() == fmt.Sprintf("system-managed policy %q cannot be deleted", policyID) {
+			c.JSON(http.StatusForbidden, dto.ErrorResponse{
+				Error:   "Cannot delete system-managed policy",
+				Details: map[string]string{"policyId": policyID},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to delete policy",
 			Details: map[string]string{"error": err.Error()},
