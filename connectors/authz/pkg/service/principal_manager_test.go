@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/store"
 	"github.com/lamassuiot/authz/pkg/testutil"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -432,12 +433,17 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 	require.NoError(t, err)
 
 	// List all principals
-	all, err := pm.ListPrincipals(false)
+	all, err := pm.ListPrincipals(nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 4)
 
 	// List only active principals
-	active, err := pm.ListPrincipals(true)
+	activeFilter := &resources.QueryParameters{
+		Filters: []resources.FilterOption{
+			{Field: "active", FilterOperation: resources.EnumEqual, Value: "true"},
+		},
+	}
+	active, err := pm.ListPrincipals(activeFilter)
 	require.NoError(t, err)
 	assert.Len(t, active, 3)
 }

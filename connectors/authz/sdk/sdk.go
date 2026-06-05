@@ -276,7 +276,7 @@ func (s *authzClient) MatchAndGetFilter(ctx context.Context, req *dto.MatchAndGe
 type PrincipalService interface {
 	Create(ctx context.Context, req *dto.CreatePrincipalRequest) (*dto.PrincipalResponse, error)
 	Get(ctx context.Context, id string) (*dto.PrincipalResponse, error)
-	List(ctx context.Context, activeOnly bool) (*dto.ListPrincipalsResponse, error)
+	List(ctx context.Context, queryParams map[string]string) (*dto.ListPrincipalsResponse, error)
 	Update(ctx context.Context, id string, req *dto.UpdatePrincipalRequest) (*dto.PrincipalResponse, error)
 	Delete(ctx context.Context, id string) error
 	GetPolicies(ctx context.Context, id string) (*dto.ListPrincipalPoliciesResponse, error)
@@ -310,10 +310,14 @@ func (s *principalClient) Get(ctx context.Context, id string) (*dto.PrincipalRes
 	return &result, nil
 }
 
-func (s *principalClient) List(ctx context.Context, activeOnly bool) (*dto.ListPrincipalsResponse, error) {
+func (s *principalClient) List(ctx context.Context, queryParams map[string]string) (*dto.ListPrincipalsResponse, error) {
 	path := "/v1/principals"
-	if activeOnly {
-		path += "?activeOnly=true"
+	if len(queryParams) > 0 {
+		vals := url.Values{}
+		for k, v := range queryParams {
+			vals.Set(k, v)
+		}
+		path += "?" + vals.Encode()
 	}
 	var result dto.ListPrincipalsResponse
 	err := s.client.get(ctx, path, &result)

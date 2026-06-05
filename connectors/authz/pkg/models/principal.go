@@ -13,10 +13,10 @@ type Principal struct {
 	Name        string     `gorm:"size:255;not null" json:"name"`
 	Description string     `gorm:"size:1024" json:"description,omitempty"`
 	Type        string     `gorm:"size:50;not null;index" json:"type"` // "oidc", "x509"
-	AuthConfig  AuthConfig `gorm:"type:jsonb" json:"authConfig"`
+	AuthConfig  AuthConfig `gorm:"type:jsonb" json:"auth_config"`
 	Active      bool       `gorm:"default:true;not null" json:"active"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 
 	// Many-to-many relationship with policies
 	Policies []PrincipalPolicy `gorm:"foreignKey:PrincipalID" json:"-"`
@@ -48,10 +48,10 @@ func (a *AuthConfig) Scan(value interface{}) error {
 // PrincipalPolicy represents the many-to-many association between principals and policies
 type PrincipalPolicy struct {
 	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	PrincipalID string    `gorm:"size:255;not null;index:idx_principal_policy,unique" json:"principalId"`
-	PolicyID    string    `gorm:"size:255;not null;index:idx_principal_policy,unique" json:"policyId"`
-	GrantedAt   time.Time `gorm:"autoCreateTime" json:"grantedAt"`
-	GrantedBy   string    `gorm:"size:255" json:"grantedBy,omitempty"`
+	PrincipalID string    `gorm:"size:255;not null;index:idx_principal_policy,unique" json:"principal_id"`
+	PolicyID    string    `gorm:"size:255;not null;index:idx_principal_policy,unique" json:"policy_id"`
+	GrantedAt   time.Time `gorm:"autoCreateTime" json:"granted_at"`
+	GrantedBy   string    `gorm:"size:255" json:"granted_by,omitempty"`
 
 	// Foreign key relationships
 	Principal Principal `gorm:"foreignKey:PrincipalID;references:ID" json:"-"`

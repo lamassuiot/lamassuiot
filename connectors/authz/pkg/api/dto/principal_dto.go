@@ -12,7 +12,7 @@ type CreatePrincipalRequest struct {
 	Name        string             `json:"name" binding:"required,min=1,max=255"`
 	Description *string            `json:"description,omitempty" binding:"omitempty,max=1024"`
 	Type        string             `json:"type"`
-	AuthConfig  *models.AuthConfig `json:"authConfig"`
+	AuthConfig  *models.AuthConfig `json:"auth_config"`
 	Active      *bool              `json:"active"` // pointer to allow explicit false
 }
 
@@ -20,7 +20,7 @@ type CreatePrincipalRequest struct {
 type UpdatePrincipalRequest struct {
 	Name        *string            `json:"name,omitempty"`
 	Description *string            `json:"description,omitempty" binding:"omitempty,max=1024"`
-	AuthConfig  *models.AuthConfig `json:"authConfig,omitempty"`
+	AuthConfig  *models.AuthConfig `json:"auth_config,omitempty"`
 	Active      *bool              `json:"active,omitempty"`
 }
 
@@ -30,10 +30,10 @@ type PrincipalResponse struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description,omitempty"`
 	Type        string             `json:"type"`
-	AuthConfig  *models.AuthConfig `json:"authConfig"`
+	AuthConfig  *models.AuthConfig `json:"auth_config"`
 	Active      bool               `json:"active"`
-	CreatedAt   time.Time          `json:"createdAt"`
-	UpdatedAt   time.Time          `json:"updatedAt"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 // ListPrincipalsResponse with pagination
@@ -44,27 +44,27 @@ type ListPrincipalsResponse struct {
 
 // GrantPolicyRequest for assigning a policy to a principal
 type GrantPolicyRequest struct {
-	PolicyID  string `json:"policyId" binding:"required"`
-	GrantedBy string `json:"grantedBy"`
+	PolicyID  string `json:"policy_id" binding:"required"`
+	GrantedBy string `json:"granted_by"`
 }
 
 // GrantPoliciesRequest for bulk assignment
 type GrantPoliciesRequest struct {
-	PolicyIDs []string `json:"policyIds" binding:"required,min=1"`
-	GrantedBy string   `json:"grantedBy"`
+	PolicyIDs []string `json:"policy_ids" binding:"required,min=1"`
+	GrantedBy string   `json:"granted_by"`
 }
 
 // PrincipalPolicyResponse shows policy assignments
 type PrincipalPolicyResponse struct {
-	PrincipalID string    `json:"principalId"`
-	PolicyID    string    `json:"policyId"`
-	PolicyName  string    `json:"policyName"`
-	GrantedAt   time.Time `json:"grantedAt"`
-	GrantedBy   string    `json:"grantedBy,omitempty"`
+	PrincipalID string    `json:"principal_id"`
+	PolicyID    string    `json:"policy_id"`
+	PolicyName  string    `json:"policy_name"`
+	GrantedAt   time.Time `json:"granted_at"`
+	GrantedBy   string    `json:"granted_by,omitempty"`
 }
 
 // ListPrincipalPoliciesResponse returns policy assignments
 type ListPrincipalPoliciesResponse struct {
-	PrincipalID string                    `json:"principalId"`
+	PrincipalID string                    `json:"principal_id"`
 	Policies    []PrincipalPolicyResponse `json:"policies"`
 }

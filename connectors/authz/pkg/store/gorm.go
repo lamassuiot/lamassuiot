@@ -6,22 +6,24 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"gorm.io/gorm"
 )
 
 // GormPrincipalStore implements both PrincipalStore and GrantStore against a *gorm.DB.
 // Both interfaces must be satisfied by the same instance to share transaction context.
 type GormPrincipalStore struct {
-	db *gorm.DB
+	db      *gorm.DB
+	querier *postgresDBQuerier[models.Principal]
 }
 
 // NewGormPrincipalStore creates the store and runs AutoMigrate for principal tables.
 func NewGormPrincipalStore(db *gorm.DB) (*GormPrincipalStore, error) {
-	s := &GormPrincipalStore{db: db}
 	if err := db.AutoMigrate(&models.Principal{}, &models.PrincipalPolicy{}); err != nil {
 		return nil, fmt.Errorf("migrate principal tables: %w", err)
 	}
-	return s, nil
+	q := newPostgresDBQuerier[models.Principal](db, "principals", "id")
+	return &GormPrincipalStore{db: db, querier: &q}, nil
 }
 
 // --- PrincipalStore ---
@@ -61,20 +63,27 @@ func (s *GormPrincipalStore) GetWithPolicies(ctx context.Context, id string) (*m
 	return &p, nil
 }
 
-func (s *GormPrincipalStore) List(ctx context.Context, activeOnly bool) ([]*models.Principal, error) {
+func (s *GormPrincipalStore) List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, error) {
 	var principals []*models.Principal
-	q := s.db.WithContext(ctx)
-	if activeOnly {
-		q = q.Where("active = ?", true)
-	}
-	if err := q.Find(&principals).Error; err != nil {
+	if _, err := s.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, false, func(p models.Principal) {
+		cp := p
+		principals = append(principals, &cp)
+	}); err != nil {
 		return nil, fmt.Errorf("list principals: %w", err)
 	}
 	return principals, nil
 }
 
 func (s *GormPrincipalStore) Update(ctx context.Context, p *models.Principal) error {
-	result := s.db.WithContext(ctx).Model(&models.Principal{}).Where("id = ?", p.ID).Updates(p)
+	updates := map[string]interface{}{
+		"name":        p.Name,
+		"description": p.Description,
+		"type":        p.Type,
+		"auth_config": p.AuthConfig,
+		"active":      p.Active,
+	}
+
+	result := s.db.WithContext(ctx).Model(&models.Principal{}).Where("id = ?", p.ID).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("update principal: %w", result.Error)
 	}

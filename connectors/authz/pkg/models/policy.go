@@ -14,8 +14,8 @@ type PolicyRecord struct {
 	Name        string          `gorm:"size:255;not null;index"       json:"name"`
 	Description string          `gorm:"size:1024;index"               json:"description,omitempty"`
 	Rules       json.RawMessage `gorm:"type:jsonb;not null"           json:"rules"`
-	CreatedAt   time.Time       `                                      json:"createdAt"`
-	UpdatedAt   time.Time       `                                      json:"updatedAt"`
+	CreatedAt   time.Time       `                                      json:"created_at"`
+	UpdatedAt   time.Time       `                                      json:"updated_at"`
 }
 
 func (PolicyRecord) TableName() string { return "policies" }
@@ -64,28 +64,28 @@ type ColumnFilter struct {
 // Rule defines authorization rules for an entity type
 type Rule struct {
 	Namespace     string         `json:"namespace"` // Namespace/config schema name (e.g., "iot", "pki")
-	SchemaName    string         `json:"schemaName,omitempty"`
-	EntityType    string         `json:"entityType"`
+	SchemaName    string         `json:"schema_name,omitempty"`
+	EntityType    string         `json:"entity_type"`
 	Actions       []string       `json:"actions"`
 	Relations     []RelationRule `json:"relations"`
-	DirectGrants  []string       `json:"directGrants,omitempty"`  // IDs of this entityType that can be directly accessed
-	ColumnFilters []ColumnFilter `json:"columnFilters,omitempty"` // Attribute-based conditions scoping access
+	DirectGrants  []string       `json:"direct_grants,omitempty"`  // IDs of this entityType that can be directly accessed
+	ColumnFilters []ColumnFilter `json:"column_filters,omitempty"` // Attribute-based conditions scoping access
 }
 
 // RelationRule defines cascading permissions through relations
 // Relations always use the same namespace as their parent rule
 type RelationRule struct {
 	To           string         `json:"-"`
-	ToSchemaName string         `json:"schemaName,omitempty"`
-	ToEntityType string         `json:"entityType,omitempty"`
+	ToSchemaName string         `json:"schema_name,omitempty"`
+	ToEntityType string         `json:"entity_type,omitempty"`
 	Via          string         `json:"via"`
 	Actions      []string       `json:"actions"`
 	Relations    []RelationRule `json:"relations,omitempty"`
 }
 
 type relationTarget struct {
-	SchemaName string `json:"schemaName,omitempty"`
-	EntityType string `json:"entityType"`
+	SchemaName string `json:"schema_name,omitempty"`
+	EntityType string `json:"entity_type"`
 }
 
 func (r *RelationRule) UnmarshalJSON(data []byte) error {
@@ -157,8 +157,8 @@ type Policy struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	Rules       []*Rule   `json:"rules"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // HasAction checks if a rule supports a specific action for direct access

@@ -27,8 +27,8 @@ type PolicyResponse struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Rules       []*models.Rule `json:"rules"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // PolicyListResponse represents a list of policies
@@ -41,10 +41,10 @@ type PolicyListResponse struct {
 type PolicyStatsResponse struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
-	RuleCount      int    `json:"ruleCount"`
-	PrincipalCount int64  `json:"principalCount"`
-	SizeBytes      int64  `json:"sizeBytes,omitempty"`
-	LastModified   string `json:"lastModified,omitempty"`
+	RuleCount      int    `json:"rule_count"`
+	PrincipalCount int64  `json:"principal_count"`
+	SizeBytes      int64  `json:"size_bytes,omitempty"`
+	LastModified   string `json:"last_modified,omitempty"`
 }
 
 // ToPolicyResponse converts a Policy to a PolicyResponse

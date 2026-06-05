@@ -125,11 +125,26 @@ func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
 // @Description Retrieves all policies
 // @Tags policies
 // @Produce json
+// @Param filter query string false "Filter expression (e.g. name[ct]foo)"
+// @Param sort_by query string false "Field to sort by"
+// @Param sort_mode query string false "Sort direction: asc or desc"
+// @Param page_size query int false "Page size"
+// @Param bookmark query string false "Pagination bookmark"
 // @Success 200 {object} dto.PolicyListResponse
+// @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/policies [get]
 func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
-	policies, _, err := ctrl.policyManager.ListPolicies(c.Request.Context(), nil)
+	queryParams, err := FilterQuery(c, c.Request, PolicyFilterableFields)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid filter",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+
+	policies, _, err := ctrl.policyManager.ListPolicies(c.Request.Context(), queryParams)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to list policies",
