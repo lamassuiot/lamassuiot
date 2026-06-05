@@ -5,8 +5,8 @@
   "rules": [
     {
       "namespace": "authz",
-      "schemaName": "authz_schema",
-      "entityType": "principal",
+      "schema_name": "authz_schema",
+      "entity_type": "principal",
       "actions": [
         "read",
         "delete",
@@ -16,14 +16,14 @@
         "list"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "authz",
-      "schemaName": "authz_schema",
-      "entityType": "policy",
+      "schema_name": "authz_schema",
+      "entity_type": "policy",
       "actions": [
         "read",
         "delete",
@@ -33,14 +33,14 @@
         "list"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "authz",
-      "schemaName": "authz_schema",
-      "entityType": "principal_policy",
+      "schema_name": "authz_schema",
+      "entity_type": "principal_policy",
       "actions": [
         "read",
         "revoke",
@@ -48,19 +48,19 @@
         "list"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     },
     {
       "namespace": "authz",
-      "schemaName": "authz_schema",
-      "entityType": "schema",
+      "schema_name": "authz_schema",
+      "entity_type": "schema",
       "actions": [
         "read"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }

@@ -5,8 +5,8 @@
   "rules": [
     {
       "namespace": "pki",
-      "schemaName": "va",
-      "entityType": "va_role",
+      "schema_name": "va",
+      "entity_type": "va_role",
       "actions": [
         "read",
         "update",
@@ -14,7 +14,7 @@
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }

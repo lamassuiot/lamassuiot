@@ -5,8 +5,8 @@
   "rules": [
     {
       "namespace": "pki",
-      "schemaName": "kms",
-      "entityType": "kms_key",
+      "schema_name": "kms",
+      "entity_type": "kms_key",
       "actions": [
         "read",
         "update",
@@ -16,7 +16,7 @@
         "ui"
       ],
       "relations": [],
-      "directGrants": [
+      "direct_grants": [
         "*"
       ]
     }
