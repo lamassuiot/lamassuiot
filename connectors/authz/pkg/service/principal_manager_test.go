@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -140,6 +141,8 @@ func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
 }
 
 func TestPrincipalManager_CreatePrincipal(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
@@ -155,11 +158,11 @@ func TestPrincipalManager_CreatePrincipal(t *testing.T) {
 		Active:      true,
 	}
 
-	err = pm.CreatePrincipal(principal)
+	err = pm.CreatePrincipal(ctx, principal)
 	assert.NoError(t, err)
 
 	// Verify it was created
-	retrieved, err := pm.GetPrincipal("user-1")
+	retrieved, err := pm.GetPrincipal(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "John Doe", retrieved.Name)
 	assert.Equal(t, "Initial description", retrieved.Description)
@@ -167,10 +170,11 @@ func TestPrincipalManager_CreatePrincipal(t *testing.T) {
 }
 
 func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	pm, err := NewPrincipalManager(container.DB)
 	require.NoError(t, err)
@@ -181,23 +185,24 @@ func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
 		Description: "Before update",
 		Active:      true,
 	}
-	err = pm.CreatePrincipal(principal)
+	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
 
 	principal.Description = "After update"
-	err = pm.UpdatePrincipal(principal)
+	err = pm.UpdatePrincipal(ctx, principal)
 	require.NoError(t, err)
 
-	retrieved, err := pm.GetPrincipal("user-1")
+	retrieved, err := pm.GetPrincipal(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "After update", retrieved.Description)
 }
 
 func TestPrincipalManager_GrantPolicy(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	// Create principal manager
 	pm, err := NewPrincipalManager(container.DB)
@@ -208,20 +213,20 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 		ID:   "user-1",
 		Name: "John Doe",
 	}
-	err = pm.CreatePrincipal(principal)
+	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
 
 	// Grant a policy
-	err = pm.GrantPolicy("user-1", "policy-iot-admin", "admin")
+	err = pm.GrantPolicy(ctx, "user-1", "policy-iot-admin", "admin")
 	assert.NoError(t, err)
 
 	// Verify the grant
-	hasPolicy, err := pm.HasPolicy("user-1", "policy-iot-admin")
+	hasPolicy, err := pm.HasPolicy(ctx, "user-1", "policy-iot-admin")
 	require.NoError(t, err)
 	assert.True(t, hasPolicy)
 
 	// Get policies
-	grants, err := pm.GetPrincipalPolicies("user-1")
+	grants, err := pm.GetPrincipalPolicies(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Len(t, grants, 1)
 	assert.Equal(t, "policy-iot-admin", grants[0].PolicyID)
@@ -230,10 +235,11 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 }
 
 func TestPrincipalManager_RevokePolicy(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	// Create principal manager
 	pm, err := NewPrincipalManager(container.DB)
@@ -244,27 +250,28 @@ func TestPrincipalManager_RevokePolicy(t *testing.T) {
 		ID:   "user-1",
 		Name: "John Doe",
 	}
-	err = pm.CreatePrincipal(principal)
+	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
 
-	err = pm.GrantPolicy("user-1", "policy-iot-admin", "admin")
+	err = pm.GrantPolicy(ctx, "user-1", "policy-iot-admin", "admin")
 	require.NoError(t, err)
 
 	// Revoke the policy
-	err = pm.RevokePolicy("user-1", "policy-iot-admin")
+	err = pm.RevokePolicy(ctx, "user-1", "policy-iot-admin")
 	assert.NoError(t, err)
 
 	// Verify it was revoked
-	hasPolicy, err := pm.HasPolicy("user-1", "policy-iot-admin")
+	hasPolicy, err := pm.HasPolicy(ctx, "user-1", "policy-iot-admin")
 	require.NoError(t, err)
 	assert.False(t, hasPolicy)
 }
 
 func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	// Create principal manager
 	pm, err := NewPrincipalManager(container.DB)
@@ -275,25 +282,26 @@ func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
 		ID:   "user-1",
 		Name: "John Doe",
 	}
-	err = pm.CreatePrincipal(principal)
+	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
 
 	// Grant multiple policies (grant the same policy once - duplicate should be skipped)
 	policyIDs := []string{"policy-iot-admin"}
-	err = pm.GrantPolicies("user-1", policyIDs, "admin")
+	err = pm.GrantPolicies(ctx, "user-1", policyIDs, "admin")
 	assert.NoError(t, err)
 
 	// Verify it was granted
-	count, err := pm.CountPrincipalPolicies("user-1")
+	count, err := pm.CountPrincipalPolicies(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
 }
 
 func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	// Create principal manager
 	pm, err := NewPrincipalManager(container.DB)
@@ -305,32 +313,33 @@ func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
 			ID:   "user-" + string(rune('0'+i)),
 			Name: "User " + string(rune('0'+i)),
 		}
-		err = pm.CreatePrincipal(principal)
+		err = pm.CreatePrincipal(ctx, principal)
 		require.NoError(t, err)
 	}
 
 	// Grant the same policy to all principals
 	for i := 1; i <= 3; i++ {
-		err = pm.GrantPolicy("user-"+string(rune('0'+i)), "policy-iot-admin", "admin")
+		err = pm.GrantPolicy(ctx, "user-"+string(rune('0'+i)), "policy-iot-admin", "admin")
 		require.NoError(t, err)
 	}
 
 	// Get all principals with this policy
-	principals, err := pm.GetPolicyPrincipals("policy-iot-admin")
+	principals, err := pm.GetPolicyPrincipals(ctx, "policy-iot-admin")
 	require.NoError(t, err)
 	assert.Len(t, principals, 3)
 
 	// Count principals
-	count, err := pm.CountPolicyPrincipals("policy-iot-admin")
+	count, err := pm.CountPolicyPrincipals(ctx, "policy-iot-admin")
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), count)
 }
 
 func TestPrincipalManager_DeletePrincipal(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	// Create principal manager
 	pm, err := NewPrincipalManager(container.DB)
@@ -341,31 +350,32 @@ func TestPrincipalManager_DeletePrincipal(t *testing.T) {
 		ID:   "user-1",
 		Name: "John Doe",
 	}
-	err = pm.CreatePrincipal(principal)
+	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
 
-	err = pm.GrantPolicy("user-1", "policy-iot-admin", "admin")
+	err = pm.GrantPolicy(ctx, "user-1", "policy-iot-admin", "admin")
 	require.NoError(t, err)
 
 	// Delete the principal
-	err = pm.DeletePrincipal("user-1")
+	err = pm.DeletePrincipal(ctx, "user-1")
 	assert.NoError(t, err)
 
 	// Verify it was deleted
-	_, err = pm.GetPrincipal("user-1")
+	_, err = pm.GetPrincipal(ctx, "user-1")
 	assert.Error(t, err)
 
 	// Verify policy associations were also deleted
-	count, err := pm.CountPrincipalPolicies("user-1")
+	count, err := pm.CountPrincipalPolicies(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), count)
 }
 
 func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	// Create principal manager
 	pm, err := NewPrincipalManager(container.DB)
@@ -377,32 +387,33 @@ func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
 		Name:   "John Doe",
 		Active: true,
 	}
-	err = pm.CreatePrincipal(principal)
+	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
 
 	// Deactivate
-	err = pm.SetPrincipalActive("user-1", false)
+	err = pm.SetPrincipalActive(ctx, "user-1", false)
 	assert.NoError(t, err)
 
 	// Verify
-	retrieved, err := pm.GetPrincipal("user-1")
+	retrieved, err := pm.GetPrincipal(ctx, "user-1")
 	require.NoError(t, err)
 	assert.False(t, retrieved.Active)
 
 	// Reactivate
-	err = pm.SetPrincipalActive("user-1", true)
+	err = pm.SetPrincipalActive(ctx, "user-1", true)
 	assert.NoError(t, err)
 
-	retrieved, err = pm.GetPrincipal("user-1")
+	retrieved, err = pm.GetPrincipal(ctx, "user-1")
 	require.NoError(t, err)
 	assert.True(t, retrieved.Active)
 }
 
 func TestPrincipalManager_ListPrincipals(t *testing.T) {
+	ctx := context.Background()
+
 	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
 	require.NoError(t, err)
 	defer container.Cleanup()
-
 
 	// Create principal manager
 	pm, err := NewPrincipalManager(container.DB)
@@ -415,7 +426,7 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 			Name:   "Active User " + string(rune('0'+i)),
 			Active: true,
 		}
-		err = pm.CreatePrincipal(principal)
+		err = pm.CreatePrincipal(ctx, principal)
 		require.NoError(t, err)
 	}
 
@@ -425,15 +436,15 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 		Name:   "Inactive User",
 		Active: false,
 	}
-	err = pm.CreatePrincipal(inactive)
+	err = pm.CreatePrincipal(ctx, inactive)
 	require.NoError(t, err)
 
 	// Explicitly set to inactive (since default might override)
-	err = pm.SetPrincipalActive("user-inactive", false)
+	err = pm.SetPrincipalActive(ctx, "user-inactive", false)
 	require.NoError(t, err)
 
 	// List all principals
-	all, err := pm.ListPrincipals(nil)
+	all, err := pm.ListPrincipals(ctx, nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 4)
 
@@ -443,7 +454,7 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 			{Field: "active", FilterOperation: resources.EnumEqual, Value: "true"},
 		},
 	}
-	active, err := pm.ListPrincipals(activeFilter)
+	active, err := pm.ListPrincipals(ctx, activeFilter)
 	require.NoError(t, err)
 	assert.Len(t, active, 3)
 }
