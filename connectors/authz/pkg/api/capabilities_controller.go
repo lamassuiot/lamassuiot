@@ -8,6 +8,7 @@ import (
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -60,13 +61,14 @@ func (c *CapabilitiesController) GetGlobalCapabilities(ctx *gin.Context) {
 		return
 	}
 
-	c.logger.WithFields(logrus.Fields{"principal_id": req.PrincipalID}).Debug("get global capabilities")
+	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	log.WithFields(logrus.Fields{"principal_id": req.PrincipalID}).Debug("get global capabilities")
 
 	gc, err := service.GetGlobalCapabilitiesForPrincipal(
 		ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, req.PrincipalID,
 	)
 	if err != nil {
-		c.logger.WithFields(logrus.Fields{"error": err}).Error("get global capabilities failed")
+		log.WithFields(logrus.Fields{"error": err}).Error("get global capabilities failed")
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to get global capabilities: " + err.Error()})
 		return
 	}
@@ -97,7 +99,8 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 		return
 	}
 
-	c.logger.WithFields(logrus.Fields{"auth_type": req.AuthType}).Debug("match and get global capabilities")
+	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	log.WithFields(logrus.Fields{"auth_type": req.AuthType}).Debug("match and get global capabilities")
 
 	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
@@ -115,7 +118,7 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 			ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, principalID,
 		)
 		if err != nil {
-			c.logger.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get global capabilities failed")
+			log.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get global capabilities failed")
 			ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to get global capabilities: " + err.Error()})
 			return
 		}
@@ -152,7 +155,8 @@ func (c *CapabilitiesController) GetEntityCapabilities(ctx *gin.Context) {
 		return
 	}
 
-	c.logger.WithFields(logrus.Fields{"principal_id": req.PrincipalID, "query_count": len(req.Queries)}).Debug("get entity capabilities")
+	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	log.WithFields(logrus.Fields{"principal_id": req.PrincipalID, "query_count": len(req.Queries)}).Debug("get entity capabilities")
 
 	engineQueries, err := dtoQueriesToEngine(c.eng.GetSchemas(), req.Queries)
 	if err != nil {
@@ -163,7 +167,7 @@ func (c *CapabilitiesController) GetEntityCapabilities(ctx *gin.Context) {
 		ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, req.PrincipalID, engineQueries,
 	)
 	if err != nil {
-		c.logger.WithFields(logrus.Fields{"error": err}).Error("get entity capabilities failed")
+		log.WithFields(logrus.Fields{"error": err}).Error("get entity capabilities failed")
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to get entity capabilities: " + err.Error()})
 		return
 	}
@@ -197,7 +201,8 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 		return
 	}
 
-	c.logger.WithFields(logrus.Fields{"auth_type": req.AuthType, "query_count": len(req.Queries)}).Debug("match and get entity capabilities")
+	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	log.WithFields(logrus.Fields{"auth_type": req.AuthType, "query_count": len(req.Queries)}).Debug("match and get entity capabilities")
 
 	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
@@ -234,7 +239,7 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 			ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, principalID, engineQueries,
 		)
 		if err != nil {
-			c.logger.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get entity capabilities batch failed")
+			log.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get entity capabilities batch failed")
 			ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to get entity capabilities: " + err.Error()})
 			return
 		}

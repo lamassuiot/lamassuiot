@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/core"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -62,7 +63,7 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 
 		authorized, matchedPrincipals, err := m.engine.MatchAndAuthorize(c.Request.Context(), authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKey)
 		if err != nil {
-			m.logger.Errorf("error in MatchAndAuthorize: %v", err)
+			helpers.ConfigureLogger(c.Request.Context(), m.logger).Errorf("error in MatchAndAuthorize: %v", err)
 			abortWithAuthzServiceError(c, err)
 			return
 		}
@@ -111,7 +112,7 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 
 		authorizedList, matchedPrincipals, err := s.engine.MatchAndGetFilter(c.Request.Context(), authType, authMaterial, s.namespace, s.schemaName, s.entityType)
 		if err != nil {
-			s.logger.Errorf("error in MatchAndGetFilter: %v", err)
+			helpers.ConfigureLogger(c.Request.Context(), s.logger).Errorf("error in MatchAndGetFilter: %v", err)
 			abortWithAuthzServiceError(c, err)
 			return
 		}
