@@ -562,7 +562,7 @@ components:
           type: string
         client_certificate_settings:
           $ref: '#/components/schemas/AuthOptionsClientCertificate'
-        external_webhook:
+        external_webhook_settings:
           type: object
           additionalProperties: true
 
