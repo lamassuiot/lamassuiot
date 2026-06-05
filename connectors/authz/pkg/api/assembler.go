@@ -4,115 +4,103 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"time"
 
+	authzconfig "github.com/lamassuiot/authz/pkg/config"
 	"github.com/lamassuiot/authz/pkg/engine"
 	authzmodels "github.com/lamassuiot/authz/pkg/models"
+	authzmw_audit "github.com/lamassuiot/authz/pkg/middlewares/audit"
+	authzmw_eventpub "github.com/lamassuiot/authz/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/authz/pkg/service"
 	"github.com/lamassuiot/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	bauditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
+	beventpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
-type Config struct {
-	Debug       bool
-	Port        int
-	LogFile     string
-	Schemas     map[string]string
-	Credentials map[string]config.PluggableStorageEngine
-	PreloadDir  string
-	// AuthzDB holds connection details for the authz service's own Postgres database
-	// (principals, grants, policies).  It is distinct from the per-schema engine DBs.
-	AuthzDB config.PluggableStorageEngine
-}
+const serviceID = "authz"
 
-// openLogFile returns an io.Writer that tees to the named file alongside the
-// existing logger output.  Returns nil when logFile is empty (no-op).
-func openLogFile(logFile string) (io.Writer, error) {
-	if logFile == "" {
-		return nil, nil
-	}
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInfo models.APIServiceInfo) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, int, error) {
+	principalManager, eng, policyManager, resolver, err := AssembleAuthzService(conf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open log file %q: %w", logFile, err)
-	}
-	return f, nil
-}
-
-// addFileOutput wraps the logger's current output with an io.MultiWriter so
-// entries are written to both the existing destination and the file.
-// Does nothing when fileWriter is nil.
-func addFileOutput(entry *logrus.Entry, fileWriter io.Writer) {
-	if fileWriter == nil {
-		return
-	}
-	entry.Logger.SetOutput(io.MultiWriter(entry.Logger.Out, fileWriter))
-	entry.Logger.SetFormatter(&OrderedJSONFormatter{FieldOrder: authzFieldOrder})
-}
-
-func AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error) {
-	fileWriter, err := openLogFile(cfg.LogFile)
-	if err != nil {
-		return -1, err
+		return nil, nil, nil, nil, -1, fmt.Errorf("failed to assemble Authz service: %w", err)
 	}
 
-	principalManager, eng, policyManager, resolver, err := AssembleAuthzService(cfg, fileWriter)
-	if err != nil {
-		return -1, fmt.Errorf("failed to assemble Authz service: %w", err)
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Service")
+	httpLogLevel := conf.Server.LogLevel
+	if httpLogLevel == "" {
+		httpLogLevel = conf.Logs.Level
 	}
+	lHttp := helpers.SetupLogger(httpLogLevel, "AUTHZ", "HTTP Server")
 
-	lHttp := helpers.SetupLogger(config.Debug, "AUTHZ", "HTTP Server")
-	addFileOutput(lHttp, fileWriter)
+	// Build authz engine from concrete managers BEFORE any wrapping so it always
+	// holds real storage references (the engine uses principalManager.matchService
+	// and principalManager.store which are not exposed by PrincipalService).
+	authzEngine := service.NewAuthzService(eng, principalManager, policyManager, service.WithServiceLogger(lSvc))
+
+	// Apply event/audit publisher decorators conditionally.
+	var principalSvc service.PrincipalService = principalManager
+	var policySvc service.PolicyService = policyManager
+
+	if conf.PublisherEventBus.Enabled {
+		lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "AUTHZ", "Event Bus")
+		lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "AUTHZ", "Audit Bus")
+
+		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
+		if err != nil {
+			return nil, nil, nil, nil, -1, fmt.Errorf("could not create Event Bus publisher: %w", err)
+		}
+
+		cePub := &beventpub.CloudEventPublisher{Publisher: pub, ServiceID: serviceID, Logger: lMessaging}
+		auditCePub := &beventpub.CloudEventPublisher{Publisher: pub, ServiceID: serviceID, Logger: lAudit}
+		auditPub := *bauditpub.NewAuditPublisher(auditCePub)
+
+		principalSvc = authzmw_eventpub.NewPrincipalEventPublisher(cePub)(principalManager)
+		principalSvc = authzmw_audit.NewPrincipalAuditPublisher(auditPub)(principalSvc)
+
+		policySvc = authzmw_eventpub.NewPolicyEventPublisher(cePub)(policyManager)
+		policySvc = authzmw_audit.NewPolicyAuditPublisher(auditPub)(policySvc)
+
+		lMessaging.Infof("Event Bus publisher enabled")
+	}
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
+	NewAuthzRoutes(httpGrp, authzEngine, principalSvc, eng, policySvc, resolver, lHttp)
 
-	NewAuthzRoutes(httpGrp, principalManager, eng, policyManager, resolver, lHttp)
-
-	port, err := routes.RunHttpRouter(
-		lHttp,
-		httpEngine,
-		config.HttpServer{
-			LogLevel:      config.Debug,
-			ListenAddress: "0.0.0.0",
-			Port:          cfg.Port,
-			Protocol:      config.HTTP,
-		},
-		models.APIServiceInfo{Version: "", BuildSHA: "", BuildTime: ""},
-	)
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
-		return -1, fmt.Errorf("failed to start Authz HTTP server: %w", err)
+		return nil, nil, nil, nil, -1, fmt.Errorf("failed to start Authz HTTP server: %w", err)
 	}
 
 	lHttp.Infof("Authz Service is running on port %d", port)
-	return port, nil
+	return principalManager, eng, policyManager, resolver, port, nil
 }
 
-func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, error) {
-	lDB := helpers.SetupLogger(config.Trace, "AUTHZ", "DB")
-	addFileOutput(lDB, fileWriter)
+func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, error) {
+	sdk.InitOtelSDK(context.Background(), "Authz Service", conf.OtelConfig)
 
-	// Connect to the authz Postgres database (principals, grants, policies).
-	authzDB, err := CreatePostgresDBConnection(lDB, cfg.AuthzDB)
+	lDB := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "DB")
+
+	authzDB, err := CreatePostgresDBConnection(lDB, conf.AuthzDB)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to connect to authz database: %w", err)
 	}
 
-	// Build policy store backed by Postgres.
 	policyStore, err := store.NewGormPolicyStore(authzDB)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to create policy store: %w", err)
 	}
 
-	// Build principal manager (also runs AutoMigrate for principals/grants tables).
 	principalManager, err := service.NewPrincipalManager(authzDB)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -120,9 +108,8 @@ func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*service.PrincipalM
 
 	policyManager := service.NewPolicyManager(policyStore)
 
-	// Connect to per-schema engine databases.
 	schemaDbs := make(map[string]*gorm.DB)
-	for schemaName, credentials := range cfg.Credentials {
+	for schemaName, credentials := range conf.Credentials {
 		lDB.Infof("Creating database connection for schema: %s", schemaName)
 		db, err := CreatePostgresDBConnection(lDB, credentials)
 		if err != nil {
@@ -131,18 +118,16 @@ func AssembleAuthzService(cfg Config, fileWriter io.Writer) (*service.PrincipalM
 		schemaDbs[schemaName] = db
 	}
 
-	lEngine := helpers.SetupLogger(config.Debug, "AUTHZ", "Engine")
-	addFileOutput(lEngine, fileWriter)
+	lEngine := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Engine")
 
-	eng, err := engine.NewEngine(schemaDbs, cfg.Schemas, engine.WithLogger(lEngine))
+	eng, err := engine.NewEngine(schemaDbs, conf.Schemas, engine.WithLogger(lEngine))
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	if cfg.PreloadDir != "" {
-		lPreload := helpers.SetupLogger(config.Debug, "AUTHZ", "Preload")
-		addFileOutput(lPreload, fileWriter)
-		if err := preloadPolicies(context.Background(), policyManager, cfg.PreloadDir, lPreload); err != nil {
+	if conf.PreloadDir != "" {
+		lPreload := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Preload")
+		if err := preloadPolicies(context.Background(), policyManager, conf.PreloadDir, lPreload); err != nil {
 			return nil, nil, nil, nil, fmt.Errorf("failed to preload policies: %w", err)
 		}
 	}
@@ -188,25 +173,36 @@ func preloadPolicies(ctx context.Context, pm *service.PolicyManager, dir string,
 	return nil
 }
 
-func CreatePostgresDBConnection(log *logrus.Entry, cfg config.PluggableStorageEngine) (*gorm.DB, error) {
-	dbLogger := &GormLogger{
-		Logger: log,
+// postgresDBConfig holds the fields extracted from a PluggableStorageEngine config map.
+type postgresDBConfig struct {
+	Hostname string           `mapstructure:"hostname"`
+	Port     int              `mapstructure:"port"`
+	Username string           `mapstructure:"username"`
+	Password cconfig.Password `mapstructure:"password"`
+	Database string           `mapstructure:"database"`
+	// Schema sets the PostgreSQL search_path. Used when all services share one
+	// database (e.g. monolithic mode where schemas live inside the "pki" DB).
+	Schema string `mapstructure:"schema"`
+}
+
+func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageEngine) (*gorm.DB, error) {
+	dbCfg, err := cconfig.DecodeStruct[postgresDBConfig](cfg.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode postgres config: %w", err)
 	}
 
-	host, _ := cfg.Config["hostname"].(string)
-	port, _ := cfg.Config["port"].(int)
-	username, _ := cfg.Config["username"].(string)
-	password := string(cfg.Config["password"].(config.Password))
-	database, _ := cfg.Config["database"].(string)
-	if database == "" {
-		database = "pki"
+	if dbCfg.Database == "" {
+		return nil, fmt.Errorf("postgres config is missing required field 'database'")
 	}
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable",
-		host, username, password, database, port)
+		dbCfg.Hostname, dbCfg.Username, string(dbCfg.Password), dbCfg.Database, dbCfg.Port)
+	if dbCfg.Schema != "" {
+		dsn += " search_path=" + dbCfg.Schema
+	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: dbLogger,
+		Logger: NewGormLogger(log),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
@@ -221,48 +217,6 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg config.PluggableStorageEn
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
-	log.Infof("Connected to PostgreSQL database: %s@%s:%d/%s", username, host, port, database)
+	log.Infof("Connected to PostgreSQL database: %s@%s:%d/%s", dbCfg.Username, dbCfg.Hostname, dbCfg.Port, dbCfg.Database)
 	return db, nil
-}
-
-func NewGormLogger(logger *logrus.Entry) *GormLogger {
-	return &GormLogger{
-		Logger: logger,
-	}
-}
-
-// Logrus GORM iface implementation
-// https://www.soberkoder.com/go-gorm-logging/
-type GormLogger struct {
-	Logger *logrus.Entry
-}
-
-func (l *GormLogger) LogMode(lvl gormlogger.LogLevel) gormlogger.Interface {
-	newlogger := *l
-	return &newlogger
-}
-
-func (l *GormLogger) Info(ctx context.Context, str string, rest ...interface{}) {
-	le := helpers.ConfigureLogger(ctx, l.Logger)
-	le.Infof(str, rest...)
-}
-
-func (l *GormLogger) Warn(ctx context.Context, str string, rest ...interface{}) {
-	le := helpers.ConfigureLogger(ctx, l.Logger)
-	le.Warnf(str, rest...)
-}
-
-func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{}) {
-	le := helpers.ConfigureLogger(ctx, l.Logger)
-	le.Errorf(str, rest...)
-}
-
-func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	le := helpers.ConfigureLogger(ctx, l.Logger)
-	sql, rows := fc()
-	if err != nil {
-		le.Errorf("Took: %s, Err:%s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), err, sql, rows)
-	} else {
-		le.Tracef("Took: %s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), sql, rows)
-	}
 }

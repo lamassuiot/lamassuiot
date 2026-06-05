@@ -29,73 +29,73 @@ func NewPrincipalManager(db *gorm.DB) (*PrincipalManager, error) {
 
 // --- Principal CRUD ---
 
-func (m *PrincipalManager) CreatePrincipal(p *models.Principal) error {
-	return m.store.Create(context.Background(), p)
+func (m *PrincipalManager) CreatePrincipal(ctx context.Context, p *models.Principal) error {
+	return m.store.Create(ctx, p)
 }
 
-func (m *PrincipalManager) GetPrincipal(id string) (*models.Principal, error) {
-	return m.store.Get(context.Background(), id)
+func (m *PrincipalManager) GetPrincipal(ctx context.Context, id string) (*models.Principal, error) {
+	return m.store.Get(ctx, id)
 }
 
-func (m *PrincipalManager) GetPrincipalWithPolicies(id string) (*models.Principal, error) {
-	return m.store.GetWithPolicies(context.Background(), id)
+func (m *PrincipalManager) GetPrincipalWithPolicies(ctx context.Context, id string) (*models.Principal, error) {
+	return m.store.GetWithPolicies(ctx, id)
 }
 
-func (m *PrincipalManager) ListPrincipals(queryParams *resources.QueryParameters) ([]*models.Principal, error) {
-	return m.store.List(context.Background(), queryParams)
+func (m *PrincipalManager) ListPrincipals(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, error) {
+	return m.store.List(ctx, queryParams)
 }
 
-func (m *PrincipalManager) UpdatePrincipal(p *models.Principal) error {
-	return m.store.Update(context.Background(), p)
+func (m *PrincipalManager) UpdatePrincipal(ctx context.Context, p *models.Principal) error {
+	return m.store.Update(ctx, p)
 }
 
-func (m *PrincipalManager) DeletePrincipal(id string) error {
-	return m.store.Delete(context.Background(), id)
+func (m *PrincipalManager) DeletePrincipal(ctx context.Context, id string) error {
+	return m.store.Delete(ctx, id)
 }
 
-func (m *PrincipalManager) SetPrincipalActive(id string, active bool) error {
-	return m.store.SetActive(context.Background(), id, active)
+func (m *PrincipalManager) SetPrincipalActive(ctx context.Context, id string, active bool) error {
+	return m.store.SetActive(ctx, id, active)
 }
 
 // --- Policy grants ---
 
-func (m *PrincipalManager) GrantPolicy(principalID, policyID, grantedBy string) error {
-	if _, err := m.store.Get(context.Background(), principalID); err != nil {
+func (m *PrincipalManager) GrantPolicy(ctx context.Context, principalID, policyID, grantedBy string) error {
+	if _, err := m.store.Get(ctx, principalID); err != nil {
 		return err
 	}
-	return m.store.Grant(context.Background(), principalID, policyID, grantedBy)
+	return m.store.Grant(ctx, principalID, policyID, grantedBy)
 }
 
-func (m *PrincipalManager) RevokePolicy(principalID, policyID string) error {
-	return m.store.Revoke(context.Background(), principalID, policyID)
+func (m *PrincipalManager) RevokePolicy(ctx context.Context, principalID, policyID string) error {
+	return m.store.Revoke(ctx, principalID, policyID)
 }
 
-func (m *PrincipalManager) GrantPolicies(principalID string, policyIDs []string, grantedBy string) error {
-	return m.store.GrantBatch(context.Background(), principalID, policyIDs, grantedBy)
+func (m *PrincipalManager) GrantPolicies(ctx context.Context, principalID string, policyIDs []string, grantedBy string) error {
+	return m.store.GrantBatch(ctx, principalID, policyIDs, grantedBy)
 }
 
-func (m *PrincipalManager) RevokePolicies(principalID string, policyIDs []string) error {
-	return m.store.RevokeBatch(context.Background(), principalID, policyIDs)
+func (m *PrincipalManager) RevokePolicies(ctx context.Context, principalID string, policyIDs []string) error {
+	return m.store.RevokeBatch(ctx, principalID, policyIDs)
 }
 
-func (m *PrincipalManager) HasPolicy(principalID, policyID string) (bool, error) {
-	return m.store.Has(context.Background(), principalID, policyID)
+func (m *PrincipalManager) HasPolicy(ctx context.Context, principalID, policyID string) (bool, error) {
+	return m.store.Has(ctx, principalID, policyID)
 }
 
-func (m *PrincipalManager) GetPrincipalPolicies(principalID string) ([]models.PrincipalPolicy, error) {
-	return m.store.ListForPrincipal(context.Background(), principalID)
+func (m *PrincipalManager) GetPrincipalPolicies(ctx context.Context, principalID string) ([]models.PrincipalPolicy, error) {
+	return m.store.ListForPrincipal(ctx, principalID)
 }
 
-func (m *PrincipalManager) GetPolicyPrincipals(policyID string) ([]*models.Principal, error) {
-	return m.store.ListForPolicy(context.Background(), policyID)
+func (m *PrincipalManager) GetPolicyPrincipals(ctx context.Context, policyID string) ([]*models.Principal, error) {
+	return m.store.ListForPolicy(ctx, policyID)
 }
 
-func (m *PrincipalManager) CountPrincipalPolicies(principalID string) (int64, error) {
-	return m.store.CountForPrincipal(context.Background(), principalID)
+func (m *PrincipalManager) CountPrincipalPolicies(ctx context.Context, principalID string) (int64, error) {
+	return m.store.CountForPrincipal(ctx, principalID)
 }
 
-func (m *PrincipalManager) CountPolicyPrincipals(policyID string) (int64, error) {
-	return m.store.CountForPolicy(context.Background(), policyID)
+func (m *PrincipalManager) CountPolicyPrincipals(ctx context.Context, policyID string) (int64, error) {
+	return m.store.CountForPolicy(ctx, policyID)
 }
 
 // NewIdentityResolver creates an IdentityResolver wired to this manager's store and

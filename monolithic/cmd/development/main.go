@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/lamassuiot/authz/pkg/api"
+	authzconfig "github.com/lamassuiot/authz/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -246,7 +246,7 @@ func main() {
 	} else {
 		fmt.Println(">> launching docker: Postgres ...")
 		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
+		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "authz"})
 		backend, err := posgresSubsystem.Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
@@ -578,7 +578,7 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
-func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, pkiSchema, preloadDir string) *api.Config {
+func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, pkiSchema, preloadDir string) *authzconfig.AuthzConfig {
 	if !enabled || useSqlite {
 		return nil
 	}
@@ -591,15 +591,33 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 		}
 	}
 
-	return &api.Config{
-		Debug:   true,
-		Port:    8888,
-		AuthzDB: storageConfig,
+	// The monolithic Postgres container uses a single database ("pki") with per-service
+	// PostgreSQL schemas inside it. Clone the shared credentials and inject the correct
+	// database + schema for each authz connection.
+	authzDB := storageConfig
+	authzDB.Config = deepCopy(storageConfig.Config)
+	authzDB.Config["database"] = "pki"
+	authzDB.Config["schema"] = "authz"
+
+	pkiDB := storageConfig
+	pkiDB.Config = deepCopy(storageConfig.Config)
+	pkiDB.Config["database"] = "pki"
+	pkiDB.Config["schema"] = "ca"
+
+	return &authzconfig.AuthzConfig{
+		Logs: cconfig.Logging{Level: cconfig.Debug},
+		Server: cconfig.HttpServer{
+			LogLevel:      cconfig.Debug,
+			Port:          8888,
+			ListenAddress: "0.0.0.0",
+			Protocol:      cconfig.HTTP,
+		},
+		AuthzDB: authzDB,
 		Schemas: map[string]string{
 			"pki": pkiSchema,
 		},
 		Credentials: map[string]cconfig.PluggableStorageEngine{
-			"pki": storageConfig,
+			"pki": pkiDB,
 		},
 		PreloadDir: preloadDir,
 	}

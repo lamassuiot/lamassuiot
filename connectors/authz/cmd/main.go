@@ -1,13 +1,21 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/lamassuiot/authz/pkg/api"
 	authzconfig "github.com/lamassuiot/authz/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/sirupsen/logrus"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
+)
+
+var (
+	version   string = "v0"
+	sha1ver   string = "-"
+	buildTime string = "devTS"
 )
 
 const readyToAuthz = `
@@ -21,57 +29,40 @@ $$ |  $$ |\$$$$$$  |   $$ |   $$ |  $$ |       $$$$$$$$\
 \__|  \__| \______/    \__|   \__|  \__|       \________|`
 
 func main() {
-	configPath := flag.String("config", "config.yaml", "Path to the YAML configuration file")
-	preloadDir := flag.String("preload", "", "Directory of policy JSON files to initialize on startup")
-	flag.Parse()
+	log.SetFormatter(helpers.LogFormatter)
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	// Load configuration from YAML file
-	appCfg, err := authzconfig.LoadAppConfig(*configPath)
+	conf, err := cconfig.LoadConfig[authzconfig.AuthzConfig](nil)
 	if err != nil {
-		logrus.Fatalf("Failed to load configuration from %q: %v", *configPath, err)
+		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
 	}
 
-	// Map pkg/config types to api.Config
-	credentials := make(map[string]config.PluggableStorageEngine, len(appCfg.Credentials))
-	for name, cred := range appCfg.Credentials {
-		credentials[name] = config.PluggableStorageEngine{
-			Config: map[string]interface{}{
-				"username": cred.Username,
-				"password": cred.Password,
-				"host":     cred.Host,
-				"port":     cred.Port,
-				"database": cred.Database,
-			},
-		}
+	globalLogLevel, err := log.ParseLevel(string(conf.Logs.Level))
+	if err != nil {
+		log.Warn("unknown log level. defaulting to 'info' log level")
+		globalLogLevel = log.InfoLevel
 	}
+	log.SetLevel(globalLogLevel)
+	log.Infof("global log level set to '%s'", globalLogLevel)
 
-	apiCfg := api.Config{
-		Debug:       appCfg.Debug,
-		Port:        8888,
-		LogFile:     appCfg.LogFile,
-		Schemas:     appCfg.Schemas,
-		Credentials: credentials,
-		PreloadDir:  *preloadDir,
-		AuthzDB: config.PluggableStorageEngine{
-			Config: map[string]interface{}{
-				"username": appCfg.AuthzDB.Username,
-				"password": appCfg.AuthzDB.Password,
-				"host":     appCfg.AuthzDB.Host,
-				"port":     appCfg.AuthzDB.Port,
-				"database": appCfg.AuthzDB.Database,
-			},
-		},
+	confBytes, err := yaml.Marshal(conf)
+	if err != nil {
+		log.Fatalf("could not dump yaml config: %s", err)
 	}
+	log.Debugf("===================================================")
+	log.Debugf("%s", confBytes)
+	log.Debugf("===================================================")
 
-	logrus.Info("Database and Policy Store initialized")
-
-	if _, err := api.AssembleAuthzServiceWithHTTPServer(apiCfg); err != nil {
-		logrus.Fatalf("Failed to start Authz service: %v", err)
+	if _, _, _, _, _, err := api.AssembleAuthzServiceWithHTTPServer(*conf, models.APIServiceInfo{
+		Version:   version,
+		BuildSHA:  sha1ver,
+		BuildTime: buildTime,
+	}); err != nil {
+		log.Fatalf("could not run Authz Server. Exiting: %s", err)
 	}
 
 	fmt.Println(readyToAuthz)
 
-	// Keep alive
 	forever := make(chan struct{})
 	<-forever
 }
