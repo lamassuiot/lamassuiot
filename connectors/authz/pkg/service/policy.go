@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/authz/pkg/engine"
@@ -43,6 +44,9 @@ func (pm *PolicyManager) UpdatePolicy(ctx context.Context, policy *models.Policy
 }
 
 func (pm *PolicyManager) DeletePolicy(ctx context.Context, policyID string) error {
+	if strings.HasPrefix(policyID, "lamassu.") {
+		return fmt.Errorf("system-managed policy %q cannot be deleted", policyID)
+	}
 	return pm.store.Delete(ctx, policyID)
 }
 

@@ -1,18 +1,18 @@
 {
-  "id": "a66e2570-3117-45b0-8e90-e4a9f0610b43",
-  "name": "KMS - Full Access",
+  "id": "lamassu.75519529-be16-4f18-bc12-8e7745902e4e",
+  "name": "DMS Manager - Full Access",
   "description": "",
   "rules": [
     {
       "namespace": "pki",
-      "schema_name": "kms",
-      "entity_type": "kms_key",
+      "schema_name": "dmsmanager",
+      "entity_type": "dms",
       "actions": [
         "read",
         "update",
         "delete",
-        "sign",
         "create",
+        "bind-identity",
         "ui"
       ],
       "relations": [],

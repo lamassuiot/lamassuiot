@@ -1,15 +1,17 @@
 {
-  "id": "03c50968-8b68-46b9-832b-37536816a045",
-  "name": "VA - Full Access",
+  "id": "lamassu.a66e2570-3117-45b0-8e90-e4a9f0610b43",
+  "name": "KMS - Full Access",
   "description": "",
   "rules": [
     {
       "namespace": "pki",
-      "schema_name": "va",
-      "entity_type": "va_role",
+      "schema_name": "kms",
+      "entity_type": "kms_key",
       "actions": [
         "read",
         "update",
+        "delete",
+        "sign",
         "create",
         "ui"
       ],
