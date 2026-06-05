@@ -95,14 +95,26 @@ func (ctrl *PrincipalController) GetPrincipal(c *gin.Context) {
 // @Description Get all principals
 // @Tags principals
 // @Produce json
-// @Param activeOnly query bool false "Filter active only"
+// @Param filter query string false "Filter expression (e.g. active[eq]true, name[ct]foo)"
+// @Param sort_by query string false "Field to sort by"
+// @Param sort_mode query string false "Sort direction: asc or desc"
+// @Param page_size query int false "Page size"
+// @Param bookmark query string false "Pagination bookmark"
 // @Success 200 {object} dto.ListPrincipalsResponse
+// @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/principals [get]
 func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
-	activeOnly := c.Query("activeOnly") == "true"
+	queryParams, err := FilterQuery(c, c.Request, PrincipalFilterableFields)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid filter",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
 
-	principals, err := ctrl.manager.ListPrincipals(activeOnly)
+	principals, err := ctrl.manager.ListPrincipals(queryParams)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to list principals",

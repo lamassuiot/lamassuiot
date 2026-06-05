@@ -5,6 +5,7 @@ import (
 
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"gorm.io/gorm"
 )
 
@@ -40,8 +41,8 @@ func (m *PrincipalManager) GetPrincipalWithPolicies(id string) (*models.Principa
 	return m.store.GetWithPolicies(context.Background(), id)
 }
 
-func (m *PrincipalManager) ListPrincipals(activeOnly bool) ([]*models.Principal, error) {
-	return m.store.List(context.Background(), activeOnly)
+func (m *PrincipalManager) ListPrincipals(queryParams *resources.QueryParameters) ([]*models.Principal, error) {
+	return m.store.List(context.Background(), queryParams)
 }
 
 func (m *PrincipalManager) UpdatePrincipal(p *models.Principal) error {

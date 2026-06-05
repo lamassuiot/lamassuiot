@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
 // PrincipalStore is the persistence port for principal CRUD and loading.
@@ -11,7 +12,7 @@ type PrincipalStore interface {
 	Create(ctx context.Context, p *models.Principal) error
 	Get(ctx context.Context, id string) (*models.Principal, error)
 	GetWithPolicies(ctx context.Context, id string) (*models.Principal, error)
-	List(ctx context.Context, activeOnly bool) ([]*models.Principal, error)
+	List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, error)
 	Update(ctx context.Context, p *models.Principal) error
 	Delete(ctx context.Context, id string) error
 	SetActive(ctx context.Context, id string, active bool) error
