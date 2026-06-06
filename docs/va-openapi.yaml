@@ -161,6 +161,9 @@ paths:
         Retrieves the Validation Authority role configuration for a specific Certificate Authority
         identified by its Subject Key Identifier (SKI).
       operationId: getVaRoleById
+      x-authz:
+        entity_type: va_role
+        action: read
       parameters:
         - name: ca-ski
           in: path
@@ -203,6 +206,9 @@ paths:
         Updates the Validation Authority role configuration for a specific Certificate Authority.
         This includes CRL generation settings and signing configuration.
       operationId: updateVaRole
+      x-authz:
+        entity_type: va_role
+        action: update
       parameters:
         - name: ca-ski
           in: path

@@ -29,6 +29,9 @@ paths:
       tags: [Events]
       summary: Get the latest event per event type
       operationId: getLatestEvents
+      x-authz:
+        entity_type: event
+        check: filter
       parameters:
         - name: page_size
           in: query
@@ -106,6 +109,9 @@ paths:
       tags: [Subscriptions]
       summary: List subscriptions for a user
       operationId: getUserSubscriptions
+      x-authz:
+        entity_type: subscription
+        check: filter
       parameters:
         - $ref: '#/components/parameters/UserId'
       responses:
@@ -135,6 +141,9 @@ paths:
       tags: [Subscriptions]
       summary: Subscribe user to an event type
       operationId: subscribeUser
+      x-authz:
+        entity_type: subscription
+        action: create
       parameters:
         - $ref: '#/components/parameters/UserId'
       requestBody:
@@ -170,6 +179,9 @@ paths:
       tags: [Subscriptions]
       summary: Unsubscribe user from an existing subscription
       operationId: unsubscribeUser
+      x-authz:
+        entity_type: subscription
+        action: delete
       parameters:
         - $ref: '#/components/parameters/UserId'
         - name: subId

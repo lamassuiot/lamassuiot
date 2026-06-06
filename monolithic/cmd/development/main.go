@@ -107,7 +107,8 @@ func main() {
 	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
 	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
-	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/authz/examples/iot/schemas.pki-v2.json", "path to PKI schema JSON file for authz service")
+	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/schemas.pki-v2.json", "path to PKI schema JSON file for authz service")
+	authzSchema := flag.String("authz-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json", "path to Authz schema JSON file for authz service")
 	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
 	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
 	flag.Parse()
@@ -477,7 +478,7 @@ func main() {
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
-		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -566,7 +567,7 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
-func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, pkiSchema, preloadDir, bootstrapJSON string) *authzconfig.AuthzConfig {
+func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON string) *authzconfig.AuthzConfig {
 	if !enabled || useSqlite {
 		return nil
 	}
@@ -612,10 +613,12 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 		},
 		AuthzDB: authzDB,
 		Schemas: map[string]string{
-			"pki": pkiSchema,
+			"authz": authzSchema,
+			"pki":   pkiSchema,
 		},
 		Credentials: map[string]cconfig.PluggableStorageEngine{
-			"pki": pkiDB,
+			"authz": authzDB,
+			"pki":   pkiDB,
 		},
 		PreloadDir: preloadDir,
 		Bootstrap:  bootstrap,
