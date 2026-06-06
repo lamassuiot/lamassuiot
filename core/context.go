@@ -12,4 +12,6 @@ const (
 
 	LamassuContextKeyEventType    string = "lamassu.io/ctx/cloudevent/type"
 	LamassuContextKeyEventSubject string = "lamassu.io/ctx/cloudevent/subject"
+
+	LamassuContextKeyMatchedPrincipals string = "lamassu.io/ctx/matched-principals"
 )
