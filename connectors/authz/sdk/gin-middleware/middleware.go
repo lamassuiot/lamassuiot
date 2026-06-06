@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/core"
+	lamassucore "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
@@ -72,8 +73,9 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 			return
 		}
 
-		// Store matched principals in context for potential use by handlers
 		c.Set("matched_principals", matchedPrincipals)
+		reqCtx := context.WithValue(c.Request.Context(), lamassucore.LamassuContextKeyMatchedPrincipals, matchedPrincipals)
+		c.Request = c.Request.WithContext(reqCtx)
 		c.Next()
 	}
 }
@@ -123,6 +125,8 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 		}
 
 		c.Set("matched_principals", matchedPrincipals)
+		reqCtx := context.WithValue(c.Request.Context(), lamassucore.LamassuContextKeyMatchedPrincipals, matchedPrincipals)
+		c.Request = c.Request.WithContext(reqCtx)
 		c.Next()
 	}
 }

@@ -221,6 +221,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		engine.Use(
 			gin.Recovery(),
 			cors.New(corsConfig),
+			stripIncomingHeaders(),
 			clientCertsToHeaderUsingEnvoyStyle(),
 		)
 
@@ -403,6 +404,27 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 	}
 
 	return -1, -1, fmt.Errorf("unsupported mode")
+}
+
+// gatewayStripHeaders are headers that clients must not be allowed to inject —
+// they are either set by this gateway or by internal services only.
+var gatewayStripHeaders = []string{
+	"X-Principal-Id",
+	"X-Forwarded-Cert",
+	"X-Lms-Source",
+	"X-Forwarded-Client-Cert", // set by gateway after TLS inspection
+	"X-Request-Id",            // gateway assigns its own UUID downstream
+	"Ssl-Client-Cert",         // nginx mTLS proxy header
+	"X-Amzn-Mtls-Clientcert", // AWS ALB mTLS header
+}
+
+func stripIncomingHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		for _, h := range gatewayStripHeaders {
+			c.Request.Header.Del(h)
+		}
+		c.Next()
+	}
 }
 
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
