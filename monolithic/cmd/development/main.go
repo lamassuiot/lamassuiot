@@ -530,7 +530,7 @@ func main() {
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
-		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -619,7 +619,7 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
-func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON string) *authzconfig.AuthzConfig {
+func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON string) *authzconfig.AuthzConfig {
 	if !enabled || useSqlite {
 		return nil
 	}
@@ -672,7 +672,8 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 			"authz": authzDB,
 			"pki":   pkiDB,
 		},
-		PreloadDir: preloadDir,
-		Bootstrap:  bootstrap,
+		PublisherEventBus: publisherEventBus,
+		PreloadDir:        preloadDir,
+		Bootstrap:         bootstrap,
 	}
 }
