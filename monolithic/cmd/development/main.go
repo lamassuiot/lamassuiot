@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/fatih/color"
 	authzconfig "github.com/lamassuiot/authz/pkg/config"
@@ -508,19 +507,6 @@ func main() {
 	}
 
 	http.DefaultClient = sdk.HttpClientWithCustomHeaders(http.DefaultClient, "X-Principal-ID", "admin-mode")
-
-	time.Sleep(3 * time.Second)
-	kmsSDK := sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/kms", conf.GatewayPortHttps))
-	engines, err := kmsSDK.GetCryptoEngineProvider(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("==================== Available Crypto Engines ==========================")
-	for _, engine := range engines {
-		fmt.Println(engine.ID)
-	}
-	fmt.Println("========================================================================")
 
 	// Populate sample data if enabled
 	if *sampleData {
