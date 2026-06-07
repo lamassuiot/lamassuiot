@@ -71,6 +71,10 @@ func (s *AuthzImplementation) Authorize(ctx context.Context, principalID, namesp
 		return false, fmt.Errorf("authorization check failed: %w", err)
 	}
 
+	reason := "denied: no applicable policy"
+	if allowed {
+		reason = "allowed by policy"
+	}
 	log.WithFields(logrus.Fields{
 		"principal_id": principalID,
 		"namespace":    namespace,
@@ -78,6 +82,8 @@ func (s *AuthzImplementation) Authorize(ctx context.Context, principalID, namesp
 		"entity_type":  entityType,
 		"action":       action,
 		"allowed":      allowed,
+		"policy_count": len(policies.GetAll()),
+		"reason":       reason,
 	}).Info("authorization decision")
 
 	return allowed, nil
@@ -101,6 +107,7 @@ func (s *AuthzImplementation) GetFilter(ctx context.Context, principalID, namesp
 		"namespace":    namespace,
 		"schema":       schemaName,
 		"entity_type":  entityType,
+		"policy_count": len(policies.GetAll()),
 	}).Debug("list filter generated")
 
 	return filterSQL, nil
@@ -118,8 +125,9 @@ func (s *AuthzImplementation) MatchAndAuthorize(ctx context.Context, authType, a
 	}
 
 	log.WithFields(logrus.Fields{
-		"matched_count": len(matchedPrincipals),
-		"auth_type":     authType,
+		"matched_count":      len(matchedPrincipals),
+		"matched_principals": matchedPrincipals,
+		"auth_type":          authType,
 	}).Debug("resolved principals")
 
 	allowed, err := s.engine.Authorize(ctx, policies, namespace, schemaName, action, entityType, entityKey)
@@ -127,13 +135,20 @@ func (s *AuthzImplementation) MatchAndAuthorize(ctx context.Context, authType, a
 		return false, nil, fmt.Errorf("authorization check failed: %w", err)
 	}
 
+	reason := "denied: no applicable policy"
+	if allowed {
+		reason = "allowed by policy"
+	}
 	log.WithFields(logrus.Fields{
 		"matched_count": len(matchedPrincipals),
+		"auth_type":     authType,
 		"namespace":     namespace,
 		"schema":        schemaName,
 		"entity_type":   entityType,
 		"action":        action,
 		"allowed":       allowed,
+		"policy_count":  len(policies.GetAll()),
+		"reason":        reason,
 	}).Info("authorization decision")
 
 	return allowed, matchedPrincipals, nil
@@ -161,10 +176,13 @@ func (s *AuthzImplementation) MatchAndGetFilter(ctx context.Context, authType, a
 	}
 
 	log.WithFields(logrus.Fields{
-		"matched_count": len(matchedPrincipals),
-		"namespace":     namespace,
-		"schema":        schemaName,
-		"entity_type":   entityType,
+		"matched_count":      len(matchedPrincipals),
+		"matched_principals": matchedPrincipals,
+		"auth_type":          authType,
+		"namespace":          namespace,
+		"schema":             schemaName,
+		"entity_type":        entityType,
+		"policy_count":       len(policies.GetAll()),
 	}).Debug("list filter generated")
 
 	return whereClause, matchedPrincipals, nil
