@@ -32,15 +32,15 @@ type SchemaDefinition struct {
 // It captures the primaryKey field as a raw JSON value so that both the string form
 // ("device_id") and the array form (["tenant_id", "device_id"]) are accepted.
 type schemaJSON struct {
-	EntityType    string            `json:"entity_type"`
-	TableName     string            `json:"table_name"`
-	SchemaName    string            `json:"schema_name,omitempty"`
-	PrimaryKey    json.RawMessage   `json:"primary_key"`
+	EntityType    string            `json:"entityType"`
+	TableName     string            `json:"tableName"`
+	SchemaName    string            `json:"schemaName,omitempty"`
+	PrimaryKey    json.RawMessage   `json:"primaryKey"`
 	Relations     []RelationConfig  `json:"relations"`
-	AtomicActions []string          `json:"atomic_actions"`
-	GlobalActions []string          `json:"global_actions"`
+	AtomicActions []string          `json:"atomicActions"`
+	GlobalActions []string          `json:"globalActions"`
 	Filterable    []FilterableField `json:"filterable,omitempty"`
-	ConfigSchema  string            `json:"config_schema,omitempty"`
+	ConfigSchema  string            `json:"configSchema,omitempty"`
 }
 
 // parsePrimaryKey normalises the raw JSON value for the primaryKey field into a []string.
@@ -114,8 +114,8 @@ func (s *SchemaDefinition) ValidateEntityKey(entityKey map[string]string) error 
 // RelationConfig defines a foreign key relationship to another entity
 type RelationConfig struct {
 	Name         string `json:"name"`
-	TargetEntity string `json:"target_entity"`
-	ForeignKey   string `json:"foreign_key"`
+	TargetEntity string `json:"targetEntity"`
+	ForeignKey   string `json:"foreignKey"`
 }
 
 // SchemaRegistry manages all entity schemas
