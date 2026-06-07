@@ -1,0 +1,87 @@
+[
+  {
+    "entityType": "organization",
+    "tableName": "organizations",
+    "schemaName": "public",
+    "primaryKey": "id",
+    "relations": [],
+    "atomicActions": [
+      "read",
+      "delete"
+    ],
+    "globalActions": [
+      "write",
+      "list"
+    ]
+  },
+  {
+    "entityType": "building",
+    "tableName": "buildings",
+    "schemaName": "public",
+    "relations": [
+      {
+        "name": "My Org",
+        "targetEntity": "organization",
+        "foreignKey": "organization_id"
+      }
+    ],
+    "atomicActions": [
+      "read",
+      "delete"
+    ],
+    "globalActions": [
+      "write",
+      "list"
+    ],
+    "primaryKey": "id"
+  },
+  {
+    "entityType": "gateway",
+    "tableName": "iot_gateways",
+    "schemaName": "public",
+    "primaryKey": "id",
+    "relations": [
+      {
+        "name": "building",
+        "targetEntity": "building",
+        "foreignKey": "building_id"
+      }
+    ],
+    "atomicActions": [
+      "read",
+      "control",
+      "delete"
+    ],
+    "globalActions": [
+      "write",
+      "list"
+    ]
+  },
+  {
+    "entityType": "device",
+    "tableName": "iot_devices",
+    "schemaName": "public",
+    "primaryKey": "device_id",
+    "relations": [
+      {
+        "name": "gateway",
+        "targetEntity": "gateway",
+        "foreignKey": "gateway_id"
+      }
+    ],
+    "atomicActions": [
+      "read",
+      "control",
+      "delete"
+    ],
+    "globalActions": [
+      "write",
+      "list"
+    ],
+    "filterable": [
+      { "column": "status", "type": "string" },
+      { "column": "active", "type": "bool" },
+      { "column": "tenant_id", "type": "string" }
+    ]
+  }
+]

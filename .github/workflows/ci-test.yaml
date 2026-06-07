@@ -41,6 +41,8 @@ jobs:
             tag: storage-postgres
           - path: connectors/awsiot
             tag: connector-awsiot
+          - path: connectors/authz
+            tag: connector-authz
           - path: monolithic
             tag: monolithic
           
