@@ -1,0 +1,154 @@
+[
+  {
+    "id": "policy-iot-admin",
+    "name": "IoT Administrator Policy",
+    "description": "Full access to organizations, buildings, gateways and devices",
+    "rules": [
+      {
+        "namespace": "iot",
+        "schemaName": "public",
+        "entityType": "organization",
+        "actions": [
+          "read",
+          "write",
+          "delete"
+        ],
+        "directGrants": [
+          "org-1"
+        ],
+        "relations": [
+          {
+            "to": {
+              "schemaName": "public",
+              "entityType": "building"
+            },
+            "via": "organization_id",
+            "actions": [
+              "read",
+              "write",
+              "delete"
+            ],
+            "relations": [
+              {
+                "to": {
+                  "schemaName": "public",
+                  "entityType": "gateway"
+                },
+                "via": "building_id",
+                "actions": [
+                  "read",
+                  "write",
+                  "control",
+                  "delete"
+                ],
+                "relations": [
+                  {
+                    "to": {
+                      "schemaName": "public",
+                      "entityType": "device"
+                    },
+                    "via": "gateway_id",
+                    "actions": [
+                      "read",
+                      "write",
+                      "control",
+                      "delete"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "namespace": "iot",
+        "schemaName": "public",
+        "entityType": "building",
+        "actions": [
+          "read",
+          "write",
+          "delete"
+        ],
+        "directGrants": [
+          "building-1"
+        ],
+        "relations": [
+          {
+            "to": {
+              "schemaName": "public",
+              "entityType": "gateway"
+            },
+            "via": "building_id",
+            "actions": [
+              "read",
+              "write",
+              "control",
+              "delete"
+            ],
+            "relations": [
+              {
+                "to": {
+                  "schemaName": "public",
+                  "entityType": "device"
+                },
+                "via": "gateway_id",
+                "actions": [
+                  "read",
+                  "write",
+                  "control",
+                  "delete"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "namespace": "iot",
+        "schemaName": "public",
+        "entityType": "gateway",
+        "actions": [
+          "read",
+          "write",
+          "control",
+          "delete"
+        ],
+        "directGrants": [
+          "gateway-1"
+        ],
+        "relations": [
+          {
+            "to": {
+              "schemaName": "public",
+              "entityType": "device"
+            },
+            "via": "gateway_id",
+            "actions": [
+              "read",
+              "write",
+              "control",
+              "delete"
+            ]
+          }
+        ]
+      },
+      {
+        "namespace": "iot",
+        "schemaName": "public",
+        "entityType": "device",
+        "actions": [
+          "read",
+          "write",
+          "control",
+          "delete"
+        ],
+        "relations": [],
+        "directGrants": [
+          "device-1",
+          "device-4"
+        ]
+      }
+    ]
+  }
+]

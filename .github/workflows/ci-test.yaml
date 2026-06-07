@@ -41,6 +41,8 @@ jobs:
             tag: storage-postgres
           - path: connectors/awsiot
             tag: connector-awsiot
+          - path: connectors/authz
+            tag: connector-authz
           - path: monolithic
             tag: monolithic
           
@@ -69,7 +71,7 @@ jobs:
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5.1.2
+        uses: codecov/codecov-action@v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: ${{ github.event.pull_request.base.sha }}
