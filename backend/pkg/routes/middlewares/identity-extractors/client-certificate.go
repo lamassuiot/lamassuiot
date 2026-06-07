@@ -57,7 +57,9 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, map[string]interface{}{
 			"crt": crtS.String(),
 		})
-		ctx.Request = ctx.Request.WithContext(reqCtx)
+		if ctx.Request != nil {
+			ctx.Request = ctx.Request.WithContext(reqCtx)
+		}
 	}
 }
 
