@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -24,26 +25,26 @@ func TestClientCertificateIdentityExtractorHeaderEnvoy(t *testing.T) {
 	ctx := &gin.Context{}
 	extractor.ExtractAuthentication(ctx, *req)
 
-	value, hasValue := ctx.Get(string(IdentityExtractorClientCertificate))
+	authType, hasAuthType := ctx.Get(core.LamassuContextKeyAuthType)
+	if !hasAuthType {
+		t.Fatalf("Expected auth type to be set")
+	}
+	if authType != string(IdentityExtractorClientCertificate) {
+		t.Errorf("Expected auth type CLIENT_CERTIFICATE, got %s", authType)
+	}
+
+	value, hasValue := ctx.Get(core.LamassuContextKeyAuthCredentialStruct)
 	if !hasValue {
-		t.Errorf("Expected certificate, got nil")
+		t.Fatalf("Expected certificate credential to be set")
 	}
 
-	crts, ok := value.([]*x509.Certificate)
+	crt, ok := value.(*x509.Certificate)
 	if !ok {
-		t.Errorf("Expected certificate, got %T", value)
+		t.Fatalf("Expected *x509.Certificate, got %T", value)
 	}
 
-	if len(crts) != 2 {
-		t.Fatalf("Expected 2 certificates, got %d", len(crts))
-	}
-
-	if crts[0].Subject.CommonName != "test" {
-		t.Errorf("Expected certificate with CN test, got %s", crts[0].Subject.CommonName)
-	}
-
-	if crts[1].Subject.CommonName != "Factory 1" {
-		t.Errorf("Expected certificate with CN Factory 1, got %s", crts[1].Subject.CommonName)
+	if crt.Subject.CommonName != "test" {
+		t.Errorf("Expected certificate with CN test, got %s", crt.Subject.CommonName)
 	}
 }
 
@@ -60,18 +61,18 @@ func TestClientCertificateIdentityExtractorHeaderNginx(t *testing.T) {
 	ctx := &gin.Context{}
 	extractor.ExtractAuthentication(ctx, *req)
 
-	value, hasValue := ctx.Get(string(IdentityExtractorClientCertificate))
+	value, hasValue := ctx.Get(core.LamassuContextKeyAuthCredentialStruct)
 	if !hasValue {
-		t.Errorf("Expected certificate, got nil")
+		t.Fatalf("Expected certificate credential to be set")
 	}
 
-	crts, ok := value.([]*x509.Certificate)
+	crt, ok := value.(*x509.Certificate)
 	if !ok {
-		t.Errorf("Expected certificate, got %T", value)
+		t.Fatalf("Expected *x509.Certificate, got %T", value)
 	}
 
-	if crts[0].Subject.CommonName != "Corebox-1" {
-		t.Errorf("Expected certificate with CN Corebox-1, got %s", crts[0].Subject.CommonName)
+	if crt.Subject.CommonName != "Corebox-1" {
+		t.Errorf("Expected certificate with CN Corebox-1, got %s", crt.Subject.CommonName)
 	}
 }
 
@@ -88,18 +89,18 @@ func TestClientCertificateIdentityExtractorHeaderAwsALB(t *testing.T) {
 	ctx := &gin.Context{}
 	extractor.ExtractAuthentication(ctx, *req)
 
-	value, hasValue := ctx.Get(string(IdentityExtractorClientCertificate))
+	value, hasValue := ctx.Get(core.LamassuContextKeyAuthCredentialStruct)
 	if !hasValue {
-		t.Errorf("Expected certificate, got nil")
+		t.Fatalf("Expected certificate credential to be set")
 	}
 
-	crts, ok := value.([]*x509.Certificate)
+	crt, ok := value.(*x509.Certificate)
 	if !ok {
-		t.Errorf("Expected certificate, got %T", value)
+		t.Fatalf("Expected *x509.Certificate, got %T", value)
 	}
 
-	if crts[0].Subject.CommonName != "ui-generated-bootstrap" {
-		t.Errorf("Expected certificate with CN ui-generated-bootstrap, got %s", crts[0].Subject.CommonName)
+	if crt.Subject.CommonName != "ui-generated-bootstrap" {
+		t.Errorf("Expected certificate with CN ui-generated-bootstrap, got %s", crt.Subject.CommonName)
 	}
 }
 
@@ -124,18 +125,18 @@ func TestClientCertificateIdentityExtractorPeerTLS(t *testing.T) {
 	ctx := &gin.Context{}
 	extractor.ExtractAuthentication(ctx, *req)
 
-	value, hasValue := ctx.Get(string(IdentityExtractorClientCertificate))
+	value, hasValue := ctx.Get(core.LamassuContextKeyAuthCredentialStruct)
 	if !hasValue {
-		t.Errorf("Expected certificate, got nil")
+		t.Fatalf("Expected certificate credential to be set")
 	}
 
-	crts, ok := value.([]*x509.Certificate)
+	crt, ok := value.(*x509.Certificate)
 	if !ok {
-		t.Errorf("Expected certificate, got %T", value)
+		t.Fatalf("Expected *x509.Certificate, got %T", value)
 	}
 
-	if crts[0].Subject.CommonName != "Corebox-1" {
-		t.Errorf("Expected certificate with CN Corebox-1, got %s", crts[0].Subject.CommonName)
+	if crt.Subject.CommonName != "Corebox-1" {
+		t.Errorf("Expected certificate with CN Corebox-1, got %s", crt.Subject.CommonName)
 	}
 }
 
@@ -151,7 +152,7 @@ func TestClientCertificateIdentityExtractorNoID(t *testing.T) {
 	ctx := &gin.Context{}
 	extractor.ExtractAuthentication(ctx, *req)
 
-	_, hasValue := ctx.Get(string(IdentityExtractorClientCertificate))
+	_, hasValue := ctx.Get(core.LamassuContextKeyAuthCredentialStruct)
 	if hasValue {
 		t.Errorf("Expected no certificate, got one")
 	}
