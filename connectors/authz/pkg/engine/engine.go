@@ -163,7 +163,7 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 
 	authorized := query.RowsAffected > 0
 
-	reason := "entity not found or does not match policy conditions"
+	reason := "denied: entity key did not match any policy-permitted entity"
 	fields := logrus.Fields{
 		"action":      action,
 		"entity_type": entityType,
@@ -172,7 +172,7 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 		"reason":      reason,
 	}
 	if authorized {
-		fields["reason"] = "entity found matching policy conditions"
+		fields["reason"] = "allowed: entity key matched policy conditions"
 		var matchedPolicyIDs []string
 		for _, policy := range policies.GetAll() {
 			for _, rule := range policy.Rules {
