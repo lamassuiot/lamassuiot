@@ -180,7 +180,8 @@ func TestMigrateAllDatabasesIdempotency(t *testing.T) {
 }
 
 func TestMigrateAllDatabasesPartialFailure(t *testing.T) {
-	// Setup only some databases (to simulate partial environment)
+	// Setup only some schemas — MigrateAllDatabases creates missing schemas automatically,
+	// so it should still succeed even with a partial setup.
 	availableDatabases := []string{
 		postgres.CA_SCHEMA,
 		postgres.DEVICE_SCHEMA,
@@ -191,10 +192,15 @@ func TestMigrateAllDatabasesPartialFailure(t *testing.T) {
 
 	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "Test")
 
-	// This should fail because not all databases exist
 	err := postgres.MigrateAllDatabases(logger, cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to migrate database")
+	require.NoError(t, err)
+
+	// Verify pre-created schemas were migrated
+	for _, dbName := range availableDatabases {
+		var count int64
+		suite.DB[dbName].Table("goose_db_version").Count(&count)
+		assert.Greater(t, count, int64(0), "database %s should have migration version records", dbName)
+	}
 }
 
 func TestGetDatabaseVersion(t *testing.T) {
@@ -367,9 +373,8 @@ func TestMigrationTablesCreated(t *testing.T) {
 
 			// Get all tables
 			var tables []string
-			err = suite.DB[tt.dbName].Table("information_schema.tables").
-				Where("table_schema = ?", "public").
-				Pluck("table_name", &tables).Error
+			err = suite.DB[tt.dbName].Raw("SELECT tablename FROM pg_tables WHERE schemaname = ?", tt.dbName).
+				Pluck("tablename", &tables).Error
 			require.NoError(t, err)
 
 			// Verify expected tables exist
