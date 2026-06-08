@@ -116,6 +116,7 @@ jobs:
             "engines/fs-storage/s3"
             "backend"
             "connectors/awsiot"
+            "connectors/authz"
             "monolithic"
           )
 
@@ -270,6 +271,7 @@ jobs:
             va,
             alerts,
             aws-connector,
+            authz,
             lamassu-db-migration,
             ca-to-kms-migration,
           ]
