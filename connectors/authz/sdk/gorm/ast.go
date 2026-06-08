@@ -1,155 +1,162 @@
 package gorm
 
 import (
+	"sort"
 	"strings"
 
-	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"gorm.io/gorm"
 )
 
-func AddASTToQuery(tx *gorm.DB, ast *pg_query.ParseResult, originalSQL string) *gorm.DB {
-	if ast == nil || len(ast.Stmts) == 0 {
-		return tx
-	}
-
-	root := ast.Stmts[0].GetStmt()
-	selectStmt := root.GetSelectStmt()
-	if selectStmt == nil {
-		return tx
-	}
-
-	// Find the start of the WHERE clause to use as a global boundary
-	whereStart := getLoc(selectStmt.WhereClause)
-
-	// Process FromClause which contains the Join Tree
-	for _, fromItem := range selectStmt.FromClause {
-		tx = processJoinItem(tx, fromItem, whereStart, originalSQL)
-	}
-
-	// Process Where
-	if whereStart != -1 {
-		kwStart := findKeywordPos(originalSQL, "WHERE", whereStart)
-		whereStr := originalSQL[kwStart:]
-		cleanWhere := strings.TrimSpace(removeWherePrefix(whereStr))
-		tx = tx.Where(cleanWhere)
-	}
-
-	return tx
+// authzParsed holds the extracted parts of an authz SQL query.
+type authzParsed struct {
+	fromTable string
+	joins     []string
+	where     string
 }
 
-func processJoinItem(tx *gorm.DB, node *pg_query.Node, whereStart int32, sql string) *gorm.DB {
-	joinExpr := node.GetJoinExpr()
-	if joinExpr == nil {
-		return tx
-	}
-
-	// 1. Recursively process the Left Argument (Larg) first.
-	// This drills down to the base table or previous joins.
-	if joinExpr.Larg != nil {
-		tx = processJoinItem(tx, joinExpr.Larg, whereStart, sql)
-	}
-
-	// 2. Process the Right Argument (Rarg) which is the table being joined here.
-	if joinExpr.Rarg != nil && joinExpr.Rarg.GetRangeVar() != nil {
-		tableLoc := joinExpr.Rarg.GetRangeVar().Location
-
-		// Find the start of THIS join (look for JOIN/LEFT/INNER behind the table location)
-		jStart := findKeywordPos(sql, "JOIN", tableLoc)
-		if lIdx := findKeywordPos(sql, "LEFT", jStart); lIdx < jStart && lIdx != -1 {
-			jStart = lIdx
-		} else if iIdx := findKeywordPos(sql, "INNER", jStart); iIdx < jStart && iIdx != -1 {
-			jStart = iIdx
-		}
-
-		// Calculate the end of THIS join segment.
-		// It should end where the NEXT join starts or where the WHERE clause starts.
-		jEnd := int32(len(sql))
-
-		// If there is a WHERE clause, that's our absolute limit
-		if whereStart != -1 {
-			jEnd = findKeywordPos(sql, "WHERE", whereStart)
-		}
-
-		// CRITICAL FIX: Look ahead for the next JOIN keyword starting from the table name
-		// If another JOIN exists before our current jEnd, we cut the string there.
-		nextJoin := findNextJoinPos(sql, tableLoc)
-		if nextJoin != -1 && nextJoin < jEnd {
-			jEnd = nextJoin
-		}
-
-		joinStr := strings.TrimSpace(sql[jStart:jEnd])
-		if joinStr != "" {
-			tx = tx.Joins(joinStr)
-		}
-	}
-
-	return tx
+// compoundJoinKeywords lists JOIN variants in longest-first order so that
+// "LEFT JOIN" is claimed before the plain "JOIN" substring inside it.
+var compoundJoinKeywords = []string{
+	"LEFT OUTER JOIN",
+	"RIGHT OUTER JOIN",
+	"FULL OUTER JOIN",
+	"LEFT JOIN",
+	"INNER JOIN",
+	"RIGHT JOIN",
+	"FULL JOIN",
+	"CROSS JOIN",
+	"JOIN",
 }
 
-func getLoc(node *pg_query.Node) int32 {
-	if node == nil {
-		return -1
+// parseAuthzSQL extracts the FROM table, JOIN clauses, and WHERE condition from an
+// authz-generated SELECT query.  Expected form:
+//
+//	SELECT * FROM [schema.]table [LEFT JOIN ... ON ...] [WHERE ...]
+func parseAuthzSQL(sql string) authzParsed {
+	if sql == "" {
+		return authzParsed{}
 	}
-	if n := node.GetAExpr(); n != nil {
-		return n.Location
-	}
-	if n := node.GetBoolExpr(); n != nil {
-		return n.Location
-	}
-	if n := node.GetColumnRef(); n != nil {
-		return n.Location
-	}
-	if n := node.GetSubLink(); n != nil {
-		return n.Location
-	}
-	if n := node.GetNullTest(); n != nil {
-		return n.Location
-	}
-	return -1
-}
 
-func findKeywordPos(sql string, kw string, beforePos int32) int32 {
-	if beforePos <= 0 {
-		return beforePos
-	}
-	sub := strings.ToUpper(sql[:beforePos])
-	idx := strings.LastIndex(sub, strings.ToUpper(kw))
-	if idx != -1 {
-		return int32(idx)
-	}
-	return beforePos
-}
+	upper := strings.ToUpper(sql)
 
-// findNextJoinPos looks forward from the current position to find where the next join starts
-func findNextJoinPos(sql string, startPos int32) int32 {
-	if int(startPos) >= len(sql) {
-		return -1
+	// Split off the WHERE clause.
+	whereOff := findWordPos(upper, "WHERE")
+	whereClause := ""
+	body := sql
+	if whereOff != -1 {
+		whereClause = strings.TrimSpace(sql[whereOff+len("WHERE"):])
+		body = sql[:whereOff]
 	}
-	upperSql := strings.ToUpper(sql[startPos:])
 
-	// Keywords that signify a new join is starting
-	keywords := []string{"LEFT JOIN", "INNER JOIN", "RIGHT JOIN", "JOIN", "FULL JOIN"}
+	// Find the FROM keyword.
+	fromOff := findWordPos(strings.ToUpper(body), "FROM")
+	if fromOff == -1 {
+		return authzParsed{where: whereClause}
+	}
 
-	firstIdx := -1
-	for _, kw := range keywords {
-		idx := strings.Index(upperSql, kw)
-		if idx != -1 {
-			if firstIdx == -1 || idx < firstIdx {
-				firstIdx = idx
+	afterFrom := strings.TrimSpace(body[fromOff+len("FROM"):])
+	upperAfterFrom := strings.ToUpper(afterFrom)
+
+	// Locate all JOIN keywords (greedy longest-match, left-to-right).
+	joinPositions := findJoinPositions(upperAfterFrom)
+
+	var fromTable string
+	var joins []string
+
+	if len(joinPositions) == 0 {
+		fromTable = extractTableName(afterFrom)
+	} else {
+		fromTable = extractTableName(afterFrom[:joinPositions[0]])
+		for i, p := range joinPositions {
+			end := len(afterFrom)
+			if i+1 < len(joinPositions) {
+				end = joinPositions[i+1]
 			}
+			joins = append(joins, strings.TrimSpace(afterFrom[p:end]))
 		}
 	}
 
-	if firstIdx != -1 {
-		return startPos + int32(firstIdx)
+	return authzParsed{
+		fromTable: fromTable,
+		joins:     joins,
+		where:     whereClause,
+	}
+}
+
+// AddASTToQuery injects the parsed authz JOINs and WHERE condition into tx.
+func AddASTToQuery(tx *gorm.DB, parsed authzParsed) *gorm.DB {
+	for _, j := range parsed.joins {
+		tx = tx.Joins(j)
+	}
+	if parsed.where != "" {
+		tx = tx.Where(parsed.where)
+	}
+	return tx
+}
+
+// findWordPos returns the byte offset of the first word-boundary occurrence of kw
+// (which must already be upper-cased) inside the upper-cased string upper, or -1.
+func findWordPos(upper, kw string) int {
+	kLen := len(kw)
+	for i := 0; i <= len(upper)-kLen; i++ {
+		if upper[i:i+kLen] != kw {
+			continue
+		}
+		if i > 0 && isIdentChar(upper[i-1]) {
+			continue
+		}
+		if i+kLen < len(upper) && isIdentChar(upper[i+kLen]) {
+			continue
+		}
+		return i
 	}
 	return -1
 }
 
-func removeWherePrefix(s string) string {
-	lower := strings.ToLower(s)
-	if strings.HasPrefix(lower, "where") {
-		return s[5:]
+// findJoinPositions returns the start positions (in upper) of all JOIN keyword
+// occurrences, in ascending order.  Longer compound keywords (LEFT JOIN) are
+// matched before their shorter suffixes (JOIN) to avoid double-counting.
+func findJoinPositions(upper string) []int {
+	claimed := make([]bool, len(upper))
+	var positions []int
+
+	for _, kw := range compoundJoinKeywords {
+		off := 0
+		for {
+			idx := strings.Index(upper[off:], kw)
+			if idx == -1 {
+				break
+			}
+			p := off + idx
+			prevOK := p == 0 || !isIdentChar(upper[p-1])
+			nextOK := p+len(kw) == len(upper) || !isIdentChar(upper[p+len(kw)])
+			if prevOK && nextOK && !claimed[p] {
+				positions = append(positions, p)
+				for i := p; i < p+len(kw) && i < len(claimed); i++ {
+					claimed[i] = true
+				}
+			}
+			off = p + 1
+		}
+	}
+
+	sort.Ints(positions)
+	return positions
+}
+
+// extractTableName returns the unqualified table name from a fragment such as
+// "schema.table", "schema.table AS alias", or "table".
+func extractTableName(s string) string {
+	s = strings.TrimSpace(s)
+	if idx := strings.IndexAny(s, " \t\r\n"); idx != -1 {
+		s = s[:idx]
+	}
+	if idx := strings.LastIndex(s, "."); idx != -1 {
+		s = s[idx+1:]
 	}
 	return s
+}
+
+func isIdentChar(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
 }

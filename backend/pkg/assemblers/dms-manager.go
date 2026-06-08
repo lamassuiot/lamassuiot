@@ -29,7 +29,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service)
+	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service, conf.AuthzClient)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run DMS Manager http server: %s", err)

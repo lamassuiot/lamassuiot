@@ -14,4 +14,5 @@ type DeviceManagerConfig struct {
 	CAClient              struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
+	AuthzClient           AuthzClient                    `mapstructure:"authz_client"`
 }
