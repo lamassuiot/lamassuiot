@@ -118,7 +118,7 @@ func (s *AuthzImplementation) MatchAndAuthorize(ctx context.Context, authType, a
 	policies, matchedPrincipals, err := s.resolver.Resolve(ctx, authMaterial, authType)
 	if err != nil {
 		if errors.Is(err, ErrNoMatch) {
-			return false, nil, fmt.Errorf("no matching principals found")
+			return false, nil, ErrNoMatch
 		}
 		return false, nil, fmt.Errorf("failed to resolve principals: %w", err)
 	}
@@ -159,7 +159,7 @@ func (s *AuthzImplementation) MatchAndGetFilter(ctx context.Context, authType, a
 	policies, matchedPrincipals, err := s.resolver.Resolve(ctx, authMaterial, authType)
 	if err != nil {
 		if errors.Is(err, ErrNoMatch) {
-			return "", nil, fmt.Errorf("no matching principals found")
+			return "", nil, ErrNoMatch
 		}
 		return "", nil, fmt.Errorf("failed to resolve principals: %w", err)
 	}
