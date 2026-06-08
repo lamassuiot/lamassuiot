@@ -10,11 +10,12 @@ import (
 
 	authzconfig "github.com/lamassuiot/authz/pkg/config"
 	"github.com/lamassuiot/authz/pkg/engine"
-	authzmodels "github.com/lamassuiot/authz/pkg/models"
 	authzmw_audit "github.com/lamassuiot/authz/pkg/middlewares/audit"
 	authzmw_eventpub "github.com/lamassuiot/authz/pkg/middlewares/eventpub"
+	authzmodels "github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/service"
 	"github.com/lamassuiot/authz/pkg/store"
+	authzgorm "github.com/lamassuiot/authz/sdk/gorm"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	bauditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	beventpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -218,6 +219,10 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageE
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+	}
+
+	if err := db.Use(authzgorm.NewAuthzGormPlugin()); err != nil {
+		return nil, fmt.Errorf("failed to register authz gorm plugin: %w", err)
 	}
 
 	sqlDB, err := db.DB()
