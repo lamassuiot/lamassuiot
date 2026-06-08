@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/lamassuiot/authz/pkg/core"
 	"github.com/lamassuiot/authz/pkg/engine"
@@ -170,11 +169,6 @@ func (s *AuthzImplementation) MatchAndGetFilter(ctx context.Context, authType, a
 		return "", nil, fmt.Errorf("failed to generate filter: %w", err)
 	}
 
-	whereClause := ""
-	if whereIdx := strings.Index(filterSQL, "WHERE "); whereIdx != -1 {
-		whereClause = filterSQL[whereIdx+6:]
-	}
-
 	log.WithFields(logrus.Fields{
 		"matched_count":      len(matchedPrincipals),
 		"matched_principals": matchedPrincipals,
@@ -185,5 +179,5 @@ func (s *AuthzImplementation) MatchAndGetFilter(ctx context.Context, authType, a
 		"policy_count":       len(policies.GetAll()),
 	}).Debug("list filter generated")
 
-	return whereClause, matchedPrincipals, nil
+	return filterSQL, matchedPrincipals, nil
 }
