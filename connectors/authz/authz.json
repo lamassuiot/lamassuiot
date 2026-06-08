@@ -7,13 +7,12 @@
     "atomic_actions": [
       "read",
       "update",
-      "delete",
-      "grant",
-      "revoke"
+      "delete"
+
     ],
     "global_actions": [
       "create",
-      "list"
+      "ui"
     ],
     "schema_name": "public",
     "filterable": [
@@ -39,7 +38,7 @@
     ],
     "global_actions": [
       "create",
-      "list"
+      "ui"
     ],
     "schema_name": "public",
     "filterable": [
@@ -54,7 +53,7 @@
   {
     "entity_type": "principal_policy",
     "table_name": "principal_policies",
-    "primary_key": "id",
+    "primary_key": ["principal_id", "policy_id"],
     "relations": [
       {
         "name": "principal",
@@ -68,12 +67,13 @@
       }
     ],
     "atomic_actions": [
-      "read",
       "delete"
     ],
     "global_actions": [
       "create",
-      "list"
+      "read",
+      "grant",
+      "revoke"
     ],
     "schema_name": "public",
     "filterable": [

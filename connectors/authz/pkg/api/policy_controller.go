@@ -117,7 +117,7 @@ func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.ToPolicyListResponse(policies))
+	c.JSON(http.StatusOK, dto.ToPolicyListResponse(policies, ""))
 }
 
 // ListPolicies godoc
@@ -144,7 +144,7 @@ func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
 		return
 	}
 
-	policies, _, err := ctrl.policyManager.ListPolicies(c.Request.Context(), queryParams)
+	policies, nextBookmark, err := ctrl.policyManager.ListPolicies(c.Request.Context(), queryParams)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to list policies",
@@ -153,7 +153,7 @@ func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.ToPolicyListResponse(policies))
+	c.JSON(http.StatusOK, dto.ToPolicyListResponse(policies, nextBookmark))
 }
 
 // UpdatePolicy godoc

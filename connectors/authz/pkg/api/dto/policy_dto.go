@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
 // CreatePolicyRequest represents a request to create a new policy
@@ -31,10 +32,9 @@ type PolicyResponse struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
-// PolicyListResponse represents a list of policies
+// PolicyListResponse is the paginated response for listing policies
 type PolicyListResponse struct {
-	Policies []*PolicyResponse `json:"policies"`
-	Count    int               `json:"count"`
+	resources.IterableList[PolicyResponse]
 }
 
 // PolicyStatsResponse represents policy statistics
@@ -60,14 +60,16 @@ func ToPolicyResponse(policy *models.Policy) *PolicyResponse {
 }
 
 // ToPolicyListResponse converts a slice of policies to PolicyListResponse
-func ToPolicyListResponse(policies []*models.Policy) *PolicyListResponse {
-	responses := make([]*PolicyResponse, len(policies))
+func ToPolicyListResponse(policies []*models.Policy, nextBookmark string) *PolicyListResponse {
+	responses := make([]PolicyResponse, len(policies))
 	for i, policy := range policies {
-		responses[i] = ToPolicyResponse(policy)
+		responses[i] = *ToPolicyResponse(policy)
 	}
 	return &PolicyListResponse{
-		Policies: responses,
-		Count:    len(responses),
+		IterableList: resources.IterableList[PolicyResponse]{
+			NextBookmark: nextBookmark,
+			List:         responses,
+		},
 	}
 }
 

@@ -12,12 +12,12 @@ type PrincipalService interface {
 	CreatePrincipal(ctx context.Context, p *models.Principal) error
 	GetPrincipal(ctx context.Context, id string) (*models.Principal, error)
 	GetPrincipalWithPolicies(ctx context.Context, id string) (*models.Principal, error)
-	ListPrincipals(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, error)
+	ListPrincipals(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, string, error)
 	UpdatePrincipal(ctx context.Context, p *models.Principal) error
 	DeletePrincipal(ctx context.Context, id string) error
 	GrantPolicy(ctx context.Context, principalID, policyID, grantedBy string) error
 	RevokePolicy(ctx context.Context, principalID, policyID string) error
-	GetPrincipalPolicies(ctx context.Context, principalID string) ([]models.PrincipalPolicy, error)
+	GetPrincipalPolicies(ctx context.Context, principalID string, queryParams *resources.QueryParameters) ([]models.PrincipalPolicy, string, error)
 	CountPolicyPrincipals(ctx context.Context, policyID string) (int64, error)
 }
 

@@ -226,7 +226,7 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 	assert.True(t, hasPolicy)
 
 	// Get policies
-	grants, err := pm.GetPrincipalPolicies(ctx, "user-1")
+	grants, _, err := pm.GetPrincipalPolicies(ctx, "user-1", nil)
 	require.NoError(t, err)
 	assert.Len(t, grants, 1)
 	assert.Equal(t, "policy-iot-admin", grants[0].PolicyID)
@@ -444,7 +444,7 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 	require.NoError(t, err)
 
 	// List all principals
-	all, err := pm.ListPrincipals(ctx, nil)
+	all, _, err := pm.ListPrincipals(ctx, nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 4)
 
@@ -454,7 +454,7 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 			{Field: "active", FilterOperation: resources.EnumEqual, Value: "true"},
 		},
 	}
-	active, err := pm.ListPrincipals(ctx, activeFilter)
+	active, _, err := pm.ListPrincipals(ctx, activeFilter)
 	require.NoError(t, err)
 	assert.Len(t, active, 3)
 }

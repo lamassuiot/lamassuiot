@@ -94,12 +94,12 @@ func (p *principalEventPublisher) GetPrincipalWithPolicies(ctx context.Context, 
 	return p.next.GetPrincipalWithPolicies(ctx, id)
 }
 
-func (p *principalEventPublisher) ListPrincipals(ctx context.Context, queryParams *resources.QueryParameters) ([]*authzmodels.Principal, error) {
+func (p *principalEventPublisher) ListPrincipals(ctx context.Context, queryParams *resources.QueryParameters) ([]*authzmodels.Principal, string, error) {
 	return p.next.ListPrincipals(ctx, queryParams)
 }
 
-func (p *principalEventPublisher) GetPrincipalPolicies(ctx context.Context, principalID string) ([]authzmodels.PrincipalPolicy, error) {
-	return p.next.GetPrincipalPolicies(ctx, principalID)
+func (p *principalEventPublisher) GetPrincipalPolicies(ctx context.Context, principalID string, queryParams *resources.QueryParameters) ([]authzmodels.PrincipalPolicy, string, error) {
+	return p.next.GetPrincipalPolicies(ctx, principalID, queryParams)
 }
 
 func (p *principalEventPublisher) CountPolicyPrincipals(ctx context.Context, policyID string) (int64, error) {

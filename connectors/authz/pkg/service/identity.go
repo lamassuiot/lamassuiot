@@ -48,7 +48,7 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 
 	registry := engine.NewPolicyRegistry()
 	for _, pid := range principalIDs {
-		grants, err := r.grants.ListForPrincipal(ctx, pid)
+		grants, _, err := r.grants.ListForPrincipal(ctx, pid, nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get policies for principal %s: %w", pid, err)
 		}
@@ -68,7 +68,7 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 // GetPoliciesForPrincipal loads policies for a single known principal ID and returns
 // a populated PolicyRegistry. Used by the by-ID authorization path.
 func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principalID string) (*engine.PolicyRegistry, error) {
-	grants, err := r.grants.ListForPrincipal(ctx, principalID)
+	grants, _, err := r.grants.ListForPrincipal(ctx, principalID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get policies for principal %s: %w", principalID, err)
 	}
