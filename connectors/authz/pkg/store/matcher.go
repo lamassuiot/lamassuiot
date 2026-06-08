@@ -202,7 +202,11 @@ func extractX509Cert(authMaterial interface{}) (*x509.Certificate, error) {
 	case *x509.Certificate:
 		return v, nil
 	case string:
-		block, _ := pem.Decode([]byte(v))
+		raw := []byte(v)
+		if decoded, err := base64.StdEncoding.DecodeString(v); err == nil {
+			raw = decoded
+		}
+		block, _ := pem.Decode(raw)
 		if block == nil {
 			return nil, fmt.Errorf("failed to decode PEM block")
 		}
