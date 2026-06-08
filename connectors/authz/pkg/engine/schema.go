@@ -24,7 +24,7 @@ type SchemaDefinition struct {
 	Relations     []RelationConfig  `json:"relations"`
 	AtomicActions []string          `json:"atomic_actions"`          // Actions that require an entity key (read, write, delete, etc.)
 	GlobalActions []string          `json:"global_actions"`          // Actions that don't require entity key (create, list, etc.)
-	Filterable    []FilterableField `json:"filterable,omitempty"`   // Columns available for column-filter conditions in policies
+	Filterable    []FilterableField `json:"filterable,omitempty"`    // Columns available for column-filter conditions in policies
 	ConfigSchema  string            `json:"config_schema,omitempty"` // Config schema name (e.g., "pki", "iot") - set during loading
 }
 
@@ -32,15 +32,15 @@ type SchemaDefinition struct {
 // It captures the primaryKey field as a raw JSON value so that both the string form
 // ("device_id") and the array form (["tenant_id", "device_id"]) are accepted.
 type schemaJSON struct {
-	EntityType    string            `json:"entityType"`
-	TableName     string            `json:"tableName"`
-	SchemaName    string            `json:"schemaName,omitempty"`
-	PrimaryKey    json.RawMessage   `json:"primaryKey"`
+	EntityType    string            `json:"entity_type"`
+	TableName     string            `json:"table_name"`
+	SchemaName    string            `json:"schema_name,omitempty"`
+	PrimaryKey    json.RawMessage   `json:"primary_key"`
 	Relations     []RelationConfig  `json:"relations"`
-	AtomicActions []string          `json:"atomicActions"`
-	GlobalActions []string          `json:"globalActions"`
+	AtomicActions []string          `json:"atomic_actions"`
+	GlobalActions []string          `json:"global_actions"`
 	Filterable    []FilterableField `json:"filterable,omitempty"`
-	ConfigSchema  string            `json:"configSchema,omitempty"`
+	ConfigSchema  string            `json:"config_schema,omitempty"`
 }
 
 // parsePrimaryKey normalises the raw JSON value for the primaryKey field into a []string.
@@ -114,8 +114,8 @@ func (s *SchemaDefinition) ValidateEntityKey(entityKey map[string]string) error 
 // RelationConfig defines a foreign key relationship to another entity
 type RelationConfig struct {
 	Name         string `json:"name"`
-	TargetEntity string `json:"targetEntity"`
-	ForeignKey   string `json:"foreignKey"`
+	TargetEntity string `json:"target_entity"`
+	ForeignKey   string `json:"foreign_key"`
 }
 
 // SchemaRegistry manages all entity schemas

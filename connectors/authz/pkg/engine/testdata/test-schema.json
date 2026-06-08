@@ -1,14 +1,14 @@
 [
   {
-    "entityType": "organization",
-    "tableName": "organizations",
-    "schemaName": "public",
-    "primaryKey": "id",
+    "entity_type": "organization",
+    "table_name": "organizations",
+    "schema_name": "public",
+    "primary_key": "id",
     "relations": [],
-    "atomicActions": [
+    "atomic_actions": [
       "read",
       "delete"
     ],
-    "globalActions": []
+    "global_actions": []
   }
 ]
