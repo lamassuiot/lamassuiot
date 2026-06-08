@@ -2,15 +2,26 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
 )
 
+// noMatchError is returned when auth material matches no active principals.
+// It implements HTTPStatusCode() so the gin middleware maps it to 401.
+type noMatchError struct{}
+
+func (noMatchError) Error() string       { return "no matching principals found" }
+func (noMatchError) HTTPStatusCode() int { return http.StatusUnauthorized }
+func (noMatchError) Is(target error) bool {
+	_, ok := target.(noMatchError)
+	return ok
+}
+
 // ErrNoMatch is returned by IdentityResolver when auth material matches no active principals.
-var ErrNoMatch = errors.New("no matching principals found")
+var ErrNoMatch error = noMatchError{}
 
 // IdentityResolver is the single entry point for the "match auth material → load policies" flow.
 type IdentityResolver struct {
