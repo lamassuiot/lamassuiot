@@ -42,18 +42,18 @@ func TestLoadIoTSchemas(t *testing.T) {
 func TestSchemaRegistry_Load(t *testing.T) {
 	testSchema := `[
   {
-    "entityType": "device",
-    "tableName": "devices",
-    "primaryKey": "id",
+    "entity_type": "device",
+    "table_name": "devices",
+    "primary_key": "id",
     "relations": [
       {
         "name": "owner",
-        "targetEntity": "user",
-        "foreignKey": "owner_id"
+        "target_entity": "user",
+        "foreign_key": "owner_id"
       }
     ],
-    "atomicActions": ["read", "write"],
-    "globalActions": ["create", "list"]
+    "atomic_actions": ["read", "write"],
+    "global_actions": ["create", "list"]
   }
 ]`
 

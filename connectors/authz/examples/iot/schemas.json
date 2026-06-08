@@ -1,80 +1,80 @@
 [
   {
-    "entityType": "organization",
-    "tableName": "organizations",
-    "schemaName": "public",
-    "primaryKey": "id",
+    "entity_type": "organization",
+    "table_name": "organizations",
+    "schema_name": "public",
+    "primary_key": "id",
     "relations": [],
-    "atomicActions": [
+    "atomic_actions": [
       "read",
       "delete"
     ],
-    "globalActions": [
+    "global_actions": [
       "write",
       "list"
     ]
   },
   {
-    "entityType": "building",
-    "tableName": "buildings",
-    "schemaName": "public",
+    "entity_type": "building",
+    "table_name": "buildings",
+    "schema_name": "public",
     "relations": [
       {
         "name": "My Org",
-        "targetEntity": "organization",
-        "foreignKey": "organization_id"
+        "target_entity": "organization",
+        "foreign_key": "organization_id"
       }
     ],
-    "atomicActions": [
+    "atomic_actions": [
       "read",
       "delete"
     ],
-    "globalActions": [
+    "global_actions": [
       "write",
       "list"
     ],
-    "primaryKey": "id"
+    "primary_key": "id"
   },
   {
-    "entityType": "gateway",
-    "tableName": "iot_gateways",
-    "schemaName": "public",
-    "primaryKey": "id",
+    "entity_type": "gateway",
+    "table_name": "iot_gateways",
+    "schema_name": "public",
+    "primary_key": "id",
     "relations": [
       {
         "name": "building",
-        "targetEntity": "building",
-        "foreignKey": "building_id"
+        "target_entity": "building",
+        "foreign_key": "building_id"
       }
     ],
-    "atomicActions": [
+    "atomic_actions": [
       "read",
       "control",
       "delete"
     ],
-    "globalActions": [
+    "global_actions": [
       "write",
       "list"
     ]
   },
   {
-    "entityType": "device",
-    "tableName": "iot_devices",
-    "schemaName": "public",
-    "primaryKey": "device_id",
+    "entity_type": "device",
+    "table_name": "iot_devices",
+    "schema_name": "public",
+    "primary_key": "device_id",
     "relations": [
       {
         "name": "gateway",
-        "targetEntity": "gateway",
-        "foreignKey": "gateway_id"
+        "target_entity": "gateway",
+        "foreign_key": "gateway_id"
       }
     ],
-    "atomicActions": [
+    "atomic_actions": [
       "read",
       "control",
       "delete"
     ],
-    "globalActions": [
+    "global_actions": [
       "write",
       "list"
     ],
