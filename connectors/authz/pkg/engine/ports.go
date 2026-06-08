@@ -12,7 +12,7 @@ type PrincipalStore interface {
 	Create(ctx context.Context, p *models.Principal) error
 	Get(ctx context.Context, id string) (*models.Principal, error)
 	GetWithPolicies(ctx context.Context, id string) (*models.Principal, error)
-	List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, error)
+	List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, string, error)
 	Update(ctx context.Context, p *models.Principal) error
 	Delete(ctx context.Context, id string) error
 	SetActive(ctx context.Context, id string, active bool) error
@@ -29,7 +29,7 @@ type GrantStore interface {
 	GrantBatch(ctx context.Context, principalID string, policyIDs []string, grantedBy string) error
 	RevokeBatch(ctx context.Context, principalID string, policyIDs []string) error
 	Has(ctx context.Context, principalID, policyID string) (bool, error)
-	ListForPrincipal(ctx context.Context, principalID string) ([]models.PrincipalPolicy, error)
+	ListForPrincipal(ctx context.Context, principalID string, queryParams *resources.QueryParameters) ([]models.PrincipalPolicy, string, error)
 	ListForPolicy(ctx context.Context, policyID string) ([]*models.Principal, error)
 	CountForPrincipal(ctx context.Context, principalID string) (int64, error)
 	CountForPolicy(ctx context.Context, policyID string) (int64, error)

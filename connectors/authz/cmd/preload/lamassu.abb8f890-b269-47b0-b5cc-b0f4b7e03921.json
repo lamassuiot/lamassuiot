@@ -1,18 +1,28 @@
 {
-  "id": "lamassu.7ec5d897-3a3f-43d1-b67a-dd220719572b",
-  "name": "Authz - Full Access",
-  "description": "",
+  "id": "lamassu.abb8f890-b269-47b0-b5cc-b0f4b7e03921",
+  "name": "Auditor",
+  "description": "Read-only PKI access plus AuthZ policy visibility",
   "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "*",
+      "entity_type": "*",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
     {
       "namespace": "authz",
       "schema_name": "public",
       "entity_type": "principal",
       "actions": [
-        "create",
-        "list",
         "read",
-        "update",
-        "delete"
+        "ui"
       ],
       "relations": [],
       "direct_grants": [
@@ -24,11 +34,8 @@
       "schema_name": "public",
       "entity_type": "policy",
       "actions": [
-        "create",
-        "list",
         "read",
-        "update",
-        "delete"
+        "ui"
       ],
       "relations": [],
       "direct_grants": [
@@ -40,12 +47,8 @@
       "schema_name": "public",
       "entity_type": "principal_policy",
       "actions": [
-        "create",
-        "list",
         "read",
-        "delete",
-        "grant",
-        "revoke"
+        "ui"
       ],
       "relations": [],
       "direct_grants": [

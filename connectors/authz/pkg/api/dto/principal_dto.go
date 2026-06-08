@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
 // CreatePrincipalRequest for creating a new principal
@@ -36,10 +37,9 @@ type PrincipalResponse struct {
 	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
-// ListPrincipalsResponse with pagination
+// ListPrincipalsResponse is the paginated response for listing principals
 type ListPrincipalsResponse struct {
-	Principals []PrincipalResponse `json:"principals"`
-	Pagination *PaginationResponse `json:"pagination,omitempty"`
+	resources.IterableList[PrincipalResponse]
 }
 
 // GrantPolicyRequest for assigning a policy to a principal
@@ -63,8 +63,8 @@ type PrincipalPolicyResponse struct {
 	GrantedBy   string    `json:"granted_by,omitempty"`
 }
 
-// ListPrincipalPoliciesResponse returns policy assignments
+// ListPrincipalPoliciesResponse is the paginated response for listing a principal's policies
 type ListPrincipalPoliciesResponse struct {
-	PrincipalID string                    `json:"principal_id"`
-	Policies    []PrincipalPolicyResponse `json:"policies"`
+	PrincipalID string `json:"principal_id"`
+	resources.IterableList[PrincipalPolicyResponse]
 }

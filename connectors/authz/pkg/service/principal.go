@@ -41,7 +41,7 @@ func (m *PrincipalManager) GetPrincipalWithPolicies(ctx context.Context, id stri
 	return m.store.GetWithPolicies(ctx, id)
 }
 
-func (m *PrincipalManager) ListPrincipals(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, error) {
+func (m *PrincipalManager) ListPrincipals(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, string, error) {
 	return m.store.List(ctx, queryParams)
 }
 
@@ -82,8 +82,8 @@ func (m *PrincipalManager) HasPolicy(ctx context.Context, principalID, policyID 
 	return m.store.Has(ctx, principalID, policyID)
 }
 
-func (m *PrincipalManager) GetPrincipalPolicies(ctx context.Context, principalID string) ([]models.PrincipalPolicy, error) {
-	return m.store.ListForPrincipal(ctx, principalID)
+func (m *PrincipalManager) GetPrincipalPolicies(ctx context.Context, principalID string, queryParams *resources.QueryParameters) ([]models.PrincipalPolicy, string, error) {
+	return m.store.ListForPrincipal(ctx, principalID, queryParams)
 }
 
 func (m *PrincipalManager) GetPolicyPrincipals(ctx context.Context, policyID string) ([]*models.Principal, error) {

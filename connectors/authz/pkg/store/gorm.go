@@ -13,8 +13,9 @@ import (
 // GormPrincipalStore implements both PrincipalStore and GrantStore against a *gorm.DB.
 // Both interfaces must be satisfied by the same instance to share transaction context.
 type GormPrincipalStore struct {
-	db      *gorm.DB
-	querier *postgresDBQuerier[models.Principal]
+	db        *gorm.DB
+	querier   *postgresDBQuerier[models.Principal]
+	ppQuerier *postgresDBQuerier[models.PrincipalPolicy]
 }
 
 // NewGormPrincipalStore creates the store and runs AutoMigrate for principal tables.
@@ -23,7 +24,8 @@ func NewGormPrincipalStore(db *gorm.DB) (*GormPrincipalStore, error) {
 		return nil, fmt.Errorf("migrate principal tables: %w", err)
 	}
 	q := newPostgresDBQuerier[models.Principal](db, "principals", "id")
-	return &GormPrincipalStore{db: db, querier: &q}, nil
+	ppq := newPostgresDBQuerier[models.PrincipalPolicy](db, "principal_policies", "id")
+	return &GormPrincipalStore{db: db, querier: &q, ppQuerier: &ppq}, nil
 }
 
 // --- PrincipalStore ---
@@ -63,15 +65,16 @@ func (s *GormPrincipalStore) GetWithPolicies(ctx context.Context, id string) (*m
 	return &p, nil
 }
 
-func (s *GormPrincipalStore) List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, error) {
+func (s *GormPrincipalStore) List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, string, error) {
 	var principals []*models.Principal
-	if _, err := s.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, false, func(p models.Principal) {
+	nextBookmark, err := s.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, false, func(p models.Principal) {
 		cp := p
 		principals = append(principals, &cp)
-	}); err != nil {
-		return nil, fmt.Errorf("list principals: %w", err)
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("list principals: %w", err)
 	}
-	return principals, nil
+	return principals, nextBookmark, nil
 }
 
 func (s *GormPrincipalStore) Update(ctx context.Context, p *models.Principal) error {
@@ -207,12 +210,18 @@ func (s *GormPrincipalStore) Has(ctx context.Context, principalID, policyID stri
 	return count > 0, nil
 }
 
-func (s *GormPrincipalStore) ListForPrincipal(ctx context.Context, principalID string) ([]models.PrincipalPolicy, error) {
+func (s *GormPrincipalStore) ListForPrincipal(ctx context.Context, principalID string, queryParams *resources.QueryParameters) ([]models.PrincipalPolicy, string, error) {
 	var rows []models.PrincipalPolicy
-	if err := s.db.WithContext(ctx).Where("principal_id = ?", principalID).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list grants for principal: %w", err)
+	filter := gormExtraOps{query: "principal_id = ?", additionalWhere: []interface{}{principalID}}
+	// nil queryParams means "load everything" (e.g. internal auth resolution); paginate only when params provided.
+	exhaustive := queryParams == nil
+	nextBookmark, err := s.ppQuerier.SelectAll(ctx, queryParams, []gormExtraOps{filter}, exhaustive, func(pp models.PrincipalPolicy) {
+		rows = append(rows, pp)
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("list grants for principal: %w", err)
 	}
-	return rows, nil
+	return rows, nextBookmark, nil
 }
 
 func (s *GormPrincipalStore) ListForPolicy(ctx context.Context, policyID string) ([]*models.Principal, error) {

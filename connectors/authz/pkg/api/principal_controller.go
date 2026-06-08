@@ -7,6 +7,7 @@ import (
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
 type PrincipalController struct {
@@ -114,7 +115,7 @@ func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
 		return
 	}
 
-	principals, err := ctrl.manager.ListPrincipals(c.Request.Context(), queryParams)
+	principals, nextBookmark, err := ctrl.manager.ListPrincipals(c.Request.Context(), queryParams)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to list principals",
@@ -129,7 +130,10 @@ func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.ListPrincipalsResponse{
-		Principals: responses,
+		IterableList: resources.IterableList[dto.PrincipalResponse]{
+			NextBookmark: nextBookmark,
+			List:         responses,
+		},
 	})
 }
 
@@ -286,14 +290,28 @@ func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 // @Tags principals
 // @Produce json
 // @Param id path string true "Principal ID"
+// @Param filter query string false "Filter expression"
+// @Param sort_by query string false "Field to sort by"
+// @Param sort_mode query string false "Sort direction: asc or desc"
+// @Param page_size query int false "Page size"
+// @Param bookmark query string false "Pagination bookmark"
 // @Success 200 {object} dto.ListPrincipalPoliciesResponse
-// @Failure 404 {object} dto.ErrorResponse
+// @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/principals/{id}/policies [get]
 func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 	id := c.Param("id")
 
-	grants, err := ctrl.manager.GetPrincipalPolicies(c.Request.Context(), id)
+	queryParams, err := FilterQuery(c, c.Request, PrincipalPolicyFilterableFields)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid filter",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+
+	grants, nextBookmark, err := ctrl.manager.GetPrincipalPolicies(c.Request.Context(), id, queryParams)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to get policies",
@@ -314,7 +332,10 @@ func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 
 	c.JSON(http.StatusOK, dto.ListPrincipalPoliciesResponse{
 		PrincipalID: id,
-		Policies:    policies,
+		IterableList: resources.IterableList[dto.PrincipalPolicyResponse]{
+			NextBookmark: nextBookmark,
+			List:         policies,
+		},
 	})
 }
 

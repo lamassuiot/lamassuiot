@@ -13,6 +13,12 @@ var PrincipalFilterableFields = map[string]resources.FilterFieldType{
 	"updated_at":  resources.DateFilterFieldType,
 }
 
+var PrincipalPolicyFilterableFields = map[string]resources.FilterFieldType{
+	"policy_id":  resources.StringFilterFieldType,
+	"granted_at": resources.DateFilterFieldType,
+	"granted_by": resources.StringFilterFieldType,
+}
+
 var PolicyFilterableFields = map[string]resources.FilterFieldType{
 	"id":          resources.StringFilterFieldType,
 	"name":        resources.StringFilterFieldType,

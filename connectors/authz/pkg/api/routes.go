@@ -30,6 +30,7 @@ func NewAuthzRoutes(
 
 	authzMwPrincipals := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "principal", logger)
 	authzMwPolicies := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "policy", logger)
+	authzMwPrincipalPolicies := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "principal_policy", logger)
 
 	v1 := router.Group("/v1")
 	{
@@ -57,9 +58,14 @@ func NewAuthzRoutes(
 			principals.PUT("/:id", authzMwPrincipals.AuthzCheck("update"), principalCtrl.UpdatePrincipal)
 			principals.DELETE("/:id", authzMwPrincipals.AuthzCheck("delete"), principalCtrl.DeletePrincipal)
 
-			principals.GET("/:id/policies", authzMwPrincipals.AuthzCheck("read"), principalCtrl.GetPrincipalPolicies)
-			principals.POST("/:id/policies", authzMwPrincipals.AuthzCheck("grant"), principalCtrl.GrantPolicy)
-			principals.DELETE("/:id/policies/:policyId", authzMwPrincipals.AuthzCheck("revoke"), principalCtrl.RevokePolicy)
+			principals.GET("/:id/policies", authzMwPrincipalPolicies.AuthzCheck("read"), principalCtrl.GetPrincipalPolicies)
+			principals.POST("/:id/policies", authzMwPrincipalPolicies.AuthzCheck("grant"), principalCtrl.GrantPolicy)
+			principals.DELETE("/:id/policies/:policyId", authzMwPrincipalPolicies.AuthzCheckCustom("revoke", func(c *gin.Context) map[string]string {
+				return map[string]string{
+					"principal_id": c.Param("id"),
+					"policy_id":    c.Param("policyId"),
+				}
+			}), principalCtrl.RevokePolicy)
 		}
 
 		// Policy management — protected by authzMwPolicies
