@@ -562,7 +562,7 @@ components:
           type: string
         client_certificate_settings:
           $ref: '#/components/schemas/AuthOptionsClientCertificate'
-        external_webhook:
+        external_webhook_settings:
           type: object
           additionalProperties: true
 
@@ -596,6 +596,8 @@ components:
     ReEnrollmentSettings:
       type: object
       properties:
+        est_rfc7030_settings:
+          $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
         additional_validation_cas:
           type: array
           items:
