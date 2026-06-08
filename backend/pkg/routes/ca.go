@@ -1,23 +1,28 @@
 package routes
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/sdk"
 	authzSdk "github.com/lamassuiot/authz/sdk"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
-func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, logger *logrus.Entry) {
+func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, authzConf config.AuthzClient, logger *logrus.Entry) {
 	routes := controllers.NewCAHttpRoutes(svc)
 
-	config := sdk.DefaultConfig("http://localhost:8888", models.CASource)
-	client, err := sdk.NewClient(config)
+	sdkCfg := authzSdk.DefaultConfig(
+		fmt.Sprintf("%s://%s:%d%s", authzConf.Protocol, authzConf.Hostname, authzConf.Port, authzConf.BasePath),
+		models.CASource,
+	)
+	sdkCfg.InsecureSkipVerify = authzConf.InsecureSkipVerify
+	client, err := authzSdk.NewClient(sdkCfg)
 	if err != nil {
 		log.Fatalf("Failed to create SDK client: %v", err)
 	}

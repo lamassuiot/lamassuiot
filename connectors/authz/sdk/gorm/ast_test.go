@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -27,10 +26,9 @@ func testDB(t *testing.T) *gorm.DB {
 // and returns the final SQL string GORM would send to the database.
 func applyAuthzSQL(t *testing.T, db *gorm.DB, table, authzSQL string) string {
 	t.Helper()
-	ast, err := pg_query.Parse(authzSQL)
-	require.NoError(t, err)
+	parsed := parseAuthzSQL(authzSQL)
 	var dest []map[string]interface{}
-	result := AddASTToQuery(db.Table(table), ast, authzSQL).Find(&dest)
+	result := AddASTToQuery(db.Table(table), parsed).Find(&dest)
 	return result.Statement.SQL.String()
 }
 
@@ -45,19 +43,10 @@ func whereAfterLastJoin(t *testing.T, sql string) {
 	assert.Greater(t, where, lastJoin, "WHERE must appear after the last JOIN\nSQL: %s", sql)
 }
 
-func TestAddASTToQuery_NilAST(t *testing.T) {
+func TestAddASTToQuery_Empty(t *testing.T) {
 	db := testDB(t)
 	var dest []map[string]interface{}
-	result := AddASTToQuery(db.Table("certificates"), nil, "").Find(&dest)
-	sql := result.Statement.SQL.String()
-	assert.NotContains(t, strings.ToUpper(sql), "JOIN")
-	assert.NotContains(t, strings.ToUpper(sql), "WHERE")
-}
-
-func TestAddASTToQuery_EmptyStmts(t *testing.T) {
-	db := testDB(t)
-	var dest []map[string]interface{}
-	result := AddASTToQuery(db.Table("certificates"), &pg_query.ParseResult{}, "").Find(&dest)
+	result := AddASTToQuery(db.Table("certificates"), authzParsed{}).Find(&dest)
 	sql := result.Statement.SQL.String()
 	assert.NotContains(t, strings.ToUpper(sql), "JOIN")
 	assert.NotContains(t, strings.ToUpper(sql), "WHERE")
@@ -83,8 +72,6 @@ func TestAddASTToQuery_DenyAllNoJoins(t *testing.T) {
 
 func TestAddASTToQuery_SingleJoinNullTest(t *testing.T) {
 	// One-hop JOIN + IS NOT NULL (NullTest node).
-	// getLoc must handle NullTest; otherwise whereStart=-1 and the WHERE ends up
-	// embedded in the last JOIN string instead of being a proper WHERE clause.
 	authzSQL := `SELECT * FROM devicemanager.devices LEFT JOIN dmsmanager.dms AS j0_0 ON devicemanager.devices.dms_owner = j0_0.id WHERE j0_0.id IS NOT NULL`
 	sql := applyAuthzSQL(t, testDB(t), "devices", authzSQL)
 
@@ -94,9 +81,6 @@ func TestAddASTToQuery_SingleJoinNullTest(t *testing.T) {
 }
 
 func TestAddASTToQuery_TwoHopJoinNullTest(t *testing.T) {
-	// The exact scenario from the bug report:
-	// dms (directGrants=["*"]) → device → certificate, querying certificates.
-	// After the filter.go fix, the WHERE is j0_1.id IS NOT NULL (dms alias, NullTest).
 	authzSQL := `SELECT * FROM ca.certificates LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id LEFT JOIN dmsmanager.dms AS j0_1 ON j0_0.dms_owner = j0_1.id WHERE j0_1.id IS NOT NULL`
 	sql := applyAuthzSQL(t, testDB(t), "certificates", authzSQL)
 
@@ -107,7 +91,7 @@ func TestAddASTToQuery_TwoHopJoinNullTest(t *testing.T) {
 }
 
 func TestAddASTToQuery_SingleJoinEqualityWhere(t *testing.T) {
-	// One-hop JOIN + equality WHERE (A_Expr): specific entity ID grant.
+	// One-hop JOIN + equality WHERE: specific entity ID grant.
 	authzSQL := `SELECT * FROM devicemanager.devices LEFT JOIN dmsmanager.dms AS j0_0 ON devicemanager.devices.dms_owner = j0_0.id WHERE j0_0.id = 'sample-dms-01'`
 	sql := applyAuthzSQL(t, testDB(t), "devices", authzSQL)
 
@@ -128,7 +112,7 @@ func TestAddASTToQuery_TwoHopJoinEqualityWhere(t *testing.T) {
 }
 
 func TestAddASTToQuery_NoJoinWithInClause(t *testing.T) {
-	// Direct grants with specific IDs: WHERE ... IN (...), no JOINs (A_Expr AEXPR_IN).
+	// Direct grants with specific IDs: WHERE ... IN (...), no JOINs.
 	authzSQL := `SELECT * FROM dmsmanager.dms WHERE dmsmanager.dms.id IN ('dms-1', 'dms-2')`
 	sql := applyAuthzSQL(t, testDB(t), "dms", authzSQL)
 
@@ -137,13 +121,10 @@ func TestAddASTToQuery_NoJoinWithInClause(t *testing.T) {
 }
 
 func TestAddASTToQuery_JoinStringContainsNoWhereKeyword(t *testing.T) {
-	// Explicitly assert that neither JOIN clause string contains the WHERE keyword.
-	// This is the core regression: before the NullTest fix, the WHERE was stitched
-	// onto the end of the last Joins() call.
+	// Assert that neither JOIN clause string contains the WHERE keyword.
 	authzSQL := `SELECT * FROM ca.certificates LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id LEFT JOIN dmsmanager.dms AS j0_1 ON j0_0.dms_owner = j0_1.id WHERE j0_1.id IS NOT NULL`
 	sql := applyAuthzSQL(t, testDB(t), "certificates", authzSQL)
 
-	// Split on WHERE to get the JOINs-only portion and check it has no stray WHERE.
 	upper := strings.ToUpper(sql)
 	whereIdx := strings.Index(upper, "WHERE")
 	require.NotEqual(t, -1, whereIdx, "expected WHERE in generated SQL")

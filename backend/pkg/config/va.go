@@ -14,6 +14,7 @@ type VAconfig struct {
 	CRLMonitoringJob      cconfig.MonitoringJob          `mapstructure:"crl_monitoring_job"`
 	CAClient              CAClient                       `mapstructure:"ca_client"`
 	KMSClient             KMSClient                      `mapstructure:"kms_client"`
+	AuthzClient           AuthzClient                    `mapstructure:"authz_client"`
 	VADomains             []string                       `mapstructure:"va_domains"`
 }
 

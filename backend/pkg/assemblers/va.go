@@ -35,7 +35,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl)
+	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl, conf.AuthzClient)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run VA http server: %s", err)

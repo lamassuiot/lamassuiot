@@ -2,7 +2,6 @@ module github.com/lamassuiot/lamassuiot/backend/v3
 
 go 1.26.2
 
-
 require (
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/cloudevents/sdk-go/v2 v2.16.2
@@ -114,7 +113,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/go-tpm v0.3.2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/wire v0.7.0 // indirect
