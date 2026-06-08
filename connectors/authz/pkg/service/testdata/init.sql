@@ -1,6 +1,8 @@
 -- IoT Domain Example Database Schema
--- Used by service package tests that spin up a real Postgres container.
+-- This demonstrates an IoT authorization hierarchy:
+-- Organization -> Building -> Gateway -> Device
 
+-- Organizations table
 CREATE TABLE organizations (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -9,6 +11,7 @@ CREATE TABLE organizations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Buildings table (belongs to organization)
 CREATE TABLE buildings (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -18,6 +21,7 @@ CREATE TABLE buildings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- IoT Gateways table (belongs to building)
 CREATE TABLE iot_gateways (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -26,6 +30,7 @@ CREATE TABLE iot_gateways (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- IoT Devices table (belongs to gateway)
 CREATE TABLE iot_devices (
     device_id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -35,6 +40,7 @@ CREATE TABLE iot_devices (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Indexes for foreign key lookups
 CREATE INDEX idx_devices_gateway ON iot_devices(gateway_id);
 CREATE INDEX idx_devices_technician ON iot_devices(assigned_technician_id);
 CREATE INDEX idx_gateways_building ON iot_gateways(building_id);
@@ -42,6 +48,7 @@ CREATE INDEX idx_buildings_org ON buildings(organization_id);
 CREATE INDEX idx_buildings_manager ON buildings(manager_id);
 CREATE INDEX idx_orgs_owner ON organizations(owner_id);
 
+-- Sample data for testing
 INSERT INTO organizations (id, name, owner_id) VALUES
     ('org-1', 'Acme Corp', 'user-alice'),
     ('org-2', 'Beta Industries', 'user-bob');

@@ -107,7 +107,7 @@ func TestNewEngine(t *testing.T) {
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 
 	engine, err := NewEngine(dbs, schemaPaths)
@@ -140,7 +140,7 @@ func TestEngine_Authorize_NonExistentEntity(t *testing.T) {
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {
@@ -211,7 +211,7 @@ func TestEngine_InvalidEntityType(t *testing.T) {
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {
@@ -243,7 +243,7 @@ func TestEngine_GlobalAction_EmptyDirectGrants(t *testing.T) {
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {
@@ -295,7 +295,7 @@ func TestEngine_GlobalAction_WithDirectGrants(t *testing.T) {
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {
@@ -346,7 +346,7 @@ func TestEngine_Authorize_GlobalAction_DeniesWhenRuleNamespaceDoesNotMatchReques
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {
@@ -387,7 +387,7 @@ func TestEngine_Authorize_GlobalAction_AllowsWildcardRuleSchemaAndEntity(t *test
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {
@@ -428,7 +428,7 @@ func TestEngine_Authorize_GlobalAction_AllowsWildcardAction(t *testing.T) {
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {
@@ -469,7 +469,7 @@ func TestEngine_GetListFilter_DoesNotUseRulesFromOtherNamespaces(t *testing.T) {
 		"iot_schema": db,
 	}
 	schemaPaths := map[string]string{
-		"iot_schema": "../../examples/iot/schemas.test.json",
+		"iot_schema": "../../examples/iot/schemas.json",
 	}
 	engine, err := NewEngine(dbs, schemaPaths)
 	if err != nil {

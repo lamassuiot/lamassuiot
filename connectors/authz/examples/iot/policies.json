@@ -6,21 +6,21 @@
     "rules": [
       {
         "namespace": "iot",
-        "schemaName": "public",
-        "entityType": "organization",
+        "schema_name": "public",
+        "entity_type": "organization",
         "actions": [
           "read",
           "write",
           "delete"
         ],
-        "directGrants": [
+        "direct_grants": [
           "org-1"
         ],
         "relations": [
           {
             "to": {
-              "schemaName": "public",
-              "entityType": "building"
+              "schema_name": "public",
+              "entity_type": "building"
             },
             "via": "organization_id",
             "actions": [
@@ -31,8 +31,8 @@
             "relations": [
               {
                 "to": {
-                  "schemaName": "public",
-                  "entityType": "gateway"
+                  "schema_name": "public",
+                  "entity_type": "gateway"
                 },
                 "via": "building_id",
                 "actions": [
@@ -44,8 +44,8 @@
                 "relations": [
                   {
                     "to": {
-                      "schemaName": "public",
-                      "entityType": "device"
+                      "schema_name": "public",
+                      "entity_type": "device"
                     },
                     "via": "gateway_id",
                     "actions": [
@@ -63,21 +63,21 @@
       },
       {
         "namespace": "iot",
-        "schemaName": "public",
-        "entityType": "building",
+        "schema_name": "public",
+        "entity_type": "building",
         "actions": [
           "read",
           "write",
           "delete"
         ],
-        "directGrants": [
+        "direct_grants": [
           "building-1"
         ],
         "relations": [
           {
             "to": {
-              "schemaName": "public",
-              "entityType": "gateway"
+              "schema_name": "public",
+              "entity_type": "gateway"
             },
             "via": "building_id",
             "actions": [
@@ -89,8 +89,8 @@
             "relations": [
               {
                 "to": {
-                  "schemaName": "public",
-                  "entityType": "device"
+                  "schema_name": "public",
+                  "entity_type": "device"
                 },
                 "via": "gateway_id",
                 "actions": [
@@ -106,22 +106,22 @@
       },
       {
         "namespace": "iot",
-        "schemaName": "public",
-        "entityType": "gateway",
+        "schema_name": "public",
+        "entity_type": "gateway",
         "actions": [
           "read",
           "write",
           "control",
           "delete"
         ],
-        "directGrants": [
+        "direct_grants": [
           "gateway-1"
         ],
         "relations": [
           {
             "to": {
-              "schemaName": "public",
-              "entityType": "device"
+              "schema_name": "public",
+              "entity_type": "device"
             },
             "via": "gateway_id",
             "actions": [
@@ -135,8 +135,8 @@
       },
       {
         "namespace": "iot",
-        "schemaName": "public",
-        "entityType": "device",
+        "schema_name": "public",
+        "entity_type": "device",
         "actions": [
           "read",
           "write",
@@ -144,7 +144,7 @@
           "delete"
         ],
         "relations": [],
-        "directGrants": [
+        "direct_grants": [
           "device-1",
           "device-4"
         ]

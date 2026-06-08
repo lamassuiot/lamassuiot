@@ -239,16 +239,14 @@
     ],
     "schema_name": "devicemanager",
     "filterable": [
-      { "column": "tags",                 "type": "string"    },
+      { "column": "tags",                 "type": "jsonb"     },
       { "column": "status",               "type": "string"    },
       { "column": "icon",                 "type": "string"    },
       { "column": "icon_color",           "type": "string"    },
       { "column": "creation_timestamp",   "type": "timestamp" },
       { "column": "metadata",             "type": "jsonb"     },
       { "column": "dms_owner",            "type": "string"    },
-      { "column": "identity_slot",        "type": "jsonb"     },
-      { "column": "extra_slots",          "type": "string"    },
-      { "column": "events",               "type": "string"    }
+      { "column": "identity_slot",        "type": "jsonb"     }
     ]
   },
   {
