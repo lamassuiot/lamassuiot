@@ -175,7 +175,7 @@ func extractAuthInputs(c *gin.Context) (string, string, error) {
 	}
 
 	switch strings.ToLower(authTypeString) {
-	case "x509":
+	case "client_certificate":
 		return "x509", authCredString, nil
 	case "jwt":
 		return "oidc", authCredString, nil
