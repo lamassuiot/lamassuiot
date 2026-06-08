@@ -63,6 +63,7 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, 
 	rv1.PUT("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", []string{"sn"}), routes.UpdateCertificateMetadata)
 	rv1.PATCH("/certificates/:sn/metadata", certAuthzMw.AuthzCheckCustomField("metadata-update", []string{"sn"}), routes.UpdateCertificateMetadata)
 	rv1.DELETE("/certificates/:sn", certAuthzMw.AuthzCheckCustomField("delete", []string{"sn"}), routes.DeleteCertificate)
+	rv1.POST("/certificates", certAuthzMw.AuthzCheck("create"), routes.CreateCertificate)
 	rv1.POST("/certificates/import", certAuthzMw.AuthzCheck("import"), routes.ImportCertificate)
 
 	// Stats endpoints
