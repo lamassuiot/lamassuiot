@@ -568,7 +568,7 @@ func TestBuildPathFilterWildcard_SingleHop(t *testing.T) {
 	// One-hop wildcard: dms (directGrants=["*"]) → device, listing devices.
 	// Condition must use the dms alias (j0_0) with the dms primary key.
 	schemas := NewSchemaRegistry()
-	if err := schemas.Load("../../examples/iot/schemas.pki-v2.json", "pki"); err != nil {
+	if err := schemas.Load("../../schemas.pki-v2.json", "pki"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -608,7 +608,7 @@ func TestBuildPathFilterWildcard_TwoHop(t *testing.T) {
 	//   - j0_1 is the last alias in the reversed traversal, which maps to dmsmanager.dms
 	//   - id is the primary key of dmsmanager.dms
 	schemas := NewSchemaRegistry()
-	if err := schemas.Load("../../examples/iot/schemas.pki-v2.json", "pki"); err != nil {
+	if err := schemas.Load("../../schemas.pki-v2.json", "pki"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -651,7 +651,7 @@ func TestGenerateListFilter_WildcardDirectGrantCascadesToCertificate(t *testing.
 	schemas := NewSchemaRegistry()
 	policies := NewPolicyRegistry()
 
-	if err := schemas.Load("../../examples/iot/schemas.pki-v2.json", "pki"); err != nil {
+	if err := schemas.Load("../../schemas.pki-v2.json", "pki"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -1084,7 +1084,7 @@ func TestGenerateListFilter_SpecificDeviceIDRevokeCascadesToCertificate(t *testi
 	schemas := NewSchemaRegistry()
 	policies := NewPolicyRegistry()
 
-	if err := schemas.Load("../../examples/iot/schemas.pki-v2.json", "pki"); err != nil {
+	if err := schemas.Load("../../schemas.pki-v2.json", "pki"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -1173,7 +1173,7 @@ func TestBuildPathFilter_UsesOwnedEntityAliasForMultiHopPath(t *testing.T) {
 	schemas := NewSchemaRegistry()
 	policies := NewPolicyRegistry()
 
-	if err := schemas.Load("../../examples/iot/schemas.pki-v2.json", "pki"); err != nil {
+	if err := schemas.Load("../../schemas.pki-v2.json", "pki"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 

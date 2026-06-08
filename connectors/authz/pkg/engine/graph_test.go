@@ -6,7 +6,7 @@ import (
 
 func TestAuthorizationGraph_Build(t *testing.T) {
 	schemas := NewSchemaRegistry()
-	if err := schemas.Load("../../examples/iot/schemas.tests.json", "iot"); err != nil {
+	if err := schemas.Load("testdata/schemas.tests.json", "iot"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -40,7 +40,7 @@ func TestAuthorizationGraph_Build(t *testing.T) {
 
 func TestAuthorizationGraph_FindPathsToUser(t *testing.T) {
 	schemas := NewSchemaRegistry()
-	if err := schemas.Load("../../examples/iot/schemas.tests.json", "iot"); err != nil {
+	if err := schemas.Load("testdata/schemas.tests.json", "iot"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -74,7 +74,7 @@ func TestAuthorizationGraph_FindPathsToUser(t *testing.T) {
 
 func TestAuthorizationGraph_FindPathsBetween(t *testing.T) {
 	schemas := NewSchemaRegistry()
-	if err := schemas.Load("../../examples/iot/schemas.tests.json", "iot"); err != nil {
+	if err := schemas.Load("testdata/schemas.tests.json", "iot"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestAuthorizationGraph_FindPathsBetween(t *testing.T) {
 
 func TestAuthorizationGraph_BuildingToDevice(t *testing.T) {
 	schemas := NewSchemaRegistry()
-	if err := schemas.Load("../../examples/iot/schemas.tests.json", "iot"); err != nil {
+	if err := schemas.Load("testdata/schemas.tests.json", "iot"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
@@ -161,7 +161,7 @@ func TestAuthorizationGraph_BuildingToDevice(t *testing.T) {
 
 func TestAuthorizationGraph_NoPath(t *testing.T) {
 	schemas := NewSchemaRegistry()
-	if err := schemas.Load("../../examples/iot/schemas.tests.json", "iot"); err != nil {
+	if err := schemas.Load("testdata/schemas.tests.json", "iot"); err != nil {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 

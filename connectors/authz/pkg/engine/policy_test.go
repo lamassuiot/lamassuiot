@@ -51,12 +51,12 @@ func TestPolicyRegistry_Load(t *testing.T) {
 "rules": [
 {
 "namespace": "test",
-	"schemaName": "test",
-	"entityType": "document",
+	"schema_name": "test",
+	"entity_type": "document",
 "actions": ["read", "write"],
 "relations": [
 {
-	"to": {"schemaName": "test", "entityType": "folder"},
+	"to": {"schema_name": "test", "entity_type": "folder"},
 "via": "parent",
 "actions": ["read"]
 }
@@ -236,8 +236,8 @@ func TestPolicyValidation(t *testing.T) {
 			name: "missing policy ID",
 			policy: `[{
 "name": "Test",
-"rules": [{"namespace": "test", "schemaName": "test",
-"entityType": "test", "actions": ["read"]}]
+"rules": [{"namespace": "test", "schema_name": "test",
+"entity_type": "test", "actions": ["read"]}]
 }]`,
 			shouldErr: true,
 			errMsg:    "policy ID is required",
@@ -246,8 +246,8 @@ func TestPolicyValidation(t *testing.T) {
 			name: "missing policy name",
 			policy: `[{
 "id": "test-1",
-"rules": [{"namespace": "test", "schemaName": "test",
-"entityType": "test", "actions": ["read"]}]
+"rules": [{"namespace": "test", "schema_name": "test",
+"entity_type": "test", "actions": ["read"]}]
 }]`,
 			shouldErr: true,
 			errMsg:    "policy name is required",
@@ -277,8 +277,8 @@ func TestPolicyValidation(t *testing.T) {
 			policy: `[{
 "id": "test-1",
 "name": "Test",
-"rules": [{"namespace": "test", "schemaName": "test",
-"entityType": "test"}]
+"rules": [{"namespace": "test", "schema_name": "test",
+"entity_type": "test"}]
 }]`,
 			shouldErr: true,
 			errMsg:    "rule must define actions, relations, or direct grants",
@@ -290,8 +290,8 @@ func TestPolicyValidation(t *testing.T) {
 "name": "Test",
 "rules": [{
 "namespace": "test",
-"schemaName": "test",
-"entityType": "test",
+"schema_name": "test",
+"entity_type": "test",
 "relations": [{
 "via": "parent",
 "actions": ["read"]
@@ -309,8 +309,8 @@ func TestPolicyValidation(t *testing.T) {
 "description": "A test policy",
 "rules": [{
 "namespace": "test",
-"schemaName": "test",
-"entityType": "document",
+"schema_name": "test",
+"entity_type": "document",
 "actions": ["read", "write"]
 }]
 }]`,
@@ -355,8 +355,8 @@ func TestPolicyValidation_AllowsRuleSchemaAndEntityWildcards(t *testing.T) {
   "rules": [
     {
       "namespace": "iot",
-      "schemaName": "*",
-      "entityType": "*",
+      "schema_name": "*",
+      "entity_type": "*",
       "actions": ["read"],
       "relations": []
     }
@@ -382,21 +382,21 @@ func TestPolicyValidation_RejectsRelationWildcards(t *testing.T) {
 	}{
 		{
 			name: "reject wildcard to.schemaName",
-			relationBody: `"to": {"schemaName": "*", "entityType": "building"},
+			relationBody: `"to": {"schema_name": "*", "entity_type": "building"},
 "via": "organization_id",
 "actions": ["read"]`,
 			errContains: "to.schemaName",
 		},
 		{
 			name: "reject wildcard to.entityType",
-			relationBody: `"to": {"schemaName": "public", "entityType": "*"},
+			relationBody: `"to": {"schema_name": "public", "entity_type": "*"},
 "via": "organization_id",
 "actions": ["read"]`,
 			errContains: "to.entityType",
 		},
 		{
 			name: "reject wildcard via",
-			relationBody: `"to": {"schemaName": "public", "entityType": "building"},
+			relationBody: `"to": {"schema_name": "public", "entity_type": "building"},
 "via": "*",
 "actions": ["read"]`,
 			errContains: "via",
@@ -415,8 +415,8 @@ func TestPolicyValidation_RejectsRelationWildcards(t *testing.T) {
   "rules": [
     {
       "namespace": "iot",
-      "schemaName": "public",
-      "entityType": "organization",
+      "schema_name": "public",
+      "entity_type": "organization",
       "actions": ["read"],
       "relations": [
         {
@@ -528,7 +528,7 @@ func TestPolicyRegistry_GetAll(t *testing.T) {
 "name": "models.Policy 1",
 "rules": [
 {"namespace": "test",
-"schemaName": "test", "entityType": "document", "actions": ["read"]}
+"schema_name": "test", "entity_type": "document", "actions": ["read"]}
 ]
 },
 {
@@ -536,7 +536,7 @@ func TestPolicyRegistry_GetAll(t *testing.T) {
 "name": "models.Policy 2",
 "rules": [
 {"namespace": "test",
-"schemaName": "test", "entityType": "folder", "actions": ["read", "write"]}
+"schema_name": "test", "entity_type": "folder", "actions": ["read", "write"]}
 ]
 }
 ]`
@@ -581,12 +581,12 @@ func TestPolicyRegistry_Load_WithSchemaNameFields(t *testing.T) {
 "rules": [
 {
 "namespace": "pki",
-"schemaName": "dmsmanager",
-"entityType": "dms",
+"schema_name": "dmsmanager",
+"entity_type": "dms",
 "actions": ["read"],
 "relations": [
 {
-"to": {"schemaName": "devicemanager", "entityType": "device"},
+"to": {"schema_name": "devicemanager", "entity_type": "device"},
 "via": "dms_owner",
 "actions": ["read"]
 }

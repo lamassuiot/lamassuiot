@@ -424,12 +424,12 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 // they are either set by this gateway or by internal services only.
 var gatewayStripHeaders = []string{
 	"X-Principal-Id",
-	"X-Forwarded-Cert",
 	"X-Lms-Source",
+	"X-Request-Id", // gateway assigns its own UUID downstream
+	"X-Forwarded-Cert",
 	"X-Forwarded-Client-Cert", // set by gateway after TLS inspection
-	"X-Request-Id",            // gateway assigns its own UUID downstream
 	"Ssl-Client-Cert",         // nginx mTLS proxy header
-	"X-Amzn-Mtls-Clientcert", // AWS ALB mTLS header
+	"X-Amzn-Mtls-Clientcert",  // AWS ALB mTLS header
 }
 
 func stripIncomingHeaders() gin.HandlerFunc {

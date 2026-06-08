@@ -14,7 +14,7 @@ func TestFilterGenerator_ControlActionOnDevice(t *testing.T) {
 
 	// Load the specific policy from the user's policy file
 	policies := NewPolicyRegistry()
-	if err := policies.Load("../../examples/iot/test-policy-control.json"); err != nil {
+	if err := policies.Load("testdata/test-policy-control.json"); err != nil {
 		t.Fatalf("Failed to load policy: %v", err)
 	}
 
