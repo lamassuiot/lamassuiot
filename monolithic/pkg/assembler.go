@@ -57,6 +57,26 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			vaDomains = append(vaDomains, fmt.Sprintf("%s:%d/api/va", domain, conf.GatewayPortHttp))
 		}
 
+		var authzClientConf config.AuthzClient
+		var authzPort int
+		if conf.AuthzConfig != nil {
+			_, _, _, _, aPort, aErr := authzapi.AssembleAuthzServiceWithHTTPServer(*conf.AuthzConfig, models.APIServiceInfo{})
+			if aErr != nil {
+				return -1, -1, fmt.Errorf("could not assemble Authz Service: %s", aErr)
+			}
+			authzPort = aPort
+			authzClientConf = config.AuthzClient{
+				HTTPClient: cconfig.HTTPClient{
+					LogLevel: cconfig.Info,
+					AuthMode: cconfig.NoAuth,
+					HTTPConnection: cconfig.HTTPConnection{
+						Protocol:        cconfig.HTTP,
+						BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: authzPort},
+					},
+				},
+			}
+		}
+
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
 			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
@@ -187,6 +207,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,
 			SSEEnabled:            conf.SSEEnabled,
+			AuthzClient:           authzClientConf,
 		}, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
@@ -227,6 +248,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
+			AuthzClient:               authzClientConf,
 		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
@@ -345,12 +367,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
-
-		if conf.AuthzConfig != nil {
-			_, _, _, _, authzPort, err := authzapi.AssembleAuthzServiceWithHTTPServer(*conf.AuthzConfig, models.APIServiceInfo{})
-			if err != nil {
-				return -1, -1, fmt.Errorf("could not assemble Authz Service: %s", err)
-			}
+		if authzPort > 0 {
 			addRouteMap("Authz", "/api/authz/", authzPort)
 		}
 
