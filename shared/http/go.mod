@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
 	github.com/sirupsen/logrus v1.9.4
 )
 

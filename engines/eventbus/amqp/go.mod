@@ -5,8 +5,8 @@ go 1.26.2
 require (
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/sirupsen/logrus v1.9.4
 )

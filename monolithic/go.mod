@@ -9,14 +9,14 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
-	github.com/lamassuiot/lamassuiot/backend/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/connectors/awsiot/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/sdk/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/backend/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/connectors/awsiot/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/sdk/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/sirupsen/logrus v1.9.4
 	gorm.io/driver/sqlite v1.6.0
@@ -149,15 +149,15 @@ require (
 	github.com/kaptinlin/jsonschema v0.7.10 // indirect
 	github.com/kaptinlin/messageformat-go v0.6.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
-	github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3 v3.7.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3 v3.8.0 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/mattn/go-sqlite3 v1.14.42 // indirect

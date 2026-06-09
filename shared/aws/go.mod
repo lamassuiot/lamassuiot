@@ -7,8 +7,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.15
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.0
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
 	github.com/ory/dockertest/v3 v3.12.0
 )
 
