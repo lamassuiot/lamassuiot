@@ -205,6 +205,70 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /devices/{id}/events:
+    get:
+      tags: [Devices]
+      summary: List device events
+      description: |
+        Returns the audit/event history for a single device, with pagination, sorting
+        and filtering. When the client sends `Accept: text/event-stream`, the server
+        switches to a Server-Sent Events stream of new events instead of returning a
+        paginated JSON list.
+      operationId: getDeviceEvents
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/DeviceEventFilter'
+      responses:
+        '200':
+          description: Paginated list of device events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDeviceEventsResponse'
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/DeviceSSEMessage'
+              description: |
+                When negotiated via `Accept: text/event-stream`, each SSE event's
+                JSON body is a `DeviceSSEMessage` envelope: an `event_type` string
+                (the CloudEvent type, e.g. `device.status.update`) and a `data`
+                field containing the underlying payload (typically a `DeviceEvent`).
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '501':
+          description: SSE is disabled by configuration or not supported in this deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Devices]
+      summary: Create a device event
+      operationId: createDeviceEvent
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceEventBody'
+      responses:
+        '201':
+          description: Created event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceEvent'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /devices/{id}/decommission:
     delete:
       tags: [Devices]
@@ -638,6 +702,27 @@ components:
         - Multiple filters: `filter=dms_owner[eq]:dms-prod&filter=tags[contains]:server`
         - Date range: `filter=creation_timestamp[af]:2024-01-01T00:00:00Z`
 
+    DeviceEventFilter:
+      name: filter
+      in: query
+      required: false
+      explode: true
+      style: form
+      schema:
+        type: string
+      description: |
+        Filter expression for device event search. Repeat the parameter to combine
+        multiple filters (e.g. `filter=event_type[eq]:STATUS-UPDATED&filter=event_ts[af]:2026-01-01T00:00:00Z`).
+
+        **Supported Fields:**
+        - `event_ts` (date): Event timestamp
+        - `event_type` (enum): Event type (CREATED, PROVISIONED, RE-PROVISIONED, RENEWED, SHADOW-UPDATED, STATUS-UPDATED, DECOMMISSIONED)
+        - `description` (string): Free-text event description
+        - `source` (string): Originating subsystem
+        - `structured_fields` (json): Structured payload, queryable via JSON-path operators
+
+        Operators follow the same conventions as device filtering (see `filter` on `/devices`).
+
     DeviceGroupFilter:
       name: filter
       in: query
@@ -988,7 +1073,81 @@ components:
         slots:
           type: object
           additionalProperties: true
-        events:
+
+    DeviceEventType:
+      type: string
+      enum:
+        - CREATED
+        - PROVISIONED
+        - RE-PROVISIONED
+        - RENEWED
+        - SHADOW-UPDATED
+        - STATUS-UPDATED
+        - DECOMMISSIONED
+        - UNKNOWN
+
+    DeviceEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        event_ts:
+          type: string
+          format: date-time
+        type:
+          $ref: '#/components/schemas/DeviceEventType'
+        description:
+          type: string
+        source:
+          type: string
+        structured_fields:
+          type: object
+          additionalProperties: true
+
+    DeviceSSEMessage:
+      type: object
+      description: |
+        Envelope streamed over Server-Sent Events for `/devices/{id}/events`.
+        `event_type` is the underlying CloudEvent type and `data` is the
+        event-specific payload (currently a `DeviceEvent` for device-event
+        streams, but may evolve to other shapes for other event types).
+      required: [event_type, data]
+      properties:
+        event_type:
+          type: string
+          description: CloudEvent type, e.g. `device.status.update`.
+        data:
+          description: Event payload. For device-event streams this is a DeviceEvent.
+          oneOf:
+            - $ref: '#/components/schemas/DeviceEvent'
+            - type: object
+              additionalProperties: true
+
+    GetDeviceEventsResponse:
+      type: object
+      properties:
+        next:
+          type: string
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceEvent'
+
+    CreateDeviceEventBody:
+      type: object
+      required: [type]
+      properties:
+        event_ts:
+          type: string
+          format: date-time
+          description: Optional client-supplied timestamp; server timestamps when omitted.
+        type:
+          $ref: '#/components/schemas/DeviceEventType'
+        description:
+          type: string
+        source:
+          type: string
+        structured_fields:
           type: object
           additionalProperties: true
 
