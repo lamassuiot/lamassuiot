@@ -15,6 +15,8 @@ options:
         - test
         - chore
         - refactor
+        - docs
+        - build
   commit_groups:
     title_maps:
       feat: Features
@@ -25,8 +27,10 @@ options:
       test: Tests
       chore: Chores
       refactor: Refactor
+      docs: Documentation
+      build: Build
   header:
-    pattern: "^((\\w+)[\\s:]\\s.*)$"
+    pattern: "^((\\w+)(\\([^)]*\\))?!?:\\s.*)$"
     pattern_maps:
       - Subject
       - Type
