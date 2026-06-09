@@ -95,6 +95,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			},
 			PublisherEventBus: conf.PublisherEventBus,
 			Storage:           conf.Storage,
+			AuthzClient:       authzClientConf,
 		}, apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
@@ -136,6 +137,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
 			VAServerDomains:          vaDomains,
+			AuthzClient:              authzClientConf,
 		}, kmsSDKBuilder("KMS", models.KMSSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
@@ -186,6 +188,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			PublisherEventBus:     conf.PublisherEventBus,
 			Storage:               conf.Storage,
 			VADomains:             vaDomains,
+			AuthzClient:           authzClientConf,
 		}, caSDKBuilder("VA", models.VASource), kmsSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
@@ -289,6 +292,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,
+			AuthzClient:           authzClientConf,
 		}, apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
