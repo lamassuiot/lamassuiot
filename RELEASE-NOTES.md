@@ -1,10 +1,9 @@
 
 <a name="3.8.0"></a>
-## [3.8.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.7.0...3.8.0) (2026-06-09)
+## [3.8.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.7.0...3.8.0) (2026-06-08)
 
 ### Chores
 
-* Chore: release: prepare release 3.8.0 ([#658](https://github.com/lamassuiot/lamassuiot/issues/658))
 * Chore: enhance DEV release workflow with tag validation ([#648](https://github.com/lamassuiot/lamassuiot/issues/648))
 * Chore: update Go version from 1.24.x to 1.26.2 across all modules ([#607](https://github.com/lamassuiot/lamassuiot/issues/607))
 
