@@ -35,4 +35,3 @@
 ### Security Fixes
 
 * Security: Update dependencies in go.mod and go.sum ([#398](https://github.com/lamassuiot/lamassuiot/issues/398))
-
