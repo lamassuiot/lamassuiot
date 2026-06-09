@@ -29,10 +29,8 @@
       "actions": [
         "read",
         "delete",
-        "status-update/revoke",
         "import",
         "ui",
-        "status-update/reactivate",
         "status-update",
         "metadata-update"
       ],
