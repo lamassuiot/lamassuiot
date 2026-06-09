@@ -34,11 +34,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	if sseHub != nil {
-		routes.NewDeviceManagerHTTPLayerWithSSE(httpGrp, *service, sseHub)
-	} else {
-		routes.NewDeviceManagerHTTPLayer(httpGrp, *service)
-	}
+	routes.NewDeviceManagerHTTPLayerWithSSE(httpGrp, *service, sseHub, conf.AuthzClient, lHttp)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Device Manager http server: %s", err)

@@ -1,0 +1,34 @@
+# Authz Service Configuration
+
+# Enable debug logging
+debug: true
+
+# Schema name -> path to the JSON schema file
+schemas:
+  authz: /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json
+  pki: /home/ubuntu/dev/authz/examples/iot/schemas.pki-v2.json
+
+# authz_db: Postgres connection for the authz service's own data
+# (principals, grants, policies).  Uses the dedicated "authz" database.
+authz_db:
+  username: postgres
+  password: test
+  host: localhost
+  port: 5432
+  database: authz
+
+# credentials: per-schema Postgres connections used by the authorization engine
+# to query entity data for policy evaluation.
+credentials:
+  authz:
+    username: postgres
+    password: test
+    host: localhost
+    port: 5432
+    database: authz
+  pki:
+    username: postgres
+    password: test
+    host: localhost
+    port: 5432
+    database: pki

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	gorm_authz "github.com/lamassuiot/authz/sdk/gorm"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
@@ -35,12 +36,12 @@ func GetEmbeddedMigrations() embed.FS {
 	return embedMigrations
 }
 
-func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, database string) (*gorm.DB, error) {
+func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, schema string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
 		logger: logger,
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, database, cfg.Port)
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, cfg.Port, schema)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: dbLogger,
 	})
@@ -49,8 +50,12 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 		return nil, err
 	}
 
+	// Set search_path for this connection
+	db.Exec(fmt.Sprintf("SET search_path TO %s", schema))
+
 	// Add OTel Tracing
 	err = db.Use(tracing.NewPlugin())
+	err = db.Use(gorm_authz.NewAuthzGormPlugin())
 
 	return db, err
 }
@@ -116,12 +121,14 @@ type migrator struct {
 }
 
 func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
-	dbName := db.Migrator().CurrentDatabase()
+	// Get current schema from search_path
+	var schemaName string
+	db.Raw("SELECT current_schema()").Scan(&schemaName)
 
-	log.Infof("Planing migrations")
-	lMig := log.WithField("migrations", dbName)
+	log.Infof("Planing migrations for schema: %s", schemaName)
+	lMig := log.WithField("migrations", schemaName)
 
-	migrationsDir := filepath.Join("migrations", dbName)
+	migrationsDir := filepath.Join("migrations", schemaName)
 	migrationsFS, err := fs.Sub(embedMigrations, migrationsDir)
 	if err != nil {
 		lMig.Fatalf("could not obtain migrations subdirectory: %s", err)
@@ -132,13 +139,14 @@ func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
 		log.Fatalf("could not get db connection: %s", err)
 	}
 	// Reset migrations to avoid conflicts between different
-	// databases migrations (this is to prevent go based migrations from being registered multiple times for different databases)
+	// schemas migrations (this is to prevent go based migrations from being registered multiple times for different schemas)
 	goose.ResetGlobalMigrations()
 
-	migrations.RegisterGoMigrations(dbName)
+	migrations.RegisterGoMigrations(schemaName)
 	m, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrationsFS)
 	if err != nil {
-		lMig.Fatalf("could not create migrator: %s", err)
+		lMig.Warnf("could not create migrator: %s", err)
+		return nil
 	}
 
 	return &migrator{

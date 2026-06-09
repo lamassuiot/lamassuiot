@@ -1,0 +1,33 @@
+{
+  "id": "lamassu.c299ff00-83bc-4bf8-ba6a-7337a3afe417",
+  "name": "Device Manager - Reader",
+  "description": "Read-only access to device and device-group resources",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "devicemanager",
+      "entity_type": "device_group",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "devicemanager",
+      "entity_type": "device",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

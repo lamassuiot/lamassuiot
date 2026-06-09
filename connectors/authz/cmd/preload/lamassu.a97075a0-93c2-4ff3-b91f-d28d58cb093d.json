@@ -1,0 +1,41 @@
+{
+  "id": "lamassu.a97075a0-93c2-4ff3-b91f-d28d58cb093d",
+  "name": "Device Manager - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "devicemanager",
+      "entity_type": "device_group",
+      "actions": [
+        "read",
+        "update",
+        "delete",
+        "create",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "devicemanager",
+      "entity_type": "device",
+      "actions": [
+        "read",
+        "delete",
+        "provision",
+        "decomission",
+        "metadata-update",
+        "create",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

@@ -1,11 +1,14 @@
 package identityextractors
 
 import (
+	"context"
 	"crypto/x509"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	clientcertificateextractor "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors/client-certificate-extractor"
+	"github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -24,21 +27,39 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 	crts, err = extractor.getCertificateFromHeader(req.Header)
 	if err != nil {
 		extractor.logger.Tracef("something went wrong while processing headers: %s", err)
-	} else if crts != nil {
-		ctx.Set(string(IdentityExtractorClientCertificate), crts)
-		return
-	}
-
-	//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
-	if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
-		extractor.logger.Trace("Using certificate presented in peer connection")
-		crts = req.TLS.PeerCertificates
-	} else {
-		extractor.logger.Trace("No certificate presented in peer connection")
+	} else if crts == nil {
+		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
+		if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
+			extractor.logger.Trace("Using certificate presented in peer connection")
+			crts = req.TLS.PeerCertificates
+		} else {
+			extractor.logger.Trace("No certificate presented in peer connection")
+		}
 	}
 
 	if len(crts) > 0 {
-		ctx.Set(string(IdentityExtractorClientCertificate), crts)
+		crt := crts[0]
+		crtS := models.X509Certificate(*crt)
+
+		ctx.Set(core.LamassuContextKeyAuthType, string(IdentityExtractorClientCertificate))
+		ctx.Set(core.LamassuContextKeyAuthCredentialString, crtS.String())
+		ctx.Set(core.LamassuContextKeyAuthCredentialStruct, crt)
+		ctx.Set(core.LamassuContextKeyAuthID, crt.Subject.CommonName)
+		ctx.Set(core.LamassuContextKeyAuthContext, map[string]interface{}{
+			"crt": crtS.String(),
+		})
+
+		reqCtx := req.Context()
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, crt)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialString, crtS.String())
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, string(IdentityExtractorClientCertificate))
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthID, crt.Subject.CommonName)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, map[string]interface{}{
+			"crt": crtS.String(),
+		})
+		if ctx.Request != nil {
+			ctx.Request = ctx.Request.WithContext(reqCtx)
+		}
 	}
 }
 

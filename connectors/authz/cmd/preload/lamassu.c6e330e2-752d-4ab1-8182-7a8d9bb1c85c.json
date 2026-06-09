@@ -1,0 +1,36 @@
+{
+  "id": "lamassu.c6e330e2-752d-4ab1-8182-7a8d9bb1c85c",
+  "name": "Alerts - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "alerts",
+      "entity_type": "event",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "alerts",
+      "entity_type": "subscription",
+      "actions": [
+        "read",
+        "delete",
+        "update",
+        "create",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

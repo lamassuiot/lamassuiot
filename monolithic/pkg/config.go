@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	authzconfig "github.com/lamassuiot/authz/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 )
@@ -33,6 +34,7 @@ type MonolithicConfig struct {
 	UIPort                int                            `mapstructure:"ui_port"`
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
 	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
+	AuthzConfig           *authzconfig.AuthzConfig        `mapstructure:"authz"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {

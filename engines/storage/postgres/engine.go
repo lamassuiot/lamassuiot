@@ -20,12 +20,14 @@ func Register() {
 }
 
 const (
-	CA_DB_NAME     = "ca"
-	DEVICE_DB_NAME = "devicemanager"
-	DMS_DB_NAME    = "dmsmanager"
-	ALERTS_DB_NAME = "alerts"
-	VA_DB_NAME     = "va"
-	KMS_DB_NAME    = "kms"
+	MAIN_DB_NAME = "pki"
+
+	CA_SCHEMA     = "ca"
+	DEVICE_SCHEMA = "devicemanager"
+	DMS_SCHEMA    = "dmsmanager"
+	ALERTS_SCHEMA = "alerts"
+	VA_SCHEMA     = "va"
+	KMS_SCHEMA    = "kms"
 )
 
 type PostgresStorageEngine struct {
@@ -57,7 +59,7 @@ func (s *PostgresStorageEngine) GetCAStorage() (storage.CACertificatesRepo, erro
 }
 
 func (s *PostgresStorageEngine) initialiceCACertStorage() error {
-	psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, CA_DB_NAME)
+	psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, CA_SCHEMA)
 	if err != nil {
 		return err
 	}
@@ -110,7 +112,7 @@ func (s *PostgresStorageEngine) GetIssuanceProfileStorage() (storage.IssuancePro
 
 func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, error) {
 	if s.Device == nil {
-		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DEVICE_DB_NAME)
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DEVICE_SCHEMA)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
@@ -127,7 +129,7 @@ func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, e
 
 func (s *PostgresStorageEngine) GetVARoleStorage() (storage.VARepo, error) {
 	if s.Device == nil {
-		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, VA_DB_NAME)
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, VA_SCHEMA)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
@@ -144,7 +146,7 @@ func (s *PostgresStorageEngine) GetVARoleStorage() (storage.VARepo, error) {
 
 func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 	if s.DMS == nil {
-		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DMS_DB_NAME)
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DMS_SCHEMA)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
@@ -173,7 +175,7 @@ func (s *PostgresStorageEngine) GetSubscriptionsStorage() (storage.Subscriptions
 }
 
 func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
-	psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, ALERTS_DB_NAME)
+	psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, ALERTS_SCHEMA)
 	if err != nil {
 		return err
 	}
@@ -197,7 +199,7 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 
 func (s *PostgresStorageEngine) GetKMSStorage() (storage.KMSKeysRepo, error) {
 	if s.KMS == nil {
-		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, KMS_DB_NAME)
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, KMS_SCHEMA)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}

@@ -10,9 +10,10 @@ import (
 )
 
 type AuditBody struct {
-	Input    interface{} `json:"input"`
-	HasError bool        `json:"has_error"`
-	Output   interface{} `json:"output"`
+	Input      interface{} `json:"input"`
+	HasError   bool        `json:"has_error"`
+	Output     interface{} `json:"output"`
+	Principals []string    `json:"principals,omitempty"`
 }
 
 type AuditPublisher struct {
@@ -29,21 +30,25 @@ func (audit *AuditPublisher) HandleServiceOutputAndPublishAuditRecord(ctx contex
 	var auditBody AuditBody
 	var auditEventType = fmt.Sprintf("audit.%s", eventType)
 
+	principals, _ := ctx.Value(core.LamassuContextKeyMatchedPrincipals).([]string)
+
 	if err != nil {
 		auditEventType = fmt.Sprintf("%s.error", eventType)
 		ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, auditEventType)
 
 		auditBody = AuditBody{
-			Input:    input,
-			HasError: true,
-			Output:   err.Error(),
+			Input:      input,
+			HasError:   true,
+			Output:     err.Error(),
+			Principals: principals,
 		}
 	} else {
 		ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, auditEventType)
 		auditBody = AuditBody{
-			Input:    input,
-			HasError: false,
-			Output:   output,
+			Input:      input,
+			HasError:   false,
+			Output:     output,
+			Principals: principals,
 		}
 	}
 
