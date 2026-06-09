@@ -37,6 +37,7 @@ func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp se
 
 	v1 := httpGrp.Group("/v1")
 
-	v1.GET("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustomField("read", []string{"ca-ski"}), vaRoutes.GetRoleByID)
-	v1.PUT("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustomField("update", []string{"ca-ski"}), vaRoutes.UpdateRole)
+	skiKey := func(c *gin.Context) map[string]string { return map[string]string{"ca_ski": c.Param("ca-ski")} }
+	v1.GET("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustom("read", skiKey), vaRoutes.GetRoleByID)
+	v1.PUT("/roles/:ca-ski", vaAuthzMw.AuthzCheckCustom("update", skiKey), vaRoutes.UpdateRole)
 }
