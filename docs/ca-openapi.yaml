@@ -694,7 +694,7 @@ paths:
       operationId: updateCertificateStatus
       x-authz:
         entity_type: certificate
-        action: status-update/revoke
+        action: status-update
       parameters:
         - $ref: '#/components/parameters/SerialNumber'
       requestBody:
