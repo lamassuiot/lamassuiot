@@ -3,8 +3,8 @@ module github.com/lamassuiot/lamassuiot/sdk/v3
 go 1.26.2
 
 require (
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.8.0
 	github.com/sirupsen/logrus v1.9.4
 	go.opentelemetry.io/contrib/instrumentation/host v0.68.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0

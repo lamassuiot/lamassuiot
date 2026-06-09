@@ -4,8 +4,8 @@ go 1.26.2
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.0
 	github.com/sirupsen/logrus v1.9.4
 	gocloud.dev v0.45.0
 )
@@ -53,7 +53,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/google/wire v0.7.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.7.0 // indirect
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect

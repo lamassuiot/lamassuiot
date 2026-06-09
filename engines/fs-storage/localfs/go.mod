@@ -3,7 +3,7 @@ module github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3
 go 1.26.2
 
 require (
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
 	github.com/sirupsen/logrus v1.9.4
 	gocloud.dev v0.45.0
 )

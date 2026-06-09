@@ -4,9 +4,9 @@ go 1.26.2
 
 require (
 	github.com/jakehl/goid v1.1.0
-	github.com/lamassuiot/lamassuiot/backend/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/core/v3 v3.7.0
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.7.0
+	github.com/lamassuiot/lamassuiot/backend/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/sirupsen/logrus v1.9.4
@@ -74,9 +74,9 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/sdk/v3 v3.7.0 // indirect
-	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.7.0 // indirect
+	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/sdk/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.8.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect
