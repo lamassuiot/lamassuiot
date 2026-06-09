@@ -1,8 +1,14 @@
 package helpers
 
 import (
+	"cloudflare/circl/sign/mldsa/mldsa44"
+	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa87"
+	"cloudflare/circl/sign/slhdsa"
+
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -13,6 +19,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -75,25 +82,9 @@ var ekuOIDToExt = func() map[string]x509.ExtKeyUsage {
 //Cammbio de la función para definir la longevidad de la expiración de la CA.
 
 func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.Duration, commonName string) (*x509.Certificate, any, error) {
-	var err error
-	var key any
-	var pubKey any
-
-	switch keyType {
-	case x509.RSA:
-		rsaKey, err := GenerateRSAKey(2048)
-		if err != nil {
-			return nil, nil, err
-		}
-		key = rsaKey
-		pubKey = &rsaKey.PublicKey
-	case x509.ECDSA:
-		eccKey, err := GenerateECDSAKey(elliptic.P224())
-		if err != nil {
-			return nil, nil, err
-		}
-		key = eccKey
-		pubKey = &eccKey.PublicKey
+	key, pubKey, err := generateKey(keyType)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
@@ -122,6 +113,62 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 	}
 
 	return cert, key, nil
+}
+
+func GenerateSelfSignedChameleonCA(deltaKeyType, baseKeyType x509.PublicKeyAlgorithm, expirationTime time.Duration, commonName string) (*x509.Certificate, crypto.Signer, crypto.Signer, error) {
+	return nil, nil, nil, fmt.Errorf("x509.CreateChameleonCertificate: requires PQC-enabled Go build")
+}
+
+func generateKey(keyType x509.PublicKeyAlgorithm) (crypto.Signer, crypto.PublicKey, error) {
+	var key crypto.Signer
+	var pubKey crypto.PublicKey
+
+	switch keyType {
+	case x509.RSA:
+		rsaKey, err := GenerateRSAKey(2048)
+		if err != nil {
+			return nil, nil, err
+		}
+		key = rsaKey
+		pubKey = &rsaKey.PublicKey
+	case x509.ECDSA:
+		eccKey, err := GenerateECDSAKey(elliptic.P224())
+		if err != nil {
+			return nil, nil, err
+		}
+		key = eccKey
+		pubKey = &eccKey.PublicKey
+	case x509.MLDSA:
+		mldsaKey, err := GenerateMLDSAKey(65)
+		if err != nil {
+			return nil, nil, err
+		}
+		key = mldsaKey
+		pubKey = mldsaKey.Public()
+	case x509.SLHDSA:
+		slhdsaKey, err := GenerateSLHDSAKey(1) // SHA2_128s
+		if err != nil {
+			return nil, nil, err
+		}
+		key = slhdsaKey
+		pubKey = slhdsaKey.Public()
+	case x509.CompositeMLDSARSA:
+		compKey, err := GenerateCompositeMLDSARSAKey(1) // MLDSA44-RSA2048-PSS-SHA256
+		if err != nil {
+			return nil, nil, err
+		}
+		key = compKey
+		pubKey = compKey.Public()
+	case x509.Ed25519:
+		ed25519Key, err := GenerateEd25519Key()
+		if err != nil {
+			return nil, nil, err
+		}
+		key = ed25519Key
+		pubKey = ed25519Key.Public()
+	}
+
+	return key, pubKey, nil
 }
 
 // defined to generate certificates with RSA and ECDSA keys
@@ -301,6 +348,47 @@ func GenerateECDSAKey(curve elliptic.Curve) (*ecdsa.PrivateKey, error) {
 	return privkey, nil
 }
 
+func GenerateMLDSAKey(dimensions int) (crypto.Signer, error) {
+	var key crypto.Signer
+	var err error
+	switch dimensions {
+	case 44:
+		_, key, err = mldsa44.GenerateKey(rand.Reader)
+	case 65:
+		_, key, err = mldsa65.GenerateKey(rand.Reader)
+	case 87:
+		_, key, err = mldsa87.GenerateKey(rand.Reader)
+	default:
+		err = errors.New("unsupported dimensions")
+	}
+	return key, err
+}
+
+func GenerateSLHDSAKey(paramSet int) (crypto.Signer, error) {
+	_, priv, err := slhdsa.GenerateKey(rand.Reader, slhdsa.ID(paramSet))
+	if err != nil {
+		return nil, err
+	}
+	return priv, nil
+}
+
+func GenerateCompositeMLDSARSAKey(variant int) (crypto.Signer, error) {
+	if variant < 1 || variant > len(x509.CompositeAlgorithms) {
+		return nil, fmt.Errorf("invalid composite variant %v (use 1-%d)", variant, len(x509.CompositeAlgorithms))
+	}
+	algo := x509.CompositeAlgorithms[variant-1]
+	_, sk, err := algo.GenerateCompositeKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return sk, nil
+}
+
+func GenerateEd25519Key() (crypto.Signer, error) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	return key, err
+}
+
 // EncryptWithPublicKey encrypts data with public key
 func EncryptWithPublicKey(msg []byte, pub *rsa.PublicKey) ([]byte, error) {
 	hash := sha512.New()
@@ -360,7 +448,7 @@ func LoadSystemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool
 	return certPool
 }
 
-func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKey *ecdsa.PrivateKey) (bool, error) {
+func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKey *ecdsa.PrivateKey, mldsaKey crypto.Signer, ed25519Key ed25519.PrivateKey) (bool, error) {
 	errs := []string{
 		"tls: private key type does not match public key type",
 		"tls: private key does not match public key",
@@ -389,6 +477,44 @@ func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKe
 		}
 
 		_, err = tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}))
+		if err == nil {
+			return true, nil
+		}
+
+		contains := slices.Contains(errs, err.Error())
+		if contains {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	if mldsaKey != nil {
+		keyBytes, err := x509.MarshalPKCS8PrivateKey(mldsaKey)
+		if err != nil {
+			return false, err
+		}
+
+		_, err = tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "MLDSA PRIVATE KEY", Bytes: keyBytes}))
+		if err == nil {
+			return true, nil
+		}
+
+		contains := slices.Contains(errs, err.Error())
+		if contains {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	if ed25519Key != nil {
+		keyBytes, err := x509.MarshalPKCS8PrivateKey(ed25519Key)
+		if err != nil {
+			return false, err
+		}
+
+		_, err = tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "Ed25519 PRIVATE KEY", Bytes: keyBytes}))
 		if err == nil {
 			return true, nil
 		}

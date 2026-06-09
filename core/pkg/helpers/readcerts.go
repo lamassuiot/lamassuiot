@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	circlSign "cloudflare/circl/sign"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -55,7 +56,7 @@ func ParsePrivateKey(privKeyBytes []byte) (interface{}, error) {
 	}
 	if key, err := x509.ParsePKCS8PrivateKey(keyDERBlock.Bytes); err == nil {
 		switch key := key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey:
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, circlSign.PrivateKey, *x509.CompositePrivateKey:
 			return key, nil
 		default:
 			return nil, errors.New("tls: found unknown private key type in PKCS#8 wrapping")

@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"os"
 	"path/filepath"
@@ -40,38 +40,19 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 	}
 
 	meta := helpers.MergeMaps(&defaultMeta, &conf.Metadata)
+	engine := software.NewSoftwareCryptoEngine(lGo)
+
 	return &FilesystemCryptoEngine{
 		logger:           lGo,
-		softCryptoEngine: software.NewSoftwareCryptoEngine(lGo),
+		softCryptoEngine: engine,
 		storageDirectory: conf.Config.StorageDirectory,
 		config: models.CryptoEngineInfo{
-			Type:          models.Golang,
-			SecurityLevel: models.SL0,
-			Provider:      "Golang",
-			Name:          runtime.Version(),
-			Metadata:      *meta,
-			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
-				{
-					Type: models.KeyType(x509.RSA),
-					Sizes: []int{
-						1024,
-						2048,
-						3072,
-						4096,
-						7680,
-						15360,
-					},
-				},
-				{
-					Type: models.KeyType(x509.ECDSA),
-					Sizes: []int{
-						224,
-						256,
-						384,
-						521,
-					},
-				},
-			},
+			Type:              models.Golang,
+			SecurityLevel:     models.SL0,
+			Provider:          "Golang",
+			Name:              runtime.Version(),
+			Metadata:          *meta,
+			SupportedKeyTypes: engine.GetEngineConfig().SupportedKeyTypes,
 		},
 	}, nil
 }
@@ -150,6 +131,32 @@ func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(ctx context.Context,
 	return engine.importKey(key)
 }
 
+func (engine *FilesystemCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
+	engine.logger.Debugf("creating ML-DSA-%v private key", dimensions)
+
+	_, key, err := engine.softCryptoEngine.CreateMLDSAPrivateKey(ctx, dimensions)
+	if err != nil {
+		engine.logger.Errorf("could not create ML-DSA-%v private key: %s", dimensions, err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("ML-DSA-%q key successfully generated", dimensions)
+	return engine.importKey(key)
+}
+
+func (engine *FilesystemCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	engine.logger.Debugf("creating Ed25519 private key")
+
+	_, key, err := engine.softCryptoEngine.CreateEd25519PrivateKey()
+	if err != nil {
+		engine.logger.Errorf("could not Ed25519 private key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("Ed25519 key successfully generated")
+	return engine.importKey(key)
+}
+
 func (engine *FilesystemCryptoEngine) DeleteKey(keyID string) error {
 	return os.Remove(engine.storageDirectory + "/" + keyID)
 }
@@ -177,6 +184,84 @@ func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKe
 	}
 
 	engine.logger.Debugf("ECDSA key successfully imported")
+	return keyID, signer, nil
+}
+
+func (engine *FilesystemCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing MLDSA private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import MLDSA key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("MLDSA key successfully imported")
+	return keyID, signer, nil
+}
+
+func (engine *FilesystemCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	engine.logger.Debugf("creating SLH-DSA paramSet=%v private key", paramSet)
+
+	_, key, err := engine.softCryptoEngine.CreateSLHDSAPrivateKey(ctx, paramSet)
+	if err != nil {
+		engine.logger.Errorf("could not create SLH-DSA paramSet=%v private key: %s", paramSet, err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("SLH-DSA paramSet=%v key successfully generated", paramSet)
+	return engine.importKey(key)
+}
+
+func (engine *FilesystemCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing SLH-DSA private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import SLH-DSA key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("SLH-DSA key successfully imported")
+	return keyID, signer, nil
+}
+
+func (engine *FilesystemCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	engine.logger.Debugf("creating Composite-ML-DSA-RSA variant=%v private key", variant)
+
+	_, key, err := engine.softCryptoEngine.CreateCompositeMLDSARSAPrivateKey(ctx, variant)
+	if err != nil {
+		engine.logger.Errorf("could not create Composite-ML-DSA-RSA variant=%v private key: %s", variant, err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("Composite-ML-DSA-RSA variant=%v key successfully generated", variant)
+	return engine.importKey(key)
+}
+
+func (engine *FilesystemCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing Composite-ML-DSA-RSA private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import Composite-ML-DSA-RSA key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("Composite-ML-DSA-RSA key successfully imported")
+	return keyID, signer, nil
+}
+
+func (engine *FilesystemCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing E25519 private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import E25519 key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("E25519 key successfully imported")
 	return keyID, signer, nil
 }
 

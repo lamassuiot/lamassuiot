@@ -104,6 +104,48 @@ func TestCreateCA(t *testing.T) {
 			},
 		},
 		{
+			name:   "OK/KeyType-MLDSA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-Ed25519",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
 			name:   "OK/Expiration-Duration",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
@@ -1055,6 +1097,333 @@ func TestCreateCA(t *testing.T) {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}
 
+		})
+	}
+}
+
+func TestCreateHybridCA(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	caID := "12345-11111"
+	caDUr := models.TimeDuration(time.Hour * 24)
+	issuanceDur := models.TimeDuration(time.Hour * 12)
+
+	createProfile := func(t *testing.T) *models.IssuanceProfile {
+		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed creating issuance profile: %s", err)
+		}
+		return profile
+	}
+
+	// Parent CA for subordinate creation tests
+	parentProfile := createProfile(t)
+	parentCA, err := serverTest.CA.Service.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+		CreateCAInput: services.CreateCAInput{
+			ID:           "1111-2222-3333",
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+			Subject:      models.Subject{CommonName: "TestCA"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+			ProfileID:    parentProfile.ID,
+		},
+		InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+		HybridCertificateType: models.HybridCertificateTypeChameleon,
+	})
+	if err != nil {
+		t.Fatalf("failed creating parent CA: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) (*models.CACertificate, error)
+		resultCheck func(createdCA *models.CACertificate, err error) error
+	}{
+		{
+			name:   "OK/Chameleon-Ed25519>MLDSA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/Chameleon-MLDSA>Ed25519",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/Expiration-Time",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				tCA := time.Date(9999, 11, 31, 23, 59, 59, 0, time.UTC)
+				tIssue := time.Date(9999, 11, 30, 23, 59, 59, 0, time.UTC)
+
+				profile2, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Time, Time: tIssue},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Time, Time: tCA},
+						ProfileID:    profile2.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				if createdCA.Certificate.ValidTo.Year() != 9999 {
+					t.Fatalf("CA certificate should expire on 9999 but got %d", createdCA.Certificate.ValidTo.Year())
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "Error/Duplicate-CA-ID",
+			before: func(svc services.CAService) error {
+				profile := createProfile(t)
+				_, err := svc.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+				if err != nil {
+					return err
+				}
+				return nil
+			},
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrCAAlreadyExists) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrCAAlreadyExists, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/SubordinateChameleonCA",
+			before: func(svc services.CAService) error {
+				profile := createProfile(t)
+				parentCA, err = svc.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           "1111-2222-3333",
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "Parent CA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+
+				return err
+			},
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				_, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: parentCA.ID,
+				})
+				if err != nil {
+					fmt.Println(err)
+				}
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						ParentID:     parentCA.ID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "Subordinate CA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Reconstruct the delta certificate
+				baseCert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				deltaCert, err := x509.ReconstructDeltaCertificate(baseCert)
+				if err != nil {
+					return fmt.Errorf("could not get raw delta certificate: %s", err)
+				}
+
+				// Reconstruct the parent certificates
+				baseParentCert := (*x509.Certificate)(parentCA.Certificate.Certificate)
+				deltaParentCert, err := x509.ReconstructDeltaCertificate(baseParentCert)
+				if err != nil {
+					return fmt.Errorf("could not get raw delta parent certificate: %s", err)
+				}
+
+				err = baseParentCert.CheckSignature(baseParentCert.SignatureAlgorithm, baseCert.RawTBSCertificate, baseCert.Signature)
+				if err != nil {
+					fmt.Println(err)
+					return fmt.Errorf("could not validate base certificate signature")
+				}
+				err = deltaParentCert.CheckSignature(deltaCert.SignatureAlgorithm, deltaCert.RawTBSCertificate, deltaCert.Signature)
+				if err != nil {
+					return fmt.Errorf("could not validate delta certificate signature: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/Metadata",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				rawMetadata, ok := createdCA.Metadata["lamassu.io/certificate/chameleon"]
+				metadata := rawMetadata.(map[string]any)
+				if !ok {
+					t.Error("ca does not contain hybrid metadata")
+				}
+
+				// Helper function to reduce code duplication
+				checkMetadata := func(t *testing.T, metadata map[string]any, certificate *models.Certificate) {
+					if metadata["akid"] != certificate.AuthorityKeyID {
+						t.Errorf("hybrid ca metadata contains incorrect akid. Expected %v, got %v", certificate.AuthorityKeyID, metadata["akid"])
+					}
+
+					if metadata["skid"] != certificate.SubjectKeyID {
+						t.Errorf("hybrid ca metadata contains incorrect skid. Expected %v, got %v", certificate.SubjectKeyID, metadata["skid"])
+					}
+
+					if metadata["keyinfo"] != certificate.Certificate.PublicKeyAlgorithm.String() {
+						t.Errorf("hybrid ca metadata contains incorrect keyinfo. Expected %v, got %v", certificate.Certificate.PublicKeyAlgorithm.String(), metadata["keyinfo"])
+					}
+				}
+
+				// Check the base metadata
+				checkMetadata(t, metadata["base"].(map[string]any), &createdCA.Certificate)
+
+				// Delta certificate reconstruction requires PQC-enabled Go build; skipped here.
+				_ = metadata["delta"]
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			err = serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+			}
+
+			err = tc.before(caTest.Service)
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
 		})
 	}
 }
@@ -3879,6 +4248,20 @@ func TestImportCA(t *testing.T) {
 			}
 			key = eccKey
 			pubKey = &eccKey.PublicKey
+		case x509.MLDSA:
+			mldsaKey, err := chelpers.GenerateMLDSAKey(65)
+			if err != nil {
+				return nil, nil, err
+			}
+			key = mldsaKey
+			pubKey = mldsaKey.Public()
+		case x509.Ed25519:
+			ed25519Key, err := chelpers.GenerateEd25519Key()
+			if err != nil {
+				return nil, nil, err
+			}
+			key = ed25519Key
+			pubKey = ed25519Key.Public()
 		}
 
 		sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
@@ -4024,6 +4407,74 @@ func TestImportCA(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, key, err := generateSelfSignedCA(x509.ECDSA)
+				var duration time.Duration = 100
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					ProfileID:     profile.ID,
+					CACertificate: (*models.X509Certificate)(ca),
+					Key:           key,
+				})
+				return importedCA, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingCAWithMLDSAKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.MLDSA)
+				var duration time.Duration = 100
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					ProfileID:     profile.ID,
+					CACertificate: (*models.X509Certificate)(ca),
+					Key:           key,
+				})
+				return importedCA, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingCAWithEd25519Key",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.Ed25519)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)

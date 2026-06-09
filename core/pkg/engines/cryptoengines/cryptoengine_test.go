@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -39,11 +41,44 @@ func (m *mockCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elli
 	return "", key, err
 }
 
+func (m *mockCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("mock: ML-DSA not implemented")
+}
+
+func (m *mockCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("mock: SLH-DSA not implemented")
+}
+
+func (m *mockCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("mock: Composite-ML-DSA-RSA not implemented")
+}
+
+func (m *mockCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	return "", key, err
+}
+
 func (m *mockCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", key, nil
 }
 
 func (m *mockCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+	return "", key, nil
+}
+
+func (m *mockCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", key, nil
+}
+
+func (m *mockCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", key, nil
+}
+
+func (m *mockCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", key, nil
+}
+
+func (m *mockCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
 	return "", key, nil
 }
 

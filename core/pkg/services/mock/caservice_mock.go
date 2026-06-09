@@ -46,6 +46,12 @@ func (m *MockCAService) CreateCA(ctx context.Context, input services.CreateCAInp
 	return args.Get(0).(*models.CACertificate), args.Error(1)
 }
 
+func (m *MockCAService) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (*models.CACertificate, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CACertificate), args.Error(1)
+}
+
+
 func (m *MockCAService) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.CACertificate), args.Error(1)

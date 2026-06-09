@@ -1,8 +1,10 @@
 package sdk
 
 import (
+	circlSign "cloudflare/circl/sign"
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -156,6 +158,40 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		409: {
 			errs.ErrCAAlreadyExists,
 		},
+		500: {
+			errs.ErrCAIncompatibleValidity,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (*models.CACertificate, error) {
+	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/pq", resources.CreateHybridCABody{
+		ID:                    input.CreateCAInput.ID,
+		Subject:               input.CreateCAInput.Subject,
+		OuterKeyMetadata:      input.CreateCAInput.KeyMetadata,
+		InnerKeyMetadata:      input.InnerKeyMetadata,
+		ProfileID:             input.CreateCAInput.ProfileID,
+		CAExpiration:          input.CreateCAInput.CAExpiration,
+		EngineID:              input.CreateCAInput.EngineID,
+		ParentID:              input.CreateCAInput.ParentID,
+		Metadata:              input.CreateCAInput.Metadata,
+		HybridCertificateType: input.HybridCertificateType,
+	}, map[int][]error{
+		400: {
+			errs.ErrCAIncompatibleValidity,
+			errs.ErrCAIssuanceExpiration,
+		},
+		409: {
+			errs.ErrCAAlreadyExists,
+		},
+		500: {
+			errs.ErrCAIncompatibleValidity,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -168,7 +204,7 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	var privKey string
 	if input.Key != nil {
 		switch input.Key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey:
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, circlSign.PrivateKey, *x509.CompositePrivateKey:
 			bytes, err := x509.MarshalPKCS8PrivateKey(input.Key)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal private key: %w", err)

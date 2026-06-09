@@ -1,4 +1,4 @@
-FROM golang:1.26.2-bookworm
+FROM ghcr.io/lamassuiot/golang-pqc:latest
 WORKDIR /app
 
 COPY core core
