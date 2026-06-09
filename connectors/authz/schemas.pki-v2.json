@@ -86,9 +86,7 @@
       "read",
       "metadata-update",
       "delete",
-      "status-update",
-      "status-update/revoke",
-      "status-update/reactivate"
+      "status-update"
     ],
     "global_actions": [
       "import",

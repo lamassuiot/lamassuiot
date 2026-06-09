@@ -1078,8 +1078,8 @@ func TestGenerateListFilter_SpecificDeviceIDRevokeCascadesToCertificate(t *testi
 	// Regression test for the policy scenario reported in the bug:
 	// Rule 1: dmsmanager.dms with directGrants=["sample-dms-01"], cascades read/ui to certs.
 	// Rule 2: devicemanager.device with directGrants=["device-007"], cascades
-	//         status-update/revoke to ca.certificate via subject_common_name.
-	// GenerateListFilter("status-update/revoke", "ca", "certificate") must produce a
+	//         status-update to ca.certificate via subject_common_name.
+	// GenerateListFilter("status-update", "ca", "certificate") must produce a
 	// single-hop JOIN condition on device alias (j0_0.id = 'device-007'), NOT "1 = 0".
 	schemas := NewSchemaRegistry()
 	policies := NewPolicyRegistry()
@@ -1110,7 +1110,7 @@ func TestGenerateListFilter_SpecificDeviceIDRevokeCascadesToCertificate(t *testi
 								ToEntityType: "certificate",
 								To:           "ca.certificate",
 								Via:          "subject_common_name",
-								// read/ui only — status-update/revoke intentionally absent here
+								// read/ui only — status-update intentionally absent here
 								Actions: []string{"read", "ui"},
 							},
 						},
@@ -1129,7 +1129,7 @@ func TestGenerateListFilter_SpecificDeviceIDRevokeCascadesToCertificate(t *testi
 						ToEntityType: "certificate",
 						To:           "ca.certificate",
 						Via:          "subject_common_name",
-						Actions:      []string{"status-update/revoke", "read"},
+						Actions:      []string{"status-update", "read"},
 					},
 				},
 				DirectGrants: []string{"device-007"},
@@ -1141,7 +1141,7 @@ func TestGenerateListFilter_SpecificDeviceIDRevokeCascadesToCertificate(t *testi
 	}
 
 	fg := NewFilterGenerator(schemas, policies)
-	result, err := fg.GenerateListFilter("status-update/revoke", "ca", "certificate")
+	result, err := fg.GenerateListFilter("status-update", "ca", "certificate")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
 	}
