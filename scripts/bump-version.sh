@@ -1,9 +1,18 @@
 #!/bin/bash
 set -e
 
-if [ -z "$1" ]; then
-  echo "Usage: $0 <new-version>"
+SKIP_TIDY=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --no-tidy) SKIP_TIDY=true ;;
+  esac
+done
+
+if [ -z "$1" ] || [[ "$1" == --* ]]; then
+  echo "Usage: $0 <new-version> [--no-tidy]"
   echo "Example: $0 3.7.0"
+  echo "         $0 3.7.0 --no-tidy   # skip go mod tidy (use when tags don't exist yet)"
   exit 1
 fi
 
@@ -50,16 +59,20 @@ for module in "${MODULES[@]}"; do
   sed -i "s|github.com/lamassuiot/lamassuiot/\([^[:space:]]*\)/v${MAJOR_VERSION} v[0-9.]*|github.com/lamassuiot/lamassuiot/\1/v${MAJOR_VERSION} v${NEW_VERSION}|g" "$GO_MOD_FILE"
 done
 
-echo ""
-echo "Running go mod tidy on all modules..."
+if [ "$SKIP_TIDY" = true ]; then
+  echo ""
+  echo "Skipping go mod tidy (--no-tidy flag set)."
+else
+  echo ""
+  echo "Running go mod tidy on all modules..."
 
-# Run go mod tidy in each module directory
-for module in "${MODULES[@]}"; do
-  if [ -d "$module" ]; then
-    echo "Tidying $module..."
-    (cd "$module" && go mod tidy)
-  fi
-done
+  for module in "${MODULES[@]}"; do
+    if [ -d "$module" ]; then
+      echo "Tidying $module..."
+      (cd "$module" && go mod tidy)
+    fi
+  done
+fi
 
 echo ""
 echo "✓ All modules updated to v${NEW_VERSION}"

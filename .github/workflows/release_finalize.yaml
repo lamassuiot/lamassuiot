@@ -75,7 +75,7 @@ jobs:
       - name: Bump versions in go.mod files
         run: |
           chmod +x scripts/bump-version.sh
-          ./scripts/bump-version.sh ${{ needs.extract_version.outputs.release_version }}
+          ./scripts/bump-version.sh ${{ needs.extract_version.outputs.release_version }} --no-tidy
 
       - name: Commit version bump
         run: |
