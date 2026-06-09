@@ -139,8 +139,8 @@ jobs:
       release_version_with_v: ${{ needs.extract_version.outputs.release_version_with_v }}
       json_modules: ${{ steps.matrix.outputs.json_modules }}
 
-  create_global_release:
-    name: Create Global Tag & Release
+  create_global_tag:
+    name: Create Global Tag
     needs: finalize
     runs-on: ubuntu-latest
     permissions:
@@ -158,43 +158,9 @@ jobs:
           git tag ${{ needs.finalize.outputs.release_version_with_v }} -m "Release ${{ needs.finalize.outputs.release_version_with_v }}"
           git push origin ${{ needs.finalize.outputs.release_version_with_v }}
 
-      - name: Checkout code to tag
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.finalize.outputs.release_version_with_v }}
-
-      - name: Create Github Release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: ${{ needs.finalize.outputs.release_version_with_v }}
-          tag_name: ${{ needs.finalize.outputs.release_version_with_v }}
-          body_path: RELEASE-NOTES.md
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "^1.26.2" # The Go version to download (if necessary) and use.
-      - name: Build release assets # This would actually build your project, using zip for an example artifact
-        run: |
-          go work vendor
-          zip -r vendor.zip vendor
-      - name: Upload vendor dependencies
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./vendor.zip
-          asset_name: vendor.zip
-          asset_content_type: application/zip
-
   create_module_release:
     name: "Create Module release"
-    needs: [create_global_release, finalize]
+    needs: [create_global_tag, finalize]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -220,9 +186,53 @@ jobs:
         with:
           ref: ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
 
+  create_global_release:
+    name: Create Global Release
+    needs: [create_module_release, finalize]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code to tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.finalize.outputs.release_version_with_v }}
+
+      - name: Create Github Release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: ${{ needs.finalize.outputs.release_version_with_v }}
+          tag_name: ${{ needs.finalize.outputs.release_version_with_v }}
+          body_path: RELEASE-NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "^1.26.2"
+
+      - name: Build release assets
+        run: |
+          go work vendor
+          zip -r vendor.zip vendor
+
+      - name: Upload vendor dependencies
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./vendor.zip
+          asset_name: vendor.zip
+          asset_content_type: application/zip
+
   create_gopkg_release:
     name: "Create Go package release"
-    needs: [create_module_release, finalize]
+    needs: [create_global_release, finalize]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -242,7 +252,7 @@ jobs:
           git push
 
   build_docker_image:
-    needs: [create_module_release, finalize]
+    needs: [create_global_release, finalize]
     permissions:
       contents: read
       packages: write
