@@ -15,7 +15,7 @@ COPY go.work.sum go.work.sum
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
-RUN go work vendor
+RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 
 RUN go build -mod vendor -o monolithic monolithic/cmd/development/main.go 
 
