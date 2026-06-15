@@ -178,13 +178,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
- 
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '^1.26.2'
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         working-directory: backend
         run: go work sync
@@ -203,3 +203,81 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: backend-rest
+
+  e2e-cmp:
+    name: CMP E2E Tests
+    runs-on: ubuntu-latest
+    needs: [test, test-pkcs11, test-backend-assemblers, test-backend-rest]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.26.2'
+          cache-dependency-path: "**/*.sum"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Apply Lamassu compatibility patches to cmp-test-suite
+        working-directory: cmp-test-suite
+        run: |
+          git apply ../.github/patches/cmp-test-suite/0001-lamassu-compat.patch
+
+      - name: Create Python venv and install dependencies
+        working-directory: cmp-test-suite
+        run: |
+          python -m venv venv-cmp-tests
+          source venv-cmp-tests/bin/activate
+          pip install --quiet uv
+          uv pip install -e .
+
+      - name: Install monolithic Go dependencies
+        working-directory: monolithic
+        run: go work sync
+
+      - name: Start Lamassu monolithic server
+        working-directory: monolithic
+        run: |
+          go run ./cmd/development/main.go --sample-data &
+          echo $! > /tmp/lamassu.pid
+
+      - name: Wait for Lamassu to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/api/ca/v1/cas > /dev/null 2>&1; then
+              echo "Lamassu is ready"
+              exit 0
+            fi
+            echo "Waiting for Lamassu... attempt $i"
+            sleep 5
+          done
+          echo "Lamassu failed to start" >&2
+          exit 1
+
+      - name: Run CMP bootstrap setup
+        run: |
+          mkdir -p /tmp/cmp-bootstrap
+          bash scripts/cmp-bootstrap-setup.sh http://localhost:8080 sample-cmp-dms /tmp/cmp-bootstrap
+
+      - name: Run CMP tests
+        working-directory: cmp-test-suite
+        run: |
+          source venv-cmp-tests/bin/activate
+          robot --pythonpath=./ --exclude verbose-tests --exclude pqc \
+            --outputdir=reports \
+            --variable environment:lamassu \
+            tests/
+
+      - name: Upload Robot Framework report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmp-e2e-report
+          path: cmp-test-suite/reports/
