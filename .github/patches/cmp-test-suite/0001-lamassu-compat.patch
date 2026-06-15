@@ -1,0 +1,29 @@
+diff --git a/resources/keywords.resource b/resources/keywords.resource
+index 30a97b6..69c5122 100644
+--- a/resources/keywords.resource
++++ b/resources/keywords.resource
+@@ -74,6 +74,11 @@ Set Up Test Suite
+             ${ir}=  Build Ir From Key    ${issued_key}   exclude_fields=sender,senderKID
+             ...                          recipient=${RECIPIENT}    implicit_confirm=${ALLOW_IMPLICIT_CONFIRM}
+             ${protected_ir}=    Protect Hybrid PKIMessage     ${ir}    private_key=${tmp_key}    cert=${tmp_cert}
++            VAR    &{CERT_CONF_DEF_VALS}    sender=${SENDER}    recipient=${RECIPIENT}
++            ...    private_key=${tmp_key}    cert=${tmp_cert}    password=${PRESHARED_SECRET}
++            ...    protection=signature   scope=Global   # robocop: off=VAR04
++            VAR    &{DEFAULT_PROTECTION_VALS}    protection=signature   private_key=${tmp_key}
++            ...    cert=${tmp_cert}   password=${PRESHARED_SECRET}  scope=Global  # robocop: off=VAR04
+         END
+         ${response}=   Exchange Migration PKIMessage    ${protected_ir}    ${CA_BASE_URL}    ${INIT_SUFFIX}
+         PKIStatus Must Be    ${response}   accepted
+diff --git a/resources/protectionutils.py b/resources/protectionutils.py
+index 0bb0387..07e2892 100644
+--- a/resources/protectionutils.py
++++ b/resources/protectionutils.py
+@@ -2760,6 +2760,8 @@ def _patch_extra_certs(
+             certs = pq_verify_logic.build_migration_cert_chain(cert=cert, certs=certs, allow_self_signed=True)
+             logging.info("Loaded %d certificates from the directory.", len(certs))
+             pki_message["extraCerts"].extend(certs)
++        else:
++            pki_message["extraCerts"].extend([cert])
+     return pki_message
+
+
