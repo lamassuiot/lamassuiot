@@ -64,15 +64,15 @@ func main() {
 	}
 
 	dmsSDK := sdk.NewHttpDMSManagerClient(
-		sdk.HttpClientWithSourceHeaderInjector(dmsHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(dmsHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.DMSManagerClient.Protocol, conf.DMSManagerClient.Hostname, conf.DMSManagerClient.Port, conf.DMSManagerClient.BasePath),
 	)
 	deviceSDK := sdk.NewHttpDeviceManagerClient(
-		sdk.HttpClientWithSourceHeaderInjector(deviceHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(deviceHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(caHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
 
