@@ -8,17 +8,22 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strings"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
 )
 
 // OIDCMatcher matches principals against JWT/OIDC auth material.
-// Zero fields, zero dependencies — safe to use as a value or package-level singleton.
-type OIDCMatcher struct{}
+// When skipValidation is true the token signature is not verified (dev/testing only).
+type OIDCMatcher struct {
+	jwkKeySet      jwt.Keyfunc
+	skipValidation bool
+}
 
 // X509Matcher matches principals against X.509 certificate auth material.
 // Zero fields, zero dependencies — safe to use as a value or package-level singleton.
@@ -26,8 +31,8 @@ type X509Matcher struct{}
 
 // Match filters principals whose AuthConfig claim conditions all pass for the given JWT material.
 // authMaterial accepts: string (Bearer token or raw JWT), jwt.MapClaims, map[string]interface{}.
-func (OIDCMatcher) Match(principals []models.Principal, authMaterial interface{}) ([]string, error) {
-	claims, err := extractOIDCClaims(authMaterial)
+func (m OIDCMatcher) Match(principals []models.Principal, authMaterial interface{}) ([]string, error) {
+	claims, err := m.extractOIDCClaims(authMaterial)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +85,22 @@ func NewMatchService(store engine.PrincipalStore, matchers map[string]engine.Pri
 }
 
 // DefaultMatchService returns a MatchService wired with the standard OIDC and X.509 matchers.
-func DefaultMatchService(store engine.PrincipalStore) *MatchService {
+// When enableJWTValidation is false, OIDC tokens are parsed without signature verification
+// (intended for development/testing environments where no JWKS endpoint is available).
+func DefaultMatchService(store engine.PrincipalStore, jwkURL string, enableJWTValidation bool) *MatchService {
+	var oidcMatcher OIDCMatcher
+	if enableJWTValidation {
+		k, err := keyfunc.NewDefaultCtx(context.Background(), []string{jwkURL})
+		if err != nil {
+			log.Fatalf("Failed to create a keyfunc.Keyfunc from the server's URL. Error: %s", err)
+		}
+		oidcMatcher = OIDCMatcher{jwkKeySet: k.Keyfunc}
+	} else {
+		oidcMatcher = OIDCMatcher{skipValidation: true}
+	}
+
 	return NewMatchService(store, map[string]engine.PrincipalMatcher{
-		"oidc": OIDCMatcher{},
+		"oidc": oidcMatcher,
 		"x509": X509Matcher{},
 	})
 }
@@ -103,19 +121,20 @@ func (ms *MatchService) MatchPrincipals(ctx context.Context, authMaterial interf
 
 // --- OIDC helpers ---
 
-func extractOIDCClaims(authMaterial interface{}) (jwt.MapClaims, error) {
+func (m OIDCMatcher) extractOIDCClaims(authMaterial interface{}) (jwt.MapClaims, error) {
 	switch v := authMaterial.(type) {
-	case jwt.MapClaims:
-		return v, nil
-	case map[string]interface{}:
-		return jwt.MapClaims(v), nil
 	case string:
 		v = strings.TrimPrefix(v, "Bearer ")
 		parser := jwt.NewParser()
 		var claims jwt.MapClaims
-		_, _, err := parser.ParseUnverified(v, &claims)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse JWT token: %w", err)
+		if m.skipValidation {
+			if _, _, err := parser.ParseUnverified(v, &claims); err != nil {
+				return nil, fmt.Errorf("failed to parse JWT token: %w", err)
+			}
+		} else {
+			if _, err := parser.ParseWithClaims(v, &claims, m.jwkKeySet); err != nil {
+				return nil, fmt.Errorf("failed to parse JWT token: %w", err)
+			}
 		}
 		if claims == nil {
 			return nil, fmt.Errorf("invalid JWT claims format")

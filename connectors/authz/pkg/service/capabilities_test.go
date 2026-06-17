@@ -292,7 +292,7 @@ func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 	db := postgres.DB
 	eng := setupIoTEngine(t, db)
 
-	principalManager, err := NewPrincipalManager(db)
+	principalManager, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	policyManager := NewPolicyManager(store.NewInMemoryPolicyStore())

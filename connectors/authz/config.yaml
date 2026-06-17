@@ -6,7 +6,7 @@ debug: true
 # Schema name -> path to the JSON schema file
 schemas:
   authz: /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json
-  pki: /home/ubuntu/dev/authz/examples/iot/schemas.pki-v2.json
+  pki: /home/ubuntu/dev/authz/examples/iot/pki.json
 
 # authz_db: Postgres connection for the authz service's own data
 # (principals, grants, policies).  Uses the dedicated "authz" database.

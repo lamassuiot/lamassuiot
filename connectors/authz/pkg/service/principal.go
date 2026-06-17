@@ -16,14 +16,16 @@ type PrincipalManager struct {
 }
 
 // NewPrincipalManager creates a PrincipalManager backed by the given Postgres DB.
-func NewPrincipalManager(db *gorm.DB) (*PrincipalManager, error) {
+// jwksURL and enableJWTValidation are forwarded to the OIDC matcher; when
+// enableJWTValidation is false, token signatures are not verified.
+func NewPrincipalManager(db *gorm.DB, jwksURL string, enableJWTValidation bool) (*PrincipalManager, error) {
 	s, err := store.NewGormPrincipalStore(db)
 	if err != nil {
 		return nil, err
 	}
 	return &PrincipalManager{
 		store:        s,
-		matchService: store.DefaultMatchService(s),
+		matchService: store.DefaultMatchService(s, jwksURL, enableJWTValidation),
 	}, nil
 }
 

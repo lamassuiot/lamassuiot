@@ -32,7 +32,7 @@ func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	principalManager, err := NewPrincipalManager(db)
+	principalManager, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Build an in-memory policy registry (no blob store needed for this test).
@@ -107,7 +107,7 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	principalManager, err := NewPrincipalManager(db)
+	principalManager, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Policy: grants read+delete on org-1.
@@ -183,7 +183,7 @@ func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
 	defer postgres.Cleanup()
 
 	db := postgres.DB
-	principalManager, err := NewPrincipalManager(db)
+	principalManager, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	principal1 := &models.Principal{
