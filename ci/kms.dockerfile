@@ -1,4 +1,4 @@
-FROM golang:1.26.2-bookworm
+FROM golang:1.26.2-bookworm AS builder
 WORKDIR /app
 
 COPY core core
@@ -17,38 +17,23 @@ ARG VERSION= # set by build script
 
 RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 
-##############
-
 ENV GOSUMDB=off
-RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \ 
-    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o kms backend/cmd/kms/main.go 
+RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
+    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o kms backend/cmd/kms/main.go
 
-# Alpine and scartch dont work for this image due to non corss compileable HSM library
-FROM ubuntu:26.04
-ARG DEBIAN_FRONTEND=noninteractive
 
-# Dependencies for pkcs11-proxy and opensc for pkcs11-tool
-RUN apt-get update && \
-    apt-get --no-install-recommends install -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev opensc ca-certificates && \
-    apt-get clean
+FROM debian:bookworm-slim AS certs
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
-# -DCMAKE_POLICY_VERSION_MINIMUM=3.5 lets CMake 4.x configure pkcs11-proxy's
-# old CMakeLists.txt, and -Wno-error=incompatible-pointer-types keeps GCC 15
-# pointer type diagnostics as warnings instead of build-stopping errors.
-RUN git clone https://github.com/SUNET/pkcs11-proxy && \
-    cd pkcs11-proxy && \
-    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_FLAGS="-Wno-error=incompatible-pointer-types" . && make && make install
+FROM debian:bookworm-slim AS pkcs11-client-proxy
+RUN apt-get update && apt-get install -y --no-install-recommends p11-kit
 
-# Clean build artifacts
-RUN rm -rf /pkcs11-proxy
-# Clean compilation dependencies
-RUN apt-get remove -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev && \
-    apt-get autoremove -y && \
-    apt-get clean
-
-RUN groupadd --system lamassu && \
-    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
-
-COPY --from=0 /app/kms /
-USER lamassu
+FROM scratch
+USER 65532:65532
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /app/kms /
+COPY --from=pkcs11-client-proxy /lib64/ld-linux-x86-64.so.2 /lib64/
+COPY --from=pkcs11-client-proxy /usr/lib/x86_64-linux-gnu/libc.so.6 /usr/lib/x86_64-linux-gnu/
+COPY --from=pkcs11-client-proxy /usr/lib/x86_64-linux-gnu/libffi.so.8 /usr/lib/x86_64-linux-gnu/
+COPY --from=pkcs11-client-proxy /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so
 CMD ["/kms"]

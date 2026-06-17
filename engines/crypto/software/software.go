@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -55,7 +56,7 @@ func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize 
 
 	entropy := NewLamassuEntropy(ctx)
 
-	lFunc := p.logger.WithField("func", "RSA")
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
 	lFunc.Debugf("creating RSA %d bit key", keySize)
 	key, err := rsa.GenerateKey(entropy, keySize)
 
@@ -64,7 +65,7 @@ func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize 
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(&key.PublicKey)
+	encDigest, err := p.EncodePKIXPublicKeyDigest(ctx, &key.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -79,7 +80,7 @@ func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve 
 
 	entropy := NewLamassuEntropy(ctx)
 
-	lFunc := p.logger.WithField("func", "ECDSA")
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
 	lFunc.Debugf("creating ECDSA %s key", curve.Params().Name)
 	key, err := ecdsa.GenerateKey(curve, entropy)
 
@@ -88,7 +89,7 @@ func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve 
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(&key.PublicKey)
+	encDigest, err := p.EncodePKIXPublicKeyDigest(ctx, &key.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -97,12 +98,13 @@ func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve 
 	return encDigest, key, nil
 }
 
-func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(key interface{}) (string, error) {
-	p.logger.Debugf("marshaling and encoding PKIX private key")
+func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(ctx context.Context, key interface{}) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
+	lFunc.Debugf("marshaling and encoding PKIX private key")
 
 	keyBytes, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		p.logger.Errorf("could not marshal PKIX private key: %s", err)
+		lFunc.Errorf("could not marshal PKIX private key: %s", err)
 		return "", err
 	}
 
@@ -112,29 +114,30 @@ func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(key interface{}) (
 	})
 
 	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
-	p.logger.Debugf("private key (b64 encoded bytes): %s", keyBase64)
+	lFunc.Debugf("private key (b64 encoded bytes): %s", keyBase64)
 
 	return keyBase64, nil
 }
 
-func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key any) (string, error) {
-	p.logger.Debugf("extracting and encoding public key")
+func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(ctx context.Context, key any) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
+	lFunc.Debugf("extracting and encoding public key")
 	var pubkeyBytes []byte
 	var err error
 
 	pubkeyBytes, err = x509.MarshalPKIXPublicKey(key)
 	if err != nil {
-		p.logger.Errorf("could not marshal public key: %s", err)
+		lFunc.Errorf("could not marshal public key: %s", err)
 		return "", err
 	}
 
 	hash := sha256.New()
 	hash.Write(pubkeyBytes)
 	digest := hash.Sum(nil)
-	p.logger.Tracef("public key digest (bytes): %x", digest)
+	lFunc.Tracef("public key digest (bytes): %x", digest)
 
 	hexDigest := hex.EncodeToString(digest)
-	p.logger.Debugf("public key digest (hex encoded bytes): %s", hexDigest)
+	lFunc.Debugf("public key digest (hex encoded bytes): %s", hexDigest)
 
 	return hexDigest, nil
 }
