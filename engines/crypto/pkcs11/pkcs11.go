@@ -47,12 +47,18 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	}
 
 	for envKey, envVal := range conf.Config.ModuleExtraOptions.Env {
-		lPkcs11.Debugf("setting env variable %s=%s", envKey, envVal)
-		os.Setenv(envKey, envVal)
+		lPkcs11.Debugf("setting env variable %s", envKey)
+		if err := os.Setenv(envKey, envVal); err != nil {
+			lPkcs11.Errorf("could not set env variable %s: %s", envKey, err)
+			return nil, fmt.Errorf("could not set env variable %s: %w", envKey, err)
+		}
 		upperEnvKey := strings.ToUpper(envKey)
 		if upperEnvKey != envKey {
-			lPkcs11.Debugf("setting env variable %s=%s", upperEnvKey, envVal)
-			os.Setenv(upperEnvKey, envVal)
+			lPkcs11.Debugf("setting env variable %s", upperEnvKey)
+			if err := os.Setenv(upperEnvKey, envVal); err != nil {
+				lPkcs11.Errorf("could not set env variable %s: %s", upperEnvKey, err)
+				return nil, fmt.Errorf("could not set env variable %s: %w", upperEnvKey, err)
+			}
 		}
 	}
 
@@ -141,14 +147,14 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		lPkcs11.Errorf("could not get ECDSA PKCS mechanism. Provider might not support ECDSA or something went wrong: %s", err)
 	}
 
-	defaultMeta := map[string]interface{}{
+	defaultMeta := map[string]any{
 		"lamassu.io/cryptoengine/pkcs11/cryptoki-version": fmt.Sprintf("%b.%b", pkcs11ProviderInfo.CryptokiVersion.Major, pkcs11ProviderInfo.CryptokiVersion.Minor),
 		"lamassu.io/cryptoengine/pkcs11/library":          pkcs11ProviderInfo.LibraryDescription,
 		"lamassu.io/cryptoengine/pkcs11/manufacturer":     pkcs11ProviderInfo.ManufacturerID,
 		"lamassu.io/cryptoengine/pkcs11/model":            tokenInfo.Model,
 	}
 
-	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
+	meta := helpers.MergeMaps(&defaultMeta, &conf.Metadata)
 
 	return &pkcs11EngineContext{
 		logger:           lPkcs11,

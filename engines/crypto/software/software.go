@@ -114,8 +114,6 @@ func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(ctx context.Contex
 	})
 
 	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
-	lFunc.Debugf("private key (b64 encoded bytes): %s", keyBase64)
-
 	return keyBase64, nil
 }
 

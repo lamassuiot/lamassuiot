@@ -174,7 +174,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(ctx context.Context, keyAlias str
 		return nil, err
 	}
 
-	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, keyArn)
+	signer, err := newKmsKeyCryptoSignerWrapper(ctx, p.kmscli, keyArn)
 	return signer, err
 }
 
@@ -271,7 +271,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(ctx context.Context, keySpec types
 		return "", nil, err
 	}
 
-	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, *key.KeyMetadata.Arn)
+	signer, err := newKmsKeyCryptoSignerWrapper(ctx, p.kmscli, *key.KeyMetadata.Arn)
 	if err != nil {
 		lFunc.Errorf("could not create private key: %s", err)
 		return "", nil, err
@@ -382,7 +382,7 @@ func (p *AWSKMSCryptoEngine) importKey(ctx context.Context, key crypto.Signer, s
 	}
 
 	// 6. Return signer
-	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, *createKeyOut.KeyMetadata.Arn)
+	signer, err := newKmsKeyCryptoSignerWrapper(ctx, p.kmscli, *createKeyOut.KeyMetadata.Arn)
 	if err != nil {
 		lFunc.Errorf("could not create signer: %s", err)
 		return "", nil, err
@@ -477,13 +477,13 @@ func (p *AWSKMSCryptoEngine) DeleteKey(ctx context.Context, keyID string) error 
 type kmsKeyCryptoSignerWrapper struct {
 	keyArn string
 	sdk    *kms.Client
+	ctx    context.Context
 
 	publicKey crypto.PublicKey
 }
 
-func newKmsKeyCryptoSignerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer, error) {
-	//preload PubKey from KMS
-	pubResp, err := sdk.GetPublicKey(context.TODO(), &kms.GetPublicKeyInput{
+func newKmsKeyCryptoSignerWrapper(ctx context.Context, sdk *kms.Client, keyArn string) (crypto.Signer, error) {
+	pubResp, err := sdk.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyArn,
 	})
 	if err != nil {
@@ -498,6 +498,7 @@ func newKmsKeyCryptoSignerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer
 	return &kmsKeyCryptoSignerWrapper{
 		sdk:       sdk,
 		keyArn:    keyArn,
+		ctx:       ctx,
 		publicKey: pubKey,
 	}, nil
 }
@@ -518,7 +519,7 @@ func (k *kmsKeyCryptoSignerWrapper) Sign(rand io.Reader, digest []byte, opts cry
 		MessageType:      types.MessageTypeDigest,
 	}
 
-	resp, err := k.sdk.Sign(context.TODO(), req)
+	resp, err := k.sdk.Sign(k.ctx, req)
 	if err != nil {
 		return nil, err
 	}
