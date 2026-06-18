@@ -190,7 +190,7 @@ func SharedTestImportRSAPrivateKey(t *testing.T, engine CryptoEngine) {
 
 func SharedTestImportECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	ctx := context.Background()
-	key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	assert.NoError(t, err)
 
 	pubKey := key.Public().(*ecdsa.PublicKey)
