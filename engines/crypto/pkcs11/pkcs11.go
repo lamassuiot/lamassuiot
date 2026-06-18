@@ -97,7 +97,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	var slotID uint
 	foundToken := false
 	for _, slot := range pkcs11ProviderSlots {
-		lPkcs11.Tracef("geting slot '%d' info", slot)
+		lPkcs11.Tracef("getting slot '%d' info", slot)
 		tokenInfoResp, err := pkcs11ProviderContext.GetTokenInfo(slot)
 		if err != nil {
 			lPkcs11.Errorf("could not get slot '%d' info. Skipping: %s", slot, err)
