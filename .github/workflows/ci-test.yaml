@@ -101,7 +101,7 @@ jobs:
         id: run
         working-directory: engines/crypto/pkcs11
         env:
-          PKCS11_MODULE_PATH: nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
+          PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
