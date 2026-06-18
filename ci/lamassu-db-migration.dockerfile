@@ -1,8 +1,7 @@
 FROM golang:1.26.2-bookworm AS builder
 WORKDIR /app
 
-# Copy workspace manifests first so the vendor step is cached independently
-# from version-only rebuilds (ARG SHA1VER/VERSION come later).
+# go.work/go.work.sum rarely change — keep as an early cache layer.
 COPY go.work go.work
 COPY go.work.sum go.work.sum
 
@@ -13,7 +12,8 @@ COPY backend backend
 COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
-COPY vendor vendor
+
+RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 
 # Build args are declared after vendoring so that a version-only change does
 # not bust the vendor cache layer.
