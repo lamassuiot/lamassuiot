@@ -25,6 +25,7 @@ RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
     CGO_ENABLED=0 GOOS=linux \
     go build \
+      -tags nopkcs11 \
       -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \
       -mod vendor \
       -o device-manager \
