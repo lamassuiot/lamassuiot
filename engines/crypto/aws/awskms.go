@@ -487,6 +487,7 @@ func newKmsKeyCryptoSignerWrapper(ctx context.Context, sdk *kms.Client, keyArn s
 	pubResp, err := sdk.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyArn,
 	})
+	if err != nil {
 		return nil, err
 	}
 
