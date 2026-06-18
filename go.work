@@ -4,11 +4,14 @@ toolchain go1.26.2
 
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 
+replace github.com/lamassuiot/lamassuiot/shared/azure/v3 v3.8.0 => ./shared/azure
+
 use (
 	./backend
 	./connectors/awsiot
 	./core
 	./engines/crypto/aws
+	./engines/crypto/azure
 	./engines/crypto/filesystem
 	./engines/crypto/pkcs11
 	./engines/crypto/software
