@@ -92,12 +92,12 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		return nil, fmt.Errorf("could not get slot list")
 	}
 
-	lPkcs11.Debugf("pkcs11 provier has %d slots", len(pkcs11ProviderSlots))
+	lPkcs11.Debugf("pkcs11 provider has %d slots", len(pkcs11ProviderSlots))
 	var tokenInfo pkcs11.TokenInfo
 	var slotID uint
 	foundToken := false
 	for _, slot := range pkcs11ProviderSlots {
-		lPkcs11.Tracef("geting slot '%d' info", slot)
+		lPkcs11.Tracef("getting slot '%d' info", slot)
 		tokenInfoResp, err := pkcs11ProviderContext.GetTokenInfo(slot)
 		if err != nil {
 			lPkcs11.Errorf("could not get slot '%d' info. Skipping: %s", slot, err)
@@ -258,7 +258,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(ctx context.Context, 
 		return "", nil, err
 	}
 
-	err = hsmContext.UpdateKeyName(tmpKeyID, keyID, PKCS11_KEY_ID)
+	err = hsmContext.UpdateKeyName(ctx, tmpKeyID, keyID, PKCS11_KEY_ID)
 	if err != nil {
 		lFunc.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -283,7 +283,7 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(ctx context.Context
 		return "", nil, err
 	}
 
-	err = hsmContext.UpdateKeyName(tmpKeyID, keyID, PKCS11_KEY_ID)
+	err = hsmContext.UpdateKeyName(ctx, tmpKeyID, keyID, PKCS11_KEY_ID)
 	if err != nil {
 		lFunc.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -307,12 +307,13 @@ const (
 	PKCS11_KEY_LABEL
 )
 
-func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID string, keyType PKCS11KeyID) error {
-	hsmContext.logger.Infof("renaming key from %s to %s", oldKeyID, newKeyID)
+func (hsmContext *pkcs11EngineContext) UpdateKeyName(ctx context.Context, oldKeyID string, newKeyID string, keyType PKCS11KeyID) error {
+	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
+	lFunc.Infof("renaming key from %s to %s", oldKeyID, newKeyID)
 
 	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
 	if err != nil {
-		hsmContext.logger.Errorf("could not open session: %s", err)
+		lFunc.Errorf("could not open session: %s", err)
 		return err
 	}
 	defer hsmContext.lowApi.CloseSession(hsmSession)
@@ -323,7 +324,7 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID s
 	// is already authenticated and our session inherits that state.
 	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
 	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
-		hsmContext.logger.Errorf("could not login to HSM session: %s", loginErr)
+		lFunc.Errorf("could not login to HSM session: %s", loginErr)
 		return loginErr
 	}
 
@@ -343,10 +344,10 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID s
 		keyHandle, err := findKeyWithAttributes(*hsmContext.lowApi, hsmSession, attrSet.ToSlice())
 		if err != nil {
 			if class == pkcs11.CKO_PRIVATE_KEY {
-				hsmContext.logger.Errorf("could not find private key: %s", err)
+				lFunc.Errorf("could not find private key: %s", err)
 				return err
 			}
-			hsmContext.logger.Warnf("could not find public key for rename (non-fatal): %s", err)
+			lFunc.Warnf("could not find public key for rename (non-fatal): %s", err)
 			continue
 		}
 
@@ -357,24 +358,24 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID s
 			if err = hsmContext.lowApi.SetAttributeValue(hsmSession, *keyHandle, []*pkcs11.Attribute{attr}); err != nil {
 				if strings.Contains(err.Error(), "CKR_ATTRIBUTE_READ_ONLY") {
 					if class == pkcs11.CKO_PRIVATE_KEY {
-						hsmContext.logger.Warnf("private key attribute %s is read-only, skipping attribute rename", pkcs11AttributeName(attr.Type))
+						lFunc.Warnf("private key attribute %s is read-only, skipping attribute rename", pkcs11AttributeName(attr.Type))
 					} else {
-						hsmContext.logger.Warnf("public key attribute %s is read-only, skipping attribute rename (non-fatal)", pkcs11AttributeName(attr.Type))
+						lFunc.Warnf("public key attribute %s is read-only, skipping attribute rename (non-fatal)", pkcs11AttributeName(attr.Type))
 					}
 					continue
 				}
 				if class == pkcs11.CKO_PRIVATE_KEY {
-					hsmContext.logger.Errorf("could not set private key attribute %s: %s", pkcs11AttributeName(attr.Type), err)
+					lFunc.Errorf("could not set private key attribute %s: %s", pkcs11AttributeName(attr.Type), err)
 					return err
 				}
-				hsmContext.logger.Warnf("could not set public key attribute %s (non-fatal): %s", pkcs11AttributeName(attr.Type), err)
+				lFunc.Warnf("could not set public key attribute %s (non-fatal): %s", pkcs11AttributeName(attr.Type), err)
 				continue
 			}
 
 			if class == pkcs11.CKO_PRIVATE_KEY {
-				hsmContext.logger.Infof("set private key attribute %s successfully", pkcs11AttributeName(attr.Type))
+				lFunc.Infof("set private key attribute %s successfully", pkcs11AttributeName(attr.Type))
 			} else {
-				hsmContext.logger.Infof("set public key attribute %s successfully", pkcs11AttributeName(attr.Type))
+				lFunc.Infof("set public key attribute %s successfully", pkcs11AttributeName(attr.Type))
 			}
 		}
 	}
@@ -383,7 +384,7 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID s
 }
 
 func (hsmContext *pkcs11EngineContext) RenameKey(ctx context.Context, oldKeyID string, newKeyID string) error {
-	return hsmContext.UpdateKeyName(oldKeyID, newKeyID, PKCS11_KEY_LABEL)
+	return hsmContext.UpdateKeyName(ctx, oldKeyID, newKeyID, PKCS11_KEY_LABEL)
 }
 
 func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {

@@ -498,7 +498,7 @@ func newKmsKeyCryptoSignerWrapper(ctx context.Context, sdk *kms.Client, keyArn s
 	return &kmsKeyCryptoSignerWrapper{
 		sdk:       sdk,
 		keyArn:    keyArn,
-		ctx:       ctx,
+		ctx:       context.WithoutCancel(ctx),
 		publicKey: pubKey,
 	}, nil
 }

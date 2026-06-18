@@ -49,16 +49,7 @@ func TestPKCS11CryptoEngine(t *testing.T) {
 }
 
 func setup(t *testing.T) (func() (cryptoengines.CryptoEngine, error), error) {
-	if os.Getenv("PKCS11_MODULE_PATH") == "" {
-		os.Setenv("PKCS11_MODULE_PATH", "/usr/local/lib/libpkcs11-proxy.so")
-	}
-
-	beforeEach, err := preparePKCS11CryptoEngine(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return beforeEach, nil
+	return preparePKCS11CryptoEngine(t)
 }
 
 func preparePKCS11CryptoEngine(t *testing.T) (func() (cryptoengines.CryptoEngine, error), error) {

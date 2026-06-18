@@ -131,7 +131,10 @@ slots:
     timeout_seconds: 10
 `, operatorID, operator, admin, p)
 
-	os.WriteFile("/tmp/nethsm_cli_conf.yaml", []byte(pkcs11ClientConfig), 0644)
+	if err := os.WriteFile("/tmp/nethsm_cli_conf.yaml", []byte(pkcs11ClientConfig), 0644); err != nil {
+		containerCleanup()
+		return nil, nil, pconfig.PKCS11Config{}, fmt.Errorf("failed to write NetHSM client config: %w", err)
+	}
 
 	return func() error {
 			return netHSMBeforeEachCleanup(cli, hsmBaseURL, admin)
