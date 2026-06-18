@@ -92,7 +92,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		return nil, fmt.Errorf("could not get slot list")
 	}
 
-	lPkcs11.Debugf("pkcs11 provier has %d slots", len(pkcs11ProviderSlots))
+	lPkcs11.Debugf("pkcs11 provider has %d slots", len(pkcs11ProviderSlots))
 	var tokenInfo pkcs11.TokenInfo
 	var slotID uint
 	foundToken := false
