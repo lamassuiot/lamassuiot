@@ -483,10 +483,10 @@ type kmsKeyCryptoSignerWrapper struct {
 }
 
 func newKmsKeyCryptoSignerWrapper(ctx context.Context, sdk *kms.Client, keyArn string) (crypto.Signer, error) {
+	ctx = context.WithoutCancel(ctx)
 	pubResp, err := sdk.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyArn,
 	})
-	if err != nil {
 		return nil, err
 	}
 
