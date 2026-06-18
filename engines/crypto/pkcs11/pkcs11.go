@@ -10,6 +10,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/asn1"
 	"errors"
 	"fmt"
 	"os"
@@ -307,6 +308,8 @@ const (
 )
 
 func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID string, keyType PKCS11KeyID) error {
+	hsmContext.logger.Infof("renaming key from %s to %s", oldKeyID, newKeyID)
+
 	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
 	if err != nil {
 		hsmContext.logger.Errorf("could not open session: %s", err)
@@ -322,11 +325,6 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID s
 	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
 		hsmContext.logger.Errorf("could not login to HSM session: %s", loginErr)
 		return loginErr
-	}
-
-	newAttrs := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(newKeyID)),
-		pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(newKeyID)),
 	}
 
 	// Rename both the private and public key objects so that crypto11's makeKeyPair
@@ -352,12 +350,32 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID s
 			continue
 		}
 
-		if err = hsmContext.lowApi.SetAttributeValue(hsmSession, *keyHandle, newAttrs); err != nil {
-			if class == pkcs11.CKO_PRIVATE_KEY {
-				hsmContext.logger.Errorf("could not set private key attributes: %s", err)
-				return err
+		for _, attr := range []*pkcs11.Attribute{
+			pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(newKeyID)),
+			pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(newKeyID)),
+		} {
+			if err = hsmContext.lowApi.SetAttributeValue(hsmSession, *keyHandle, []*pkcs11.Attribute{attr}); err != nil {
+				if strings.Contains(err.Error(), "CKR_ATTRIBUTE_READ_ONLY") {
+					if class == pkcs11.CKO_PRIVATE_KEY {
+						hsmContext.logger.Warnf("private key attribute %s is read-only, skipping attribute rename", pkcs11AttributeName(attr.Type))
+					} else {
+						hsmContext.logger.Warnf("public key attribute %s is read-only, skipping attribute rename (non-fatal)", pkcs11AttributeName(attr.Type))
+					}
+					continue
+				}
+				if class == pkcs11.CKO_PRIVATE_KEY {
+					hsmContext.logger.Errorf("could not set private key attribute %s: %s", pkcs11AttributeName(attr.Type), err)
+					return err
+				}
+				hsmContext.logger.Warnf("could not set public key attribute %s (non-fatal): %s", pkcs11AttributeName(attr.Type), err)
+				continue
 			}
-			hsmContext.logger.Warnf("could not set public key attributes (non-fatal): %s", err)
+
+			if class == pkcs11.CKO_PRIVATE_KEY {
+				hsmContext.logger.Infof("set private key attribute %s successfully", pkcs11AttributeName(attr.Type))
+			} else {
+				hsmContext.logger.Infof("set public key attribute %s successfully", pkcs11AttributeName(attr.Type))
+			}
 		}
 	}
 
@@ -369,15 +387,194 @@ func (hsmContext *pkcs11EngineContext) RenameKey(ctx context.Context, oldKeyID s
 }
 
 func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	return "", nil, fmt.Errorf("TODO")
+	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
+
+	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, key.Public())
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest: %s", err)
+		return "", nil, err
+	}
+	lFunc.Debugf("importing RSA key with ID %s", keyID)
+
+	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	if err != nil {
+		lFunc.Errorf("could not open session: %s", err)
+		return "", nil, err
+	}
+	defer hsmContext.lowApi.CloseSession(hsmSession)
+
+	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
+	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
+		lFunc.Errorf("could not login: %s", loginErr)
+		return "", nil, loginErr
+	}
+
+	key.Precompute()
+
+	privTemplate := []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
+		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, true),
+		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
+		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_DECRYPT, true),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, key.N.Bytes()),
+		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, intToBytes(key.PublicKey.E)),
+		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE_EXPONENT, key.D.Bytes()),
+		pkcs11.NewAttribute(pkcs11.CKA_PRIME_1, key.Primes[0].Bytes()),
+		pkcs11.NewAttribute(pkcs11.CKA_PRIME_2, key.Primes[1].Bytes()),
+		pkcs11.NewAttribute(pkcs11.CKA_EXPONENT_1, key.Precomputed.Dp.Bytes()),
+		pkcs11.NewAttribute(pkcs11.CKA_EXPONENT_2, key.Precomputed.Dq.Bytes()),
+		pkcs11.NewAttribute(pkcs11.CKA_COEFFICIENT, key.Precomputed.Qinv.Bytes()),
+	}
+	if _, err = hsmContext.lowApi.CreateObject(hsmSession, privTemplate); err != nil {
+		lFunc.Errorf("could not import RSA private key: %s", err)
+		return "", nil, fmt.Errorf("could not import RSA private key: %w", err)
+	}
+
+	pubTemplate := []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
+		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_VERIFY, true),
+		pkcs11.NewAttribute(pkcs11.CKA_ENCRYPT, true),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, key.N.Bytes()),
+		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, intToBytes(key.PublicKey.E)),
+	}
+	if _, err = hsmContext.lowApi.CreateObject(hsmSession, pubTemplate); err != nil {
+		lFunc.Warnf("could not import RSA public key object (non-fatal): %s", err)
+	}
+
+	signer, err := hsmContext.GetPrivateKeyByID(ctx, keyID)
+	if err != nil {
+		lFunc.Errorf("could not retrieve imported RSA key: %s", err)
+		return "", nil, err
+	}
+	return keyID, signer, nil
 }
 
 func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
-	return "", nil, fmt.Errorf("TODO")
+	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
+
+	ecParams, err := marshalEcParamsForCurve(key.Curve)
+	if err != nil {
+		lFunc.Errorf("unsupported elliptic curve: %s", err)
+		return "", nil, err
+	}
+
+	rawPoint := elliptic.Marshal(key.Curve, key.PublicKey.X, key.PublicKey.Y)
+	ecPoint, err := asn1.Marshal(rawPoint)
+	if err != nil {
+		lFunc.Errorf("could not marshal EC point: %s", err)
+		return "", nil, fmt.Errorf("could not marshal EC point: %w", err)
+	}
+
+	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, key.Public())
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest: %s", err)
+		return "", nil, err
+	}
+	lFunc.Debugf("importing ECDSA key with ID %s", keyID)
+
+	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	if err != nil {
+		lFunc.Errorf("could not open session: %s", err)
+		return "", nil, err
+	}
+	defer hsmContext.lowApi.CloseSession(hsmSession)
+
+	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
+	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
+		lFunc.Errorf("could not login: %s", loginErr)
+		return "", nil, loginErr
+	}
+
+	privTemplate := []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
+		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, true),
+		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
+		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
+		pkcs11.NewAttribute(pkcs11.CKA_VALUE, key.D.Bytes()),
+	}
+	if _, err = hsmContext.lowApi.CreateObject(hsmSession, privTemplate); err != nil {
+		lFunc.Errorf("could not import ECDSA private key: %s", err)
+		return "", nil, fmt.Errorf("could not import ECDSA private key: %w", err)
+	}
+
+	pubTemplate := []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
+		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_VERIFY, true),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(keyID)),
+		pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, ecParams),
+		pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, ecPoint),
+	}
+	if _, err = hsmContext.lowApi.CreateObject(hsmSession, pubTemplate); err != nil {
+		lFunc.Warnf("could not import ECDSA public key object (non-fatal): %s", err)
+	}
+
+	signer, err := hsmContext.GetPrivateKeyByID(ctx, keyID)
+	if err != nil {
+		lFunc.Errorf("could not retrieve imported ECDSA key: %s", err)
+		return "", nil, err
+	}
+	return keyID, signer, nil
 }
 
 func (hsmContext *pkcs11EngineContext) DeleteKey(ctx context.Context, keyID string) error {
-	return fmt.Errorf("TODO")
+	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
+	lFunc.Debugf("deleting key %s", keyID)
+
+	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	if err != nil {
+		lFunc.Errorf("could not open session: %s", err)
+		return err
+	}
+	defer hsmContext.lowApi.CloseSession(hsmSession)
+
+	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
+	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
+		lFunc.Errorf("could not login: %s", loginErr)
+		return loginErr
+	}
+
+	for _, class := range []uint{pkcs11.CKO_PRIVATE_KEY, pkcs11.CKO_PUBLIC_KEY} {
+		template := []*pkcs11.Attribute{
+			pkcs11.NewAttribute(pkcs11.CKA_CLASS, class),
+			pkcs11.NewAttribute(pkcs11.CKA_LABEL, keyID),
+		}
+		handle, err := findKeyWithAttributes(*hsmContext.lowApi, hsmSession, template)
+		if err != nil {
+			if class == pkcs11.CKO_PRIVATE_KEY {
+				lFunc.Errorf("could not find private key %s: %s", keyID, err)
+				return fmt.Errorf("could not find key %s: %w", keyID, err)
+			}
+			lFunc.Warnf("could not find public key %s for deletion (non-fatal): %s", keyID, err)
+			continue
+		}
+		if err := hsmContext.lowApi.DestroyObject(hsmSession, *handle); err != nil {
+			if class == pkcs11.CKO_PRIVATE_KEY {
+				lFunc.Errorf("could not delete private key %s: %s", keyID, err)
+				return fmt.Errorf("could not delete key %s: %w", keyID, err)
+			}
+			lFunc.Warnf("could not delete public key %s (non-fatal): %s", keyID, err)
+		} else {
+			lFunc.Infof("deleted %s key object %s", pkcs11ClassName(class), keyID)
+		}
+	}
+	return nil
 }
 
 func findKeyWithAttributes(ctx pkcs11.Ctx, sh pkcs11.SessionHandle, template []*pkcs11.Attribute) (handle *pkcs11.ObjectHandle, err error) {
@@ -401,4 +598,54 @@ func findKeyWithAttributes(ctx pkcs11.Ctx, sh pkcs11.SessionHandle, template []*
 	}
 
 	return nil, errors.New("object not found")
+}
+
+func intToBytes(n int) []byte {
+	result := [4]byte{byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}
+	i := 0
+	for i < 3 && result[i] == 0 {
+		i++
+	}
+	return result[i:]
+}
+
+func marshalEcParamsForCurve(curve elliptic.Curve) ([]byte, error) {
+	var oid asn1.ObjectIdentifier
+	switch curve {
+	case elliptic.P224():
+		oid = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
+	case elliptic.P256():
+		oid = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
+	case elliptic.P384():
+		oid = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
+	case elliptic.P521():
+		oid = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
+	default:
+		return nil, fmt.Errorf("unsupported elliptic curve: %s", curve.Params().Name)
+	}
+	return asn1.Marshal(oid)
+}
+
+func pkcs11ClassName(class uint) string {
+	switch class {
+	case pkcs11.CKO_PRIVATE_KEY:
+		return "private"
+	case pkcs11.CKO_PUBLIC_KEY:
+		return "public"
+	default:
+		return fmt.Sprintf("class_%d", class)
+	}
+}
+
+func pkcs11AttributeName(attrType uint) string {
+	switch attrType {
+	case pkcs11.CKA_LABEL:
+		return "CKA_LABEL"
+	case pkcs11.CKA_ID:
+		return "CKA_ID"
+	case pkcs11.CKA_MODIFIABLE:
+		return "CKA_MODIFIABLE"
+	default:
+		return fmt.Sprintf("attr_%d", attrType)
+	}
 }
