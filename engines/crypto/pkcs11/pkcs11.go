@@ -48,18 +48,11 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	}
 
 	for envKey, envVal := range conf.Config.ModuleExtraOptions.Env {
-		lPkcs11.Debugf("setting env variable %s", envKey)
-		if err := os.Setenv(envKey, envVal); err != nil {
-			lPkcs11.Errorf("could not set env variable %s: %s", envKey, err)
-			return nil, fmt.Errorf("could not set env variable %s: %w", envKey, err)
-		}
 		upperEnvKey := strings.ToUpper(envKey)
-		if upperEnvKey != envKey {
-			lPkcs11.Debugf("setting env variable %s", upperEnvKey)
-			if err := os.Setenv(upperEnvKey, envVal); err != nil {
-				lPkcs11.Errorf("could not set env variable %s: %s", upperEnvKey, err)
-				return nil, fmt.Errorf("could not set env variable %s: %w", upperEnvKey, err)
-			}
+		lPkcs11.Debugf("setting env variable %s", upperEnvKey)
+		if err := os.Setenv(upperEnvKey, envVal); err != nil {
+			lPkcs11.Errorf("could not set env variable %s: %s", upperEnvKey, err)
+			return nil, fmt.Errorf("could not set env variable %s: %w", upperEnvKey, err)
 		}
 	}
 
@@ -333,6 +326,7 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(ctx context.Context, oldKey
 	// Failing to rename the public key is non-fatal — crypto11 has a CKA_ID-only
 	// fallback — but keeping them in sync avoids relying on that fallback.
 	for _, class := range []uint{pkcs11.CKO_PRIVATE_KEY, pkcs11.CKO_PUBLIC_KEY} {
+		isPrivate := class == pkcs11.CKO_PRIVATE_KEY
 		attrSet := crypto11.NewAttributeSet()
 		attrSet.Set(crypto11.CkaClass, class)
 		if keyType == PKCS11_KEY_LABEL {
@@ -343,7 +337,7 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(ctx context.Context, oldKey
 
 		keyHandle, err := findKeyWithAttributes(*hsmContext.lowApi, hsmSession, attrSet.ToSlice())
 		if err != nil {
-			if class == pkcs11.CKO_PRIVATE_KEY {
+			if isPrivate {
 				lFunc.Errorf("could not find private key: %s", err)
 				return err
 			}
@@ -355,31 +349,37 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(ctx context.Context, oldKey
 			pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(newKeyID)),
 			pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(newKeyID)),
 		} {
-			if err = hsmContext.lowApi.SetAttributeValue(hsmSession, *keyHandle, []*pkcs11.Attribute{attr}); err != nil {
-				if strings.Contains(err.Error(), "CKR_ATTRIBUTE_READ_ONLY") {
-					if class == pkcs11.CKO_PRIVATE_KEY {
-						lFunc.Warnf("private key attribute %s is read-only, skipping attribute rename", pkcs11AttributeName(attr.Type))
-					} else {
-						lFunc.Warnf("public key attribute %s is read-only, skipping attribute rename (non-fatal)", pkcs11AttributeName(attr.Type))
-					}
-					continue
-				}
-				if class == pkcs11.CKO_PRIVATE_KEY {
-					lFunc.Errorf("could not set private key attribute %s: %s", pkcs11AttributeName(attr.Type), err)
-					return err
-				}
-				lFunc.Warnf("could not set public key attribute %s (non-fatal): %s", pkcs11AttributeName(attr.Type), err)
-				continue
-			}
-
-			if class == pkcs11.CKO_PRIVATE_KEY {
-				lFunc.Infof("set private key attribute %s successfully", pkcs11AttributeName(attr.Type))
-			} else {
-				lFunc.Infof("set public key attribute %s successfully", pkcs11AttributeName(attr.Type))
+			if err := hsmContext.setKeyAttribute(lFunc, hsmSession, attr, *keyHandle, isPrivate); err != nil {
+				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+func (hsmContext *pkcs11EngineContext) setKeyAttribute(lFunc *logrus.Entry, hsmSession pkcs11.SessionHandle, attr *pkcs11.Attribute, keyHandle pkcs11.ObjectHandle, isPrivate bool) error {
+	attrName := pkcs11AttributeName(attr.Type)
+	keyKind := "public key"
+	if isPrivate {
+		keyKind = "private key"
+	}
+
+	err := hsmContext.lowApi.SetAttributeValue(hsmSession, keyHandle, []*pkcs11.Attribute{attr})
+	if err != nil {
+		if strings.Contains(err.Error(), "CKR_ATTRIBUTE_READ_ONLY") {
+			lFunc.Warnf("%s attribute %s is read-only, skipping attribute rename", keyKind, attrName)
+			return nil
+		}
+		if isPrivate {
+			lFunc.Errorf("could not set private key attribute %s: %s", attrName, err)
+			return err
+		}
+		lFunc.Warnf("could not set public key attribute %s (non-fatal): %s", attrName, err)
+		return nil
+	}
+
+	lFunc.Infof("set %s attribute %s successfully", keyKind, attrName)
 	return nil
 }
 
