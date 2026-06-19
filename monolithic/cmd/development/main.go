@@ -401,7 +401,7 @@ func main() {
 		pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
 
 		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository:   "custom-wfx-ui",
+			Repository:   "ghcr.io/siemens/wfx",
 			Tag:          "latest",
 			ExposedPorts: []string{"9080/tcp", "9081/tcp"},
 			Env: []string{
@@ -424,10 +424,6 @@ func main() {
 		}, func(hc *docker.HostConfig) {
 			hc.AutoRemove = true
 			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"9081/tcp": {{HostIP: "0.0.0.0", HostPort: "9081"}}, //North - Management API
-				"9080/tcp": {{HostIP: "0.0.0.0", HostPort: "9080"}}, //South - Device API
-			}
 		})
 		if err != nil {
 			if wfxCleanup != nil {
