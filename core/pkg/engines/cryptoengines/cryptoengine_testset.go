@@ -100,15 +100,19 @@ func SharedGetKeyNotFound(t *testing.T, engine CryptoEngine) {
 	assert.Error(t, err)
 }
 
+func sha256Hash(t *testing.T, data []byte) []byte {
+	h := sha256.New()
+	_, err := h.Write(data)
+	assert.NoError(t, err)
+	return h.Sum(nil)
+}
+
 func SharedTestRSAPSSSignature(t *testing.T, engine CryptoEngine) {
 	ctx := context.Background()
 	keyID, signer, err := engine.CreateRSAPrivateKey(ctx, 2048)
 	assert.NoError(t, err)
 
-	h := sha256.New()
-	_, err = h.Write([]byte("aa"))
-	assert.NoError(t, err)
-	hashed := h.Sum(nil)
+	hashed := sha256Hash(t, []byte("aa"))
 
 	signature, err := signer.Sign(rand.Reader, hashed, &rsa.PSSOptions{
 		SaltLength: rsa.PSSSaltLengthEqualsHash,
@@ -134,10 +138,7 @@ func SharedTestRSAPKCS1v15Signature(t *testing.T, engine CryptoEngine) {
 	keyID, signer, err := engine.CreateRSAPrivateKey(ctx, 2048)
 	assert.NoError(t, err)
 
-	h := sha256.New()
-	_, err = h.Write([]byte("aa"))
-	assert.NoError(t, err)
-	hashed := h.Sum(nil)
+	hashed := sha256Hash(t, []byte("aa"))
 
 	signature, err := signer.Sign(rand.Reader, hashed, crypto.SHA256)
 	assert.NoError(t, err)
@@ -156,10 +157,7 @@ func SharedTestECDSASignature(t *testing.T, engine CryptoEngine) {
 	keyID, signer, err := engine.CreateECDSAPrivateKey(ctx, elliptic.P256())
 	assert.NoError(t, err)
 
-	h := sha256.New()
-	_, err = h.Write([]byte("aa"))
-	assert.NoError(t, err)
-	hashed := h.Sum(nil)
+	hashed := sha256Hash(t, []byte("aa"))
 
 	signature, err := signer.Sign(rand.Reader, hashed, crypto.SHA256)
 	assert.NoError(t, err)

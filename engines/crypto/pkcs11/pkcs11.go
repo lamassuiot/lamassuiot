@@ -300,26 +300,36 @@ const (
 	PKCS11_KEY_LABEL
 )
 
+// openRWSession opens a read-write PKCS#11 session and logs in.
+// lowApi is a separate pkcs11.Ctx from crypto11's internal context, so
+// CKR_USER_ALREADY_LOGGED_IN is acceptable — the token is already authenticated.
+// The caller is responsible for closing the session (typically via defer).
+func (hsmContext *pkcs11EngineContext) openRWSession(lFunc *logrus.Entry) (pkcs11.SessionHandle, error) {
+	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	if err != nil {
+		lFunc.Errorf("could not open session: %s", err)
+		return 0, err
+	}
+
+	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
+	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
+		hsmContext.lowApi.CloseSession(hsmSession)
+		lFunc.Errorf("could not login: %s", loginErr)
+		return 0, loginErr
+	}
+
+	return hsmSession, nil
+}
+
 func (hsmContext *pkcs11EngineContext) UpdateKeyName(ctx context.Context, oldKeyID string, newKeyID string, keyType PKCS11KeyID) error {
 	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
 	lFunc.Infof("renaming key from %s to %s", oldKeyID, newKeyID)
 
-	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	hsmSession, err := hsmContext.openRWSession(lFunc)
 	if err != nil {
-		lFunc.Errorf("could not open session: %s", err)
 		return err
 	}
 	defer hsmContext.lowApi.CloseSession(hsmSession)
-
-	// lowApi is a separate pkcs11.Ctx from crypto11's internal context and has never
-	// called C_Login. Private key objects are invisible to unauthenticated sessions,
-	// so we must log in here. CKR_USER_ALREADY_LOGGED_IN is acceptable — the token
-	// is already authenticated and our session inherits that state.
-	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
-	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
-		lFunc.Errorf("could not login to HSM session: %s", loginErr)
-		return loginErr
-	}
 
 	// Rename both the private and public key objects so that crypto11's makeKeyPair
 	// can find the public half by matching CKA_ID + CKA_LABEL on both sides.
@@ -397,18 +407,11 @@ func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(ctx context.Context, 
 	}
 	lFunc.Debugf("importing RSA key with ID %s", keyID)
 
-	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	hsmSession, err := hsmContext.openRWSession(lFunc)
 	if err != nil {
-		lFunc.Errorf("could not open session: %s", err)
 		return "", nil, err
 	}
 	defer hsmContext.lowApi.CloseSession(hsmSession)
-
-	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
-	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
-		lFunc.Errorf("could not login: %s", loginErr)
-		return "", nil, loginErr
-	}
 
 	key.Precompute()
 
@@ -482,18 +485,11 @@ func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(ctx context.Context
 	}
 	lFunc.Debugf("importing ECDSA key with ID %s", keyID)
 
-	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	hsmSession, err := hsmContext.openRWSession(lFunc)
 	if err != nil {
-		lFunc.Errorf("could not open session: %s", err)
 		return "", nil, err
 	}
 	defer hsmContext.lowApi.CloseSession(hsmSession)
-
-	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
-	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
-		lFunc.Errorf("could not login: %s", loginErr)
-		return "", nil, loginErr
-	}
 
 	privTemplate := []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
@@ -538,18 +534,11 @@ func (hsmContext *pkcs11EngineContext) DeleteKey(ctx context.Context, keyID stri
 	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
 	lFunc.Debugf("deleting key %s", keyID)
 
-	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	hsmSession, err := hsmContext.openRWSession(lFunc)
 	if err != nil {
-		lFunc.Errorf("could not open session: %s", err)
 		return err
 	}
 	defer hsmContext.lowApi.CloseSession(hsmSession)
-
-	loginErr := hsmContext.lowApi.Login(hsmSession, pkcs11.CKU_USER, hsmContext.config.Pin)
-	if loginErr != nil && loginErr != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
-		lFunc.Errorf("could not login: %s", loginErr)
-		return loginErr
-	}
 
 	for _, class := range []uint{pkcs11.CKO_PRIVATE_KEY, pkcs11.CKO_PUBLIC_KEY} {
 		template := []*pkcs11.Attribute{
