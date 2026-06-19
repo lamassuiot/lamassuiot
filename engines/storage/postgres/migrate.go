@@ -18,6 +18,9 @@ func MigrateDatabase(logger *log.Entry, config lconfig.PostgresPSEConfig, databa
 	}
 
 	m := NewMigrator(logger, psqlCli)
+	if m == nil {
+		return nil
+	}
 
 	// Get current and target versions
 	c, t, err := m.Goose.GetVersions(context.Background())
