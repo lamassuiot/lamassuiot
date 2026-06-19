@@ -91,15 +91,8 @@ jobs:
       
       - name: Install PKCS11 Proxy Dependencies
         run: |
-          sudo apt-get install -y libseccomp-dev #Required for building pkcs11-proxy
-          git clone https://github.com/SUNET/pkcs11-proxy
-          cd pkcs11-proxy
-          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 . 
-          make
-          sudo make install 
-          sudo cp pkcs11-daemon /usr/local/bin/
-          ls /usr/local/lib/libpkcs11-proxy.so
- 
+          wget https://github.com/Nitrokey/nethsm-pkcs11/releases/download/v2.2.0/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
+
       - name: Install Dependencies
         working-directory: engines/crypto/pkcs11
         run: go work sync
@@ -108,7 +101,7 @@ jobs:
         id: run
         working-directory: engines/crypto/pkcs11
         env:
-          PKCS11_MODULE_PATH: /usr/local/lib/libpkcs11-proxy.so
+          PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
