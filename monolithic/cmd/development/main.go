@@ -362,8 +362,8 @@ func main() {
 	}
 
 	var uiPort int
-	var wfxClientPort int
-	var wfxMgmtPort int
+	var wfxNorthPort int
+	var wfxSouthPort int
 	fmt.Printf(">> UI Enabled : %v\n", !*disableUI)
 
 	cloudConnectors := "[]"
@@ -422,8 +422,8 @@ func main() {
 			hc.AutoRemove = true
 			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"9080/tcp": {{HostIP: "0.0.0.0", HostPort: "9080"}}, //South - Device API
 				"9081/tcp": {{HostIP: "0.0.0.0", HostPort: "9081"}}, //North - Management API
+				"9080/tcp": {{HostIP: "0.0.0.0", HostPort: "9080"}}, //South - Device API
 			}
 		})
 		if err != nil {
@@ -432,10 +432,11 @@ func main() {
 			}
 			log.Fatalf("could not launch wfx: %s", err)
 		}
-		wfxClientPort, _ = strconv.Atoi(wfxContainer.GetPort("9080/tcp"))
-		wfxMgmtPort, _ = strconv.Atoi(wfxContainer.GetPort("9081/tcp"))
-		fmt.Printf(" \t-- wfx client port: %d\n", wfxClientPort)
-		fmt.Printf(" \t-- wfx mgmt port: %d\n", wfxMgmtPort)
+
+		wfxNorthPort, _ = strconv.Atoi(wfxContainer.GetPort("9081/tcp"))
+		wfxSouthPort, _ = strconv.Atoi(wfxContainer.GetPort("9080/tcp"))
+		fmt.Printf(" \t-- wfx north port: %d\n", wfxNorthPort)
+		fmt.Printf(" \t-- wfx south port: %d\n", wfxSouthPort)
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
@@ -505,8 +506,8 @@ func main() {
 		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,
-		WfxPort:               wfxClientPort,
-		WfxMgmtPort:           wfxMgmtPort,
+		WfxNorthPort:          wfxNorthPort,
+		WfxSouthPort:          wfxSouthPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,

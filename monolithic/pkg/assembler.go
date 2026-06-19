@@ -204,45 +204,50 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			}
 		}
 
+		corsConfig := cors.DefaultConfig()
+		corsConfig.AllowAllOrigins = true
+		corsConfig.AllowHeaders = []string{"*"}
+
 		engine := gin.New()
 		engine.Use(
 			gin.Recovery(),
-			cors.New(cors.Config{
-				AllowAllOrigins:  true,
-				AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-				AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Requested-With"},
-				ExposeHeaders:    []string{"Content-Length"},
-				AllowCredentials: false,
-			}),
+			cors.New(corsConfig),
 			clientCertsToHeaderUsingEnvoyStyle(),
 		)
 
 		routeMaps := make(map[string]func(c *gin.Context))
 		routeList := make([]string, 0)
 
-		registerRoute := func(serviceName, servicePath string, servicePort int, stripPrefix bool) {
-			subpath := strings.TrimSuffix(servicePath, "/")
+		// registerRoute registers a reverse proxy route. sourcePath is the incoming
+		// path prefix; targetPath is the prefix to replace it with on the upstream.
+		// Pass "" for targetPath to strip the prefix entirely (route to upstream root).
+		// Pass sourcePath to forward the full path unchanged.
+		// Pass any other value to rewrite the prefix (e.g. /api/wfx/nbi/ → /api/wfx/).
+		registerRoute := func(serviceName, sourcePath string, servicePort int, targetPath string) {
+			subpath := strings.TrimSuffix(sourcePath, "/")
+			targetSubpath := strings.TrimSuffix(targetPath, "/")
 			label := ""
-			if !stripPrefix {
-				label = " (path rewrite: keep)"
+			if targetPath != "" {
+				if targetPath == sourcePath {
+					label = " (path rewrite: keep)"
+				} else {
+					label = fmt.Sprintf(" (path rewrite: %s*)", targetSubpath)
+				}
 			}
 			color.Set(color.BgCyan)
 			color.Set(color.FgWhite)
-			fmt.Printf("  (HTTPS)  0.0.0.0:%d%s*  --> %s 127.0.0.1:%d%s\n", conf.GatewayPortHttps, servicePath, serviceName, servicePort, label)
-			fmt.Printf("  (HTTP)   0.0.0.0:%d%s*  --> %s 127.0.0.1:%d%s\n", conf.GatewayPortHttp, servicePath, serviceName, servicePort, label)
+			fmt.Printf("  (HTTPS)  0.0.0.0:%d%s*  --> %s 127.0.0.1:%d%s\n", conf.GatewayPortHttps, sourcePath, serviceName, servicePort, label)
+			fmt.Printf("  (HTTP)   0.0.0.0:%d%s*  --> %s 127.0.0.1:%d%s\n", conf.GatewayPortHttp, sourcePath, serviceName, servicePort, label)
 			color.Unset()
 			fmt.Printf("\n")
-			routeMaps[servicePath] = func(c *gin.Context) {
+			routeMaps[sourcePath] = func(c *gin.Context) {
 				remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", servicePort))
 				if err != nil {
 					panic(err)
 				}
-				var proxyUrl string
-				if stripPrefix {
-					proxyUrl = strings.TrimPrefix(c.Param("proxyPath"), subpath)
+				proxyUrl := targetSubpath + strings.TrimPrefix(c.Param("proxyPath"), subpath)
+				if targetPath == "" {
 					proxyUrl = strings.TrimSuffix(proxyUrl, "/")
-				} else {
-					proxyUrl = c.Param("proxyPath")
 				}
 				//emulate envoy config by generating rand request id as HTTP header to the upstream service
 				c.Request.Header.Add("x-request-id", uuid.NewString())
@@ -254,6 +259,15 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 					req.URL.Host = remote.Host
 					req.URL.Path = proxyUrl
 				}
+				proxy.ModifyResponse = func(resp *http.Response) error {
+					resp.Header.Del("Access-Control-Allow-Origin")
+					resp.Header.Del("Access-Control-Allow-Headers")
+					resp.Header.Del("Access-Control-Allow-Methods")
+					resp.Header.Del("Access-Control-Allow-Credentials")
+					resp.Header.Del("Access-Control-Expose-Headers")
+					resp.Header.Del("Access-Control-Max-Age")
+					return nil
+				}
 				proxy.ServeHTTP(c.Writer, c.Request)
 			}
 			for k := range routeMaps {
@@ -262,14 +276,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		addRouteMap := func(serviceName, servicePath string, servicePort int) {
-			registerRoute(serviceName, servicePath, servicePort, true)
-		}
-
-		// addRouteMapRewrite forwards the full incoming path unchanged (no prefix
-		// stripping). Use when the upstream expects the same path the gateway
-		// receives, e.g. a WFX server that serves /api/wfx/v1/... directly.
-		addRouteMapRewrite := func(serviceName, servicePath string, servicePort int) {
-			registerRoute(serviceName, servicePath, servicePort, false)
+			registerRoute(serviceName, servicePath, servicePort, "")
 		}
 
 		defaultHander := func(c *gin.Context) {
@@ -288,6 +295,15 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				req.URL.Scheme = remote.Scheme
 				req.URL.Host = remote.Host
 			}
+			proxy.ModifyResponse = func(resp *http.Response) error {
+				resp.Header.Del("Access-Control-Allow-Origin")
+				resp.Header.Del("Access-Control-Allow-Headers")
+				resp.Header.Del("Access-Control-Allow-Methods")
+				resp.Header.Del("Access-Control-Allow-Credentials")
+				resp.Header.Del("Access-Control-Expose-Headers")
+				resp.Header.Del("Access-Control-Max-Age")
+				return nil
+			}
 			proxy.ServeHTTP(c.Writer, c.Request)
 		}
 
@@ -298,8 +314,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
 
-		if conf.WfxPort > 0 {
-			addRouteMapRewrite("wfx", "/api/wfx/", conf.WfxPort)
+		if conf.WfxNorthPort > 0 {
+			registerRoute("wfx NBI", "/api/wfx/nbi/", conf.WfxNorthPort, "/api/wfx/")
+		}
+		if conf.WfxSouthPort > 0 {
+			registerRoute("wfx SBI", "/api/wfx/sbi/", conf.WfxSouthPort, "/api/wfx/")
 		}
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
