@@ -103,6 +103,7 @@ func main() {
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
 	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
+	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
 	flag.Parse()
@@ -390,7 +391,7 @@ func main() {
 		}
 	}
 
-	if !*useSqlite {
+	if !*disableWFX {
 		fmt.Println(">> launching docker: wfx ...")
 		pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
 		pgUser := storageConfig.Config["username"].(string)
