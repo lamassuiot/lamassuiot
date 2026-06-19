@@ -94,6 +94,7 @@ func (r *PolicyRegistry) validateRule(rule *models.Rule) error {
 
 // ValidatePolicyStruct validates a policy structure.
 // Exported so the service layer can reuse it for storage-time validation.
+// A policy must contain at least one Rule or one HTTPRule (or both).
 func ValidatePolicyStruct(policy *models.Policy) error {
 	if policy.ID == "" {
 		return fmt.Errorf("policy ID is required")
@@ -103,8 +104,8 @@ func ValidatePolicyStruct(policy *models.Policy) error {
 		return fmt.Errorf("policy name is required")
 	}
 
-	if len(policy.Rules) == 0 {
-		return fmt.Errorf("policy must contain at least one rule")
+	if len(policy.Rules) == 0 && len(policy.HTTPRules) == 0 {
+		return fmt.Errorf("policy must contain at least one rule or http_rule")
 	}
 
 	for i, rule := range policy.Rules {
@@ -113,6 +114,22 @@ func ValidatePolicyStruct(policy *models.Policy) error {
 		}
 	}
 
+	for i, hr := range policy.HTTPRules {
+		if err := validateHTTPRuleStruct(hr); err != nil {
+			return fmt.Errorf("invalid http_rule at index %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+func validateHTTPRuleStruct(r *models.HTTPRule) error {
+	if r.SchemaName == "" {
+		return fmt.Errorf("http_schema_name is required")
+	}
+	if len(r.Actions) == 0 {
+		return fmt.Errorf("actions must not be empty; use [\"*\"] to grant all")
+	}
 	return nil
 }
 

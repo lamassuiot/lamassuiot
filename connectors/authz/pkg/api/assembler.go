@@ -98,6 +98,15 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 		return nil, nil, nil, nil, fmt.Errorf("failed to connect to authz database: %w", err)
 	}
 
+	sqlDB, err := authzDB.DB()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to get raw sql.DB for migrations: %w", err)
+	}
+	lMigrate := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Migrate")
+	if err := store.RunMigrations(sqlDB, lMigrate); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("database migration failed: %w", err)
+	}
+
 	policyStore, err := store.NewGormPolicyStore(authzDB)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to create policy store: %w", err)
@@ -122,7 +131,10 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 
 	lEngine := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Engine")
 
-	eng, err := engine.NewEngine(schemaDbs, conf.Schemas, engine.WithLogger(lEngine))
+	eng, err := engine.NewEngine(schemaDbs, conf.Schemas,
+		engine.WithLogger(lEngine),
+		engine.WithHTTPSchemas(conf.HTTPSchemas),
+	)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

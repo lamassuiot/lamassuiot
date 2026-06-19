@@ -112,6 +112,7 @@ func main() {
 	authzSchema := flag.String("authz-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json", "path to Authz schema JSON file for authz service")
 	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
 	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
+	authzHTTPSchemas := flag.String("authz-http-schemas", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json", "comma-separated list of HTTP schema JSON file paths for Envoy ext_authz (e.g. ./connectors/authz/examples/wfx/http-schema.json)")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -530,7 +531,7 @@ func main() {
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
-		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -619,7 +620,7 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
-func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON string) *authzconfig.AuthzConfig {
+func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string) *authzconfig.AuthzConfig {
 	if !enabled || useSqlite {
 		return nil
 	}
@@ -672,6 +673,15 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 			"authz": authzDB,
 			"pki":   pkiDB,
 		},
+		HTTPSchemas:       func() []string {
+			var out []string
+			for _, p := range strings.Split(httpSchemas, ",") {
+				if p = strings.TrimSpace(p); p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
+		}(),
 		PublisherEventBus: publisherEventBus,
 		PreloadDir:        preloadDir,
 		Bootstrap:         bootstrap,

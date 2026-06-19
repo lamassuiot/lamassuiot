@@ -8,7 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
-	"github.com/lamassuiot/authz/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -19,11 +18,7 @@ import (
 func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 	ctx := context.Background()
 
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
-	require.NoError(t, err)
-	defer postgres.Cleanup()
-
-	db := postgres.DB
+	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
 
 	// test-schema.json has organization with atomicActions=[read,delete], globalActions=[]
 	eng, err := engine.NewEngine(
@@ -95,11 +90,7 @@ func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 	ctx := context.Background()
 
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
-	require.NoError(t, err)
-	defer postgres.Cleanup()
-
-	db := postgres.DB
+	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
 
 	eng, err := engine.NewEngine(
 		map[string]*gorm.DB{"test": db},
@@ -178,11 +169,7 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
 	ctx := context.Background()
 
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
-	require.NoError(t, err)
-	defer postgres.Cleanup()
-
-	db := postgres.DB
+	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
 	principalManager, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 

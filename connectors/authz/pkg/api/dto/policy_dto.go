@@ -7,29 +7,34 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
-// CreatePolicyRequest represents a request to create a new policy
+// CreatePolicyRequest represents a request to create a new policy.
+// At least one of Rules or HTTPRules must be provided (validated by ValidatePolicyStruct).
 type CreatePolicyRequest struct {
-	ID          string         `json:"id" binding:"required"`
-	Name        string         `json:"name" binding:"required"`
-	Description string         `json:"description"`
-	Rules       []*models.Rule `json:"rules" binding:"required,min=1"`
+	ID          string              `json:"id" binding:"required"`
+	Name        string              `json:"name" binding:"required"`
+	Description string              `json:"description"`
+	Rules       []*models.Rule      `json:"rules"`
+	HTTPRules   []*models.HTTPRule  `json:"http_rules"`
 }
 
-// UpdatePolicyRequest represents a request to update an existing policy
+// UpdatePolicyRequest represents a request to update an existing policy.
+// At least one of Rules or HTTPRules must be provided (validated by ValidatePolicyStruct).
 type UpdatePolicyRequest struct {
-	Name        string         `json:"name" binding:"required"`
-	Description string         `json:"description"`
-	Rules       []*models.Rule `json:"rules" binding:"required,min=1"`
+	Name        string              `json:"name" binding:"required"`
+	Description string              `json:"description"`
+	Rules       []*models.Rule      `json:"rules"`
+	HTTPRules   []*models.HTTPRule  `json:"http_rules"`
 }
 
 // PolicyResponse represents a policy in API responses
 type PolicyResponse struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Rules       []*models.Rule `json:"rules"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Rules       []*models.Rule      `json:"rules"`
+	HTTPRules   []*models.HTTPRule  `json:"http_rules,omitempty"`
+	CreatedAt   time.Time           `json:"created_at"`
+	UpdatedAt   time.Time           `json:"updated_at"`
 }
 
 // PolicyListResponse is the paginated response for listing policies
@@ -54,6 +59,7 @@ func ToPolicyResponse(policy *models.Policy) *PolicyResponse {
 		Name:        policy.Name,
 		Description: policy.Description,
 		Rules:       policy.Rules,
+		HTTPRules:   policy.HTTPRules,
 		CreatedAt:   policy.CreatedAt,
 		UpdatedAt:   policy.UpdatedAt,
 	}
@@ -80,6 +86,7 @@ func (r *CreatePolicyRequest) ToPolicy() *models.Policy {
 		Name:        r.Name,
 		Description: r.Description,
 		Rules:       r.Rules,
+		HTTPRules:   r.HTTPRules,
 	}
 }
 
@@ -88,4 +95,5 @@ func (r *UpdatePolicyRequest) ApplyToPolicy(policy *models.Policy) {
 	policy.Name = r.Name
 	policy.Description = r.Description
 	policy.Rules = r.Rules
+	policy.HTTPRules = r.HTTPRules
 }

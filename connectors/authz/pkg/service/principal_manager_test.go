@@ -16,7 +16,6 @@ import (
 
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/store"
-	"github.com/lamassuiot/authz/pkg/testutil"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,11 +142,9 @@ func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
 func TestPrincipalManager_CreatePrincipal(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Test creating a principal
@@ -172,11 +169,9 @@ func TestPrincipalManager_CreatePrincipal(t *testing.T) {
 func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	principal := &models.Principal{
@@ -200,12 +195,9 @@ func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
 func TestPrincipalManager_GrantPolicy(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Create a principal
@@ -237,12 +229,9 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 func TestPrincipalManager_RevokePolicy(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Create principal and grant policy
@@ -269,12 +258,9 @@ func TestPrincipalManager_RevokePolicy(t *testing.T) {
 func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Create principal
@@ -299,12 +285,9 @@ func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
 func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Create multiple principals
@@ -337,12 +320,9 @@ func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
 func TestPrincipalManager_DeletePrincipal(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Create principal and grant policies
@@ -373,12 +353,9 @@ func TestPrincipalManager_DeletePrincipal(t *testing.T) {
 func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Create principal
@@ -411,12 +388,9 @@ func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
 func TestPrincipalManager_ListPrincipals(t *testing.T) {
 	ctx := context.Background()
 
-	container, err := testutil.RunPostgresWithMigration("../../examples/iot/migrations.sql")
-	require.NoError(t, err)
-	defer container.Cleanup()
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	// Create principal manager
-	pm, err := NewPrincipalManager(container.DB, "", false)
+	pm, err := NewPrincipalManager(db, "", false)
 	require.NoError(t, err)
 
 	// Create active principals

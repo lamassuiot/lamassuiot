@@ -285,11 +285,7 @@ func TestGetEntityCapabilities_UnknownSchema(t *testing.T) {
 func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 	ctx := context.Background()
 
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
-	require.NoError(t, err)
-	defer postgres.Cleanup()
-
-	db := postgres.DB
+	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
 	eng := setupIoTEngine(t, db)
 
 	principalManager, err := NewPrincipalManager(db, "", false)

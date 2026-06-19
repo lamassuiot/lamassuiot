@@ -37,4 +37,8 @@ type AuthzConfig struct {
 	// URL to fetch JSON Web Key Sets for verifying JWT tokens.
 	JWKSURL             string `mapstructure:"jwks_url"`
 	EnableJWTValidation bool   `mapstructure:"enable_jwt_validation"`
+	// HTTPSchemas is a list of file paths to HTTP schema JSON files.
+	// Each file contains an array of HTTPSchemaDefinition objects that describe
+	// REST API routes for use with the Envoy ext_authz endpoint.
+	HTTPSchemas []string `mapstructure:"http_schemas"`
 }

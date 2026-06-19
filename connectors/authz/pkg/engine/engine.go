@@ -13,9 +13,10 @@ import (
 
 // Engine is the core authorization engine
 type Engine struct {
-	dbs     map[string]*gorm.DB // Map of config schema name -> database connection
-	schemas *SchemaRegistry
-	logger  *logrus.Entry
+	dbs        map[string]*gorm.DB // Map of config schema name -> database connection
+	schemas    *SchemaRegistry
+	httpSchemas *HTTPSchemaRegistry
+	logger     *logrus.Entry
 }
 
 // EngineOption is a functional option for Engine.
@@ -49,9 +50,10 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	}
 
 	e := &Engine{
-		dbs:     dbs,
-		schemas: schemas,
-		logger:  engineNopLogger(),
+		dbs:         dbs,
+		schemas:     schemas,
+		httpSchemas: NewHTTPSchemaRegistry(),
+		logger:      engineNopLogger(),
 	}
 
 	for _, opt := range opts {
@@ -229,9 +231,50 @@ func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, na
 	return result.FullSQL, nil
 }
 
-// GetSchemas returns the schema registry (useful for introspection)
+// GetSchemas returns the entity schema registry (for introspection).
 func (e *Engine) GetSchemas() *SchemaRegistry {
 	return e.schemas
+}
+
+// GetHTTPSchemas returns the HTTP schema registry (for introspection).
+func (e *Engine) GetHTTPSchemas() *HTTPSchemaRegistry {
+	return e.httpSchemas
+}
+
+// WithHTTPSchemas returns an EngineOption that loads HTTP schema JSON files into the engine.
+// Files that fail to load are logged and skipped — startup is not aborted.
+func WithHTTPSchemas(paths []string) EngineOption {
+	return func(e *Engine) {
+		for _, p := range paths {
+			if err := e.httpSchemas.Load(p); err != nil {
+				e.logger.WithError(err).Errorf("http schema load failed: %s", p)
+			}
+		}
+	}
+}
+
+// CheckHTTP reports whether the policies in the registry grant access to the given
+// HTTP method+path combination. It iterates all HTTPRules across all policies and
+// returns on the first positive match (allow-first semantics).
+// Missing schema references are skipped without error to tolerate rolling deployments
+// where a schema file may not yet be present on all instances.
+func (e *Engine) CheckHTTP(ctx context.Context, policies *PolicyRegistry, method, path string) (allowed bool, matchedPolicyID string, err error) {
+	for _, policy := range policies.GetAll() {
+		for _, httpRule := range policy.HTTPRules {
+			schema, schemaErr := e.httpSchemas.Get(httpRule.SchemaName)
+			if schemaErr != nil {
+				continue // schema not loaded on this instance — skip
+			}
+			route := schema.MatchRoute(method, path)
+			if route == nil {
+				continue
+			}
+			if httpRule.HasHTTPAction(route.Action) {
+				return true, policy.ID, nil
+			}
+		}
+	}
+	return false, "", nil
 }
 
 func (e *Engine) getDBForSchema(schema *SchemaDefinition) (*gorm.DB, error) {

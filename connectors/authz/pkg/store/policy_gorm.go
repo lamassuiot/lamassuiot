@@ -18,11 +18,8 @@ type GormPolicyStore struct {
 	querier *postgresDBQuerier[models.PolicyRecord]
 }
 
-// NewGormPolicyStore creates the store and migrates the policies table.
+// NewGormPolicyStore creates the store. Schema is managed by RunMigrations.
 func NewGormPolicyStore(db *gorm.DB) (*GormPolicyStore, error) {
-	if err := db.AutoMigrate(&models.PolicyRecord{}); err != nil {
-		return nil, fmt.Errorf("migrate policies table: %w", err)
-	}
 	q := newPostgresDBQuerier[models.PolicyRecord](db, "policies", "id")
 	return &GormPolicyStore{db: db, querier: &q}, nil
 }

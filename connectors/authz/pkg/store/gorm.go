@@ -18,11 +18,8 @@ type GormPrincipalStore struct {
 	ppQuerier *postgresDBQuerier[models.PrincipalPolicy]
 }
 
-// NewGormPrincipalStore creates the store and runs AutoMigrate for principal tables.
+// NewGormPrincipalStore creates the store. Schema is managed by RunMigrations.
 func NewGormPrincipalStore(db *gorm.DB) (*GormPrincipalStore, error) {
-	if err := db.AutoMigrate(&models.Principal{}, &models.PrincipalPolicy{}); err != nil {
-		return nil, fmt.Errorf("migrate principal tables: %w", err)
-	}
 	q := newPostgresDBQuerier[models.Principal](db, "principals", "id")
 	ppq := newPostgresDBQuerier[models.PrincipalPolicy](db, "principal_policies", "id")
 	return &GormPrincipalStore{db: db, querier: &q, ppQuerier: &ppq}, nil

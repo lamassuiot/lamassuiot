@@ -17,25 +17,25 @@ func NewSchemaController(eng *engine.Engine) *SchemaController {
 	}
 }
 
-// GetSchemas godoc
-// @Summary Get all entity schemas
-// @Description Returns all registered entity schemas grouped by authorization namespace
-// @Tags schema
-// @Produce json
-// @Success 200 {object} map[string][]engine.SchemaDefinition
-// @Router /api/v1/schemas [get]
+// GetSchemas returns all registered schemas — both entity (SQL-backed) schemas and
+// HTTP route schemas — in a single response.
+//
+//	{
+//	  "entity": { "<namespace>": [<SchemaDefinition>, ...], ... },
+//	  "http":   { "<name>": <HTTPSchemaDefinition>, ... }
+//	}
 func (ctrl *SchemaController) GetSchemas(c *gin.Context) {
-	schemas := ctrl.eng.GetSchemas().GetAll()
-
-	// Group schemas by config schema (authorization namespace)
 	grouped := make(map[string][]*engine.SchemaDefinition)
-	for _, schema := range schemas {
-		configSchema := schema.ConfigSchema
-		if configSchema == "" {
-			configSchema = "default"
+	for _, s := range ctrl.eng.GetSchemas().GetAll() {
+		ns := s.ConfigSchema
+		if ns == "" {
+			ns = "default"
 		}
-		grouped[configSchema] = append(grouped[configSchema], schema)
+		grouped[ns] = append(grouped[ns], s)
 	}
 
-	c.JSON(http.StatusOK, grouped)
+	c.JSON(http.StatusOK, map[string]any{
+		"entity": grouped,
+		"http":   ctrl.eng.GetHTTPSchemas().GetAll(),
+	})
 }

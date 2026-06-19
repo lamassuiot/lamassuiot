@@ -5,17 +5,25 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/authz/pkg/testutil"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	container, err := testutil.RunPostgresEmpty()
+	require.NoError(t, err)
+	defer container.Cleanup()
+
+	sqlDB, err := container.DB.DB()
 	require.NoError(t, err)
 
-	store, err := NewGormPrincipalStore(db)
+	log := logrus.NewEntry(logrus.New())
+	log.Logger.SetLevel(logrus.ErrorLevel)
+	require.NoError(t, RunMigrations(sqlDB, log))
+
+	s, err := NewGormPrincipalStore(container.DB)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -28,13 +36,13 @@ func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
 		Active:      true,
 	}
 
-	require.NoError(t, store.Create(ctx, principal))
+	require.NoError(t, s.Create(ctx, principal))
 
 	principal.Description = ""
 	principal.Active = false
-	require.NoError(t, store.Update(ctx, principal))
+	require.NoError(t, s.Update(ctx, principal))
 
-	retrieved, err := store.Get(ctx, "user-1")
+	retrieved, err := s.Get(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Empty(t, retrieved.Description)
 	assert.False(t, retrieved.Active)

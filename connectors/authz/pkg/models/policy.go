@@ -8,12 +8,13 @@ import (
 )
 
 // PolicyRecord is the GORM model that persists a Policy in the authz Postgres database.
-// The rules slice is stored as JSONB so it can be filtered with Postgres JSONPath operators.
+// The rules and http_rules slices are stored as JSONB. Schema is managed by RunMigrations.
 type PolicyRecord struct {
 	ID          string          `gorm:"primaryKey;size:255"          json:"id"`
 	Name        string          `gorm:"size:255;not null;index"       json:"name"`
 	Description string          `gorm:"size:1024;index"               json:"description,omitempty"`
 	Rules       json.RawMessage `gorm:"type:jsonb;not null"           json:"rules"`
+	HTTPRules   json.RawMessage `gorm:"column:http_rules;type:jsonb"  json:"http_rules,omitempty"`
 	CreatedAt   time.Time       `                                      json:"created_at"`
 	UpdatedAt   time.Time       `                                      json:"updated_at"`
 }
@@ -26,11 +27,20 @@ func (r *PolicyRecord) ToPolicy() (*Policy, error) {
 	if err := json.Unmarshal(r.Rules, &rules); err != nil {
 		return nil, fmt.Errorf("unmarshal rules for policy %s: %w", r.ID, err)
 	}
+
+	var httpRules []*HTTPRule
+	if len(r.HTTPRules) > 0 && string(r.HTTPRules) != "null" {
+		if err := json.Unmarshal(r.HTTPRules, &httpRules); err != nil {
+			return nil, fmt.Errorf("unmarshal http_rules for policy %s: %w", r.ID, err)
+		}
+	}
+
 	return &Policy{
 		ID:          r.ID,
 		Name:        r.Name,
 		Description: r.Description,
 		Rules:       rules,
+		HTTPRules:   httpRules,
 		CreatedAt:   r.CreatedAt,
 		UpdatedAt:   r.UpdatedAt,
 	}, nil
@@ -38,15 +48,30 @@ func (r *PolicyRecord) ToPolicy() (*Policy, error) {
 
 // PolicyRecordFromPolicy builds a PolicyRecord from a Policy domain object.
 func PolicyRecordFromPolicy(p *Policy) (*PolicyRecord, error) {
-	raw, err := json.Marshal(p.Rules)
+	// Ensure rules column never stores null — the DB default is '[]'.
+	rulesSlice := p.Rules
+	if rulesSlice == nil {
+		rulesSlice = []*Rule{}
+	}
+	rawRules, err := json.Marshal(rulesSlice)
 	if err != nil {
 		return nil, fmt.Errorf("marshal rules for policy %s: %w", p.ID, err)
 	}
+
+	var rawHTTPRules json.RawMessage
+	if len(p.HTTPRules) > 0 {
+		rawHTTPRules, err = json.Marshal(p.HTTPRules)
+		if err != nil {
+			return nil, fmt.Errorf("marshal http_rules for policy %s: %w", p.ID, err)
+		}
+	}
+
 	return &PolicyRecord{
 		ID:          p.ID,
 		Name:        p.Name,
 		Description: p.Description,
-		Rules:       raw,
+		Rules:       rawRules,
+		HTTPRules:   rawHTTPRules,
 	}, nil
 }
 
@@ -151,14 +176,36 @@ func (r RelationRule) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// HTTPRule grants a set of HTTP actions from an HTTPSchemaDefinition to the
+// principal holding the parent policy. Evaluated by the ExtAuthz engine only;
+// has no relation to the SQL-based Rule type.
+type HTTPRule struct {
+	// SchemaName references an HTTPSchemaDefinition by its "name" field.
+	SchemaName string   `json:"http_schema_name"`
+	// Actions is the list of logical action names from the schema that are granted.
+	// Use ["*"] to grant all actions defined in the schema.
+	Actions    []string `json:"actions"`
+}
+
+// HasHTTPAction reports whether the rule grants a specific HTTP action.
+func (r *HTTPRule) HasHTTPAction(action string) bool {
+	for _, a := range r.Actions {
+		if a == "*" || a == action {
+			return true
+		}
+	}
+	return false
+}
+
 // Policy contains a collection of rules with metadata
 type Policy struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Rules       []*Rule   `json:"rules"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Rules       []*Rule     `json:"rules"`
+	HTTPRules   []*HTTPRule `json:"http_rules,omitempty"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
 // HasAction checks if a rule supports a specific action for direct access

@@ -8,6 +8,10 @@ schemas:
   authz: /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json
   pki: /home/ubuntu/dev/authz/examples/iot/pki.json
 
+# http_schemas: list of HTTP schema JSON files (for Envoy ext_authz route mapping)
+http_schemas:
+  - /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json
+
 # authz_db: Postgres connection for the authz service's own data
 # (principals, grants, policies).  Uses the dedicated "authz" database.
 authz_db:

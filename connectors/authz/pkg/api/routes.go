@@ -27,6 +27,7 @@ func NewAuthzRoutes(
 	schemaCtrl := NewSchemaController(eng)
 	policyCtrl := NewPolicyController(policySvc, principalSvc)
 	capabilitiesCtrl := NewCapabilitiesController(eng, principalSvc, policySvc, resolver, logger)
+	extAuthzCtrl := NewExtAuthzController(eng, resolver, logger)
 
 	authzMwPrincipals := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "principal", logger)
 	authzMwPolicies := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "policy", logger)
@@ -81,5 +82,12 @@ func NewAuthzRoutes(
 		}
 
 		v1.GET("/schemas", schemaCtrl.GetSchemas)
+
+		// Envoy ext_authz check — no auth middleware; Envoy is the network edge.
+		// Credentials are inside the JSON body and evaluated inside the handler.
+		extAuthzGrp := v1.Group("/ext_authz")
+		{
+			extAuthzGrp.POST("/check", extAuthzCtrl.Check)
+		}
 	}
 }

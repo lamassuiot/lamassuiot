@@ -132,3 +132,75 @@ func (c *PostgresContainer) DSN() string {
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		c.Host, c.Port, c.Username, c.Password, c.DBName)
 }
+
+// RunPostgresEmpty starts a Postgres 15-alpine container with no init SQL.
+// The caller is responsible for running any schema migrations after connecting.
+func RunPostgresEmpty() (*PostgresContainer, error) {
+	pool, err := dockertest.NewPool("")
+	if err != nil {
+		return nil, fmt.Errorf("could not construct pool: %w", err)
+	}
+
+	if err := pool.Client.Ping(); err != nil {
+		return nil, fmt.Errorf("could not connect to Docker: %w", err)
+	}
+
+	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository: "postgres",
+		Tag:        "15-alpine",
+		Env: []string{
+			fmt.Sprintf("POSTGRES_USER=%s", defaultUser),
+			fmt.Sprintf("POSTGRES_PASSWORD=%s", defaultPassword),
+			fmt.Sprintf("POSTGRES_DB=%s", defaultDBName),
+		},
+	}, func(config *docker.HostConfig) {
+		config.AutoRemove = true
+		config.RestartPolicy = docker.RestartPolicy{Name: "no"}
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not start resource: %w", err)
+	}
+
+	port := resource.GetPort("5432/tcp")
+	host := "localhost"
+
+	container := &PostgresContainer{
+		Pool:     pool,
+		Resource: resource,
+		Host:     host,
+		Port:     port,
+		DBName:   defaultDBName,
+		Username: defaultUser,
+		Password: defaultPassword,
+	}
+
+	if err := pool.Retry(func() error {
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+			host, port, defaultUser, defaultPassword, defaultDBName)
+
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
+		if err != nil {
+			return err
+		}
+
+		sqlDB, err := db.DB()
+		if err != nil {
+			return err
+		}
+
+		if err := sqlDB.Ping(); err != nil {
+			return err
+		}
+
+		container.DB = db
+		return nil
+	}); err != nil {
+		container.Cleanup()
+		return nil, fmt.Errorf("could not connect to database: %w", err)
+	}
+
+	fmt.Printf("PostgreSQL container started on port %s\n", port)
+	return container, nil
+}
