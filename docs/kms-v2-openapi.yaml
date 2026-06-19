@@ -1,0 +1,798 @@
+openapi: 3.0.3
+info:
+  title: Lamassu KMS API v2
+  version: 2.0.0
+  description: |
+    Key Management Service (KMS) v2 API for Lamassu IoT Platform.
+
+    Manages the full lifecycle of cryptographic keys — classical (RSA, ECDSA, ECDH,
+    EdDSA, AES, HMAC) and post-quantum (ML-KEM-768, ML-KEM-1024). This API covers
+    key management only; cryptographic operations (sign, encrypt, MAC, …) are
+    performed server-side once a key is provisioned.
+
+    ## Key concepts
+
+    - **Algorithm IDs** are stable string identifiers such as `ECDSA_SHA_256` or
+      `ML_KEM_768`. They encode both the family and the parameters, so no separate
+      key-size field is needed.
+    - **Operations** declare what a key may be used for at creation time. Requesting
+      an operation not permitted by the algorithm is rejected with `400`.
+    - **State machine**: `enabled ⇄ disabled → pendingDeletion → destroyed`.
+      `DELETE /keys/{id}` triggers a soft-delete (202); the key stays accessible
+      until the pending window elapses.
+    - **Aliases** are stable names that point to a key UUID. `PUT /aliases/{name}`
+      is an upsert — it creates or atomically retargets in one call.
+    - **Transparent alias resolution**: `GET /keys/{id}` accepts both a UUID and
+      an alias name.
+  contact:
+    name: Lamassu IoT
+    url: https://github.com/lamassuiot/lamassuiot
+  license:
+    name: Mozilla Public License 2.0
+    url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
+
+servers:
+  - url: /v2/kms
+    description: KMS API v2
+
+tags:
+  - name: Keys
+    description: Key lifecycle management
+  - name: State
+    description: Key state machine transitions
+  - name: Backup
+    description: Key backup and restore
+  - name: Aliases
+    description: Stable alias management
+  - name: Utility
+    description: RNG and other utilities
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # Keys
+  # ---------------------------------------------------------------------------
+
+  /keys:
+    get:
+      tags: [Keys]
+      summary: List keys
+      operationId: listKeys
+      parameters:
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/Limit'
+        - name: filter
+          in: query
+          description: Server-side filter expression (e.g. `state[eq]enabled`)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated key list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListKeysResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Keys]
+      summary: Create or import a key
+      description: |
+        When `key_material` is absent a new key is generated (`CreateKey`).
+        When `key_material` is present (base64-encoded PKCS#8 DER or raw symmetric
+        bytes) the material is imported (`ImportKey`).
+      operationId: createOrImportKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKeyRequest'
+            examples:
+              generateECDSA:
+                summary: Generate ECDSA P-256 signing key
+                value:
+                  algorithm: ECDSA_SHA_256
+                  operations: [sign, verify]
+                  policy_id: pol-default
+                  tags:
+                    device_id: sensor-42
+              generateMLKEM:
+                summary: Generate ML-KEM-768 (post-quantum)
+                value:
+                  algorithm: ML_KEM_768
+                  operations: [encapsulate, decapsulate]
+              importRSA:
+                summary: Import existing RSA 2048 key
+                value:
+                  algorithm: RSASSA_PKCS1_V1_5_SHA_256
+                  operations: [sign, verify]
+                  key_material: MIIEvAIBADANBgkqhkiG9w0BAQEFAASC...
+      responses:
+        '201':
+          description: Key created or imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+
+    get:
+      tags: [Keys]
+      summary: Get key
+      description: |
+        Returns the key identified by `id`. Accepts either a UUID or an alias name —
+        resolution is transparent.
+      operationId: getKey
+      responses:
+        '200':
+          description: Key metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyMetadata'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    patch:
+      tags: [Keys]
+      summary: Update key metadata
+      description: |
+        Patches mutable metadata fields (`tags`, `policy_id`, `not_after`).
+        Never triggers a state transition — use `PUT /keys/{id}/state` for that.
+      operationId: updateKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyRequest'
+            example:
+              tags:
+                env: prod
+                audited: "true"
+              not_after: "2027-01-01T00:00:00Z"
+      responses:
+        '200':
+          description: Updated key metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Keys]
+      summary: Schedule key deletion
+      description: |
+        Soft-deletes the key by transitioning it to `pendingDeletion`. The key
+        remains accessible until the pending window elapses.
+
+        Use `?pending_days=N` to override the default 7-day window.
+        Use `PUT /keys/{id}/state` with `{"state":"disabled"}` to cancel.
+      operationId: deleteKey
+      parameters:
+        - name: pending_days
+          in: query
+          description: Days before the key is permanently destroyed (default 7)
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+      responses:
+        '202':
+          description: Deletion scheduled — key is now `pendingDeletion`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  state:
+                    type: string
+                    example: pendingDeletion
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # State
+  # ---------------------------------------------------------------------------
+
+  /keys/{id}/state:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+
+    put:
+      tags: [State]
+      summary: Set key state
+      description: |
+        Drives the key state machine. Valid transitions:
+
+        | From             | To               | Notes                                       |
+        |------------------|------------------|---------------------------------------------|
+        | `enabled`        | `disabled`       | `DisableKey`                                |
+        | `disabled`       | `enabled`        | `EnableKey`                                 |
+        | `enabled`        | `pendingDeletion` | `ScheduleDeletion` — `deletion_scheduled_at` required |
+        | `disabled`       | `pendingDeletion` | `ScheduleDeletion` — `deletion_scheduled_at` required |
+        | `pendingDeletion` | `disabled`      | `CancelDeletion`                            |
+
+        Invalid transitions return `409 Conflict`.
+      operationId: setKeyState
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetKeyStateRequest'
+            examples:
+              disable:
+                summary: Disable key
+                value:
+                  state: disabled
+              enable:
+                summary: Re-enable key
+                value:
+                  state: enabled
+              scheduleDeletion:
+                summary: Schedule deletion
+                value:
+                  state: pendingDeletion
+                  deletion_scheduled_at: "2026-07-15T00:00:00Z"
+              cancelDeletion:
+                summary: Cancel pending deletion (back to disabled)
+                value:
+                  state: disabled
+      responses:
+        '200':
+          description: State transition applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateTransitionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict — invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Backup
+  # ---------------------------------------------------------------------------
+
+  /keys/{id}/backup:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+
+    put:
+      tags: [Backup]
+      summary: Backup key
+      description: |
+        Exports an encrypted backup blob for the key. Only available for backends
+        with `extractable: true`. Idempotent — repeated calls refresh the blob.
+      operationId: backupKey
+      responses:
+        '200':
+          description: Backup blob
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupKeyResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/restore:
+    post:
+      tags: [Backup]
+      summary: Restore key from backup
+      description: |
+        Imports a key from a previously exported backup blob. The restored key
+        receives a new UUID; its metadata and algorithm are preserved from the blob.
+      operationId: restoreKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreKeyRequest'
+      responses:
+        '200':
+          description: Restored key metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Aliases
+  # ---------------------------------------------------------------------------
+
+  /aliases/{name}:
+    parameters:
+      - $ref: '#/components/parameters/AliasName'
+
+    get:
+      tags: [Aliases]
+      summary: Resolve alias
+      description: Returns the full key metadata for the key the alias points to.
+      operationId: resolveAlias
+      responses:
+        '200':
+          description: Key metadata for the aliased key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyMetadata'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags: [Aliases]
+      summary: Create or retarget alias
+      description: |
+        Upserts an alias. If the alias does not exist it is created; if it already
+        exists it is atomically retargeted to the new key. Use this for key rotation
+        without a delete-then-recreate race window.
+      operationId: upsertAlias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertAliasRequest'
+            example:
+              key_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: Alias created or retargeted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: ca-root-active
+                  key_id:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Target key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Aliases]
+      summary: Delete alias
+      description: Removes the alias. The key itself is not affected.
+      operationId: deleteAlias
+      responses:
+        '204':
+          description: Alias deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Utility
+  # ---------------------------------------------------------------------------
+
+  /random:
+    post:
+      tags: [Utility]
+      summary: Generate random bytes
+      description: Returns cryptographically strong random bytes from the server's entropy source.
+      operationId: generateRandom
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRandomRequest'
+            example:
+              bytes: 32
+      responses:
+        '200':
+          description: Random bytes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateRandomResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+
+components:
+
+  parameters:
+
+    KeyID:
+      name: id
+      in: path
+      required: true
+      description: Key UUID or alias name
+      schema:
+        type: string
+      example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+    AliasName:
+      name: name
+      in: path
+      required: true
+      description: |
+        Alias name. Restricted to `[a-zA-Z0-9_-]` characters; maximum 128 characters.
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9_-]{1,128}$'
+      example: ca-root-active
+
+    PageToken:
+      name: page_token
+      in: query
+      description: Opaque token from a previous response's `next_page_token` field
+      schema:
+        type: string
+
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return (default 50)
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 1000
+
+  responses:
+
+    BadRequest:
+      description: Bad request — invalid input or operation not permitted by algorithm
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Key or alias not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+
+    # -------------------------------------------------------------------------
+    # Core domain types
+    # -------------------------------------------------------------------------
+
+    AlgorithmID:
+      type: string
+      description: |
+        Stable algorithm identifier. Encodes both family and parameters.
+        Classical algorithms:
+        - `RSASSA_PKCS1_V1_5_SHA_{256,384,512}` — RSA PKCS#1 v1.5 signing
+        - `RSASSA_PSS_SHA_{256,384,512}` — RSA PSS signing
+        - `RSAES_OAEP_SHA_{1,256,384,512}_{2048,3072,4096}` — RSA OAEP encrypt/wrap
+        - `ECDSA_SHA_{256,384,512}` — ECDSA signing (P-256/P-384/P-521)
+        - `ED25519` — EdDSA signing
+        - `ECDH_NIST_{P256,P384,P521}`, `ECDH_X25519` — key agreement
+        - `AES_GCM_{128,192,256}` — AES-GCM symmetric encryption
+        - `HMAC_SHA_{256,384,512}` — HMAC authentication
+        Post-quantum algorithms:
+        - `ML_KEM_768` — ML-KEM (FIPS 203) at security level 3
+        - `ML_KEM_1024` — ML-KEM (FIPS 203) at security level 5
+      example: ECDSA_SHA_256
+
+    KeyState:
+      type: string
+      enum: [enabled, disabled, pendingDeletion, destroyed]
+      description: |
+        Lifecycle state of the key.
+        - `enabled` — key is active and usable
+        - `disabled` — key is suspended; no operations permitted
+        - `pendingDeletion` — scheduled for permanent destruction
+        - `destroyed` — key material permanently erased; metadata retained for audit
+
+    KeyOrigin:
+      type: string
+      enum: [generated, imported, external]
+      description: How the key material was provisioned
+
+    Operation:
+      type: string
+      enum:
+        - sign
+        - verify
+        - encrypt
+        - decrypt
+        - wrapKey
+        - unwrapKey
+        - encapsulate
+        - decapsulate
+        - mac
+        - verifyMac
+        - agreeKey
+        - deriveKey
+      description: Cryptographic operation the key is authorised to perform
+
+    KeyMetadata:
+      type: object
+      description: Complete metadata for a managed key
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Stable unique identifier assigned at creation
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Operation'
+          description: Operations this key is authorised to perform
+          example: [sign, verify]
+        state:
+          $ref: '#/components/schemas/KeyState'
+        public_key:
+          type: string
+          description: |
+            Public key in PEM format (PKIX `BEGIN PUBLIC KEY` block) for
+            asymmetric algorithms. Base64-encoded raw bytes for post-quantum
+            types not yet covered by PKIX. Absent for symmetric keys.
+          example: "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQY...\n-----END PUBLIC KEY-----\n"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-06-15T10:00:00Z"
+        not_before:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-06-15T00:00:00Z"
+        not_after:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2027-06-15T00:00:00Z"
+        origin:
+          $ref: '#/components/schemas/KeyOrigin'
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          description: Arbitrary string key-value pairs for classification
+          example:
+            device_id: sensor-42
+            env: prod
+        policy_id:
+          type: string
+          description: Reference to an access/usage policy
+          example: pol-default
+
+    # -------------------------------------------------------------------------
+    # Request bodies
+    # -------------------------------------------------------------------------
+
+    CreateKeyRequest:
+      type: object
+      required: [algorithm]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Operation'
+          description: |
+            Subset of operations to permit. Defaults to the algorithm's full
+            operation set when omitted. Must not include operations not permitted
+            by the algorithm.
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        policy_id:
+          type: string
+        not_before:
+          type: string
+          format: date-time
+        not_after:
+          type: string
+          format: date-time
+        backend_hint:
+          type: string
+          description: Preferred backend name (e.g. `pkcs11-hsm-01`). Server falls back to policy routing when absent.
+        key_material:
+          type: string
+          format: byte
+          description: |
+            Base64-encoded private key material for the **import** path.
+            Asymmetric: PKCS#8 DER. Symmetric / ML-KEM: raw bytes.
+            When present the request is treated as ImportKey; when absent a new
+            key is generated.
+
+    UpdateKeyRequest:
+      type: object
+      description: |
+        Partial update of mutable metadata. Only fields that are explicitly
+        provided are changed. State is never changed via this endpoint.
+      properties:
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        policy_id:
+          type: string
+        not_after:
+          type: string
+          format: date-time
+
+    SetKeyStateRequest:
+      type: object
+      required: [state]
+      properties:
+        state:
+          $ref: '#/components/schemas/KeyState'
+        deletion_scheduled_at:
+          type: string
+          format: date-time
+          description: Required when `state` is `pendingDeletion`. Must be in the future.
+          example: "2026-07-15T00:00:00Z"
+
+    RestoreKeyRequest:
+      type: object
+      required: [backup_blob]
+      properties:
+        backup_blob:
+          type: string
+          format: byte
+          description: Base64-encoded blob previously returned by `PUT /keys/{id}/backup`
+
+    UpsertAliasRequest:
+      type: object
+      required: [key_id]
+      properties:
+        key_id:
+          type: string
+          format: uuid
+          description: UUID of the key this alias should point to
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+    GenerateRandomRequest:
+      type: object
+      required: [bytes]
+      properties:
+        bytes:
+          type: integer
+          minimum: 1
+          maximum: 1024
+          description: Number of random bytes to generate
+          example: 32
+
+    # -------------------------------------------------------------------------
+    # Response bodies
+    # -------------------------------------------------------------------------
+
+    ListKeysResponse:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeyMetadata'
+        next_page_token:
+          type: string
+          description: Opaque token to pass as `page_token` in the next request. Absent when no further pages exist.
+
+    StateTransitionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/KeyState'
+        previous_state:
+          $ref: '#/components/schemas/KeyState'
+        transitioned_at:
+          type: string
+          format: date-time
+      example:
+        id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        state: disabled
+        previous_state: enabled
+        transitioned_at: "2026-06-15T10:10:00Z"
+
+    BackupKeyResponse:
+      type: object
+      properties:
+        key_id:
+          type: string
+          format: uuid
+        backup_blob:
+          type: string
+          format: byte
+          description: Base64-encoded encrypted backup blob
+
+    GenerateRandomResponse:
+      type: object
+      properties:
+        bytes:
+          type: integer
+          description: Number of bytes generated
+          example: 32
+        data:
+          type: string
+          format: byte
+          description: Base64-encoded random bytes
+          example: "aGVsbG8gd29ybGQgdGhpcyBpcyBhIHRlc3Q="
+
+    Error:
+      type: object
+      properties:
+        err:
+          type: string
+          description: Human-readable error message
+          example: key not found
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []
