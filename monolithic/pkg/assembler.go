@@ -270,6 +270,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				}
 				proxy.ServeHTTP(c.Writer, c.Request)
 			}
+			routeList = make([]string, 0, len(routeMaps))
 			for k := range routeMaps {
 				routeList = append(routeList, k)
 			}
