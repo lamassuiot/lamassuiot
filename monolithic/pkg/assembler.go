@@ -307,6 +307,39 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			}
 		}
 
+		// addRouteMapRewrite is like addRouteMap but forwards the full incoming
+		// path to the upstream unchanged (no prefix stripping). Use this when
+		// the upstream service expects the same path the gateway receives, e.g.
+		// a WFX server that serves /api/wfx/v1/... directly.
+		addRouteMapRewrite := func(serviceName, servicePath string, servicePort int) {
+			color.Set(color.BgCyan)
+			color.Set(color.FgWhite)
+			fmt.Printf("  (HTTPS)  0.0.0.0:%d%s*  --> %s 127.0.0.1:%d (path rewrite: keep)\n", conf.GatewayPortHttps, servicePath, serviceName, servicePort)
+			fmt.Printf("  (HTTP)   0.0.0.0:%d%s*  --> %s 127.0.0.1:%d (path rewrite: keep)\n", conf.GatewayPortHttp, servicePath, serviceName, servicePort)
+			color.Unset()
+			fmt.Printf("\n")
+			routeMaps[servicePath] = func(c *gin.Context) {
+				remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", servicePort))
+				if err != nil {
+					panic(err)
+				}
+				proxyUrl := c.Param("proxyPath")
+				c.Request.Header.Add("x-request-id", uuid.NewString())
+				proxy := httputil.NewSingleHostReverseProxy(remote)
+				proxy.Director = func(req *http.Request) {
+					req.Header = c.Request.Header
+					req.Host = remote.Host
+					req.URL.Scheme = remote.Scheme
+					req.URL.Host = remote.Host
+					req.URL.Path = proxyUrl
+				}
+				proxy.ServeHTTP(c.Writer, c.Request)
+			}
+			for k := range routeMaps {
+				routeList = append(routeList, k)
+			}
+		}
+
 		defaultHander := func(c *gin.Context) {
 			remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", conf.UIPort))
 			if err != nil {
@@ -332,6 +365,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+
+		if conf.WfxPort > 0 {
+			addRouteMapRewrite("wfx", "/api/wfx/", conf.WfxPort)
+		}
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
 			proxy := func(c *gin.Context) {
