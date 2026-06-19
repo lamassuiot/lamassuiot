@@ -19,7 +19,7 @@ const (
 )
 
 func RunPostgresDocker(pkiSchema map[string]string, exposeAsStandardPort bool) (func() error, *config.PostgresPSEConfig, error) {
-	extraDBs := []string{"authz"}
+	extraDBs := []string{"authz", "wfx"}
 
 	pwd, err := os.Getwd()
 	if err != nil {
