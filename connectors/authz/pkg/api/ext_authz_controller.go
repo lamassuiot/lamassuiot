@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/service"
 	"github.com/sirupsen/logrus"
@@ -26,31 +25,14 @@ func NewExtAuthzController(eng *engine.Engine, resolver *service.IdentityResolve
 	return &ExtAuthzController{engine: eng, resolver: resolver, logger: logger}
 }
 
-// Check handles POST /v1/ext_authz/check.
-// It accepts Envoy's CheckRequest JSON body, resolves the caller's principal from
-// credentials in the request headers, evaluates HTTP policy rules, and returns
-// HTTP 200 (allowed) or HTTP 403 (denied). HTTP 401 is returned when credentials
-// are absent or match no registered principal.
+// Check handles Envoy's HTTP ext_authz request.
+// Envoy's HTTP auth service mode forwards an ordinary HTTP request to this service.
+// The response contract follows Envoy's example HTTP auth service: HTTP 200 allows
+// the request, non-2xx denies it, and response headers can be propagated upstream.
 func (ctrl *ExtAuthzController) Check(c *gin.Context) {
-	var req dto.ExtAuthzCheckRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request body",
-			Details: map[string]string{"validation": err.Error()},
-		})
-		return
-	}
-
-	if req.Attributes == nil || req.Attributes.Request == nil || req.Attributes.Request.HTTP == nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error: "attributes.request.http is required",
-		})
-		return
-	}
-
-	httpReq := req.Attributes.Request.HTTP
-	method := strings.ToUpper(httpReq.Method)
-	path := httpReq.Path
+	method := strings.ToUpper(c.Request.Method)
+	path := extAuthzOriginalPath(c.Request)
+	headers := extAuthzHeaders(c.Request.Header)
 
 	log := ctrl.logger.WithFields(logrus.Fields{
 		"ext_authz_method": method,
@@ -58,13 +40,10 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	})
 
 	// 1. Extract auth material from Envoy-forwarded headers.
-	authType, authMaterial, err := extractAuthFromEnvoyHeaders(httpReq.Headers)
+	authType, authMaterial, err := extractAuthFromEnvoyHeaders(headers)
 	if err != nil {
 		log.WithError(err).Debug("no valid auth credential in ext_authz request")
-		c.JSON(http.StatusUnauthorized, dto.ExtAuthzCheckResponse{
-			Allowed: false,
-			Reason:  "no valid auth credential: " + err.Error(),
-		})
+		c.Status(http.StatusForbidden)
 		return
 	}
 
@@ -76,17 +55,11 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, service.ErrNoMatch) {
 			log.Debug("ext_authz: no matching principals")
-			c.JSON(http.StatusUnauthorized, dto.ExtAuthzCheckResponse{
-				Allowed: false,
-				Reason:  "no matching principals found",
-			})
+			c.Status(http.StatusForbidden)
 			return
 		}
 		log.WithError(err).Error("ext_authz: principal resolution error")
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "principal resolution failed",
-			Details: map[string]string{"error": err.Error()},
-		})
+		c.Status(http.StatusInternalServerError)
 		return
 	}
 
@@ -97,10 +70,7 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	allowed, matchedPolicyID, err := ctrl.engine.CheckHTTP(reqCtx, policies, method, path)
 	if err != nil {
 		log.WithError(err).Error("ext_authz: http engine error")
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "HTTP authorization check failed",
-			Details: map[string]string{"error": err.Error()},
-		})
+		c.Status(http.StatusInternalServerError)
 		return
 	}
 
@@ -111,19 +81,34 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	}).Info("ext_authz decision")
 
 	if !allowed {
-		c.JSON(http.StatusForbidden, dto.ExtAuthzCheckResponse{
-			Allowed:           false,
-			MatchedPrincipals: matchedPrincipals,
-			Reason:            "no http_rule grants access to this route",
-		})
+		c.Status(http.StatusForbidden)
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.ExtAuthzCheckResponse{
-		Allowed:           true,
-		MatchedPolicyID:   matchedPolicyID,
-		MatchedPrincipals: matchedPrincipals,
-	})
+	if len(matchedPrincipals) > 0 {
+		c.Header("x-current-user", matchedPrincipals[0])
+	}
+	c.Status(http.StatusOK)
+}
+
+func extAuthzHeaders(headers http.Header) map[string]string {
+	out := make(map[string]string, len(headers))
+	for key, values := range headers {
+		if len(values) == 0 {
+			continue
+		}
+		out[strings.ToLower(key)] = values[0]
+	}
+	return out
+}
+
+func extAuthzOriginalPath(req *http.Request) string {
+	for _, header := range []string{"x-envoy-original-path", "x-forwarded-uri", "x-original-uri"} {
+		if value := req.Header.Get(header); value != "" {
+			return value
+		}
+	}
+	return req.URL.RequestURI()
 }
 
 // extractAuthFromEnvoyHeaders derives (authType, authMaterial, error) from Envoy-forwarded

@@ -71,22 +71,22 @@ func TestHTTPSchemaRegistry_LoadWFXExampleGroups(t *testing.T) {
 	registry := NewHTTPSchemaRegistry()
 	require.NoError(t, registry.Load("../../examples/wfx/wfx.json"))
 
-	schema, err := registry.Get("wfx")
+	schema, err := registry.Get("Job Manager")
 	require.NoError(t, err)
 
 	require.Len(t, schema.Groups, 3)
-	assert.Equal(t, "System Group", schema.Groups[0].Name)
+	assert.Equal(t, "System", schema.Groups[0].Name)
 	assert.Len(t, schema.Groups[0].Routes, 2)
-	assert.Equal(t, "Workflow Group", schema.Groups[1].Name)
+	assert.Equal(t, "Workflows", schema.Groups[1].Name)
 	assert.Len(t, schema.Groups[1].Routes, 4)
-	assert.Equal(t, "Job Group", schema.Groups[2].Name)
+	assert.Equal(t, "Jobs", schema.Groups[2].Name)
 	assert.Len(t, schema.Groups[2].Routes, 12)
 	assert.NotContains(t, schema.AllActions, "system")
 	assert.NotContains(t, schema.AllActions, "workflow")
 	assert.NotContains(t, schema.AllActions, "job")
 	assert.Contains(t, schema.AllActions, "job-delete")
 
-	route := schema.MatchRoute("DELETE", "/api/wfx/v1/jobs/job-1")
+	route := schema.MatchRoute("DELETE", "/api/wfx/nbi/v1/jobs/job-1")
 	require.NotNil(t, route)
 	assert.Equal(t, "job-delete", route.Action)
 }

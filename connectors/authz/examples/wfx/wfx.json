@@ -1,7 +1,7 @@
 [
   {
     "name": "Job Manager",
-    "description": "Siemens wfx (Workflow Executor) REST API v1.1 — full route mapping for Envoy ext_authz. Base path: /api/wfx/v1",
+    "description": "Siemens wfx (Workflow Executor) REST API v1.1 — full route mapping for Envoy ext_authz. Base path: /api/wfx/nbi/v1",
     "groups": [
       {
         "name": "System",
@@ -9,14 +9,14 @@
           {
             "name": "health-read",
             "methods": ["GET"],
-            "path": "/api/wfx/v1/health",
+            "path": "/api/wfx/nbi/v1/health",
             "match_type": "exact",
             "action": "health-read"
           },
           {
             "name": "version-read",
             "methods": ["GET"],
-            "path": "/api/wfx/v1/version",
+            "path": "/api/wfx/nbi/v1/version",
             "match_type": "exact",
             "action": "version-read"
           }
@@ -28,28 +28,28 @@
           {
             "name": "workflow-list",
             "methods": ["GET"],
-            "path": "/api/wfx/v1/workflows",
+            "path": "/api/wfx/nbi/v1/workflows",
             "match_type": "exact",
             "action": "workflow-list"
           },
           {
             "name": "workflow-create",
             "methods": ["POST"],
-            "path": "/api/wfx/v1/workflows",
+            "path": "/api/wfx/nbi/v1/workflows",
             "match_type": "exact",
             "action": "workflow-create"
           },
           {
             "name": "workflow-read",
             "methods": ["GET"],
-            "path": "^/api/wfx/v1/workflows/[^/]+$",
+            "path": "^/api/wfx/nbi/v1/workflows/[^/]+$",
             "match_type": "regex",
             "action": "workflow-read"
           },
           {
             "name": "workflow-delete",
             "methods": ["DELETE"],
-            "path": "^/api/wfx/v1/workflows/[^/]+$",
+            "path": "^/api/wfx/nbi/v1/workflows/[^/]+$",
             "match_type": "regex",
             "action": "workflow-delete"
           }
@@ -61,84 +61,84 @@
           {
             "name": "job-list",
             "methods": ["GET"],
-            "path": "/api/wfx/v1/jobs",
+            "path": "/api/wfx/nbi/v1/jobs",
             "match_type": "exact",
             "action": "job-list"
           },
           {
             "name": "job-create",
             "methods": ["POST"],
-            "path": "/api/wfx/v1/jobs",
+            "path": "/api/wfx/nbi/v1/jobs",
             "match_type": "exact",
             "action": "job-create"
           },
           {
             "name": "job-events",
             "methods": ["GET"],
-            "path": "/api/wfx/v1/jobs/events",
+            "path": "/api/wfx/nbi/v1/jobs/events",
             "match_type": "exact",
             "action": "job-events"
           },
           {
             "name": "job-status-read",
             "methods": ["GET"],
-            "path": "^/api/wfx/v1/jobs/[^/]+/status$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+/status$",
             "match_type": "regex",
             "action": "job-status-read"
           },
           {
             "name": "job-status-update",
             "methods": ["PUT"],
-            "path": "^/api/wfx/v1/jobs/[^/]+/status$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+/status$",
             "match_type": "regex",
             "action": "job-status-update"
           },
           {
             "name": "job-definition-read",
             "methods": ["GET"],
-            "path": "^/api/wfx/v1/jobs/[^/]+/definition$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+/definition$",
             "match_type": "regex",
             "action": "job-definition-read"
           },
           {
             "name": "job-definition-update",
             "methods": ["PUT"],
-            "path": "^/api/wfx/v1/jobs/[^/]+/definition$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+/definition$",
             "match_type": "regex",
             "action": "job-definition-update"
           },
           {
             "name": "job-tags-read",
             "methods": ["GET"],
-            "path": "^/api/wfx/v1/jobs/[^/]+/tags$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+/tags$",
             "match_type": "regex",
             "action": "job-tags-read"
           },
           {
             "name": "job-tags-add",
             "methods": ["POST"],
-            "path": "^/api/wfx/v1/jobs/[^/]+/tags$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+/tags$",
             "match_type": "regex",
             "action": "job-tags-add"
           },
           {
             "name": "job-tags-delete",
             "methods": ["DELETE"],
-            "path": "^/api/wfx/v1/jobs/[^/]+/tags$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+/tags$",
             "match_type": "regex",
             "action": "job-tags-delete"
           },
           {
             "name": "job-read",
             "methods": ["GET"],
-            "path": "^/api/wfx/v1/jobs/[^/]+$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+$",
             "match_type": "regex",
             "action": "job-read"
           },
           {
             "name": "job-delete",
             "methods": ["DELETE"],
-            "path": "^/api/wfx/v1/jobs/[^/]+$",
+            "path": "^/api/wfx/nbi/v1/jobs/[^/]+$",
             "match_type": "regex",
             "action": "job-delete"
           }

@@ -84,10 +84,10 @@ func NewAuthzRoutes(
 		v1.GET("/schemas", schemaCtrl.GetSchemas)
 
 		// Envoy ext_authz check — no auth middleware; Envoy is the network edge.
-		// Credentials are inside the JSON body and evaluated inside the handler.
+		// Credentials are forwarded as HTTP headers and evaluated inside the handler.
 		extAuthzGrp := v1.Group("/ext_authz")
 		{
-			extAuthzGrp.POST("/check", extAuthzCtrl.Check)
+			extAuthzGrp.Any("/check", extAuthzCtrl.Check)
 		}
 	}
 }
