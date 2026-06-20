@@ -30,5 +30,6 @@ COPY --from=0 /app/authz /
 COPY --from=0 /app/connectors/authz/cmd/preload /etc/lamassuiot/authz/preload
 COPY --from=0 /app/connectors/authz/authz.json /etc/lamassuiot/authz/schemas/authz.json
 COPY --from=0 /app/connectors/authz/pki.json /etc/lamassuiot/authz/schemas/pki.json
+COPY --from=0 /app/connectors/authz/wfx.json /etc/lamassuiot/authz/schemas/http-wfx.json
 USER lamassu
 CMD ["/authz"]
