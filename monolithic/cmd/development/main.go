@@ -110,9 +110,9 @@ func main() {
 	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
 	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json", "path to PKI schema JSON file for authz service")
 	authzSchema := flag.String("authz-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json", "path to Authz schema JSON file for authz service")
+	authzHTTPSchemas := flag.String("authz-http-schemas", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json", "comma-separated list of HTTP schema JSON file paths for Envoy ext_authz (e.g. ./connectors/authz/examples/wfx/http-schema.json)")
 	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
 	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
-	authzHTTPSchemas := flag.String("authz-http-schemas", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json", "comma-separated list of HTTP schema JSON file paths for Envoy ext_authz (e.g. ./connectors/authz/examples/wfx/http-schema.json)")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -660,7 +660,7 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 		Logs: cconfig.Logging{Level: cconfig.Debug},
 		Server: cconfig.HttpServer{
 			LogLevel:      cconfig.Debug,
-			Port:          8888,
+			Port:          0,
 			ListenAddress: "0.0.0.0",
 			Protocol:      cconfig.HTTP,
 		},
@@ -673,7 +673,7 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 			"authz": authzDB,
 			"pki":   pkiDB,
 		},
-		HTTPSchemas:       func() []string {
+		HTTPSchemas: func() []string {
 			var out []string
 			for _, p := range strings.Split(httpSchemas, ",") {
 				if p = strings.TrimSpace(p); p != "" {

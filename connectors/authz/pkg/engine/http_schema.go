@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -27,24 +28,37 @@ type HTTPRouteConfig struct {
 	compiledRegex *regexp.Regexp
 }
 
+// HTTPRouteGroupConfig groups related routes for presentation and introspection.
+type HTTPRouteGroupConfig struct {
+	Name        string            `json:"name"`                  // human-readable label
+	Description string            `json:"description,omitempty"` // optional group description
+	Routes      []HTTPRouteConfig `json:"routes"`                // routes covered by this group
+	AllActions  []string          `json:"all_actions,omitempty"` // route actions derived at load time
+}
+
 // HTTPSchemaDefinition describes an external REST API's routes and their action mappings.
 // It is the HTTP-world analogue of SchemaDefinition: loaded from a JSON file, registered by name.
 type HTTPSchemaDefinition struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	Routes      []HTTPRouteConfig `json:"routes"`
-	// AllActions is derived at load time from the unique Action values across all Routes.
-	AllActions []string `json:"all_actions,omitempty"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	Routes      []HTTPRouteConfig      `json:"routes,omitempty"`
+	Groups      []HTTPRouteGroupConfig `json:"groups,omitempty"`
+	// AllActions is derived at load time from the unique Action values across all Routes and Groups.
+	AllActions     []string           `json:"all_actions,omitempty"`
+	compiledRoutes []*HTTPRouteConfig `json:"-"`
 }
 
 // MatchRoute returns the first HTTPRouteConfig whose method and path match the given inputs.
 // Matching precedence: exact > prefix > regex; within each type, first-defined wins.
 // Returns nil when no route matches.
 func (s *HTTPSchemaDefinition) MatchRoute(method, path string) *HTTPRouteConfig {
+	return s.matchRouteEntry(method, path)
+}
+
+func (s *HTTPSchemaDefinition) matchRouteEntry(method, path string) *HTTPRouteConfig {
 	method = strings.ToUpper(method)
 	for _, priority := range []HTTPMatchType{HTTPMatchExact, HTTPMatchPrefix, HTTPMatchRegex} {
-		for i := range s.Routes {
-			r := &s.Routes[i]
+		for _, r := range s.compiledRoutes {
 			if r.MatchType != priority {
 				continue
 			}
@@ -139,35 +153,74 @@ func (r *HTTPSchemaRegistry) validateAndCompile(def *HTTPSchemaDefinition) error
 	if def.Name == "" {
 		return fmt.Errorf("name is required")
 	}
-	if len(def.Routes) == 0 {
-		return fmt.Errorf("at least one route is required")
+	if len(def.Routes) == 0 && len(def.Groups) == 0 {
+		return fmt.Errorf("at least one route or group is required")
 	}
+
+	def.compiledRoutes = nil
 	actionSet := make(map[string]struct{})
 	for i := range def.Routes {
 		route := &def.Routes[i]
 		if route.Action == "" {
 			return fmt.Errorf("route at index %d: action is required", i)
 		}
-		if route.Path == "" {
-			return fmt.Errorf("route at index %d: path is required", i)
-		}
-		switch route.MatchType {
-		case HTTPMatchExact, HTTPMatchPrefix:
-			// no extra validation needed
-		case HTTPMatchRegex:
-			re, err := regexp.Compile(route.Path)
-			if err != nil {
-				return fmt.Errorf("route at index %d: invalid regex %q: %w", i, route.Path, err)
-			}
-			route.compiledRegex = re
-		default:
-			return fmt.Errorf("route at index %d: unknown match_type %q (must be exact, prefix, or regex)", i, route.MatchType)
+		if err := validateAndCompileHTTPRoute(route, fmt.Sprintf("route at index %d", i)); err != nil {
+			return err
 		}
 		actionSet[route.Action] = struct{}{}
+		def.compiledRoutes = append(def.compiledRoutes, route)
 	}
-	def.AllActions = make([]string, 0, len(actionSet))
-	for a := range actionSet {
-		def.AllActions = append(def.AllActions, a)
+	for i := range def.Groups {
+		group := &def.Groups[i]
+		if group.Name == "" {
+			return fmt.Errorf("group at index %d: name is required", i)
+		}
+		if len(group.Routes) == 0 {
+			return fmt.Errorf("group %q: at least one route is required", group.Name)
+		}
+		groupActionSet := make(map[string]struct{})
+		for j := range group.Routes {
+			route := &group.Routes[j]
+			if route.Action == "" {
+				return fmt.Errorf("group %q route at index %d: action is required", group.Name, j)
+			}
+			if err := validateAndCompileHTTPRoute(route, fmt.Sprintf("group %q route at index %d", group.Name, j)); err != nil {
+				return err
+			}
+			actionSet[route.Action] = struct{}{}
+			groupActionSet[route.Action] = struct{}{}
+			def.compiledRoutes = append(def.compiledRoutes, route)
+		}
+		group.AllActions = sortedKeys(groupActionSet)
+	}
+	def.AllActions = sortedKeys(actionSet)
+	return nil
+}
+
+func validateAndCompileHTTPRoute(route *HTTPRouteConfig, label string) error {
+	if route.Path == "" {
+		return fmt.Errorf("%s: path is required", label)
+	}
+	switch route.MatchType {
+	case HTTPMatchExact, HTTPMatchPrefix:
+		// no extra validation needed
+	case HTTPMatchRegex:
+		re, err := regexp.Compile(route.Path)
+		if err != nil {
+			return fmt.Errorf("%s: invalid regex %q: %w", label, route.Path, err)
+		}
+		route.compiledRegex = re
+	default:
+		return fmt.Errorf("%s: unknown match_type %q (must be exact, prefix, or regex)", label, route.MatchType)
 	}
 	return nil
+}
+
+func sortedKeys(set map[string]struct{}) []string {
+	keys := make([]string, 0, len(set))
+	for key := range set {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
