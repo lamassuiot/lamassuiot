@@ -1,21 +1,17 @@
 {
-  "id": "lamassu.6ff9becb-5628-4c45-a7d7-687945445d35",
-  "name": "Job Manager - Device SBI Client",
-  "description": "Device SBI Job Manager HTTP access for discovering and executing assigned jobs.",
+  "id": "lamassu.d20ad425-6d0c-4fb7-8a96-7ad729774628",
+  "name": "Job Manager - Device SBI Job Observer",
+  "description": "Read-only device SBI Job Manager HTTP access for jobs.",
   "http_rules": [
     {
       "http_schema_name": "Job Manager",
       "actions": [
         "sbi-health-read",
         "sbi-version-read",
-        "sbi-workflow-list",
-        "sbi-workflow-read",
         "sbi-job-list",
         "sbi-job-events",
         "sbi-job-status-read",
-        "sbi-job-status-update",
         "sbi-job-definition-read",
-        "sbi-job-definition-update",
         "sbi-job-tags-read",
         "sbi-job-read"
       ]

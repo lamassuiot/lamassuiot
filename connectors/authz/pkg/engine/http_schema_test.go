@@ -74,21 +74,77 @@ func TestHTTPSchemaRegistry_LoadWFXExampleGroups(t *testing.T) {
 	schema, err := registry.Get("Job Manager")
 	require.NoError(t, err)
 
-	require.Len(t, schema.Groups, 3)
-	assert.Equal(t, "System", schema.Groups[0].Name)
+	require.Len(t, schema.Groups, 6)
+	assert.Equal(t, "Mgmt NBI System", schema.Groups[0].Name)
 	assert.Len(t, schema.Groups[0].Routes, 2)
-	assert.Equal(t, "Workflows", schema.Groups[1].Name)
+	assert.Equal(t, "Mgmt NBI Workflows", schema.Groups[1].Name)
 	assert.Len(t, schema.Groups[1].Routes, 4)
-	assert.Equal(t, "Jobs", schema.Groups[2].Name)
+	assert.Equal(t, "Mgmt NBI Jobs", schema.Groups[2].Name)
 	assert.Len(t, schema.Groups[2].Routes, 12)
+	assert.Equal(t, "Device SBI System", schema.Groups[3].Name)
+	assert.Len(t, schema.Groups[3].Routes, 2)
+	assert.Equal(t, "Device SBI Workflows", schema.Groups[4].Name)
+	assert.Len(t, schema.Groups[4].Routes, 2)
+	assert.Equal(t, "Device SBI Jobs", schema.Groups[5].Name)
+	assert.Len(t, schema.Groups[5].Routes, 8)
 	assert.NotContains(t, schema.AllActions, "system")
 	assert.NotContains(t, schema.AllActions, "workflow")
 	assert.NotContains(t, schema.AllActions, "job")
-	assert.Contains(t, schema.AllActions, "job-delete")
+	assert.Contains(t, schema.AllActions, "nbi-job-delete")
+	assert.Contains(t, schema.AllActions, "sbi-job-status-update")
 
 	route := schema.MatchRoute("DELETE", "/api/wfx/nbi/v1/jobs/job-1")
 	require.NotNil(t, route)
-	assert.Equal(t, "job-delete", route.Action)
+	assert.Equal(t, "nbi-job-delete", route.Action)
+
+	route = schema.MatchRoute("PUT", "/api/wfx/sbi/v1/jobs/job-1/status")
+	require.NotNil(t, route)
+	assert.Equal(t, "sbi-job-status-update", route.Action)
+	assert.Nil(t, schema.MatchRoute("POST", "/api/wfx/sbi/v1/jobs"))
+}
+
+func TestEngineCheckHTTP_WFXNBISBIActionsAreDistinct(t *testing.T) {
+	eng, err := NewEngine(nil, nil, WithHTTPSchemas([]string{"../../examples/wfx/wfx.json"}))
+	require.NoError(t, err)
+
+	sbiPolicies := NewPolicyRegistry()
+	require.NoError(t, sbiPolicies.AddPolicy(&models.Policy{
+		ID:   "sbi-job-status-update",
+		Name: "SBI Job Status Update",
+		HTTPRules: []*models.HTTPRule{
+			{
+				SchemaName: "Job Manager",
+				Actions:    []string{"sbi-job-status-update"},
+			},
+		},
+	}))
+
+	allowed, policyID, err := eng.CheckHTTP(context.Background(), sbiPolicies, "PUT", "/api/wfx/sbi/v1/jobs/job-1/status")
+	require.NoError(t, err)
+	assert.True(t, allowed)
+	assert.Equal(t, "sbi-job-status-update", policyID)
+
+	allowed, policyID, err = eng.CheckHTTP(context.Background(), sbiPolicies, "PUT", "/api/wfx/nbi/v1/jobs/job-1/status")
+	require.NoError(t, err)
+	assert.False(t, allowed)
+	assert.Empty(t, policyID)
+
+	nbiPolicies := NewPolicyRegistry()
+	require.NoError(t, nbiPolicies.AddPolicy(&models.Policy{
+		ID:   "nbi-job-status-update",
+		Name: "NBI Job Status Update",
+		HTTPRules: []*models.HTTPRule{
+			{
+				SchemaName: "Job Manager",
+				Actions:    []string{"nbi-job-status-update"},
+			},
+		},
+	}))
+
+	allowed, policyID, err = eng.CheckHTTP(context.Background(), nbiPolicies, "PUT", "/api/wfx/nbi/v1/jobs/job-1/status")
+	require.NoError(t, err)
+	assert.True(t, allowed)
+	assert.Equal(t, "nbi-job-status-update", policyID)
 }
 
 func TestEngineCheckHTTP_RequiresIndividualRouteActionInGroupedSchema(t *testing.T) {
