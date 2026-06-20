@@ -36,11 +36,10 @@ func RunNetHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func(
 		return nil, nil, pconfig.PKCS11Config{}, err
 	}
 
-	p, _ := strconv.Atoi(container.GetPort("8443/tcp"))
-
+	p, err := strconv.Atoi(container.GetPort("8443/tcp"))
 	if err != nil {
 		containerCleanup()
-		return nil, nil, pconfig.PKCS11Config{}, err
+		return nil, nil, pconfig.PKCS11Config{}, fmt.Errorf("could not parse container port: %w", err)
 	}
 
 	container.Exec([]string{"sh", "-c", "apk add --no-cache opensc"}, dockertest.ExecOptions{})

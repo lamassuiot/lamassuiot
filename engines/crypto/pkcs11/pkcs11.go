@@ -191,10 +191,22 @@ func (hsmContext *pkcs11EngineContext) GetPrivateKeys() []crypto.Signer {
 func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(ctx context.Context, keyID string) (crypto.Signer, error) {
 	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
 	lFunc.Debugf("reading %s Key", keyID)
+
+	// Try by CKA_LABEL first (primary path). If the token's CKA_LABEL is read-only,
+	// UpdateKeyName silently skips that attribute; fall back to CKA_ID in that case.
 	hsmKey, err := hsmContext.api.FindKeyPair(nil, []byte(keyID))
 	if err != nil {
-		lFunc.Errorf("could not get private key %s. Got error: %s", keyID, err)
+		lFunc.Errorf("could not get private key %s by label. Got error: %s", keyID, err)
 		return nil, fmt.Errorf("could not get private key. Got error: %s", err)
+	}
+
+	if hsmKey == nil {
+		lFunc.Debugf("key %s not found by label, retrying by CKA_ID", keyID)
+		hsmKey, err = hsmContext.api.FindKeyPair([]byte(keyID), nil)
+		if err != nil {
+			lFunc.Errorf("could not get private key %s by ID. Got error: %s", keyID, err)
+			return nil, fmt.Errorf("could not get private key. Got error: %s", err)
+		}
 	}
 
 	if hsmKey == nil {
