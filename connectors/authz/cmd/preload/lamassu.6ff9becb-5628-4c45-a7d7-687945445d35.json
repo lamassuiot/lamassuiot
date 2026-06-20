@@ -1,0 +1,26 @@
+{
+  "id": "lamassu.6ff9becb-5628-4c45-a7d7-687945445d35",
+  "name": "Job Manager - Device Client",
+  "description": "Southbound Job Manager HTTP access for discovering and executing assigned jobs.",
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": [
+        "health-read",
+        "version-read",
+        "workflow-list",
+        "workflow-read",
+        "job-list",
+        "job-events",
+        "job-status-read",
+        "job-status-update",
+        "job-definition-read",
+        "job-definition-update",
+        "job-tags-read",
+        "job-tags-add",
+        "job-tags-delete",
+        "job-read"
+      ]
+    }
+  ]
+}

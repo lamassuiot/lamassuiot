@@ -1,0 +1,16 @@
+{
+  "id": "lamassu.cecf72c8-5745-40df-bc42-2a5e681cfa58",
+  "name": "Job Manager - Workflow Observer",
+  "description": "Read-only Job Manager HTTP access for workflows.",
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": [
+        "health-read",
+        "version-read",
+        "workflow-list",
+        "workflow-read"
+      ]
+    }
+  ]
+}

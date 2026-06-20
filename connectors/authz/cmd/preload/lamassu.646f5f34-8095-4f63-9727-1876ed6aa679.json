@@ -1,0 +1,22 @@
+{
+  "id": "lamassu.646f5f34-8095-4f63-9727-1876ed6aa679",
+  "name": "Job Manager - Observer",
+  "description": "Read-only Job Manager HTTP access for monitoring dashboards, audit tools, and read-only integrations.",
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": [
+        "health-read",
+        "version-read",
+        "workflow-list",
+        "workflow-read",
+        "job-list",
+        "job-events",
+        "job-status-read",
+        "job-definition-read",
+        "job-tags-read",
+        "job-read"
+      ]
+    }
+  ]
+}
