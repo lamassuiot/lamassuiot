@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,7 +63,42 @@ func TestExtAuthzCheck_DeniesWhenNoFineGrainedHTTPActionGrantsRoute(t *testing.T
 	assert.Empty(t, rec.Body.String())
 }
 
+func TestExtAuthzCheck_LogsDecisionDetails(t *testing.T) {
+	var buf bytes.Buffer
+	logger := logrus.New()
+	logger.SetOutput(&buf)
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	router := testExtAuthzRouterWithLogger(t, logrus.NewEntry(logger))
+
+	req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+	req.Header.Set("authorization", "Bearer good")
+	req.Header.Set("x-envoy-original-path", "/api/v1/resource")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &fields))
+	assert.Equal(t, "GET", fields["ext_authz_method"])
+	assert.Equal(t, "/ext_authz/check", fields["ext_authz_incoming_url"])
+	assert.Equal(t, "/api/v1/resource", fields["ext_authz_path"])
+	assert.Equal(t, "allow", fields["decision"])
+	assert.Equal(t, true, fields["allowed"])
+	assert.Equal(t, "principal-1", fields["matched_principal"])
+	assert.Equal(t, "policy-1", fields["matched_policy_id"])
+	assert.Equal(t, float64(http.StatusOK), fields["status_code"])
+	assert.Contains(t, fields, "decision_duration_ms")
+	assert.Contains(t, fields["evaluated_policy_ids"], "policy-1")
+}
+
 func testExtAuthzRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+
+	return testExtAuthzRouterWithLogger(t, logrus.NewEntry(logrus.New()))
+}
+
+func testExtAuthzRouterWithLogger(t *testing.T, logger *logrus.Entry) *gin.Engine {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -79,7 +116,7 @@ func testExtAuthzRouter(t *testing.T) *gin.Engine {
 		},
 	}
 	resolver := service.NewIdentityResolver(testPrincipalMatcher{}, testGrantStore{}, testPolicyLoader{policy: policy})
-	ctrl := NewExtAuthzController(eng, resolver, logrus.NewEntry(logrus.New()))
+	ctrl := NewExtAuthzController(eng, resolver, logger)
 
 	router := gin.New()
 	router.Any("/ext_authz/check", ctrl.Check)
