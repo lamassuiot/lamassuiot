@@ -35,6 +35,20 @@ func TestExtAuthzCheck_AllowsEnvoyHTTPServiceRequest(t *testing.T) {
 	assert.Empty(t, rec.Body.String())
 }
 
+func TestExtAuthzCheck_AllowsOriginalURLAfterCheckRoute(t *testing.T) {
+	router := testExtAuthzRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/ext_authz/check/api/v1/resource?pagination=true&limit=10&offset=0&sort=asc", nil)
+	req.Header.Set("authorization", "Bearer good")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "principal-1", rec.Header().Get("x-current-user"))
+	assert.Empty(t, rec.Body.String())
+}
+
 func TestExtAuthzCheck_DeniesMissingCredentialLikeEnvoyExample(t *testing.T) {
 	router := testExtAuthzRouter(t)
 
@@ -82,6 +96,7 @@ func TestExtAuthzCheck_LogsDecisionDetails(t *testing.T) {
 	require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &fields))
 	assert.Equal(t, "GET", fields["ext_authz_method"])
 	assert.Equal(t, "/ext_authz/check", fields["ext_authz_incoming_url"])
+	assert.Equal(t, "/api/v1/resource", fields["ext_authz_original_url"])
 	assert.Equal(t, "/api/v1/resource", fields["ext_authz_path"])
 	assert.Equal(t, "allow", fields["decision"])
 	assert.Equal(t, true, fields["allowed"])
@@ -90,6 +105,27 @@ func TestExtAuthzCheck_LogsDecisionDetails(t *testing.T) {
 	assert.Equal(t, float64(http.StatusOK), fields["status_code"])
 	assert.Contains(t, fields, "decision_duration_ms")
 	assert.Contains(t, fields["evaluated_policy_ids"], "policy-1")
+}
+
+func TestExtAuthzCheck_LogsOriginalURLAfterCheckRoute(t *testing.T) {
+	var buf bytes.Buffer
+	logger := logrus.New()
+	logger.SetOutput(&buf)
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	router := testExtAuthzRouterWithLogger(t, logrus.NewEntry(logger))
+
+	req := httptest.NewRequest(http.MethodGet, "/ext_authz/check/api/v1/resource?pagination=true&limit=10&offset=0&sort=asc", nil)
+	req.Header.Set("authorization", "Bearer good")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &fields))
+	assert.Equal(t, "/ext_authz/check/api/v1/resource?pagination=true&limit=10&offset=0&sort=asc", fields["ext_authz_incoming_url"])
+	assert.Equal(t, "/api/v1/resource?pagination=true&limit=10&offset=0&sort=asc", fields["ext_authz_original_url"])
+	assert.Equal(t, "/api/v1/resource", fields["ext_authz_path"])
 }
 
 func testExtAuthzRouter(t *testing.T) *gin.Engine {
@@ -120,6 +156,7 @@ func testExtAuthzRouterWithLogger(t *testing.T, logger *logrus.Entry) *gin.Engin
 
 	router := gin.New()
 	router.Any("/ext_authz/check", ctrl.Check)
+	router.Any("/ext_authz/check/*original_url", ctrl.Check)
 	return router
 }
 

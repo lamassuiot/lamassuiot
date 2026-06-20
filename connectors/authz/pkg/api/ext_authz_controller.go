@@ -34,12 +34,13 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	start := time.Now()
 	method := strings.ToUpper(c.Request.Method)
 	incomingURL := c.Request.URL.RequestURI()
-	path := extAuthzOriginalPath(c.Request)
+	originalURL, path := extAuthzOriginalURL(c)
 	headers := extAuthzHeaders(c.Request.Header)
 
 	log := ctrl.logger.WithFields(logrus.Fields{
 		"ext_authz_method":       method,
 		"ext_authz_incoming_url": incomingURL,
+		"ext_authz_original_url": originalURL,
 		"ext_authz_path":         path,
 	})
 
@@ -159,13 +160,44 @@ func extAuthzHeaders(headers http.Header) map[string]string {
 	return out
 }
 
-func extAuthzOriginalPath(req *http.Request) string {
+func extAuthzOriginalURL(c *gin.Context) (originalURL string, path string) {
+	req := c.Request
 	for _, header := range []string{"x-envoy-original-path", "x-forwarded-uri", "x-original-uri"} {
 		if value := req.Header.Get(header); value != "" {
-			return value
+			return splitExtAuthzOriginalURL(value)
 		}
 	}
-	return req.URL.RequestURI()
+
+	if value := c.Param("original_url"); value != "" {
+		if !strings.HasPrefix(value, "/") {
+			value = "/" + value
+		}
+		if req.URL.RawQuery != "" && !strings.Contains(value, "?") {
+			value += "?" + req.URL.RawQuery
+		}
+		return splitExtAuthzOriginalURL(value)
+	}
+
+	return splitExtAuthzOriginalURL(req.URL.RequestURI())
+}
+
+func splitExtAuthzOriginalURL(value string) (originalURL string, path string) {
+	if value == "" {
+		return "", ""
+	}
+	if !strings.HasPrefix(value, "/") && !strings.Contains(value, "://") {
+		value = "/" + value
+	}
+
+	parsed, err := url.Parse(value)
+	if err == nil && parsed.Path != "" {
+		return parsed.RequestURI(), parsed.Path
+	}
+
+	if idx := strings.Index(value, "?"); idx >= 0 {
+		return value, value[:idx]
+	}
+	return value, value
 }
 
 // extractAuthFromEnvoyHeaders derives (authType, authMaterial, error) from Envoy-forwarded

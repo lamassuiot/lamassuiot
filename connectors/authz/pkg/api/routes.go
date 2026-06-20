@@ -88,6 +88,7 @@ func NewAuthzRoutes(
 		extAuthzGrp := v1.Group("/ext_authz")
 		{
 			extAuthzGrp.Any("/check", extAuthzCtrl.Check)
+			extAuthzGrp.Any("/check/*original_url", extAuthzCtrl.Check)
 		}
 	}
 }
