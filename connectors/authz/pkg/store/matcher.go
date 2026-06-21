@@ -119,6 +119,100 @@ func (ms *MatchService) MatchPrincipals(ctx context.Context, authMaterial interf
 	return matcher.Match(principals, authMaterial)
 }
 
+// MatchSubjects loads active principals of authType and returns normalized
+// subjects for the matched principals. The returned attributes are neutral
+// domain values derived from principal auth_config and, optionally, auth-type
+// adapters; authorization code never consumes auth-specific fields directly.
+func (ms *MatchService) MatchSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error) {
+	matcher, ok := ms.matchers[authType]
+	if !ok {
+		return nil, fmt.Errorf("unsupported auth type: %s", authType)
+	}
+	principals, err := ms.store.ListByType(ctx, authType)
+	if err != nil {
+		return nil, fmt.Errorf("load principals for matching: %w", err)
+	}
+
+	matchedIDs, err := matcher.Match(principals, authMaterial)
+	if err != nil {
+		return nil, err
+	}
+
+	principalsByID := make(map[string]models.Principal, len(principals))
+	for _, principal := range principals {
+		principalsByID[principal.ID] = principal
+	}
+
+	subjects := make([]engine.ResolvedSubject, 0, len(matchedIDs))
+	for _, principalID := range matchedIDs {
+		principal, ok := principalsByID[principalID]
+		if !ok {
+			continue
+		}
+		attributes := staticSubjectAttributes(principal.AuthConfig)
+		if resolver, ok := matcher.(subjectAttributeResolver); ok {
+			derived, err := resolver.ResolveSubjectAttributes(principal, authMaterial)
+			if err != nil {
+				return nil, fmt.Errorf("resolve subject attributes for principal %s: %w", principal.ID, err)
+			}
+			for key, value := range derived {
+				attributes[key] = value
+			}
+		}
+		subjects = append(subjects, engine.ResolvedSubject{
+			PrincipalID: principal.ID,
+			Attributes:  attributes,
+		})
+	}
+	return subjects, nil
+}
+
+type subjectAttributeResolver interface {
+	ResolveSubjectAttributes(principal models.Principal, authMaterial interface{}) (map[string]string, error)
+}
+
+func staticSubjectAttributes(authConfig models.AuthConfig) map[string]string {
+	attributes := make(map[string]string)
+	raw, ok := authConfig["subject_attributes"]
+	if !ok {
+		return attributes
+	}
+
+	switch values := raw.(type) {
+	case map[string]string:
+		for key, value := range values {
+			attributes[key] = value
+		}
+	case map[string]interface{}:
+		for key, value := range values {
+			attributes[key] = fmt.Sprintf("%v", value)
+		}
+	}
+	return attributes
+}
+
+func subjectAttributeMappings(authConfig models.AuthConfig) map[string]string {
+	raw, ok := authConfig["subject_attribute_mappings"]
+	if !ok {
+		return nil
+	}
+
+	mappings := make(map[string]string)
+	switch values := raw.(type) {
+	case map[string]string:
+		for key, value := range values {
+			mappings[key] = value
+		}
+	case map[string]interface{}:
+		for key, value := range values {
+			if str, ok := value.(string); ok {
+				mappings[key] = str
+			}
+		}
+	}
+	return mappings
+}
+
 // --- OIDC helpers ---
 
 func (m OIDCMatcher) extractOIDCClaims(authMaterial interface{}) (jwt.MapClaims, error) {
@@ -143,6 +237,34 @@ func (m OIDCMatcher) extractOIDCClaims(authMaterial interface{}) (jwt.MapClaims,
 	default:
 		return nil, fmt.Errorf("invalid OIDC auth material format")
 	}
+}
+
+// ResolveSubjectAttributes maps auth-specific OIDC claim values to neutral
+// subject attributes requested by the principal's auth_config.
+func (m OIDCMatcher) ResolveSubjectAttributes(principal models.Principal, authMaterial interface{}) (map[string]string, error) {
+	mappings := subjectAttributeMappings(principal.AuthConfig)
+	attributes := make(map[string]string, len(mappings))
+	if len(mappings) == 0 {
+		return attributes, nil
+	}
+
+	claims, err := m.extractOIDCClaims(authMaterial)
+	if err != nil {
+		return nil, err
+	}
+
+	for attributeName, source := range mappings {
+		const prefix = "oidc.claim."
+		if !strings.HasPrefix(source, prefix) {
+			continue
+		}
+		value, ok := getNestedClaim(claims, strings.TrimPrefix(source, prefix))
+		if !ok {
+			continue
+		}
+		attributes[attributeName] = fmt.Sprintf("%v", value)
+	}
+	return attributes, nil
 }
 
 func matchOIDCClaims(p *models.Principal, claims jwt.MapClaims) (bool, error) {
@@ -237,6 +359,31 @@ func extractX509Cert(authMaterial interface{}) (*x509.Certificate, error) {
 	default:
 		return nil, fmt.Errorf("invalid x509 auth material format")
 	}
+}
+
+// ResolveSubjectAttributes maps auth-specific certificate values to neutral
+// subject attributes requested by the principal's auth_config.
+func (X509Matcher) ResolveSubjectAttributes(principal models.Principal, authMaterial interface{}) (map[string]string, error) {
+	mappings := subjectAttributeMappings(principal.AuthConfig)
+	attributes := make(map[string]string, len(mappings))
+	if len(mappings) == 0 {
+		return attributes, nil
+	}
+
+	cert, err := extractX509Cert(authMaterial)
+	if err != nil {
+		return nil, err
+	}
+
+	for attributeName, source := range mappings {
+		switch source {
+		case "x509.subject.cn", "x509.subject.common_name":
+			attributes[attributeName] = cert.Subject.CommonName
+		case "x509.serial_number":
+			attributes[attributeName] = strings.ToUpper(cert.SerialNumber.Text(16))
+		}
+	}
+	return attributes, nil
 }
 
 func matchX509Cert(p *models.Principal, cert *x509.Certificate) (bool, error) {

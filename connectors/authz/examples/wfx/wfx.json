@@ -190,56 +190,104 @@
             "methods": ["GET"],
             "path": "/api/wfx/sbi/v1/jobs",
             "match_type": "exact",
-            "action": "sbi-job-list"
+            "action": "sbi-job-list",
+            "constraints": [
+              {
+                "request": { "source": "query", "name": "clientId" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           },
           {
             "name": "job-events",
             "methods": ["GET"],
             "path": "/api/wfx/sbi/v1/jobs/events",
             "match_type": "exact",
-            "action": "sbi-job-events"
+            "action": "sbi-job-events",
+            "constraints": [
+              {
+                "request": { "source": "query", "name": "clientIds" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           },
           {
             "name": "job-status-read",
             "methods": ["GET"],
             "path": "^/api/wfx/sbi/v1/jobs/[^/]+/status$",
             "match_type": "regex",
-            "action": "sbi-job-status-read"
+            "action": "sbi-job-status-read",
+            "constraints": [
+              {
+                "request": { "source": "header", "name": "x-wfx-client-id" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           },
           {
             "name": "job-status-update",
             "methods": ["PUT"],
             "path": "^/api/wfx/sbi/v1/jobs/[^/]+/status$",
             "match_type": "regex",
-            "action": "sbi-job-status-update"
+            "action": "sbi-job-status-update",
+            "constraints": [
+              {
+                "request": { "source": "json_body", "path": "$.clientId" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           },
           {
             "name": "job-definition-read",
             "methods": ["GET"],
             "path": "^/api/wfx/sbi/v1/jobs/[^/]+/definition$",
             "match_type": "regex",
-            "action": "sbi-job-definition-read"
+            "action": "sbi-job-definition-read",
+            "constraints": [
+              {
+                "request": { "source": "header", "name": "x-wfx-client-id" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           },
           {
             "name": "job-definition-update",
             "methods": ["PUT"],
             "path": "^/api/wfx/sbi/v1/jobs/[^/]+/definition$",
             "match_type": "regex",
-            "action": "sbi-job-definition-update"
+            "action": "sbi-job-definition-update",
+            "constraints": [
+              {
+                "request": { "source": "header", "name": "x-wfx-client-id" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           },
           {
             "name": "job-tags-read",
             "methods": ["GET"],
             "path": "^/api/wfx/sbi/v1/jobs/[^/]+/tags$",
             "match_type": "regex",
-            "action": "sbi-job-tags-read"
+            "action": "sbi-job-tags-read",
+            "constraints": [
+              {
+                "request": { "source": "header", "name": "x-wfx-client-id" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           },
           {
             "name": "job-read",
             "methods": ["GET"],
             "path": "^/api/wfx/sbi/v1/jobs/[^/]+$",
             "match_type": "regex",
-            "action": "sbi-job-read"
+            "action": "sbi-job-read",
+            "constraints": [
+              {
+                "request": { "source": "header", "name": "x-wfx-client-id" },
+                "equals_subject_attribute": "client_id"
+              }
+            ]
           }
         ]
       }

@@ -221,3 +221,88 @@ func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
 
 	t.Log("Successfully matched JWT to multiple principals – OR logic precondition verified")
 }
+
+func TestPrincipalManager_MatchSubjects_StaticAndOIDCDerivedAttributes(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
+	principalManager, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	principal := &models.Principal{
+		ID:   "principal-oidc-device",
+		Name: "OIDC Device",
+		Type: "oidc",
+		AuthConfig: models.AuthConfig{
+			"claims": []interface{}{
+				map[string]interface{}{
+					"claim":    "sub",
+					"operator": "equals",
+					"value":    "device-token",
+				},
+			},
+			"subject_attributes": map[string]interface{}{
+				"tenant_id": "tenant-a",
+			},
+			"subject_attribute_mappings": map[string]interface{}{
+				"device_id": "oidc.claim.device_id",
+			},
+		},
+		Active: true,
+	}
+	require.NoError(t, principalManager.CreatePrincipal(ctx, principal))
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":       "device-token",
+		"device_id": "device-123",
+		"exp":       time.Now().Add(time.Hour).Unix(),
+	})
+	tokenString, err := token.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+
+	subjects, err := principalManager.MatchSubjects(ctx, tokenString, "oidc")
+	require.NoError(t, err)
+	require.Len(t, subjects, 1)
+	assert.Equal(t, "principal-oidc-device", subjects[0].PrincipalID)
+	assert.Equal(t, "tenant-a", subjects[0].Attributes["tenant_id"])
+	assert.Equal(t, "device-123", subjects[0].Attributes["device_id"])
+}
+
+func TestPrincipalManager_MatchSubjects_StaticAndX509DerivedAttributes(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
+	principalManager, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	caCert, leafCert, _ := createTestCAAndLeafCerts(t)
+	principal := &models.Principal{
+		ID:   "principal-x509-device",
+		Name: "X509 Device",
+		Type: "x509",
+		AuthConfig: models.AuthConfig{
+			"match_mode": "cn_and_ca",
+			"subject_cn": "sensor-*.example.com",
+			"ca_trust": map[string]interface{}{
+				"pem":           base64PEMFromCert(caCert),
+				"identity_type": "authority_key_id",
+				"value":         formatAKIValue(leafCert.AuthorityKeyId),
+			},
+			"subject_attributes": map[string]interface{}{
+				"tenant_id": "tenant-a",
+			},
+			"subject_attribute_mappings": map[string]interface{}{
+				"device_id": "x509.subject.cn",
+			},
+		},
+		Active: true,
+	}
+	require.NoError(t, principalManager.CreatePrincipal(ctx, principal))
+
+	subjects, err := principalManager.MatchSubjects(ctx, leafCert, "x509")
+	require.NoError(t, err)
+	require.Len(t, subjects, 1)
+	assert.Equal(t, "principal-x509-device", subjects[0].PrincipalID)
+	assert.Equal(t, "tenant-a", subjects[0].Attributes["tenant_id"])
+	assert.Equal(t, "sensor-001.example.com", subjects[0].Attributes["device_id"])
+}

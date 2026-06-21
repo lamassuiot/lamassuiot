@@ -35,6 +35,10 @@ type principalMatcher interface {
 	MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error)
 }
 
+type subjectMatcher interface {
+	MatchSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error)
+}
+
 // policyLoader is the local interface for PolicyManager used by IdentityResolver.
 type policyLoader interface {
 	GetPolicy(ctx context.Context, policyID string) (*models.Policy, error)
@@ -74,6 +78,64 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 		}
 	}
 	return registry, principalIDs, nil
+}
+
+// ResolveSubjects matches auth material to active subjects and loads policies
+// separately for each subject. This is used by HTTP authorization so policy
+// grants cannot be merged across subjects before route constraints are checked.
+func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.SubjectPolicySet, []string, error) {
+	var subjects []engine.ResolvedSubject
+	if matcher, ok := r.match.(subjectMatcher); ok {
+		matchedSubjects, err := matcher.MatchSubjects(ctx, authMaterial, authType)
+		if err != nil {
+			return nil, nil, fmt.Errorf("match subjects: %w", err)
+		}
+		subjects = matchedSubjects
+	} else {
+		principalIDs, err := r.match.MatchPrincipals(ctx, authMaterial, authType)
+		if err != nil {
+			return nil, nil, fmt.Errorf("match principals: %w", err)
+		}
+		subjects = make([]engine.ResolvedSubject, 0, len(principalIDs))
+		for _, principalID := range principalIDs {
+			subjects = append(subjects, engine.ResolvedSubject{
+				PrincipalID: principalID,
+				Attributes:  map[string]string{},
+			})
+		}
+	}
+
+	if len(subjects) == 0 {
+		return nil, nil, ErrNoMatch
+	}
+
+	subjectPolicies := make([]engine.SubjectPolicySet, 0, len(subjects))
+	principalIDs := make([]string, 0, len(subjects))
+	for _, subject := range subjects {
+		if subject.Attributes == nil {
+			subject.Attributes = map[string]string{}
+		}
+		registry := engine.NewPolicyRegistry()
+		grants, _, err := r.grants.ListForPrincipal(ctx, subject.PrincipalID, nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("get policies for principal %s: %w", subject.PrincipalID, err)
+		}
+		for _, g := range grants {
+			policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("load policy %s: %w", g.PolicyID, err)
+			}
+			if err := registry.AddPolicy(policy); err != nil {
+				return nil, nil, fmt.Errorf("register policy %s: %w", g.PolicyID, err)
+			}
+		}
+		subjectPolicies = append(subjectPolicies, engine.SubjectPolicySet{
+			Subject:  subject,
+			Policies: registry,
+		})
+		principalIDs = append(principalIDs, subject.PrincipalID)
+	}
+	return subjectPolicies, principalIDs, nil
 }
 
 // GetPoliciesForPrincipal loads policies for a single known principal ID and returns

@@ -13,10 +13,10 @@ import (
 
 // Engine is the core authorization engine
 type Engine struct {
-	dbs        map[string]*gorm.DB // Map of config schema name -> database connection
-	schemas    *SchemaRegistry
+	dbs         map[string]*gorm.DB // Map of config schema name -> database connection
+	schemas     *SchemaRegistry
 	httpSchemas *HTTPSchemaRegistry
-	logger     *logrus.Entry
+	logger      *logrus.Entry
 }
 
 // EngineOption is a functional option for Engine.
@@ -259,22 +259,55 @@ func WithHTTPSchemas(paths []string) EngineOption {
 // Missing schema references are skipped without error to tolerate rolling deployments
 // where a schema file may not yet be present on all instances.
 func (e *Engine) CheckHTTP(ctx context.Context, policies *PolicyRegistry, method, path string) (allowed bool, matchedPolicyID string, err error) {
-	for _, policy := range policies.GetAll() {
-		for _, httpRule := range policy.HTTPRules {
-			schema, schemaErr := e.httpSchemas.Get(httpRule.SchemaName)
-			if schemaErr != nil {
-				continue // schema not loaded on this instance — skip
-			}
-			route := schema.MatchRoute(method, path)
-			if route == nil {
-				continue
-			}
-			if httpRule.HasHTTPAction(route.Action) {
-				return true, policy.ID, nil
+	result, err := e.CheckHTTPRequest(ctx, HTTPCheckRequest{
+		Method: method,
+		Path:   path,
+		Subjects: []SubjectPolicySet{
+			{
+				Subject:  ResolvedSubject{Attributes: map[string]string{}},
+				Policies: policies,
+			},
+		},
+	})
+	if err != nil {
+		return false, "", err
+	}
+	return result.Allowed, result.MatchedPolicyID, nil
+}
+
+// CheckHTTPRequest evaluates HTTP route action grants plus optional route
+// constraints against each subject independently.
+func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (HTTPCheckResult, error) {
+	for _, subjectPolicies := range req.Subjects {
+		if subjectPolicies.Policies == nil {
+			continue
+		}
+		for _, policy := range subjectPolicies.Policies.GetAll() {
+			for _, httpRule := range policy.HTTPRules {
+				schema, schemaErr := e.httpSchemas.Get(httpRule.SchemaName)
+				if schemaErr != nil {
+					continue // schema not loaded on this instance — skip
+				}
+				route := schema.MatchRoute(req.Method, req.Path)
+				if route == nil {
+					continue
+				}
+				if !httpRule.HasHTTPAction(route.Action) {
+					continue
+				}
+				if !httpRouteConstraintsMatch(route, req, subjectPolicies.Subject) {
+					continue
+				}
+				return HTTPCheckResult{
+					Allowed:            true,
+					MatchedPolicyID:    policy.ID,
+					MatchedPrincipalID: subjectPolicies.Subject.PrincipalID,
+					MatchedAction:      route.Action,
+				}, nil
 			}
 		}
 	}
-	return false, "", nil
+	return HTTPCheckResult{}, nil
 }
 
 func (e *Engine) getDBForSchema(schema *SchemaDefinition) (*gorm.DB, error) {

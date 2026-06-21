@@ -224,6 +224,75 @@ q8TME1/6AOdMqWZoJYr6wVz79Jnt
   - `authority_key_id`: `ca_trust.value` is the CA Authority Key Identifier (AKI)
 - Certificate chain validation is always performed
 
+### Normalized Subject Attributes
+
+Authentication matchers can also produce normalized subject attributes. These attributes are neutral authorization facts such as `device_id` or `tenant_id`; they are not certificate fields, JWT claim names, or other authentication-specific details.
+
+HTTP authorization constraints consume only these normalized attributes. This keeps authorization schemas and policies independent from the authentication mechanism that produced the identity.
+
+There are two ways to populate subject attributes:
+
+1. `subject_attributes`: static neutral attributes stored on the principal.
+2. `subject_attribute_mappings`: auth-adapter mappings from credential fields into neutral attribute names.
+
+Example with static attributes:
+
+```json
+{
+  "type": "x509",
+  "auth_config": {
+    "match_mode": "cn_and_ca",
+    "subject_cn": "device-123",
+    "ca_trust": {
+      "pem": "<base64-encoded-PEM-string>",
+      "identity_type": "fingerprint",
+      "value": "SHA256:abc123..."
+    },
+    "subject_attributes": {
+      "device_id": "device-123",
+      "tenant_id": "tenant-a"
+    }
+  }
+}
+```
+
+Example with derived attributes:
+
+```json
+{
+  "type": "oidc",
+  "auth_config": {
+    "claims": [
+      { "claim": "sub", "operator": "equals", "value": "device-token" }
+    ],
+    "subject_attribute_mappings": {
+      "device_id": "oidc.claim.device_id"
+    }
+  }
+}
+```
+
+Supported mapping sources:
+
+| Mapping source | Meaning |
+|---|---|
+| `oidc.claim.<path>` | Reads a JWT claim path, e.g. `oidc.claim.device_id` or `oidc.claim.device.id` |
+| `x509.subject.cn` | X.509 subject Common Name |
+| `x509.subject.common_name` | Alias for X.509 subject Common Name |
+| `x509.serial_number` | X.509 certificate serial number |
+
+If both static and derived attributes define the same key, the derived value wins for that request. Authorization sees only the normalized result:
+
+```json
+{
+  "principal_id": "principal-uuid",
+  "attributes": {
+    "device_id": "device-123",
+    "tenant_id": "tenant-a"
+  }
+}
+```
+
 **Configuration Options**:
 ```json
 // Option 1: Match specific certificate by serial + CA
@@ -338,6 +407,8 @@ Authorization Granted = (Principal_1 has permission) OR (Principal_2 has permiss
     (gateway_id IN (SELECT id FROM iot_gateways WHERE admin_id = 'principal-b'))
   )
   ```
+
+> HTTP ext_authz route constraints use stricter multi-principal semantics than SQL/entity checks: one matched subject must both own the granting HTTP policy and satisfy all route constraints. This prevents combining Principal A's policy grant with Principal B's matching subject attribute.
 
 ### Database Schema for Principals
 
@@ -630,6 +701,119 @@ Returns **only the atomic actions** (those that require an entity ID, e.g. `read
 | Actions returned | `globalActions` only | `atomicActions` only |
 | Typical actions | `create`, `list` | `read`, `write`, `delete`, `control` |
 | Grouped by | Entity type | Single entity instance |
+
+### HTTP ext_authz Schemas and Constraints
+
+The HTTP authorization path protects REST endpoints through HTTP schema files and `http_rules` in policies. A route maps an HTTP method and path to a fine-grained action. Policies grant those action names through `http_rules`.
+
+Basic unconstrained route:
+
+```json
+{
+  "name": "job-read",
+  "methods": ["GET"],
+  "path": "^/api/wfx/sbi/v1/jobs/[^/]+$",
+  "match_type": "regex",
+  "action": "sbi-job-read"
+}
+```
+
+Policy grant:
+
+```json
+{
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": ["sbi-job-read"]
+    }
+  ]
+}
+```
+
+Routes may also include `constraints`. A constraint extracts a value from the incoming HTTP request and requires it to equal a normalized subject attribute on the same subject whose policy grants the action.
+
+```json
+{
+  "name": "device-job-read",
+  "methods": ["GET"],
+  "path": "^/api/wfx/sbi/v1/devices/([^/]+)/jobs$",
+  "match_type": "regex",
+  "action": "sbi-job-read",
+  "constraints": [
+    {
+      "request": { "source": "path_regex_group", "index": 1 },
+      "equals_subject_attribute": "device_id"
+    }
+  ]
+}
+```
+
+Supported request sources:
+
+| Source | Required fields | Description |
+|---|---|---|
+| `path_regex_group` | `index` | Capturing group from the route regex. Index starts at `1`. Requires `match_type: "regex"`. |
+| `query` | `name` | Query parameter value from the original request URL. |
+| `header` | `name` | Request header value. Header names are matched case-insensitively. |
+| `json_body` | `path` | JSON body path such as `$.device_id` or `$.device.id`. |
+
+Constraint behavior:
+
+- All constraints on a route are ANDed.
+- Missing request values deny.
+- Missing subject attributes deny.
+- Malformed JSON bodies deny routes that use `json_body`.
+- Bodies larger than the configured ext_authz body limit deny routes that use `json_body`.
+- Unconstrained HTTP routes continue to behave as action-only checks.
+
+For body-based constraints, Envoy must be configured to forward or buffer the request body to the ext_authz service. URL, query, and header constraints do not require body forwarding.
+
+#### HTTP Multi-Principal Semantics
+
+Entity authorization merges permissions across matched principals with OR logic. HTTP route constraints are evaluated per subject instead:
+
+```text
+HTTP allow =
+  exists subject S such that:
+    S has a policy granting the route action
+    AND all route constraints match S.attributes
+```
+
+This avoids unsafe mixing where one matched principal has the policy and a different matched principal has the matching `device_id`.
+
+#### WFX Standard SBI Constraints
+
+The standard WFX Device SBI HTTP policies use the normalized subject attribute `client_id`. Device principals that should use these policies must provide that attribute, either statically or through a credential mapping:
+
+```json
+{
+  "subject_attributes": {
+    "client_id": "client42"
+  }
+}
+```
+
+or:
+
+```json
+{
+  "subject_attribute_mappings": {
+    "client_id": "x509.subject.cn"
+  }
+}
+```
+
+The packaged WFX HTTP schema constrains SBI job routes as follows:
+
+| Route | Constraint |
+|---|---|
+| `GET /api/wfx/sbi/v1/jobs?clientId=...` | Query `clientId` equals subject `client_id` |
+| `GET /api/wfx/sbi/v1/jobs/events?clientIds=...` | Query `clientIds` equals subject `client_id` |
+| `PUT /api/wfx/sbi/v1/jobs/{id}/status` | JSON body `$.clientId` equals subject `client_id` |
+| SBI job-by-id read/status/definition/tags routes | Header `x-wfx-client-id` equals subject `client_id` |
+
+The `x-wfx-client-id` header is only used by authz for ownership scoping; WFX itself does not need to consume it.
 
 ## Technical Requirements
 ### Inheritance Logic (ReBAC)

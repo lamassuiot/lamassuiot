@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,6 +23,8 @@ type ExtAuthzController struct {
 	logger   *logrus.Entry
 }
 
+const extAuthzMaxBodyBytes = 1 << 20
+
 // NewExtAuthzController creates an ExtAuthzController.
 func NewExtAuthzController(eng *engine.Engine, resolver *service.IdentityResolver, logger *logrus.Entry) *ExtAuthzController {
 	return &ExtAuthzController{engine: eng, resolver: resolver, logger: logger}
@@ -35,6 +39,7 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	method := strings.ToUpper(c.Request.Method)
 	incomingURL := c.Request.URL.RequestURI()
 	originalURL, path := extAuthzOriginalURL(c)
+	rawQuery := extAuthzRawQuery(originalURL)
 	headers := extAuthzHeaders(c.Request.Header)
 
 	log := ctrl.logger.WithFields(logrus.Fields{
@@ -57,7 +62,7 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	reqCtx := enrichContextByAuthMaterial(c.Request.Context(), authType, authMaterial)
 	c.Request = c.Request.WithContext(reqCtx)
 
-	policies, matchedPrincipals, err := ctrl.resolver.Resolve(reqCtx, authMaterial, authType)
+	subjectPolicies, matchedPrincipals, err := ctrl.resolver.ResolveSubjects(reqCtx, authMaterial, authType)
 	if err != nil {
 		if errors.Is(err, service.ErrNoMatch) {
 			log.Debug("ext_authz: no matching principals")
@@ -73,27 +78,47 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 
 	reqCtx = enrichContextWithMatchedPrincipals(reqCtx, matchedPrincipals)
 	c.Request = c.Request.WithContext(reqCtx)
-	evaluatedPolicyIDs := policyIDs(policies)
+	evaluatedPolicyIDs := subjectPolicyIDs(subjectPolicies)
 
-	// 3. Evaluate HTTP policy rules.
-	allowed, matchedPolicyID, err := ctrl.engine.CheckHTTP(reqCtx, policies, method, path)
+	body, bodyTooLarge, err := extAuthzRequestBody(c)
 	if err != nil {
-		log.WithError(err).Error("ext_authz: http engine error")
-		logExtAuthzDecision(log, start, http.StatusInternalServerError, false, "http authorization check failed", matchedPrincipals, evaluatedPolicyIDs, matchedPolicyID, err)
+		log.WithError(err).Error("ext_authz: read request body failed")
+		logExtAuthzDecision(log, start, http.StatusInternalServerError, false, "read request body failed", matchedPrincipals, evaluatedPolicyIDs, "", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}
 
-	if !allowed {
-		logExtAuthzDecision(log, start, http.StatusForbidden, false, "no http_rule grants access to this route", matchedPrincipals, evaluatedPolicyIDs, matchedPolicyID, nil)
+	// 3. Evaluate HTTP policy rules.
+	result, err := ctrl.engine.CheckHTTPRequest(reqCtx, engine.HTTPCheckRequest{
+		Method:       method,
+		Path:         path,
+		RawQuery:     rawQuery,
+		Headers:      headers,
+		Body:         body,
+		BodyTooLarge: bodyTooLarge,
+		Subjects:     subjectPolicies,
+	})
+	if err != nil {
+		log.WithError(err).Error("ext_authz: http engine error")
+		logExtAuthzDecision(log, start, http.StatusInternalServerError, false, "http authorization check failed", matchedPrincipals, evaluatedPolicyIDs, result.MatchedPolicyID, err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	if !result.Allowed {
+		logExtAuthzDecision(log, start, http.StatusForbidden, false, "no http_rule grants access to this route", matchedPrincipals, evaluatedPolicyIDs, result.MatchedPolicyID, nil)
 		c.Status(http.StatusForbidden)
 		return
 	}
 
-	if len(matchedPrincipals) > 0 {
-		c.Header("x-current-user", matchedPrincipals[0])
+	currentUser := result.MatchedPrincipalID
+	if currentUser == "" {
+		currentUser = firstString(matchedPrincipals)
 	}
-	logExtAuthzDecision(log, start, http.StatusOK, true, "http_rule grants access to this route", matchedPrincipals, evaluatedPolicyIDs, matchedPolicyID, nil)
+	if currentUser != "" {
+		c.Header("x-current-user", currentUser)
+	}
+	logExtAuthzDecision(log, start, http.StatusOK, true, "http_rule grants access to this route", preferPrincipal(matchedPrincipals, currentUser), evaluatedPolicyIDs, result.MatchedPolicyID, nil)
 	c.Status(http.StatusOK)
 }
 
@@ -142,11 +167,42 @@ func policyIDs(policies *engine.PolicyRegistry) []string {
 	return ids
 }
 
+func subjectPolicyIDs(subjects []engine.SubjectPolicySet) []string {
+	ids := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, subject := range subjects {
+		if subject.Policies == nil {
+			continue
+		}
+		for _, policy := range subject.Policies.GetAll() {
+			if _, ok := seen[policy.ID]; ok {
+				continue
+			}
+			seen[policy.ID] = struct{}{}
+			ids = append(ids, policy.ID)
+		}
+	}
+	return ids
+}
+
 func firstString(values []string) string {
 	if len(values) == 0 {
 		return ""
 	}
 	return values[0]
+}
+
+func preferPrincipal(values []string, preferred string) []string {
+	if preferred == "" {
+		return values
+	}
+	out := []string{preferred}
+	for _, value := range values {
+		if value != preferred {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func extAuthzHeaders(headers http.Header) map[string]string {
@@ -198,6 +254,34 @@ func splitExtAuthzOriginalURL(value string) (originalURL string, path string) {
 		return value, value[:idx]
 	}
 	return value, value
+}
+
+func extAuthzRawQuery(originalURL string) string {
+	parsed, err := url.Parse(originalURL)
+	if err != nil {
+		return ""
+	}
+	return parsed.RawQuery
+}
+
+func extAuthzRequestBody(c *gin.Context) ([]byte, bool, error) {
+	if c.Request.Body == nil {
+		return nil, false, nil
+	}
+
+	data, err := io.ReadAll(io.LimitReader(c.Request.Body, extAuthzMaxBodyBytes+1))
+	if err != nil {
+		return nil, false, err
+	}
+	if err := c.Request.Body.Close(); err != nil {
+		return nil, false, err
+	}
+	if len(data) > extAuthzMaxBodyBytes {
+		c.Request.Body = io.NopCloser(bytes.NewReader(nil))
+		return nil, true, nil
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(data))
+	return data, false, nil
 }
 
 // extractAuthFromEnvoyHeaders derives (authType, authMaterial, error) from Envoy-forwarded

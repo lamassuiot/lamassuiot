@@ -1,7 +1,7 @@
 {
   "id": "lamassu.d20ad425-6d0c-4fb7-8a96-7ad729774628",
   "name": "Job Manager - Device SBI Job Observer",
-  "description": "Read-only device SBI Job Manager HTTP access for jobs.",
+  "description": "Read-only device SBI Job Manager HTTP access for jobs. SBI job routes require subject attribute client_id to match request clientId/clientIds or x-wfx-client-id.",
   "http_rules": [
     {
       "http_schema_name": "Job Manager",

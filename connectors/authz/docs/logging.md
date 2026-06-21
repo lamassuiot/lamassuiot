@@ -127,6 +127,42 @@ When using JWT token-based authentication:
 [AUTHZ] ========== Final Result: GRANTED ==========
 ```
 
+## HTTP ext_authz Logging
+
+The Envoy HTTP ext_authz endpoint logs one structured decision per check. The log records both the incoming check request and the original request URL being authorized.
+
+Typical allow log fields:
+
+```json
+{
+  "ext_authz_method": "GET",
+  "ext_authz_incoming_url": "/ext_authz/check/api/wfx/sbi/v1/jobs/job-1",
+  "ext_authz_original_url": "/api/wfx/sbi/v1/jobs/job-1",
+  "ext_authz_path": "/api/wfx/sbi/v1/jobs/job-1",
+  "decision": "allow",
+  "allowed": true,
+  "matched_principal": "principal-device-1",
+  "matched_principals": ["principal-device-1"],
+  "matched_policy_id": "lamassu.policy-id",
+  "evaluated_policy_ids": ["lamassu.policy-id"],
+  "reason": "http_rule grants access to this route",
+  "status_code": 200,
+  "decision_duration_ms": 2
+}
+```
+
+For constrained HTTP schemas, `matched_principal` is the subject that both granted the HTTP action and satisfied all subject-attribute constraints. If several principals matched the credential, this may not be the first principal originally returned by authentication.
+
+Common deny reasons:
+
+| Reason | Meaning |
+|---|---|
+| `no valid auth credential` | No supported XFCC certificate or Bearer token was present |
+| `no matching principals found` | The credential did not match an active principal |
+| `no http_rule grants access to this route` | No single matched subject both granted the route action and satisfied route constraints |
+| `read request body failed` | ext_authz could not read the forwarded body |
+| `http authorization check failed` | Internal HTTP authz evaluation error |
+
 ## Error Logging
 
 Errors are clearly marked:

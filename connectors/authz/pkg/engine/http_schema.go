@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -20,12 +21,47 @@ const (
 
 // HTTPRouteConfig maps a method+path pattern to a named logical action.
 type HTTPRouteConfig struct {
-	Name          string        `json:"name"`       // human-readable label
-	Methods       []string      `json:"methods"`    // HTTP verbs; empty slice = wildcard (any method)
-	Path          string        `json:"path"`       // pattern string
-	MatchType     HTTPMatchType `json:"match_type"` // "exact" | "prefix" | "regex"
-	Action        string        `json:"action"`     // logical action name, referenced in HTTPRule.Actions
+	Name          string                `json:"name"`                  // human-readable label
+	Methods       []string              `json:"methods"`               // HTTP verbs; empty slice = wildcard (any method)
+	Path          string                `json:"path"`                  // pattern string
+	MatchType     HTTPMatchType         `json:"match_type"`            // "exact" | "prefix" | "regex"
+	Action        string                `json:"action"`                // logical action name, referenced in HTTPRule.Actions
+	Constraints   []HTTPRouteConstraint `json:"constraints,omitempty"` // optional subject/request constraints
 	compiledRegex *regexp.Regexp
+}
+
+// HTTPRouteConstraint requires a request-derived value to equal one normalized
+// subject attribute for the same subject whose policy grants the route action.
+type HTTPRouteConstraint struct {
+	Request                HTTPRequestValueRef `json:"request"`
+	EqualsSubjectAttribute string              `json:"equals_subject_attribute"`
+}
+
+// HTTPRequestValueRef identifies the request value used by a route constraint.
+type HTTPRequestValueRef struct {
+	Source string `json:"source"`          // path_regex_group | query | header | json_body
+	Name   string `json:"name,omitempty"`  // query/header name
+	Index  int    `json:"index,omitempty"` // regex capture group index
+	Path   string `json:"path,omitempty"`  // JSON path, e.g. $.device_id
+}
+
+// HTTPCheckRequest is the request envelope for subject-aware HTTP authz.
+type HTTPCheckRequest struct {
+	Method       string
+	Path         string
+	RawQuery     string
+	Headers      map[string]string
+	Body         []byte
+	BodyTooLarge bool
+	Subjects     []SubjectPolicySet
+}
+
+// HTTPCheckResult contains the subject-aware HTTP authorization decision.
+type HTTPCheckResult struct {
+	Allowed            bool
+	MatchedPolicyID    string
+	MatchedPrincipalID string
+	MatchedAction      string
 }
 
 // HTTPRouteGroupConfig groups related routes for presentation and introspection.
@@ -213,7 +249,129 @@ func validateAndCompileHTTPRoute(route *HTTPRouteConfig, label string) error {
 	default:
 		return fmt.Errorf("%s: unknown match_type %q (must be exact, prefix, or regex)", label, route.MatchType)
 	}
+
+	for i := range route.Constraints {
+		if err := validateHTTPRouteConstraint(route, &route.Constraints[i], fmt.Sprintf("%s constraint at index %d", label, i)); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func validateHTTPRouteConstraint(route *HTTPRouteConfig, constraint *HTTPRouteConstraint, label string) error {
+	if constraint.EqualsSubjectAttribute == "" {
+		return fmt.Errorf("%s: equals_subject_attribute is required", label)
+	}
+	switch constraint.Request.Source {
+	case "path_regex_group":
+		if route.MatchType != HTTPMatchRegex {
+			return fmt.Errorf("%s: path_regex_group requires a regex route", label)
+		}
+		if constraint.Request.Index <= 0 {
+			return fmt.Errorf("%s: path_regex_group index must be greater than zero", label)
+		}
+	case "query", "header":
+		if constraint.Request.Name == "" {
+			return fmt.Errorf("%s: %s name is required", label, constraint.Request.Source)
+		}
+	case "json_body":
+		if constraint.Request.Path == "" {
+			return fmt.Errorf("%s: json_body path is required", label)
+		}
+	default:
+		return fmt.Errorf("%s: unsupported request source %q", label, constraint.Request.Source)
+	}
+	return nil
+}
+
+func httpRouteConstraintsMatch(route *HTTPRouteConfig, req HTTPCheckRequest, subject ResolvedSubject) bool {
+	for i := range route.Constraints {
+		constraint := &route.Constraints[i]
+		requestValue, ok := extractHTTPConstraintRequestValue(route, req, constraint.Request)
+		if !ok {
+			return false
+		}
+		subjectValue, ok := subject.Attributes[constraint.EqualsSubjectAttribute]
+		if !ok {
+			return false
+		}
+		if requestValue != subjectValue {
+			return false
+		}
+	}
+	return true
+}
+
+func extractHTTPConstraintRequestValue(route *HTTPRouteConfig, req HTTPCheckRequest, ref HTTPRequestValueRef) (string, bool) {
+	switch ref.Source {
+	case "path_regex_group":
+		if route.compiledRegex == nil {
+			return "", false
+		}
+		matches := route.compiledRegex.FindStringSubmatch(req.Path)
+		if ref.Index <= 0 || ref.Index >= len(matches) {
+			return "", false
+		}
+		return matches[ref.Index], true
+	case "query":
+		values, err := url.ParseQuery(req.RawQuery)
+		if err != nil {
+			return "", false
+		}
+		value := values.Get(ref.Name)
+		return value, value != ""
+	case "header":
+		value := req.Headers[strings.ToLower(ref.Name)]
+		if value == "" {
+			for key, candidate := range req.Headers {
+				if strings.EqualFold(key, ref.Name) {
+					value = candidate
+					break
+				}
+			}
+		}
+		return value, value != ""
+	case "json_body":
+		return extractJSONBodyValue(req, ref.Path)
+	default:
+		return "", false
+	}
+}
+
+func extractJSONBodyValue(req HTTPCheckRequest, path string) (string, bool) {
+	if req.BodyTooLarge || len(req.Body) == 0 {
+		return "", false
+	}
+
+	var body interface{}
+	if err := json.Unmarshal(req.Body, &body); err != nil {
+		return "", false
+	}
+
+	parts := strings.Split(strings.TrimPrefix(strings.TrimPrefix(path, "$."), "."), ".")
+	current := body
+	for _, part := range parts {
+		if part == "" {
+			return "", false
+		}
+		object, ok := current.(map[string]interface{})
+		if !ok {
+			return "", false
+		}
+		current, ok = object[part]
+		if !ok {
+			return "", false
+		}
+	}
+
+	switch value := current.(type) {
+	case string:
+		return value, value != ""
+	case float64, bool:
+		return fmt.Sprintf("%v", value), true
+	default:
+		return "", false
+	}
 }
 
 func sortedKeys(set map[string]struct{}) []string {

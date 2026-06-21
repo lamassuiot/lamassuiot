@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/store"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -110,4 +111,8 @@ func (m *PrincipalManager) NewIdentityResolver(policies *PolicyManager) *Identit
 
 func (m *PrincipalManager) MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error) {
 	return m.matchService.MatchPrincipals(ctx, authMaterial, authType)
+}
+
+func (m *PrincipalManager) MatchSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error) {
+	return m.matchService.MatchSubjects(ctx, authMaterial, authType)
 }

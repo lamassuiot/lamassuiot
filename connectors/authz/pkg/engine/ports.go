@@ -41,3 +41,19 @@ type GrantStore interface {
 type PrincipalMatcher interface {
 	Match(principals []models.Principal, authMaterial interface{}) ([]string, error)
 }
+
+// ResolvedSubject is the normalized identity shape consumed by authorization.
+// Attributes are neutral domain attributes (for example, "device_id"), not
+// authentication-mechanism fields such as certificate CNs or JWT claim names.
+type ResolvedSubject struct {
+	PrincipalID string
+	Attributes  map[string]string
+}
+
+// SubjectPolicySet keeps policies scoped to the subject that contributed them.
+// HTTP authz uses this to avoid mixing one subject's policy grant with another
+// subject's matching request attribute.
+type SubjectPolicySet struct {
+	Subject  ResolvedSubject
+	Policies *PolicyRegistry
+}
