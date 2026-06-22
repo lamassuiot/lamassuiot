@@ -20,7 +20,6 @@ RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
-
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
     CGO_ENABLED=1 GOOS=linux \
     go build \
@@ -41,3 +40,4 @@ COPY --from=pkcs11-client-proxy /usr/lib/x86_64-linux-gnu/libffi.so.8 /usr/lib/x
 COPY --from=pkcs11-client-proxy /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so
 COPY --from=builder /app/kms /kms
 CMD ["/kms"]
+

@@ -103,6 +103,7 @@ func main() {
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
 	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
+	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
 	flag.Parse()
@@ -242,7 +243,7 @@ func main() {
 	} else {
 		fmt.Println(">> launching docker: Postgres ...")
 		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
+		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "wfx"})
 		backend, err := posgresSubsystem.Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
@@ -361,6 +362,8 @@ func main() {
 	}
 
 	var uiPort int
+	var wfxNorthPort int
+	var wfxSouthPort int
 	fmt.Printf(">> UI Enabled : %v\n", !*disableUI)
 
 	cloudConnectors := "[]"
@@ -386,6 +389,53 @@ func main() {
 			containerCleanup()
 			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
 		}
+	}
+
+	if !*disableWFX {
+		if storageConfig.Provider != cconfig.Postgres {
+			log.Fatalf("wfx requires Postgres storage; rerun without -sqlite or with -disable-wfx")
+		}
+		fmt.Println(">> launching docker: wfx ...")
+		pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
+		pgUser := storageConfig.Config["username"].(string)
+		pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
+
+		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
+			Repository:   "ghcr.io/siemens/wfx",
+			Tag:          "latest",
+			ExposedPorts: []string{"9080/tcp", "9081/tcp"},
+			Env: []string{
+				"PGHOST=host.docker.internal",
+				"PGPORT=" + pgPort,
+				"PGUSER=" + pgUser,
+				"PGPASSWORD=" + pgPassword,
+				"PGDATABASE=wfx",
+				"WFX_STORAGE=postgres",
+				"WFX_CLIENT_HOST=0.0.0.0",
+				"WFX_CLIENT_PORT=9080",
+				"WFX_MGMT_HOST=0.0.0.0",
+				"WFX_MGMT_PORT=9081",
+				"WFX_LOG_FORMAT=json",
+				"WFX_LOG_LEVEL=debug",
+			},
+			Labels: map[string]string{
+				"group": "lamassuiot-monolithic",
+			},
+		}, func(hc *docker.HostConfig) {
+			hc.AutoRemove = true
+			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+		})
+		if err != nil {
+			if wfxCleanup != nil {
+				wfxCleanup()
+			}
+			log.Fatalf("could not launch wfx: %s", err)
+		}
+
+		wfxNorthPort, _ = strconv.Atoi(wfxContainer.GetPort("9081/tcp"))
+		wfxSouthPort, _ = strconv.Atoi(wfxContainer.GetPort("9080/tcp"))
+		fmt.Printf(" \t-- wfx north port: %d\n", wfxNorthPort)
+		fmt.Printf(" \t-- wfx south port: %d\n", wfxSouthPort)
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
@@ -455,6 +505,8 @@ func main() {
 		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,
+		WfxNorthPort:          wfxNorthPort,
+		WfxSouthPort:          wfxSouthPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,

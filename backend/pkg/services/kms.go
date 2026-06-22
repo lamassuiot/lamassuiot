@@ -175,7 +175,7 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 }
 
 // Helper to get engine and signer
-func (svc *KMSServiceBackend) getEngineAndSigner(engineID, keyID string) (*cryptoengines.CryptoEngine, crypto.Signer, error) {
+func (svc *KMSServiceBackend) getEngineAndSigner(ctx context.Context, engineID, keyID string) (*cryptoengines.CryptoEngine, crypto.Signer, error) {
 	engine, ok := svc.cryptoEngines[engineID]
 	if !ok {
 		return nil, nil, errors.New("engine not found")
@@ -183,7 +183,7 @@ func (svc *KMSServiceBackend) getEngineAndSigner(engineID, keyID string) (*crypt
 
 	engineInstance := *engine
 
-	signer, err := engineInstance.GetPrivateKeyByID(keyID)
+	signer, err := engineInstance.GetPrivateKeyByID(ctx, keyID)
 	if err != nil || signer == nil {
 		return nil, nil, errors.New("could not get signing key")
 	}
@@ -223,7 +223,7 @@ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifie
 	}
 
 	// Get engine and signer
-	engine, signer, err := svc.getEngineAndSigner(key.EngineID, key.KeyID)
+	engine, signer, err := svc.getEngineAndSigner(ctx, key.EngineID, key.KeyID)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +550,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 			return nil, err
 		}
 
-		keyID, signer, err = engineInstance.ImportRSAPrivateKey(k)
+		keyID, signer, err = engineInstance.ImportRSAPrivateKey(ctx, k)
 	case *ecdsa.PrivateKey:
 		size = k.Params().BitSize
 		algorithm = "ECDSA"
@@ -561,7 +561,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 			return nil, err
 		}
 
-		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(k)
+		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(ctx, k)
 	default:
 		lFunc.Errorf("unsupported private key type")
 		return nil, errors.New("unsupported private key type")
@@ -792,13 +792,13 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 	}
 	engineInstance := *engine
 
-	_, err = engineInstance.GetPrivateKeyByID(key.KeyID)
+	_, err = engineInstance.GetPrivateKeyByID(ctx, key.KeyID)
 	if err != nil {
 		lFunc.Errorf("could not get key from engine: %s", err)
 		return fmt.Errorf("key not found")
 	}
 
-	err = engineInstance.DeleteKey(key.KeyID)
+	err = engineInstance.DeleteKey(ctx, key.KeyID)
 	if err != nil {
 		lFunc.Errorf("delete key error: %s", err)
 		return err

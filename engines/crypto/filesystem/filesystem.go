@@ -80,21 +80,21 @@ func (engine *FilesystemCryptoEngine) GetEngineConfig() models.CryptoEngineInfo 
 	return engine.config
 }
 
-func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
-	engine.logger.Debugf("reading %s Key", keyID)
+func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(ctx context.Context, keyID string) (crypto.Signer, error) {
+	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("reading %s Key", keyID)
 	file := filepath.Join(engine.storageDirectory, keyID)
 
 	pemBytes, err := os.ReadFile(file)
 	if err != nil {
-		engine.logger.Errorf("Could not read %s Key: %s", keyID, err)
+		lFunc.Errorf("Could not read %s Key: %s", keyID, err)
 		return nil, err
 	}
 
 	return engine.softCryptoEngine.ParsePrivateKey(pemBytes)
 }
 
-func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
-	// Update KeyIDs in folder and remove old naming
+func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs(ctx context.Context) ([]string, error) {
 	entries, err := os.ReadDir(engine.storageDirectory)
 	if err != nil {
 		return nil, err
@@ -112,105 +112,111 @@ func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 	return keyIDs, nil
 }
 
-func (engine *FilesystemCryptoEngine) RenameKey(oldID, newID string) error {
-	engine.logger.Debugf("renaming key %s to %s", oldID, newID)
+func (engine *FilesystemCryptoEngine) RenameKey(ctx context.Context, oldID, newID string) error {
+	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("renaming key %s to %s", oldID, newID)
 	err := os.Rename(filepath.Join(engine.storageDirectory, oldID), filepath.Join(engine.storageDirectory, newID))
 	if err != nil {
-		engine.logger.Errorf("could not rename key %s to %s: %s", oldID, newID, err)
+		lFunc.Errorf("could not rename key %s to %s: %s", oldID, newID, err)
 		return err
 	}
 
-	engine.logger.Debugf("key %s successfully renamed to %s", oldID, newID)
+	lFunc.Debugf("key %s successfully renamed to %s", oldID, newID)
 	return nil
 }
 
 func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
-	engine.logger.Debugf("creating RSA private key")
+	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("creating RSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(ctx, keySize)
 	if err != nil {
-		engine.logger.Errorf("could not create RSA private key: %s", err)
+		lFunc.Errorf("could not create RSA private key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("RSA key successfully generated")
-	return engine.importKey(key)
+	lFunc.Debugf("RSA key successfully generated")
+	return engine.importKey(ctx, key)
 }
 
 func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
-	engine.logger.Debugf("creating ECDSA private key")
+	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("creating ECDSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(ctx, curve)
 	if err != nil {
-		engine.logger.Errorf("could not create ECDSA private key: %s", err)
+		lFunc.Errorf("could not create ECDSA private key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("ECDSA key successfully generated")
-	return engine.importKey(key)
+	lFunc.Debugf("ECDSA key successfully generated")
+	return engine.importKey(ctx, key)
 }
 
-func (engine *FilesystemCryptoEngine) DeleteKey(keyID string) error {
+func (engine *FilesystemCryptoEngine) DeleteKey(ctx context.Context, keyID string) error {
 	return os.Remove(engine.storageDirectory + "/" + keyID)
 }
 
-func (engine *FilesystemCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	engine.logger.Debugf("importing RSA private key")
+func (engine *FilesystemCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
+	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("importing RSA private key")
 
-	keyID, signer, err := engine.importKey(key)
+	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
-		engine.logger.Errorf("could not import RSA key: %s", err)
+		lFunc.Errorf("could not import RSA key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("RSA key successfully imported")
+	lFunc.Debugf("RSA key successfully imported")
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
-	engine.logger.Debugf("importing ECDSA private key")
+func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("importing ECDSA private key")
 
-	keyID, signer, err := engine.importKey(key)
+	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
-		engine.logger.Errorf("could not import ECDSA key: %s", err)
+		lFunc.Errorf("could not import ECDSA key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("ECDSA key successfully imported")
+	lFunc.Debugf("ECDSA key successfully imported")
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) importKey(ctx context.Context, key interface{}) (string, crypto.Signer, error) {
+	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
 	pubKey := key.(crypto.Signer).Public()
 
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, pubKey)
 	if err != nil {
-		engine.logger.Errorf("could not encode public key digest: %s", err)
+		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
 	}
 
-	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(key)
+	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(ctx, key)
 	if err != nil {
-		engine.logger.Errorf("could not marshal and encode private key: %s", err)
+		lFunc.Errorf("could not marshal and encode private key: %s", err)
 		return "", nil, err
 	}
 
 	pemKey, err := base64.StdEncoding.DecodeString(b64PemKey)
 	if err != nil {
-		engine.logger.Errorf("could not decode RSA private key: %s", err)
+		lFunc.Errorf("could not decode RSA private key: %s", err)
 		return "", nil, err
 	}
 
 	file := filepath.Join(engine.storageDirectory, keyID)
 	err = os.WriteFile(file, pemKey, 0600)
 	if err != nil {
-		engine.logger.Errorf("could not store RSA private key: %s", err)
+		lFunc.Errorf("could not store RSA private key: %s", err)
 		return "", nil, err
 	}
 
-	signer, err := engine.GetPrivateKeyByID(keyID)
+	signer, err := engine.GetPrivateKeyByID(ctx, keyID)
 	if err != nil {
-		engine.logger.Errorf("could not get private key by ID: %s", err)
+		lFunc.Errorf("could not get private key by ID: %s", err)
 		return "", nil, err
 	}
 
