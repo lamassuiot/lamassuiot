@@ -176,6 +176,14 @@ func (mw CAAuditEventPublisher) UpdateCertificateMetadata(ctx context.Context, i
 	return mw.next.UpdateCertificateMetadata(ctx, input)
 }
 
+func (mw CAAuditEventPublisher) UpdateCertificateHasPrivateKey(ctx context.Context, input services.UpdateCertificateHasPrivateKeyInput) (*models.Certificate, error) {
+	return mw.next.UpdateCertificateHasPrivateKey(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) UpdateCAHasPrivateKey(ctx context.Context, input services.UpdateCAHasPrivateKeyInput) (*models.CACertificate, error) {
+	return mw.next.UpdateCAHasPrivateKey(ctx, input)
+}
+
 func (mw CAAuditEventPublisher) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) (err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteCertificateKey, input, err, nil)

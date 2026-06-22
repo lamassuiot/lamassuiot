@@ -9,6 +9,8 @@ type CAConfig struct {
 	Logs                     cconfig.Logging                `mapstructure:"logs"`
 	Server                   cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus        cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
+	SubscriberEventBus       cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
+	SubscriberDLQEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
 	Storage                  cconfig.PluggableStorageEngine `mapstructure:"storage"`
 	KMSClient                KMSClient                      `mapstructure:"kms_client"`
 	CertificateMonitoringJob cconfig.MonitoringJob          `mapstructure:"certificate_monitoring_job"`

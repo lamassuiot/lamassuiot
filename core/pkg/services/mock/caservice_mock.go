@@ -21,6 +21,16 @@ func (m *MockCAService) UpdateCertificateMetadata(ctx context.Context, input ser
 	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 
+func (m *MockCAService) UpdateCertificateHasPrivateKey(ctx context.Context, input services.UpdateCertificateHasPrivateKeyInput) (*models.Certificate, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Certificate), args.Error(1)
+}
+
+func (m *MockCAService) UpdateCAHasPrivateKey(ctx context.Context, input services.UpdateCAHasPrivateKeyInput) (*models.CACertificate, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CACertificate), args.Error(1)
+}
+
 func (m *MockCAService) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
 	args := m.Called(ctx, input)
 	return args.Error(0)

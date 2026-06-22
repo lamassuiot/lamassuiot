@@ -2051,6 +2051,38 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 	return svc.certStorage.Update(ctx, cert)
 }
 
+func (svc *CAServiceBackend) UpdateCertificateHasPrivateKey(ctx context.Context, input services.UpdateCertificateHasPrivateKeyInput) (*models.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
+	if err != nil {
+		lFunc.Errorf("could not check if certificate %s exists: %s", input.SerialNumber, err)
+		return nil, err
+	}
+	if !exists {
+		return nil, errs.ErrCertificateNotFound
+	}
+
+	cert.HasPrivateKey = input.HasPrivateKey
+	return svc.certStorage.Update(ctx, cert)
+}
+
+func (svc *CAServiceBackend) UpdateCAHasPrivateKey(ctx context.Context, input services.UpdateCAHasPrivateKeyInput) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	if err != nil {
+		lFunc.Errorf("could not check if CA %s exists: %s", input.CAID, err)
+		return nil, err
+	}
+	if !exists {
+		return nil, errs.ErrCANotFound
+	}
+
+	ca.Certificate.HasPrivateKey = input.HasPrivateKey
+	return svc.caStorage.Update(ctx, ca)
+}
+
 // Returned Error Codes:
 //   - ErrCertificateNotFound
 //     The specified Certificate can not be found in the Database

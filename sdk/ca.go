@@ -463,6 +463,14 @@ func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input se
 	return response, nil
 }
 
+func (cli *httpCAClient) UpdateCertificateHasPrivateKey(ctx context.Context, input services.UpdateCertificateHasPrivateKeyInput) (*models.Certificate, error) {
+	return nil, fmt.Errorf("UpdateCertificateHasPrivateKey: not implemented in SDK client (internal operation only)")
+}
+
+func (cli *httpCAClient) UpdateCAHasPrivateKey(ctx context.Context, input services.UpdateCAHasPrivateKeyInput) (*models.CACertificate, error) {
+	return nil, fmt.Errorf("UpdateCAHasPrivateKey: not implemented in SDK client (internal operation only)")
+}
+
 func (cli *httpCAClient) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
 	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber, map[int][]error{
 		404: {

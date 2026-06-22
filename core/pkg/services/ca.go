@@ -41,6 +41,8 @@ type CAService interface {
 	// GetCertificatesByStatusAndCA(input GetCertificatesByExpirationDateInput) (string, error)
 	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error)
 	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
+	UpdateCertificateHasPrivateKey(ctx context.Context, input UpdateCertificateHasPrivateKeyInput) (*models.Certificate, error)
+	UpdateCAHasPrivateKey(ctx context.Context, input UpdateCAHasPrivateKeyInput) (*models.CACertificate, error)
 	DeleteCertificate(ctx context.Context, input DeleteCertificateInput) error
 
 	// Issuance Profiles
@@ -295,6 +297,16 @@ type UpdateCertificateStatusInput struct {
 type UpdateCertificateMetadataInput struct {
 	SerialNumber string                  `validate:"required"`
 	Patches      []models.PatchOperation `validate:"required"`
+}
+
+type UpdateCertificateHasPrivateKeyInput struct {
+	SerialNumber  string `validate:"required"`
+	HasPrivateKey bool
+}
+
+type UpdateCAHasPrivateKeyInput struct {
+	CAID          string `validate:"required"`
+	HasPrivateKey bool
 }
 
 type DeleteCertificateInput struct {

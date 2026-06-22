@@ -203,6 +203,20 @@ func (mw CAOTelTracer) UpdateCertificateMetadata(ctx context.Context, input serv
 	return mw.next.UpdateCertificateMetadata(ctx, input)
 }
 
+func (mw CAOTelTracer) UpdateCertificateHasPrivateKey(ctx context.Context, input services.UpdateCertificateHasPrivateKeyInput) (*models.Certificate, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.UpdateCertificateHasPrivateKey(ctx, input)
+}
+
+func (mw CAOTelTracer) UpdateCAHasPrivateKey(ctx context.Context, input services.UpdateCAHasPrivateKeyInput) (*models.CACertificate, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.UpdateCAHasPrivateKey(ctx, input)
+}
+
 func (mw CAOTelTracer) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) (err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()

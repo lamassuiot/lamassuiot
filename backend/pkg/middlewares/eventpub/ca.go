@@ -292,6 +292,14 @@ func (mw CAEventPublisher) UpdateCertificateMetadata(ctx context.Context, input 
 	return mw.Next.UpdateCertificateMetadata(ctx, input)
 }
 
+func (mw CAEventPublisher) UpdateCertificateHasPrivateKey(ctx context.Context, input services.UpdateCertificateHasPrivateKeyInput) (*models.Certificate, error) {
+	return mw.Next.UpdateCertificateHasPrivateKey(ctx, input)
+}
+
+func (mw CAEventPublisher) UpdateCAHasPrivateKey(ctx context.Context, input services.UpdateCAHasPrivateKeyInput) (*models.CACertificate, error) {
+	return mw.Next.UpdateCAHasPrivateKey(ctx, input)
+}
+
 func (mw CAEventPublisher) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) (err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteCertificateKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.SerialNumber))

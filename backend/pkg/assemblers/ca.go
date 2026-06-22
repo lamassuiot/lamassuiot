@@ -12,8 +12,10 @@ import (
 	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -99,6 +101,35 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 
 		//this utilizes the middlewares from within the CA service (if svc.service.func is used instead of regular svc.func)
 		caSvc.SetService(svc)
+	}
+
+	if conf.SubscriberEventBus.Enabled {
+		if !conf.SubscriberDLQEventBus.Enabled {
+			log.Fatalf("CA Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
+		} else {
+			lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "CA", "Event Bus")
+			lMessaging.Infof("Subscriber Event Bus is enabled")
+
+			dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, "ca", lMessaging)
+			if err != nil {
+				return nil, nil, fmt.Errorf("could not create CA Event Bus DLQ publisher: %s", err)
+			}
+
+			subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, "ca", lMessaging)
+			if err != nil {
+				return nil, nil, fmt.Errorf("could not create CA Event Bus subscriber: %s", err)
+			}
+
+			eventHandlers := handlers.NewCAKMSEventHandler(lMessaging, svc)
+			subHandler, err := ceventbus.NewEventBusMessageHandler("CA-KMS", []string{"kms.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+			if err != nil {
+				return nil, nil, fmt.Errorf("could not create CA Event Bus subscription handler: %s", err)
+			}
+
+			if err := subHandler.RunAsync(); err != nil {
+				return nil, nil, fmt.Errorf("could not run CA Event Bus subscription handler: %s", err)
+			}
+		}
 	}
 
 	var scheduler *jobs.JobScheduler
