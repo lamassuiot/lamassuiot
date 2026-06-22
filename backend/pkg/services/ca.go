@@ -321,9 +321,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	var importType models.CertificateType
 	var key *models.Key
+	hasPrivateKey := false
 
 	if input.Key != nil {
 		importType = models.CertificateTypeImportedWithKey
+		hasPrivateKey = true
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, importType)
 
 		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
@@ -360,6 +362,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		} else if key != nil {
 			lFunc.Infof("found private key with SKID %s for CA %s in KMS", skid, caCertSN)
 			importType = models.CertificateTypeManaged
+			hasPrivateKey = true
 		} else {
 			lFunc.Infof("found KMS key with SKID %s for CA %s but it has no private key", skid, caCertSN)
 			importType = models.CertificateTypeImportedWithoutKey
@@ -498,7 +501,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		Certificate: models.Certificate{
 			SubjectKeyID:        skid,
 			AuthorityKeyID:      akid,
-			HasPrivateKey:       key != nil,
+			HasPrivateKey:       hasPrivateKey,
 			Certificate:         input.CACertificate,
 			Extensions:          certificateExtensionsFromX509((*x509.Certificate)(caCert)),
 			Status:              models.StatusActive,
