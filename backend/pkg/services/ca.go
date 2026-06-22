@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto"
 	"crypto/rsa"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
@@ -27,6 +30,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
+	"golang.org/x/crypto/sha3"
 )
 
 type CAMiddleware func(services.CAService) services.CAService
@@ -96,6 +100,24 @@ func certificateExtensionsFromX509(cert *x509.Certificate) models.CertificateExt
 	return models.CertificateExtensions{
 		KeyUsage:         models.X509KeyUsage(cert.KeyUsage),
 		ExtendedKeyUsage: extendedKeyUsage,
+	}
+}
+
+func fingerprintsFromX509(cert *x509.Certificate) models.CertificateFingerprints {
+	if cert == nil || len(cert.Raw) == 0 {
+		return models.CertificateFingerprints{}
+	}
+	s1 := sha1.Sum(cert.Raw)
+	s256 := sha256.Sum256(cert.Raw)
+	s512 := sha512.Sum512(cert.Raw)
+	s3256 := sha3.Sum256(cert.Raw)
+	s3512 := sha3.Sum512(cert.Raw)
+	return models.CertificateFingerprints{
+		SHA1:    hex.EncodeToString(s1[:]),
+		SHA256:  hex.EncodeToString(s256[:]),
+		SHA512:  hex.EncodeToString(s512[:]),
+		SHA3256: hex.EncodeToString(s3256[:]),
+		SHA3512: hex.EncodeToString(s3512[:]),
 	}
 }
 
@@ -507,6 +529,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			HasPrivateKey:       hasPrivateKey,
 			Certificate:         input.CACertificate,
 			Extensions:          certificateExtensionsFromX509((*x509.Certificate)(caCert)),
+			Fingerprints:        fingerprintsFromX509((*x509.Certificate)(caCert)),
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToHexString(caCert.SerialNumber),
 			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
@@ -829,6 +852,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			HasPrivateKey:  true,
 			Certificate:    (*models.X509Certificate)(ca),
 			Extensions:     certificateExtensionsFromX509(ca),
+			Fingerprints:   fingerprintsFromX509(ca),
 			Status:         models.StatusActive,
 			SerialNumber:   helpers.SerialNumberToHexString(ca.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
@@ -1454,6 +1478,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		Status:           models.StatusActive,
 		Certificate:      (*models.X509Certificate)(newCert),
 		Extensions:       certificateExtensionsFromX509(newCert),
+		Fingerprints:     fingerprintsFromX509(newCert),
 		KeyMetadata:      ca.Certificate.KeyMetadata,
 		Subject:          ca.Certificate.Subject,
 		Issuer:           ca.Certificate.Issuer,
@@ -1621,6 +1646,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		Type:        certType,
 		Certificate: (*models.X509Certificate)(x509Cert),
 		Extensions:  certificateExtensionsFromX509(x509Cert),
+		Fingerprints: fingerprintsFromX509(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SN: helpers.SerialNumberToHexString(caCert.SerialNumber),
 			ID: ca.ID,
@@ -1669,6 +1695,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		Type:                models.CertificateTypeImportedWithoutKey,
 		Certificate:         (*models.X509Certificate)(input.Certificate),
 		Extensions:          certificateExtensionsFromX509(x509Cert),
+		Fingerprints:        fingerprintsFromX509(x509Cert),
 		Status:              status,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
 		Subject:             chelpers.PkixNameToSubject(input.Certificate.Subject),

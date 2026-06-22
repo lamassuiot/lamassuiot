@@ -28,6 +28,14 @@ const (
 	StatusInactive CertificateStatus = "INACTIVE"
 )
 
+type CertificateFingerprints struct {
+	SHA1    string `json:"sha1" gorm:"column:fingerprint_sha1"`
+	SHA256  string `json:"sha256" gorm:"column:fingerprint_sha256"`
+	SHA512  string `json:"sha512" gorm:"column:fingerprint_sha512"`
+	SHA3256 string `json:"sha3_256" gorm:"column:fingerprint_sha3_256"`
+	SHA3512 string `json:"sha3_512" gorm:"column:fingerprint_sha3_512"`
+}
+
 type Certificate struct {
 	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
 	SubjectKeyID        string                 `json:"subject_key_id"`
@@ -48,6 +56,7 @@ type Certificate struct {
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
 	IsCA                bool                   `json:"is_ca"`
+	Fingerprints        CertificateFingerprints `json:"fingerprints" gorm:"embedded"`
 }
 
 type CertificateExtensions struct {

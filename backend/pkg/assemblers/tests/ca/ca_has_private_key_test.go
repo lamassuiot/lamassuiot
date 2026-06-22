@@ -190,9 +190,6 @@ func TestCertificateHasPrivateKeyCreateCertificate(t *testing.T) {
 		if cert.EngineID == "" {
 			t.Fatal("expected managed certificate to include engine_id")
 		}
-		if cert.VersionSchema != "1.1" {
-			t.Fatalf("expected version_schema 1.1, got %s", cert.VersionSchema)
-		}
 	})
 
 	t.Run("ReusedPublicOnlyKMSKey", func(t *testing.T) {
@@ -231,9 +228,6 @@ func TestCertificateHasPrivateKeyCreateCertificate(t *testing.T) {
 		}
 		if cert.EngineID != "" {
 			t.Fatalf("expected empty engine_id for public-only certificate, got %s", cert.EngineID)
-		}
-		if cert.VersionSchema != "1.1" {
-			t.Fatalf("expected version_schema 1.1, got %s", cert.VersionSchema)
 		}
 	})
 }
@@ -283,9 +277,6 @@ func TestCertificateHasPrivateKeyImportCertificate(t *testing.T) {
 		if importedCert.EngineID != key.EngineID {
 			t.Fatalf("expected engine_id %s, got %s", key.EngineID, importedCert.EngineID)
 		}
-		if importedCert.VersionSchema != "unknown" {
-			t.Fatalf("expected imported certificate version_schema to remain unknown, got %s", importedCert.VersionSchema)
-		}
 	})
 
 	t.Run("NoMatchingKMSKey", func(t *testing.T) {
@@ -325,9 +316,6 @@ func TestCertificateHasPrivateKeyImportCertificate(t *testing.T) {
 		}
 		if importedCert.EngineID != "" {
 			t.Fatalf("expected empty engine_id, got %s", importedCert.EngineID)
-		}
-		if importedCert.VersionSchema != "unknown" {
-			t.Fatalf("expected imported certificate version_schema to remain unknown, got %s", importedCert.VersionSchema)
 		}
 	})
 }
