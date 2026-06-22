@@ -99,6 +99,9 @@ func certificateExtensionsFromX509(cert *x509.Certificate) models.CertificateExt
 	}
 }
 
+// getManagedKMSKey returns the KMS key for identifier if it exists and holds a
+// private key. Returns (nil, nil) if the key exists but has no private key.
+// Returns (nil, err) on lookup failure.
 func (svc *CAServiceBackend) getManagedKMSKey(ctx context.Context, identifier string) (*models.Key, error) {
 	key, err := svc.kmsService.GetKey(ctx, services.GetKeyInput{
 		Identifier: identifier,
@@ -1679,7 +1682,12 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 	}
 
 	key, err := svc.getManagedKMSKey(ctx, skid)
-	if err == nil && key != nil {
+	if err != nil {
+		// KMS lookup failed — store the certificate as imported-without-key rather than
+		// failing the import. The caller gets no private-key management for this cert,
+		// but a transient KMS outage should not block an otherwise valid import.
+		lFunc.Warnf("KMS lookup for SKID %s failed during certificate import; storing as ImportedWithoutKey: %s", skid, err)
+	} else if key != nil {
 		newCert.Type = models.CertificateTypeManaged
 		newCert.EngineID = key.EngineID
 		newCert.HasPrivateKey = true
