@@ -117,8 +117,17 @@ func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, re
 		return nil
 	}
 
+	u := &url.URL{
+		Scheme: config.Scheme,
+		Host:   fmt.Sprintf("%s:%d", config.Hostname, config.Port),
+	}
+	if config.BasePath != "" {
+		u.Path = path.Join("/", config.BasePath)
+	}
+	endpointURL := u.String()
+
 	options := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(fmt.Sprintf("%s:%d", config.Hostname, config.Port)),
+		otlptracehttp.WithEndpointURL(endpointURL),
 	}
 
 	if config.Scheme == "http" {
