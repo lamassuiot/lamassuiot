@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -31,6 +32,9 @@ func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		for _, authExtractor := range authExtractors {
 			authExtractor.ExtractAuthentication(c, *c.Request)
+			if _, ok := c.Get(core.LamassuContextKeyAuthType); ok {
+				break
+			}
 		}
 
 		c.Next()

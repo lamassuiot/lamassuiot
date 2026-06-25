@@ -112,7 +112,10 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 		return false, nil
 	}
 
-	filterGenerator := NewFilterGenerator(e.schemas, policies)
+	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
+	if err != nil {
+		return false, fmt.Errorf("failed to build authorization graph: %w", err)
+	}
 
 	result, err := filterGenerator.GenerateCheckFilter(action, schemaName, entityType, entityKey)
 	if err != nil {
@@ -206,7 +209,10 @@ func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, na
 		return "", fmt.Errorf("entity type '%s' does not belong to namespace '%s'", entityType, namespace)
 	}
 
-	filterGenerator := NewFilterGenerator(e.schemas, policies)
+	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
+	if err != nil {
+		return "", fmt.Errorf("failed to build authorization graph: %w", err)
+	}
 
 	result, err := filterGenerator.GenerateListFilter("read", schemaName, entityType)
 	if err != nil {

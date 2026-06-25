@@ -1,6 +1,7 @@
 package identityextractors
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -51,5 +52,15 @@ func (extractor JWTExtractor) ExtractAuthentication(ctx *gin.Context, req http.R
 	ctx.Set(core.LamassuContextKeyAuthCredentialString, tokenString)
 	ctx.Set(core.LamassuContextKeyAuthCredentialStruct, token)
 	ctx.Set(core.LamassuContextKeyAuthID, callerID)
-	ctx.Set(core.LamassuContextKeyAuthContext, claims)
+	ctx.Set(core.LamassuContextKeyAuthContext, map[string]interface{}(claims))
+
+	reqCtx := req.Context()
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, string(IdentityExtractorJWT))
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialString, tokenString)
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, token)
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthID, callerID)
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, map[string]interface{}(claims))
+	if ctx.Request != nil {
+		ctx.Request = ctx.Request.WithContext(reqCtx)
+	}
 }

@@ -14,19 +14,18 @@ type FilterGenerator struct {
 	graph    *AuthorizationGraph
 }
 
-// NewFilterGenerator creates a new filter generator
-func NewFilterGenerator(schemas *SchemaRegistry, policies *PolicyRegistry) *FilterGenerator {
+// NewFilterGenerator creates a new filter generator.
+func NewFilterGenerator(schemas *SchemaRegistry, policies *PolicyRegistry) (*FilterGenerator, error) {
 	graph := NewAuthorizationGraph()
 	if err := graph.BuildFromPoliciesAndSchemas(policies, schemas); err != nil {
-		// Log error but continue - graph will be empty
-		fmt.Printf("Warning: failed to build authorization graph: %v\n", err)
+		return nil, fmt.Errorf("failed to build authorization graph: %w", err)
 	}
 
 	return &FilterGenerator{
 		schemas:  schemas,
 		policies: policies,
 		graph:    graph,
-	}
+	}, nil
 }
 
 // FilterResult contains the generated filter components
@@ -42,26 +41,31 @@ func sqlStringLiteral(value string) string {
 
 // formatColumnFilterValue formats a Go value (from JSON unmarshaling) into a SQL literal.
 // JSON numbers unmarshal as float64; booleans as bool; strings as string; arrays as []interface{}.
-func formatColumnFilterValue(v interface{}) string {
+// Returns an error for any type not produced by encoding/json so callers get a clear failure
+// instead of unquoted/unescaped output being silently interpolated into SQL.
+func formatColumnFilterValue(v interface{}) (string, error) {
 	switch val := v.(type) {
 	case string:
-		return sqlStringLiteral(val)
+		return sqlStringLiteral(val), nil
 	case bool:
 		if val {
-			return "true"
+			return "true", nil
 		}
-		return "false"
+		return "false", nil
 	case float64:
-		formatted := fmt.Sprintf("%g", val)
-		return formatted
+		return fmt.Sprintf("%g", val), nil
 	case []interface{}:
 		parts := make([]string, len(val))
 		for i, item := range val {
-			parts[i] = formatColumnFilterValue(item)
+			s, err := formatColumnFilterValue(item)
+			if err != nil {
+				return "", err
+			}
+			parts[i] = s
 		}
-		return "(" + strings.Join(parts, ", ") + ")"
+		return "(" + strings.Join(parts, ", ") + ")", nil
 	default:
-		return fmt.Sprintf("%v", v)
+		return "", fmt.Errorf("unsupported filter value type %T: only string, bool, float64, and arrays are accepted", v)
 	}
 }
 
@@ -107,7 +111,11 @@ func buildColumnFilterConditionsWithPrefix(schema *SchemaDefinition, cf []models
 		}
 
 		colRef := fmt.Sprintf("%s.%s", tablePrefix, filter.Column)
-		parts = append(parts, fmt.Sprintf("%s %s %s", colRef, op, formatColumnFilterValue(filter.Value)))
+		formattedValue, err := formatColumnFilterValue(filter.Value)
+		if err != nil {
+			return "", fmt.Errorf("column %q: %w", filter.Column, err)
+		}
+		parts = append(parts, fmt.Sprintf("%s %s %s", colRef, op, formattedValue))
 	}
 
 	return strings.Join(parts, " AND "), nil

@@ -92,6 +92,10 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	var sseHub *controllers.DeviceEventSSEHub
 
+	if conf.SSEEnabled && !conf.SubscriberEventBus.Enabled {
+		return nil, nil, fmt.Errorf("SSEEnabled requires SubscriberEventBus to be enabled")
+	}
+
 	if conf.SubscriberEventBus.Enabled {
 		if !conf.SubscriberDLQEventBus.Enabled {
 			lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")

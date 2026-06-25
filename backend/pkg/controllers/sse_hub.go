@@ -47,18 +47,20 @@ func (h *DeviceEventSSEHub) Subscribe(deviceID string) chan string {
 }
 
 // Unsubscribe removes an SSE listener and closes its channel.
+// ch is always closed so the streamDeviceEventsSSE goroutine unblocks
+// even if the deviceID entry was already removed from the map.
 func (h *DeviceEventSSEHub) Unsubscribe(deviceID string, ch chan string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if subs, ok := h.subscribers[deviceID]; ok {
 		delete(subs, ch)
-		close(ch)
 		if len(subs) == 0 {
 			delete(h.subscribers, deviceID)
 		}
 		h.logger.Debugf("SSE client unsubscribed for device %s", deviceID)
 	}
+	close(ch)
 }
 
 // Publish sends a device event to all SSE listeners for the given device ID.
