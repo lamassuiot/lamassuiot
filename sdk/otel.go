@@ -222,7 +222,10 @@ func setupLogging(config config.OTELLoggingConfig, resources *resource.Resource)
 	}
 
 	processor := sdklog.NewBatchProcessor(exporter)
-	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(processor))
+	provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(processor),
+		sdklog.WithResource(resources),
+	)
 
 	global.SetLoggerProvider(provider)
 

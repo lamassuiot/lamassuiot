@@ -30,6 +30,8 @@ func main() {
 	}
 	log.SetLevel(lvl)
 
+	helpers.SetGlobalLogFormat(conf.Logs.Format)
+
 	logger := helpers.SetupLogger(conf.Logs.Level, "Migration", "ca-to-kms")
 	if *dryRun {
 		logger.Info("running in DRY-RUN mode — NO WRITES will occur")

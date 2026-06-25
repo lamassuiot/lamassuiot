@@ -29,6 +29,7 @@ import (
 
 func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 	log.SetLevel(log.PanicLevel)
+	chelpers.SetGlobalLogFormat(conf.Logs.Format)
 	if conf.AssemblyMode == Http {
 		// Initialize OTel SDK once at the very beginning, before any HTTP clients are created
 		// This ensures trace context propagation works correctly across all services
@@ -59,7 +60,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		// --- shared helpers ---
 
-		svcLogs := cconfig.Logging{Level: conf.Logs.Level}
+		svcLogs := cconfig.Logging{Level: conf.Logs.Level, Format: conf.Logs.Format}
 		svcServer := cconfig.HttpServer{
 			LogLevel:           conf.Logs.Level,
 			HealthCheckLogging: true,

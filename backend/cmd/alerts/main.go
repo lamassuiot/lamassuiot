@@ -34,6 +34,8 @@ func main() {
 
 	log.Infof("global log level set to '%s'", globalLogLevel)
 
+	helpers.SetGlobalLogFormat(conf.Logs.Format)
+
 	confBytes, err := yaml.Marshal(conf)
 	if err != nil {
 		log.Fatalf("could not dump yaml config: %s", err)

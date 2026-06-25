@@ -9,6 +9,16 @@ const (
 	None  LogLevel = "none"
 )
 
+type LogFormat string
+
+const (
+	// LogFormatText renders human-readable, nested text logs (default).
+	LogFormatText LogFormat = "text"
+	// LogFormatJSON renders structured JSON logs.
+	LogFormatJSON LogFormat = "json"
+)
+
 type Logging struct {
-	Level LogLevel `mapstructure:"level"`
+	Level  LogLevel  `mapstructure:"level"`
+	Format LogFormat `mapstructure:"format"`
 }

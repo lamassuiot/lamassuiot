@@ -27,10 +27,34 @@ var LogFormatter = &formatter.Formatter{
 	},
 }
 
+// activeFormatter is the formatter applied to loggers created via SetupLogger.
+// It defaults to the human-readable nested text formatter and can be switched
+// to JSON (or back) via SetGlobalLogFormat based on configuration.
+var activeFormatter logrus.Formatter = LogFormatter
+
+// GetFormatter returns the logrus formatter matching the configured log format.
+// Unknown or empty values fall back to the human-readable text formatter.
+func GetFormatter(format config.LogFormat) logrus.Formatter {
+	switch format {
+	case config.LogFormatJSON:
+		return &logrus.JSONFormatter{TimestampFormat: "2006-01-02 15:04:05"}
+	default:
+		return LogFormatter
+	}
+}
+
+// SetGlobalLogFormat selects the log output format (text or JSON). It updates
+// the formatter used by both the global logrus logger and any loggers created
+// afterwards via SetupLogger.
+func SetGlobalLogFormat(format config.LogFormat) {
+	activeFormatter = GetFormatter(format)
+	logrus.SetFormatter(activeFormatter)
+}
+
 func SetupLogger(currentLevel config.LogLevel, serviceID string, subsystem string) *logrus.Entry {
 	var err error
 	logger := logrus.New()
-	logger.SetFormatter(LogFormatter)
+	logger.SetFormatter(activeFormatter)
 	lSubsystem := logger.WithFields(logrus.Fields{
 		"service":   serviceID,
 		"subsystem": subsystem,
