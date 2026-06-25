@@ -111,6 +111,7 @@ func main() {
 	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json", "path to PKI schema JSON file for authz service")
 	authzSchema := flag.String("authz-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json", "path to Authz schema JSON file for authz service")
 	authzHTTPSchemas := flag.String("authz-http-schemas", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json", "comma-separated list of HTTP schema JSON file paths for Envoy ext_authz (e.g. ./connectors/authz/examples/wfx/http-schema.json)")
+	authzProxyPrefixes := flag.String("authz-proxy-prefixes", "/api/wfx/nbi/,/api/wfx/sbi/", "comma-separated gateway path prefixes protected by monolithic ext_authz checks")
 	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
 	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
 	flag.Parse()
@@ -531,6 +532,7 @@ func main() {
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
+		AuthzProxyPrefixes: splitCommaSeparated(*authzProxyPrefixes),
 		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
@@ -618,6 +620,16 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 		dst[k] = v
 	}
 	return dst
+}
+
+func splitCommaSeparated(value string) []string {
+	out := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string) *authzconfig.AuthzConfig {

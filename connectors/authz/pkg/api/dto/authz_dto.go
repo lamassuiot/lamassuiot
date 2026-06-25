@@ -7,7 +7,7 @@ type AuthorizeRequest struct {
 	PrincipalID string        `json:"principal_id" binding:"required"`
 	Namespace   string        `json:"namespace" binding:"required"`
 	SchemaName  string        `json:"schema_name" binding:"required"`
-	Action      string        `json:"action" binding:"required"`     // Action name (atomicAction or globalAction)
+	Action      string        `json:"action" binding:"required"`      // Action name (atomicAction or globalAction)
 	EntityType  string        `json:"entity_type" binding:"required"` // Unqualified entity type as defined in schema
 	EntityKey   FlexEntityKey `json:"entity_key"`                     // Primary key: string or {col: val} map (required for atomicActions)
 }
@@ -42,6 +42,42 @@ type MatchAndAuthorizeResponse struct {
 	EntityKey         map[string]string `json:"entity_key"`
 	Action            string            `json:"action"`
 	MatchedPrincipals []string          `json:"matched_principals"`
+}
+
+// HTTPAuthzCheckRequestDetails contains the HTTP request to evaluate.
+type HTTPAuthzCheckRequestDetails struct {
+	Method   string            `json:"method" binding:"required"`
+	Path     string            `json:"path" binding:"required"`
+	RawQuery string            `json:"raw_query,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty"`
+	Body     string            `json:"body,omitempty"`
+}
+
+// HTTPAuthzCheckRequest checks an HTTP route for a known principal. SubjectAttributes
+// are explicit test attributes; credential-derived mappings are only available through
+// MatchHTTPAuthzCheckRequest.
+type HTTPAuthzCheckRequest struct {
+	PrincipalID       string                       `json:"principal_id" binding:"required"`
+	SubjectAttributes map[string]string            `json:"subject_attributes,omitempty"`
+	Request           HTTPAuthzCheckRequestDetails `json:"request" binding:"required"`
+}
+
+// MatchHTTPAuthzCheckRequest checks an HTTP route after resolving the supplied credential.
+type MatchHTTPAuthzCheckRequest struct {
+	AuthMaterial interface{}                  `json:"auth_material" binding:"required"`
+	AuthType     string                       `json:"auth_type" binding:"required"`
+	Request      HTTPAuthzCheckRequestDetails `json:"request" binding:"required"`
+}
+
+// HTTPAuthzCheckResponse contains a debug-friendly HTTP authorization decision.
+type HTTPAuthzCheckResponse struct {
+	Allowed            bool              `json:"allowed"`
+	MatchedPrincipalID string            `json:"matched_principal_id,omitempty"`
+	MatchedPrincipals  []string          `json:"matched_principals,omitempty"`
+	MatchedPolicyID    string            `json:"matched_policy_id,omitempty"`
+	MatchedAction      string            `json:"matched_action,omitempty"`
+	SubjectAttributes  map[string]string `json:"subject_attributes,omitempty"`
+	Reason             string            `json:"reason,omitempty"`
 }
 
 // GetFilterRequest for retrieving list filters

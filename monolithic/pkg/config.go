@@ -34,9 +34,10 @@ type MonolithicConfig struct {
 	UIPort                int                            `mapstructure:"ui_port"`
 	WfxNorthPort          int                            `mapstructure:"wfx_north_port"`
 	WfxSouthPort          int                            `mapstructure:"wfx_south_port"`
+	AuthzProxyPrefixes    []string                       `mapstructure:"authz_proxy_prefixes"`
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
 	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
-	AuthzConfig           *authzconfig.AuthzConfig        `mapstructure:"authz"`
+	AuthzConfig           *authzconfig.AuthzConfig       `mapstructure:"authz"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {

@@ -1,9 +1,12 @@
 package pkg
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -114,7 +117,6 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				},
 			}
 		}
-
 
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
 			Logs:   svcLogs,
@@ -254,6 +256,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		routeMaps := make(map[string]func(c *gin.Context))
 		routeList := make([]string, 0)
+		authzProxy := newMonolithicAuthzProxy(authzPort, authzProxyPrefixes(conf))
 
 		// registerRoute registers a reverse proxy route. sourcePath is the incoming
 		// path prefix; targetPath is the prefix to replace it with on the upstream.
@@ -278,6 +281,28 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			color.Unset()
 			fmt.Printf("\n")
 			routeMaps[sourcePath] = func(c *gin.Context) {
+				if authzProxy != nil && authzProxy.protects(c.Request.URL.Path) {
+					statusCode, err := authzProxy.authorize(c.Request)
+					if err != nil {
+						log.WithError(err).WithFields(log.Fields{
+							"method": c.Request.Method,
+							"path":   c.Request.URL.RequestURI(),
+							"status": statusCode,
+						}).Error("monolithic proxy authz check failed")
+						c.Status(statusCode)
+						return
+					}
+					if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+						log.WithFields(log.Fields{
+							"method": c.Request.Method,
+							"path":   c.Request.URL.RequestURI(),
+							"status": statusCode,
+						}).Info("monolithic proxy authz denied request")
+						c.Status(statusCode)
+						return
+					}
+				}
+
 				remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", servicePort))
 				if err != nil {
 					panic(err)
@@ -429,6 +454,110 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 	return -1, -1, fmt.Errorf("unsupported mode")
 }
 
+type monolithicAuthzProxy struct {
+	port     int
+	prefixes []string
+	client   *http.Client
+}
+
+func newMonolithicAuthzProxy(port int, prefixes []string) *monolithicAuthzProxy {
+	if port <= 0 || len(prefixes) == 0 {
+		return nil
+	}
+	return &monolithicAuthzProxy{
+		port:     port,
+		prefixes: prefixes,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+}
+
+func authzProxyPrefixes(conf MonolithicConfig) []string {
+	if conf.AuthzProxyPrefixes != nil {
+		return normalizePathPrefixes(conf.AuthzProxyPrefixes)
+	}
+	if conf.WfxNorthPort > 0 || conf.WfxSouthPort > 0 {
+		return []string{"/api/wfx/nbi/", "/api/wfx/sbi/"}
+	}
+	return nil
+}
+
+func normalizePathPrefixes(prefixes []string) []string {
+	out := make([]string, 0, len(prefixes))
+	for _, prefix := range prefixes {
+		prefix = strings.TrimSpace(prefix)
+		if prefix == "" {
+			continue
+		}
+		if !strings.HasPrefix(prefix, "/") {
+			prefix = "/" + prefix
+		}
+		out = append(out, prefix)
+	}
+	return out
+}
+
+func (proxy *monolithicAuthzProxy) protects(path string) bool {
+	for _, prefix := range proxy.prefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (proxy *monolithicAuthzProxy) authorize(req *http.Request) (int, error) {
+	body, err := readAndRestoreRequestBody(req)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("read request body for authz check: %w", err)
+	}
+
+	checkURL := fmt.Sprintf("http://127.0.0.1:%d/v1/ext_authz/check%s", proxy.port, req.URL.RequestURI())
+	checkReq, err := http.NewRequestWithContext(req.Context(), req.Method, checkURL, bytes.NewReader(body))
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("create authz check request: %w", err)
+	}
+	checkReq.Header = req.Header.Clone()
+	checkReq.Header.Set("x-envoy-original-path", req.URL.RequestURI())
+
+	resp, err := proxy.client.Do(checkReq)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("call authz check endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		propagateAuthzHeaders(req.Header, resp.Header)
+	}
+	return resp.StatusCode, nil
+}
+
+func readAndRestoreRequestBody(req *http.Request) ([]byte, error) {
+	if req.Body == nil {
+		return nil, nil
+	}
+	body, readErr := io.ReadAll(req.Body)
+	closeErr := req.Body.Close()
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
+	}
+	req.ContentLength = int64(len(body))
+	if readErr != nil {
+		return body, readErr
+	}
+	return body, closeErr
+}
+
+func propagateAuthzHeaders(reqHeaders, authzHeaders http.Header) {
+	if currentUser := authzHeaders.Get("x-current-user"); currentUser != "" {
+		reqHeaders.Set("x-current-user", currentUser)
+		reqHeaders.Set("x-principal-id", currentUser)
+	}
+}
+
 // gatewayStripHeaders are headers that clients must not be allowed to inject —
 // they are either set by this gateway or by internal services only.
 var gatewayStripHeaders = []string{
@@ -454,15 +583,24 @@ func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.TLS != nil {
 			if len(c.Request.TLS.PeerCertificates) > 0 {
-				fullChain := ""
-				for _, crt := range c.Request.TLS.PeerCertificates {
-					fullChain += chelpers.CertificateToPEM(crt)
-				}
-				chainURLEnc := url.QueryEscape(fullChain)
-				c.Request.Header.Add("x-forwarded-client-cert", fmt.Sprintf("Chain=%q", chainURLEnc))
+				c.Request.Header.Add("x-forwarded-client-cert", envoyStyleClientCertHeader(c.Request.TLS.PeerCertificates))
 			}
 		}
 
 		c.Next()
 	}
+}
+
+func envoyStyleClientCertHeader(certs []*x509.Certificate) string {
+	if len(certs) == 0 {
+		return ""
+	}
+
+	leafURLEnc := url.QueryEscape(chelpers.CertificateToPEM(certs[0]))
+	fullChain := ""
+	for _, crt := range certs {
+		fullChain += chelpers.CertificateToPEM(crt)
+	}
+	chainURLEnc := url.QueryEscape(fullChain)
+	return fmt.Sprintf("Cert=%q;Chain=%q", leafURLEnc, chainURLEnc)
 }

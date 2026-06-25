@@ -42,6 +42,8 @@ func NewAuthzRoutes(
 			authzGrp.POST("/filter", authzCtrl.GetFilter)
 			authzGrp.POST("/match/authorize", authzCtrl.MatchAndAuthorize)
 			authzGrp.POST("/match/filter", authzCtrl.MatchAndGetFilter)
+			authzGrp.POST("/http/check", authzCtrl.CheckHTTP)
+			authzGrp.POST("/match/http/check", authzCtrl.MatchAndCheckHTTP)
 
 			authzGrp.POST("/capabilities/global", capabilitiesCtrl.GetGlobalCapabilities)
 			authzGrp.POST("/match/capabilities/global", capabilitiesCtrl.MatchAndGetGlobalCapabilities)

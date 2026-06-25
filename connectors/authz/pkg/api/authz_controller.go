@@ -238,6 +238,132 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 	})
 }
 
+// CheckHTTP checks an HTTP route for a known principal and explicit subject attributes.
+// @Summary Check HTTP authorization
+// @Description Check whether a known principal can access an HTTP route. Subject attributes must be supplied explicitly for this debug path.
+// @Tags authorization
+// @Accept json
+// @Produce json
+// @Param request body dto.HTTPAuthzCheckRequest true "HTTP authorization check request"
+// @Success 200 {object} dto.HTTPAuthzCheckResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/authz/http/check [post]
+func (ctrl *AuthzController) CheckHTTP(c *gin.Context) {
+	var req dto.HTTPAuthzCheckRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid request",
+			Details: map[string]string{"validation": err.Error()},
+		})
+		return
+	}
+	if err := validateHTTPCheckRequest(req.Request); err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid request",
+			Details: map[string]string{"validation": err.Error()},
+		})
+		return
+	}
+
+	reqCtx := enrichContextByPrincipalID(c.Request.Context(), req.PrincipalID)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Error:   "Failed to get principal policies",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+
+	attributes := copySubjectAttributes(req.SubjectAttributes)
+	subjectPolicies := []engine.SubjectPolicySet{
+		{
+			Subject: engine.ResolvedSubject{
+				PrincipalID: req.PrincipalID,
+				Attributes:  attributes,
+			},
+			Policies: policies,
+		},
+	}
+
+	result, err := ctrl.engine.CheckHTTPRequest(reqCtx, toEngineHTTPCheckRequest(req.Request, subjectPolicies))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Error:   "HTTP authorization check failed",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, httpCheckResponse(result, []string{req.PrincipalID}, attributes))
+}
+
+// MatchAndCheckHTTP resolves a credential, derives subject attributes, and checks an HTTP route.
+// @Summary Check HTTP authorization with principal matching
+// @Description Resolve principals from auth material and check whether one matched subject can access an HTTP route.
+// @Tags authorization
+// @Accept json
+// @Produce json
+// @Param request body dto.MatchHTTPAuthzCheckRequest true "HTTP authorization check request"
+// @Success 200 {object} dto.HTTPAuthzCheckResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/authz/match/http/check [post]
+func (ctrl *AuthzController) MatchAndCheckHTTP(c *gin.Context) {
+	var req dto.MatchHTTPAuthzCheckRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid request",
+			Details: map[string]string{"validation": err.Error()},
+		})
+		return
+	}
+	if err := validateHTTPCheckRequest(req.Request); err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid request",
+			Details: map[string]string{"validation": err.Error()},
+		})
+		return
+	}
+
+	reqCtx := enrichContextByAuthMaterial(c.Request.Context(), req.AuthType, req.AuthMaterial)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	subjectPolicies, matchedPrincipals, err := ctrl.resolver.ResolveSubjects(reqCtx, req.AuthMaterial, req.AuthType)
+	if err != nil {
+		if errors.Is(err, service.ErrNoMatch) {
+			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
+				Error:   "Authentication failed",
+				Details: map[string]string{"reason": "No matching principals found"},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Error:   "Failed to resolve principals",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+
+	reqCtx = enrichContextWithMatchedPrincipals(reqCtx, matchedPrincipals)
+	c.Request = c.Request.WithContext(reqCtx)
+
+	result, err := ctrl.engine.CheckHTTPRequest(reqCtx, toEngineHTTPCheckRequest(req.Request, subjectPolicies))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Error:   "HTTP authorization check failed",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, httpCheckResponse(result, matchedPrincipals, subjectAttributesForResult(result, subjectPolicies)))
+}
+
 // MatchAndGetFilter godoc
 // @Summary Get list filter with principal matching
 // @Description Match principals from auth material and get SQL filter for listing entities
@@ -324,6 +450,80 @@ func validateEntityIdentifier(schemaName, entityType string) error {
 	}
 
 	return nil
+}
+
+func validateHTTPCheckRequest(req dto.HTTPAuthzCheckRequestDetails) error {
+	if strings.TrimSpace(req.Method) == "" {
+		return fmt.Errorf("request.method is required")
+	}
+	if strings.TrimSpace(req.Path) == "" {
+		return fmt.Errorf("request.path is required")
+	}
+	return nil
+}
+
+func toEngineHTTPCheckRequest(req dto.HTTPAuthzCheckRequestDetails, subjects []engine.SubjectPolicySet) engine.HTTPCheckRequest {
+	return engine.HTTPCheckRequest{
+		Method:   strings.ToUpper(strings.TrimSpace(req.Method)),
+		Path:     strings.TrimSpace(req.Path),
+		RawQuery: strings.TrimPrefix(strings.TrimSpace(req.RawQuery), "?"),
+		Headers:  normalizeHTTPCheckHeaders(req.Headers),
+		Body:     []byte(req.Body),
+		Subjects: subjects,
+	}
+}
+
+func normalizeHTTPCheckHeaders(headers map[string]string) map[string]string {
+	normalized := make(map[string]string, len(headers))
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		normalized[strings.ToLower(key)] = value
+	}
+	return normalized
+}
+
+func copySubjectAttributes(attributes map[string]string) map[string]string {
+	out := make(map[string]string, len(attributes))
+	for key, value := range attributes {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func subjectAttributesForResult(result engine.HTTPCheckResult, subjects []engine.SubjectPolicySet) map[string]string {
+	if result.MatchedPrincipalID != "" {
+		for _, subject := range subjects {
+			if subject.Subject.PrincipalID == result.MatchedPrincipalID {
+				return copySubjectAttributes(subject.Subject.Attributes)
+			}
+		}
+	}
+	if len(subjects) == 1 {
+		return copySubjectAttributes(subjects[0].Subject.Attributes)
+	}
+	return map[string]string{}
+}
+
+func httpCheckResponse(result engine.HTTPCheckResult, matchedPrincipals []string, subjectAttributes map[string]string) dto.HTTPAuthzCheckResponse {
+	reason := "no http_rule grants access to this route"
+	if result.Allowed {
+		reason = "http_rule grants access to this route"
+	}
+	return dto.HTTPAuthzCheckResponse{
+		Allowed:            result.Allowed,
+		MatchedPrincipalID: result.MatchedPrincipalID,
+		MatchedPrincipals:  matchedPrincipals,
+		MatchedPolicyID:    result.MatchedPolicyID,
+		MatchedAction:      result.MatchedAction,
+		SubjectAttributes:  copySubjectAttributes(subjectAttributes),
+		Reason:             reason,
+	}
 }
 
 func (ctrl *AuthzController) validateEntityNamespace(namespace, schemaName, entityType string) error {

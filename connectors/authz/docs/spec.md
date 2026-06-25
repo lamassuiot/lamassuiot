@@ -815,6 +815,73 @@ The packaged WFX HTTP schema constrains SBI job routes as follows:
 
 The `x-wfx-client-id` header is only used by authz for ownership scoping; WFX itself does not need to consume it.
 
+#### HTTP Debug Check API
+
+The HTTP authorization engine can also be exercised directly for UI/debug flows. These endpoints return a JSON decision instead of the Envoy-style allow/deny status code used by `/ext_authz/check`.
+
+Known-principal mode:
+
+```http
+POST /api/authz/v1/authz/http/check
+```
+
+```json
+{
+  "principal_id": "principal-device-1",
+  "subject_attributes": {
+    "client_id": "hub-6ece-0664"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/api/wfx/sbi/v1/jobs",
+    "raw_query": "clientId=hub-6ece-0664",
+    "headers": {
+      "x-wfx-client-id": "hub-6ece-0664"
+    },
+    "body": ""
+  }
+}
+```
+
+Credential mode:
+
+```http
+POST /api/authz/v1/authz/match/http/check
+```
+
+```json
+{
+  "auth_type": "x509",
+  "auth_material": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+  "request": {
+    "method": "PUT",
+    "path": "/api/wfx/sbi/v1/jobs/e0e8/status",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"clientId\":\"hub-6ece-0664\",\"state\":\"DOWNLOADING\"}"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "allowed": true,
+  "matched_principal_id": "principal-device-1",
+  "matched_principals": ["principal-device-1"],
+  "matched_policy_id": "lamassu.6ff9becb-5628-4c45-a7d7-687945445d35",
+  "matched_action": "sbi-job-list",
+  "subject_attributes": {
+    "client_id": "hub-6ece-0664"
+  },
+  "reason": "http_rule grants access to this route"
+}
+```
+
+Known-principal mode does not derive mapped attributes because no certificate or JWT is supplied. Callers should send the test `subject_attributes` they want evaluated. Credential mode resolves matching principals and applies `subject_attribute_mappings`, so derived attributes override static attributes when both define the same key.
+
 ## Technical Requirements
 ### Inheritance Logic (ReBAC)
 The engine must support inheritance through foreign key relationships:
