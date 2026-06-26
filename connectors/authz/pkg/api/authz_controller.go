@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/service"
@@ -44,18 +43,12 @@ func NewAuthzController(eng *engine.Engine, resolver *service.IdentityResolver, 
 func (ctrl *AuthzController) Authorize(c *gin.Context) {
 	var req dto.AuthorizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
 	if err := ctrl.validateEntityNamespace(req.Namespace, req.SchemaName, req.EntityType); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -64,10 +57,7 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 
 	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get principal policies",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to get principal policies", err)
 		return
 	}
 
@@ -82,10 +72,7 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 
 	allowed, err := ctrl.engine.Authorize(reqCtx, policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Authorization check failed",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Authorization check failed", err)
 		return
 	}
 
@@ -113,18 +100,12 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 	var req dto.GetFilterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
 	if err := ctrl.validateEntityNamespace(req.Namespace, req.SchemaName, req.EntityType); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -133,19 +114,13 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 
 	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get principal policies",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to get principal policies", err)
 		return
 	}
 
 	filterSQL, err := ctrl.engine.GetListFilter(reqCtx, policies, req.Namespace, req.SchemaName, req.EntityType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to generate filter",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to generate filter", err)
 		return
 	}
 
@@ -172,18 +147,12 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 	var req dto.MatchAndAuthorizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
 	if err := ctrl.validateEntityNamespace(req.Namespace, req.SchemaName, req.EntityType); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -199,10 +168,7 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to resolve principals",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to resolve principals", err)
 		return
 	}
 
@@ -220,10 +186,7 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 
 	allowed, err := ctrl.engine.Authorize(reqCtx, policies, req.Namespace, req.SchemaName, req.Action, req.EntityType, entityKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Authorization check failed",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Authorization check failed", err)
 		return
 	}
 
@@ -252,17 +215,11 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 func (ctrl *AuthzController) CheckHTTP(c *gin.Context) {
 	var req dto.HTTPAuthzCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 	if err := validateHTTPCheckRequest(req.Request); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -271,10 +228,7 @@ func (ctrl *AuthzController) CheckHTTP(c *gin.Context) {
 
 	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get principal policies",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to get principal policies", err)
 		return
 	}
 
@@ -291,10 +245,7 @@ func (ctrl *AuthzController) CheckHTTP(c *gin.Context) {
 
 	result, err := ctrl.engine.CheckHTTPRequest(reqCtx, toEngineHTTPCheckRequest(req.Request, subjectPolicies))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "HTTP authorization check failed",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "HTTP authorization check failed", err)
 		return
 	}
 
@@ -316,17 +267,11 @@ func (ctrl *AuthzController) CheckHTTP(c *gin.Context) {
 func (ctrl *AuthzController) MatchAndCheckHTTP(c *gin.Context) {
 	var req dto.MatchHTTPAuthzCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 	if err := validateHTTPCheckRequest(req.Request); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -342,10 +287,7 @@ func (ctrl *AuthzController) MatchAndCheckHTTP(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to resolve principals",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to resolve principals", err)
 		return
 	}
 
@@ -354,10 +296,7 @@ func (ctrl *AuthzController) MatchAndCheckHTTP(c *gin.Context) {
 
 	result, err := ctrl.engine.CheckHTTPRequest(reqCtx, toEngineHTTPCheckRequest(req.Request, subjectPolicies))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "HTTP authorization check failed",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "HTTP authorization check failed", err)
 		return
 	}
 
@@ -379,18 +318,12 @@ func (ctrl *AuthzController) MatchAndCheckHTTP(c *gin.Context) {
 func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 	var req dto.MatchAndGetFilterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
 	if err := ctrl.validateEntityNamespace(req.Namespace, req.SchemaName, req.EntityType); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -406,10 +339,7 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to resolve principals",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to resolve principals", err)
 		return
 	}
 
@@ -418,10 +348,7 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 
 	filterSQL, err := ctrl.engine.GetListFilter(reqCtx, policies, req.Namespace, req.SchemaName, req.EntityType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to generate filter",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to generate filter", err)
 		return
 	}
 
@@ -582,10 +509,8 @@ func enrichContextByAuthMaterial(ctx context.Context, authType string, authMater
 	credential := authMaterial
 	if authType == "oidc" {
 		if tokenStr, ok := authMaterial.(string); ok {
-			claims := jwt.MapClaims{}
-			parser := jwt.NewParser()
-			if _, _, err := parser.ParseUnverified(tokenStr, claims); err == nil {
-				credential = map[string]interface{}(claims)
+			if claims, err := decodeJWTPayload(tokenStr); err == nil {
+				credential = claims
 			}
 		}
 	}

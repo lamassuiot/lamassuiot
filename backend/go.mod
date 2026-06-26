@@ -9,7 +9,6 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/globalsign/est v1.0.6
 	github.com/go-playground/validator/v10 v10.30.2
-	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/jakehl/goid v1.1.0
 	github.com/kaptinlin/jsonschema v0.7.10
 	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0

@@ -38,10 +38,7 @@ func NewPolicyController(policyManager service.PolicyService, principalManager s
 func (ctrl *PolicyController) CreatePolicy(c *gin.Context) {
 	var req dto.CreatePolicyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -55,10 +52,7 @@ func (ctrl *PolicyController) CreatePolicy(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to create policy",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to create policy", err)
 		return
 	}
 
@@ -80,17 +74,10 @@ func (ctrl *PolicyController) GetPolicy(c *gin.Context) {
 
 	policy, err := ctrl.policyManager.GetPolicy(c.Request.Context(), policyID)
 	if err != nil {
-		if err.Error() == "policy not found: "+policyID {
-			c.JSON(http.StatusNotFound, dto.ErrorResponse{
-				Error:   "Policy not found",
-				Details: map[string]string{"policyId": policyID},
-			})
+		if replyPolicyNotFound(c, err, policyID) {
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get policy",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to get policy", err)
 		return
 	}
 
@@ -111,10 +98,7 @@ func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
 
 	policies, err := ctrl.policyManager.SearchPolicies(c.Request.Context(), query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to search policies",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to search policies", err)
 		return
 	}
 
@@ -147,10 +131,7 @@ func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
 
 	policies, nextBookmark, err := ctrl.policyManager.ListPolicies(c.Request.Context(), queryParams)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to list policies",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to list policies", err)
 		return
 	}
 
@@ -175,39 +156,23 @@ func (ctrl *PolicyController) UpdatePolicy(c *gin.Context) {
 
 	var req dto.UpdatePolicyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
-	// Get existing policy
 	policy, err := ctrl.policyManager.GetPolicy(c.Request.Context(), policyID)
 	if err != nil {
-		if err.Error() == "policy not found: "+policyID {
-			c.JSON(http.StatusNotFound, dto.ErrorResponse{
-				Error:   "Policy not found",
-				Details: map[string]string{"policyId": policyID},
-			})
+		if replyPolicyNotFound(c, err, policyID) {
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get policy",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to get policy", err)
 		return
 	}
 
-	// Apply updates
 	req.ApplyToPolicy(policy)
 
-	// Save updated policy
 	if err := ctrl.policyManager.UpdatePolicy(c.Request.Context(), policy); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to update policy",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to update policy", err)
 		return
 	}
 
@@ -227,13 +192,9 @@ func (ctrl *PolicyController) UpdatePolicy(c *gin.Context) {
 func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 	policyID := c.Param("id")
 
-	// Check if any principals have this policy
 	count, err := ctrl.principalManager.CountPolicyPrincipals(c.Request.Context(), policyID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to check policy usage",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to check policy usage", err)
 		return
 	}
 
@@ -249,13 +210,8 @@ func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 		return
 	}
 
-	// Delete the policy
 	if err := ctrl.policyManager.DeletePolicy(c.Request.Context(), policyID); err != nil {
-		if err.Error() == "policy not found: "+policyID {
-			c.JSON(http.StatusNotFound, dto.ErrorResponse{
-				Error:   "Policy not found",
-				Details: map[string]string{"policyId": policyID},
-			})
+		if replyPolicyNotFound(c, err, policyID) {
 			return
 		}
 		if err.Error() == fmt.Sprintf("system-managed policy %q cannot be deleted", policyID) {
@@ -265,10 +221,7 @@ func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to delete policy",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to delete policy", err)
 		return
 	}
 
@@ -291,17 +244,10 @@ func (ctrl *PolicyController) GetPolicyStats(c *gin.Context) {
 
 	policy, err := ctrl.policyManager.GetPolicy(ctx, policyID)
 	if err != nil {
-		if err.Error() == "policy not found: "+policyID {
-			c.JSON(http.StatusNotFound, dto.ErrorResponse{
-				Error:   "Policy not found",
-				Details: map[string]string{"policyId": policyID},
-			})
+		if replyPolicyNotFound(c, err, policyID) {
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get policy stats",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyInternalError(c, "Failed to get policy stats", err)
 		return
 	}
 

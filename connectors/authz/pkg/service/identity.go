@@ -49,6 +49,20 @@ func NewIdentityResolver(match principalMatcher, grants engine.GrantStore, polic
 	return &IdentityResolver{match: match, grants: grants, policies: policies}
 }
 
+// loadGrantedPolicies fetches each policy referenced by grants and registers it in registry.
+func (r *IdentityResolver) loadGrantedPolicies(ctx context.Context, registry *engine.PolicyRegistry, grants []models.PrincipalPolicy) error {
+	for _, g := range grants {
+		policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
+		if err != nil {
+			return fmt.Errorf("load policy %s: %w", g.PolicyID, err)
+		}
+		if err := registry.AddPolicy(policy); err != nil {
+			return fmt.Errorf("register policy %s: %w", g.PolicyID, err)
+		}
+	}
+	return nil
+}
+
 // Resolve matches auth material to active principals, loads all their granted policies,
 // and returns a populated PolicyRegistry ready for Engine.Authorize or Engine.GetListFilter.
 // Returns ErrNoMatch (check with errors.Is) when no principals matched.
@@ -67,14 +81,8 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 		if err != nil {
 			return nil, nil, fmt.Errorf("get policies for principal %s: %w", pid, err)
 		}
-		for _, g := range grants {
-			policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
-			if err != nil {
-				return nil, nil, fmt.Errorf("load policy %s: %w", g.PolicyID, err)
-			}
-			if err := registry.AddPolicy(policy); err != nil {
-				return nil, nil, fmt.Errorf("register policy %s: %w", g.PolicyID, err)
-			}
+		if err := r.loadGrantedPolicies(ctx, registry, grants); err != nil {
+			return nil, nil, err
 		}
 	}
 	return registry, principalIDs, nil
@@ -120,14 +128,8 @@ func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial int
 		if err != nil {
 			return nil, nil, fmt.Errorf("get policies for principal %s: %w", subject.PrincipalID, err)
 		}
-		for _, g := range grants {
-			policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
-			if err != nil {
-				return nil, nil, fmt.Errorf("load policy %s: %w", g.PolicyID, err)
-			}
-			if err := registry.AddPolicy(policy); err != nil {
-				return nil, nil, fmt.Errorf("register policy %s: %w", g.PolicyID, err)
-			}
+		if err := r.loadGrantedPolicies(ctx, registry, grants); err != nil {
+			return nil, nil, err
 		}
 		subjectPolicies = append(subjectPolicies, engine.SubjectPolicySet{
 			Subject:  subject,
@@ -147,14 +149,8 @@ func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principa
 	}
 
 	registry := engine.NewPolicyRegistry()
-	for _, g := range grants {
-		policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
-		if err != nil {
-			return nil, fmt.Errorf("load policy %s: %w", g.PolicyID, err)
-		}
-		if err := registry.AddPolicy(policy); err != nil {
-			return nil, fmt.Errorf("register policy %s: %w", g.PolicyID, err)
-		}
+	if err := r.loadGrantedPolicies(ctx, registry, grants); err != nil {
+		return nil, err
 	}
 	return registry, nil
 }

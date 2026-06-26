@@ -33,10 +33,7 @@ func NewPrincipalController(manager service.PrincipalService) *PrincipalControll
 func (ctrl *PrincipalController) CreatePrincipal(c *gin.Context) {
 	var req dto.CreatePrincipalRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -156,10 +153,7 @@ func (ctrl *PrincipalController) UpdatePrincipal(c *gin.Context) {
 
 	var req dto.UpdatePrincipalRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 
@@ -240,10 +234,7 @@ func (ctrl *PrincipalController) GrantPolicy(c *gin.Context) {
 
 	var req dto.GrantPolicyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Error:   "Invalid request",
-			Details: map[string]string{"validation": err.Error()},
-		})
+		replyBadRequest(c, err)
 		return
 	}
 

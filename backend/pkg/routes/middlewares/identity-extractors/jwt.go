@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
-	"github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,38 +28,28 @@ func (extractor JWTExtractor) ExtractAuthentication(ctx *gin.Context, req http.R
 		return
 	}
 
-	// Parse the JWT
 	tokenString := authToken[1]
-	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
+	claims, err := helpers.DecodeJWTPayload(tokenString)
 	if err != nil {
 		return
 	}
 
 	extractor.logger.Debugf("found JWT token in request headers")
-	callerID := ""
 
-	// Access the claims
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if ok {
-		// Extract the sub claim
-		sub, ok := claims["sub"].(string)
-		if ok {
-			callerID = sub
-		}
-	}
+	callerID, _ := claims["sub"].(string)
 
 	ctx.Set(core.LamassuContextKeyAuthType, string(IdentityExtractorJWT))
 	ctx.Set(core.LamassuContextKeyAuthCredentialString, tokenString)
-	ctx.Set(core.LamassuContextKeyAuthCredentialStruct, token)
+	ctx.Set(core.LamassuContextKeyAuthCredentialStruct, claims)
 	ctx.Set(core.LamassuContextKeyAuthID, callerID)
-	ctx.Set(core.LamassuContextKeyAuthContext, map[string]interface{}(claims))
+	ctx.Set(core.LamassuContextKeyAuthContext, claims)
 
 	reqCtx := req.Context()
 	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, string(IdentityExtractorJWT))
 	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialString, tokenString)
-	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, token)
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, claims)
 	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthID, callerID)
-	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, map[string]interface{}(claims))
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, claims)
 	if ctx.Request != nil {
 		ctx.Request = ctx.Request.WithContext(reqCtx)
 	}
