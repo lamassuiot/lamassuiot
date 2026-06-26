@@ -254,6 +254,16 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			clientCertsToHeaderUsingEnvoyStyle(),
 		)
 
+		// When authz is disabled (no authz service running), bypass service-level authz
+		// checks by injecting admin-mode. This runs after stripIncomingHeaders so external
+		// clients cannot forge the header.
+		if authzPort == 0 {
+			engine.Use(func(c *gin.Context) {
+				c.Request.Header.Set("X-Principal-ID", "admin-mode")
+				c.Next()
+			})
+		}
+
 		routeMaps := make(map[string]func(c *gin.Context))
 		routeList := make([]string, 0)
 		authzProxy := newMonolithicAuthzProxy(authzPort, authzProxyPrefixes(conf))
