@@ -7,6 +7,15 @@ import (
 	"github.com/lamassuiot/authz/pkg/models"
 )
 
+func mustNewFilterGenerator(t *testing.T, schemas *SchemaRegistry, policies *PolicyRegistry) *FilterGenerator {
+	t.Helper()
+	fg, err := NewFilterGenerator(schemas, policies)
+	if err != nil {
+		t.Fatalf("Failed to create filter generator: %v", err)
+	}
+	return fg
+}
+
 func TestFilterGenerator_DirectOwnership(t *testing.T) {
 	// Setup registries
 	schemas := NewSchemaRegistry()
@@ -19,7 +28,7 @@ func TestFilterGenerator_DirectOwnership(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test direct device ownership - policy has directGrants ["device-1", "device-4"]
 	result, err := fg.GenerateListFilter("read", "public", "device")
@@ -54,7 +63,7 @@ func TestFilterGenerator_CascadingOwnership(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test cascading: policies should define organization directGrants to cascade to devices
 	result, err := fg.GenerateListFilter("read", "public", "device")
@@ -93,7 +102,7 @@ func TestFilterGenerator_BuildingManager(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Building directGrants (if defined in policy)
 	result, err := fg.GenerateListFilter("read", "public", "building")
@@ -126,7 +135,7 @@ func TestFilterGenerator_CheckFilter(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Check specific device access
 	result, err := fg.GenerateCheckFilter("read", "public", "device", map[string]string{"device_id": "device-1"})
@@ -183,7 +192,7 @@ func TestFilterGenerator_WildcardRuleSchemaAndEntity(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "device")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -222,7 +231,7 @@ func TestFilterGenerator_WildcardAction_DirectGrant(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "device")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -269,7 +278,7 @@ func TestFilterGenerator_WildcardAction_RelationCascade(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "gateway")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -296,7 +305,7 @@ func TestFilterGenerator_NoAccess(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test with an action that doesn't exist in any policy for organization
 	// All policies for organization have read, write, delete - but not "execute"
@@ -326,7 +335,7 @@ func TestFilterGenerator_NoAccessCheckFilter(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test check filter with an action that doesn't exist in any policy
 	// This should return just "1 = 0" without adding the entity ID check
@@ -358,7 +367,7 @@ func TestFilterGenerator_MultipleActions(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test different actions - user owns device "device-001"
 	actions := []string{"read", "write", "control", "delete"}
@@ -390,7 +399,7 @@ func TestFilterGenerator_InvalidEntity(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test with non-existent entity
 	_, err := fg.GenerateListFilter("read", "public", "nonexistent")
@@ -410,7 +419,7 @@ func TestFilterGenerator_Gateway(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Gateway access (depends on policy directGrants)
 	result, err := fg.GenerateListFilter("read", "public", "gateway")
@@ -443,7 +452,7 @@ func TestFilterGenerator_OrganizationAccess(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Organization access (depends on policy directGrants)
 	result, err := fg.GenerateListFilter("read", "public", "organization")
@@ -480,7 +489,7 @@ func TestFilterGenerator_ControlDevice(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test control action on devices
 	result, err := fg.GenerateListFilter("control", "public", "device")
@@ -539,7 +548,7 @@ func TestFilterResult_FullSQL(t *testing.T) {
 		t.Fatalf("Failed to load policies: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	// Test GenerateListFilter
 	listResult, err := fg.GenerateListFilter("read", "public", "device")
@@ -572,7 +581,7 @@ func TestBuildPathFilterWildcard_SingleHop(t *testing.T) {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, NewPolicyRegistry())
+	fg := mustNewFilterGenerator(t,schemas, NewPolicyRegistry())
 
 	path := []*GraphEdge{
 		{From: "dmsmanager.dms", To: "devicemanager.device", ForeignKey: "dms_owner"},
@@ -612,7 +621,7 @@ func TestBuildPathFilterWildcard_TwoHop(t *testing.T) {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, NewPolicyRegistry())
+	fg := mustNewFilterGenerator(t,schemas, NewPolicyRegistry())
 
 	path := []*GraphEdge{
 		{From: "dmsmanager.dms", To: "devicemanager.device", ForeignKey: "dms_owner"},
@@ -690,7 +699,7 @@ func TestGenerateListFilter_WildcardDirectGrantCascadesToCertificate(t *testing.
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "ca", "certificate")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -749,7 +758,7 @@ func TestFilterGenerator_ColumnFilter_SingleCondition(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "device")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -790,7 +799,7 @@ func TestFilterGenerator_ColumnFilter_MultipleConditionsANDed(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "device")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -840,7 +849,7 @@ func TestFilterGenerator_ColumnFilter_BoolValue(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "device")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -879,7 +888,7 @@ func TestFilterGenerator_ColumnFilter_InOperator(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "device")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -918,7 +927,7 @@ func TestFilterGenerator_ColumnFilter_NonFilterableColumnReturnsError(t *testing
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	_, err := fg.GenerateListFilter("read", "public", "device")
 	if err == nil {
 		t.Error("Expected error for undeclared filterable column, got nil")
@@ -956,7 +965,7 @@ func TestFilterGenerator_ColumnFilter_TypeMatchesSchema(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("read", "public", "device")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -996,7 +1005,7 @@ func TestFilterGenerator_ColumnFilter_TypeMismatchReturnsError(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	_, err := fg.GenerateListFilter("read", "public", "device")
 	if err == nil {
 		t.Fatal("Expected type mismatch error, got nil")
@@ -1037,7 +1046,7 @@ func TestFilterGenerator_ColumnFilter_ActionNotMatched(t *testing.T) {
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	// Requesting "delete" — not granted by this rule
 	result, err := fg.GenerateListFilter("delete", "public", "device")
 	if err != nil {
@@ -1140,7 +1149,7 @@ func TestGenerateListFilter_SpecificDeviceIDRevokeCascadesToCertificate(t *testi
 		t.Fatalf("Failed to add policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 	result, err := fg.GenerateListFilter("status-update", "ca", "certificate")
 	if err != nil {
 		t.Fatalf("GenerateListFilter failed: %v", err)
@@ -1177,7 +1186,7 @@ func TestBuildPathFilter_UsesOwnedEntityAliasForMultiHopPath(t *testing.T) {
 		t.Fatalf("Failed to load schemas: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t,schemas, policies)
 
 	path := []*GraphEdge{
 		{From: "dmsmanager.dms", To: "devicemanager.device", ForeignKey: "dms_owner"},

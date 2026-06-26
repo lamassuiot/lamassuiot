@@ -18,7 +18,7 @@ func TestFilterGenerator_ControlActionOnDevice(t *testing.T) {
 		t.Fatalf("Failed to load policy: %v", err)
 	}
 
-	fg := NewFilterGenerator(schemas, policies)
+	fg := mustNewFilterGenerator(t, schemas, policies)
 
 	// Test control action on device - should cascade from org-1
 	result, err := fg.GenerateListFilter("control", "public", "device")
