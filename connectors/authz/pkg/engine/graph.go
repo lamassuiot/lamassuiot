@@ -38,30 +38,27 @@ func NewAuthorizationGraph() *AuthorizationGraph {
 
 // BuildFromPoliciesAndSchemas constructs the graph from policy and schema definitions
 func (g *AuthorizationGraph) BuildFromPoliciesAndSchemas(policies *PolicyRegistry, schemas *SchemaRegistry) error {
-	// Create nodes for all entity types from schemas (use qualified entity types)
+	g.createSchemaNodes(schemas)
+	if err := g.buildPolicyEdges(policies, schemas); err != nil {
+		return err
+	}
+	g.addUserOwnershipEdges(schemas)
+	return nil
+}
+
+func (g *AuthorizationGraph) createSchemaNodes(schemas *SchemaRegistry) {
 	for qualifiedType, schema := range schemas.GetAll() {
 		if _, exists := g.nodes[qualifiedType]; !exists {
-			g.nodes[qualifiedType] = &GraphNode{
-				EntityType: qualifiedType,
-				Relations:  make(map[string]*GraphEdge),
-			}
+			g.nodes[qualifiedType] = &GraphNode{EntityType: qualifiedType, Relations: make(map[string]*GraphEdge)}
 		}
-		// Also create node with simple name for backward compatibility
 		if _, exists := g.nodes[schema.EntityType]; !exists {
-			g.nodes[schema.EntityType] = &GraphNode{
-				EntityType: schema.EntityType,
-				Relations:  make(map[string]*GraphEdge),
-			}
+			g.nodes[schema.EntityType] = &GraphNode{EntityType: schema.EntityType, Relations: make(map[string]*GraphEdge)}
 		}
 	}
+	g.nodes["user"] = &GraphNode{EntityType: "user", Relations: make(map[string]*GraphEdge)}
+}
 
-	// Add user node (virtual node for user ownership)
-	g.nodes["user"] = &GraphNode{
-		EntityType: "user",
-		Relations:  make(map[string]*GraphEdge),
-	}
-
-	// Build edges from policies/rules
+func (g *AuthorizationGraph) buildPolicyEdges(policies *PolicyRegistry, schemas *SchemaRegistry) error {
 	for _, policy := range policies.GetAll() {
 		for _, rule := range policy.Rules {
 			matchedSchemas := 0
@@ -70,54 +67,40 @@ func (g *AuthorizationGraph) BuildFromPoliciesAndSchemas(policies *PolicyRegistr
 					continue
 				}
 				matchedSchemas++
-
 				concreteRule := concretizeRuleForSchema(rule, schema)
 				if err := g.addRuleEdges(concreteRule.QualifiedEntityType(), concreteRule.Namespace, concreteRule, schemas); err != nil {
 					return err
 				}
 			}
-
 			if matchedSchemas == 0 && (rule.SchemaName == "*" || rule.EntityType == "*") {
-				// No schemas registered for this namespace yet — skip this rule rather than
-				// aborting the entire graph build. The namespace may be loaded later or may
-				// simply not be present in the current schema registry.
 				fmt.Printf("Warning: wildcard rule matched no schemas: namespace=%s schemaName=%s entityType=%s (skipping rule)\n",
-					rule.Namespace,
-					rule.SchemaName,
-					rule.EntityType,
-				)
-				continue
+					rule.Namespace, rule.SchemaName, rule.EntityType)
 			}
 		}
 	}
+	return nil
+}
 
-	// Add direct user ownership edges from schemas
+func (g *AuthorizationGraph) addUserOwnershipEdges(schemas *SchemaRegistry) {
 	for _, schema := range schemas.GetAll() {
 		for _, relConfig := range schema.Relations {
-			if relConfig.TargetEntity == "user" {
-				// Edge from entity to user
-				edge := &GraphEdge{
-					From:               schema.QualifiedEntityType(),
-					To:                 "user",
-					Via:                relConfig.ForeignKey,
-					ForeignKey:         relConfig.ForeignKey,
-					TableName:          schema.TableName,
-					QualifiedTableName: schema.QualifiedTableName(),
-					PrimaryKey:         schema.PrimaryKeys[0],
-				}
-				qualifiedType := schema.QualifiedEntityType()
-				if g.nodes[qualifiedType] != nil {
-					g.nodes[qualifiedType].Relations[relConfig.ForeignKey] = edge
-				}
-				// Also add to simple name node for backward compatibility
-				if g.nodes[schema.EntityType] != nil {
-					g.nodes[schema.EntityType].Relations[relConfig.ForeignKey] = edge
-				}
+			if relConfig.TargetEntity != "user" {
+				continue
+			}
+			edge := &GraphEdge{
+				From: schema.QualifiedEntityType(), To: "user", Via: relConfig.ForeignKey,
+				ForeignKey: relConfig.ForeignKey, TableName: schema.TableName,
+				QualifiedTableName: schema.QualifiedTableName(), PrimaryKey: schema.PrimaryKeys[0],
+			}
+			qualifiedType := schema.QualifiedEntityType()
+			if g.nodes[qualifiedType] != nil {
+				g.nodes[qualifiedType].Relations[relConfig.ForeignKey] = edge
+			}
+			if g.nodes[schema.EntityType] != nil {
+				g.nodes[schema.EntityType].Relations[relConfig.ForeignKey] = edge
 			}
 		}
 	}
-
-	return nil
 }
 
 // addRuleEdges adds edges from a policy's relations
@@ -129,51 +112,23 @@ func (g *AuthorizationGraph) addRuleEdges(entityType string, namespace string, r
 func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace string, relations []models.RelationRule, schemas *SchemaRegistry) error {
 	for _, rel := range relations {
 		targetEntityType := rel.QualifiedTo()
-
-		// Get target schema to find table details - must match namespace
-		// Relations always use the parent rule's namespace
-		var targetSchema *SchemaDefinition
-		for _, schema := range schemas.GetAll() {
-			if schema.ConfigSchema == fromNamespace && schema.QualifiedEntityType() == targetEntityType {
-				targetSchema = schema
-				break
-			}
-		}
+		targetSchema := findSchemaForRelation(fromNamespace, targetEntityType, schemas)
 		if targetSchema == nil {
 			return fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, targetEntityType)
 		}
-
-		// Create edge from source to target
 		edge := &GraphEdge{
-			From:               fromEntity,
-			To:                 targetEntityType,
-			Via:                rel.Via,
-			Actions:            rel.Actions,
-			ForeignKey:         rel.Via, // Via IS the foreign key column
-			TableName:          targetSchema.TableName,
-			QualifiedTableName: targetSchema.QualifiedTableName(),
-			PrimaryKey:         targetSchema.PrimaryKeys[0],
+			From: fromEntity, To: targetEntityType, Via: rel.Via,
+			Actions: rel.Actions, ForeignKey: rel.Via,
+			TableName: targetSchema.TableName, QualifiedTableName: targetSchema.QualifiedTableName(),
+			PrimaryKey: targetSchema.PrimaryKeys[0],
 		}
-
 		if g.nodes[fromEntity] != nil {
-			// Check if edge already exists - merge actions if so
 			if existingEdge, exists := g.nodes[fromEntity].Relations[rel.Via]; exists {
-				// Merge actions - add new actions that don't already exist
-				actionSet := make(map[string]bool)
-				for _, action := range existingEdge.Actions {
-					actionSet[action] = true
-				}
-				for _, action := range rel.Actions {
-					if !actionSet[action] {
-						existingEdge.Actions = append(existingEdge.Actions, action)
-					}
-				}
+				mergeEdgeActions(existingEdge, rel.Actions)
 			} else {
 				g.nodes[fromEntity].Relations[rel.Via] = edge
 			}
 		}
-
-		// Recursively add nested relations (using same namespace as parent)
 		if len(rel.Relations) > 0 {
 			if err := g.addRelationEdges(targetEntityType, fromNamespace, rel.Relations, schemas); err != nil {
 				return err
@@ -181,6 +136,27 @@ func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace s
 		}
 	}
 	return nil
+}
+
+func findSchemaForRelation(namespace, entityType string, schemas *SchemaRegistry) *SchemaDefinition {
+	for _, schema := range schemas.GetAll() {
+		if schema.ConfigSchema == namespace && schema.QualifiedEntityType() == entityType {
+			return schema
+		}
+	}
+	return nil
+}
+
+func mergeEdgeActions(edge *GraphEdge, newActions []string) {
+	actionSet := make(map[string]bool, len(edge.Actions))
+	for _, a := range edge.Actions {
+		actionSet[a] = true
+	}
+	for _, a := range newActions {
+		if !actionSet[a] {
+			edge.Actions = append(edge.Actions, a)
+		}
+	}
 }
 
 // FindPathsToUser finds all paths from an entity type to user ownership

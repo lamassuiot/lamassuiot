@@ -74,107 +74,82 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 	if err != nil {
 		return false, fmt.Errorf("schema not found: %w", err)
 	}
-
 	if schema.ConfigSchema != namespace {
 		return false, fmt.Errorf("entity type '%s' does not belong to namespace '%s'", entityType, namespace)
 	}
-
 	if !schema.HasAction(action) {
 		return false, fmt.Errorf("action '%s' is not defined for entity type '%s'", action, entityType)
 	}
-
 	if schema.IsGlobalAction(action) {
-		matchedRules := 0
-		for _, rule := range policies.GetRules() {
-			if ruleMatchesSchema(rule, schema) {
-				matchedRules++
-				if rule.HasAction(action) {
-					log.WithFields(logrus.Fields{
-						"action":      action,
-						"entity_type": entityType,
-						"namespace":   namespace,
-						"allowed":     true,
-						"reason":      "global action granted by policy rule",
-					}).Info("authorization decision")
-					return true, nil
-				}
+		return e.authorizeGlobal(log, policies, schema, action, entityType, namespace)
+	}
+	return e.authorizeAtomic(ctx, policies, schema, schemaName, action, entityType, namespace, entityKey)
+}
+
+func (e *Engine) authorizeGlobal(log *logrus.Entry, policies *PolicyRegistry, schema *SchemaDefinition, action, entityType, namespace string) (bool, error) {
+	matchedRules := 0
+	for _, rule := range policies.GetRules() {
+		if ruleMatchesSchema(rule, schema) {
+			matchedRules++
+			if rule.HasAction(action) {
+				log.WithFields(logrus.Fields{
+					"action": action, "entity_type": entityType, "namespace": namespace,
+					"allowed": true, "reason": "global action granted by policy rule",
+				}).Info("authorization decision")
+				return true, nil
 			}
 		}
-		log.WithFields(logrus.Fields{
-			"action":        action,
-			"entity_type":   entityType,
-			"namespace":     namespace,
-			"allowed":       false,
-			"reason":        "no policy rule grants this action",
-			"rules_checked": len(policies.GetRules()),
-			"rules_matched": matchedRules,
-		}).Info("authorization decision")
-		return false, nil
 	}
+	log.WithFields(logrus.Fields{
+		"action": action, "entity_type": entityType, "namespace": namespace,
+		"allowed": false, "reason": "no policy rule grants this action",
+		"rules_checked": len(policies.GetRules()), "rules_matched": matchedRules,
+	}).Info("authorization decision")
+	return false, nil
+}
 
+func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, schema *SchemaDefinition, schemaName, action, entityType, namespace string, entityKey map[string]string) (bool, error) {
+	log := helpers.ConfigureLogger(ctx, e.logger)
 	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
 	if err != nil {
 		return false, fmt.Errorf("failed to build authorization graph: %w", err)
 	}
-
 	result, err := filterGenerator.GenerateCheckFilter(action, schemaName, entityType, entityKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to generate filter: %w", err)
 	}
-
 	if len(result.Conditions) == 1 && result.Conditions[0] == "1 = 0" {
 		log.WithFields(logrus.Fields{
-			"action":      action,
-			"entity_type": entityType,
-			"namespace":   namespace,
-			"allowed":     false,
-			"reason":      "no policy grants access to this entity",
+			"action": action, "entity_type": entityType, "namespace": namespace,
+			"allowed": false, "reason": "no policy grants access to this entity",
 		}).Info("authorization decision")
 		return false, nil
 	}
-
 	log.WithFields(logrus.Fields{
-		"action":          action,
-		"entity_type":     entityType,
-		"condition_count": len(result.Conditions),
-		"join_count":      len(result.Joins),
+		"action": action, "entity_type": entityType,
+		"condition_count": len(result.Conditions), "join_count": len(result.Joins),
 	}).Debug("authorization filter generated")
-
 	db, err := e.getDBForSchema(schema)
 	if err != nil {
 		return false, fmt.Errorf("failed to get database connection: %w", err)
 	}
-
 	var exists int
 	query := db.WithContext(ctx).Table(schema.QualifiedTableName())
-
 	for _, join := range result.Joins {
 		query = query.Joins(join)
 	}
-
 	whereClause := strings.Join(result.Conditions, " AND ")
-
 	log.WithFields(logrus.Fields{
-		"action":       action,
-		"entity_type":  entityType,
-		"where_clause": whereClause,
+		"action": action, "entity_type": entityType, "where_clause": whereClause,
 	}).Trace("authorization filter detail")
-
 	query = query.Where(whereClause).Select("1").Limit(1).Find(&exists)
-
 	if query.Error != nil {
 		return false, fmt.Errorf("database query failed: %w", query.Error)
 	}
-
 	authorized := query.RowsAffected > 0
-
-	reason := "denied: entity key did not match any policy-permitted entity"
 	fields := logrus.Fields{
-		"action":      action,
-		"entity_type": entityType,
-		"namespace":   namespace,
-		"allowed":     authorized,
-		"reason":      reason,
+		"action": action, "entity_type": entityType, "namespace": namespace,
+		"allowed": authorized, "reason": "denied: entity key did not match any policy-permitted entity",
 	}
 	if authorized {
 		fields["reason"] = "allowed: entity key matched policy conditions"
@@ -191,9 +166,7 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 			fields["policy_ids"] = matchedPolicyIDs
 		}
 	}
-
 	log.WithFields(fields).Info("authorization decision")
-
 	return authorized, nil
 }
 

@@ -149,139 +149,126 @@ func (fg *FilterGenerator) GenerateListFilter(action, targetSchemaName, targetEn
 		return nil, fmt.Errorf("schema not found: %w", err)
 	}
 
-	targetQualifiedEntityType := schema.QualifiedEntityType()
-
-	result := &FilterResult{
-		Joins:      []string{},
-		Conditions: []string{},
-	}
-
-	// Track global path index to ensure unique table aliases across all paths from different entity types
+	result := &FilterResult{Joins: []string{}, Conditions: []string{}}
 	pathCounter := 0
 
-	// 1. Check direct grants from rules that match both entityType AND action
+	if done, err := fg.applyDirectGrants(result, action, schema); done || err != nil {
+		return result, err
+	}
+
+	if err := fg.applyCascadingGrants(result, action, schema.QualifiedEntityType(), &pathCounter); err != nil {
+		return nil, err
+	}
+
+	if len(result.Conditions) == 0 {
+		result.Conditions = append(result.Conditions, "1 = 0")
+	}
+	result.buildFullSQL(schema, " OR ")
+	return result, nil
+}
+
+// applyDirectGrants processes direct-grant rules for the target schema.
+// Returns (true, nil) on a wildcard grant — caller should return immediately.
+func (fg *FilterGenerator) applyDirectGrants(result *FilterResult, action string, schema *SchemaDefinition) (bool, error) {
 	for _, rule := range fg.policies.GetRules() {
-		if !ruleMatchesSchema(rule, schema) {
+		if !ruleMatchesSchema(rule, schema) || !rule.HasAction(action) {
 			continue
 		}
-		if !rule.HasAction(action) {
-			continue // This rule doesn't support the requested action
-		}
 		if rule.HasDirectGrants() {
-			// Check for wildcard "*" grant
-			for _, entityID := range rule.GetDirectGrants() {
-				if entityID == "*" {
-					// Wildcard grants access to ALL entities
-					result.Conditions = append(result.Conditions, "1 = 1")
-					return result, nil
-				}
+			if hasWildcardGrant(rule) {
+				result.Conditions = append(result.Conditions, "1 = 1")
+				return true, nil
 			}
-			// No wildcard, collect all entity IDs for this rule
 			grants := rule.GetDirectGrants()
 			if len(grants) > 0 {
-				// Build IN clause with escaped SQL string literals
 				quotedGrants := make([]string, len(grants))
 				for i, grant := range grants {
 					quotedGrants[i] = sqlStringLiteral(grant)
 				}
-				// Qualify the column name with the table name to avoid ambiguity
 				result.Conditions = append(result.Conditions, fmt.Sprintf("%s.%s IN (%s)",
 					schema.ColumnQualifier(), schema.PrimaryKeys[0], strings.Join(quotedGrants, ", ")))
 			}
 		}
-
 		if rule.HasColumnFilters() {
 			cond, err := buildColumnFilterConditions(schema, rule.ColumnFilters)
 			if err != nil {
-				return nil, fmt.Errorf("column filter error in rule for %s: %w", rule.QualifiedEntityType(), err)
+				return false, fmt.Errorf("column filter error in rule for %s: %w", rule.QualifiedEntityType(), err)
 			}
 			if cond != "" {
 				result.Conditions = append(result.Conditions, cond)
 			}
 		}
 	}
+	return false, nil
+}
 
-	// 2. Check cascading access from other entity types' directGrants
+// applyCascadingGrants processes cascading access from all other entity types.
+func (fg *FilterGenerator) applyCascadingGrants(result *FilterResult, action, targetQualifiedEntityType string, pathCounter *int) error {
 	for _, otherRule := range fg.policies.GetRules() {
 		for _, sourceSchema := range fg.schemas.GetAll() {
 			if !ruleMatchesSchema(otherRule, sourceSchema) {
 				continue
 			}
-
 			if sourceSchema.QualifiedEntityType() == targetQualifiedEntityType {
-				continue // Already handled above
+				continue
 			}
-
-			concreteRule := concretizeRuleForSchema(otherRule, sourceSchema)
-
-			if concreteRule.HasDirectGrants() {
-				// Check for wildcard "*" grant
-				hasWildcard := false
-				for _, entityID := range concreteRule.GetDirectGrants() {
-					if entityID == "*" {
-						hasWildcard = true
-						break
-					}
-				}
-
-				if hasWildcard {
-					// Wildcard - cascade from ALL entities of this type
-					cascadeResult, newPathCounter, err := fg.buildCascadingAccessWildcard(
-						concreteRule,
-						action,
-						targetQualifiedEntityType,
-						pathCounter,
-					)
-					if err != nil {
-						return nil, err
-					}
-					pathCounter = newPathCounter
-					result.Joins = append(result.Joins, cascadeResult.Joins...)
-					result.Conditions = append(result.Conditions, cascadeResult.Conditions...)
-				} else {
-					// Specific entity IDs
-					for _, entityID := range concreteRule.GetDirectGrants() {
-						cascadeResult, newPathCounter, err := fg.buildCascadingAccess(
-							concreteRule,
-							entityID,
-							action,
-							targetQualifiedEntityType,
-							pathCounter,
-						)
-						if err != nil {
-							return nil, err
-						}
-						pathCounter = newPathCounter
-						result.Joins = append(result.Joins, cascadeResult.Joins...)
-						result.Conditions = append(result.Conditions, cascadeResult.Conditions...)
-					}
-				}
-			} else if concreteRule.HasColumnFilters() {
-				// Attribute-based cascading
-				cascadeResult, newPathCounter, err := fg.buildCascadingAccessByColumnFilter(
-					concreteRule,
-					action,
-					targetQualifiedEntityType,
-					pathCounter,
-				)
-				if err != nil {
-					return nil, err
-				}
-				pathCounter = newPathCounter
-				result.Joins = append(result.Joins, cascadeResult.Joins...)
-				result.Conditions = append(result.Conditions, cascadeResult.Conditions...)
+			if err := fg.applyCascadeForRule(result, concretizeRuleForSchema(otherRule, sourceSchema), action, targetQualifiedEntityType, pathCounter); err != nil {
+				return err
 			}
 		}
 	}
+	return nil
+}
 
-	if len(result.Conditions) == 0 {
-		result.Conditions = append(result.Conditions, "1 = 0")
+// applyCascadeForRule applies a single concretized rule's cascade contribution to result.
+func (fg *FilterGenerator) applyCascadeForRule(result *FilterResult, rule *models.Rule, action, targetQualifiedEntityType string, pathCounter *int) error {
+	if rule.HasDirectGrants() {
+		return fg.applyCascadeDirectGrants(result, rule, action, targetQualifiedEntityType, pathCounter)
 	}
+	if rule.HasColumnFilters() {
+		cascadeResult, newCounter, err := fg.buildCascadingAccessByColumnFilter(rule, action, targetQualifiedEntityType, *pathCounter)
+		if err != nil {
+			return err
+		}
+		*pathCounter = newCounter
+		result.Joins = append(result.Joins, cascadeResult.Joins...)
+		result.Conditions = append(result.Conditions, cascadeResult.Conditions...)
+	}
+	return nil
+}
 
-	// Build the complete SQL query
-	result.buildFullSQL(schema, " OR ")
+// applyCascadeDirectGrants handles the direct-grant branch of cascading access.
+func (fg *FilterGenerator) applyCascadeDirectGrants(result *FilterResult, rule *models.Rule, action, targetQualifiedEntityType string, pathCounter *int) error {
+	if hasWildcardGrant(rule) {
+		cascadeResult, newCounter, err := fg.buildCascadingAccessWildcard(rule, action, targetQualifiedEntityType, *pathCounter)
+		if err != nil {
+			return err
+		}
+		*pathCounter = newCounter
+		result.Joins = append(result.Joins, cascadeResult.Joins...)
+		result.Conditions = append(result.Conditions, cascadeResult.Conditions...)
+		return nil
+	}
+	for _, entityID := range rule.GetDirectGrants() {
+		cascadeResult, newCounter, err := fg.buildCascadingAccess(rule, entityID, action, targetQualifiedEntityType, *pathCounter)
+		if err != nil {
+			return err
+		}
+		*pathCounter = newCounter
+		result.Joins = append(result.Joins, cascadeResult.Joins...)
+		result.Conditions = append(result.Conditions, cascadeResult.Conditions...)
+	}
+	return nil
+}
 
-	return result, nil
+// hasWildcardGrant reports whether any of the rule's direct grants is "*".
+func hasWildcardGrant(rule *models.Rule) bool {
+	for _, id := range rule.GetDirectGrants() {
+		if id == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 // GenerateCheckFilter generates JOIN clauses and WHERE conditions for checking single entity access
