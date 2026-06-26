@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
 	"gorm.io/gorm"
 )
 
@@ -15,13 +16,16 @@ import (
 // AutoMigrate is called at construction time to create the "policies" table if missing.
 type GormPolicyStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.PolicyRecord]
+	querier *postgres.DBQuerier[models.PolicyRecord]
 }
 
 // NewGormPolicyStore creates the store. Schema is managed by RunMigrations.
 func NewGormPolicyStore(db *gorm.DB) (*GormPolicyStore, error) {
-	q := newPostgresDBQuerier[models.PolicyRecord](db, "policies", "id")
-	return &GormPolicyStore{db: db, querier: &q}, nil
+	q, err := postgres.TableQuery[models.PolicyRecord](nil, db, "policies", "id", models.PolicyRecord{})
+	if err != nil {
+		return nil, err
+	}
+	return &GormPolicyStore{db: db, querier: q}, nil
 }
 
 func (s *GormPolicyStore) Create(ctx context.Context, policy *models.Policy) error {
@@ -88,7 +92,7 @@ func (s *GormPolicyStore) Delete(ctx context.Context, id string) error {
 
 func (s *GormPolicyStore) List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Policy, string, error) {
 	var policies []*models.Policy
-	nextBookmark, err := s.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, false, func(rec models.PolicyRecord) {
+	nextBookmark, err := s.querier.SelectAll(ctx, queryParams, []postgres.GormExtraOps{}, false, func(rec models.PolicyRecord) {
 		p, convErr := rec.ToPolicy()
 		if convErr == nil {
 			policies = append(policies, p)

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	gorm_authz "github.com/lamassuiot/authz/sdk/gorm"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
@@ -36,6 +35,18 @@ func GetEmbeddedMigrations() embed.FS {
 	return embedMigrations
 }
 
+// registeredPlugins holds GORM plugins to be registered on every new DB connection.
+// Call RegisterGORMPlugin during init to inject plugins from outside this module
+// (e.g. the authz SDK plugin) without creating a circular module dependency.
+var registeredPlugins []gorm.Plugin
+
+// RegisterGORMPlugin adds a GORM plugin that will be registered on every DB
+// connection created by CreatePostgresDBConnection. Must be called before any
+// storage operations (typically from an init() or a builder registration).
+func RegisterGORMPlugin(p gorm.Plugin) {
+	registeredPlugins = append(registeredPlugins, p)
+}
+
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, schema string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
 		logger: logger,
@@ -54,13 +65,20 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	db.Exec(fmt.Sprintf("SET search_path TO %s", schema))
 
 	// Add OTel Tracing
-	err = db.Use(tracing.NewPlugin())
-	err = db.Use(gorm_authz.NewAuthzGormPlugin())
+	if err = db.Use(tracing.NewPlugin()); err != nil {
+		return nil, err
+	}
 
-	return db, err
+	for _, p := range registeredPlugins {
+		if err = db.Use(p); err != nil {
+			return nil, fmt.Errorf("register GORM plugin %q: %w", p.Name(), err)
+		}
+	}
+
+	return db, nil
 }
 
-func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
+func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*DBQuerier[E], error) {
 	schema.RegisterSerializer("text", TextSerializer{})
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
 	return &querier, nil
@@ -174,41 +192,41 @@ func (migrator *migrator) MigrateToLatest() {
 	migrator.logger.Infof("Migrated %d steps", len(r))
 }
 
-type postgresDBQuerier[E any] struct {
+type DBQuerier[E any] struct {
 	*gorm.DB
 	tableName        string
 	primaryKeyColumn string
 }
 
-func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) postgresDBQuerier[E] {
-	return postgresDBQuerier[E]{
+func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) DBQuerier[E] {
+	return DBQuerier[E]{
 		DB:               db,
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
 	}
 }
 
-type gormExtraOps struct {
-	query           interface{}
-	additionalWhere []interface{}
-	joins           []string
+type GormExtraOps struct {
+	Query           interface{}
+	AdditionalWhere []interface{}
+	Joins           []string
 }
 
-func applyExtraOpts(tx *gorm.DB, extraOpts []gormExtraOps) *gorm.DB {
+func applyExtraOpts(tx *gorm.DB, extraOpts []GormExtraOps) *gorm.DB {
 	for _, join := range extraOpts {
-		for _, j := range join.joins {
+		for _, j := range join.Joins {
 			tx = tx.Joins(j)
 		}
 	}
 
 	for _, whereQuery := range extraOpts {
-		tx = tx.Where(whereQuery.query, whereQuery.additionalWhere...)
+		tx = tx.Where(whereQuery.Query, whereQuery.AdditionalWhere...)
 	}
 
 	return tx
 }
 
-func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtraOps) (int, error) {
+func (db *DBQuerier[E]) Count(ctx context.Context, extraOpts []GormExtraOps) (int, error) {
 	var count int64
 	tx := db.Table(db.tableName).WithContext(ctx)
 
@@ -222,7 +240,7 @@ func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtra
 	return int(count), nil
 }
 
-func (db *postgresDBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.FilterOption, extraOpts []gormExtraOps) (int, error) {
+func (db *DBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.FilterOption, extraOpts []GormExtraOps) (int, error) {
 	var count int64
 	tx := db.Table(db.tableName).WithContext(ctx)
 
@@ -240,7 +258,7 @@ func (db *postgresDBQuerier[E]) CountFiltered(ctx context.Context, filters []res
 	return int(count), nil
 }
 
-func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
+func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []GormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 	tx := db.Table(db.tableName)
 
@@ -448,7 +466,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 // Selects first element from DB. if queryCol is empty or nil, the primary key column
 // defined in the creation process, is used.
-func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryCol *string) (bool, *E, error) {
+func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryCol *string) (bool, *E, error) {
 	searchCol := db.primaryKeyColumn
 	if queryCol != nil && *queryCol != "" {
 		searchCol = *queryCol
@@ -467,7 +485,7 @@ func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string
 	return true, &elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
+func (db *DBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
 	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -476,7 +494,7 @@ func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID stri
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
+func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
 	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -489,7 +507,7 @@ func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID stri
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Delete(ctx context.Context, elemID string) error {
+func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
 	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
 	if err := tx.Error; err != nil {
 		return err
