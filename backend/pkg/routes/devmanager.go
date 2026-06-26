@@ -1,11 +1,7 @@
 package routes
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/gin-gonic/gin"
-	authzSdk "github.com/lamassuiot/authz/sdk"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
@@ -21,17 +17,7 @@ func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManag
 func NewDeviceManagerHTTPLayerWithSSE(router *gin.RouterGroup, svc services.DeviceManagerService, sseHub *controllers.DeviceEventSSEHub, authzConf config.AuthzClient, logger *logrus.Entry) {
 	routes := controllers.NewDeviceManagerHttpRoutesWithSSE(svc, sseHub)
 
-	sdkCfg := authzSdk.DefaultConfig(
-		fmt.Sprintf("%s://%s:%d%s", authzConf.Protocol, authzConf.Hostname, authzConf.Port, authzConf.BasePath),
-		models.DeviceManagerSource,
-	)
-	sdkCfg.InsecureSkipVerify = authzConf.InsecureSkipVerify
-	client, err := authzSdk.NewClient(sdkCfg)
-	if err != nil {
-		log.Fatalf("Failed to create SDK client: %v", err)
-	}
-
-	remoteEngine := authzSdk.NewRemoteEngine(client)
+	remoteEngine := newRemoteAuthzEngine(authzConf, models.DeviceManagerSource, logger)
 	authzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "devicemanager", "device", logger)
 	deviceGroupAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "devicemanager", "device_group", logger)
 

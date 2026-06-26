@@ -1,11 +1,7 @@
 package routes
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/gin-gonic/gin"
-	authzSdk "github.com/lamassuiot/authz/sdk"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
@@ -17,17 +13,9 @@ import (
 func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService, authzConf config.AuthzClient, logger *logrus.Entry) {
 	routes := controllers.NewKMSHttpRoutes(svc)
 
-	sdkCfg := authzSdk.DefaultConfig(
-		fmt.Sprintf("%s://%s:%d%s", authzConf.Protocol, authzConf.Hostname, authzConf.Port, authzConf.BasePath),
-		models.KMSSource,
-	)
-	sdkCfg.InsecureSkipVerify = authzConf.InsecureSkipVerify
-	client, err := authzSdk.NewClient(sdkCfg)
-	if err != nil {
-		log.Fatalf("Failed to create SDK client: %v", err)
-	}
+	remoteEngine := newRemoteAuthzEngine(authzConf, models.KMSSource, logger)
 
-	keyIDExractor := func(c *gin.Context) map[string]string {
+	keyIDExtractor := func(c *gin.Context) map[string]string {
 		pkcs11Uri := c.Param("id")
 		keyUriParts, err := models.ParsePKCS11URI(pkcs11Uri)
 		if err != nil {
@@ -44,7 +32,6 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 		}
 	}
 
-	remoteEngine := authzSdk.NewRemoteEngine(client)
 	kmsAuthzMw := middleware.NewCompositeAuthzMiddleware(remoteEngine, "pki", "kms", "kms_key", []string{"key_id", "type", "engine_id"}, logger)
 
 	router := parentRouterGroup
@@ -54,14 +41,14 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 	rv1.GET("/engines", kmsAuthzMw.AuthListCheck(), routes.GetCryptoEngineProvider)
 
 	rv1.GET("/keys", kmsAuthzMw.AuthListCheck(), routes.GetKeys)
-	rv1.GET("/keys/:id", kmsAuthzMw.AuthzCheckCustom("read", keyIDExractor), routes.GetKeyByID)
-	rv1.POST("/keys", kmsAuthzMw.AuthzCheckCustom("create", keyIDExractor), routes.CreateKey)
+	rv1.GET("/keys/:id", kmsAuthzMw.AuthzCheckCustom("read", keyIDExtractor), routes.GetKeyByID)
+	rv1.POST("/keys", kmsAuthzMw.AuthzCheck("create"), routes.CreateKey)
 	rv1.POST("/keys/import", kmsAuthzMw.AuthzCheck("create"), routes.ImportKey)
-	rv1.PUT("/keys/:id/alias", kmsAuthzMw.AuthzCheckCustom("update", keyIDExractor), routes.UpdateKeyAliases)
-	rv1.PUT("/keys/:id/name", kmsAuthzMw.AuthzCheckCustom("update", keyIDExractor), routes.UpdateKeyName)
-	rv1.PUT("/keys/:id/tags", kmsAuthzMw.AuthzCheckCustom("update", keyIDExractor), routes.UpdateKeyTags)
-	rv1.PUT("/keys/:id/metadata", kmsAuthzMw.AuthzCheckCustom("update", keyIDExractor), routes.UpdateKeyMetadata)
-	rv1.DELETE("/keys/:id", kmsAuthzMw.AuthzCheckCustom("delete", keyIDExractor), routes.DeleteKeyByID)
-	rv1.POST("/keys/:id/sign", kmsAuthzMw.AuthzCheckCustom("sign", keyIDExractor), routes.SignMessage)
-	rv1.POST("/keys/:id/verify", kmsAuthzMw.AuthzCheckCustom("read", keyIDExractor), routes.VerifySignature)
+	rv1.PUT("/keys/:id/alias", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyAliases)
+	rv1.PUT("/keys/:id/name", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyName)
+	rv1.PUT("/keys/:id/tags", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyTags)
+	rv1.PUT("/keys/:id/metadata", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyMetadata)
+	rv1.DELETE("/keys/:id", kmsAuthzMw.AuthzCheckCustom("delete", keyIDExtractor), routes.DeleteKeyByID)
+	rv1.POST("/keys/:id/sign", kmsAuthzMw.AuthzCheckCustom("sign", keyIDExtractor), routes.SignMessage)
+	rv1.POST("/keys/:id/verify", kmsAuthzMw.AuthzCheckCustom("read", keyIDExtractor), routes.VerifySignature)
 }

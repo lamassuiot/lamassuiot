@@ -1,11 +1,7 @@
 package routes
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/gin-gonic/gin"
-	authzSdk "github.com/lamassuiot/authz/sdk"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
@@ -17,17 +13,7 @@ import (
 func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc services.DMSManagerService, authzConf config.AuthzClient) {
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
-	sdkCfg := authzSdk.DefaultConfig(
-		fmt.Sprintf("%s://%s:%d%s", authzConf.Protocol, authzConf.Hostname, authzConf.Port, authzConf.BasePath),
-		models.DMSManagerSource,
-	)
-	sdkCfg.InsecureSkipVerify = authzConf.InsecureSkipVerify
-	client, err := authzSdk.NewClient(sdkCfg)
-	if err != nil {
-		log.Fatalf("Failed to create SDK client: %v", err)
-	}
-
-	remoteEngine := authzSdk.NewRemoteEngine(client)
+	remoteEngine := newRemoteAuthzEngine(authzConf, models.DMSManagerSource, logger)
 	dmsAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "dmsmanager", "dms", logger)
 
 	NewESTHttpRoutes(logger, httpGrp, svc)

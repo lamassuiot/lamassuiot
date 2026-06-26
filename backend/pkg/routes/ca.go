@@ -1,11 +1,7 @@
 package routes
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/gin-gonic/gin"
-	authzSdk "github.com/lamassuiot/authz/sdk"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
@@ -17,17 +13,7 @@ import (
 func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, authzConf config.AuthzClient, logger *logrus.Entry) {
 	routes := controllers.NewCAHttpRoutes(svc)
 
-	sdkCfg := authzSdk.DefaultConfig(
-		fmt.Sprintf("%s://%s:%d%s", authzConf.Protocol, authzConf.Hostname, authzConf.Port, authzConf.BasePath),
-		models.CASource,
-	)
-	sdkCfg.InsecureSkipVerify = authzConf.InsecureSkipVerify
-	client, err := authzSdk.NewClient(sdkCfg)
-	if err != nil {
-		log.Fatalf("Failed to create SDK client: %v", err)
-	}
-
-	remoteEngine := authzSdk.NewRemoteEngine(client)
+	remoteEngine := newRemoteAuthzEngine(authzConf, models.CASource, logger)
 	caAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "ca", "ca_certificate", logger)
 	certAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "ca", "certificate", logger)
 	profileAuthzMw := middleware.NewSimpleAuthzMiddleware(remoteEngine, "pki", "ca", "issuance_profile", logger)
