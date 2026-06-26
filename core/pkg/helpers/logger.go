@@ -101,10 +101,6 @@ func configureLoggerWitSourceAndCallerID(ctx context.Context, logger *logrus.Ent
 }
 
 func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
-	if logger.Logger.Level < logrus.DebugLevel {
-		return logger
-	}
-
 	spanCtx := trace.SpanFromContext(ctx).SpanContext()
 	if spanCtx.HasTraceID() {
 		return logger.WithField("trace-id", spanCtx.TraceID().String())
@@ -119,4 +115,11 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 
 func InitContext() context.Context {
 	return context.Background()
+}
+
+func InitJobContext(jobName string) context.Context {
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthType, "job")
+	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthID, jobName)
+	return ctx
 }
