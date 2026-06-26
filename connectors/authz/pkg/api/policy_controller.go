@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 )
 
 type PolicyController struct {
@@ -135,7 +136,7 @@ func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/policies [get]
 func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
-	queryParams, err := FilterQuery(c, c.Request, PolicyFilterableFields)
+	queryParams, err := controllers.FilterQuery(c.Request, PolicyFilterableFields)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error:   "Invalid filter",

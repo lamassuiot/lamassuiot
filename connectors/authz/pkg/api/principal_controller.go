@@ -7,6 +7,7 @@ import (
 	"github.com/lamassuiot/authz/pkg/api/dto"
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
@@ -106,7 +107,7 @@ func (ctrl *PrincipalController) GetPrincipal(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/principals [get]
 func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
-	queryParams, err := FilterQuery(c, c.Request, PrincipalFilterableFields)
+	queryParams, err := controllers.FilterQuery(c.Request, PrincipalFilterableFields)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error:   "Invalid filter",
@@ -302,7 +303,7 @@ func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 	id := c.Param("id")
 
-	queryParams, err := FilterQuery(c, c.Request, PrincipalPolicyFilterableFields)
+	queryParams, err := controllers.FilterQuery(c.Request, PrincipalPolicyFilterableFields)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error:   "Invalid filter",
