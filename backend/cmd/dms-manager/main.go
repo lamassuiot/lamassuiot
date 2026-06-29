@@ -67,7 +67,12 @@ func main() {
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 
-	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, caSDK, deviceSDK, models.APIServiceInfo{
+	kmsSDK := sdk.NewHttpKMSClient(
+		sdk.HttpClientWithSourceHeaderInjector(nil, models.DMSManagerSource),
+		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
+	)
+
+	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, kmsSDK, caSDK, deviceSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

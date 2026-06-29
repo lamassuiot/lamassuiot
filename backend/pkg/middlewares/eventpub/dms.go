@@ -183,10 +183,10 @@ func (mw dmsEventPublisher) LWCGetCRL(ctx context.Context, input services.GetCMP
 	return mw.next.LWCGetCRL(ctx, input)
 }
 
-func (mw dmsEventPublisher) LWCProtectionCredentials() (*x509.Certificate, crypto.Signer, error) {
+func (mw dmsEventPublisher) LWCProtectionCredentials(aps string) (*x509.Certificate, crypto.Signer, error) {
 	provider, ok := mw.next.(services.LightweightCMPProtectionProvider)
 	if !ok {
 		return nil, nil, fmt.Errorf("cmp protection credentials not available")
 	}
-	return provider.LWCProtectionCredentials()
+	return provider.LWCProtectionCredentials(aps)
 }

@@ -26,21 +26,21 @@ type DMSManagerMiddleware func(services.DMSManagerService) services.DMSManagerSe
 
 type DMSManagerServiceBackend struct {
 	service          services.DMSManagerService
-	downstreamCert   *x509.Certificate
-	downstreamSigner crypto.Signer
 	dmsStorage       storage.DMSRepo
 	deviceManagerCli services.DeviceManagerService
+	kmsClient        services.KMSService
 	caClient         services.CAService
 	logger           *logrus.Entry
+	downstreamCert   *x509.Certificate // included as system CA in EST CACerts responses
 }
 
 type DMSManagerBuilder struct {
 	Logger                *logrus.Entry
 	DevManagerCli         services.DeviceManagerService
 	CAClient              services.CAService
+	KMSClient             services.KMSService
 	DMSStorage            storage.DMSRepo
 	DownstreamCertificate *x509.Certificate
-	DownstreamSigner      crypto.Signer
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
@@ -48,9 +48,9 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		dmsStorage:       builder.DMSStorage,
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
-		downstreamCert:   builder.DownstreamCertificate,
-		downstreamSigner: builder.DownstreamSigner,
 		logger:           builder.Logger,
+		downstreamCert:   builder.DownstreamCertificate,
+		kmsClient:        builder.KMSClient,
 	}
 
 	svc.service = svc
@@ -62,14 +62,64 @@ func (svc *DMSManagerServiceBackend) SetService(service services.DMSManagerServi
 	svc.service = service
 }
 
-func (svc DMSManagerServiceBackend) LWCProtectionCredentials() (*x509.Certificate, crypto.Signer, error) {
-	if svc.downstreamCert == nil {
-		return nil, nil, fmt.Errorf("cmp protection certificate not configured")
+// ensureDeviceRegistered applies JITP registration logic given a device that may or may not exist.
+// If device is nil and the DMS is configured with JITP, the device is created.
+// If device is nil and JITP is disabled, an error is returned.
+// Returns the (possibly newly created) device.
+func (svc DMSManagerServiceBackend) ensureDeviceRegistered(ctx context.Context, lFunc *logrus.Entry, enrollSettings models.EnrollmentSettings, dmsID string, deviceID string, device *models.Device) (*models.Device, error) {
+	if enrollSettings.RegistrationMode == models.JITP {
+		if device == nil {
+			lFunc.Debugf("DMS is configured with JustInTime registration. will create device with ID %s", deviceID)
+			var err error
+			device, err = svc.deviceManagerCli.CreateDevice(ctx, services.CreateDeviceInput{
+				ID:        deviceID,
+				Alias:     deviceID,
+				Tags:      enrollSettings.DeviceProvisionProfile.Tags,
+				Metadata:  enrollSettings.DeviceProvisionProfile.Metadata,
+				Icon:      enrollSettings.DeviceProvisionProfile.Icon,
+				IconColor: enrollSettings.DeviceProvisionProfile.IconColor,
+				DMSID:     dmsID,
+			})
+			if err != nil {
+				lFunc.Errorf("could not register device: %s", err)
+				return nil, err
+			}
+		} else {
+			lFunc.Debugf("skipping device registration since already exists")
+		}
+	} else if device == nil {
+		lFunc.Errorf("aborting enrollment. DMS doesn't allow JustInTime registration. register the device manually or switch DMS JIT option ON")
+		return nil, fmt.Errorf("device not preregistered")
+	} else {
+		lFunc.Infof("device %s already preregistered. continuing enrollment process", device.ID)
 	}
-	if svc.downstreamSigner == nil {
-		return nil, nil, fmt.Errorf("cmp protection signer not configured")
+
+	return device, nil
+}
+
+func (svc DMSManagerServiceBackend) LWCProtectionCredentials(aps string) (*x509.Certificate, crypto.Signer, error) {
+	ctx := context.Background()
+
+	exists, dms, err := svc.dmsStorage.SelectExists(ctx, aps)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not look up DMS '%s': %w", aps, err)
 	}
-	return svc.downstreamCert, svc.downstreamSigner, nil
+	if !exists {
+		return nil, nil, fmt.Errorf("DMS '%s' not found", aps)
+	}
+
+	protectionCAID := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ProtectionCA
+	if protectionCAID == "" {
+		return nil, nil, fmt.Errorf("protection_ca not configured for DMS '%s'", aps)
+	}
+
+	ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: protectionCAID})
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get protection CA '%s': %w", protectionCAID, err)
+	}
+
+	caSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsClient)
+	return (*x509.Certificate)(ca.Certificate.Certificate), caSigner, nil
 }
 
 func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
