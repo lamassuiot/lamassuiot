@@ -153,3 +153,31 @@ func (mw dmsEventPublisher) BindIdentityToDevice(ctx context.Context, input serv
 	}()
 	return mw.next.BindIdentityToDevice(ctx, input)
 }
+
+func (mw dmsEventPublisher) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	return mw.next.LWCEnroll(ctx, csr, aps)
+}
+
+func (mw dmsEventPublisher) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	return mw.next.LWCReenroll(ctx, csr, aps)
+}
+
+func (mw dmsEventPublisher) LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	return mw.next.LWCCACerts(ctx, aps)
+}
+
+func (mw dmsEventPublisher) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
+	return mw.next.LWCRevokeCertificate(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {
+	return mw.next.LWCGetRootCACertUpdate(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCGetCertReqTemplate(ctx context.Context, input services.GetCertReqTemplateInput) (*services.CertReqTemplateOutput, error) {
+	return mw.next.LWCGetCertReqTemplate(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
+	return mw.next.LWCGetCRL(ctx, input)
+}
