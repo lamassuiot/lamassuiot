@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
 )
 
 func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
-	caPool := helpers.LoadSytemCACertPool()
+	caPool := chelpers.LoadSytemCACertPool()
 	tlsConfig := &tls.Config{}
 
 	if cfg.InsecureSkipVerify {
@@ -21,7 +21,7 @@ func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*htt
 	}
 
 	if cfg.CACertificateFile != "" {
-		cert, err := helpers.ReadCertificateFromFile(cfg.CACertificateFile)
+		cert, err := chelpers.ReadCertificateFromFile(cfg.CACertificateFile)
 		if err != nil {
 			return nil, err
 		}
@@ -57,13 +57,13 @@ type loggingRoundTripper struct {
 
 func (lrt loggingRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
 	start := time.Now()
-	// Send the request, get the response (or the error)
 	dReq := gindump.DumpRequest(req, true, true)
 	res, err = lrt.transport.RoundTrip(req)
+	lFunc := chelpers.ConfigureLogger(req.Context(), lrt.logger)
 	if err != nil {
-		lrt.logger.Errorf("%s: %s", req.URL.String(), err)
+		lFunc.Errorf("%s: %s", req.URL.String(), err)
 	} else {
-		log := lrt.logger.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
+		log := lFunc.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
 		log.Debug(req.URL.String())
 		log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
 	}

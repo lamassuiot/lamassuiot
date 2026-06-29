@@ -37,9 +37,6 @@ func HttpClientWithCustomHeaders(cli *http.Client, header string, value string) 
 		transport = cli.Transport
 	}
 
-	// Add OTel Tracing
-	transport = otelhttp.NewTransport(transport)
-
 	cli.Transport = customHeaderRoundTripper{
 		transport: transport,
 		header:    header,
@@ -153,7 +150,15 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 		}
 	}
 
-	return hhelpers.BuildHTTPClientWithTracerLogger(client, logger)
+	client, err = hhelpers.BuildHTTPClientWithTracerLogger(client, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wrap the full transport chain with OTel once here, so callers of
+	// HttpClientWithCustomHeaders don't accidentally stack multiple otelhttp layers.
+	client.Transport = otelhttp.NewTransport(client.Transport)
+	return client, nil
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {
