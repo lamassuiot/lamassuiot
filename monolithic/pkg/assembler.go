@@ -234,7 +234,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
 			AuthzClient:               authzClientConf,
-		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
+		}, kmsSDKBuilder("DMS Manager", models.DMSManagerSource), caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
