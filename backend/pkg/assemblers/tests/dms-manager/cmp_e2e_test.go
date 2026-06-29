@@ -57,6 +57,7 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 	}
 
 	enrollCA := createCA("cmp-enroll")
+	protectionCA := createCA("cmp-protection")
 
 	dms, err := dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{
 		ID:   "cmp-e2e-dms",
@@ -73,6 +74,10 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 				},
 				RegistrationMode:            models.PreRegistration,
 				EnableReplaceableEnrollment: true,
+				EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+					AuthMode:     models.CMPAuthModeClientCertificate,
+					ProtectionCA: protectionCA.ID,
+				},
 			},
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
 				AdditionalValidationCAs:     []string{},
@@ -118,7 +123,7 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 
 	protectionProvider, ok := dmsMgr.Service.(services.LightweightCMPProtectionProvider)
 	require.True(t, ok, "dms manager service must provide cmp protection credentials")
-	protectionCert, _, err := protectionProvider.LWCProtectionCredentials()
+	protectionCert, _, err := protectionProvider.LWCProtectionCredentials(dms.ID)
 	require.NoError(t, err)
 	protectionCertPath := filepath.Join(tmpDir, "cmp-protection.crt")
 	require.NoError(t, os.WriteFile(protectionCertPath, []byte(chelpers.CertificateToPEM(protectionCert)), 0o600))
