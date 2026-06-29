@@ -508,9 +508,6 @@ func main() {
 		UIPort:                uiPort,
 		WfxNorthPort:          wfxNorthPort,
 		WfxSouthPort:          wfxSouthPort,
-		// CMP WFX reporter aliases: North=Mgmt/NBI, South=client/SBI.
-		WfxPort:               wfxSouthPort,
-		WfxMgmtPort:           wfxNorthPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,
