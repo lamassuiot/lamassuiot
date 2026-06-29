@@ -214,6 +214,14 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
+      # The CMP compliance suite is a separate upstream repo; it MUST be checked
+      # out before any `working-directory: cmp-test-suite` step can run.
+      - name: Checkout CMP test suite
+        uses: actions/checkout@v5
+        with:
+          repository: siemens/cmp-test-suite
+          path: cmp-test-suite
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -225,55 +233,24 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Apply Lamassu compatibility patches to cmp-test-suite
-        working-directory: cmp-test-suite
-        run: |
-          git apply ../.github/patches/cmp-test-suite/0001-lamassu-compat.patch
-
-      - name: Create Python venv and install dependencies
-        working-directory: cmp-test-suite
-        run: |
-          python -m venv venv-cmp-tests
-          source venv-cmp-tests/bin/activate
-          pip install --quiet uv
-          uv pip install -e .
-
       - name: Install monolithic Go dependencies
         working-directory: monolithic
         run: go work sync
 
-      - name: Start Lamassu monolithic server
-        working-directory: monolithic
+      # run-cmp-test-suite.sh handles the full flow against a clean full stack
+      # (Postgres + RabbitMQ + WFX via Docker): applies the compat patch, seeds
+      # config/lamassu.robot, creates the venv, waits for sample-cmp-dms to
+      # exist, runs the CMP bootstrap, then executes the suite. --fresh-full
+      # starts and tears down the dev server itself, so no separate start/wait
+      # steps are needed. continue-on-error: the suite has known unsupported
+      # cases; the uploaded report is the source of truth, not a green check.
+      - name: Run CMP E2E test suite
+        id: cmp
+        continue-on-error: true
+        env:
+          SUITE_DIR: ${{ github.workspace }}/cmp-test-suite
         run: |
-          go run ./cmd/development/main.go --sample-data &
-          echo $! > /tmp/lamassu.pid
-
-      - name: Wait for Lamassu to be ready
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/api/ca/v1/cas > /dev/null 2>&1; then
-              echo "Lamassu is ready"
-              exit 0
-            fi
-            echo "Waiting for Lamassu... attempt $i"
-            sleep 5
-          done
-          echo "Lamassu failed to start" >&2
-          exit 1
-
-      - name: Run CMP bootstrap setup
-        run: |
-          mkdir -p /tmp/cmp-bootstrap
-          bash scripts/cmp-bootstrap-setup.sh http://localhost:8080 sample-cmp-dms /tmp/cmp-bootstrap
-
-      - name: Run CMP tests
-        working-directory: cmp-test-suite
-        run: |
-          source venv-cmp-tests/bin/activate
-          robot --pythonpath=./ --exclude verbose-tests --exclude pqc \
-            --outputdir=reports \
-            --variable environment:lamassu \
-            tests/
+          bash scripts/run-cmp-test-suite.sh --fresh-full
 
       - name: Upload Robot Framework report
         if: always()
