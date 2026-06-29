@@ -1,6 +1,17 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+import (
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+)
+
+type DMSWFXConfig struct {
+	Enabled            bool                `mapstructure:"enabled"`
+	Workflow           string              `mapstructure:"workflow"`
+	Timeout            models.TimeDuration `mapstructure:"timeout"`
+	Tags               []string            `mapstructure:"tags"`
+	cconfig.HTTPClient `mapstructure:",squash"`
+}
 
 type DMSconfig struct {
 	OtelConfig        cconfig.OTELConfig             `mapstructure:"otel"`
@@ -21,5 +32,6 @@ type DMSconfig struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"device_manager_client"`
 
-	DownstreamCertificateFile string `mapstructure:"downstream_cert_file"`
+	DownstreamCertificateFile string       `mapstructure:"downstream_cert_file"`
+	WFX                       DMSWFXConfig `mapstructure:"wfx"`
 }

@@ -176,6 +176,20 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
+			WFX: config.DMSWFXConfig{
+				Enabled: conf.WfxMgmtPort > 0,
+				HTTPClient: cconfig.HTTPClient{
+					LogLevel: cconfig.Info,
+					AuthMode: cconfig.NoAuth,
+					HTTPConnection: cconfig.HTTPConnection{
+						Protocol: cconfig.HTTP,
+						BasicConnection: cconfig.BasicConnection{
+							Hostname: "127.0.0.1",
+							Port:     conf.WfxMgmtPort,
+						},
+					},
+				},
+			},
 		}, kmsSDKBuilder("DMS Manager", models.DMSManagerSource), caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
@@ -314,6 +328,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+		if conf.WfxPort > 0 {
+			addRouteMap("wfx", "/api/wfx/", conf.WfxPort)
+		}
 
 		if conf.WfxNorthPort > 0 {
 			registerRoute("wfx NBI", "/api/wfx/nbi/", conf.WfxNorthPort, "/api/wfx/")

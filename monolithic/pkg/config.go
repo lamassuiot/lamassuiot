@@ -33,6 +33,10 @@ type MonolithicConfig struct {
 	UIPort                int                            `mapstructure:"ui_port"`
 	WfxNorthPort          int                            `mapstructure:"wfx_north_port"`
 	WfxSouthPort          int                            `mapstructure:"wfx_south_port"`
+	// CMP integration aliases (North=Mgmt/NBI, South=client/SBI); unified onto
+	// the v4 North/South names — kept for the CMP WFX reporter wiring.
+	WfxPort               int                            `mapstructure:"wfx_port"`
+	WfxMgmtPort           int                            `mapstructure:"wfx_mgmt_port"`
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
 	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
 }
