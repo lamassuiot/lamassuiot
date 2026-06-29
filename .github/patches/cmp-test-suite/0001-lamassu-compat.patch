@@ -1,3 +1,32 @@
+diff --git a/resources/cmputils.py b/resources/cmputils.py
+index 33f07c8..788d827 100644
+--- a/resources/cmputils.py
++++ b/resources/cmputils.py
+@@ -2251,7 +2251,7 @@ def _prepare_cert_req_msg_body(body_type: str) -> rfc9480.PKIBody:
+ def build_key_update_request(  # noqa D417 undocumented-param
+     signing_key: SignKey,
+     cert: Optional[rfc9480.CMPCertificate] = None,
+-    common_name: Union[str, rfc9480.Name] = "CN=Hans Mustermann",
++    common_name: Optional[Union[str, rfc9480.Name]] = None,
+     sender: str = "tests@example.com",
+     recipient: str = "testr@example.com",
+     exclude_fields: Optional[str] = "sender,senderKID",
+@@ -2307,6 +2307,15 @@ def build_key_update_request(  # noqa D417 undocumented-param
+     | ${pki_message}= | Build Key Update Request | ${new_key} | ${cert} | hash_alg=sha512 | implicit_confirm=True |
+ 
+     """
++    # A KUR updates a *specific* certificate, so the request subject must match
++    # the certificate being updated (RFC 9483 Section 4.1.3). When a `cert` is
++    # supplied, let its subject drive the CertTemplate instead of forcing the
++    # hardcoded default — otherwise CAs that key the device/identity off the
++    # subject look up the wrong certificate. Only fall back to the historic
++    # default when neither a cert nor an explicit common_name is given.
++    if common_name is None and cert is None:
++        common_name = "CN=Hans Mustermann"
++
+     cert_template = params.get("cert_template")
+     if cert_template is None:
+         cert_template = certbuildutils.prepare_cert_template(
 diff --git a/resources/keywords.resource b/resources/keywords.resource
 index 30a97b6..69c5122 100644
 --- a/resources/keywords.resource
@@ -25,5 +54,5 @@ index 0bb0387..07e2892 100644
 +        else:
 +            pki_message["extraCerts"].extend([cert])
      return pki_message
-
-
+ 
+ 
