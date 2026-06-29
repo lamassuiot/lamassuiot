@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -51,23 +52,32 @@ type cmpTransactionStorer interface {
 	GetCMPTransactionRepo() storage.CMPTransactionRepo
 }
 
+type cmpWFXReporterProvider interface {
+	GetCMPWFXReporter() cmpwfx.CMPReporter
+}
+
 // cmpHttpRoutes is the Gin handler for /.well-known/cmp/p/:id.
 type cmpHttpRoutes struct {
 	svc    services.LightweightCMPService
 	logger *logrus.Entry
 	store  storage.CMPTransactionRepo
+	wfx    cmpwfx.CMPReporter
 }
 
 // NewCMPHttpRoutes creates and initialises the CMP HTTP handler, backed by
 // a DB-persisted transaction store retrieved from the service via type assertion.
 func NewCMPHttpRoutes(logger *logrus.Entry, svc services.LightweightCMPService) *cmpHttpRoutes {
 	var repo storage.CMPTransactionRepo
+	var reporter cmpwfx.CMPReporter
 	if storer, ok := svc.(cmpTransactionStorer); ok {
 		repo = storer.GetCMPTransactionRepo()
 	} else {
 		logger.Warn("CMP: service does not implement cmpTransactionStorer; transaction store will be nil")
 	}
-	return &cmpHttpRoutes{svc: svc, logger: logger, store: repo}
+	if provider, ok := svc.(cmpWFXReporterProvider); ok {
+		reporter = provider.GetCMPWFXReporter()
+	}
+	return &cmpHttpRoutes{svc: svc, logger: logger, store: repo, wfx: reporter}
 }
 
 // HandleCMP handles all inbound CMP messages posted to /.well-known/cmp/p/:id.
@@ -116,6 +126,26 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		WithField("bodyTagStr", cmpTagToString(body.Tag)).
 		WithField("txid", hex.EncodeToString(reqHeader.TransactionID))
 	lFunc.Debugf("received CMP message body tag=%d", body.Tag)
+	txHex := hex.EncodeToString(reqHeader.TransactionID)
+
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID: txHex,
+		DMSID:         dmsID,
+		RequestType:   cmpTagToString(body.Tag),
+		State:         cmpwfx.CMPStateReceived,
+		Metadata: map[string]any{
+			"bodyTag": body.Tag,
+		},
+	})
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID: txHex,
+		DMSID:         dmsID,
+		RequestType:   cmpTagToString(body.Tag),
+		State:         cmpwfx.CMPStateParsed,
+		Metadata: map[string]any{
+			"bodyTag": body.Tag,
+		},
+	})
 
 	// Fetch DMS enrollment options so we can make per-request decisions
 	// (request-protection enforcement, implicit-confirm mode, etc.).
@@ -181,6 +211,17 @@ func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, head
 		return
 	}
 
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     hex.EncodeToString(header.TransactionID),
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(body.Tag),
+		SubjectCommonName: cnFromSubjectDER(req.SubjectDER),
+		State:             cmpwfx.CMPStateValidated,
+		Metadata: map[string]any{
+			"certReqId": req.CertReqID,
+		},
+	})
+
 	// Respond IP (tag 1) for ir, CP (tag 3) for cr
 	respTag := cmpBodyTagCP
 	if body.Tag == cmpBodyTagIR {
@@ -189,6 +230,7 @@ func (r *cmpHttpRoutes) handleEnroll(ctx *gin.Context, lFunc *logrus.Entry, head
 
 	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
 		isReenrollment: false,
+		requestTag:     body.Tag,
 		respTag:        respTag,
 		enroll: func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
 			return r.svc.LWCEnroll(ctx, csr, dmsID)
@@ -220,8 +262,20 @@ func (r *cmpHttpRoutes) handleReenroll(ctx *gin.Context, lFunc *logrus.Entry, he
 		return
 	}
 
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     hex.EncodeToString(header.TransactionID),
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(body.Tag),
+		SubjectCommonName: cnFromSubjectDER(req.SubjectDER),
+		State:             cmpwfx.CMPStateValidated,
+		Metadata: map[string]any{
+			"certReqId": req.CertReqID,
+		},
+	})
+
 	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
 		isReenrollment: true,
+		requestTag:     body.Tag,
 		respTag:        cmpBodyTagKUP,
 		enroll: func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
 			return r.svc.LWCReenroll(ctx, csr, dmsID)
@@ -232,6 +286,7 @@ func (r *cmpHttpRoutes) handleReenroll(ctx *gin.Context, lFunc *logrus.Entry, he
 // issueParams holds the per-operation differences between ir/cr and kur flows.
 type issueParams struct {
 	isReenrollment bool
+	requestTag     int
 	respTag        int
 	enroll         func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
 }
@@ -274,6 +329,18 @@ func (r *cmpHttpRoutes) issueAndStore(
 		}
 	}
 
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(params.requestTag),
+		SubjectCommonName: csr.Subject.CommonName,
+		State:             cmpwfx.CMPStateIssuing,
+		Metadata: map[string]any{
+			"certReqId":      req.CertReqID,
+			"isReenrollment": params.isReenrollment,
+		},
+	})
+
 	// Detach from the HTTP connection so issuance completes even if the EE
 	// drops the TCP connection mid-request.
 	issuanceCtx := context.WithoutCancel(ctx.Request.Context())
@@ -283,6 +350,20 @@ func (r *cmpHttpRoutes) issueAndStore(
 		r.rejectWithError(ctx, header, cmp.PKIStatus(2), err.Error(), dmsID)
 		return
 	}
+	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
+
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(params.requestTag),
+		SubjectCommonName: csr.Subject.CommonName,
+		CertSerialNumber:  certSerial,
+		State:             cmpwfx.CMPStateIssued,
+		Metadata: map[string]any{
+			"certReqId":      req.CertReqID,
+			"isReenrollment": params.isReenrollment,
+		},
+	})
 
 	// Persist ISSUED row for lost-response recovery via pollReq.
 	if r.store != nil {
@@ -290,7 +371,6 @@ func (r *cmpHttpRoutes) issueAndStore(
 		if !implicitConfirm {
 			header.ResponseSenderNonce = senderNonce
 		}
-		certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
 		if storeErr := r.store.Insert(issuanceCtx, storage.CMPTransaction{
 			TransactionID:    txHex,
 			DMSID:            dmsID,
@@ -319,6 +399,34 @@ func (r *cmpHttpRoutes) issueAndStore(
 		return
 	}
 	r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(params.requestTag),
+		SubjectCommonName: csr.Subject.CommonName,
+		CertSerialNumber:  certSerial,
+		State:             cmpwfx.CMPStateResponded,
+		Metadata: map[string]any{
+			"responseType": cmpTagToString(params.respTag),
+			"certReqId":    req.CertReqID,
+		},
+	})
+	finalState := cmpwfx.CMPStateAwaitingCertConf
+	if implicitConfirm {
+		finalState = cmpwfx.CMPStateLogicallyComplete
+	}
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(params.requestTag),
+		SubjectCommonName: csr.Subject.CommonName,
+		CertSerialNumber:  certSerial,
+		State:             finalState,
+		Metadata: map[string]any{
+			"responseType":    cmpTagToString(params.respTag),
+			"implicitConfirm": implicitConfirm,
+		},
+	})
 }
 
 // handleRevoke processes an rr (11) body.
@@ -429,6 +537,17 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		return
 	}
 	r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
+	var confirmedCN string
+	if cert, err := x509.ParseCertificate(tx.CertDER); err == nil {
+		confirmedCN = cert.Subject.CommonName
+	}
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		SubjectCommonName: confirmedCN,
+		CertSerialNumber:  tx.CertSerialNumber,
+		State:             cmpwfx.CMPStateConfirmed,
+	})
 }
 
 // defaultPollIntervalSeconds is the checkAfter hint sent in pollRep messages.
@@ -568,6 +687,19 @@ func (r *cmpHttpRoutes) isImplicitConfirm(ctx context.Context, header requestPKI
 	return opts.AcceptImplicit
 }
 
+func (r *cmpHttpRoutes) reportCMPState(ctx context.Context, lFunc *logrus.Entry, transition cmpwfx.CMPTransition) {
+	if r.wfx == nil || transition.TransactionID == "" {
+		return
+	}
+
+	if transition.Metadata == nil {
+		transition.Metadata = map[string]any{}
+	}
+	if err := r.wfx.Emit(ctx, transition); err != nil {
+		lFunc.WithField("cmpState", transition.State).Warnf("WFX CMP transition export failed: %v", err)
+	}
+}
+
 // hashesEqual compares two byte slices in constant time.
 func hashesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
@@ -592,6 +724,12 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHead
 	var h requestPKIHeader
 	if header != nil {
 		h = *header
+		r.reportCMPState(ctx.Request.Context(), r.logger, cmpwfx.CMPTransition{
+			TransactionID: hex.EncodeToString(header.TransactionID),
+			DMSID:         aps,
+			State:         cmpwfx.CMPStateRejected,
+			Reason:        reason,
+		})
 	}
 	r.sendRawBody(ctx, r.logger, h, cmpBodyTagError, errBody, aps)
 }
@@ -1190,6 +1328,18 @@ func popoVerifySignature(data, sigBytes []byte, algID pkix.AlgorithmIdentifier, 
 	default:
 		return fmt.Errorf("POPO: unsupported public key type %T", pub)
 	}
+}
+
+// cnFromSubjectDER extracts the CommonName from a DER-encoded X.509 Subject.
+// Returns an empty string if the subject cannot be parsed or carries no CN.
+func cnFromSubjectDER(subjectDER []byte) string {
+	var rdns pkix.RDNSequence
+	if rest, err := asn1.Unmarshal(subjectDER, &rdns); err != nil || len(rest) > 0 {
+		return ""
+	}
+	var name pkix.Name
+	name.FillFromRDNSequence(&rdns)
+	return name.CommonName
 }
 
 // buildSyntheticCSR constructs a *x509.CertificateRequest from the Subject and

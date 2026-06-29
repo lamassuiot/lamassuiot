@@ -7,6 +7,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -72,10 +73,20 @@ func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSSer
 		}
 	}()
 
+	var cmpReporter cmpwfx.CMPReporter
+	if conf.WFX.Enabled {
+		lWFX := chelpers.SetupLogger(conf.WFX.LogLevel, "DMS Manager", "WFX")
+		cmpReporter, err = cmpwfx.NewCMPReporter(conf.WFX, lWFX)
+		if err != nil {
+			return nil, fmt.Errorf("could not create CMP WFX reporter: %s", err)
+		}
+	}
+
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
 		CMPTransactionStorage: cmptxStorage,
+		CMPWFXReporter:        cmpReporter,
 		KMSClient:             kmsService,
 		CAClient:              caService,
 		DevManagerCli:         deviceService,
