@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
@@ -209,6 +210,19 @@ func (mw dmsEventPublisher) GetCMPTransactionRepo() storage.CMPTransactionRepo {
 	}
 	if p, ok := mw.next.(repoProvider); ok {
 		return p.GetCMPTransactionRepo()
+	}
+	return nil
+}
+
+// GetCMPWFXReporter forwards the optional CMP WFX reporter through the
+// middleware chain so the HTTP controller can emit transaction state
+// transitions regardless of how many middlewares wrap the backend.
+func (mw dmsEventPublisher) GetCMPWFXReporter() cmpwfx.CMPReporter {
+	type reporterProvider interface {
+		GetCMPWFXReporter() cmpwfx.CMPReporter
+	}
+	if p, ok := mw.next.(reporterProvider); ok {
+		return p.GetCMPWFXReporter()
 	}
 	return nil
 }

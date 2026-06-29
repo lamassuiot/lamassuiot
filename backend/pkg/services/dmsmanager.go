@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -28,6 +29,7 @@ type DMSManagerServiceBackend struct {
 	service          services.DMSManagerService
 	dmsStorage       storage.DMSRepo
 	cmptxStorage     storage.CMPTransactionRepo
+	cmpWFXReporter   cmpwfx.CMPReporter
 	deviceManagerCli services.DeviceManagerService
 	kmsClient        services.KMSService
 	caClient         services.CAService
@@ -42,6 +44,7 @@ type DMSManagerBuilder struct {
 	KMSClient             services.KMSService
 	DMSStorage            storage.DMSRepo
 	CMPTransactionStorage storage.CMPTransactionRepo
+	CMPWFXReporter        cmpwfx.CMPReporter
 	DownstreamCertificate *x509.Certificate
 }
 
@@ -49,6 +52,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 	svc := &DMSManagerServiceBackend{
 		dmsStorage:       builder.DMSStorage,
 		cmptxStorage:     builder.CMPTransactionStorage,
+		cmpWFXReporter:   builder.CMPWFXReporter,
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
 		logger:           builder.Logger,
@@ -70,6 +74,12 @@ func (svc *DMSManagerServiceBackend) SetService(service services.DMSManagerServi
 // interface.  Controllers type-assert the service to CMPTransactionStorer.
 func (svc *DMSManagerServiceBackend) GetCMPTransactionRepo() storage.CMPTransactionRepo {
 	return svc.cmptxStorage
+}
+
+// GetCMPWFXReporter exposes the optional WFX reporter used to mirror CMP
+// transaction state transitions into WFX jobs.
+func (svc *DMSManagerServiceBackend) GetCMPWFXReporter() cmpwfx.CMPReporter {
+	return svc.cmpWFXReporter
 }
 
 // GetCMPTransactionsByDMS lists CMP transactions belonging to the given DMS,
