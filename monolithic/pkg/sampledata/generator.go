@@ -212,14 +212,6 @@ func PopulateSampleData(
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
 				RevokeOnReEnrollment:    false,
 				AdditionalValidationCAs: []string{},
-				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: "CLIENT_CERTIFICATE",
-					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
-						ValidationCAs:        []string{},
-						ChainLevelValidation: -1,
-						AllowExpired:         false,
-					},
-				},
 			},
 			CADistributionSettings: models.CADistributionSettings{
 				IncludeEnrollmentCA:    true,
