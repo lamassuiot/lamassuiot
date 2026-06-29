@@ -28,6 +28,12 @@
 #                      group=lamassuiot-monolithic) only; never your own.
 #                      Slower to start (Docker). Recommended for a real number.
 #                      Without --fresh/--fresh-full, uses the server at $SERVER.
+#   --per-suite-isolated
+#                      Run each suite file against its own clean full stack and
+#                      merge the reports (rebot). Removes cross-suite state
+#                      pollution so tests that are passable in isolation actually
+#                      pass (e.g. Cert Conf 0 -> 8). Slowest, but the honest
+#                      "passable" count. Implies --fresh-full per suite.
 #   --no-bootstrap     Skip the CMP bootstrap step (assume already provisioned).
 #   -h | --help        Show this help.
 #
@@ -62,18 +68,20 @@ TESTNAME=""
 FRESH=0
 FULL_STACK=0
 DO_BOOTSTRAP=1
+PER_SUITE=0
 
 # --- args ---------------------------------------------------------------------
 while [ $# -gt 0 ]; do
     case "$1" in
-        --suite)        TARGET="$2"; shift 2 ;;
-        --include)      INCLUDE="$2"; shift 2 ;;
-        --test)         TESTNAME="$2"; shift 2 ;;
-        --fresh)        FRESH=1; shift ;;
-        --fresh-full)   FRESH=1; FULL_STACK=1; shift ;;
-        --no-bootstrap) DO_BOOTSTRAP=0; shift ;;
-        -h|--help)      sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *)              echo "unknown option: $1" >&2; exit 2 ;;
+        --suite)              TARGET="$2"; shift 2 ;;
+        --include)            INCLUDE="$2"; shift 2 ;;
+        --test)               TESTNAME="$2"; shift 2 ;;
+        --fresh)              FRESH=1; shift ;;
+        --fresh-full)         FRESH=1; FULL_STACK=1; shift ;;
+        --per-suite-isolated) PER_SUITE=1; FRESH=1; FULL_STACK=1; shift ;;
+        --no-bootstrap)       DO_BOOTSTRAP=0; shift ;;
+        -h|--help)            sed -n '2,52p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)                    echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
 
@@ -83,6 +91,51 @@ die()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -d "${SUITE_DIR}" ] || die "cmp-test-suite not found at ${SUITE_DIR} (set SUITE_DIR=...)"
 [ -f "${PATCH}" ]     || die "compat patch not found at ${PATCH}"
+
+# --- per-suite isolation ------------------------------------------------------
+# Run every suite file against its OWN clean full stack, then merge the reports
+# with rebot. This removes cross-suite state pollution (one suite revoking the
+# shared protection cert poisons later suites), recovering tests that are
+# passable in isolation (e.g. Cert Conf 0 -> 8). Slower (one stack boot per
+# suite), but it yields the honest "passable" count deterministically.
+if [ "${PER_SUITE}" = "1" ]; then
+    log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+    die()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; exit 1; }
+    PARTS_DIR="${SUITE_DIR}/reports/per-suite"
+    rm -rf "${PARTS_DIR}"; mkdir -p "${PARTS_DIR}"
+    suites=$(ls "${SUITE_DIR}"/tests/*.robot 2>/dev/null)
+    [ -n "${suites}" ] || die "no suite files found in ${SUITE_DIR}/tests/"
+    for suite in ${suites}; do
+        name="$(basename "${suite}" .robot)"
+        log "===== isolated suite: ${name} ====="
+        # Re-invoke ourselves for a single suite against a fresh full stack.
+        "${BASH_SOURCE[0]}" --fresh-full --suite "tests/${name}.robot" || true
+        if [ -f "${SUITE_DIR}/reports/output.xml" ]; then
+            cp "${SUITE_DIR}/reports/output.xml" "${PARTS_DIR}/${name}.xml"
+        else
+            warn "no output.xml for suite ${name}"
+        fi
+    done
+    log "Merging ${PARTS_DIR}/*.xml into a combined report"
+    # shellcheck disable=SC1091
+    source "${SUITE_DIR}/venv-cmp-tests/bin/activate" 2>/dev/null || true
+    rebot --outputdir "${SUITE_DIR}/reports" --output combined.xml \
+          --report combined-report.html --log combined-log.html \
+          "${PARTS_DIR}"/*.xml || true
+    python3 - "${SUITE_DIR}/reports/combined.xml" <<'PY'
+import sys, xml.etree.ElementTree as ET
+r = ET.parse(sys.argv[1]).getroot()
+t = r.find('.//statistics/total/stat')
+print("\n========= PER-SUITE-ISOLATED COMBINED RESULT =========")
+print(f"  PASS={t.get('pass')}  FAIL={t.get('fail')}  SKIP={t.get('skip')}")
+for s in r.findall('.//statistics/suite/stat'):
+    n = s.text or ''
+    if n.count('.') == 1:
+        print(f"    {n[6:]:24} pass={s.get('pass'):>3} fail={s.get('fail'):>3} skip={s.get('skip'):>3}")
+print("=====================================================")
+PY
+    exit 0
+fi
 
 PORT="${SERVER##*:}"; PORT="${PORT%%/*}"   # e.g. 8080
 
