@@ -22,31 +22,32 @@ type CloudEventHandler struct {
 }
 
 func (h CloudEventHandler) HandleMessage(m *message.Message) error {
-	h.Logger.Infof("Received event: %s", m.Payload)
+	ctx := getContextFromMessage(m)
+	lFunc := helpers.ConfigureLogger(ctx, h.Logger)
+
+	lFunc.Infof("Received event: %s", m.Payload)
 	event, err := helpers.ParseCloudEvent(m.Payload)
 	if err != nil {
 		err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
-		h.Logger.Error(err)
+		lFunc.Error(err)
 		return err
 	}
 
 	handler, ok := h.DispatchMap[event.Type()]
 	if !ok {
-		h.Logger.Warnf("No handler found for event type: %s", event.Type())
+		lFunc.Warnf("No handler found for event type: %s", event.Type())
 
 		handler, ok = h.DispatchMap[string(models.EventAnyKey)]
 		if !ok {
-			h.Logger.Warnf("No default handler found for event type: %s", event.Type())
+			lFunc.Warnf("No default handler found for event type: %s", event.Type())
 			return nil
 		}
 	}
 
-	ctx := getContextFromMessage(m)
-
 	err = handler(ctx, event)
 
 	if err != nil {
-		h.Logger.Errorf("Something went wrong while handling event: %s", err)
+		lFunc.Errorf("Something went wrong while handling event: %s", err)
 	}
 
 	return err
