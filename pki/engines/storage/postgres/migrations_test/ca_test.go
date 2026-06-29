@@ -1,0 +1,744 @@
+package migrationstest
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/pki/v3/engines/storage/postgres"
+
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
+)
+
+var CADBName = "ca"
+
+func MigrationTest_CA_00000000000001_create_table(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+
+	con.Exec(`INSERT INTO ca_certificates
+			(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_strength_meta_type, key_strength_meta_bits, key_strength_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, id, issuance_expiration_ref, creation_ts, "level")
+			VALUES('ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47', '{}', 'ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47', '9beebc5b-ba8d-4fc0-9e97-58299d30ae9f', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUY5RENDQTl5Z0F3SUJBZ0lSQU85dFIvVGx2Y2pqZ1dkMFlCTEJEMGN3RFFZSktvWklodmNOQVFFTEJRQXcKSERFYU1CZ0dBMVVFQXhNUlJVTlRMVTFoYm5WbVlXTjBkWEpwYm1jd0hoY05NalF4TVRJMU1EazBOVFE0V2hjTgpNalV3T1RJeE1EazBOVFEwV2pBY01Sb3dHQVlEVlFRREV4RkZRMU10VFdGdWRXWmhZM1IxY21sdVp6Q0NBaUl3CkRRWUpLb1pJaHZjTkFRRUJCUUFEZ2dJUEFEQ0NBZ29DZ2dJQkFOQllQKytacmZNY2MzL1BiTXVVYjBVcklMMVEKb2Jtbm41TllWdXJkU1c2ZEhZMEF3ajQzbmhlTndtV3NPbGt5bmR3UGNmVWdpWnlsS1dpVzcxUlFsMGF1bWFZLworczFVcnhjQXhidFFCOGQ3c3dBd2xYZ0xoMk1XR3ppUm4wUjBuNDJkRDdxVFdZWXIwcFRnbkc1WG82LzV1ak5iCmlSVzZaWXA4ZzNuM1BCbWFhbFRRVmxmRWgzNHBIbFU5SThFUExUdmFvMnFXU01RSlY4WDM5Y1VDdjBib0RKVEwKa0daaWpxTVM0dEoyR3NRWHo4UE8yTk83UHlXVndLWlgvSE5tYTA1NWlZV0tzNi9GN2I3bEY3YkNEQVFMalVCdwphWldWOW00VmpwRWpCMEc0WTkzTm5VMFNqVUxzR2ZFYVRlblovVk5zMXBZZ3hJcHRXWFdtZUdBT3RJWi90bFJ0CmwyTitweTVZenFtQ2tYbjZxRlRpb3ZyN1huTjFWSkxRblJKMkhSZUxWVUJ6K21TWmMzSmRXOHd6QmgvWTVtYUgKK1RpZ0dyTnIrcFZVZi9vNTZ6ZS9pblAzWUUvdERoUG5FRk1PSVBCbGdyZktlcFRKOVd6dmtPWHNkb1hwR2RHYQp6QlIwNTl1N05uVFpEQzBsc3ByKzJWMTVGVVhIMXRyelg3Nmk4QSt5bVJRak45U2NhTWlhemlzWUdSU09XNVRTClhJZ0VkSVM0YXg4TWQ1Skd5TStFVVdyQ2pwaHRaamVlQzNvdjY0R25mSWdiL1lOTFNQUi9FeHhwekJwNjN4d3AKdS8wWnZaRTZVNVBNTExwNkF0RzkzY2h2NTFVdE1lVVAzYXlQaUF4OEhZTmp3L0djN2VHKzZ1cnhYMVFnakpHSQp1MWNqU3djTE00dFA4aXdMQWdNQkFBR2pnZ0V2TUlJQkt6QU9CZ05WSFE4QkFmOEVCQU1DQVpZd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0lHQ0NzR0FRVUZCd01CTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3TFFZRFZSME8KQkNZRUpEbGlaV1ZpWXpWaUxXSmhPR1F0Tkdaak1DMDVaVGszTFRVNE1qazVaRE13WVdVNVpqQXZCZ05WSFNNRQpLREFtZ0NRNVltVmxZbU0xWWkxaVlUaGtMVFJtWXpBdE9XVTVOeTAxT0RJNU9XUXpNR0ZsT1dZd053WUlLd1lCCkJRVUhBUUVFS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWoKYzNBd1VBWURWUjBmQkVrd1J6QkZvRU9nUVlZL2FIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dgpPV0psWldKak5XSXRZbUU0WkMwMFptTXdMVGxsT1RjdE5UZ3lPVGxrTXpCaFpUbG1NQTBHQ1NxR1NJYjNEUUVCCkN3VUFBNElDQVFDQ1pTOG5pRStxeEdBYjJjSVhVWW4rRHNJVGRwZXFnM3BQRU1EZU5DR29rUUY4cGcwbkpOdjcKZURmaTR3TEp2ZlBRK0lzNjNLYnU4dVBoanpYcnVrWUE3VWgyTmJRZnJHM1d3L3JDUGlJTkVZNktjNmltdnk1RApyK2NIbFJKYkEyaE9yNTd3Tnc0b2RrMERsdkdIbVN6M2hOWXFxcWZJcEYxMEYwdUNTNllOV1AvUHU1VFVaN2V4CkFPTjF2aWZMdFBGcGFnYkxPd3k5K3JicStHUkZET0ZSRjlzYzdBUHdoWVpUZTdHSnFNblZKbklPOU1Qd01idDEKMW1KRHNJTzlqTkhNVkVMbzBGWVRhOE05K29EWE1CaThzRWN5aER0ZlN1ZUU5bU9wWkhFck1Wb2s5aTd6Y2FObwp4OEFBZTNHRFU5MDB1SlB1Y0t3TmprVjZpL21FMk1maXBCYTMxV3NHcUdNbjY3MDBoSjJhS00wcjVIRnhhK3l4CnMzMVArQ1hCZjF4THBaYTBPY3ZTTFJuTzJtSFhnTTlzRGRsdW5WZkEzOGFoU2Zna1ZBK1BQU1EvTTFZTVUxT1YKRTIvdlNvUjR0elF4QU9wU3RjaUxGUFpxczcrY0ZJbzlKSk5aZnNNR2ZKempDbFBlRU91VFJ0YklmR0FEc1VzeQp0MmdtdDZMeDhSc2M1V0NXanNGMjFjR3FKZjB3TlJHcloyb20xTnlRcjhDZTdmQ1Y1dWY0dlNJMEZkVGU3cE5WCjNKKzJwa3ZDV05TVUdyNktmUEw2OGw1YnhiVWl0d294N0doV0dZT2IwaEp5b2V4VC92MmNiQys2WWNDUXZCSFUKeUR6bU1EZVFVQkVJeXhFRk96bE5uZlZxRnNQbmVJT2ZhbWNNaHd1VkdRSUhMdWhIK0gwdDVBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=', 1, 4096, 'HIGH', 'ECS-Manufacturing', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 0, 'MANAGED', 'filesystem-1', '9beebc5b-ba8d-4fc0-9e97-58299d30ae9f', '{"type":"Duration","duration":"14w2d","time":""}', '2024-11-25 11:45:48.620', 0);
+	`)
+
+	var result map[string]any
+	tx := con.Raw("SELECT * FROM ca_certificates").Scan(&result)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
+	}
+
+	assert.Equal(t, "ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47", result["serial_number"])
+	assert.Equal(t, "9beebc5b-ba8d-4fc0-9e97-58299d30ae9f", result["issuer_meta_id"])
+	assert.Equal(t, "ACTIVE", result["status"])
+	assert.Equal(t, "filesystem-1", result["engine_id"])
+	assertEqualD(t, time.Date(2024, time.November, 25, 9, 45, 48, 0, time.UTC), result["valid_from"].(time.Time))
+	assertEqualD(t, time.Date(2025, time.September, 21, 11, 45, 44, 0, time.UTC), result["valid_to"].(time.Time))
+	assert.Equal(t, "MANAGED", result["type"])
+	assert.Equal(t, "9beebc5b-ba8d-4fc0-9e97-58299d30ae9f", result["id"])
+	assertEqualD(t, time.Date(2024, time.November, 25, 11, 45, 48, 620000000, time.UTC), result["creation_ts"].(time.Time))
+	assert.Equal(t, int64(0), result["level"])
+	assert.Equal(t, "{}", result["metadata"])
+	assert.Equal(t, "ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47", result["issuer_meta_serial_number"])
+	assert.Equal(t, int64(0), result["issuer_meta_level"])
+	assert.Equal(t, int64(1), result["key_strength_meta_type"])
+	assert.Equal(t, int64(4096), result["key_strength_meta_bits"])
+	assert.Equal(t, "HIGH", result["key_strength_meta_strength"])
+	assertEqualD(t, time.Time(time.Date(1, time.January, 1, 1, 0, 0, 0, time.UTC)), result["revocation_timestamp"].(time.Time))
+	assert.Equal(t, int64(0), result["revocation_reason"])
+	assert.Equal(t, `{"type":"Duration","duration":"14w2d","time":""}`, result["issuance_expiration_ref"])
+	assert.Equal(t, "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUY5RENDQTl5Z0F3SUJBZ0lSQU85dFIvVGx2Y2pqZ1dkMFlCTEJEMGN3RFFZSktvWklodmNOQVFFTEJRQXcKSERFYU1CZ0dBMVVFQXhNUlJVTlRMVTFoYm5WbVlXTjBkWEpwYm1jd0hoY05NalF4TVRJMU1EazBOVFE0V2hjTgpNalV3T1RJeE1EazBOVFEwV2pBY01Sb3dHQVlEVlFRREV4RkZRMU10VFdGdWRXWmhZM1IxY21sdVp6Q0NBaUl3CkRRWUpLb1pJaHZjTkFRRUJCUUFEZ2dJUEFEQ0NBZ29DZ2dJQkFOQllQKytacmZNY2MzL1BiTXVVYjBVcklMMVEKb2Jtbm41TllWdXJkU1c2ZEhZMEF3ajQzbmhlTndtV3NPbGt5bmR3UGNmVWdpWnlsS1dpVzcxUlFsMGF1bWFZLworczFVcnhjQXhidFFCOGQ3c3dBd2xYZ0xoMk1XR3ppUm4wUjBuNDJkRDdxVFdZWXIwcFRnbkc1WG82LzV1ak5iCmlSVzZaWXA4ZzNuM1BCbWFhbFRRVmxmRWgzNHBIbFU5SThFUExUdmFvMnFXU01RSlY4WDM5Y1VDdjBib0RKVEwKa0daaWpxTVM0dEoyR3NRWHo4UE8yTk83UHlXVndLWlgvSE5tYTA1NWlZV0tzNi9GN2I3bEY3YkNEQVFMalVCdwphWldWOW00VmpwRWpCMEc0WTkzTm5VMFNqVUxzR2ZFYVRlblovVk5zMXBZZ3hJcHRXWFdtZUdBT3RJWi90bFJ0CmwyTitweTVZenFtQ2tYbjZxRlRpb3ZyN1huTjFWSkxRblJKMkhSZUxWVUJ6K21TWmMzSmRXOHd6QmgvWTVtYUgKK1RpZ0dyTnIrcFZVZi9vNTZ6ZS9pblAzWUUvdERoUG5FRk1PSVBCbGdyZktlcFRKOVd6dmtPWHNkb1hwR2RHYQp6QlIwNTl1N05uVFpEQzBsc3ByKzJWMTVGVVhIMXRyelg3Nmk4QSt5bVJRak45U2NhTWlhemlzWUdSU09XNVRTClhJZ0VkSVM0YXg4TWQ1Skd5TStFVVdyQ2pwaHRaamVlQzNvdjY0R25mSWdiL1lOTFNQUi9FeHhwekJwNjN4d3AKdS8wWnZaRTZVNVBNTExwNkF0RzkzY2h2NTFVdE1lVVAzYXlQaUF4OEhZTmp3L0djN2VHKzZ1cnhYMVFnakpHSQp1MWNqU3djTE00dFA4aXdMQWdNQkFBR2pnZ0V2TUlJQkt6QU9CZ05WSFE4QkFmOEVCQU1DQVpZd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0lHQ0NzR0FRVUZCd01CTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3TFFZRFZSME8KQkNZRUpEbGlaV1ZpWXpWaUxXSmhPR1F0Tkdaak1DMDVaVGszTFRVNE1qazVaRE13WVdVNVpqQXZCZ05WSFNNRQpLREFtZ0NRNVltVmxZbU0xWWkxaVlUaGtMVFJtWXpBdE9XVTVOeTAxT0RJNU9XUXpNR0ZsT1dZd053WUlLd1lCCkJRVUhBUUVFS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWoKYzNBd1VBWURWUjBmQkVrd1J6QkZvRU9nUVlZL2FIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dgpPV0psWldKak5XSXRZbUU0WkMwMFptTXdMVGxsT1RjdE5UZ3lPVGxrTXpCaFpUbG1NQTBHQ1NxR1NJYjNEUUVCCkN3VUFBNElDQVFDQ1pTOG5pRStxeEdBYjJjSVhVWW4rRHNJVGRwZXFnM3BQRU1EZU5DR29rUUY4cGcwbkpOdjcKZURmaTR3TEp2ZlBRK0lzNjNLYnU4dVBoanpYcnVrWUE3VWgyTmJRZnJHM1d3L3JDUGlJTkVZNktjNmltdnk1RApyK2NIbFJKYkEyaE9yNTd3Tnc0b2RrMERsdkdIbVN6M2hOWXFxcWZJcEYxMEYwdUNTNllOV1AvUHU1VFVaN2V4CkFPTjF2aWZMdFBGcGFnYkxPd3k5K3JicStHUkZET0ZSRjlzYzdBUHdoWVpUZTdHSnFNblZKbklPOU1Qd01idDEKMW1KRHNJTzlqTkhNVkVMbzBGWVRhOE05K29EWE1CaThzRWN5aER0ZlN1ZUU5bU9wWkhFck1Wb2s5aTd6Y2FObwp4OEFBZTNHRFU5MDB1SlB1Y0t3TmprVjZpL21FMk1maXBCYTMxV3NHcUdNbjY3MDBoSjJhS00wcjVIRnhhK3l4CnMzMVArQ1hCZjF4THBaYTBPY3ZTTFJuTzJtSFhnTTlzRGRsdW5WZkEzOGFoU2Zna1ZBK1BQU1EvTTFZTVUxT1YKRTIvdlNvUjR0elF4QU9wU3RjaUxGUFpxczcrY0ZJbzlKSk5aZnNNR2ZKempDbFBlRU91VFJ0YklmR0FEc1VzeQp0MmdtdDZMeDhSc2M1V0NXanNGMjFjR3FKZjB3TlJHcloyb20xTnlRcjhDZTdmQ1Y1dWY0dlNJMEZkVGU3cE5WCjNKKzJwa3ZDV05TVUdyNktmUEw2OGw1YnhiVWl0d294N0doV0dZT2IwaEp5b2V4VC92MmNiQys2WWNDUXZCSFUKeUR6bU1EZVFVQkVJeXhFRk96bE5uZlZxRnNQbmVJT2ZhbWNNaHd1VkdRSUhMdWhIK0gwdDVBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=", result["certificate"])
+
+	tx = con.Raw("SELECT * FROM certificates")
+	assert.Equal(t, int64(0), tx.RowsAffected)
+}
+
+func MigrationTest_CA_20241215165048_add_key_id(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+
+	var result map[string]any
+	tx := con.Raw("SELECT * FROM ca_certificates").Scan(&result)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
+	}
+
+	assert.Equal(t, "ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47", result["serial_number"])
+	assert.Equal(t, "9beebc5b-ba8d-4fc0-9e97-58299d30ae9f", result["issuer_meta_id"])
+	assert.Equal(t, "ACTIVE", result["status"])
+	assert.Equal(t, "filesystem-1", result["engine_id"])
+	assertEqualD(t, time.Date(2024, time.November, 25, 9, 45, 48, 0, time.UTC), result["valid_from"].(time.Time))
+	assertEqualD(t, time.Date(2025, time.September, 21, 11, 45, 44, 0, time.UTC), result["valid_to"].(time.Time))
+	assert.Equal(t, "MANAGED", result["type"])
+	assert.Equal(t, "9beebc5b-ba8d-4fc0-9e97-58299d30ae9f", result["id"])
+	assertEqualD(t, time.Date(2024, time.November, 25, 11, 45, 48, 620000000, time.UTC), result["creation_ts"].(time.Time))
+	assert.Equal(t, int64(0), result["level"])
+	assert.Equal(t, "{}", result["metadata"])
+	assert.Equal(t, "ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47", result["issuer_meta_serial_number"])
+	assert.Equal(t, int64(0), result["issuer_meta_level"])
+	assert.Equal(t, int64(1), result["key_strength_meta_type"])
+	assert.Equal(t, int64(4096), result["key_strength_meta_bits"])
+	assert.Equal(t, "HIGH", result["key_strength_meta_strength"])
+	assertEqualD(t, time.Time(time.Date(1, time.January, 1, 1, 0, 0, 0, time.UTC)), result["revocation_timestamp"].(time.Time))
+	assert.Equal(t, int64(0), result["revocation_reason"])
+	assert.Equal(t, `{"type":"Duration","duration":"14w2d","time":""}`, result["issuance_expiration_ref"])
+	assert.Equal(t, "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUY5RENDQTl5Z0F3SUJBZ0lSQU85dFIvVGx2Y2pqZ1dkMFlCTEJEMGN3RFFZSktvWklodmNOQVFFTEJRQXcKSERFYU1CZ0dBMVVFQXhNUlJVTlRMVTFoYm5WbVlXTjBkWEpwYm1jd0hoY05NalF4TVRJMU1EazBOVFE0V2hjTgpNalV3T1RJeE1EazBOVFEwV2pBY01Sb3dHQVlEVlFRREV4RkZRMU10VFdGdWRXWmhZM1IxY21sdVp6Q0NBaUl3CkRRWUpLb1pJaHZjTkFRRUJCUUFEZ2dJUEFEQ0NBZ29DZ2dJQkFOQllQKytacmZNY2MzL1BiTXVVYjBVcklMMVEKb2Jtbm41TllWdXJkU1c2ZEhZMEF3ajQzbmhlTndtV3NPbGt5bmR3UGNmVWdpWnlsS1dpVzcxUlFsMGF1bWFZLworczFVcnhjQXhidFFCOGQ3c3dBd2xYZ0xoMk1XR3ppUm4wUjBuNDJkRDdxVFdZWXIwcFRnbkc1WG82LzV1ak5iCmlSVzZaWXA4ZzNuM1BCbWFhbFRRVmxmRWgzNHBIbFU5SThFUExUdmFvMnFXU01RSlY4WDM5Y1VDdjBib0RKVEwKa0daaWpxTVM0dEoyR3NRWHo4UE8yTk83UHlXVndLWlgvSE5tYTA1NWlZV0tzNi9GN2I3bEY3YkNEQVFMalVCdwphWldWOW00VmpwRWpCMEc0WTkzTm5VMFNqVUxzR2ZFYVRlblovVk5zMXBZZ3hJcHRXWFdtZUdBT3RJWi90bFJ0CmwyTitweTVZenFtQ2tYbjZxRlRpb3ZyN1huTjFWSkxRblJKMkhSZUxWVUJ6K21TWmMzSmRXOHd6QmgvWTVtYUgKK1RpZ0dyTnIrcFZVZi9vNTZ6ZS9pblAzWUUvdERoUG5FRk1PSVBCbGdyZktlcFRKOVd6dmtPWHNkb1hwR2RHYQp6QlIwNTl1N05uVFpEQzBsc3ByKzJWMTVGVVhIMXRyelg3Nmk4QSt5bVJRak45U2NhTWlhemlzWUdSU09XNVRTClhJZ0VkSVM0YXg4TWQ1Skd5TStFVVdyQ2pwaHRaamVlQzNvdjY0R25mSWdiL1lOTFNQUi9FeHhwekJwNjN4d3AKdS8wWnZaRTZVNVBNTExwNkF0RzkzY2h2NTFVdE1lVVAzYXlQaUF4OEhZTmp3L0djN2VHKzZ1cnhYMVFnakpHSQp1MWNqU3djTE00dFA4aXdMQWdNQkFBR2pnZ0V2TUlJQkt6QU9CZ05WSFE4QkFmOEVCQU1DQVpZd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0lHQ0NzR0FRVUZCd01CTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3TFFZRFZSME8KQkNZRUpEbGlaV1ZpWXpWaUxXSmhPR1F0Tkdaak1DMDVaVGszTFRVNE1qazVaRE13WVdVNVpqQXZCZ05WSFNNRQpLREFtZ0NRNVltVmxZbU0xWWkxaVlUaGtMVFJtWXpBdE9XVTVOeTAxT0RJNU9XUXpNR0ZsT1dZd053WUlLd1lCCkJRVUhBUUVFS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWoKYzNBd1VBWURWUjBmQkVrd1J6QkZvRU9nUVlZL2FIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dgpPV0psWldKak5XSXRZbUU0WkMwMFptTXdMVGxsT1RjdE5UZ3lPVGxrTXpCaFpUbG1NQTBHQ1NxR1NJYjNEUUVCCkN3VUFBNElDQVFDQ1pTOG5pRStxeEdBYjJjSVhVWW4rRHNJVGRwZXFnM3BQRU1EZU5DR29rUUY4cGcwbkpOdjcKZURmaTR3TEp2ZlBRK0lzNjNLYnU4dVBoanpYcnVrWUE3VWgyTmJRZnJHM1d3L3JDUGlJTkVZNktjNmltdnk1RApyK2NIbFJKYkEyaE9yNTd3Tnc0b2RrMERsdkdIbVN6M2hOWXFxcWZJcEYxMEYwdUNTNllOV1AvUHU1VFVaN2V4CkFPTjF2aWZMdFBGcGFnYkxPd3k5K3JicStHUkZET0ZSRjlzYzdBUHdoWVpUZTdHSnFNblZKbklPOU1Qd01idDEKMW1KRHNJTzlqTkhNVkVMbzBGWVRhOE05K29EWE1CaThzRWN5aER0ZlN1ZUU5bU9wWkhFck1Wb2s5aTd6Y2FObwp4OEFBZTNHRFU5MDB1SlB1Y0t3TmprVjZpL21FMk1maXBCYTMxV3NHcUdNbjY3MDBoSjJhS00wcjVIRnhhK3l4CnMzMVArQ1hCZjF4THBaYTBPY3ZTTFJuTzJtSFhnTTlzRGRsdW5WZkEzOGFoU2Zna1ZBK1BQU1EvTTFZTVUxT1YKRTIvdlNvUjR0elF4QU9wU3RjaUxGUFpxczcrY0ZJbzlKSk5aZnNNR2ZKempDbFBlRU91VFJ0YklmR0FEc1VzeQp0MmdtdDZMeDhSc2M1V0NXanNGMjFjR3FKZjB3TlJHcloyb20xTnlRcjhDZTdmQ1Y1dWY0dlNJMEZkVGU3cE5WCjNKKzJwa3ZDV05TVUdyNktmUEw2OGw1YnhiVWl0d294N0doV0dZT2IwaEp5b2V4VC92MmNiQys2WWNDUXZCSFUKeUR6bU1EZVFVQkVJeXhFRk96bE5uZlZxRnNQbmVJT2ZhbWNNaHd1VkdRSUhMdWhIK0gwdDVBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=", result["certificate"])
+	assert.Equal(t, "ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47", result["key_id"])
+}
+
+func MigrationTest_CA_20241223183344_unified_ca_models(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+
+	caRepo, err := postgres.NewCAPostgresRepository(logger, con)
+	if err != nil {
+		t.Fatalf("could not create ca repository: %s", err)
+	}
+
+	certRepo, err := postgres.NewCertificateRepository(logger, con)
+	if err != nil {
+		t.Fatalf("could not create certificate repository: %s", err)
+	}
+
+	ctrCAs, err := caRepo.Count(context.Background())
+	if err != nil {
+		t.Fatalf("could not count certificates: %s", err)
+	}
+
+	assert.Equal(t, 0, ctrCAs)
+
+	ctrCerts, err := certRepo.Count(context.Background())
+	if err != nil {
+		t.Fatalf("could not count certificates: %s", err)
+	}
+
+	assert.Equal(t, 0, ctrCerts)
+
+	con.Exec(`INSERT INTO "certificates"
+	("serial_number","key_id","metadata","status","certificate","key_meta_type","key_meta_bits","key_meta_strength","subject_common_name","subject_organization","subject_organization_unit","subject_country","subject_state","subject_locality","valid_from","issuer_meta_serial_number","issuer_meta_id","issuer_meta_level","valid_to","revocation_timestamp","revocation_reason","type","engine_id")
+	VALUES ('ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47','ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47','{}','ACTIVE','LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUY5RENDQTl5Z0F3SUJBZ0lSQU85dFIvVGx2Y2pqZ1dkMFlCTEJEMGN3RFFZSktvWklodmNOQVFFTEJRQXcKSERFYU1CZ0dBMVVFQXhNUlJVTlRMVTFoYm5WbVlXTjBkWEpwYm1jd0hoY05NalF4TVRJMU1EazBOVFE0V2hjTgpNalV3T1RJeE1EazBOVFEwV2pBY01Sb3dHQVlEVlFRREV4RkZRMU10VFdGdWRXWmhZM1IxY21sdVp6Q0NBaUl3CkRRWUpLb1pJaHZjTkFRRUJCUUFEZ2dJUEFEQ0NBZ29DZ2dJQkFOQllQKytacmZNY2MzL1BiTXVVYjBVcklMMVEKb2Jtbm41TllWdXJkU1c2ZEhZMEF3ajQzbmhlTndtV3NPbGt5bmR3UGNmVWdpWnlsS1dpVzcxUlFsMGF1bWFZLworczFVcnhjQXhidFFCOGQ3c3dBd2xYZ0xoMk1XR3ppUm4wUjBuNDJkRDdxVFdZWXIwcFRnbkc1WG82LzV1ak5iCmlSVzZaWXA4ZzNuM1BCbWFhbFRRVmxmRWgzNHBIbFU5SThFUExUdmFvMnFXU01RSlY4WDM5Y1VDdjBib0RKVEwKa0daaWpxTVM0dEoyR3NRWHo4UE8yTk83UHlXVndLWlgvSE5tYTA1NWlZV0tzNi9GN2I3bEY3YkNEQVFMalVCdwphWldWOW00VmpwRWpCMEc0WTkzTm5VMFNqVUxzR2ZFYVRlblovVk5zMXBZZ3hJcHRXWFdtZUdBT3RJWi90bFJ0CmwyTitweTVZenFtQ2tYbjZxRlRpb3ZyN1huTjFWSkxRblJKMkhSZUxWVUJ6K21TWmMzSmRXOHd6QmgvWTVtYUgKK1RpZ0dyTnIrcFZVZi9vNTZ6ZS9pblAzWUUvdERoUG5FRk1PSVBCbGdyZktlcFRKOVd6dmtPWHNkb1hwR2RHYQp6QlIwNTl1N05uVFpEQzBsc3ByKzJWMTVGVVhIMXRyelg3Nmk4QSt5bVJRak45U2NhTWlhemlzWUdSU09XNVRTClhJZ0VkSVM0YXg4TWQ1Skd5TStFVVdyQ2pwaHRaamVlQzNvdjY0R25mSWdiL1lOTFNQUi9FeHhwekJwNjN4d3AKdS8wWnZaRTZVNVBNTExwNkF0RzkzY2h2NTFVdE1lVVAzYXlQaUF4OEhZTmp3L0djN2VHKzZ1cnhYMVFnakpHSQp1MWNqU3djTE00dFA4aXdMQWdNQkFBR2pnZ0V2TUlJQkt6QU9CZ05WSFE4QkFmOEVCQU1DQVpZd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0lHQ0NzR0FRVUZCd01CTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3TFFZRFZSME8KQkNZRUpEbGlaV1ZpWXpWaUxXSmhPR1F0Tkdaak1DMDVaVGszTFRVNE1qazVaRE13WVdVNVpqQXZCZ05WSFNNRQpLREFtZ0NRNVltVmxZbU0xWWkxaVlUaGtMVFJtWXpBdE9XVTVOeTAxT0RJNU9XUXpNR0ZsT1dZd053WUlLd1lCCkJRVUhBUUVFS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWoKYzNBd1VBWURWUjBmQkVrd1J6QkZvRU9nUVlZL2FIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dgpPV0psWldKak5XSXRZbUU0WkMwMFptTXdMVGxsT1RjdE5UZ3lPVGxrTXpCaFpUbG1NQTBHQ1NxR1NJYjNEUUVCCkN3VUFBNElDQVFDQ1pTOG5pRStxeEdBYjJjSVhVWW4rRHNJVGRwZXFnM3BQRU1EZU5DR29rUUY4cGcwbkpOdjcKZURmaTR3TEp2ZlBRK0lzNjNLYnU4dVBoanpYcnVrWUE3VWgyTmJRZnJHM1d3L3JDUGlJTkVZNktjNmltdnk1RApyK2NIbFJKYkEyaE9yNTd3Tnc0b2RrMERsdkdIbVN6M2hOWXFxcWZJcEYxMEYwdUNTNllOV1AvUHU1VFVaN2V4CkFPTjF2aWZMdFBGcGFnYkxPd3k5K3JicStHUkZET0ZSRjlzYzdBUHdoWVpUZTdHSnFNblZKbklPOU1Qd01idDEKMW1KRHNJTzlqTkhNVkVMbzBGWVRhOE05K29EWE1CaThzRWN5aER0ZlN1ZUU5bU9wWkhFck1Wb2s5aTd6Y2FObwp4OEFBZTNHRFU5MDB1SlB1Y0t3TmprVjZpL21FMk1maXBCYTMxV3NHcUdNbjY3MDBoSjJhS00wcjVIRnhhK3l4CnMzMVArQ1hCZjF4THBaYTBPY3ZTTFJuTzJtSFhnTTlzRGRsdW5WZkEzOGFoU2Zna1ZBK1BQU1EvTTFZTVUxT1YKRTIvdlNvUjR0elF4QU9wU3RjaUxGUFpxczcrY0ZJbzlKSk5aZnNNR2ZKempDbFBlRU91VFJ0YklmR0FEc1VzeQp0MmdtdDZMeDhSc2M1V0NXanNGMjFjR3FKZjB3TlJHcloyb20xTnlRcjhDZTdmQ1Y1dWY0dlNJMEZkVGU3cE5WCjNKKzJwa3ZDV05TVUdyNktmUEw2OGw1YnhiVWl0d294N0doV0dZT2IwaEp5b2V4VC92MmNiQys2WWNDUXZCSFUKeUR6bU1EZVFVQkVJeXhFRk96bE5uZlZxRnNQbmVJT2ZhbWNNaHd1VkdRSUhMdWhIK0gwdDVBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=','RSA',4096,'HIGH','ECS-Manufacturing','','','','','','2024-11-25 09:45:48','ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47','1111-2222-3333-4444',0,'2025-09-21 11:45:44','2025-11-03 15:51:41.000','Unspecified','MANAGED','filesystem-1')
+	`)
+
+	con.Exec(`INSERT INTO "ca_certificates" 
+	("id","serial_number","metadata","validity_type","validity_duration","validity_time","creation_ts","level") 
+	VALUES ('1111-2222-3333-4444','ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47',NULL,'','0s',NULL,NULL,0)
+	`)
+
+	ctrCAs, err = caRepo.Count(context.Background())
+	if err != nil {
+		t.Fatalf("could not count certificates: %s", err)
+	}
+
+	assert.Equal(t, 1, ctrCAs)
+
+	ctrCerts, err = certRepo.Count(context.Background())
+	if err != nil {
+		t.Fatalf("could not count certificates: %s", err)
+	}
+
+	assert.Equal(t, 1, ctrCerts)
+}
+
+func MigrationTest_CA_20250107164937_add_is_ca(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	//Add 2 CAs (1 Root and SubCA)
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, key_id)
+		VALUES('99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '{}', '99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUdPakNDQkNLZ0F3SUJBZ0lSQUpuZ0ptQkxrSTArVUplWXNCYmIxbmt3RFFZSktvWklodmNOQVFFTEJRQXcKRlRFVE1CRUdBMVVFQXhNS1VtOXZkQzFEUVMxV01UQWVGdzB5TlRBeE1EY3hORFV4TlRsYUZ3MHlOVEV4TURNeApORFV4TlRSYU1CVXhFekFSQmdOVkJBTVRDbEp2YjNRdFEwRXRWakV3Z2dJaU1BMEdDU3FHU0liM0RRRUJBUVVBCkE0SUNEd0F3Z2dJS0FvSUNBUUMzTTZYdDJNSWlVR21LNXpUUlVvZlZzazdtQ1ZZMWlkbXdLSythd0M0anZzWWoKM0JiZW5zZXVJaUo3NEg5TnZZdnhYZ0xDNVE3NXJ5UmJzNHN5TzBpV2YxUlJtamFVVUdxbHlkMmFLNVlIM3JWYgpXZ0htTkJMU2Q0dVlTRit3dno0Vk9Ic24zT1kvbFBTUkRwSm11ajJ3ekhYZ1p5RVR6M1Bzd1hhT0xXY3RsZFUvCm11eUJPWHE0bTFwNHh6dy83N0R2bW53Ni9mRXYwdG9iRVBYdVdvdlhSaS84NHQ2c0g5K1VDWmI5U3JTdFJWTHEKTGhsUEVQUC9SOXVveHBsVElTNllyQ2VHdWlPM2ViOGtmRVVETVdKS2pFbktueUx2b1RmbFVOMGE0K1docEFSSQp3WXgwSm9zQzhrb0xLV29ScFdJSlVlOC9hZStNWXRmWW1JNUdacGRIdnk1ZngzbXB5R2hseUJhWVRSOER2dkdvCmN1S0pabm16MVFuamYzM0syZFAxbk1RVHJhalJlWS9aMnd6bmRQbjg0SWdoWnJRc2NpSXYxcXg3Z3Y4Y3BuK0QKWTJuRUJUTHBPRHNIQXhKcmEyTGZZaXFYNnQzaUNCNEkrLzQ2djFBSitBWmJYMnRSVUpsakpSeHBqbkI5VnA1MApEQWFwNTN6dVhZdFhFYmJ0azI0djdodyt6cW5JYm9ueHZ6WVQ2c0Z4STdPYXdFNE5zQ2pjS2VOd2RBRmJPMmYzCkFqVURrUTdQTTE4OW9tRG5ZemxKWXFMWTFkZkNMcnhTTllZUzRwSUNPOE81dlVkQXJsWEI1MmhRWjcrLzdWWlYKOTRJbHpKVi9ZbzRGS2prMjJEZ0VyTk5sSGZHakhLbFBGMUhyUE81WkY2Z0ttTzd5SkJaeWx3SWVWODVoQXdJRApBUUFCbzRJQmd6Q0NBWDh3RGdZRFZSMFBBUUgvQkFRREFnR1dNQjBHQTFVZEpRUVdNQlFHQ0NzR0FRVUZCd01DCkJnZ3JCZ0VGQlFjREFUQVBCZ05WSFJNQkFmOEVCVEFEQVFIL01Fa0dBMVVkRGdSQ0JFQTROMlkyTURFelpHVXkKTW1GbU1tSm1NMlZqTm1GbU5XRmlNemc1WVRFek56STBaREJqT1RJM1lUTmxNamd3WVRobFlqQXhOVFU1TXpNNQpZakF5TnpjMk1Fc0dBMVVkSXdSRU1FS0FRRGczWmpZd01UTmtaVEl5WVdZeVltWXpaV00yWVdZMVlXSXpPRGxoCk1UTTNNalJrTUdNNU1qZGhNMlV5T0RCaE9HVmlNREUxTlRrek16bGlNREkzTnpZd053WUlLd1lCQlFVSEFRRUUKS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWpjM0F3YkFZRApWUjBmQkdVd1l6QmhvRitnWFlaYmFIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dk9EZG1OakF4Ck0yUmxNakpoWmpKaVpqTmxZelpoWmpWaFlqTTRPV0V4TXpjeU5HUXdZemt5TjJFelpUSTRNR0U0WldJd01UVTEKT1RNek9XSXdNamMzTmpBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQWdFQUxpOGRBWHg3aGR3QmZtRDJSWjhxL2J2SQphN0dac0M2clQ2K05KaGxVVnI5cTZXWXBwYnV3VnJuTC81ZG01dTJ0bzBuVGIyQlQ1bXp1M2hFRkRGYlBFL1BWCmkxdGk2ZTdvdXVoNTFNc0c0ZEhCa2tRUjBUMDFjcnRURHBmU1VwTEREQXVDbU83OE0vMDFTcnV0UTk4ZE1WOHcKVkJqWTAzTTVoMEo3UWd5WjBTYmtXMFBYOTk5NEhUYnVMZXovaG9EVjZ1YmsxTU5Qa01UT2Y5T0V5dWViZzROWQpIM1FTdGxYV0FkMTFIM2U5a0UyVy9Jb2d1L3F5amRIK0RsLzM2WlhUMzdsRllnUUhOMHRTZ0FvQnAzRlQ2TDd2CnZNc1hkeGt1NGRLSHFOOG9RaHY5S09vM005d0cvV1NLUkVRZGdVc3dYOVRkRXBSS2FYMC9vb3RJYVFQTlE5TWIKeU9DMEhlN3g4ZUtVMHNFenBpZjV0cGJZNGxuNVplZXRPbyttampvb3N1Y0Q5SnhkK3BpRGlBay9NeTdJcjFZQQpDZ21ZcUxSZXJBdGFtVWw4TzNmSWg3Y1J0TDlqcVRhckM1TGp1bnV6cExZd2lHSWFUZkxCZGZrTFNkRDhHeXE3CmZvQ2IvbjBadEZaOENHTHJDZGd3N1Z6MmVQbUwvL3dva2s5SHUxbkVPQVJqTGM5SFV5OXlHTlU1UHkvRXJHKzEKUDNSNk9ieHNpMFVXS1oyT1BlRnpjeS94VGEwSlBjZzNUdXFrcmFacUlTOWovREEraEpkaVk2c0YxcW9KQk0rLwpoNy9IV3VBL2t5K3dnL2dlVWZCWHlxSmw3S1J3WklBVTRkYzl1TG00aE1LVDZxTFNBM1R4dzl1N3lVZHZlcFRMCk50OGtheVJCY0M0YmMxNkpucGs9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 4096, 'HIGH', 'Root-CA-V1', '', '', '', '', '', '2025-01-07 15:51:59.000', '2025-11-03 15:51:54.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'aws-sm-ikerlan-zpd', '87f6013de22af2bf3ec6af5ab389a13724d0c927a3e280a8eb01559339b02776');
+	`)
+
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+		VALUES('99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '{}', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0, 'Duration', '2025-11-03 15:51:41.000', '14w2d');
+	`)
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, key_id)
+		VALUES('de-25-2c-7d-5a-c4-b2-3d-dd-fd-b6-c6-e0-43-16-4f', '{}', '99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUdQVENDQkNXZ0F3SUJBZ0lSQU40bExIMWF4TEk5M2YyMnh1QkRGazh3RFFZSktvWklodmNOQVFFTEJRQXcKRlRFVE1CRUdBMVVFQXhNS1VtOXZkQzFEUVMxV01UQWVGdzB5TlRBeE1EY3hORFV5TWpWYUZ3MHlOVEEzTWpZeApORFV5TWpOYU1CZ3hGakFVQmdOVkJBTVREVWx1ZEdWeUxVTkJMVXhXVERJd2dnSWlNQTBHQ1NxR1NJYjNEUUVCCkFRVUFBNElDRHdBd2dnSUtBb0lDQVFDNVFFM0hUVkNYYlhqZ21CR3JiMGROSXpOc21WdDZWQm5vVHZRYVVvY2kKcmhWRjhMVjRLV3RWREp5SG9yWDltSFRmeHlOTFZGcXFpdU4xbXBrUHhvNzF0bGVjL0xVK2txNWdYaVZOc2hjVAptTEMrNFowQ3ZOTUx1bkx1Y3lHRTZpdG13eGVuL0dzcXoxK1k1c1FIK2k3SklDbkJZY2tFMFhYbFBYRjJ1Sm93CnpTZnkyQnIvVWhNMGFVdXl4UkFSc1lmMlV0TFQrdlFCbE82UTI4TWw5aGgyVXZjTUVyZ0xWYmZSTmxQY2NyNjMKUkhQTzFzYWQ5V3liYWZLUndsTkNLOU9QZzNudmtQOWxQNDZxY0JLUk44T3g3MVBVY2NoVnMvMVZHM0s0YnBpUgpCSk1sdkZWajNUNFNXUnIxZndyM3VUamxGT0pJVzZFQUQ3NE5SNVlmb2VDeVdjZi9TWWhrSGFCN051ZW11U3pPCjJTeUtZSitHTjFJRlF2QmE2RkhqYWZncUs4Q2c4Yi93ZzNtQmVVeVY4WkZ0RGgyT0VBWHZ6M3VNa0JvTnpVblAKN21PaWZlRUJEVXNOdGtTTjZCWHhMSkpqVGVOcUsyWDRSTXcwSEVMUDRWSGdvV3dEWE10Ni9ha01PcFU4N2srUgo5MEJYQzFXTXBSZXl1NEdJR2lSa3BUbHlDeW1Sd0EwaFBtMllOV0VJZzlUaTB6a00yYmlqV2J4OXRWRzkvUHpwClUwNkFMWnZQem5xb2FoVTVaZEpnMmFENVRtcis1dzZpa2p4YmI4N2pDSm8yWDNKc0NnbjVzYkhXVTdwSVo3SU4KeWdDaFVBM09nZXNsbjFTeWkzNFUwU1FEaTBTNTlTQTRSSUxNQUkwZDZ0Rkg4cE9HdzZUekd1OEJGRXhpSjJTKworUUlEQVFBQm80SUJnekNDQVg4d0RnWURWUjBQQVFIL0JBUURBZ0dXTUIwR0ExVWRKUVFXTUJRR0NDc0dBUVVGCkJ3TUNCZ2dyQmdFRkJRY0RBVEFQQmdOVkhSTUJBZjhFQlRBREFRSC9NRWtHQTFVZERnUkNCRUJpTUdVNE9XWmsKTkRCbU5XRmxNRGs1TjJGbU9XWmxaall5TjJJeFpERTBOemxsTWpjMVpXTXlOMkkwTXpBNU9UUTNNamhpTmpWagpOMk5tWkRSaFkyRTFNRXNHQTFVZEl3UkVNRUtBUURnM1pqWXdNVE5rWlRJeVlXWXlZbVl6WldNMllXWTFZV0l6Ck9EbGhNVE0zTWpSa01HTTVNamRoTTJVeU9EQmhPR1ZpTURFMU5Ua3pNemxpTURJM056WXdOd1lJS3dZQkJRVUgKQVFFRUt6QXBNQ2NHQ0NzR0FRVUZCekFCaGh0b2RIUndjem92TDJ4aFlpNXNZVzFoYzNOMUxtbHZMMjlqYzNBdwpiQVlEVlIwZkJHVXdZekJob0YrZ1hZWmJhSFIwY0hNNkx5OXNZV0l1YkdGdFlYTnpkUzVwYnk5amNtd3ZZakJsCk9EbG1aRFF3WmpWaFpUQTVPVGRoWmpsbVpXWTJNamRpTVdReE5EYzVaVEkzTldWak1qZGlORE13T1RrME56STQKWWpZMVl6ZGpabVEwWVdOaE5UQU5CZ2txaGtpRzl3MEJBUXNGQUFPQ0FnRUFuRE9DVVFPMUlEWnExdnpVNkxSOQoyNE1VaCtWaVF6S3V2TVVGN1p4V1dLZVdRTmZsc2lmZDh5WHl4R0xQekE1Z0VJYzVPMWFCcnpleXBMUytSeU5sClBEc0xHamI5RXVRRitVNnYrWUhzMGNkWmpzcDREMlR3ZVBCRXMzOTJQVE5Gamp1ZW5uTzZGeHV4bWQ2cHJWNFkKWkhWcHFJZ3RWS0xKRXRiZjR0TXA1VU5PMUVEeFRELzdPSDhQa25OUTAwQmxCU2c3ckMyVk1ld3VaYnV1RHpxUgpNWUFVc215bHZEQ29vbDlVYUkxaXMzN0wxakpFNmptSmtSdmp3WVRNZng3OWNyNGVTSUU1aEFnRkRqZ2dReWN3ClY3ak1LdU91ZXRuWFRKaEt4a3NMRlBVWmhHTE9HUXhkYU9wQUdrYmZrOUR2SitSR0FyM2VGRFVHczIyU2dNTysKMHRuRWU2S293T2RpNUZWL295QnFkZWk2RUpzWko2TDRwbkRweDNHclBaeVpvNW5JV2s1eGN0V1JzSnIzOXJQLwpmblVSSDJ0SFE4WGlacmhUNTlGelZzUWUwTU1ER0RPWkRLSG04ei91YnVPaXlqdGdnMzZVdm5MbW1TZStaQlhYCjJFNHBkc0Z5TThycGdJQWRIb2pqeHU0Si9Fc3JWUUQrRGYybWVGa2hReGR1VjczNFY3SElBaDJnN1BCcm93ZEoKR3NYZWhlTFNFTlFKZjlzVno0NlFkK0JhcUNyaXFzNFlrbDFPSGJWbUFNTFRZOGNSRGZYOWM0ZGtPbzRtdnlMUApNWjlNT2MzZTlYUUJNVHErdWx1OGovR0Q1Y2hGRUdvZXU2a1NkVEZDRXhFQm45WCsvV2NtQmRWU2wvdzVCaldvCnZGR3BSazNuSzU0bU1vWlpwZ29hbGJjPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==', 'RSA', 4096, 'HIGH', 'Inter-CA-LVL2', '', '', '', '', '', '2025-01-07 15:52:25.000', '2025-07-26 16:52:23.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'aws-sm-ikerlan-zpd', 'b0e89fd40f5ae0997af9fef627b1d1479e275ec27b430994728b65c7cfd4aca5');
+	`)
+
+	con.Exec(`INSERT INTO ca_certificates
+	(serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+	VALUES('de-25-2c-7d-5a-c4-b2-3d-dd-fd-b6-c6-e0-43-16-4f', '{}', '49b330d5-bbf7-46b4-87d2-27705f61a498', '2025-01-07 15:52:25.088', 1, 'Duration', '2025-11-03 15:52:05.000', '14w2d');
+	`)
+
+	//Add Non-CA certificate
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, key_id)
+		VALUES('62-1f-5c-33-3e-ca-c1-c7-56-9e-49-78-45-e2-bd-f2', '{}', 'ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47', '9beebc5b-ba8d-4fc0-9e97-58299d30ae9f', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUV4RENDQXF5Z0F3SUJBZ0lRWWg5Y016N0t3Y2RXbmtsNFJlSzk4akFOQmdrcWhraUc5dzBCQVFzRkFEQWMKTVJvd0dBWURWUVFERXhGRlExTXRUV0Z1ZFdaaFkzUjFjbWx1WnpBZUZ3MHlOREV5TVRJd056SXpOVGRhRncweQpOVEF6TWpJd056SXpOVGRhTUNFeEh6QWRCZ05WQkFNVEZuVnBMV2RsYm1WeVlYUmxaQzFpYjI5MGMzUnlZWEF3CmdnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUURCNkdQNk40YmExTUFTTUw5djVreFAKRmdnR3ZxaUVwQmVQUE5GYlhlNVNFLzVzK1NQV0RybmU5L2x3Mjh3SjdPdkhwaHpjVHBkZXFYeFFDMEt3REgyZQo4SmZrWlBsSG9SNzI4Ty9abER1aWNIa2xhL0huTzBVQlRTS2dYcStPRVZCNkJwTFJlYmhZcG1hTk9za1pmQXJmCkJSeXJRRUV4ay9TaUF0anpDdE5wN1FjNzNQbUtGekxtdk5XRElGM2xYWVlnZUxnb3A2MUs3ZEU3RGQ3SEdYWGMKdWxZdE9FaGpMVG1aZmtVME1hcUcwSWF3YUVtb3BFajg0ZE5PSmJKRnJseTMxcmNGa1RoN1ExeHI0Y25Xa3lxWQpGUEdhY1FSUXVQbDRkVXJYMTlXS3hIaU84Y2FXODJnQXRsNjBmZUJ5R24xWHFiK0hwdTdjRkpjdDhaSWJVcVc5CkFnTUJBQUdqZ2Z3d2dma3dEZ1lEVlIwUEFRSC9CQVFEQWdlQU1CMEdBMVVkSlFRV01CUUdDQ3NHQVFVRkJ3TUMKQmdnckJnRUZCUWNEQVRBdkJnTlZIU01FS0RBbWdDUTVZbVZsWW1NMVlpMWlZVGhrTFRSbVl6QXRPV1U1TnkwMQpPREk1T1dRek1HRmxPV1l3UGdZSUt3WUJCUVVIQVFFRU1qQXdNQzRHQ0NzR0FRVUZCekFCaGlKb2RIUndjem92CkwyeGhZaTVzWVcxaGMzTjFMbWx2TDJGd2FTOTJZUzl2WTNOd01GY0dBMVVkSHdSUU1FNHdUS0JLb0VpR1JtaDAKZEhCek9pOHZiR0ZpTG14aGJXRnpjM1V1YVc4dllYQnBMM1poTDJOeWJDODVZbVZsWW1NMVlpMWlZVGhrTFRSbQpZekF0T1dVNU55MDFPREk1T1dRek1HRmxPV1l3RFFZSktvWklodmNOQVFFTEJRQURnZ0lCQUd5a0RYZHc3WVVLCklmcHNkd1crMkpDcXgvQUt6d0phdnh3bXIzendmNmkrR1grbnRjTExpUjRSeFBVRFM4cytUbUk4Qm1qaHJNRXEKZXFmSFg3OWlxdFZ0dkxHcnFSTjd3NGlXcnBtYnRiYlNoUzJPcFY1cyt2Y2x2RnFsSGpqWmNGcE03NXB0TERGUwpZdk56VThWTTA4aXkwNzlYLzNpSW5NL3piTUNNWGhHRE9JMDdpRzhvTVZWc0hieUhRTGZZank2UnV0dW5tTXpECi9yZm9JcGtsT0pwZmdWNnIvM20zdEp0WVZ6RUVWbkcyT1Znc00wTUMzYU50MkxwRjVxRndkQ1hyWm5LcGVYM20KdkEydnd6dnRrTWluR01GOGVUaVR3MWRqVU1KSTQzSHlFdmdJeVIvRnFobXpVZy9iMTZRWUZRdmd3Q01MaDc0UQpMK2MvQ0dCT2YwajR4TDhLRERzK2ZCeVJPTmh2WGw5b243NE1vc0E1VWZvSFdaRm0wTXZycTFFMW1oU3J0MHR2ClJadU5udXcxOS9yR0N0YXJ1RGN5dDBlRzNIalFUczZ6Nkd4T0RKQjRrVzV3d3pDV1JIaVlGTkpIdVBRSmdZOHkKbFhYSFRHbzhhR0lZcmtnRXFNSmUzUlduTlkwWk1wNWlEUzdQWk4yVWhEOUpKMVJIZFl2SmxlSHdLcVhhZ2tCWAozVmpYaE9qZ2FYZUlDQWFYK1FXeEgvK2FDdjNVMzRBZWgrYWM4ekVFSlpieDRWbDE3UE05ZER4aTNFeVB6RHloCmswWC9tRHlFQ0tPVmFrNUNGbG0zK2h0dER6b0k1ejBtNXZHUHZGQmxSSUYxZzZhUkN3NVMrTWpEVzd4YzZkZjEKQjdXRzc3cjJpTzNXa2gwZlhYRXFkREVZQXZ3SWt5dXAKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=', 'RSA', 2048, 'MEDIUM', 'ui-generated-bootstrap', '', '', '', '', '', '2024-12-12 08:23:57.000', '2025-03-22 08:23:57.000', '0001-01-01 01:00:00.000', 'Unspecified', 'EXTERNAL', '', NULL);
+	`)
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	certRepo, err := postgres.NewCertificateRepository(logger, con)
+	if err != nil {
+		t.Fatalf("could not create ca repository: %s", err)
+	}
+
+	ctr, err := certRepo.Count(context.Background())
+	if err != nil {
+		t.Fatalf("could not count certificates: %s", err)
+	}
+
+	assert.Equal(t, 3, ctr)
+
+	var isCA bool
+	//Check if Root CA is marked as CA
+	tx := con.Table("certificates").Where("serial_number = '99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79'").Select("is_ca").Find(&isCA)
+	if tx.Error != nil {
+		t.Fatalf("failed to select row: %v", tx.Error)
+	}
+
+	assert.Equal(t, true, isCA)
+
+	//Check if SubCA is marked as CA
+	tx = con.Table("certificates").Where("serial_number = 'de-25-2c-7d-5a-c4-b2-3d-dd-fd-b6-c6-e0-43-16-4f'").Select("is_ca").Find(&isCA)
+	if tx.Error != nil {
+		t.Fatalf("failed to select row: %v", tx.Error)
+	}
+
+	assert.Equal(t, true, isCA)
+
+	//Check if Non-CA certificate is not marked as CA
+	tx = con.Table("certificates").Where("serial_number = '62-1f-5c-33-3e-ca-c1-c7-56-9e-49-78-45-e2-bd-f2'").Select("is_ca").Find(&isCA)
+	if tx.Error != nil {
+		t.Fatalf("failed to select row: %v", tx.Error)
+	}
+
+	assert.Equal(t, false, isCA)
+}
+
+func MigrationTest_CA_20250115095852_create_requests_table(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+}
+
+func MigrationTest_CA_20250123125500_ca_aws_metadata(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	currentMeta := `{"lamassu.io/iot/aws.123456789012":{"account":"123456789012","arn":"arn:aws:iot:eu-west-1:123456789012:cacert/d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","certificate_id":"d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","mqtt_endpoint":"axxxxxxxxxx-ats.iot.eu-west-1.amazonaws.com","region":"eu-west-1","register":true}}`
+	expectedMeta := `{"lamassu.io/iot/aws.123456789012":{"account":"123456789012","arn":"arn:aws:iot:eu-west-1:123456789012:cacert/d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","certificate_id":"d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","mqtt_endpoint":"axxxxxxxxxx-ats.iot.eu-west-1.amazonaws.com","region":"eu-west-1","registration":{"error":"","primary_account":true,"registration_request_time":"1970-01-01T00:00:00Z","registration_time":"1970-01-01T00:00:00Z","status":"SUCCEEDED"}}}`
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, key_id, is_ca)
+		VALUES('99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '{}', '99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUdPakNDQkNLZ0F3SUJBZ0lSQUpuZ0ptQkxrSTArVUplWXNCYmIxbmt3RFFZSktvWklodmNOQVFFTEJRQXcKRlRFVE1CRUdBMVVFQXhNS1VtOXZkQzFEUVMxV01UQWVGdzB5TlRBeE1EY3hORFV4TlRsYUZ3MHlOVEV4TURNeApORFV4TlRSYU1CVXhFekFSQmdOVkJBTVRDbEp2YjNRdFEwRXRWakV3Z2dJaU1BMEdDU3FHU0liM0RRRUJBUVVBCkE0SUNEd0F3Z2dJS0FvSUNBUUMzTTZYdDJNSWlVR21LNXpUUlVvZlZzazdtQ1ZZMWlkbXdLSythd0M0anZzWWoKM0JiZW5zZXVJaUo3NEg5TnZZdnhYZ0xDNVE3NXJ5UmJzNHN5TzBpV2YxUlJtamFVVUdxbHlkMmFLNVlIM3JWYgpXZ0htTkJMU2Q0dVlTRit3dno0Vk9Ic24zT1kvbFBTUkRwSm11ajJ3ekhYZ1p5RVR6M1Bzd1hhT0xXY3RsZFUvCm11eUJPWHE0bTFwNHh6dy83N0R2bW53Ni9mRXYwdG9iRVBYdVdvdlhSaS84NHQ2c0g5K1VDWmI5U3JTdFJWTHEKTGhsUEVQUC9SOXVveHBsVElTNllyQ2VHdWlPM2ViOGtmRVVETVdKS2pFbktueUx2b1RmbFVOMGE0K1docEFSSQp3WXgwSm9zQzhrb0xLV29ScFdJSlVlOC9hZStNWXRmWW1JNUdacGRIdnk1ZngzbXB5R2hseUJhWVRSOER2dkdvCmN1S0pabm16MVFuamYzM0syZFAxbk1RVHJhalJlWS9aMnd6bmRQbjg0SWdoWnJRc2NpSXYxcXg3Z3Y4Y3BuK0QKWTJuRUJUTHBPRHNIQXhKcmEyTGZZaXFYNnQzaUNCNEkrLzQ2djFBSitBWmJYMnRSVUpsakpSeHBqbkI5VnA1MApEQWFwNTN6dVhZdFhFYmJ0azI0djdodyt6cW5JYm9ueHZ6WVQ2c0Z4STdPYXdFNE5zQ2pjS2VOd2RBRmJPMmYzCkFqVURrUTdQTTE4OW9tRG5ZemxKWXFMWTFkZkNMcnhTTllZUzRwSUNPOE81dlVkQXJsWEI1MmhRWjcrLzdWWlYKOTRJbHpKVi9ZbzRGS2prMjJEZ0VyTk5sSGZHakhLbFBGMUhyUE81WkY2Z0ttTzd5SkJaeWx3SWVWODVoQXdJRApBUUFCbzRJQmd6Q0NBWDh3RGdZRFZSMFBBUUgvQkFRREFnR1dNQjBHQTFVZEpRUVdNQlFHQ0NzR0FRVUZCd01DCkJnZ3JCZ0VGQlFjREFUQVBCZ05WSFJNQkFmOEVCVEFEQVFIL01Fa0dBMVVkRGdSQ0JFQTROMlkyTURFelpHVXkKTW1GbU1tSm1NMlZqTm1GbU5XRmlNemc1WVRFek56STBaREJqT1RJM1lUTmxNamd3WVRobFlqQXhOVFU1TXpNNQpZakF5TnpjMk1Fc0dBMVVkSXdSRU1FS0FRRGczWmpZd01UTmtaVEl5WVdZeVltWXpaV00yWVdZMVlXSXpPRGxoCk1UTTNNalJrTUdNNU1qZGhNMlV5T0RCaE9HVmlNREUxTlRrek16bGlNREkzTnpZd053WUlLd1lCQlFVSEFRRUUKS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWpjM0F3YkFZRApWUjBmQkdVd1l6QmhvRitnWFlaYmFIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dk9EZG1OakF4Ck0yUmxNakpoWmpKaVpqTmxZelpoWmpWaFlqTTRPV0V4TXpjeU5HUXdZemt5TjJFelpUSTRNR0U0WldJd01UVTEKT1RNek9XSXdNamMzTmpBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQWdFQUxpOGRBWHg3aGR3QmZtRDJSWjhxL2J2SQphN0dac0M2clQ2K05KaGxVVnI5cTZXWXBwYnV3VnJuTC81ZG01dTJ0bzBuVGIyQlQ1bXp1M2hFRkRGYlBFL1BWCmkxdGk2ZTdvdXVoNTFNc0c0ZEhCa2tRUjBUMDFjcnRURHBmU1VwTEREQXVDbU83OE0vMDFTcnV0UTk4ZE1WOHcKVkJqWTAzTTVoMEo3UWd5WjBTYmtXMFBYOTk5NEhUYnVMZXovaG9EVjZ1YmsxTU5Qa01UT2Y5T0V5dWViZzROWQpIM1FTdGxYV0FkMTFIM2U5a0UyVy9Jb2d1L3F5amRIK0RsLzM2WlhUMzdsRllnUUhOMHRTZ0FvQnAzRlQ2TDd2CnZNc1hkeGt1NGRLSHFOOG9RaHY5S09vM005d0cvV1NLUkVRZGdVc3dYOVRkRXBSS2FYMC9vb3RJYVFQTlE5TWIKeU9DMEhlN3g4ZUtVMHNFenBpZjV0cGJZNGxuNVplZXRPbyttampvb3N1Y0Q5SnhkK3BpRGlBay9NeTdJcjFZQQpDZ21ZcUxSZXJBdGFtVWw4TzNmSWg3Y1J0TDlqcVRhckM1TGp1bnV6cExZd2lHSWFUZkxCZGZrTFNkRDhHeXE3CmZvQ2IvbjBadEZaOENHTHJDZGd3N1Z6MmVQbUwvL3dva2s5SHUxbkVPQVJqTGM5SFV5OXlHTlU1UHkvRXJHKzEKUDNSNk9ieHNpMFVXS1oyT1BlRnpjeS94VGEwSlBjZzNUdXFrcmFacUlTOWovREEraEpkaVk2c0YxcW9KQk0rLwpoNy9IV3VBL2t5K3dnL2dlVWZCWHlxSmw3S1J3WklBVTRkYzl1TG00aE1LVDZxTFNBM1R4dzl1N3lVZHZlcFRMCk50OGtheVJCY0M0YmMxNkpucGs9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 4096, 'HIGH', 'Root-CA-V1', '', '', '', '', '', '2025-01-07 15:51:59.000', '2025-11-03 15:51:54.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'aws-sm-engine', '87f6013de22af2bf3ec6af5ab389a13724d0c927a3e280a8eb01559339b02776', true);
+	`)
+
+	con.Exec(fmt.Sprintf(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+		VALUES('99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '%s', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0, 'Duration', '2025-11-03 15:51:41.000', '14w2d');
+	`, currentMeta))
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	var result string
+
+	// Select iot1, should have the new keygen settings enabled and reenrollment_settings.revoke_on_reenrollment set to false
+	tx := con.Table("ca_certificates").Where("id = '8b600c60-9eb3-4251-b6ce-c92d1beccc63'").Select("metadata").Find(&result)
+	if tx.Error != nil {
+		t.Fatalf("failed to select row: %v", tx.Error)
+	}
+
+	assert.Equal(t, expectedMeta, result)
+}
+
+func MigrationTest_CA_20250226114600_ca_add_kids(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	con.Exec(`INSERT INTO certificates 
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id, key_id, is_ca) 
+		VALUES ('37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '{}', '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', 'b0db9cc7-2cce-45be-8085-88f7aff40ca2', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURsRENDQW55Z0F3SUJBZ0lVTjJYTmh2Qy94Y2diZnhENEZVNU9OWUZNMkhrd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1hURUxNQWtHQTFVRUJoTUNWVk14RlRBVEJnTlZCQWdNREVWNFlXMXdiR1ZUZEdGMFpURVVNQklHQTFVRQpCd3dMUlhoaGJYQnNaVU5wZEhreER6QU5CZ05WQkFvTUJsSnZiM1JEUVRFUU1BNEdBMVVFQXd3SFVtOXZkQ0JEClFUQWVGdzB5TlRBeU1qVXhNelUwTVRoYUZ3MHpOVEF5TWpNeE16VTBNVGhhTUVZeEN6QUpCZ05WQkFZVEFsVlQKTVJVd0V3WURWUVFJREF4RmVHRnRjR3hsVTNSaGRHVXhEekFOQmdOVkJBb01CbEp2YjNSRFFURVBNQTBHQTFVRQpBd3dHVTNWaUlFTkJNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQTJIay91Ri9VClJNdHAzengyYmltUllvSEFxMXJ6OUgyL1F3S2d0RTRkTkk1R01ISUh4ZWVJZk9sYnh4T2hyMVBhTUtTb3hJdjEKM1NqMWFycEloUUVGc2V0NDJ0WU9FS2dUTzB4NUtRSFFSbnNYOUY1dXVjNURyajZFNFUxcUF2MGtxQlMvN2NobQpqc3pwc1oyK1ExOWordjNHM0NNa2twT09ZWmFUQW8wWlBFdFJCYU5HM3hYMlg0akdidmlNMWFDeDZ2MmNDM0s4CnJmYXVoNzR4T3lLaldNME1PVm5kS2N0VUFzNW9VckZjTkM2c3BwOGtqQk1XcFhjQ3RjWStZTm5ISDVhRDcvTEIKakdaSmxaTkROS0NDdFIwR050d2xxUHZiQ3pUYnV2UHZqVkY2aFdQaEIwZFdYUDVqRTFuc05BUkxnWW51RTJXTQpoQWx5cU92bWdlaGZVUUlEQVFBQm8yTXdZVEFQQmdOVkhSTUJBZjhFQlRBREFRSC9NQTRHQTFVZER3RUIvd1FFCkF3SUJCakFkQmdOVkhRNEVGZ1FVSHV1UElDL2tVWVA2MHlzSGlMMTl2NTFyMUtFd0h3WURWUjBqQkJnd0ZvQVUKNUZpMVFQOFc5KzRSaS8wdFZFNENhaVg1cHY0d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFJdTFsQVp0ZVUrbgorNmwvd3VFb2V2K0FkOEQzVHZIREVqeHlIbll0RTRNZitITGsyU2d1WXZYSkpSRkZjOXVzRzNGbW1CMGhUUG14CktEck1rOVFPYmdIc1pIY05hZ3doQjZVcm4rRUtyai9ZVW5JSkUyVHJYL2JsRllvTUJQYXhiV3J3cm1GQWpLc2wKOHV1Sm9OWTY0RzZzT016SEJwZUVMaGRaVS94Z0Rzck5rK2RHeVZ0WUFqbWZrc1FMT1NnRjE0WFpuWEw5K3dQYwpqU200bjhXNVlRMHpzS0FaNVRtQjBWcFRDa3ZWUy9nR0RIb1pmZE8zOENTcnk0ejhuTTNXNHpka212bzc2RzhVCjJmdkMxMUZTWHh6UlZRcmJ4ZmFPTUVjZHpUMHUxd2NzUVF6TTQrdjBOanQzdlZ5K2dSbGptK0dtdDBEYzkvTGIKTzN2MkFmbWhQaVU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 2048, 'MEDIUM', 'Sub CA', 'RootCA', '', 'US', 'ExampleState', '', '2025-02-25 13:54:18+00', '2035-02-23 13:54:18+00', '0001-01-01 00:00:00+00', 'Unspecified', 'EXTERNAL', '', '1E:EB:8F:20:2F:E4:51:83:FA:D3:2B:07:88:BD:7D:BF:9D:6B:D4:A1', true);
+	`)
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	var result map[string]any
+	tx := con.Raw("SELECT * FROM certificates").Scan(&result)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
+	}
+
+	assert.Equal(t, "1E:EB:8F:20:2F:E4:51:83:FA:D3:2B:07:88:BD:7D:BF:9D:6B:D4:A1", result["subject_key_id"])
+	assert.Equal(t, "E4:58:B5:40:FF:16:F7:EE:11:8B:FD:2D:54:4E:02:6A:25:F9:A6:FE", result["authority_key_id"])
+	assert.Equal(t, "Root CA", result["issuer_common_name"])
+	assert.Equal(t, "RootCA", result["issuer_organization"])
+	assert.Equal(t, "", result["issuer_organization_unit"])
+	assert.Equal(t, "US", result["issuer_country"])
+	assert.Equal(t, "ExampleState", result["issuer_state"])
+	assert.Equal(t, "ExampleCity", result["issuer_locality"])
+}
+
+func MigrationTest_CA_20250702124800_create_issuance_profile(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+
+}
+
+func MigrationTest_CA_20250704101200_add_version_schema(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+}
+
+func MigrationTest_CA_20250908074250_add_profile_id(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert CA certificate with validity_time as NULL (should be handled gracefully by migration)
+	con.Exec(`INSERT INTO certificates 
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id, subject_key_id, is_ca) 
+		VALUES ('00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00', '{}', '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURsRENDQW55Z0F3SUJBZ0lVTjJYTmh2Qy94Y2diZnhENEZVNU9OWUZNMkhrd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1hERUxNQWtHQTFVRUJoTUNWVk14RlRBVEJnTlZCQWdNREVWNFlXMXdiR1ZUZEdGMFpURVVNQklHQTFVRQpCd3dMUlhoaGJYQnNaVU5wZEhreER6QU5CZ05WQkFvTUJsSnZiM1JEUVRFUU1BNEdBMVVFQXd3SFVtOXZkQ0JEClFUQWVGdzB5TlRBeU1qVXhNelUwTVRoYUZ3MHpOVEF5TWpNeE16VTBNVGhhTUVZeEN6QUpCZ05WQkFZVEFsVlQKTVJVd0V3WURWUVFJREF4RmVHRnRjR3hsVTNSaGRHVXhEekFOQmdOVkJBb01CbEp2YjNSRFFURVBNQTBHQTFVRQpBd3dHVTNWaUlFTkJNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQTJIay91Ri9VClJNdHAzengyYmltUllvSEFxMXJ6OUgyL1F3S2d0RTRkTkk1R01ISUh4ZWVJZk9sYnh4T2hyMVBhTUtTb3hJdjEKM1NqMWFycEloUUVGc2V0NDJ0WU9FS2dUTzB4NUtRSFFSbnNYOUY1dXVjNURyajZFNFUxcUF2MGtxQlMvN2NobQpqc3pwc1oyK1ExOWordjNHM0NNa2twT09ZWmFUQW8wWlBFdFJCYU5HM3hYMlg0akdidmlNMWFDeDZ2MmNDM0s4CnJmYXVoNzR4T3lLaldNME1PVm5kS2N0VUFzNW9VckZjTkM2c3BwOGtqQk1XcFhjQ3RjWStZTm5ISDVhRDcvTEIKakdaSmxaTkROS0NDdFIwR050d2xxUHZiQ3pUYnV2UHZqVkY2aFdQaEIwZFdYUDVqRTFuc05BUkxnWW51RTJXTQpoQWx5cU92bWdlaGZVUUlEQVFBQm8yTXdZVEFQQmdOVkhSTUJBZjhFQlRBREFRSC9NQTRHQTFVZER3RUIvd1FFCkF3SUJCakFkQmdOVkhRNEVGZ1FVSHV1UElDL2tVWVA2MHlzSGlMMTl2NTFyMUtFd0h3WURWUjBqQkJnd0ZvQVUKNUZpMVFQOFc5KzRSaS8wdFZFNENhaVg1cHY0d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFJdTFsQVp0ZVUrbgorNmwvd3VFb2V2K0FkOEQzVHZIREVqeHlIbll0RTRNZitITGsyU2d1WXZYSkpSRkZjOXVzRzNGbW1CMGhUUG14CktEck1rOVFPYmdIc1pIY05hZ3doQjZVcm4rRUtyai9ZVW5JSkUyVHJYL2JsRllvTUJQYXhiV3J3cm1GQWpLc2wKOHV1Sm9OWTY0RzZzT016SEJwZUVMaGRaVS94Z0Rzck5rK2RHeVZ0WUFqbWZrc1FMT1NnRjE0WFpuWEw5K3dQYwpqU200bjhXNVlRMHpzS0FaNVRtQjBWcFRDa3ZWUy9nR0RIb1pmZE8zOENTcnk0ejhuTTNXNHpka212bzc2RzhVCjJmdkMxMUZTWHh6UlZRcmJ4ZmFPTUVjZHpUMHUxd2NzUVF6TTQrdjBOanQzdlZ5K2dSbGptK0dtdDBEYzkvTGIKTzN2MkFmbWhQaVU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 2048, 'MEDIUM', 'Sub CA', 'RootCA', '', 'US', 'ExampleState', '', '2025-02-25 13:54:18+00', '2035-02-23 13:54:18+00', '0001-01-01 00:00:00+00', 'Unspecified', 'EXTERNAL', '', '1E:EB:8F:20:2F:E4:51:83:FA:D3:2B:07:88:BD:7D:BF:9D:6B:D4:A1', true);
+	`)
+	con.Exec(`INSERT INTO ca_certificates
+	       (serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+	       VALUES('00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00', '{}', 'ca-nil-validity-time', '2025-01-07 15:53:00.000', 2, 'Duration', NULL, '14w2d');
+       `)
+	// Insert first CA certificate
+	con.Exec(`INSERT INTO certificates 
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id, subject_key_id, is_ca) 
+		VALUES ('37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '{}', '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURsRENDQW55Z0F3SUJBZ0lVTjJYTmh2Qy94Y2diZnhENEZVNU9OWUZNMkhrd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1hERUxNQWtHQTFVRUJoTUNWVk14RlRBVEJnTlZCQWdNREVWNFlXMXdiR1ZUZEdGMFpURVVNQklHQTFVRQpCd3dMUlhoaGJYQnNaVU5wZEhreER6QU5CZ05WQkFvTUJsSnZiM1JEUVRFUU1BNEdBMVVFQXd3SFVtOXZkQ0JEClFUQWVGdzB5TlRBeU1qVXhNelUwTVRoYUZ3MHpOVEF5TWpNeE16VTBNVGhhTUVZeEN6QUpCZ05WQkFZVEFsVlQKTVJVd0V3WURWUVFJREF4RmVHRnRjR3hsVTNSaGRHVXhEekFOQmdOVkJBb01CbEp2YjNSRFFURVBNQTBHQTFVRQpBd3dHVTNWaUlFTkJNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQTJIay91Ri9VClJNdHAzengyYmltUllvSEFxMXJ6OUgyL1F3S2d0RTRkTkk1R01ISUh4ZWVJZk9sYnh4T2hyMVBhTUtTb3hJdjEKM1NqMWFycEloUUVGc2V0NDJ0WU9FS2dUTzB4NUtRSFFSbnNYOUY1dXVjNURyajZFNFUxcUF2MGtxQlMvN2NobQpqc3pwc1oyK1ExOWordjNHM0NNa2twT09ZWmFUQW8wWlBFdFJCYU5HM3hYMlg0akdidmlNMWFDeDZ2MmNDM0s4CnJmYXVoNzR4T3lLaldNME1PVm5kS2N0VUFzNW9VckZjTkM2c3BwOGtqQk1XcFhjQ3RjWStZTm5ISDVhRDcvTEIKakdaSmxaTkROS0NDdFIwR050d2xxUHZiQ3pUYnV2UHZqVkY2aFdQaEIwZFdYUDVqRTFuc05BUkxnWW51RTJXTQpoQWx5cU92bWdlaGZVUUlEQVFBQm8yTXdZVEFQQmdOVkhSTUJBZjhFQlRBREFRSC9NQTRHQTFVZER3RUIvd1FFCkF3SUJCakFkQmdOVkhRNEVGZ1FVSHV1UElDL2tVWVA2MHlzSGlMMTl2NTFyMUtFd0h3WURWUjBqQkJnd0ZvQVUKNUZpMVFQOFc5KzRSaS8wdFZFNENhaVg1cHY0d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFJdTFsQVp0ZVUrbgorNmwvd3VFb2V2K0FkOEQzVHZIREVqeHlIbll0RTRNZitITGsyU2d1WXZYSkpSRkZjOXVzRzNGbW1CMGhUUG14CktEck1rOVFPYmdIc1pIY05hZ3doQjZVcm4rRUtyai9ZVW5JSkUyVHJYL2JsRllvTUJQYXhiV3J3cm1GQWpLc2wKOHV1Sm9OWTY0RzZzT016SEJwZUVMaGRaVS94Z0Rzck5rK2RHeVZ0WUFqbWZrc1FMT1NnRjE0WFpuWEw5K3dQYwpqU200bjhXNVlRMHpzS0FaNVRtQjBWcFRDa3ZWUy9nR0RIb1pmZE8zOENTcnk0ejhuTTNXNHpka212bzc2RzhVCjJmdkMxMUZTWHh6UlZRcmJ4ZmFPTUVjZHpUMHUxd2NzUVF6TTQrdjBOanQzdlZ5K2dSbGptK0dtdDBEYzkvTGIKTzN2MkFmbWhQaVU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 2048, 'MEDIUM', 'Sub CA', 'RootCA', '', 'US', 'ExampleState', '', '2025-02-25 13:54:18+00', '2035-02-23 13:54:18+00', '0001-01-01 00:00:00+00', 'Unspecified', 'EXTERNAL', '', '1E:EB:8F:20:2F:E4:51:83:FA:D3:2B:07:88:BD:7D:BF:9D:6B:D4:A1', true);
+	`)
+
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+		VALUES('37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '{}', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0, 'Duration', '2025-11-03 15:51:41.000', '14w2d');
+	`)
+
+	// Insert second CA certificate with same validity settings (should reuse the same profile)
+	con.Exec(`INSERT INTO certificates 
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id, subject_key_id, is_ca) 
+		VALUES ('ab-cd-ef-12-34-56-78-90-ab-cd-ef-12-34-56-78-90-ab-cd-ef-12', '{}', 'ab-cd-ef-12-34-56-78-90-ab-cd-ef-12-34-56-78-90-ab-cd-ef-12', '22b330d5-bbf7-46b4-87d2-27705f61a498', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURsRENDQW55Z0F3SUJBZ0lVTjJYTmh2Qy94Y2diZnhENEZVNU9OWUZNMkhrd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1hERUxNQWtHQTFVRUJoTUNWVk14RlRBVEJnTlZCQWdNREVWNFlXMXdiR1ZUZEdGMFpURVVNQklHQTFVRQpCd3dMUlhoaGJYQnNaVU5wZEhreER6QU5CZ05WQkFvTUJsSnZiM1JEUVRFUU1BNEdBMVVFQXd3SFVtOXZkQ0JEClFUQWVGdzB5TlRBeU1qVXhNelUwTVRoYUZ3MHpOVEF5TWpNeE16VTBNVGhhTUVZeEN6QUpCZ05WQkFZVEFsVlQKTVJVd0V3WURWUVFJREF4RmVHRnRjR3hsVTNSaGRHVXhEekFOQmdOVkJBb01CbEp2YjNSRFFURVBNQTBHQTFVRQpBd3dHVTNWaUlFTkJNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQTJIay91Ri9VClJNdHAzengyYmltUllvSEFxMXJ6OUgyL1F3S2d0RTRkTkk1R01ISUh4ZWVJZk9sYnh4T2hyMVBhTUtTb3hJdjEKM1NqMWFycEloUUVGc2V0NDJ0WU9FS2dUTzB4NUtRSFFSbnNYOUY1dXVjNURyajZFNFUxcUF2MGtxQlMvN2NobQpqc3pwc1oyK1ExOWordjNHM0NNa2twT09ZWmFUQW8wWlBFdFJCYU5HM3hYMlg0akdidmlNMWFDeDZ2MmNDM0s4CnJmYXVoNzR4T3lLaldNME1PVm5kS2N0VUFzNW9VckZjTkM2c3BwOGtqQk1XcFhjQ3RjWStZTm5ISDVhRDcvTEIKakdaSmxaTkROS0NDdFIwR050d2xxUHZiQ3pUYnV2UHZqVkY2aFdQaEIwZFdYUDVqRTFuc05BUkxnWW51RTJXTQpoQWx5cU92bWdlaGZVUUlEQVFBQm8yTXdZVEFQQmdOVkhSTUJBZjhFQlRBREFRSC9NQTRHQTFVZER3RUIvd1FFCkF3SUJCakFkQmdOVkhRNEVGZ1FVSHV1UElDL2tVWVA2MHlzSGlMMTl2NTFyMUtFd0h3WURWUjBqQkJnd0ZvQVUKNUZpMVFQOFc5KzRSaS8wdFZFNENhaVg1cHY0d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFJdTFsQVp0ZVUrbitorNmwvd3VFb2V2K0FkOEQzVHZIREVqeHlIbll0RTRNZitITGsyU2d1WXZYSkpSRkZjOXVzRzNGbW1CMGhUUG14CktEck1rOVFPYmdIc1pIY05hZ3doQjZVcm4rRUtyai9ZVW5JSkUyVHJYL2JsRllvTUJQYXhiV3J3cm1GQWpLc2wKOHV1Sm9OWTY0RzZzT016SEJwZUVMaGRaVS94Z0Rzck5rK2RHeVZ0WUFqbWZrc1FMT1NnRjE0WFpuWEw5K3dQYwpqU200bjhXNVlRMHpzS0FaNVRtQjBWcFRDa3ZWUy9nR0RIb1pmZE8zOENTcnk0ejhuTTNXNHpka212bzc2RzhVCjJmdkMxMUZTWHh6UlZRcmJ4ZmFPTUVjZHpUMHUxd2NzUVF6TTQrdjBOanQzdlZ5K2dSbGptK0dtdDBEYzkvTGIKTzN2MkFmbWhQaVU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 2048, 'MEDIUM', 'Sub CA 2', 'RootCA', '', 'US', 'ExampleState', '', '2025-02-25 13:54:18+00', '2035-02-23 13:54:18+00', '0001-01-01 00:00:00+00', 'Unspecified', 'EXTERNAL', '', '1E:EB:8F:20:2F:E4:51:83:FA:D3:2B:07:88:BD:7D:BF:9D:6B:D4:A1', true);
+	`)
+
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+		VALUES('ab-cd-ef-12-34-56-78-90-ab-cd-ef-12-34-56-78-90-ab-cd-ef-12', '{}', '22b330d5-bbf7-46b4-87d2-27705f61a498', '2025-01-07 15:52:25.088', 1, 'Duration', '2025-11-03 15:51:41.000', '14w2d');
+	`)
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	// Define the CA IDs we created for focused testing
+	ca1ID := "8b600c60-9eb3-4251-b6ce-c92d1beccc63"
+	ca2ID := "22b330d5-bbf7-46b4-87d2-27705f61a498"
+
+	// Verify both CAs have profile_id assigned (focusing only on our test CAs)
+	var ca1ProfileID, ca2ProfileID string
+	tx := con.Raw("SELECT profile_id FROM ca_certificates WHERE id = ?", ca1ID).Scan(&ca1ProfileID)
+	if tx.Error != nil {
+		t.Fatalf("failed to get profile ID for first CA: %v", tx.Error)
+	}
+
+	tx = con.Raw("SELECT profile_id FROM ca_certificates WHERE id = ?", ca2ID).Scan(&ca2ProfileID)
+	if tx.Error != nil {
+		t.Fatalf("failed to get profile ID for second CA: %v", tx.Error)
+	}
+
+	// Verify both profile IDs are assigned
+	assert.NotEmpty(t, ca1ProfileID, "First CA should have a profile ID assigned")
+	assert.NotEmpty(t, ca2ProfileID, "Second CA should have a profile ID assigned")
+
+	// Check that the CA with nil validity_time still gets a profile_id assigned (should not panic)
+	var caNilProfileID string
+	tx = con.Raw("SELECT profile_id FROM ca_certificates WHERE id = ?", "ca-nil-validity-time").Scan(&caNilProfileID)
+	if tx.Error != nil {
+		t.Fatalf("failed to get profile ID for CA with nil validity_time: %v", tx.Error)
+	}
+	assert.NotEmpty(t, caNilProfileID, "CA with nil validity_time should have a profile ID assigned (or at least not panic)")
+
+	// Both CAs should share the same profile since they have identical validity settings
+	assert.Equal(t, ca1ProfileID, ca2ProfileID, "Both CAs should reference the same profile ID since they have identical validity settings")
+
+	// Verify the shared profile exists in issuance_profiles table
+	var profileExists int
+	tx = con.Raw("SELECT COUNT(*) FROM issuance_profiles WHERE id = ?", ca1ProfileID).Scan(&profileExists)
+	if tx.Error != nil {
+		t.Fatalf("failed to check if profile exists: %v", tx.Error)
+	}
+	assert.Equal(t, 1, profileExists, "The shared profile should exist in issuance_profiles table")
+
+	// Verify that only one profile was created for our test CAs by checking for profiles
+	// that were created for CAs with our specific validity settings
+	var profilesForOurValiditySettings int
+	tx = con.Raw(`
+		SELECT COUNT(DISTINCT ip.id) 
+		FROM issuance_profiles ip 
+		WHERE ip.validity_type = 'Duration' 
+		AND ip.validity_duration = '14w2d' 
+		AND ip.validity_time = '2025-11-03 15:51:41.000'
+		AND ip.sign_as_ca = false
+	`).Scan(&profilesForOurValiditySettings)
+	if tx.Error != nil {
+		t.Fatalf("failed to count profiles with our validity settings: %v", tx.Error)
+	}
+
+	assert.Equal(t, 1, profilesForOurValiditySettings, "Expected only one profile for our specific validity settings (deduplication should work)")
+}
+
+func MigrationTest_CA_20250904183000_update_serial_numbers(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+
+	serialWithDashes := "37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79"
+	expected := "3765cd86f0bfc5c81b7f10f8154e4e35814cd879"
+
+	// 1. Insert certificate with dashed serial number
+	con.Exec(`INSERT INTO certificates
+        (serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id)
+        VALUES (?, '{}', ?, 'test-id', 0, 'ACTIVE', 'test-cert', 'RSA', 2048, 'MEDIUM', 'TestCN', 'TestOrg', '', 'US', '', '', '2025-01-01 00:00:00', '2026-01-01 00:00:00', '0001-01-01 01:00:00.000', 'Unspecified', 'EXTERNAL', 'test-engine');`,
+		serialWithDashes, serialWithDashes)
+
+	// 2. Insert ca_certificates referencing the certificate
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level")
+		VALUES(?, '{}', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0);
+	`, serialWithDashes)
+
+	// 3. Apply migration
+	ApplyMigration(t, logger, con, CADBName)
+
+	// 4. Check serial numbers updated correctly in certificates
+	var certSerial string
+	tx := con.Raw("SELECT serial_number FROM certificates WHERE serial_number = ?", expected).Scan(&certSerial)
+	if tx.Error != nil {
+		t.Fatalf("failed to select updated certificate serial_number: %v", tx.Error)
+	}
+	assert.Equal(t, expected, certSerial)
+
+	// Check serial numbers updated correctly in ca_certificates
+	var caCertSerial string
+	tx = con.Raw("SELECT serial_number FROM ca_certificates WHERE serial_number = ?", expected).Scan(&caCertSerial)
+	if tx.Error != nil {
+		t.Fatalf("failed to select updated ca_certificate serial_number: %v", tx.Error)
+	}
+	assert.Equal(t, expected, caCertSerial)
+}
+
+func MigrationTest_CA_20250915090500_update_ski_aki(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+
+	const expectedSKI = "62333562383861653665633935376463656463343234643666373933346338646265326265663364326262356334303066663333636135653266613030626236"
+	const expectedAKI = "62333562383861653665633935376463656463343234643666373933346338646265326265663364326262356334303066663333636135653266613030626236"
+
+	serial := "3765cd86f0bfc5c81b7f10f8154e4e35814cd879"
+
+	// 1. Insert certificate
+	con.Exec(`INSERT INTO certificates
+        (serial_number, is_ca, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id)
+        VALUES (?, true, '{}', ?, 'test-id', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM4ekNDQW5tZ0F3SUJBZ0lSQUxnNEt3VGxKSUdIYXl0cnBWeUIvQ2N3Q2dZSUtvWkl6ajBFQXdNd0R6RU4KTUFzR0ExVUVBeE1FZEdWemREQWVGdzB5TlRBMk1qWXdPRFE0TkRsYUZ3MHlOakEwTWpJd09EUTRORGxhTUE4eApEVEFMQmdOVkJBTVRCSFJsYzNRd2RqQVFCZ2NxaGtqT1BRSUJCZ1VyZ1FRQUlnTmlBQVQvK0hXZTBLRWl2cGFhCmc2NDRyUmZuOGRwU0c1U1RiS3ZCWWdWQ1FYSmQ3VWE3eWc2T3BUL2Y0dVJnemFvd2tjbVVvOW5ON3QxclRKK0kKcTh6ME5oMkJXRnlDSE5PSkc5MlI0cXlNdE90V2FZRWFvVXF1STFKMk5hMVo1akd4ZzcyamdnR1hNSUlCa3pBTwpCZ05WSFE4QkFmOEVCQU1DQVlZd0V3WURWUjBsQkF3d0NnWUlLd1lCQlFVSEF3a3dEd1lEVlIwVEFRSC9CQVV3CkF3RUIvekJKQmdOVkhRNEVRZ1JBWWpNMVlqZzRZV1UyWldNNU5UZGtZMlZrWXpReU5HUTJaamM1TXpSak9HUmkKWlRKaVpXWXpaREppWWpWak5EQXdabVl6TTJOaE5XVXlabUV3TUdKaU5qQkxCZ05WSFNNRVJEQkNnRUJpTXpWaQpPRGhoWlRabFl6azFOMlJqWldSak5ESTBaRFptTnprek5HTTRaR0psTW1KbFpqTmtNbUppTldNME1EQm1aak16ClkyRTFaVEptWVRBd1ltSTJNRVlHQ0NzR0FRVUZCd0VCQkRvd09EQTJCZ2dyQmdFRkJRY3dBWVlxYUhSMGNEb3YKTDJSbGJXOHRZWEJwTG14aGJXRnpjM1V1WTJ4dmRXUXZjSEp2WkM5MllTOXZZM053TUhzR0ExVWRId1IwTUhJdwpjS0J1b0d5R2FtaDBkSEE2THk5a1pXMXZMV0Z3YVM1c1lXMWhjM04xTG1Oc2IzVmtMM0J5YjJRdmRtRXZZM0pzCkwySXpOV0k0T0dGbE5tVmpPVFUzWkdObFpHTTBNalJrTm1ZM09UTTBZemhrWW1VeVltVm1NMlF5WW1JMVl6UXcKTUdabU16TmpZVFZsTW1aaE1EQmlZall3Q2dZSUtvWkl6ajBFQXdNRGFBQXdaUUl4QVBJSkNMUCs5MW8yUSswLwowK2gwM1FzYWRSbkg3eThqK0M1RWpwUGY2UkgzcGVYUW9xR3hSNkF1R1p4M3lxdkVjd0l3T2dndXY4QmM1bHVOCkNaZEl4SzZFV2xCOUtMTUJjaXBDUzloMDV2SUF3SzU3Ui9sdGJoNm82ZnN0MHhvTDh1WGgKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=', 'RSA', 2048, 'MEDIUM', 'TestCN', 'TestOrg', '', 'US', '', '', '2025-01-01 00:00:00', '2026-01-01 00:00:00', '0001-01-01 01:00:00.000', 'Unspecified', 'EXTERNAL', 'test-engine');`,
+		serial, serial)
+
+	// 2. Insert ca_certificates referencing the certificate
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level")
+		VALUES(?, '{}', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0);
+	`, serial)
+
+	// Apply migration
+	ApplyMigration(t, logger, con, CADBName)
+
+	// Check SKI and AKI updated correctly in certificates
+	var result map[string]any
+	tx := con.Raw("SELECT subject_key_id, authority_key_id FROM certificates WHERE serial_number = ?", serial).Scan(&result)
+	if tx.Error != nil {
+		t.Fatalf("failed to select updated certificate SKI/AKI: %v", tx.Error)
+	}
+	assert.Equal(t, expectedSKI, result["subject_key_id"])
+	assert.Equal(t, expectedAKI, result["authority_key_id"])
+}
+
+func MigrationTest_CA_20251001120000_update_issuer_meta_serial_numbers(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Before applying migration, insert test data with hyphenated issuer_meta_serial_number
+	// 1. Insert certificate with hyphenated issuer_meta_serial_number
+	err := con.Exec("INSERT INTO certificates (serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"test-cert-serial", "{}", "aa-bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00", "test-issuer-id", 0, "ACTIVE", "test-certificate-data", "RSA", 4096, "HIGH", "Test Certificate", "", "", "", "", "", "2024-11-25 9:45:48.000", "2025-09-21 11:45:44.000", "0001-01-01 01:00:00.000", "Unspecified", "MANAGED", "test-engine").Error
+	if err != nil {
+		t.Fatalf("failed to insert test certificate: %v", err)
+	}
+
+	// 2. Insert ca_certificate_requests with hyphenated issuer_meta_serial_number
+	err = con.Exec("INSERT INTO ca_certificate_requests (id, key_id, engine_id, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, creation_ts, level, key_meta_type, key_meta_bits, key_meta_strength, status, fingerprint, csr) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"test-request-id", "test-key-id", "test-engine", "{}", "bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00-aa", "test-issuer-id", 0, "Test Request", "", "", "", "", "", "2024-11-25 9:45:48.000", 0, "RSA", 4096, "HIGH", "PENDING", "test-fingerprint", "test-csr-data").Error
+	if err != nil {
+		t.Fatalf("failed to insert test certificate request: %v", err)
+	}
+
+	// Apply migration
+	ApplyMigration(t, logger, con, CADBName)
+
+	// 3. Check issuer_meta_serial_number updated correctly in certificates table
+	var certResult map[string]any
+	tx := con.Raw("SELECT issuer_meta_serial_number FROM certificates WHERE serial_number = ?", "test-cert-serial").Scan(&certResult)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row in certificates, got %d", tx.RowsAffected)
+	}
+	// Should be updated from 'aa-bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00' to 'aabbccddeeff11223344556677889900'
+	assert.Equal(t, "aabbccddeeff11223344556677889900", certResult["issuer_meta_serial_number"])
+
+	// 4. Check issuer_meta_serial_number updated correctly in ca_certificate_requests table
+	var requestResult map[string]any
+	tx = con.Raw("SELECT issuer_meta_serial_number FROM ca_certificate_requests WHERE id = ?", "test-request-id").Scan(&requestResult)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row in ca_certificate_requests, got %d", tx.RowsAffected)
+	}
+	// Should be updated from 'bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00-aa' to 'bbccddeeff11223344556677889900aa'
+	assert.Equal(t, "bbccddeeff11223344556677889900aa", requestResult["issuer_meta_serial_number"])
+}
+
+func MigrationTest_CA_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert test data with text metadata before migration
+	// First insert certificates (ca_certificates has FK to certificates)
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id, is_ca)
+		VALUES('aa-bb-cc-dd-ee-ff-00-11', '{"key":"value","num":123}', 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test-CA', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id', true);
+	`)
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id, is_ca)
+		VALUES('bb-cc-dd-ee-ff-00-11-22', '', 'bb-cc-dd-ee-ff-00-11-22', 'test-ca-id-2', 0, 'ACTIVE', 'test-cert-2', 'RSA', 4096, 'HIGH', 'Test-CA-2', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id-2', true);
+	`)
+
+	// Then insert ca_certificates
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level")
+		VALUES('aa-bb-cc-dd-ee-ff-00-11', '{"key":"value","num":123}', 'test-ca-id', '2024-11-25 11:45:48.620', 0);
+	`)
+
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level")
+		VALUES('bb-cc-dd-ee-ff-00-11-22', '', 'test-ca-id-2', '2024-11-25 11:45:48.620', 0);
+	`)
+
+	// Insert additional regular certificates
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id)
+		VALUES('cc-dd-ee-ff-00-11-22-33', '{"cert_key":"cert_value"}', 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test-Cert', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id-3');
+	`)
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id)
+		VALUES('dd-ee-ff-00-11-22-33-44', NULL, 'aa-bb-cc-dd-ee-ff-00-11', 'test-ca-id', 0, 'ACTIVE', 'test-cert-2', 'RSA', 4096, 'HIGH', 'Test-Cert-2', '', '', '', '', '', '2024-11-25 9:45:48.000', '2025-09-21 11:45:44.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'filesystem-1', 'test-key-id-4');
+	`)
+
+	// Apply migration (this applies ALL migrations, including the serial number normalization)
+	ApplyMigration(t, logger, con, CADBName)
+
+	// After migration, serial numbers have dashes removed, so we query with normalized serial numbers
+	// Verify ca_certificates metadata is now jsonb
+	var caMetadata1 string
+	tx := con.Raw("SELECT metadata FROM ca_certificates WHERE serial_number = 'aa-bb-cc-dd-ee-ff-00-11'").Scan(&caMetadata1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select ca_certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{"key": "value", "num": 123}`, caMetadata1)
+
+	var caMetadata2 string
+	tx = con.Raw("SELECT metadata FROM ca_certificates WHERE serial_number = 'bb-cc-dd-ee-ff-00-11-22'").Scan(&caMetadata2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select ca_certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, caMetadata2)
+
+	// Verify certificates metadata is now jsonb
+	var certMetadata1 string
+	tx = con.Raw("SELECT metadata FROM certificates WHERE serial_number = 'cc-dd-ee-ff-00-11-22-33'").Scan(&certMetadata1)
+	if tx.Error != nil {
+		t.Fatalf("failed to select certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{"cert_key": "cert_value"}`, certMetadata1)
+
+	var certMetadata2 string
+	tx = con.Raw("SELECT metadata FROM certificates WHERE serial_number = 'dd-ee-ff-00-11-22-33-44'").Scan(&certMetadata2)
+	if tx.Error != nil {
+		t.Fatalf("failed to select certificates row: %v", tx.Error)
+	}
+	assert.Equal(t, `{}`, certMetadata2)
+
+	// Verify that the column type is jsonb by trying to use jsonb operators
+	var keyValue string
+	tx = con.Raw("SELECT metadata->>'key' FROM ca_certificates WHERE serial_number = 'aa-bb-cc-dd-ee-ff-00-11'").Scan(&keyValue)
+	if tx.Error != nil {
+		t.Fatalf("failed to query jsonb column: %v", tx.Error)
+	}
+	assert.Equal(t, "value", keyValue)
+}
+
+func MigrationTest_CA_20260331120000_add_certificate_extensions(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	const serial = "37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79"
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, subject_key_id, is_ca)
+		VALUES ('37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '{}', '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', 'b0db9cc7-2cce-45be-8085-88f7aff40ca2', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUY5RENDQTl5Z0F3SUJBZ0lSQU85dFIvVGx2Y2pqZ1dkMFlCTEJEMGN3RFFZSktvWklodmNOQVFFTEJRQXcKSERFYU1CZ0dBMVVFQXhNUlJVTlRMVTFoYm5WbVlXTjBkWEpwYm1jd0hoY05NalF4TVRJMU1EazBOVFE0V2hjTgpNalV3T1RJeE1EazBOVFEwV2pBY01Sb3dHQVlEVlFRREV4RkZRMU10VFdGdWRXWmhZM1IxY21sdVp6Q0NBaUl3CkRRWUpLb1pJaHZjTkFRRUJCUUFEZ2dJUEFEQ0NBZ29DZ2dJQkFOQllQKytacmZNY2MzL1BiTXVVYjBVcklMMVEKb2Jtbm41TllWdXJkU1c2ZEhZMEF3ajQzbmhlTndtV3NPbGt5bmR3UGNmVWdpWnlsS1dpVzcxUlFsMGF1bWFZLworczFVcnhjQXhidFFCOGQ3c3dBd2xYZ0xoMk1XR3ppUm4wUjBuNDJkRDdxVFdZWXIwcFRnbkc1WG82LzV1ak5iCmlSVzZaWXA4ZzNuM1BCbWFhbFRRVmxmRWgzNHBIbFU5SThFUExUdmFvMnFXU01RSlY4WDM5Y1VDdjBib0RKVEwKa0daaWpxTVM0dEoyR3NRWHo4UE8yTk83UHlXVndLWlgvSE5tYTA1NWlZV0tzNi9GN2I3bEY3YkNEQVFMalVCdwphWldWOW00VmpwRWpCMEc0WTkzTm5VMFNqVUxzR2ZFYVRlblovVk5zMXBZZ3hJcHRXWFdtZUdBT3RJWi90bFJ0CmwyTitweTVZenFtQ2tYbjZxRlRpb3ZyN1huTjFWSkxRblJKMkhSZUxWVUJ6K21TWmMzSmRXOHd6QmgvWTVtYUgKK1RpZ0dyTnIrcFZVZi9vNTZ6ZS9pblAzWUUvdERoUG5FRk1PSVBCbGdyZktlcFRKOVd6dmtPWHNkb1hwR2RHYQp6QlIwNTl1N05uVFpEQzBsc3ByKzJWMTVGVVhIMXRyelg3Nmk4QSt5bVJRak45U2NhTWlhemlzWUdSU09XNVRTClhJZ0VkSVM0YXg4TWQ1Skd5TStFVVdyQ2pwaHRaamVlQzNvdjY0R25mSWdiL1lOTFNQUi9FeHhwekJwNjN4d3AKdS8wWnZaRTZVNVBNTExwNkF0RzkzY2h2NTFVdE1lVVAzYXlQaUF4OEhZTmp3L0djN2VHKzZ1cnhYMVFnakpHSQp1MWNqU3djTE00dFA4aXdMQWdNQkFBR2pnZ0V2TUlJQkt6QU9CZ05WSFE4QkFmOEVCQU1DQVpZd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0lHQ0NzR0FRVUZCd01CTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3TFFZRFZSME8KQkNZRUpEbGlaV1ZpWXpWaUxXSmhPR1F0Tkdaak1DMDVaVGszTFRVNE1qazVaRE13WVdVNVpqQXZCZ05WSFNNRQpLREFtZ0NRNVltVmxZbU0xWWkxaVlUaGtMVFJtWXpBdE9XVTVOeTAxT0RJNU9XUXpNR0ZsT1dZd053WUlLd1lCCkJRVUhBUUVFS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWoKYzNBd1VBWURWUjBmQkVrd1J6QkZvRU9nUVlZL2FIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dgpPV0psWldKak5XSXRZbUU0WkMwMFptTXdMVGxsT1RjdE5UZ3lPVGxrTXpCaFpUbG1NQTBHQ1NxR1NJYjNEUUVCCkN3VUFBNElDQVFDQ1pTOG5pRStxeEdBYjJjSVhVWW4rRHNJVGRwZXFnM3BQRU1EZU5DR29rUUY4cGcwbkpOdjcKZURmaTR3TEp2ZlBRK0lzNjNLYnU4dVBoanpYcnVrWUE3VWgyTmJRZnJHM1d3L3JDUGlJTkVZNktjNmltdnk1RApyK2NIbFJKYkEyaE9yNTd3Tnc0b2RrMERsdkdIbVN6M2hOWXFxcWZJcEYxMEYwdUNTNllOV1AvUHU1VFVaN2V4CkFPTjF2aWZMdFBGcGFnYkxPd3k5K3JicStHUkZET0ZSRjlzYzdBUHdoWVpUZTdHSnFNblZKbklPOU1Qd01idDEKMW1KRHNJTzlqTkhNVkVMbzBGWVRhOE05K29EWE1CaThzRWN5aER0ZlN1ZUU5bU9wWkhFck1Wb2s5aTd6Y2FObwp4OEFBZTNHRFU5MDB1SlB1Y0t3TmprVjZpL21FMk1maXBCYTMxV3NHcUdNbjY3MDBoSjJhS00wcjVIRnhhK3l4CnMzMVArQ1hCZjF4THBaYTBPY3ZTTFJuTzJtSFhnTTlzRGRsdW5WZkEzOGFoU2Zna1ZBK1BQU1EvTTFZTVUxT1YKRTIvdlNvUjR0elF4QU9wU3RjaUxGUFpxczcrY0ZJbzlKSk5aZnNNR2ZKempDbFBlRU91VFJ0YklmR0FEc1VzeQp0MmdtdDZMeDhSc2M1V0NXanNGMjFjR3FKZjB3TlJHcloyb20xTnlRcjhDZTdmQ1Y1dWY0dlNJMEZkVGU3cE5WCjNKKzJwa3ZDV05TVUdyNktmUEw2OGw1YnhiVWl0d294N0doV0dZT2IwaEp5b2V4VC92MmNiQys2WWNDUXZCSFUKeUR6bU1EZVFVQkVJeXhFRk96bE5uZlZxRnNQbmVJT2ZhbWNNaHd1VkdRSUhMdWhIK0gwdDVBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=', 'RSA', 4096, 'HIGH', 'ECS-Manufacturing', '', '', '', '', '', '2024-11-25 09:45:48+00', '2025-09-21 11:45:44+00', '0001-01-01 00:00:00+00', 'Unspecified', 'MANAGED', 'filesystem-1', '9beebc5b-ba8d-4fc0-9e97-58299d30ae9f', true);
+	`)
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	var result map[string]any
+	tx := con.Raw(`
+		SELECT
+			pg_typeof(extensions_key_usage)::text AS key_usage_type,
+			pg_typeof(extensions_extended_key_usage)::text AS extended_key_usage_type,
+			jsonb_exists(extensions_key_usage, 'DigitalSignature') AS has_digital_signature,
+			jsonb_exists(extensions_key_usage, 'DataEncipherment') AS has_data_encipherment,
+			jsonb_exists(extensions_key_usage, 'CertSign') AS has_cert_sign,
+			jsonb_exists(extensions_key_usage, 'CRLSign') AS has_crl_sign,
+			jsonb_exists(extensions_extended_key_usage, 'ClientAuth') AS has_client_auth,
+			jsonb_exists(extensions_extended_key_usage, 'ServerAuth') AS has_server_auth,
+			jsonb_array_length(extensions_extended_key_usage) AS extended_key_usage_length
+		FROM certificates
+		WHERE serial_number = ?
+	`, serial).Scan(&result)
+	if tx.Error != nil {
+		t.Fatalf("failed to select certificate extensions: %v", tx.Error)
+	}
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
+	}
+
+	assert.Equal(t, "jsonb", result["key_usage_type"])
+	assert.Equal(t, "jsonb", result["extended_key_usage_type"])
+	assert.Equal(t, true, result["has_digital_signature"])
+	assert.Equal(t, true, result["has_data_encipherment"])
+	assert.Equal(t, true, result["has_cert_sign"])
+	assert.Equal(t, true, result["has_crl_sign"])
+	assert.Equal(t, true, result["has_client_auth"])
+	assert.Equal(t, true, result["has_server_auth"])
+	assert.Equal(t, int32(2), result["extended_key_usage_length"])
+
+	var versionSchemaColumnCount int64
+	tx = con.Raw(`
+		SELECT COUNT(*)
+		FROM information_schema.columns
+		WHERE table_name = 'certificates'
+			AND column_name = 'version_schema'
+	`).Scan(&versionSchemaColumnCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to check version_schema column: %v", tx.Error)
+	}
+
+	assert.Equal(t, int64(0), versionSchemaColumnCount)
+}
+
+func MigrationTest_CA_20260520120000_update_certificate_type_values(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert rows with legacy type values before applying migration
+	for _, tc := range []struct{ serial, typ string }{
+		{"type-test-managed", "MANAGED"},
+		{"type-test-imported", "IMPORTED"},
+		{"type-test-external", "EXTERNAL"},
+	} {
+		err := con.Exec(`INSERT INTO certificates
+			(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id)
+			VALUES(?, '{}', ?, 'test-issuer-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test', '', '', '', '', '', '2024-11-25 09:45:48+00', '2025-09-21 11:45:44+00', '0001-01-01 00:00:00+00', 'Unspecified', ?, 'test-engine')`,
+			tc.serial, tc.serial, tc.typ).Error
+		if err != nil {
+			t.Fatalf("failed to insert certificate with type %s: %v", tc.typ, err)
+		}
+	}
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	expected := map[string]string{
+		"type-test-managed":  "MANAGED",
+		"type-test-imported": "IMPORTED_WITH_KEY",
+		"type-test-external": "IMPORTED_WITHOUT_KEY",
+	}
+
+	for serial, wantType := range expected {
+		var result map[string]any
+		tx := con.Raw(`SELECT "type" FROM certificates WHERE serial_number = ?`, serial).Scan(&result)
+		if tx.RowsAffected != 1 {
+			t.Fatalf("expected 1 row for serial %s, got %d", serial, tx.RowsAffected)
+		}
+		assert.Equal(t, wantType, result["type"], "serial_number=%s", serial)
+	}
+}
+
+func TestMigrations(t *testing.T) {
+	logger := helpers.SetupLogger(config.Trace, "test", "test")
+	cleanup, con := RunDB(t, logger, CADBName)
+
+	defer cleanup()
+
+	MigrationTest_CA_00000000000001_create_table(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v00000000000001_create_table")
+	}
+
+	MigrationTest_CA_20241215165048_add_key_id(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20241215165048_add_key_id")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20241223183344_unified_ca_models(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20241223183344_unified_ca_models")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20250107164937_add_is_ca(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250107164937_add_is_ca")
+	}
+
+	MigrationTest_CA_20250115095852_create_requests_table(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250115095852_create_requests_table")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20250123125500_ca_aws_metadata(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250123125500_ca_aws_metadata")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20250226114600_ca_add_kids(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250226114600_ca_add_kids")
+	}
+
+	MigrationTest_CA_20250704101200_add_version_schema(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250704101200_add_version_schema")
+	}
+
+	MigrationTest_CA_20250702124800_create_issuance_profile(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250702124800_create_issuance_profile")
+	}
+
+	MigrationTest_CA_20250908074250_add_profile_id(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250908074250_add_profile_id")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20250904183000_update_serial_numbers(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250904183000_update_serial_numbers")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20250915090500_update_ski_aki(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250915090500_update_ski_aki")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20251001120000_update_issuer_meta_serial_numbers(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20251001120000_update_issuer_meta_serial_numbers")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20251217120000_metadata_text_to_jsonb(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20251217120000_metadata_text_to_jsonb")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20260331120000_add_certificate_extensions(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260331120000_add_certificate_extensions")
+	}
+
+	MigrationTest_CA_20260520120000_update_certificate_type_values(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260520120000_update_certificate_type_values")
+	}
+}

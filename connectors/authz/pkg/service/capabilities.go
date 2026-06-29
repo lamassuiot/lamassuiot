@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lamassuiot/authz/pkg/engine"
-	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 

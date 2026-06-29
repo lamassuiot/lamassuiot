@@ -5,23 +5,9 @@ toolchain go1.26.2
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 
 use (
-	./backend
 	./connectors/authz
 	./connectors/awsiot
 	./core
-	./engines/crypto/aws
-	./engines/crypto/filesystem
-	./engines/crypto/pkcs11
-	./engines/crypto/software
-	./engines/crypto/vaultkv2
-	./engines/eventbus/amqp
-	./engines/eventbus/aws
-	./engines/fs-storage/localfs
-	./engines/fs-storage/s3
-	./engines/storage/postgres
-	./monolithic
+	./pki
 	./sdk
-	./shared/aws
-	./shared/http
-	./shared/subsystems
 )

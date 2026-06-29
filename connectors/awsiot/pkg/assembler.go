@@ -7,11 +7,11 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	"github.com/lamassuiot/lamassuiot/pki/v3/pkg/eventbus"
 	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	laws "github.com/lamassuiot/lamassuiot/pki/v3/shared/aws"
 )
 
 func AssembleAWSIoTManagerService(conf ConnectorServiceConfig, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*AWSCloudConnectorService, error) {

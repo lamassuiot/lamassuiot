@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/lamassuiot/authz/pkg/api"
-	authzconfig "github.com/lamassuiot/authz/pkg/config"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api"
+	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"

@@ -26,11 +26,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/pki/v3/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	hhelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
+	hhelpers "github.com/lamassuiot/lamassuiot/pki/v3/shared/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )

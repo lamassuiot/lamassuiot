@@ -11,8 +11,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
 	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"go.opentelemetry.io/otel"

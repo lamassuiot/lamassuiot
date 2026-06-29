@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/core"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
 	lamassucore "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"

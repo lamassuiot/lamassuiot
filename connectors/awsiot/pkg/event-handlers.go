@@ -6,8 +6,8 @@ import (
 	"slices"
 
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	lms_slices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers/slices"
+	"github.com/lamassuiot/lamassuiot/pki/v3/pkg/helpers"
+	lms_slices "github.com/lamassuiot/lamassuiot/pki/v3/pkg/helpers/slices"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"

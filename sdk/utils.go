@@ -16,7 +16,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	hhelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
+	hhelpers "github.com/lamassuiot/lamassuiot/pki/v3/shared/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"

@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/engine"
-	"github.com/lamassuiot/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )

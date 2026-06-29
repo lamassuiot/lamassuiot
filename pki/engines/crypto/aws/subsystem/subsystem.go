@@ -1,0 +1,41 @@
+package subsystem
+
+import (
+	"log"
+
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/pki/v3/shared/aws"
+	"github.com/lamassuiot/lamassuiot/pki/v3/shared/subsystems/pkg/test/subsystems"
+)
+
+func Register() {
+	subsystems.RegisterSubsystemBuilder(subsystems.Aws, &AwsSubsystem{})
+}
+
+type AwsSubsystem struct {
+}
+
+func (p *AwsSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBackend, error) {
+	awsCleanup, _, awsCfg, err := aws.RunAWSEmulationLocalStackDocker(exposeAsStandardPort)
+	if err != nil {
+		log.Fatalf("could not launch AWS Platform: %s", err)
+	}
+
+	cryptoEngine, err := config.CryptoEngineConfigAdapter[aws.AWSSDKConfig]{
+		ID:       "aws-1",
+		Metadata: make(map[string]interface{}),
+		Type:     config.AWSKMSProvider,
+		Config:   *awsCfg,
+	}.Unmarshal()
+
+	if err != nil {
+		log.Fatalf("could not marshal AWS Platform config: %s", err)
+	}
+
+	return &subsystems.SubsystemBackend{
+		Config:     *cryptoEngine,
+		BeforeEach: func() error { return nil },
+		AfterSuite: func() { awsCleanup() },
+	}, nil
+
+}

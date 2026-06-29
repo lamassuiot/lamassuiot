@@ -2,10 +2,10 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/core"
-	"github.com/lamassuiot/authz/pkg/engine"
-	"github.com/lamassuiot/authz/pkg/service"
-	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
+	middleware "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk/gin-middleware"
 	"github.com/sirupsen/logrus"
 )
 

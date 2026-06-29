@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/lamassuiot/authz/pkg/engine"
-	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
 )
 
 // noMatchError is returned when auth material matches no active principals.

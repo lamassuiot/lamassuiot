@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
+	postgres "github.com/lamassuiot/lamassuiot/pki/v3/engines/storage/postgres"
 	"gorm.io/gorm"
 )
 
