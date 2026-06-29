@@ -27,7 +27,8 @@ func NewCryptoMonitor(service services.CAService, logger *logrus.Entry) *CryptoM
 }
 
 func (svc *CryptoMonitor) Run() {
-	ctx := helpers.InitJobContext("ca-crypto-monitor")
+	ctx, finish := helpers.InitJobContext("ca-crypto-monitor", "Job - Certificate Expiration Monitor")
+	defer finish()
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	now := time.Now()

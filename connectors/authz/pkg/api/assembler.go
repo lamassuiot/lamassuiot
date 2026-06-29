@@ -32,7 +32,7 @@ import (
 const serviceID = "authz"
 
 func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInfo models.APIServiceInfo) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, int, error) {
-	principalManager, eng, policyManager, resolver, err := AssembleAuthzService(conf)
+	principalManager, eng, policyManager, resolver, err := AssembleAuthzService(conf, serviceInfo.Version)
 	if err != nil {
 		return nil, nil, nil, nil, -1, fmt.Errorf("failed to assemble Authz service: %w", err)
 	}
@@ -88,8 +88,8 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 	return principalManager, eng, policyManager, resolver, port, nil
 }
 
-func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, error) {
-	sdk.InitOtelSDK(context.Background(), "Authz Service", conf.OtelConfig)
+func AssembleAuthzService(conf authzconfig.AuthzConfig, serviceVersion string) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, error) {
+	sdk.InitOtelSDK(context.Background(), "Authz Service", serviceVersion, conf.OtelConfig)
 
 	lDB := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "DB")
 

@@ -25,7 +25,7 @@ import (
 )
 
 func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.DeviceManagerService, int, error) {
-	service, sseHub, err := AssembleDeviceManagerService(conf, caService)
+	service, sseHub, err := AssembleDeviceManagerService(conf, caService, serviceInfo.Version)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble Device Manager Service. Exiting: %s", err)
 	}
@@ -43,9 +43,9 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 	return service, port, nil
 }
 
-func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, *controllers.DeviceEventSSEHub, error) {
+func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService, serviceVersion string) (*services.DeviceManagerService, *controllers.DeviceEventSSEHub, error) {
 	serviceID := "device-manager"
-	sdk.InitOtelSDK(context.Background(), "Device Manager Service", conf.OtelConfig)
+	sdk.InitOtelSDK(context.Background(), "Device Manager Service", serviceVersion, conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "Device Manager", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Device Manager", "Storage")

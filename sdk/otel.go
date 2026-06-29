@@ -34,14 +34,14 @@ var (
 	otelInitErr      error
 )
 
-func InitOtelSDK(ctx context.Context, svcName string, config config.OTELConfig) (func(context.Context) error, error) {
+func InitOtelSDK(ctx context.Context, svcName string, svcVersion string, config config.OTELConfig) (func(context.Context) error, error) {
 	otelInitOnce.Do(func() {
-		otelShutdownFunc, otelInitErr = initOtelSDKInternal(ctx, svcName, config)
+		otelShutdownFunc, otelInitErr = initOtelSDKInternal(ctx, svcName, svcVersion, config)
 	})
 	return otelShutdownFunc, otelInitErr
 }
 
-func initOtelSDKInternal(ctx context.Context, svcName string, config config.OTELConfig) (func(context.Context) error, error) {
+func initOtelSDKInternal(ctx context.Context, svcName string, svcVersion string, config config.OTELConfig) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
 	var err error
 
@@ -65,6 +65,7 @@ func initOtelSDKInternal(ctx context.Context, svcName string, config config.OTEL
 		context.Background(),
 		resource.WithAttributes(
 			attribute.String("service.name", svcName),
+			attribute.String("service.version", svcVersion),
 			attribute.String("library.language", "go"),
 		),
 	)
@@ -224,7 +225,10 @@ func setupLogging(config config.OTELLoggingConfig, resources *resource.Resource)
 	}
 
 	processor := sdklog.NewBatchProcessor(exporter)
-	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(processor))
+	provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(processor),
+		sdklog.WithResource(resources),
+	)
 
 	global.SetLoggerProvider(provider)
 

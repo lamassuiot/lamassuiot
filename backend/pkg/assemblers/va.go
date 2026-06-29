@@ -26,7 +26,7 @@ import (
 var serviceID = "va"
 
 func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, kmsService services.KMSService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
-	crl, ocsp, err := AssembleVAService(conf, caService, kmsService)
+	crl, ocsp, err := AssembleVAService(conf, caService, kmsService, serviceInfo.Version)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not assemble VA Service. Exiting: %s", err)
 	}
@@ -44,8 +44,8 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 	return crl, ocsp, port, nil
 }
 
-func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsService services.KMSService) (*services.CRLService, *services.OCSPService, error) {
-	sdk.InitOtelSDK(context.Background(), "VA Service", conf.OtelConfig)
+func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsService services.KMSService, serviceVersion string) (*services.CRLService, *services.OCSPService, error) {
+	sdk.InitOtelSDK(context.Background(), "VA Service", serviceVersion, conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")

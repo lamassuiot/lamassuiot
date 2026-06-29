@@ -21,7 +21,7 @@ import (
 )
 
 func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo models.APIServiceInfo) (*services.AlertsService, int, error) {
-	service, err := AssembleAlertsService(conf)
+	service, err := AssembleAlertsService(conf, serviceInfo.Version)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble Alerts Service. Exiting: %s", err)
 	}
@@ -39,8 +39,8 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 	return service, port, nil
 }
 
-func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, error) {
-	sdk.InitOtelSDK(context.Background(), "Alerts Service", conf.OtelConfig)
+func AssembleAlertsService(conf config.AlertsConfig, serviceVersion string) (*services.AlertsService, error) {
+	sdk.InitOtelSDK(context.Background(), "Alerts Service", serviceVersion, conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "Alerts", "Service")
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Alerts", "Event Bus")

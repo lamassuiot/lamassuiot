@@ -34,15 +34,15 @@ import (
 func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 	log.SetLevel(log.PanicLevel)
 	if conf.AssemblyMode == Http {
-		// Initialize OTel SDK once at the very beginning, before any HTTP clients are created
-		// This ensures trace context propagation works correctly across all services
-		sdk.InitOtelSDK(context.Background(), "Lamassu-Monolithic", conf.OtelConfig)
-
 		apiInfo := models.APIServiceInfo{
 			Version:   "-",
 			BuildSHA:  "-",
 			BuildTime: "-",
 		}
+
+		// Initialize OTel SDK once at the very beginning, before any HTTP clients are created
+		// This ensures trace context propagation works correctly across all services
+		sdk.InitOtelSDK(context.Background(), "Lamassu-Monolithic", apiInfo.Version, conf.OtelConfig)
 
 		key, _ := chelpers.GenerateRSAKey(2048)
 		keyPem, _ := chelpers.PrivateKeyToPEM(key)

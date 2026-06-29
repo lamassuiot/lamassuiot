@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/bridges/otellogrus"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -110,6 +111,10 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 		return logger.WithField("span-id", spanCtx.SpanID().String())
 	}
 
+	if requestID, ok := ctx.Value(core.LamassuContextKeyRequestID).(string); ok && requestID != "" {
+		return logger.WithField("trace-id", requestID)
+	}
+
 	return logger
 }
 
@@ -117,9 +122,13 @@ func InitContext() context.Context {
 	return context.Background()
 }
 
-func InitJobContext(jobName string) context.Context {
+// InitJobContext creates a root context for a scheduled job, starting an OTel
+// span with the given operationName. The caller must defer the returned func to
+// end the span. jobID is used as the auth-id in log fields.
+func InitJobContext(jobID string, operationName string) (context.Context, func()) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthType, "job")
-	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthID, jobName)
-	return ctx
+	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthID, jobID)
+	ctx, span := otel.GetTracerProvider().Tracer("job-scheduler").Start(ctx, operationName)
+	return ctx, func() { span.End() }
 }

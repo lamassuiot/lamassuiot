@@ -20,7 +20,7 @@ import (
 )
 
 func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
-	service, err := AssembleDMSManagerService(conf, caService, deviceService)
+	service, err := AssembleDMSManagerService(conf, caService, deviceService, serviceInfo.Version)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
@@ -38,8 +38,8 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 	return service, port, nil
 }
 
-func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
-	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", conf.OtelConfig)
+func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, serviceVersion string) (*services.DMSManagerService, error) {
+	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", serviceVersion, conf.OtelConfig)
 
 	lSvc := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
 	lMessaging := chelpers.SetupLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")

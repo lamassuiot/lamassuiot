@@ -25,7 +25,7 @@ import (
 )
 
 func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.APIServiceInfo) (*services.KMSService, int, error) {
-	kmsService, err := AssembleKMSService(conf)
+	kmsService, err := AssembleKMSService(conf, serviceInfo.Version)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble KMS Service. Exiting: %s", err)
 	}
@@ -43,8 +43,8 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 	return kmsService, port, nil
 }
 
-func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
-	sdk.InitOtelSDK(context.Background(), "KMS Service", conf.OtelConfig)
+func AssembleKMSService(conf config.KMSConfig, serviceVersion string) (*services.KMSService, error) {
+	sdk.InitOtelSDK(context.Background(), "KMS Service", serviceVersion, conf.OtelConfig)
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "KMS", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "KMS", "Event Bus")
