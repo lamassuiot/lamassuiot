@@ -109,6 +109,34 @@ func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.Certifi
 	return nil, nil, fmt.Errorf("not supported, use the estCli instead")
 }
 
+func (cli *dmsManagerClient) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
+	return fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCGetCertReqTemplate(ctx context.Context, input services.GetCertReqTemplateInput) (*services.CertReqTemplateOutput, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
+func (cli *dmsManagerClient) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
+	return nil, fmt.Errorf("not supported, use the cmp client instead")
+}
+
 func (cli *dmsManagerClient) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
 	response, err := Post[*models.BindIdentityToDeviceOutput](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/bind-identity", resources.BindIdentityToDeviceBody{
 		BindMode:                input.BindMode,
