@@ -108,9 +108,19 @@ cmp_bootstrap_setup() {
         echo "cmp_bootstrap_setup: failed to fetch DMS ${dms_id}" >&2
         return 1
     }
+    #    Two CAs must be trusted as message-protection signers:
+    #      - the bootstrap CA (initial enrollment, openssl -cert/-extracerts)
+    #      - the enrollment CA itself, so that re-enrollment/KUR requests
+    #        protected with a previously Lamassu-issued cert still validate
+    #        (the standard CMP renewal flow, RFC 9483 §4.1.3).
+    #    EnableReplaceableEnrollment is also turned on so re-running the suite
+    #    (which reuses the same subject CN) can supersede the prior cert.
     patched_dms=$(echo "${dms_resp}" | jq --arg ca "${ca_id}" '
-        .settings.enrollment_settings.lwc_rfc9483_settings.client_certificate_settings.validation_cas =
-            (((.settings.enrollment_settings.lwc_rfc9483_settings.client_certificate_settings.validation_cas) // []) + [$ca] | unique)
+        ( .settings.enrollment_settings.enrollment_ca ) as $enrollca
+        | .settings.enrollment_settings.lwc_rfc9483_settings.client_certificate_settings.validation_cas =
+            (((.settings.enrollment_settings.lwc_rfc9483_settings.client_certificate_settings.validation_cas) // [])
+                + [$ca] + (if $enrollca then [$enrollca] else [] end) | unique)
+        | .settings.enrollment_settings.enable_replaceable_enrollment = true
     ')
     curl -sf -X PUT "${server}/api/dmsmanager/v1/dms/${dms_id}" \
         -H 'Content-Type: application/json' \
