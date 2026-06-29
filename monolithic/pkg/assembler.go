@@ -228,7 +228,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			AuthzClient:                  authzClientConf,
 			CMPConfirmationMonitoringJob: conf.Monitoring,
 			WFX: config.DMSWFXConfig{
-				Enabled: conf.WfxMgmtPort > 0,
+				// CMP confirmation reporter talks to the WFX management API (NBI).
+				Enabled: conf.WfxNorthPort > 0,
 				HTTPClient: cconfig.HTTPClient{
 					LogLevel: cconfig.Info,
 					AuthMode: cconfig.NoAuth,
@@ -236,7 +237,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 						Protocol: cconfig.HTTP,
 						BasicConnection: cconfig.BasicConnection{
 							Hostname: "127.0.0.1",
-							Port:     conf.WfxMgmtPort,
+							Port:     conf.WfxNorthPort,
 						},
 					},
 				},

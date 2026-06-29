@@ -35,13 +35,9 @@ type MonolithicConfig struct {
 	WfxNorthPort          int                            `mapstructure:"wfx_north_port"`
 	WfxSouthPort          int                            `mapstructure:"wfx_south_port"`
 	AuthzProxyPrefixes    []string                       `mapstructure:"authz_proxy_prefixes"`
-	// CMP integration aliases (North=Mgmt/NBI, South=client/SBI); unified onto
-	// the v4 North/South names — kept for the CMP WFX reporter wiring.
-	WfxPort            int                      `mapstructure:"wfx_port"`
-	WfxMgmtPort        int                      `mapstructure:"wfx_mgmt_port"`
-	PopulateSampleData bool                     `mapstructure:"populate_sample_data"`
-	SSEEnabled         bool                     `mapstructure:"sse_enabled"`
-	AuthzConfig        *authzconfig.AuthzConfig `mapstructure:"authz"`
+	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
+	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
+	AuthzConfig           *authzconfig.AuthzConfig       `mapstructure:"authz"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {
