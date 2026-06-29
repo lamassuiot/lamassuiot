@@ -9,6 +9,10 @@ type DMSconfig struct {
 	PublisherEventBus cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	Storage           cconfig.PluggableStorageEngine `mapstructure:"storage"`
 
+	KMSClient struct {
+		cconfig.HTTPClient `mapstructure:",squash"`
+	} `mapstructure:"kms_client"`
+
 	CAClient struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
