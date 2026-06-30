@@ -7,6 +7,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
@@ -31,7 +32,13 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewAlertsHTTPLayer(httpGrp, *service)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.Alerts
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Alerts http server: %s", err)
 	}

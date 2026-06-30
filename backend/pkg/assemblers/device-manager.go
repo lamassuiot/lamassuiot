@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -39,7 +40,13 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 	} else {
 		routes.NewDeviceManagerHTTPLayer(httpGrp, *service)
 	}
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.DeviceManager
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Device Manager http server: %s", err)
 	}
