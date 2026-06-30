@@ -86,6 +86,21 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		}
 	}
 
+	// RFC 9483 §4.1.3 / RFC 4211 §6.2: when a KUR carries the optional
+	// id-regCtrl-oldCertID control, it MUST reference the certificate being
+	// updated. We validate it against the protection (signer) certificate — the
+	// EE's current cert — and reject with badCertId in a kup CertRepMessage on
+	// mismatch, before the service-layer signer binding runs.
+	if variant.isReenrollment && req.OldCertID != nil {
+		if signer := cmpSignerCertFromGin(ctx); signer != nil {
+			if rej := validateOldCertID(req, signer); rej != nil {
+				lFunc.Warnf("kur: oldCertId mismatch: %s", rej.Reason)
+				r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
+				return
+			}
+		}
+	}
+
 	deviceCN := extractCNFromSubjectDER(req.SubjectDER)
 	wfxJobID := r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 		TransactionID:     hex.EncodeToString(header.TransactionID),
