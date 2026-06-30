@@ -179,6 +179,28 @@ func TestCreateRootCA(t *testing.T) {
 			expirationTime: expirationTime,
 			check:          checkOk,
 		},
+		{
+			name:    "OK/MLDSA_44",
+			caId:    "rootCA-MLDSA_44",
+			subject: caSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 44,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{
+			name:    "OK/Ed25519",
+			caId:    "rootCA-Ed25519",
+			subject: caSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.Ed25519),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
 	}
 
 	for _, tc := range testcases {
@@ -200,10 +222,7 @@ func TestCreateRootCA(t *testing.T) {
 			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
-			}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-				Type: models.Time,
-				Time: tc.expirationTime,
-			}))
+			}, models.IssuanceProfile{})
 			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
@@ -426,10 +445,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}))
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
@@ -447,10 +463,43 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+	}, models.IssuanceProfile{})
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	// Create MLDSA Root CA
+	keyMLDSA, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "ML-DSA",
+		Size:      65,
+		Name:      "rootCA-MLDSA",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	caSignerMLDSA := beservice.NewKMSCryptoSigner(ctx, *keyMLDSA, kmsSvc)
+	rootCaCertMLDSA, err := x509Engine.CreateRootCA(ctx, caSignerMLDSA, keyMLDSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	}))
+	}, models.IssuanceProfile{})
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	// Create Ed25519 Root CA
+	keyEd25519, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "Ed25519",
+		Size:      256,
+		Name:      "rootCA-Ed25519",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	caSignerEd25519 := beservice.NewKMSCryptoSigner(ctx, *keyEd25519, kmsSvc)
+	rootCaCertEd25519, err := x509Engine.CreateRootCA(ctx, caSignerEd25519, keyEd25519.KeyID, subject, models.Validity{
+		Type: models.Time,
+		Time: caExpirationTime,
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -507,6 +556,30 @@ func TestCreateSubordinateCA(t *testing.T) {
 			expirationTime: expirationTime,
 			check:          checkOk,
 		},
+		{name: "OK/RSA_MLDSA",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertRSA,
+			parentCASigner:  caSignerRSA,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 44,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/RSA_Ed25519",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertRSA,
+			parentCASigner:  caSignerRSA,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.Ed25519),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
 		{name: "OK/EC_RSA",
 			subordinateCAID: "subCA-EC-RSA",
 			rootCaCert:      rootCaCertEC,
@@ -526,6 +599,126 @@ func TestCreateSubordinateCA(t *testing.T) {
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/EC_MLDSA",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertEC,
+			parentCASigner:  caSignerEC,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 65,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/EC_Ed25519",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertEC,
+			parentCASigner:  caSignerEC,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.Ed25519),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/MLDSA_RSA",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertMLDSA,
+			parentCASigner:  caSignerMLDSA,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.RSA),
+				Bits: 2048,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/MLDSA_EC",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertMLDSA,
+			parentCASigner:  caSignerMLDSA,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/MLDSA_MLDSA",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertMLDSA,
+			parentCASigner:  caSignerMLDSA,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 87,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/MLDSA_Ed25519",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertMLDSA,
+			parentCASigner:  caSignerMLDSA,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.Ed25519),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/Ed25519_RSA",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertEd25519,
+			parentCASigner:  caSignerEd25519,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.RSA),
+				Bits: 2048,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/Ed25519_EC",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertEd25519,
+			parentCASigner:  caSignerEd25519,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/Ed25519_MLDSA",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertEd25519,
+			parentCASigner:  caSignerEd25519,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 87,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{name: "OK/Ed25519_Ed25519",
+			subordinateCAID: "subCA",
+			rootCaCert:      rootCaCertEd25519,
+			parentCASigner:  caSignerEd25519,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.Ed25519),
 				Bits: 256,
 			},
 			expirationTime: expirationTime,
@@ -600,10 +793,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}))
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
@@ -622,10 +812,45 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+	}, models.IssuanceProfile{})
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	// Create MLDSA CA key
+	keyMLDSA, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "ML-DSA",
+		Size:      65,
+		Name:      "signCertReq-MLDSA",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	caSignerMLDSA := beservice.NewKMSCryptoSigner(ctx, *keyMLDSA, kmsSvc)
+
+	caCertificateMLDSA, err := x509Engine.CreateRootCA(ctx, caSignerMLDSA, keyMLDSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	}))
+	}, models.IssuanceProfile{})
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	// Create Ed25519 CA key
+	keyEd25519, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "Ed25519",
+		Size:      256,
+		Name:      "signCertReq-Ed25519",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	caSignerEd25519 := beservice.NewKMSCryptoSigner(ctx, *keyEd25519, kmsSvc)
+
+	caCertificateEd25519, err := x509Engine.CreateRootCA(ctx, caSignerEd25519, keyEd25519.KeyID, subject, models.Validity{
+		Type: models.Time,
+		Time: caExpirationTime,
+	}, models.IssuanceProfile{})
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -730,6 +955,34 @@ func TestSignCertificateRequest(t *testing.T) {
 			check: checkOk,
 		},
 		{
+			name:          "OK/MLDSA_RSA",
+			caCertificate: caCertificateMLDSA,
+			subject:       csrSubject,
+			caSigner:      caSignerMLDSA,
+			profile:       certProfile,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.RSA),
+			key: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/Ed25519_RSA",
+			caCertificate: caCertificateEd25519,
+			subject:       csrSubject,
+			caSigner:      caSignerEd25519,
+			profile:       certProfile,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.RSA),
+			key: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			check: checkOk,
+		},
+		{
 			name:          "OK/RSA_EC",
 			caCertificate: caCertificateRSA,
 			caSigner:      caSignerRSA,
@@ -753,6 +1006,146 @@ func TestSignCertificateRequest(t *testing.T) {
 			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/MLDSA_EC",
+			caCertificate: caCertificateMLDSA,
+			caSigner:      caSignerMLDSA,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.ECDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/Ed25519_EC",
+			caCertificate: caCertificateEd25519,
+			caSigner:      caSignerEd25519,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.ECDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/RSA_MLDSA",
+			caCertificate: caCertificateRSA,
+			caSigner:      caSignerRSA,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.MLDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/EC_MLDSA",
+			caCertificate: caCertificateEC,
+			caSigner:      caSignerEC,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.MLDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/MLDSA_MLDSA",
+			caCertificate: caCertificateMLDSA,
+			caSigner:      caSignerMLDSA,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.MLDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/Ed25519_MLDSA",
+			caCertificate: caCertificateEd25519,
+			caSigner:      caSignerEd25519,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.MLDSA),
+			key: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/RSA_Ed25519",
+			caCertificate: caCertificateRSA,
+			caSigner:      caSignerRSA,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.Ed25519),
+			key: func() any {
+				key, _ := chelpers.GenerateEd25519Key()
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/EC_Ed25519",
+			caCertificate: caCertificateEC,
+			caSigner:      caSignerEC,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.Ed25519),
+			key: func() any {
+				key, _ := chelpers.GenerateEd25519Key()
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/MLDSA_Ed25519",
+			caCertificate: caCertificateMLDSA,
+			caSigner:      caSignerMLDSA,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.Ed25519),
+			key: func() any {
+				key, _ := chelpers.GenerateEd25519Key()
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/Ed25519_Ed25519",
+			caCertificate: caCertificateEd25519,
+			caSigner:      caSignerEd25519,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			keyType:       models.KeyType(x509.Ed25519),
+			key: func() any {
+				key, _ := chelpers.GenerateEd25519Key()
 				return key
 			},
 			check: checkOk,
@@ -821,7 +1214,6 @@ func TestSignCertificateRequest(t *testing.T) {
 				},
 				SignAsCA:        false,
 				KeyUsage:        models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageContentCommitment),
-				HonorKeyUsage:   false,
 				HonorSubject:    true,
 				HonorExtensions: true,
 			},
@@ -870,9 +1262,8 @@ func TestSignCertificateRequest(t *testing.T) {
 					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
 					models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
 				},
-				HonorExtendedKeyUsages: false,
-				HonorSubject:           true,
-				HonorExtensions:        true,
+				HonorSubject:    true,
+				HonorExtensions: true,
 			},
 			subject: csrSubject,
 			keyType: models.KeyType(x509.ECDSA),
@@ -893,72 +1284,6 @@ func TestSignCertificateRequest(t *testing.T) {
 					}
 				}
 
-				return nil
-			},
-		},
-		{
-			name:          "OK/HONOR_KEY_USAGE_TRUE",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile: models.IssuanceProfile{
-				Validity: models.Validity{
-					Type: models.Time,
-					Time: expirationTime,
-				},
-				SignAsCA:        false,
-				KeyUsage:        models.X509KeyUsage(x509.KeyUsageCRLSign), // should NOT be applied; CSR's KU is honored
-				HonorKeyUsage:   true,
-				HonorSubject:    true,
-				HonorExtensions: true,
-			},
-			subject: csrSubject,
-			keyType: models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			extensions: func() []pkix.Extension { return []pkix.Extension{} },
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
-				if errSign != nil {
-					return fmt.Errorf("unexpected error: %s", errSign)
-				}
-				if cert.KeyUsage&x509.KeyUsageCRLSign != 0 {
-					return fmt.Errorf("profile KeyUsage was applied despite HonorKeyUsage=true")
-				}
-				return nil
-			},
-		},
-		{
-			name:          "OK/HONOR_EXT_KEY_USAGE_TRUE",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile: models.IssuanceProfile{
-				Validity: models.Validity{
-					Type: models.Time,
-					Time: expirationTime,
-				},
-				SignAsCA: false,
-				ExtendedKeyUsages: []models.X509ExtKeyUsage{
-					models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning), // should NOT be applied; CSR's EKUs are honored
-				},
-				HonorExtendedKeyUsages: true,
-				HonorSubject:           true,
-				HonorExtensions:        true,
-			},
-			subject: csrSubject,
-			keyType: models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			extensions: func() []pkix.Extension { return []pkix.Extension{} },
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
-				if errSign != nil {
-					return fmt.Errorf("unexpected error: %s", errSign)
-				}
-				if slices.Contains(cert.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
-					return fmt.Errorf("profile ExtKeyUsage was applied despite HonorExtendedKeyUsages=true")
-				}
 				return nil
 			},
 		},
