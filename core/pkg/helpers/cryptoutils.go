@@ -1,15 +1,13 @@
 package helpers
 
 import (
-	"cloudflare/circl/sign/mldsa/mldsa44"
-	"cloudflare/circl/sign/mldsa/mldsa65"
-	"cloudflare/circl/sign/mldsa/mldsa87"
 	"cloudflare/circl/sign/slhdsa"
 
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -353,11 +351,11 @@ func GenerateMLDSAKey(dimensions int) (crypto.Signer, error) {
 	var err error
 	switch dimensions {
 	case 44:
-		_, key, err = mldsa44.GenerateKey(rand.Reader)
+		key, err = mldsa.GenerateKey(mldsa.MLDSA44())
 	case 65:
-		_, key, err = mldsa65.GenerateKey(rand.Reader)
+		key, err = mldsa.GenerateKey(mldsa.MLDSA65())
 	case 87:
-		_, key, err = mldsa87.GenerateKey(rand.Reader)
+		key, err = mldsa.GenerateKey(mldsa.MLDSA87())
 	default:
 		err = errors.New("unsupported dimensions")
 	}
