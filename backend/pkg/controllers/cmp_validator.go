@@ -43,7 +43,7 @@ func (e *cmpEnvelopeRejection) Error() string { return e.reason }
 // The sender-vs-subject check is intentionally NOT performed here because
 // the protection cert is not known until verifyRequestProtection has run.
 // See verifySenderMatchesProtectionCert for that pairing.
-func validateRequestEnvelope(h requestPKIHeader, now time.Time) *cmpEnvelopeRejection {
+func validateRequestEnvelope(h requestPKIHeader, now time.Time, bodyTag int) *cmpEnvelopeRejection {
 	if h.PVNO != pvnoCMP2000 && h.PVNO != pvnoCMP2021 {
 		return &cmpEnvelopeRejection{
 			reason:   fmt.Sprintf("unsupported protocol version %d (must be cmp2000(2) or cmp2021(3))", h.PVNO),
@@ -51,9 +51,18 @@ func validateRequestEnvelope(h requestPKIHeader, now time.Time) *cmpEnvelopeReje
 		}
 	}
 	if len(h.TransactionID) == 0 {
+		// A certConf that carries no transactionID cannot be correlated to any
+		// open transaction; RFC 9483 §4.1.1 treats this as a badRequest (the
+		// confirmation references a non-existent exchange) rather than the
+		// malformed-field semantics of badDataFormat used for the issuance
+		// request bodies.
+		failInfo := pkiFailureInfoBadDataFormat
+		if bodyTag == cmpBodyTagCertConf {
+			failInfo = pkiFailureInfoBadRequest
+		}
 		return &cmpEnvelopeRejection{
 			reason:   "transactionID is required (RFC 9483 §3.5)",
-			failInfo: pkiFailureInfoBadDataFormat,
+			failInfo: failInfo,
 		}
 	}
 	if len(h.TransactionID) < 16 {

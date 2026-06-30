@@ -23,6 +23,8 @@ const (
 	cmpBodyTagRP       = 12 // rp  – Revocation Response
 	cmpBodyTagCertConf = 24 // certConf – Certificate Confirmation
 	cmpBodyTagPKIConf  = 19 // pkiConf  – PKI Confirmation
+	cmpBodyTagGenMsg   = 21 // genm     – General Message  (RFC 4210 §5.3.19 / RFC 9483 §4.3)
+	cmpBodyTagGenRep   = 22 // genp     – General Response (RFC 4210 §5.3.20 / RFC 9483 §4.3)
 	cmpBodyTagError    = 23 // error    – Error Message
 	cmpBodyTagPollReq  = 25 // pollReq  – Polling Request   (RFC 4210 §5.3.22)
 	cmpBodyTagPollRep  = 26 // pollRep  – Polling Response  (RFC 4210 §5.3.22)
@@ -56,6 +58,7 @@ const (
 	pkiFailureInfoBadPOP             = 9  // proof-of-possession failed
 	pkiFailureInfoCertRevoked        = 10 // referenced/protection certificate is revoked
 	pkiFailureInfoBadRecipientNonce  = 13 // recipNonce did not match the expected senderNonce
+	pkiFailureInfoAddInfoNotAvailable = 17 // request needs information the server cannot supply (RFC 9810 §5.1.3)
 	pkiFailureInfoBadSenderNonce     = 18 // sender nonce missing or too short (RFC 9483 §3.5)
 	pkiFailureInfoBadCertTemplate    = 19 // submitted CertTemplate is incomplete or invalid
 	pkiFailureInfoSignerNotTrusted   = 20 // protection signer cert not trusted / no trust anchor (RFC 9483 §3.5)
@@ -473,98 +476,161 @@ func encodePKIFailureInfo(bits []int) asn1.BitString {
 
 // marshalRevRepBody produces the raw RevRepContent DER for an rp (tag 12) body.
 // RevRepContent ::= SEQUENCE { status SEQUENCE OF PKIStatusInfo, ... }
-func marshalRevRepBody(status PKIStatus) ([]byte, error) {
+//
+// The optional statusString is populated so RFC 9483 §4.2 clients (and the
+// CMP test-suite's "Verify statusString" check) can read a human-readable
+// reason. An empty statusText omits the field. failInfoBits, when non-empty,
+// sets the PKIFailureInfo so rejection responses carry a populated BIT STRING
+// (required by the suite's "Is Bit Set" check).
+func marshalRevRepBody(status PKIStatus, statusText string, failInfoBits ...int) ([]byte, error) {
 	type revRepContent struct {
 		Status []PKIStatusInfo
 	}
+	info := PKIStatusInfo{Status: status}
+	if statusText != "" {
+		info.StatusString = PKIFreeText{
+			asn1.RawValue{Tag: asn1.TagUTF8String, Bytes: []byte(statusText)},
+		}
+	}
+	if len(failInfoBits) > 0 {
+		info.FailInfo = encodePKIFailureInfo(failInfoBits)
+	}
 	return asn1.Marshal(revRepContent{
-		Status: []PKIStatusInfo{
-			{Status: status},
-		},
+		Status: []PKIStatusInfo{info},
 	})
 }
 
-// decodeRevReqContent parses the RevReqContent from an rr body.
+// crlReasonRemoveFromCRL is the RFC 5280 §5.3.1 CRLReason value (8) that the
+// CMP revive operation (RFC 9483 §4.2) reuses to request un-revocation.
+const crlReasonRemoveFromCRL = 8
+
+// isKnownCRLReason reports whether code is a value defined by RFC 5280 §5.3.1.
+// Value 7 is unused and any value ≥ 11 is out of range. removeFromCRL (8) is
+// considered known because CMP uses it for revive requests.
+func isKnownCRLReason(code int) bool {
+	switch code {
+	case 0, 1, 2, 3, 4, 5, 6, 8, 9, 10:
+		return true
+	default:
+		return false
+	}
+}
+
+// revDetails holds the parsed fields of a single RevDetails entry (the
+// CertTemplate plus its optional crlEntryDetails). The *DER fields are encoded
+// so they can be DER-compared directly against the corresponding
+// x509.Certificate.Raw* fields of the protection certificate.
+type revDetails struct {
+	SerialNumber    []byte // big-endian, leading 0x00 sign byte stripped
+	HasSerial       bool
+	IssuerDER       []byte // Name TLV, comparable to x509.Certificate.RawIssuer
+	HasIssuer       bool
+	SubjectDER      []byte // Name TLV, comparable to x509.Certificate.RawSubject
+	HasSubject      bool
+	PublicKeyDER    []byte // SubjectPublicKeyInfo SEQUENCE TLV, comparable to RawSubjectPublicKeyInfo
+	HasPublicKey    bool
+	Reasons         []int // decoded CRLReason ENUMERATED values, in encounter order
+	ReasonExtCount  int   // number of CRLReason extensions present
+	ReasonDecodeErr bool  // at least one CRLReason extension value failed to decode
+}
+
+// decodeRevDetails parses the first RevDetails entry of an rr body.
 // RevReqContent ::= SEQUENCE OF RevDetails
 //
 //	RevDetails    ::= SEQUENCE {
 //	    certDetails     CertTemplate,
 //	    crlEntryDetails Extensions OPTIONAL }
 //
-// We extract the serialNumber ([1] context-specific INTEGER in CertTemplate)
-// and the optional CRL reason from crlEntryDetails.
-func decodeRevReqContent(bodyBytes []byte) (serialNumber []byte, reason int, err error) {
-	// bodyBytes is the content of [11] IMPLICIT — it holds a full
-	// SEQUENCE OF RevDetails TLV (the outer SEQUENCE tag was replaced
-	// by [11] in the PKIMessage, and asn1.Unmarshal puts the inner
-	// content in Body.Bytes which IS the SEQUENCE TLV).
+// CertTemplate ::= SEQUENCE {
+//	    version      [0], serialNumber [1] INTEGER, signingAlg [2],
+//	    issuer       [3] Name, validity [4], subject [5] Name,
+//	    publicKey    [6] SubjectPublicKeyInfo, ..., extensions [9] }
+//
+// Per RFC 4211, Name (a CHOICE) is EXPLICITLY tagged so issuer [3] / subject [5]
+// wrap a full Name TLV; SubjectPublicKeyInfo [6] is IMPLICITLY tagged so its
+// SEQUENCE tag is replaced and must be re-wrapped before comparison.
+func decodeRevDetails(bodyBytes []byte) (*revDetails, error) {
+	rd := &revDetails{}
+
+	// bodyBytes is the content of [11] IMPLICIT — a SEQUENCE OF RevDetails TLV.
 	var revDetailsSeq asn1.RawValue
 	if _, err := asn1.Unmarshal(bodyBytes, &revDetailsSeq); err != nil {
-		return nil, 0, fmt.Errorf("RevReqContent: %w", err)
+		return nil, fmt.Errorf("RevReqContent: %w", err)
 	}
 
 	// First element is a RevDetails SEQUENCE.
-	var revDetails asn1.RawValue
-	if _, err := asn1.Unmarshal(revDetailsSeq.Bytes, &revDetails); err != nil {
-		return nil, 0, fmt.Errorf("RevDetails: %w", err)
+	var revDet asn1.RawValue
+	if _, err := asn1.Unmarshal(revDetailsSeq.Bytes, &revDet); err != nil {
+		return nil, fmt.Errorf("RevDetails: %w", err)
 	}
 
-	// RevDetails.certDetails is a CertTemplate SEQUENCE.
+	// RevDetails.certDetails is a CertTemplate SEQUENCE; what follows is the
+	// optional crlEntryDetails Extensions.
 	var certTemplate asn1.RawValue
-	crlExtRest, err := asn1.Unmarshal(revDetails.Bytes, &certTemplate)
+	crlExtRest, err := asn1.Unmarshal(revDet.Bytes, &certTemplate)
 	if err != nil {
-		return nil, 0, fmt.Errorf("CertTemplate: %w", err)
+		return nil, fmt.Errorf("CertTemplate: %w", err)
 	}
 
-	// Walk CertTemplate fields looking for serialNumber [1] INTEGER.
+	// Walk CertTemplate fields by context tag.
 	remaining := certTemplate.Bytes
 	for len(remaining) > 0 {
 		var field asn1.RawValue
 		remaining, err = asn1.Unmarshal(remaining, &field)
 		if err != nil {
-			return nil, 0, fmt.Errorf("CertTemplate field: %w", err)
+			return nil, fmt.Errorf("CertTemplate field: %w", err)
 		}
-		if field.Class == asn1.ClassContextSpecific && field.Tag == 1 {
-			// [1] is serialNumber — an INTEGER whose DER encoding is in field.Bytes.
-			// Re-interpret as UNIVERSAL INTEGER to extract the bytes.
-			var sn asn1.RawValue
-			if _, e := asn1.Unmarshal(field.Bytes, &sn); e == nil && sn.Tag == asn1.TagInteger {
-				serialNumber = sn.Bytes
-			} else {
-				// If the content is the raw integer octets directly (no tag),
-				// use field.Bytes as-is.
-				serialNumber = field.Bytes
+		if field.Class != asn1.ClassContextSpecific {
+			continue
+		}
+		switch field.Tag {
+		case 1: // serialNumber [1] INTEGER
+			sn := field.Bytes
+			var inner asn1.RawValue
+			if _, e := asn1.Unmarshal(field.Bytes, &inner); e == nil && inner.Tag == asn1.TagInteger {
+				sn = inner.Bytes
 			}
-			// ASN.1 INTEGER prepends 0x00 when the high bit of the leading byte
-			// would otherwise be 1 (which would mark it as negative). Lamassu's
-			// certificate storage keys are big.Int-normalized hex (no leading
-			// 0x00), so we must strip the padding byte here to make lookups match.
-			if len(serialNumber) > 1 && serialNumber[0] == 0x00 {
-				serialNumber = serialNumber[1:]
+			// Strip the ASN.1 INTEGER sign-padding byte so the value matches
+			// Lamassu's big.Int-normalized hex serial keys.
+			if len(sn) > 1 && sn[0] == 0x00 {
+				sn = sn[1:]
+			}
+			rd.SerialNumber = sn
+			rd.HasSerial = len(sn) > 0
+		case 3: // issuer [3] Name (EXPLICIT) → field.Bytes is the Name TLV
+			rd.IssuerDER = field.Bytes
+			rd.HasIssuer = true
+		case 5: // subject [5] Name (EXPLICIT) → field.Bytes is the Name TLV
+			rd.SubjectDER = field.Bytes
+			rd.HasSubject = true
+		case 6: // publicKey [6] SubjectPublicKeyInfo (IMPLICIT) → re-wrap as SEQUENCE
+			spki, e := asn1.Marshal(asn1.RawValue{
+				Class:      asn1.ClassUniversal,
+				Tag:        asn1.TagSequence,
+				IsCompound: true,
+				Bytes:      field.Bytes,
+			})
+			if e == nil {
+				rd.PublicKeyDER = spki
+				rd.HasPublicKey = true
 			}
 		}
-	}
-	if len(serialNumber) == 0 {
-		return nil, 0, fmt.Errorf("serialNumber [1] not found in CertTemplate")
 	}
 
-	// Try to extract CRL reason from crlEntryDetails (Extensions, OPTIONAL).
-	// Extensions ::= SEQUENCE OF Extension
-	// Extension  ::= SEQUENCE { extnID OID, critical BOOLEAN DEFAULT FALSE, extnValue OCTET STRING }
-	// CRL Reason OID = 2.5.29.21, extnValue wraps an ENUMERATED.
-	reason = 0 // default: unspecified
+	// crlEntryDetails (Extensions, OPTIONAL): collect every CRLReason value.
 	if len(crlExtRest) > 0 {
-		reason = parseCRLReasonFromExtensions(crlExtRest)
+		rd.Reasons, rd.ReasonExtCount, rd.ReasonDecodeErr = collectCRLReasons(crlExtRest)
 	}
-	return serialNumber, reason, nil
+	return rd, nil
 }
 
-// parseCRLReasonFromExtensions scans an Extensions SEQUENCE for id-ce-CRLReasons
-// (2.5.29.21) and returns the ENUMERATED reason code, or 0 if not found.
-func parseCRLReasonFromExtensions(der []byte) int {
+// collectCRLReasons scans an Extensions SEQUENCE and returns every CRLReason
+// (2.5.29.21) ENUMERATED value found, the count of CRLReason extensions, and a
+// flag indicating that at least one extension's value could not be decoded.
+func collectCRLReasons(der []byte) (reasons []int, count int, decodeErr bool) {
 	var extsSeq asn1.RawValue
 	if _, err := asn1.Unmarshal(der, &extsSeq); err != nil {
-		return 0
+		return nil, 0, false
 	}
 	remaining := extsSeq.Bytes
 	oidCRLReason := asn1.ObjectIdentifier{2, 5, 29, 21}
@@ -573,39 +639,42 @@ func parseCRLReasonFromExtensions(der []byte) int {
 		var err error
 		remaining, err = asn1.Unmarshal(remaining, &ext)
 		if err != nil {
-			return 0
+			return reasons, count, decodeErr
 		}
-		// Each Extension is SEQUENCE { OID, BOOLEAN?, OCTET STRING }
 		var oid asn1.ObjectIdentifier
 		extRest, err := asn1.Unmarshal(ext.Bytes, &oid)
 		if err != nil || !oid.Equal(oidCRLReason) {
 			continue
 		}
-		// Skip optional critical BOOLEAN.
+		count++
+		// Skip optional critical BOOLEAN to reach the OCTET STRING extnValue.
 		var next asn1.RawValue
 		extRest, err = asn1.Unmarshal(extRest, &next)
 		if err != nil {
+			decodeErr = true
 			continue
 		}
 		var extnValue []byte
 		if next.Tag == asn1.TagOctetString {
 			extnValue = next.Bytes
 		} else {
-			// Was critical BOOLEAN; next TLV is the OCTET STRING.
 			var octet asn1.RawValue
 			if _, e := asn1.Unmarshal(extRest, &octet); e != nil || octet.Tag != asn1.TagOctetString {
+				decodeErr = true
 				continue
 			}
 			extnValue = octet.Bytes
 		}
-		// extnValue wraps an ENUMERATED.
 		var reasonCode asn1.Enumerated
 		if _, e := asn1.Unmarshal(extnValue, &reasonCode); e == nil {
-			return int(reasonCode)
+			reasons = append(reasons, int(reasonCode))
+		} else {
+			decodeErr = true
 		}
 	}
-	return 0
+	return reasons, count, decodeErr
 }
+
 
 // rewrapBodyAsSequence re-wraps the raw content bytes of an IMPLICIT-tagged
 // body CHOICE (where the SEQUENCE outer tag was replaced by the CHOICE tag)

@@ -123,8 +123,14 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 			return nil, fmt.Errorf("forbiddenNewEnrollment")
 		}
 		lFunc.Debugf("DMS allows replaceable enrollment. Continuing for device '%s'", csr.Subject.CommonName)
-		// Revoke the superseded active certificate once the new one is issued.
-		if existingDevice.IdentitySlot != nil {
+		// Revoke the superseded active certificate once the new one is issued,
+		// but only when the DMS opts in via ReEnrollmentSettings.RevokeOnReEnrollment.
+		// This mirrors the KUR/re-enrollment path (see LWCReenroll), where the
+		// superseded cert is revoked only when that flag is set. Without this
+		// gate the initial-enroll path revoked unconditionally, which is
+		// inconsistent with KUR and breaks flows that legitimately keep the
+		// previous certificate valid (e.g. a reused message-protection cert).
+		if existingDevice.IdentitySlot != nil && dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment {
 			supersededSN := existingDevice.IdentitySlot.Secrets[existingDevice.IdentitySlot.ActiveVersion]
 			defer func() {
 				if _, revErr := svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
@@ -340,6 +346,47 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	if err != nil {
 		lFunc.Errorf("aborting revocation. Could not get DMS '%s': %s", input.APS, err)
 		return errs.ErrDMSNotFound
+	}
+
+	// Fetch the target certificate so we can validate the requested state
+	// transition before asking the CA to perform it. This lets the CMP
+	// controller surface precise PKIFailureInfo bits (certRevoked vs badCertId)
+	// per RFC 9483 §4.2 instead of relying on the CA client's error mapping
+	// surviving the HTTP boundary.
+	cert, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+		SerialNumber: input.SerialNumber,
+	})
+	if err != nil {
+		lFunc.Errorf("could not load certificate '%s': %s", input.SerialNumber, err)
+		return err
+	}
+
+	// A removeFromCRL (8) CRLReason is the CMP revive operation (RFC 9483 §4.2):
+	// it requests un-revocation rather than revocation.
+	revive := input.Reason == models.RevocationReason(ocsp.RemoveFromCRL)
+	if revive {
+		// Only a currently-revoked certificate can be revived. Anything else
+		// (active, expired) is an invalid target → badCertId at the controller.
+		if cert.Status != models.StatusRevoked {
+			lFunc.Warnf("revive rejected: certificate '%s' is not revoked (status=%s)", input.SerialNumber, cert.Status)
+			return errs.ErrCertificateStatusTransitionNotAllowed
+		}
+		_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+			SerialNumber: input.SerialNumber,
+			NewStatus:    models.StatusActive,
+		})
+		if err != nil {
+			lFunc.Errorf("could not revive certificate '%s': %s", input.SerialNumber, err)
+			return err
+		}
+		return nil
+	}
+
+	// Revocation: an already-revoked certificate cannot be revoked again
+	// → certRevoked at the controller.
+	if cert.Status == models.StatusRevoked {
+		lFunc.Warnf("revocation rejected: certificate '%s' is already revoked", input.SerialNumber)
+		return errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
 	_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
