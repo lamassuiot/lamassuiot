@@ -973,12 +973,24 @@ func PopulateSampleData(
 							AuthMode:                          models.EnrollmentAuthModeClientCertificate,
 							ProtectionCertificateSerialNumber: protectionCert.SerialNumber,
 							EnforcePOPO:                       true,
+							// Accept implicit confirmation (RFC 9483 §4.1.1): when the EE
+							// includes id-it-implicitConfirm, the CA skips the certConf
+							// round-trip and echoes the OID in the response generalInfo.
+							AcceptImplicit: true,
 						},
 					},
 					ReEnrollmentSettings: models.ReEnrollmentSettings{
 						AdditionalValidationCAs:     []string{},
 						PreventiveReEnrollmentDelta: models.TimeDuration(7 * 24 * time.Hour),
 						CriticalReEnrollmentDelta:   models.TimeDuration(24 * time.Hour),
+						// Keep the superseded certificate valid across replaceable
+						// enrollments. The CMP compliance suite reuses a single
+						// message-protection certificate (same subject CN) for the
+						// whole run; revoking it on the first re-enrollment would
+						// make every later signature-protected request fail with
+						// certRevoked. This matches the KUR path, which only revokes
+						// when RevokeOnReEnrollment is set.
+						RevokeOnReEnrollment: false,
 					},
 					CADistributionSettings: models.CADistributionSettings{
 						IncludeEnrollmentCA:    true,

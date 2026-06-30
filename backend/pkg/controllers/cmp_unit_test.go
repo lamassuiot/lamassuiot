@@ -317,7 +317,7 @@ func TestValidateRequestEnvelope_AllRules(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rej := validateRequestEnvelope(tc.header, now)
+			rej := validateRequestEnvelope(tc.header, now, cmpBodyTagIR)
 			if !tc.wantReject {
 				assert.Nil(t, rej)
 				return
