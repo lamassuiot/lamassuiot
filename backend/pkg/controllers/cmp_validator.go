@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytes"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -123,6 +124,37 @@ func verifySenderMatchesProtectionCert(senderRaw asn1.RawValue, eeCert *x509.Cer
 		return &cmpEnvelopeRejection{
 			reason: fmt.Sprintf("sender DN does not match protection certificate subject (sender=%q, cert subject=%q) (RFC 9483 §3.5)",
 				senderRDN.String(), eeCert.Subject.String()),
+			failInfo: pkiFailureInfoBadMessageCheck,
+		}
+	}
+	return nil
+}
+
+// verifySenderKIDMatchesProtectionCert enforces RFC 9483 §3.1: a signature-
+// protected PKIMessage MUST carry a senderKID equal to the SubjectKeyIdentifier
+// of the CMP protection certificate. Returns nil when satisfied, or a
+// cmpEnvelopeRejection (failInfo badMessageCheck) otherwise.
+//
+// eeCert nil means the message was unprotected (accepted upstream) — no rule to
+// apply. When the protection cert carries no SubjectKeyIdentifier we cannot
+// enforce the byte match; we still require senderKID to be present (the RFC
+// makes it mandatory) but skip the equality check in that edge case.
+func verifySenderKIDMatchesProtectionCert(senderKID []byte, eeCert *x509.Certificate) *cmpEnvelopeRejection {
+	if eeCert == nil {
+		return nil
+	}
+	if len(senderKID) == 0 {
+		return &cmpEnvelopeRejection{
+			reason:   "senderKID is required for signature-based protection (RFC 9483 §3.1)",
+			failInfo: pkiFailureInfoBadMessageCheck,
+		}
+	}
+	if len(eeCert.SubjectKeyId) == 0 {
+		return nil
+	}
+	if !bytes.Equal(senderKID, eeCert.SubjectKeyId) {
+		return &cmpEnvelopeRejection{
+			reason:   "senderKID does not match the protection certificate's SubjectKeyIdentifier (RFC 9483 §3.1)",
 			failInfo: pkiFailureInfoBadMessageCheck,
 		}
 	}
