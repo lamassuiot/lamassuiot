@@ -854,7 +854,7 @@ components:
     GetKeysResponse:
       type: object
       properties:
-        next_bookmark:
+        next:
           type: string
           description: Bookmark for retrieving the next page of results
           example: "eyJrZXlfaWQiOiJrZXktMTIzIn0="

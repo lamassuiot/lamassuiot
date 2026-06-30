@@ -534,6 +534,29 @@ paths:
                 $ref: '#/components/schemas/GetCertificatesResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Certificates]
+      summary: Create a certificate with a new key
+      description: |
+        Issues a new certificate by generating a key pair inside the specified engine.
+        The CA to sign the certificate is specified in the request body.
+      operationId: createCertificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCertificateBody'
+      responses:
+        '201':
+          description: Created certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /certificates/status/{status}:
     get:
@@ -1037,6 +1060,43 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PatchOperation'
+
+    CreateCertificateBodyKeySpec:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Key type (e.g. RSA, ECDSA)
+        bits:
+          type: integer
+          description: Key size in bits
+        engine_id:
+          type: string
+          description: Crypto engine to generate the key in
+        key_identifier:
+          type: string
+          description: Optional pre-existing key identifier to reuse
+
+    CreateCertificateBody:
+      type: object
+      required: [ca_id, key_spec, subject]
+      properties:
+        ca_id:
+          type: string
+          description: Identifier of the CA that will sign the certificate
+        key_spec:
+          $ref: '#/components/schemas/CreateCertificateBodyKeySpec'
+        subject:
+          $ref: '#/components/schemas/Subject'
+        issuance_profile_id:
+          type: string
+          description: ID of an existing issuance profile to apply
+        issuance_profile:
+          $ref: '#/components/schemas/IssuanceProfile'
+          description: Inline issuance profile (alternative to issuance_profile_id)
+        metadata:
+          type: object
+          additionalProperties: true
 
     ImportCertificateBody:
       type: object
