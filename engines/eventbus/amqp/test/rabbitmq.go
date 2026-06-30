@@ -1,49 +1,46 @@
 package rabbitmq_test
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	ampq "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/config"
 	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/moby/moby/api/types/network"
+	"github.com/ory/dockertest/v4"
 	"github.com/sirupsen/logrus"
 )
 
 func RunRabbitMQDocker(exposeAsStandardPort bool) (func() error, *ampq.AMQPConnection, int, error) {
-	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "rabbitmq",        // image
-		Tag:        "3.12-management", // version
-		Env: []string{
+	runOpts := []dockertest.RunOption{
+		dockertest.WithTag("3.12-management"),
+		dockertest.WithEnv([]string{
 			"RABBITMQ_DEFAULT_USER=user",
 			"RABBITMQ_DEFAULT_PASS=user",
-		},
-		Labels: map[string]string{
+		}),
+		dockertest.WithLabels(map[string]string{
 			"group": "lamassuiot-monolithic",
-		},
-	}, func(hc *docker.HostConfig) {
-		if exposeAsStandardPort {
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"5672/tcp": {
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "5672", // random port
-					},
-				},
-				"15672/tcp": {
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "15672", // random port
-					},
-				},
-			}
-		}
-	})
+		}),
+	}
+	if exposeAsStandardPort {
+		runOpts = append(runOpts, dockertest.WithPortBindings(network.PortMap{
+			network.MustParsePort("5672/tcp"): []network.PortBinding{
+				{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "5672"},
+			},
+			network.MustParsePort("15672/tcp"): []network.PortBinding{
+				{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "15672"},
+			},
+		}))
+	}
+
+	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker("rabbitmq", runOpts...)
 	if err != nil {
 		return nil, nil, -1, err
 	}
@@ -52,7 +49,7 @@ func RunRabbitMQDocker(exposeAsStandardPort bool) (func() error, *ampq.AMQPConne
 	adminPort, _ := strconv.Atoi(container.GetPort("15672/tcp"))
 
 	// retry until server is ready
-	err = dockerHost.Retry(func() error {
+	err = dockerHost.Retry(context.Background(), 30*time.Second, func() error {
 		lgr := logrus.New()
 		lgr.SetOutput(io.Discard)
 

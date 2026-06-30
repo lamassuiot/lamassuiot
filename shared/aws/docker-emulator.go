@@ -5,30 +5,28 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"time"
 
 	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/moby/moby/api/types/network"
+	"github.com/ory/dockertest/v4"
 )
 
 func RunAWSEmulationLocalStackDocker(exposeAsStandardPort bool) (func() error, func() error, *AWSSDKConfig, error) {
-	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "localstack/localstack", // image
-		Tag:        "4.10",                  // version
-	}, func(hc *docker.HostConfig) {
-		if exposeAsStandardPort {
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"4566/tcp": {
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "4566", // random port
-					},
-				},
-			}
-		}
-	})
+	runOpts := []dockertest.RunOption{
+		dockertest.WithTag("4.10"),
+	}
+	if exposeAsStandardPort {
+		runOpts = append(runOpts, dockertest.WithPortBindings(network.PortMap{
+			network.MustParsePort("4566/tcp"): []network.PortBinding{
+				{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "4566"},
+			},
+		}))
+	}
+
+	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker("localstack/localstack", runOpts...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -36,7 +34,7 @@ func RunAWSEmulationLocalStackDocker(exposeAsStandardPort bool) (func() error, f
 	p, _ := strconv.Atoi(container.GetPort("4566/tcp"))
 	endpoint := fmt.Sprintf("http://127.0.0.1:%d", p)
 	// retry until server is ready
-	err = dockerHost.Retry(func() error {
+	err = dockerHost.Retry(context.Background(), time.Minute, func() error {
 		r, err := http.DefaultClient.Get(endpoint)
 		if err != nil {
 			return err
