@@ -4,12 +4,14 @@ import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 
 type DeviceManagerConfig struct {
 	OtelConfig            cconfig.OTELConfig             `mapstructure:"otel"`
+	OpenAPI               cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs                  cconfig.Logging                `mapstructure:"logs"`
 	Server                cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus     cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
 	SubscriberDLQEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
 	Storage               cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
 	CAClient              struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
