@@ -79,8 +79,6 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 			ctx.Data(http.StatusOK, "application/yaml", openApiContent)
 		})
 		mainEngine.Handle("/openapi", openApiEngine)
-	} else {
-		logger.Warn("OpenAPI spec content is empty. Skipping /openapi endpoint creation")
 	}
 
 	addr := fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port)
