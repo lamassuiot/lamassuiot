@@ -1610,8 +1610,13 @@ func TestHandleCMP_MACProtection_Rejected(t *testing.T) {
 	router, _ := newTestRouterWithStore(svc)
 
 	// Build a minimal IR with protectionAlg [1] set to id-PasswordBasedMac.
+	// A genuine MAC-protected message also carries a protection value; we
+	// attach a (deliberately fake) one so the message reaches the MAC-algorithm
+	// gate rather than the "protection value absent" structural check. The
+	// handler must reject on the algorithm OID alone, before any verification.
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-mac"})
 	irDERWithMACAlg := injectProtectionAlgOID(t, irDER, oidPasswordBasedMac)
+	irDERWithMACAlg = attachFakeProtection(t, irDERWithMACAlg, []byte{0x00, 0xDE, 0xAD, 0xBE, 0xEF})
 
 	resp := postCMP(t, router, "test-dms", irDERWithMACAlg)
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -2077,9 +2082,16 @@ func TestHandleCMP_RR_ServiceError(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", rrDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
-		"failed revocation must return CMP error")
-	assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "certificate not found")
+	// RFC 9483 §4.2: the response to an rr is always an rp body, even on
+	// failure — the rejection is conveyed via the rp PKIStatusInfo, never via a
+	// generic error body.
+	assert.Equal(t, cmpBodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"failed revocation must return an rp body with rejection status")
+	var rpMsg rawPKIMessage
+	_, err := asn1.Unmarshal(resp.Body.Bytes(), &rpMsg)
+	require.NoError(t, err)
+	assert.Contains(t, scanFirstUTF8String(rpMsg.Body.Bytes), "certificate not found",
+		"rp statusString must carry the revocation failure reason")
 }
 
 // TestHandleCMP_RR_DefaultReason verifies that when the rr body’s
