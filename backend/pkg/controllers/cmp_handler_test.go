@@ -7,6 +7,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -745,12 +746,20 @@ func buildSelfSignedCert(t *testing.T, cn string) (*x509.Certificate, *ecdsa.Pri
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
+	// Real EE certs carry a SubjectKeyIdentifier, and RFC 9483 §3.1 requires the
+	// CMP senderKID to equal it; compute one (SHA-1 of the public key, RFC 5280
+	// §4.2.1.2 method 1) so signed fixtures mirror production.
+	pubDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	ski := sha1.Sum(pubDER)
+
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: cn},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
+		SubjectKeyId: ski[:],
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	require.NoError(t, err)
@@ -781,6 +790,10 @@ func signCMPMessage(t *testing.T, msgDER []byte, signerCert *x509.Certificate, s
 	// 3 mandatory fields (pvno, sender, recipient) per RFC 4210 §5.1.1.
 	headerDER = injectProtectionAlgInHeader(t, headerDER,
 		asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}) // ecdsaWithSHA256
+	// RFC 9483 §3.1: signature-based protection MUST carry senderKID equal to the
+	// protection cert's SubjectKeyIdentifier; the validator enforces it, so signed
+	// fixtures must include it.
+	headerDER = injectSenderKIDInHeader(t, headerDER, signerCert.SubjectKeyId)
 	rawMsg.Header = asn1.RawValue{FullBytes: headerDER}
 
 	payload, err := marshalProtectedPayload(headerDER, rawMsg.Body.FullBytes)
@@ -918,6 +931,68 @@ func corruptProtectionSignature(t *testing.T, signedDER []byte) []byte {
 // with a directoryName GeneralName carrying the given subject's RDNSequence.
 // The PKIHeader has three mandatory fields (pvno, sender, recipient); we peel
 // the first one, swap the second, and keep the remainder.
+// injectSenderKIDInHeader inserts senderKID [2] EXPLICIT OCTET STRING into a
+// DER-encoded PKIHeader, in tag order (after messageTime[0]/protectionAlg[1] if
+// present). Mirrors what a real EE sets per RFC 9483 §3.1. No-op if ski is empty
+// or senderKID [2] is already present.
+func injectSenderKIDInHeader(t *testing.T, headerDER []byte, ski []byte) []byte {
+	t.Helper()
+	if len(ski) == 0 {
+		return headerDER
+	}
+
+	var headerSeq asn1.RawValue
+	_, err := asn1.Unmarshal(headerDER, &headerSeq)
+	require.NoError(t, err)
+
+	remaining := headerSeq.Bytes
+	var prefix []byte
+	// Keep the 3 mandatory fields (pvno, sender, recipient).
+	for i := 0; i < 3; i++ {
+		var field asn1.RawValue
+		rest, e := asn1.Unmarshal(remaining, &field)
+		require.NoError(t, e)
+		prefix = append(prefix, field.FullBytes...)
+		remaining = rest
+	}
+	// Keep any optional [0] messageTime / [1] protectionAlg so senderKID lands in
+	// the correct tag order; bail if [2] already present.
+	for len(remaining) > 0 {
+		var peek asn1.RawValue
+		_, e := asn1.Unmarshal(remaining, &peek)
+		require.NoError(t, e)
+		if peek.Class == asn1.ClassContextSpecific && peek.Tag == 2 {
+			return headerDER
+		}
+		if peek.Class == asn1.ClassContextSpecific && (peek.Tag == 0 || peek.Tag == 1) {
+			prefix = append(prefix, peek.FullBytes...)
+			remaining = remaining[len(peek.FullBytes):]
+			continue
+		}
+		break
+	}
+
+	octetStr, err := asn1.Marshal(ski) // []byte -> OCTET STRING
+	require.NoError(t, err)
+	kidField, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassContextSpecific,
+		Tag:        2,
+		IsCompound: true,
+		Bytes:      octetStr,
+	})
+	require.NoError(t, err)
+
+	newContent := concatBytes(prefix, kidField, remaining)
+	newHeaderDER, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassUniversal,
+		Tag:        asn1.TagSequence,
+		IsCompound: true,
+		Bytes:      newContent,
+	})
+	require.NoError(t, err)
+	return newHeaderDER
+}
+
 func injectSenderInHeader(t *testing.T, headerDER []byte, subject pkix.Name) []byte {
 	t.Helper()
 
@@ -2287,16 +2362,12 @@ func TestHandleCMP_POPO_Absent_NotEnforced(t *testing.T) {
 // Registration Authority already proved possession; the RA MUST be trusted so
 // the CA does not re-verify. This enables delegated enrollment flows.
 func TestHandleCMP_POPO_RAVerified(t *testing.T) {
-	issuedCert, _ := buildSelfSignedCert(t, "device-popo-raverified")
-
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{
 			EnforcePOPO:    true,
 			AcceptImplicit: true,
 		}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
 
 	router, _ := newTestRouterWithStore(svc)
 	irDER, _, _ := buildTestIR(t, testIROptions{
@@ -2307,10 +2378,15 @@ func TestHandleCMP_POPO_RAVerified(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
+	// On this endpoint the requester authenticates as an EE; an EE asserting
+	// raVerified is unauthorized (RFC 9483 §4.1). The request is rejected inside
+	// the ip CertRepMessage with failInfo notAuthorized, and never reaches enroll.
 	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
-		"IR with raVerified POPO must be accepted (upstream RA proved possession)")
-
-	svc.AssertExpectations(t)
+		"IR with raVerified POPO from an EE must be rejected via ip CertRepMessage")
+	reason, fi := parseCertRepRejection(t, resp.Body.Bytes())
+	assert.Contains(t, reason, "proof of possession", "statusString must reference POPO")
+	assert.True(t, bitSet(fi, pkiFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
 }
 
 // ---------------------------------------------------------------------------
