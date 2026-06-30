@@ -3,11 +3,11 @@ package assemblers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -43,10 +43,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent, err = os.ReadFile(conf.OpenAPI.SpecFilePath)
-		if err != nil {
-			lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
-		}
+		openApiContent = specs.DeviceManager
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

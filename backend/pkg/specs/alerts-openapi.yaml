@@ -1,0 +1,336 @@
+openapi: 3.0.3
+info:
+  title: Lamassu Alerts API
+  version: 1.0.0
+  description: |
+    Alerts and notification subscription API for Lamassu IoT Platform.
+    Provides access to the latest events per event type and lets users manage
+    their alert subscriptions.
+  contact:
+    name: Lamassu IoT
+    url: https://github.com/lamassuiot/lamassuiot
+  license:
+    name: Mozilla Public License 2.0
+    url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
+
+servers:
+  - url: /api/alerts/v1
+    description: Alerts API v1
+
+tags:
+  - name: Events
+    description: Event inspection endpoints
+  - name: Subscriptions
+    description: Manage alert subscriptions per user
+
+paths:
+  /events/latest:
+    get:
+      tags: [Events]
+      summary: Get the latest event per event type
+      operationId: getLatestEvents
+      parameters:
+        - name: page_size
+          in: query
+          required: false
+          description: Maximum number of events to return
+          schema:
+            type: integer
+            minimum: 1
+            default: 25
+        - name: bookmark
+          in: query
+          required: false
+          description: Opaque bookmark token for next page retrieval
+          schema:
+            type: string
+        - name: sort_by
+          in: query
+          required: false
+          description: |
+            Field to sort by. Supported fields: `event_type`, `seen_at`, `counter`.
+          schema:
+            type: string
+            enum: [event_type, seen_at, counter]
+        - name: sort_mode
+          in: query
+          required: false
+          description: Sort direction.
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: filter
+          in: query
+          required: false
+          description: |
+            Filter expression. Repeat the parameter to combine multiple filters
+            (e.g. `filter=event_type[eq]:DEVICE-CREATED&filter=counter[gt]:5`).
+
+            **Supported fields and types:**
+            - `event_type` (string)
+            - `seen_at` (date)
+            - `counter` (number)
+
+            **Operators by type:**
+            - String: `eq`, `eq_ic`, `ne`, `ne_ic`, `ct`, `ct_ic`, `nc`, `nc_ic`
+            - Date: `eq`, `bf`, `af`
+            - Number: `eq`, `ne`, `lt`, `le`, `gt`, `ge`
+          schema:
+            type: string
+          explode: true
+          style: form
+      responses:
+        '200':
+          description: Latest events grouped by type
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  next:
+                    type: string
+                    description: Bookmark for the next page. Empty when no more items are available.
+                  list:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlertLatestEvent'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/{userId}/subscriptions:
+    get:
+      tags: [Subscriptions]
+      summary: List subscriptions for a user
+      operationId: getUserSubscriptions
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Invalid user identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/{userId}/subscribe:
+    post:
+      tags: [Subscriptions]
+      summary: Subscribe user to an event type
+      operationId: subscribeUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscribeBody'
+      responses:
+        '200':
+          description: Updated subscription list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Invalid request body or user identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/{userId}/unsubscribe/{subId}:
+    post:
+      tags: [Subscriptions]
+      summary: Unsubscribe user from an existing subscription
+      operationId: unsubscribeUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: subId
+          in: path
+          required: true
+          description: Subscription identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Updated subscription list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: User identifier
+      schema:
+        type: string
+
+  schemas:
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Subscription identifier
+        user_id:
+          type: string
+        event_type:
+          $ref: '#/components/schemas/EventType'
+        subscription_ts:
+          type: string
+          format: date-time
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionCondition'
+        channel:
+          $ref: '#/components/schemas/Channel'
+
+    SubscriptionCondition:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/ConditionType'
+        condition:
+          type: string
+          description: Condition expression (JSON Schema, JSONPath, or JavaScript)
+
+    SubscribeBody:
+      type: object
+      required: [event_type, channel]
+      properties:
+        event_type:
+          $ref: '#/components/schemas/EventType'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionCondition'
+        channel:
+          $ref: '#/components/schemas/Channel'
+
+    Channel:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/ChannelType'
+        name:
+          type: string
+        config:
+          description: Channel specific configuration payload
+          oneOf:
+            - $ref: '#/components/schemas/EmailConfig'
+            - $ref: '#/components/schemas/MSTeamsChannelConfig'
+            - $ref: '#/components/schemas/WebhookChannelConfig'
+            - type: object
+              description: Generic config for other channel types
+
+    EmailConfig:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+
+    MSTeamsChannelConfig:
+      type: object
+      properties:
+        webhook_url:
+          type: string
+          format: uri
+
+    WebhookChannelConfig:
+      type: object
+      properties:
+        webhook_url:
+          type: string
+          format: uri
+        webhook_method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+
+    AlertLatestEvent:
+      type: object
+      properties:
+        event_type:
+          $ref: '#/components/schemas/EventType'
+        event:
+          type: object
+          description: CloudEvent payload for the latest event
+        seen_at:
+          type: string
+          format: date-time
+        counter:
+          type: integer
+
+    EventType:
+      type: string
+      description: Event type identifier
+
+    ConditionType:
+      type: string
+      enum: [JSON-SCHEMA, JSON-PATH, JAVASCRIPT]
+
+    ChannelType:
+      type: string
+      enum: [EMAIL, MSTEAMS, WEBHOOK]
+
+    Error:
+      type: object
+      properties:
+        err:
+          type: string
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+
+security:
+  - BearerAuth: []

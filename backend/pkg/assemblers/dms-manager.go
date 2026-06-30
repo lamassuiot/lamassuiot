@@ -3,9 +3,9 @@ package assemblers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
@@ -34,10 +34,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent, err = os.ReadFile(conf.OpenAPI.SpecFilePath)
-		if err != nil {
-			lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
-		}
+		openApiContent = specs.DMSManager
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

@@ -95,10 +95,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		// --- service assembly ---
 
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
-			OpenAPI: cconfig.OpenAPIConfig{
-				SpecFilePath: conf.DocsDir + "/kms-openapi.yaml",
-				Enabled:      true,
-			},
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs:   svcLogs,
 			Server: svcServer,
 			CryptoEngineConfig: config.CryptoEngines{
@@ -119,10 +116,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			OpenAPI: cconfig.OpenAPIConfig{
-				SpecFilePath: conf.DocsDir + "/ca-openapi.yaml",
-				Enabled:      true,
-			},
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs:   svcLogs,
 			Server: svcServer,
 			PublisherEventBus:        conf.PublisherEventBus,
@@ -140,10 +134,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
-			OpenAPI: cconfig.OpenAPIConfig{
-				SpecFilePath: conf.DocsDir + "/va-openapi.yaml",
-				Enabled:      true,
-			},
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs:   svcLogs,
 			Server: svcServer,
 			FilesystemStorage: cconfig.FSStorageConfig{
@@ -165,10 +156,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-			OpenAPI: cconfig.OpenAPIConfig{
-				SpecFilePath: conf.DocsDir + "/device-manager-openapi.yaml",
-				Enabled:      true,
-			},
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},
@@ -195,10 +183,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			OpenAPI: cconfig.OpenAPIConfig{
-				SpecFilePath: conf.DocsDir + "/dms-manager-openapi.yaml",
-				Enabled:      true,
-			},
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},
@@ -223,10 +208,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
-			OpenAPI: cconfig.OpenAPIConfig{
-				SpecFilePath: conf.DocsDir + "/alerts-openapi.yaml",
-				Enabled:      true,
-			},
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},

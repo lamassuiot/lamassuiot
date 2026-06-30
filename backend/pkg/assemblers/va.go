@@ -3,9 +3,9 @@ package assemblers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	fssBuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/fs-storage/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
@@ -40,10 +40,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent, err = os.ReadFile(conf.OpenAPI.SpecFilePath)
-		if err != nil {
-			lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
-		}
+		openApiContent = specs.VA
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

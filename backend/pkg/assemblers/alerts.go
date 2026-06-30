@@ -3,11 +3,11 @@ package assemblers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
@@ -35,10 +35,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent, err = os.ReadFile(conf.OpenAPI.SpecFilePath)
-		if err != nil {
-			lHttp.Warnf("could not read OpenAPI spec file: %s. Ignoring it", err)
-		}
+		openApiContent = specs.Alerts
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
