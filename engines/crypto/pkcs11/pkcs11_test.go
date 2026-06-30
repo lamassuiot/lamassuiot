@@ -21,11 +21,13 @@ func TestPKCS11CryptoEngine(t *testing.T) {
 		{"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
 		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
 		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
-		// {"DeleteKey", cryptoengines.SharedTestDeleteKey}, TODO
+		{"DeleteKey", cryptoengines.SharedTestDeleteKey},
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
 		{"RenameKey", cryptoengines.SharedRenameKey},
+		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
+		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 	}
 
 	beforeEach, err := setup(t)
@@ -47,13 +49,7 @@ func TestPKCS11CryptoEngine(t *testing.T) {
 }
 
 func setup(t *testing.T) (func() (cryptoengines.CryptoEngine, error), error) {
-	os.Setenv("PKCS11_MODULE_PATH", "/usr/local/lib/libpkcs11-proxy.so")
-	beforeEach, err := preparePKCS11CryptoEngine(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return beforeEach, nil
+	return preparePKCS11CryptoEngine(t)
 }
 
 func preparePKCS11CryptoEngine(t *testing.T) (func() (cryptoengines.CryptoEngine, error), error) {
@@ -62,7 +58,7 @@ func preparePKCS11CryptoEngine(t *testing.T) (func() (cryptoengines.CryptoEngine
 		t.Skip("PKCS11_MODULE_PATH not set")
 	}
 
-	beforeEach, _, engineConf, err := docker.RunSoftHsmV2Docker(false, soPath)
+	beforeEach, _, engineConf, err := docker.RunNetHsmV2Docker(false, soPath)
 	if err != nil {
 		return nil, err
 	}

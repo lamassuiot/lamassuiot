@@ -286,7 +286,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	caCertX509 := (*x509.Certificate)(input.CACertificate)
 
-	skid, err := helpers.GetSubjectKeyID(lFunc, caCertX509)
+	skid, err := helpers.GetSubjectKeyID(ctx, lFunc, caCertX509)
 	if err != nil {
 		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", caCertX509.Subject.CommonName, err)
 		return nil, err
@@ -1246,7 +1246,7 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 	}
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
-	keyID, err := helpers.GetSubjectKeyID(lFunc, caCert)
+	keyID, err := helpers.GetSubjectKeyID(ctx, lFunc, caCert)
 	if err != nil {
 		lFunc.Warnf("could not compute key ID for CA %s: %s", ca.ID, err)
 		return
@@ -1559,13 +1559,13 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
-	ski, err := helpers.GetSubjectKeyID(lFunc, x509Cert)
+	ski, err := helpers.GetSubjectKeyID(ctx, lFunc, x509Cert)
 	if err != nil {
 		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", x509Cert.Subject.CommonName, err)
 		return nil, err
 	}
 
-	aki, err := helpers.GetSubjectKeyID(lFunc, caCert)
+	aki, err := helpers.GetSubjectKeyID(ctx, lFunc, caCert)
 	if err != nil {
 		lFunc.Errorf("could not get Authority Key Identifier for CA: %s: %s", caCert.Subject.CommonName, err)
 		return nil, err
@@ -1631,7 +1631,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		status = models.StatusExpired
 	}
 
-	skid, err := helpers.GetSubjectKeyID(lFunc, x509Cert)
+	skid, err := helpers.GetSubjectKeyID(ctx, lFunc, x509Cert)
 	if err != nil {
 		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", x509Cert.Subject.CommonName, err)
 		return nil, err
