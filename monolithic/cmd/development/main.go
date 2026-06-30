@@ -27,6 +27,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 	mobycontainer "github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	mobyclient "github.com/moby/moby/client"
 	"github.com/ory/dockertest/v4"
 )
@@ -404,11 +405,15 @@ func main() {
 		pgUser := storageConfig.Config["username"].(string)
 		pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
 
-		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository:   "ghcr.io/siemens/wfx",
-			Tag:          "latest",
-			ExposedPorts: []string{"9080/tcp", "9081/tcp"},
-			Env: []string{
+		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker("ghcr.io/siemens/wfx",
+			dockertest.WithTag("latest"),
+			dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
+				cfg.ExposedPorts = network.PortSet{
+					network.MustParsePort("9080/tcp"): struct{}{},
+					network.MustParsePort("9081/tcp"): struct{}{},
+				}
+			}),
+			dockertest.WithEnv([]string{
 				"PGHOST=host.docker.internal",
 				"PGPORT=" + pgPort,
 				"PGUSER=" + pgUser,
@@ -421,14 +426,15 @@ func main() {
 				"WFX_MGMT_PORT=9081",
 				"WFX_LOG_FORMAT=json",
 				"WFX_LOG_LEVEL=debug",
-			},
-			Labels: map[string]string{
+			}),
+			dockertest.WithLabels(map[string]string{
 				"group": "lamassuiot-monolithic",
-			},
-		}, func(hc *docker.HostConfig) {
-			hc.AutoRemove = true
-			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
-		})
+			}),
+			dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
+				hc.AutoRemove = true
+				hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+			}),
+		)
 		if err != nil {
 			if wfxCleanup != nil {
 				wfxCleanup()
