@@ -114,7 +114,7 @@ ${DEVICE_KEY_PASSWORD}   ${None}
 ${ALLOW_P10CR_MAC_BASED}   ${False}
 ${ALLOW_CR_MAC_BASED}   ${False}
 ${ALLOW_IR_MAC_BASED}   ${False}
-${ALLOW_KUR_SAME_KEY}    ${False}
+${ALLOW_KUR_SAME_KEY}    ${True}
 ${LARGE_KEY_SIZE}    ${False}
 ${ALLOW_CERT_CONF}    ${False}
 
