@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -962,6 +963,19 @@ type firstCertReq struct {
 	// POPORaw is the raw ASN.1 value of the ProofOfPossession CHOICE,
 	// as decoded from the CertReqMsg following the CertRequest.
 	POPORaw asn1.RawValue
+	// OldCertID carries the RFC 4211 §6.2 id-regCtrl-oldCertID control from the
+	// CertRequest's optional `controls` field, when present. For a KUR it names
+	// the certificate being updated (CertId = issuer + serialNumber). nil when no
+	// such control was supplied.
+	OldCertID *oldCertID
+}
+
+// oldCertID is the decoded RFC 4211 CertId { issuer GeneralName, serialNumber }
+// from the id-regCtrl-oldCertID control. IssuerNameDER is the DER of the issuer
+// directoryName ([4]) RDNSequence, directly comparable to x509.Certificate.RawIssuer.
+type oldCertID struct {
+	IssuerNameDER []byte
+	SerialNumber  *big.Int
 }
 
 type responsePKIHeader struct {
@@ -1045,12 +1059,18 @@ func decodeFirstCertReq(bodyBytes []byte) (*firstCertReq, error) {
 	}
 
 	var certTemplate asn1.RawValue
-	if _, err := asn1.Unmarshal(rest, &certTemplate); err != nil {
+	controlsRest, err := asn1.Unmarshal(rest, &certTemplate)
+	if err != nil {
 		return nil, fmt.Errorf("CertTemplate: %w", err)
 	}
 	if certTemplate.Tag != asn1.TagSequence || certTemplate.Class != asn1.ClassUniversal {
 		return nil, fmt.Errorf("expected UNIVERSAL SEQUENCE for CertTemplate, got class=%d tag=%d", certTemplate.Class, certTemplate.Tag)
 	}
+
+	// Optional `controls` SEQUENCE follows the CertTemplate (RFC 4211 §5). We only
+	// care about id-regCtrl-oldCertID (KUR cert-to-update reference); ignore the
+	// rest. A malformed controls block is non-fatal — it just yields no oldCertID.
+	oldCID := parseOldCertIDControl(controlsRest)
 
 	var subjectDER []byte
 	var publicKeyDER []byte
@@ -1097,7 +1117,99 @@ func decodeFirstCertReq(bodyBytes []byte) (*firstCertReq, error) {
 		PublicKeyDER: publicKeyDER,
 		CertReqDER:   certReqSeq.FullBytes,
 		POPORaw:      popoRaw,
+		OldCertID:    oldCID,
 	}, nil
+}
+
+// oidRegCtrlOldCertID is RFC 4211 §6.2 id-regCtrl-oldCertID (1.3.6.1.5.5.7.5.1.5).
+var oidRegCtrlOldCertID = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 1, 5}
+
+// parseOldCertIDControl scans an optional CertRequest `controls` field
+// (SEQUENCE OF AttributeTypeAndValue) for id-regCtrl-oldCertID and decodes its
+// CertId value { issuer GeneralName, serialNumber INTEGER }. It returns nil if
+// controls is absent, the control is not present, or anything fails to parse —
+// the control is optional, so a parse problem must not break enrollment.
+func parseOldCertIDControl(controlsDER []byte) *oldCertID {
+	if len(controlsDER) == 0 {
+		return nil
+	}
+	var controlsSeq asn1.RawValue
+	if _, err := asn1.Unmarshal(controlsDER, &controlsSeq); err != nil {
+		return nil
+	}
+	if controlsSeq.Tag != asn1.TagSequence || controlsSeq.Class != asn1.ClassUniversal {
+		return nil
+	}
+
+	rest := controlsSeq.Bytes
+	for len(rest) > 0 {
+		var attr asn1.RawValue
+		var err error
+		rest, err = asn1.Unmarshal(rest, &attr)
+		if err != nil {
+			return nil
+		}
+		// AttributeTypeAndValue ::= SEQUENCE { type OID, value ANY }
+		var oid asn1.ObjectIdentifier
+		valDER, err := asn1.Unmarshal(attr.Bytes, &oid)
+		if err != nil || !oid.Equal(oidRegCtrlOldCertID) {
+			continue
+		}
+		// value is CertId ::= SEQUENCE { issuer GeneralName, serialNumber INTEGER }
+		var certIDSeq asn1.RawValue
+		if _, err := asn1.Unmarshal(valDER, &certIDSeq); err != nil {
+			return nil
+		}
+		inner := certIDSeq.Bytes
+		var issuer asn1.RawValue
+		inner, err = asn1.Unmarshal(inner, &issuer)
+		if err != nil {
+			return nil
+		}
+		// issuer GeneralName directoryName [4] EXPLICIT Name: issuer.Bytes is the
+		// RDNSequence DER, directly comparable to x509.Certificate.RawIssuer.
+		if issuer.Class != asn1.ClassContextSpecific || issuer.Tag != 4 {
+			return nil
+		}
+		var serial *big.Int
+		if _, err := asn1.Unmarshal(inner, &serial); err != nil {
+			return nil
+		}
+		return &oldCertID{IssuerNameDER: issuer.Bytes, SerialNumber: serial}
+	}
+	return nil
+}
+
+// cmpSignerCertFromGin returns the verified CMP protection (signer) certificate
+// that HandleCMP stashed on the request context after protection verification,
+// or nil when the request was unprotected.
+func cmpSignerCertFromGin(ctx *gin.Context) *x509.Certificate {
+	v := ctx.Request.Context().Value(string(identityextractors.IdentityExtractorCMPSignerCertificate))
+	cert, _ := v.(*x509.Certificate)
+	return cert
+}
+
+// validateOldCertID checks that a KUR's id-regCtrl-oldCertID references the
+// certificate actually being updated — the protection (signer) certificate.
+// Issuer (DER-compared against RawIssuer) and serialNumber must both match;
+// otherwise it returns a badCertId cert-request rejection. Returns nil when no
+// oldCertID control was supplied (it is optional, RFC 9483 §4.1.3).
+func validateOldCertID(req *firstCertReq, signer *x509.Certificate) *certRequestRejection {
+	oc := req.OldCertID
+	if oc == nil {
+		return nil
+	}
+	serialMatches := oc.SerialNumber != nil && signer.SerialNumber != nil &&
+		oc.SerialNumber.Cmp(signer.SerialNumber) == 0
+	issuerMatches := bytes.Equal(oc.IssuerNameDER, signer.RawIssuer)
+	if serialMatches && issuerMatches {
+		return nil
+	}
+	return &certRequestRejection{
+		CertReqID:   req.CertReqID,
+		Reason:      "controls oldCertId does not match the certificate being updated (RFC 9483 §4.1.3)",
+		FailInfoBit: pkiFailureInfoBadCertId,
+	}
 }
 
 func normalizeSequenceDER(der []byte, label string) ([]byte, error) {
