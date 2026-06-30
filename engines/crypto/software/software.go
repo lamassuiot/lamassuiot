@@ -19,10 +19,8 @@ import (
 	"io"
 
 	circlSign "cloudflare/circl/sign"
-	"cloudflare/circl/sign/mldsa/mldsa44"
-	"cloudflare/circl/sign/mldsa/mldsa65"
-	"cloudflare/circl/sign/mldsa/mldsa87"
 	"cloudflare/circl/sign/slhdsa"
+	"crypto/mldsa"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
@@ -165,19 +163,19 @@ func (p *SoftwareCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimens
 	lFunc := p.logger.WithField("func", "ML-DSA")
 	lFunc.Debugf("creating ML-DSA-%v key", dimensions)
 
-	var key crypto.Signer
-	var err error
+	var params mldsa.Parameters
 	switch dimensions {
 	case 44:
-		_, key, err = mldsa44.GenerateKey(rand.Reader)
+		params = mldsa.MLDSA44()
 	case 65:
-		_, key, err = mldsa65.GenerateKey(rand.Reader)
+		params = mldsa.MLDSA65()
 	case 87:
-		_, key, err = mldsa87.GenerateKey(rand.Reader)
+		params = mldsa.MLDSA87()
 	default:
-		err = fmt.Errorf("invalid dimensions %v", dimensions)
+		return "", nil, fmt.Errorf("invalid dimensions %v", dimensions)
 	}
 
+	key, err := mldsa.GenerateKey(params)
 	if err != nil {
 		lFunc.Errorf("could not create MLDSA key: %s", err)
 		return "", nil, err
@@ -345,6 +343,8 @@ func (p *SoftwareCryptoEngine) ParsePrivateKey(pemBytes []byte) (crypto.Signer, 
 	case *ecdsa.PrivateKey:
 		return key, nil
 	case ed25519.PrivateKey:
+		return key, nil
+	case *mldsa.PrivateKey:
 		return key, nil
 	case circlSign.PrivateKey:
 		return key, nil

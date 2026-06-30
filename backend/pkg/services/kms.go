@@ -18,6 +18,7 @@ import (
 
 	circlSign "cloudflare/circl/sign"
 	"cloudflare/circl/sign/slhdsa"
+	"crypto/mldsa"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
@@ -1064,6 +1065,8 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 			valid = ecdsa.VerifyASN1(pub, digest, input.Signature)
 		case ed25519.PublicKey:
 			valid = ed25519.Verify(pub, digest, input.Signature)
+		case *mldsa.PublicKey:
+			valid = mldsa.Verify(pub, digest, input.Signature, nil) == nil
 		case circlSign.PublicKey:
 			scheme := pub.Scheme()
 			valid = scheme.Verify(pub, digest, input.Signature, nil)
