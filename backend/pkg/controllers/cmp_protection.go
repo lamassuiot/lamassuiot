@@ -74,17 +74,25 @@ func isProtectionAlgError(err error) bool {
 func verifyRequestProtection(full rawPKIMessageFull, protectionAlg pkix.AlgorithmIdentifier, required bool) (*x509.Certificate, error) {
 	protectionAlgOID := protectionAlg.Algorithm
 
-	// Reject MAC-based protection algorithms unconditionally.
-	if protectionAlgOID.Equal(oidPasswordBasedMac) || protectionAlgOID.Equal(oidDHBasedMac) {
-		return nil, &protectionAlgError{msg: fmt.Sprintf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)}
-	}
-
+	// A protectionAlg declared in the header with NO accompanying protection
+	// value is a structural error regardless of which algorithm is named
+	// (RFC 9483 §3.2/§3.5 — missing protection → badMessageCheck). This check
+	// MUST run before the MAC-algorithm rejection below: a message that names a
+	// MAC algorithm but omits the protection value should be reported as a
+	// missing-protection error (badMessageCheck), not as an unsupported
+	// algorithm (badAlg).
 	if len(full.Protection.Bytes) == 0 {
 		if required {
 			return nil, fmt.Errorf("request protection absent: DMS configuration requires signature-protected CMP requests")
 		}
 		return nil, nil
 	}
+
+	// Reject MAC-based protection algorithms unconditionally.
+	if protectionAlgOID.Equal(oidPasswordBasedMac) || protectionAlgOID.Equal(oidDHBasedMac) {
+		return nil, &protectionAlgError{msg: fmt.Sprintf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)}
+	}
+
 	if len(full.ExtraCerts) == 0 {
 		return nil, fmt.Errorf("protection present but extraCerts is empty: cannot identify EE certificate")
 	}
@@ -361,22 +369,22 @@ func cmpProtectionAlgorithm(signer crypto.Signer) (pkix.AlgorithmIdentifier, cry
 			}, crypto.SHA256, nil
 		}
 	case *ecdsa.PublicKey:
-		// ECDSA: match hash to curve per RFC 9481 §2.
+		// ECDSA: match hash to curve per RFC 9481 §2. Per RFC 5480 §2.1.1 the
+		// ECDSA AlgorithmIdentifier MUST omit the parameters field entirely
+		// (no NULL) — RFC 9483 §3.2 enforces this for signature-based
+		// protection, and the CMP test-suite rejects any parameters here.
 		switch pub.Curve.Params().BitSize {
 		case 521:
 			return pkix.AlgorithmIdentifier{
-				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 4}, // ecdsaWithSHA512
-				Parameters: asn1.NullRawValue,
+				Algorithm: asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 4}, // ecdsaWithSHA512
 			}, crypto.SHA512, nil
 		case 384:
 			return pkix.AlgorithmIdentifier{
-				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 3}, // ecdsaWithSHA384
-				Parameters: asn1.NullRawValue,
+				Algorithm: asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 3}, // ecdsaWithSHA384
 			}, crypto.SHA384, nil
 		default: // P-256 and anything else
 			return pkix.AlgorithmIdentifier{
-				Algorithm:  asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}, // ecdsaWithSHA256
-				Parameters: asn1.NullRawValue,
+				Algorithm: asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}, // ecdsaWithSHA256
 			}, crypto.SHA256, nil
 		}
 	case ed25519.PublicKey:
