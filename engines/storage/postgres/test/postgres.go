@@ -1,14 +1,19 @@
 package postgrestest
 
 import (
+	"context"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	mobycontainer "github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/api/types/network"
+	"github.com/ory/dockertest/v4"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -36,7 +41,7 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 	}
 
 	idx := 1
-	mounts := []docker.HostMount{}
+	mounts := []mount.Mount{}
 
 	sqlStatements := ""
 	for dbName, dbInitScript := range dbs {
@@ -53,8 +58,8 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 				return nil, nil, err
 			}
 
-			mounts = append(mounts, docker.HostMount{
-				Type:   "bind",
+			mounts = append(mounts, mount.Mount{
+				Type:   mount.TypeBind,
 				Target: "/docker-entrypoint-initdb.d/" + fname,
 				Source: fullpath,
 			})
@@ -69,35 +74,32 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 		return nil, nil, err
 	}
 
-	mounts = append(mounts, docker.HostMount{
-		Type:   "bind",
+	mounts = append(mounts, mount.Mount{
+		Type:   mount.TypeBind,
 		Target: "/docker-entrypoint-initdb.d/ " + initFileName,
 		Source: initScriptFname,
 	})
 
-	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "postgres", // image
-		Tag:        "14",       // version
-		Env:        []string{"POSTGRES_PASSWORD=" + passwd},
-		Labels: map[string]string{
+	runOpts := []dockertest.RunOption{
+		dockertest.WithTag("14"),
+		dockertest.WithEnv([]string{"POSTGRES_PASSWORD=" + passwd}),
+		dockertest.WithLabels(map[string]string{
 			"group": "lamassuiot-monolithic",
-		},
-		PortBindings: map[docker.Port][]docker.PortBinding{},
-	}, func(hc *docker.HostConfig) {
-		hc.Mounts = mounts
-		hc.AutoRemove = false
+		}),
+		dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
+			hc.Mounts = mounts
+			hc.AutoRemove = false
+		}),
+	}
+	if exposeAsStandardPort {
+		runOpts = append(runOpts, dockertest.WithPortBindings(network.PortMap{
+			network.MustParsePort("5432/tcp"): []network.PortBinding{
+				{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "5432"},
+			},
+		}))
+	}
 
-		if exposeAsStandardPort {
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"5432/tcp": {
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "5432", // random port
-					},
-				},
-			}
-		}
-	})
+	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker("postgres", runOpts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -110,7 +112,7 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 
 	var gdb *gorm.DB
 	// retry until db server is ready
-	err = dockerHost.Retry(func() error {
+	err = dockerHost.Retry(context.Background(), 30*time.Second, func() error {
 		gdb, err = gorm.Open(postgres.Open(conStr), &gorm.Config{
 			Logger: gormLogger.Discard,
 		})
