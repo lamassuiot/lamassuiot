@@ -220,6 +220,10 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: siemens/cmp-test-suite
+          # Pin to the exact upstream commit the compat patch was generated
+          # against, so the patch always applies and the test set is stable.
+          # Bump this together with 0001-lamassu-compat.patch when re-syncing.
+          ref: e918ccb525fd674f8586efa0b79d2b56daec611d
           path: cmp-test-suite
 
       - name: Setup Go
