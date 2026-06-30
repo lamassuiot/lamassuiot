@@ -54,11 +54,14 @@ const (
 	pkiFailureInfoBadDataFormat      = 5  // the data submitted has the wrong format
 	pkiFailureInfoIncorrectData      = 7  // requester's data is incorrect (notary services)
 	pkiFailureInfoBadPOP             = 9  // proof-of-possession failed
+	pkiFailureInfoCertRevoked        = 10 // referenced/protection certificate is revoked
 	pkiFailureInfoBadRecipientNonce  = 13 // recipNonce did not match the expected senderNonce
 	pkiFailureInfoBadSenderNonce     = 18 // sender nonce missing or too short (RFC 9483 §3.5)
 	pkiFailureInfoBadCertTemplate    = 19 // submitted CertTemplate is incomplete or invalid
+	pkiFailureInfoSignerNotTrusted   = 20 // protection signer cert not trusted / no trust anchor (RFC 9483 §3.5)
 	pkiFailureInfoTransactionIDInUse = 21 // transactionID collides with an in-flight one (RFC 9810 §3.1)
 	pkiFailureInfoUnsupportedVersion = 22 // pvno not understood (RFC 9810 §7 / RFC 9483 §3.5)
+	pkiFailureInfoNotAuthorized      = 23 // sender not authorized for the request (RFC 9810 §3.1)
 	pkiFailureInfoSystemFailure      = 25
 	// pkiStatusWaiting is RFC 4210 §5.2.3 PKIStatus value 3, sent on the initial
 	// ip/cp/kup response in async-issuance mode to tell the EE that the

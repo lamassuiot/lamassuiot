@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -261,6 +262,14 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		// cert's subject (badMessageCheck per the RFC's failInfo mapping).
 		if rej := verifySenderMatchesProtectionCert(reqHeader.Sender, signerCert); rej != nil {
 			lFunc.Warnf("sender/subject mismatch: %s", rej.reason)
+			r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
+			return
+		}
+		// RFC 9483 §3.1: signature-based protection MUST carry senderKID equal to
+		// the protection cert's SubjectKeyIdentifier. Missing/mismatched senderKID
+		// is badMessageCheck.
+		if rej := verifySenderKIDMatchesProtectionCert(reqHeader.SenderKID, signerCert); rej != nil {
+			lFunc.Warnf("senderKID validation: %s", rej.reason)
 			r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
 			return
 		}
@@ -1404,8 +1413,14 @@ func findOctetStringInRaw(rv asn1.RawValue) ([]byte, error) {
 //
 // Per RFC 9483 §4.1, the POPO signature (if present) is a self-signature by the
 // new private key over the DER-encoded CertRequest (certReqDER). If the POPO is
+// errPOPORAVerifiedFromEE signals that the request carried a raVerified [0]
+// POPO. On this endpoint the requester authenticates as an end entity (the
+// message-protection signer), so asserting raVerified is unauthorized; the
+// caller maps this to PKIFailureInfo notAuthorized rather than badPOP.
+var errPOPORAVerifiedFromEE = errors.New("raVerified POPO not accepted from an end entity (RFC 9483 §4.1)")
+
 // absent and enforce is true the request is rejected. If raVerified [0] is set
-// the check is skipped (an authorized RA already verified possession upstream).
+// the request is rejected as notAuthorized (see errPOPORAVerifiedFromEE).
 // For KUR, POPO is proven implicitly by the message-level protection key being the
 // old cert key (RFC 9483 §4.1.3), so this function is NOT called for KUR.
 func verifyPOPO(certReqDER []byte, popoRaw asn1.RawValue, pubKeyDER []byte, enforce bool) error {
@@ -1420,8 +1435,11 @@ func verifyPOPO(certReqDER []byte, popoRaw asn1.RawValue, pubKeyDER []byte, enfo
 
 	switch {
 	case popoRaw.Class == asn1.ClassContextSpecific && popoRaw.Tag == 0:
-		// raVerified [0] NULL — an RA upstream already verified POPO; trust it.
-		return nil
+		// raVerified [0] NULL — asserts "an RA already verified POPO". On this
+		// endpoint the message-protection signer IS the requester (an EE); there
+		// is no trusted-RA path, so an EE asserting raVerified is bypassing POPO
+		// and MUST be rejected as notAuthorized (RFC 9483 §4.1 / RFC 4211 §4).
+		return errPOPORAVerifiedFromEE
 
 	case popoRaw.Class == asn1.ClassContextSpecific && popoRaw.Tag == 1:
 		// signature [1] POPOSigningKey

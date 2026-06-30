@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -69,11 +70,17 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// would be redundant (and is omitted by RFC 9483 §4.1.3).
 	if variant.verifyInnerPOPO {
 		if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, enrollOpts.EnforcePOPO); err != nil {
+			// An EE asserting raVerified is notAuthorized (RFC 9483 §4.1); every
+			// other POPO failure is badPOP.
+			failBit := pkiFailureInfoBadPOP
+			if errors.Is(err, errPOPORAVerifiedFromEE) {
+				failBit = pkiFailureInfoNotAuthorized
+			}
 			lFunc.Warnf("%s: POPO verification failed: %v", variant.logPrefix, err)
 			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
 				CertReqID:   req.CertReqID,
 				Reason:      fmt.Sprintf("proof of possession verification failed: %v", err),
-				FailInfoBit: pkiFailureInfoBadPOP,
+				FailInfoBit: failBit,
 			})
 			return
 		}
@@ -98,6 +105,14 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		wfxJobID:       wfxJobID,
 		enroll:         variant.enrollFn(r, dmsID),
 	})
+}
+
+// isRevokedCertError reports whether an enroll/reenroll error is the service's
+// "certificate is revoked" rejection. The service returns these as plain
+// fmt.Errorf strings (no sentinel), so we match on the substring; used to map
+// the failure to PKIFailureInfo certRevoked instead of systemFailure.
+func isRevokedCertError(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "revoked")
 }
 
 // enrollmentVariant captures the per-body-tag differences between ir/cr and
@@ -218,12 +233,19 @@ func (r *cmpHttpRoutes) issueAndStore(
 	cert, err := params.enroll(issuanceCtx, csr)
 	if err != nil {
 		lFunc.Errorf("enroll failed: %v", err)
-		// CA-layer rejections cover a wide range of conditions (policy
-		// violation, signing-key unavailability, revocation, etc.). Without
-		// structured error categorisation from the service layer we map all
-		// CA failures to systemFailure, which is the broadest "server-side
-		// inability to complete the request" bit (RFC 9810 §5.1.3).
-		r.rejectWithError(ctx, header, PKIStatus(2), err.Error(), dmsID, pkiFailureInfoSystemFailure)
+		// Map the few categories the service distinguishes to their RFC 9483
+		// §3.5 failInfo bits; everything else is systemFailure (the broadest
+		// "server-side inability to complete the request" bit, RFC 9810 §5.1.3).
+		failBit := pkiFailureInfoSystemFailure
+		switch {
+		case errors.Is(err, errs.ErrDMSEnrollInvalidCert):
+			// Protection signer cert did not chain to any of the DMS's
+			// ValidationCAs → the requester is not trusted.
+			failBit = pkiFailureInfoSignerNotTrusted
+		case isRevokedCertError(err):
+			failBit = pkiFailureInfoCertRevoked
+		}
+		r.rejectWithError(ctx, header, PKIStatus(2), err.Error(), dmsID, failBit)
 		return
 	}
 	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
