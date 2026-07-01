@@ -1,12 +1,9 @@
 package aws
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
@@ -15,8 +12,8 @@ import (
 
 func RunAWSEmulationLocalStackDocker(exposeAsStandardPort bool) (func() error, func() error, *AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "localstack/localstack", // image
-		Tag:        "4.10",                  // version
+		Repository: "floci/floci", // image
+		Tag:        "1.5.29",      // version
 	}, func(hc *docker.HostConfig) {
 		if exposeAsStandardPort {
 			hc.PortBindings = map[docker.Port][]docker.PortBinding{
@@ -68,18 +65,15 @@ func RunAWSEmulationLocalStackDocker(exposeAsStandardPort bool) (func() error, f
 }
 
 func cleanupBeforeTest(baseUrl string) error {
-	// Restart localstack. This is necessary because the localstack container is reused between tests.
-	// Docs say that to errase all data, a POST command can be sent to reboot and clean the data.
-	url := fmt.Sprintf("%s/_localstack/health", baseUrl)
-	payload := []byte(`{"action":"restart"}`)
+	// Reset Floci state before each test using the /_floci/state/reset endpoint
+	// available since v1.5.29, which clears all data without restarting the container.
+	url := fmt.Sprintf("%s/_floci/state/reset", baseUrl)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		fmt.Printf("Error creating request: %v\n", err)
 		return err
 	}
-
-	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -89,43 +83,9 @@ func cleanupBeforeTest(baseUrl string) error {
 	}
 	defer resp.Body.Close()
 
-	// Wait for localstack to restart. We will wait 15 seconds at most.
-	healthyChan := make(chan bool)
-	ctxTimeout, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	checkHealth := func(respChan chan bool) {
-		// If no timeout, we will wait for localstack to restart, querying its health endpoint each second
-		for {
-			select {
-			case <-ctxTimeout.Done(): // timeout. Exit the goroutine
-				return
-			default:
-				time.Sleep(1 * time.Second)
-
-				req, err = http.NewRequest("GET", url, nil)
-				if err != nil {
-					continue
-				}
-
-				resp, err = client.Do(req)
-				if err != nil {
-					continue
-				}
-
-				if condition := resp.StatusCode == http.StatusOK; condition {
-					respChan <- true
-				}
-			}
-		}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code from /_floci/state/reset: %s", resp.Status)
 	}
 
-	go checkHealth(healthyChan)
-
-	select {
-	case <-ctxTimeout.Done():
-		return fmt.Errorf("timeout waiting for localstack to restart")
-	case <-healthyChan:
-		return nil
-	}
+	return nil
 }
