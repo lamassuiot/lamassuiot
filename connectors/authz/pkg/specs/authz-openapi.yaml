@@ -2,9 +2,20 @@ openapi: 3.0.3
 info:
   title: Lamassu Authorization Service
   description: Authorization service managing principals, policies, and access control decisions.
-  version: v1
+  version: 1.0.0
+  contact:
+    name: Lamassu IoT
+    url: https://github.com/lamassuiot/lamassuiot
+  license:
+    name: Mozilla Public License 2.0
+    url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
+
+servers:
+  - url: /api/authz/v1
+    description: Authz API v1
+
 paths:
-  /v1/authz/authorize:
+  /authz/authorize:
     post:
       summary: Authorize a principal against a resource and action
       operationId: Authorize
@@ -23,7 +34,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthorizeResponse'
 
-  /v1/authz/filter:
+  /authz/filter:
     post:
       summary: Get a filter expression for list operations
       operationId: GetFilter
@@ -42,7 +53,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FilterResponse'
 
-  /v1/authz/match/authorize:
+  /authz/match/authorize:
     post:
       summary: Resolve principal from request context then authorize
       operationId: MatchAndAuthorize
@@ -61,7 +72,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthorizeResponse'
 
-  /v1/authz/match/filter:
+  /authz/match/filter:
     post:
       summary: Resolve principal from request context then return a filter expression
       operationId: MatchAndGetFilter
@@ -80,7 +91,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FilterResponse'
 
-  /v1/authz/http/check:
+  /authz/http/check:
     post:
       summary: Check HTTP request authorization (ext_authz compatible)
       operationId: CheckHTTP
@@ -95,7 +106,7 @@ paths:
         '200':
           description: Authorization decision
 
-  /v1/authz/match/http/check:
+  /authz/match/http/check:
     post:
       summary: Resolve principal then check HTTP request authorization
       operationId: MatchAndCheckHTTP
@@ -110,7 +121,7 @@ paths:
         '200':
           description: Authorization decision
 
-  /v1/authz/capabilities/global:
+  /authz/capabilities/global:
     post:
       summary: Get global capabilities for a principal
       operationId: GetGlobalCapabilities
@@ -129,7 +140,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CapabilitiesResponse'
 
-  /v1/authz/match/capabilities/global:
+  /authz/match/capabilities/global:
     post:
       summary: Resolve principal then get global capabilities
       operationId: MatchAndGetGlobalCapabilities
@@ -148,7 +159,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CapabilitiesResponse'
 
-  /v1/authz/capabilities/entity:
+  /authz/capabilities/entity:
     post:
       summary: Get capabilities for a principal on a specific entity
       operationId: GetEntityCapabilities
@@ -167,7 +178,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CapabilitiesResponse'
 
-  /v1/authz/match/capabilities/entity:
+  /authz/match/capabilities/entity:
     post:
       summary: Resolve principal then get entity capabilities
       operationId: MatchAndGetEntityCapabilities
@@ -186,7 +197,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CapabilitiesResponse'
 
-  /v1/principals:
+  /principals:
     get:
       summary: List principals
       operationId: ListPrincipals
@@ -218,7 +229,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Principal'
 
-  /v1/principals/{id}:
+  /principals/{id}:
     get:
       summary: Get a principal by ID
       operationId: GetPrincipal
@@ -273,7 +284,7 @@ paths:
         '204':
           description: Deleted
 
-  /v1/principals/{id}/policies:
+  /principals/{id}/policies:
     get:
       summary: Get policies granted to a principal
       operationId: GetPrincipalPolicies
@@ -313,7 +324,7 @@ paths:
         '200':
           description: Grant result
 
-  /v1/principals/{id}/policies/{policyId}:
+  /principals/{id}/policies/{policyId}:
     delete:
       summary: Revoke a policy from a principal
       operationId: RevokePolicy
@@ -333,7 +344,7 @@ paths:
         '204':
           description: Revoked
 
-  /v1/policies:
+  /policies:
     get:
       summary: List policies
       operationId: ListPolicies
@@ -365,7 +376,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
 
-  /v1/policies/search:
+  /policies/search:
     get:
       summary: Search policies
       operationId: SearchPolicies
@@ -385,7 +396,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Policy'
 
-  /v1/policies/{id}:
+  /policies/{id}:
     get:
       summary: Get a policy by ID
       operationId: GetPolicy
@@ -440,7 +451,7 @@ paths:
         '204':
           description: Deleted
 
-  /v1/policies/{id}/stats:
+  /policies/{id}/stats:
     get:
       summary: Get usage statistics for a policy
       operationId: GetPolicyStats
@@ -455,7 +466,7 @@ paths:
         '200':
           description: Policy statistics
 
-  /v1/schemas:
+  /schemas:
     get:
       summary: List available authorization schemas
       operationId: GetSchemas
