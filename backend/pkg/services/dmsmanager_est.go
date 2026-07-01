@@ -283,9 +283,11 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
+	estAuthOpts := enrollSettings.EnrollmentOptionsESTRFC7030
 
-	if enrollSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.EnrollmentAuthMode(identityextractors.IdentityExtractorClientCertificate) {
-		lFunc = lFunc.WithField("auth-method", identityextractors.IdentityExtractorClientCertificate)
+	switch estAuthOpts.AuthMode {
+	case models.EnrollmentAuthModeClientCertificate, models.EnrollmentAuthModeClientCertificateAndWebhook:
+		lFunc = lFunc.WithField("auth-method", estAuthOpts.AuthMode)
 		clientCerts, _ := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).([]*x509.Certificate)
 		if len(clientCerts) == 0 {
 			lFunc.Errorf("aborting reenrollment. No client certificate was presented")
@@ -357,14 +359,16 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		}
 
 		//Check if EXPIRED
-		now := time.Now()
-		if now.After(clientCert.NotAfter) {
-			if reEnrollSettings.EnableExpiredRenewal {
-				lFunc.Warnf("presented an expired certificate: %s", now.Sub(clientCert.NotBefore))
-			} else {
-				lFunc = lFunc.WithField("auth-status", "failed")
-				lFunc.Errorf("aborting reenrollment. device has a valid but expired certificate")
-				return nil, fmt.Errorf("expired certificate")
+		{
+			now := time.Now()
+			if now.After(clientCert.NotAfter) {
+				if reEnrollSettings.EnableExpiredRenewal {
+					lFunc.Warnf("presented an expired certificate: %s", now.Sub(clientCert.NotBefore))
+				} else {
+					lFunc = lFunc.WithField("auth-status", "failed")
+					lFunc.Errorf("aborting reenrollment. device has a valid but expired certificate")
+					return nil, fmt.Errorf("expired certificate")
+				}
 			}
 		}
 
@@ -388,7 +392,21 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		} else {
 			lFunc.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
 		}
-	} else {
+
+		if estAuthOpts.AuthMode == models.EnrollmentAuthModeClientCertificateAndWebhook {
+			lFunc.Infof("combined auth: client certificate validated. Starting webhook validation (step 2/2)")
+			if err := invokeWebhook(ctx, lFunc, estAuthOpts.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
+				return nil, err
+			}
+		}
+
+	case models.EnrollmentAuthModeExternalWebhook:
+		lFunc = lFunc.WithField("auth-method", models.EnrollmentAuthModeExternalWebhook)
+		if err := invokeWebhook(ctx, lFunc, estAuthOpts.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
+			return nil, err
+		}
+
+	default:
 		lFunc.Warnf("allowing reenroll: using NO AUTH mode")
 	}
 
