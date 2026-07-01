@@ -236,18 +236,12 @@ if [ ! -x "venv-cmp-tests/bin/robot" ]; then
     python3 -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml","rb"))["project"]["dependencies"]))' \
         > "${REQS_FILE}" \
         || die "Could not extract dependencies from pyproject.toml"
-    # The suite imports pq_logic during suite setup even when PQ tests are
-    # excluded (--exclude pqc): keywords.resource's setup constructs hybrid
-    # PKIMessages via pq_logic, which dereferences oqs.StatefulSignature. Without
-    # the liboqs binding, `oqs` is None and suite setup dies with
-    # "'NoneType' object has no attribute 'StatefulSignature'", which also
-    # prevents DEFAULT_PROTECTION_VALS from being set and cascades into
-    # "variable not found" across every suite. liboqs-python is declared only in
-    # the optional [pq] extra (as a source build of a git fork); the PyPI wheel
-    # 0.15.0 provides StatefulSignature with no cmake/toolchain build, so pin it
-    # here to match a known-good venv. Bump alongside the suite ref if needed.
-    echo "liboqs-python==0.15.0" >> "${REQS_FILE}"
-    log "Installing $(grep -c . "${REQS_FILE}") runtime dependencies (no project build)"
+    # Note: liboqs (post-quantum) is deliberately NOT installed. The suite's
+    # global setup loads stateful PQ keys, which would require the liboqs binding
+    # (and trigger a full liboqs source build on first import). The compat patch
+    # makes that load best-effort so the classical suite runs PQ-free; PQ tests
+    # are excluded at runtime via --exclude pqc.
+    log "Installing $(grep -c . "${REQS_FILE}") runtime dependencies (no project build, no PQ)"
     # Prefer uv for speed; fall back to plain pip. Both are given a plain
     # requirements file, so neither attempts to build cmp-test-suite.
     if pip install --quiet uv && uv pip install -r "${REQS_FILE}"; then
