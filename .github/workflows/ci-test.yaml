@@ -33,6 +33,8 @@ jobs:
             tag: crypto-filesystem
           - path: engines/crypto/vaultkv2
             tag: crypto-vaultkv2
+          - path: engines/crypto/azure
+            tag: crypto-azure
           - path: engines/eventbus/amqp
             tag: eventbus-amqp
           - path: engines/eventbus/aws
