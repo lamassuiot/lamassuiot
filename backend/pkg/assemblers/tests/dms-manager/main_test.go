@@ -3403,9 +3403,6 @@ func TestESTReEnroll(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.EnrollmentAuthModeClientCertificate,
-					},
 					RevokeOnReEnrollment:        true,
 					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
@@ -4023,8 +4020,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeExternalWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeExternalWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4085,8 +4082,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": false})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeExternalWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeExternalWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4144,8 +4141,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4205,8 +4202,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": false})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4267,8 +4264,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4332,8 +4329,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeClientCertificateAndWebhook
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4378,7 +4375,7 @@ func TestESTReEnroll(t *testing.T) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
-						in.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeNoAuth
+						in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.EnrollmentAuthModeNoAuth
 					},
 					"1m",
 				)
@@ -4417,21 +4414,14 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
-				})
-				if err != nil {
-					t.Fatalf("could not clear reenroll auth settings: %s", err)
-				}
-
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
+				// CLIENT_CERTIFICATE auth is configured but no cert is presented — must be rejected
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
 					AdditionalPathSegment: dms.ID,
-					Certificates:          []*x509.Certificate{deviceCrt},
-					PrivateKey:            deviceKey,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
 					InsecureSkipVerify:    true,
 				}
 
