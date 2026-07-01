@@ -23,7 +23,7 @@ const (
 func RunAzureEmulationFlociAZDocker(exposeAsStandardPort bool) (func() error, func() error, *AzureSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "floci/floci-az",
-		Tag:        "latest",
+		Tag:        "0.8.0",
 	}, func(hc *docker.HostConfig) {
 		if exposeAsStandardPort {
 			hc.PortBindings = map[docker.Port][]docker.PortBinding{
