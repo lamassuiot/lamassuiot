@@ -48,6 +48,8 @@ func TestNewAzureKeyVaultEngine(t *testing.T) {
 }
 
 func TestAzureKeyVaultCryptoEngine(t *testing.T) {
+	t.Skip("Azure Key Vault not yet supported by floci-az emulator")
+
 	cleanupBeforeTest, engine, err := prepareKeyVaultCryptoEngine(t)
 	if err != nil {
 		t.Fatalf("Error preparing Key Vault engine: %v", err)
