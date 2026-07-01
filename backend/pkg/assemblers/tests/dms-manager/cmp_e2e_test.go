@@ -211,6 +211,11 @@ func cmpRunEnroll(ctx context.Context, serverAddr, dmsID, signerKey, signerCert,
 	args := []string{
 		"cmp",
 		"-server", serverAddr,
+		// -tls_used is required by OpenSSL 3.0.x when the -server URL is https;
+		// OpenSSL >=3.2 assumes it automatically. We don't authenticate the TLS
+		// server (no -tls_trusted), so this just enables the HTTPS transport and
+		// keeps the invocation portable across openssl versions.
+		"-tls_used",
 		"-path", "/.well-known/cmp/p/" + dmsID,
 		"-cmd", "ir",
 		"-cert", signerCert,
@@ -517,6 +522,9 @@ func cmpRunKUR(ctx context.Context, serverAddr, dmsID, existingCertPath, existin
 	args := []string{
 		"cmp",
 		"-server", serverAddr,
+		// See cmpRunEnroll: -tls_used keeps the https transport working on
+		// OpenSSL 3.0.x, which errors without it.
+		"-tls_used",
 		"-path", "/.well-known/cmp/p/" + dmsID,
 		"-cmd", "kur",
 		"-cert", existingCertPath,
