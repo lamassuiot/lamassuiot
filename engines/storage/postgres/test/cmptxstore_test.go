@@ -2,8 +2,10 @@ package postgrestest
 
 import (
 	"context"
+	"crypto/elliptic"
 	"encoding/hex"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,10 +13,43 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// cmpTxTestMaterial lazily builds a real self-signed certificate and matching
+// CSR once for the whole package. The CMPTransaction Certificate/CSR fields
+// round-trip through PEM in the store (String()/Scan()), so the test data must
+// be parseable X.509 material rather than arbitrary bytes.
+var (
+	cmpTxTestMaterialOnce sync.Once
+	cmpTxTestCert         *models.X509Certificate
+	cmpTxTestCSR          *models.X509CertificateRequest
+	cmpTxTestSerial       string
+)
+
+func cmpTxTestMaterial() (*models.X509Certificate, *models.X509CertificateRequest, string) {
+	cmpTxTestMaterialOnce.Do(func() {
+		key, err := helpers.GenerateECDSAKey(elliptic.P256())
+		if err != nil {
+			panic(fmt.Sprintf("cmptx test setup: generate key: %s", err))
+		}
+		crt, err := helpers.GenerateSelfSignedCertificate(key, "cmp-tx-test")
+		if err != nil {
+			panic(fmt.Sprintf("cmptx test setup: self-signed cert: %s", err))
+		}
+		csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "cmp-tx-test"}, key)
+		if err != nil {
+			panic(fmt.Sprintf("cmptx test setup: csr: %s", err))
+		}
+		cmpTxTestCert = (*models.X509Certificate)(crt)
+		cmpTxTestCSR = (*models.X509CertificateRequest)(csr)
+		cmpTxTestSerial = fmt.Sprintf("%x", crt.SerialNumber)
+	})
+	return cmpTxTestCert, cmpTxTestCSR, cmpTxTestSerial
+}
 
 func setupCMPTxRepo(t *testing.T) (storage.CMPTransactionRepo, func()) {
 	t.Helper()
@@ -31,14 +66,16 @@ func setupCMPTxRepo(t *testing.T) (storage.CMPTransactionRepo, func()) {
 }
 
 func newTx(txID, dmsID string, ttl time.Duration) storage.CMPTransaction {
+	cert, _, serial := cmpTxTestMaterial()
 	return storage.CMPTransaction{
-		TransactionID: txID,
-		DMSID:         dmsID,
-		CertDER:       []byte("fake-cert-der"),
-		SentNonce:     []byte("fake-nonce-16byt"),
-		State:         storage.CMPTransactionStateIssued,
-		ExpiresAt:     time.Now().Add(ttl),
-		CreatedAt:     time.Now(),
+		TransactionID:    txID,
+		DMSID:            dmsID,
+		CertSerialNumber: serial,
+		Certificate:      cert,
+		SentNonce:        hex.EncodeToString([]byte("fake-nonce-16byt")),
+		State:            storage.CMPTransactionStateIssued,
+		ExpiresAt:        time.Now().Add(ttl),
+		CreatedAt:        time.Now(),
 	}
 }
 
@@ -46,13 +83,14 @@ func newTx(txID, dmsID string, ttl time.Duration) storage.CMPTransaction {
 // worker path: cert is not yet issued, the row carries the CSR DER the worker
 // will hand to LWCEnroll/LWCReenroll once it picks the row up.
 func newPendingTx(txID, dmsID string, ttl time.Duration) storage.CMPTransaction {
+	_, csr, _ := cmpTxTestMaterial()
 	return storage.CMPTransaction{
 		TransactionID:  txID,
 		DMSID:          dmsID,
-		CertDER:        nil,
-		SentNonce:      []byte("fake-nonce-16byt"),
+		Certificate:    nil,
+		SentNonce:      hex.EncodeToString([]byte("fake-nonce-16byt")),
 		State:          storage.CMPTransactionStatePending,
-		CSRDER:         []byte("fake-csr-der"),
+		CSR:            csr,
 		IsReenrollment: false,
 		ExpiresAt:      time.Now().Add(ttl),
 		CreatedAt:      time.Now(),
@@ -75,7 +113,8 @@ func TestCMPTx_InsertAndSelectAndDelete(t *testing.T) {
 	assert.True(t, ok, "should find the transaction")
 	assert.Equal(t, txID, got.TransactionID)
 	assert.Equal(t, "dms-a", got.DMSID)
-	assert.Equal(t, tx.CertDER, got.CertDER)
+	require.NotNil(t, got.Certificate, "issued row must carry the certificate")
+	assert.Equal(t, tx.Certificate.Raw, got.Certificate.Raw)
 	assert.Equal(t, tx.SentNonce, got.SentNonce)
 }
 
@@ -183,10 +222,10 @@ func TestCMPTx_LifecycleRetryAfterCertConf(t *testing.T) {
 		"after certConf consumed the row the same txID must be reusable")
 }
 
-// TestCMPTx_LifecycleRetryAfterExpiryAndCleanup documents that an expired
-// pending transaction is only reclaimed by DeleteExpired:
+// TestCMPTx_LifecycleRetryAfterExpiryAndCleanup documents how an expired
+// transaction slot is eventually reclaimed so its txID becomes reusable:
 //
-//  1. EE sends ir → row inserted with a short TTL.
+//  1. EE sends ir → PENDING row inserted with a short TTL.
 //  2. EE retries while the row is still live → rejected (duplicate).
 //  3. TTL elapses. The row is invisible to Exists and SelectAndDelete (both
 //     filter by expires_at > now()), so the controller's early duplicate
@@ -194,7 +233,10 @@ func TestCMPTx_LifecycleRetryAfterCertConf(t *testing.T) {
 //     the table, so Insert continues to report ErrCMPTransactionAlreadyExists.
 //     This is the documented controller-side behavior: stale tx IDs must be
 //     garbage-collected before they can be reused.
-//  4. DeleteExpired purges the expired row.
+//  4. The confirmation monitor transitions the expired PENDING row to
+//     ISSUE_FAILED (so the rejection stays auditable). DeleteExpired only
+//     sweeps expired ISSUE_FAILED rows, so once that row's retention TTL has
+//     also lapsed the janitor purges it.
 //  5. The EE retries → Insert now succeeds.
 func TestCMPTx_LifecycleRetryAfterExpiryAndCleanup(t *testing.T) {
 	repo, cleanup := setupCMPTxRepo(t)
@@ -206,10 +248,10 @@ func TestCMPTx_LifecycleRetryAfterExpiryAndCleanup(t *testing.T) {
 
 	// 1) initial IR with a deliberately short TTL so the test does not have
 	// to wait minutes for the row to expire.
-	require.NoError(t, repo.Insert(ctx, newTx(txID, "dms-life-e", ttl)))
+	require.NoError(t, repo.Insert(ctx, newPendingTx(txID, "dms-life-e", ttl)))
 
 	// 2) replay during the live window.
-	err := repo.Insert(ctx, newTx(txID, "dms-life-e", ttl))
+	err := repo.Insert(ctx, newPendingTx(txID, "dms-life-e", ttl))
 	require.ErrorIs(t, err, errs.ErrCMPTransactionAlreadyExists,
 		"replay while the original tx is still live must be rejected")
 
@@ -227,15 +269,22 @@ func TestCMPTx_LifecycleRetryAfterExpiryAndCleanup(t *testing.T) {
 
 	// …but the PK still blocks a fresh Insert with the same txID until the
 	// janitor runs. This is what makes DeleteExpired load-bearing.
-	err = repo.Insert(ctx, newTx(txID, "dms-life-e", 5*time.Minute))
+	err = repo.Insert(ctx, newPendingTx(txID, "dms-life-e", 5*time.Minute))
 	require.ErrorIs(t, err, errs.ErrCMPTransactionAlreadyExists,
 		"expired-but-not-purged row must still block re-insertion of the same PK")
 
-	// 4) janitor reclaims the slot.
+	// 4a) the confirmation monitor transitions the expired PENDING row to
+	// ISSUE_FAILED. DeleteExpired only reclaims expired ISSUE_FAILED rows, so
+	// give it a retention TTL that is already in the past.
+	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssueFailed, nil, "expired before confirmation", time.Now().Add(-1*time.Second))
+	require.NoError(t, err)
+	require.True(t, updated, "monitor must be able to transition the expired PENDING row")
+
+	// 4b) janitor reclaims the slot.
 	require.NoError(t, repo.DeleteExpired(ctx))
 
 	// 5) retry now succeeds.
-	require.NoError(t, repo.Insert(ctx, newTx(txID, "dms-life-e", 5*time.Minute)),
+	require.NoError(t, repo.Insert(ctx, newPendingTx(txID, "dms-life-e", 5*time.Minute)),
 		"after DeleteExpired the txID must be reusable")
 }
 
@@ -244,8 +293,8 @@ func TestCMPTx_LifecycleRetryAfterExpiryAndCleanup(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestCMPTx_InsertPendingHasNoCert verifies that a PENDING row is accepted
-// even when CertDER is empty (cert hasn't been issued yet) and Select returns
-// it with the correct state.
+// even when the certificate is unset (cert hasn't been issued yet) and Select
+// returns it with the correct state.
 func TestCMPTx_InsertPendingHasNoCert(t *testing.T) {
 	repo, cleanup := setupCMPTxRepo(t)
 	defer cleanup()
@@ -259,8 +308,8 @@ func TestCMPTx_InsertPendingHasNoCert(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, storage.CMPTransactionStatePending, got.State)
-	assert.Empty(t, got.CertDER, "PENDING row must have no cert yet")
-	assert.NotEmpty(t, got.CSRDER, "PENDING row must carry the CSR for the worker")
+	assert.Nil(t, got.Certificate, "PENDING row must have no cert yet")
+	assert.NotNil(t, got.CSR, "PENDING row must carry the CSR for the worker")
 	assert.False(t, got.IsReenrollment)
 }
 
@@ -310,14 +359,17 @@ func TestCMPTx_UpdateStateToIssued(t *testing.T) {
 	txID := hex.EncodeToString([]byte("tx-pend→issued"))
 	require.NoError(t, repo.Insert(ctx, newPendingTx(txID, "dms-async", 5*time.Minute)))
 
-	issuedCertDER := []byte("issued-cert-der-from-CA")
-	require.NoError(t, repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssued, issuedCertDER, ""))
+	issuedCert, _, _ := cmpTxTestMaterial()
+	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssued, issuedCert, "", time.Now().Add(5*time.Minute))
+	require.NoError(t, err)
+	require.True(t, updated, "UpdateState must report the row as updated")
 
 	got, ok, err := repo.Select(ctx, txID)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, storage.CMPTransactionStateIssued, got.State)
-	assert.Equal(t, issuedCertDER, got.CertDER, "cert must be written into the row by UpdateState")
+	require.NotNil(t, got.Certificate, "cert must be written into the row by UpdateState")
+	assert.Equal(t, issuedCert.Raw, got.Certificate.Raw, "cert must be written into the row by UpdateState")
 	assert.Empty(t, got.ErrorMessage)
 }
 
@@ -333,21 +385,25 @@ func TestCMPTx_UpdateStateToFailed(t *testing.T) {
 	require.NoError(t, repo.Insert(ctx, newPendingTx(txID, "dms-async", 5*time.Minute)))
 
 	reason := "CA returned: profile validation failed"
-	require.NoError(t, repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssueFailed, nil, reason))
+	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssueFailed, nil, reason, time.Now().Add(5*time.Minute))
+	require.NoError(t, err)
+	require.True(t, updated, "UpdateState must report the row as updated")
 
 	got, ok, err := repo.Select(ctx, txID)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, storage.CMPTransactionStateIssueFailed, got.State)
-	assert.Empty(t, got.CertDER, "ISSUE_FAILED rows have no cert")
+	assert.Nil(t, got.Certificate, "ISSUE_FAILED rows have no cert")
 	assert.Equal(t, reason, got.ErrorMessage)
 }
 
-// TestCMPTx_UpdateState_IgnoresExpiredRow verifies that the worker's late
-// write doesn't resurrect a row the janitor has already cleaned up. This is
-// the race between DeleteExpired and the worker that prompted the
-// "silently no-op when row is gone" contract.
-func TestCMPTx_UpdateState_IgnoresExpiredRow(t *testing.T) {
+// TestCMPTx_UpdateState_TransitionsExpiredRow verifies UpdateState's documented
+// contract: it is keyed solely by transaction_id and does NOT filter on expiry.
+// This is what lets the confirmation monitor transition an expired PENDING row
+// to ISSUE_FAILED (with a fresh retention TTL) so the rejection stays auditable
+// and a later pollReq can surface the reason. Callers that need a staleness
+// precondition enforce it at the service layer, not here.
+func TestCMPTx_UpdateState_TransitionsExpiredRow(t *testing.T) {
 	repo, cleanup := setupCMPTxRepo(t)
 	defer cleanup()
 
@@ -355,14 +411,19 @@ func TestCMPTx_UpdateState_IgnoresExpiredRow(t *testing.T) {
 	txID := hex.EncodeToString([]byte("tx-update-after-expiry"))
 	require.NoError(t, repo.Insert(ctx, newPendingTx(txID, "dms-async", -1*time.Second)))
 
-	// Row is already past expiry. UpdateState must return nil (no-op) without
-	// either resurrecting the row or returning an error.
-	require.NoError(t, repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssued, []byte("late-cert"), ""))
-
-	// And Select must continue to report the row as gone (expired).
-	_, ok, err := repo.Select(ctx, txID)
+	// The row is already past expiry. UpdateState must still transition it —
+	// here to ISSUE_FAILED with a fresh TTL, exactly as the monitor does.
+	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssueFailed, nil, "expired before confirmation", time.Now().Add(5*time.Minute))
 	require.NoError(t, err)
-	assert.False(t, ok)
+	assert.True(t, updated, "UpdateState must transition the row regardless of prior expiry")
+
+	// ISSUE_FAILED is a terminal state and is visible regardless of expiry, so
+	// Select now returns the row carrying the recorded failure reason.
+	got, ok, err := repo.Select(ctx, txID)
+	require.NoError(t, err)
+	require.True(t, ok, "terminal ISSUE_FAILED row must be visible after transition")
+	assert.Equal(t, storage.CMPTransactionStateIssueFailed, got.State)
+	assert.Equal(t, "expired before confirmation", got.ErrorMessage)
 }
 
 // TestCMPTx_SelectPending_ReturnsOldestFirst verifies the worker's queue
@@ -404,7 +465,8 @@ func TestCMPTx_SelectPending_IgnoresNonPendingAndExpired(t *testing.T) {
 
 	failedTx := newPendingTx(hex.EncodeToString([]byte("failed")), "dms-async", 5*time.Minute)
 	require.NoError(t, repo.Insert(ctx, failedTx))
-	require.NoError(t, repo.UpdateState(ctx, failedTx.TransactionID, storage.CMPTransactionStateIssueFailed, nil, "nope"))
+	_, err := repo.UpdateState(ctx, failedTx.TransactionID, storage.CMPTransactionStateIssueFailed, nil, "nope", time.Now().Add(5*time.Minute))
+	require.NoError(t, err)
 
 	alive := newPendingTx(hex.EncodeToString([]byte("alive-pending")), "dms-async", 5*time.Minute)
 	require.NoError(t, repo.Insert(ctx, alive))

@@ -139,7 +139,7 @@ func nowExpr(db *gorm.DB) string {
 // so the controller can respond with PKIFailureInfo transactionIdInUse (21).
 //
 // The caller chooses the initial state by setting tx.State. Sync issuance sets
-// ISSUED with CertDER populated; async issuance sets PENDING with CSRDER + the
+// ISSUED with Certificate populated; async issuance sets PENDING with CSR + the
 // IsReenrollment flag so the worker can later finish issuance.
 func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.CMPTransaction) error {
 	state := tx.State
