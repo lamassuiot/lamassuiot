@@ -166,26 +166,7 @@ func (p *AzureKeyVaultCryptoEngine) CreateRSAPrivateKey(ctx context.Context, key
 		return "", nil, fmt.Errorf("creating RSA key in Key Vault: %w", err)
 	}
 
-	keyName := resp.Key.KID.Name()
-	keyVersion := resp.Key.KID.Version()
-	signer, err := newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
-	if err != nil {
-		return "", nil, err
-	}
-
-	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(signer.Public())
-	if err != nil {
-		return "", nil, fmt.Errorf("encoding public key digest: %w", err)
-	}
-
-	_, err = p.keyVaultCli.UpdateKey(ctx, keyName, keyVersion, azkeys.UpdateKeyParameters{
-		Tags: map[string]*string{lamassuIDTag: &keyID},
-	}, nil)
-	if err != nil {
-		lAzureKV.Warnf("could not tag Key Vault key %s with lamassu ID: %s", keyName, err)
-	}
-
-	return keyID, signer, nil
+	return p.registerCreatedKey(ctx, resp.Key.KID)
 }
 
 func (p *AzureKeyVaultCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
@@ -207,26 +188,7 @@ func (p *AzureKeyVaultCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, c
 		return "", nil, fmt.Errorf("creating ECDSA key in Key Vault: %w", err)
 	}
 
-	keyName := resp.Key.KID.Name()
-	keyVersion := resp.Key.KID.Version()
-	signer, err := newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
-	if err != nil {
-		return "", nil, err
-	}
-
-	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(signer.Public())
-	if err != nil {
-		return "", nil, fmt.Errorf("encoding public key digest: %w", err)
-	}
-
-	_, err = p.keyVaultCli.UpdateKey(ctx, keyName, keyVersion, azkeys.UpdateKeyParameters{
-		Tags: map[string]*string{lamassuIDTag: &keyID},
-	}, nil)
-	if err != nil {
-		lAzureKV.Warnf("could not tag Key Vault key %s with lamassu ID: %s", keyName, err)
-	}
-
-	return keyID, signer, nil
+	return p.registerCreatedKey(ctx, resp.Key.KID)
 }
 
 func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
@@ -312,6 +274,32 @@ func (p *AzureKeyVaultCryptoEngine) DeleteKey(keyID string) error {
 		return fmt.Errorf("deleting key %s from Key Vault: %w", keyName, err)
 	}
 	return nil
+}
+
+// registerCreatedKey builds a signer for the newly created key, computes its
+// Lamassu ID, and tags the Key Vault key so it can be looked up later.
+func (p *AzureKeyVaultCryptoEngine) registerCreatedKey(ctx context.Context, kid *azkeys.ID) (string, crypto.Signer, error) {
+	keyName := kid.Name()
+	keyVersion := kid.Version()
+
+	signer, err := newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
+	if err != nil {
+		return "", nil, err
+	}
+
+	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(signer.Public())
+	if err != nil {
+		return "", nil, fmt.Errorf("encoding public key digest: %w", err)
+	}
+
+	_, err = p.keyVaultCli.UpdateKey(ctx, keyName, keyVersion, azkeys.UpdateKeyParameters{
+		Tags: map[string]*string{lamassuIDTag: &keyID},
+	}, nil)
+	if err != nil {
+		lAzureKV.Warnf("could not tag Key Vault key %s with lamassu ID: %s", keyName, err)
+	}
+
+	return keyID, signer, nil
 }
 
 // ---- helpers ----
