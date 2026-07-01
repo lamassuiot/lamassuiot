@@ -14,8 +14,14 @@ import (
 )
 
 func GetAzureCredential(conf AzureSDKConfig) (azcore.TokenCredential, error) {
+	if conf.TenantID == "" || conf.ClientID == "" {
+		return nil, fmt.Errorf("tenant ID and client ID are required to authenticate")
+	}
 	switch conf.AzureAuthenticationMethod {
 	case Secret:
+		if conf.ClientSecret == "" {
+			return nil, fmt.Errorf("client secret is required for secret authentication method")
+		}
 		return azidentity.NewClientSecretCredential(
 			conf.TenantID,
 			conf.ClientID,
@@ -23,7 +29,11 @@ func GetAzureCredential(conf AzureSDKConfig) (azcore.TokenCredential, error) {
 			nil,
 		)
 
+	// Only RSA is supported for now by the azidentity package
 	case Certificate:
+		if conf.CertificatePath == "" || conf.KeyPath == "" {
+			return nil, fmt.Errorf("certificate and key paths are required for certificate authentication method")
+		}
 		certPEM, err := os.ReadFile(conf.CertificatePath)
 		if err != nil {
 			return nil, fmt.Errorf("reading certificate file: %w", err)
