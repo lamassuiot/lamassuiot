@@ -5,6 +5,7 @@ import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 type AzureAuthenticationMethod string
 
 const (
+	Default     AzureAuthenticationMethod = "default"
 	Secret      AzureAuthenticationMethod = "secret"
 	Certificate AzureAuthenticationMethod = "certificate"
 	Emulator    AzureAuthenticationMethod = "emulator"

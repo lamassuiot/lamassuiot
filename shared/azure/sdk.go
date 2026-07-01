@@ -52,6 +52,9 @@ func GetAzureCredential(conf AzureSDKConfig) (azcore.TokenCredential, error) {
 			nil,
 		)
 
+	case Default:
+		return azidentity.NewDefaultAzureCredential(nil)
+
 	case Emulator:
 		// floci-az (and Azurite) run in dev mode: all credentials are accepted
 		// without validation. Return a no-op credential that satisfies the
