@@ -1,0 +1,597 @@
+openapi: 3.0.3
+info:
+  title: Lamassu Authorization Service
+  description: Authorization service managing principals, policies, and access control decisions.
+  version: v1
+paths:
+  /v1/authz/authorize:
+    post:
+      summary: Authorize a principal against a resource and action
+      operationId: Authorize
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizeRequest'
+      responses:
+        '200':
+          description: Authorization decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizeResponse'
+
+  /v1/authz/filter:
+    post:
+      summary: Get a filter expression for list operations
+      operationId: GetFilter
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FilterRequest'
+      responses:
+        '200':
+          description: Filter expression
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilterResponse'
+
+  /v1/authz/match/authorize:
+    post:
+      summary: Resolve principal from request context then authorize
+      operationId: MatchAndAuthorize
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchAuthorizeRequest'
+      responses:
+        '200':
+          description: Authorization decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizeResponse'
+
+  /v1/authz/match/filter:
+    post:
+      summary: Resolve principal from request context then return a filter expression
+      operationId: MatchAndGetFilter
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchFilterRequest'
+      responses:
+        '200':
+          description: Filter expression
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilterResponse'
+
+  /v1/authz/http/check:
+    post:
+      summary: Check HTTP request authorization (ext_authz compatible)
+      operationId: CheckHTTP
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTTPCheckRequest'
+      responses:
+        '200':
+          description: Authorization decision
+
+  /v1/authz/match/http/check:
+    post:
+      summary: Resolve principal then check HTTP request authorization
+      operationId: MatchAndCheckHTTP
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTTPCheckRequest'
+      responses:
+        '200':
+          description: Authorization decision
+
+  /v1/authz/capabilities/global:
+    post:
+      summary: Get global capabilities for a principal
+      operationId: GetGlobalCapabilities
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilitiesRequest'
+      responses:
+        '200':
+          description: Global capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilitiesResponse'
+
+  /v1/authz/match/capabilities/global:
+    post:
+      summary: Resolve principal then get global capabilities
+      operationId: MatchAndGetGlobalCapabilities
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchCapabilitiesRequest'
+      responses:
+        '200':
+          description: Global capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilitiesResponse'
+
+  /v1/authz/capabilities/entity:
+    post:
+      summary: Get capabilities for a principal on a specific entity
+      operationId: GetEntityCapabilities
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityCapabilitiesRequest'
+      responses:
+        '200':
+          description: Entity capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilitiesResponse'
+
+  /v1/authz/match/capabilities/entity:
+    post:
+      summary: Resolve principal then get entity capabilities
+      operationId: MatchAndGetEntityCapabilities
+      tags: [Authorization]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchEntityCapabilitiesRequest'
+      responses:
+        '200':
+          description: Entity capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilitiesResponse'
+
+  /v1/principals:
+    get:
+      summary: List principals
+      operationId: ListPrincipals
+      tags: [Principals]
+      responses:
+        '200':
+          description: List of principals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Principal'
+    post:
+      summary: Create a principal
+      operationId: CreatePrincipal
+      tags: [Principals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Principal'
+      responses:
+        '201':
+          description: Created principal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Principal'
+
+  /v1/principals/{id}:
+    get:
+      summary: Get a principal by ID
+      operationId: GetPrincipal
+      tags: [Principals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Principal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Principal'
+    put:
+      summary: Update a principal
+      operationId: UpdatePrincipal
+      tags: [Principals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Principal'
+      responses:
+        '200':
+          description: Updated principal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Principal'
+    delete:
+      summary: Delete a principal
+      operationId: DeletePrincipal
+      tags: [Principals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /v1/principals/{id}/policies:
+    get:
+      summary: Get policies granted to a principal
+      operationId: GetPrincipalPolicies
+      tags: [Principals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Policy'
+    post:
+      summary: Grant a policy to a principal
+      operationId: GrantPolicy
+      tags: [Principals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantPolicyRequest'
+      responses:
+        '200':
+          description: Grant result
+
+  /v1/principals/{id}/policies/{policyId}:
+    delete:
+      summary: Revoke a policy from a principal
+      operationId: RevokePolicy
+      tags: [Principals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Revoked
+
+  /v1/policies:
+    get:
+      summary: List policies
+      operationId: ListPolicies
+      tags: [Policies]
+      responses:
+        '200':
+          description: List of policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Policy'
+    post:
+      summary: Create a policy
+      operationId: CreatePolicy
+      tags: [Policies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Policy'
+      responses:
+        '201':
+          description: Created policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+
+  /v1/policies/search:
+    get:
+      summary: Search policies
+      operationId: SearchPolicies
+      tags: [Policies]
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matching policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Policy'
+
+  /v1/policies/{id}:
+    get:
+      summary: Get a policy by ID
+      operationId: GetPolicy
+      tags: [Policies]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+    put:
+      summary: Update a policy
+      operationId: UpdatePolicy
+      tags: [Policies]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Policy'
+      responses:
+        '200':
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+    delete:
+      summary: Delete a policy
+      operationId: DeletePolicy
+      tags: [Policies]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /v1/policies/{id}/stats:
+    get:
+      summary: Get usage statistics for a policy
+      operationId: GetPolicyStats
+      tags: [Policies]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy statistics
+
+  /v1/schemas:
+    get:
+      summary: List available authorization schemas
+      operationId: GetSchemas
+      tags: [Schemas]
+      responses:
+        '200':
+          description: Schema definitions
+
+components:
+  schemas:
+    AuthorizeRequest:
+      type: object
+      properties:
+        principal_id:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        action:
+          type: string
+
+    FilterRequest:
+      type: object
+      properties:
+        principal_id:
+          type: string
+        resource_type:
+          type: string
+        action:
+          type: string
+
+    FilterResponse:
+      type: object
+      properties:
+        filter:
+          type: string
+
+    AuthorizeResponse:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+
+    MatchAuthorizeRequest:
+      type: object
+      properties:
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        action:
+          type: string
+
+    MatchFilterRequest:
+      type: object
+      properties:
+        resource_type:
+          type: string
+        action:
+          type: string
+
+    HTTPCheckRequest:
+      type: object
+      properties:
+        method:
+          type: string
+        path:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+
+    CapabilitiesRequest:
+      type: object
+      properties:
+        principal_id:
+          type: string
+
+    MatchCapabilitiesRequest:
+      type: object
+
+    EntityCapabilitiesRequest:
+      type: object
+      properties:
+        principal_id:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+
+    MatchEntityCapabilitiesRequest:
+      type: object
+      properties:
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+
+    CapabilitiesResponse:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string
+
+    Principal:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        auth_config:
+          type: object
+          additionalProperties: true
+
+    Policy:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        rules:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    GrantPolicyRequest:
+      type: object
+      properties:
+        policy_id:
+          type: string

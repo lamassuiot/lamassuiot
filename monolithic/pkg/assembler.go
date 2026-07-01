@@ -101,7 +101,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		var authzClientConf config.AuthzClient
 		var authzPort int
 		if conf.AuthzConfig != nil {
-			_, _, _, _, aPort, aErr := authzapi.AssembleAuthzServiceWithHTTPServer(*conf.AuthzConfig, models.APIServiceInfo{})
+			authzCfg := *conf.AuthzConfig
+			authzCfg.OpenAPI = cconfig.OpenAPIConfig{Enabled: true}
+			_, _, _, _, aPort, aErr := authzapi.AssembleAuthzServiceWithHTTPServer(authzCfg, models.APIServiceInfo{})
 			if aErr != nil {
 				return -1, -1, fmt.Errorf("could not assemble Authz Service: %s", aErr)
 			}

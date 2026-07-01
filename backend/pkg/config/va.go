@@ -18,11 +18,3 @@ type VAconfig struct {
 	AuthzClient           AuthzClient                    `mapstructure:"authz_client"`
 	VADomains             []string                       `mapstructure:"va_domains"`
 }
-
-type CAClient struct {
-	cconfig.HTTPClient `mapstructure:",squash"`
-}
-
-type KMSClient struct {
-	cconfig.HTTPClient `mapstructure:",squash"`
-}

@@ -40,5 +40,6 @@ type AuthzConfig struct {
 	// HTTPSchemas is a list of file paths to HTTP schema JSON files.
 	// Each file contains an array of HTTPSchemaDefinition objects that describe
 	// REST API routes for use with the Envoy ext_authz endpoint.
-	HTTPSchemas []string `mapstructure:"http_schemas"`
+	HTTPSchemas []string              `mapstructure:"http_schemas"`
+	OpenAPI     cconfig.OpenAPIConfig `mapstructure:"openapi"`
 }

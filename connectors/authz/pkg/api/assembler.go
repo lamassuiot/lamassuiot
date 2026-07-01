@@ -19,6 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	bauditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	beventpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
+	"github.com/lamassuiot/authz/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -79,7 +80,12 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 	httpGrp := httpEngine.Group("/")
 	NewAuthzRoutes(httpGrp, authzEngine, principalSvc, eng, policySvc, resolver, lHttp)
 
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.Authz
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, nil, nil, nil, -1, fmt.Errorf("failed to start Authz HTTP server: %w", err)
 	}
