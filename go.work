@@ -24,6 +24,7 @@ use (
 	./monolithic
 	./sdk
 	./shared/aws
+	./shared/azure
 	./shared/http
 	./shared/subsystems
 )
