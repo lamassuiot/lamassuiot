@@ -3,6 +3,7 @@ package dockerrunner
 import (
 	"context"
 
+	mobycontainer "github.com/moby/moby/api/types/container"
 	"github.com/ory/dockertest/v4"
 )
 
@@ -14,6 +15,10 @@ func RunDocker(repository string, opts ...dockertest.RunOption) (func() error, d
 	}
 
 	opts = append([]dockertest.RunOption{dockertest.WithoutReuse()}, opts...)
+	opts = append(opts, dockertest.WithHostConfig(func(config *mobycontainer.HostConfig) {
+		config.RestartPolicy = mobycontainer.RestartPolicy{Name: mobycontainer.RestartPolicyDisabled}
+		config.AutoRemove = true
+	}))
 	resource, err := pool.Run(ctx, repository, opts...)
 	if err != nil {
 		pool.Close(ctx)
