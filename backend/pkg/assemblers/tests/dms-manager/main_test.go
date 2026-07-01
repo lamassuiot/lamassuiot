@@ -45,6 +45,11 @@ func TestCreateDMS(t *testing.T) {
 	dmsSample := services.CreateDMSInput{
 		ID:   dmsID,
 		Name: "MyIotFleet",
+		Settings: models.DMSSettings{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: models.EST,
+			},
+		},
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
 	if err != nil {
@@ -73,6 +78,11 @@ func TestUpdateDMS(t *testing.T) {
 	dmsSample := services.CreateDMSInput{
 		ID:   dmsID,
 		Name: "MyIotFleet",
+		Settings: models.DMSSettings{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: models.EST,
+			},
+		},
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
 	if err != nil {
@@ -110,6 +120,11 @@ func TestUpdateDMSMetadata(t *testing.T) {
 		ID:       dmsID,
 		Name:     "MyIotFleet",
 		Metadata: map[string]any{"test": "test"},
+		Settings: models.DMSSettings{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: models.EST,
+			},
+		},
 	}
 
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -168,6 +183,11 @@ func TestDeleteDMS(t *testing.T) {
 				dmsSample := services.CreateDMSInput{
 					ID:   dmsID,
 					Name: "MyIotFleet",
+					Settings: models.DMSSettings{
+						EnrollmentSettings: models.EnrollmentSettings{
+							EnrollmentProtocol: models.EST,
+						},
+					},
 				}
 				dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
 				if err != nil {
