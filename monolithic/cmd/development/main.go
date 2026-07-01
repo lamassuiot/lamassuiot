@@ -26,8 +26,10 @@ import (
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	mobycontainer "github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	mobyclient "github.com/moby/moby/client"
+	"github.com/ory/dockertest/v4"
 )
 
 const readyToPKI = ` 
@@ -145,14 +147,17 @@ func main() {
 	cleanup := func() {
 		fmt.Println("========== CLEANING UP ==========")
 
-		cli, err := docker.NewClientFromEnv()
+		cli, err := mobyclient.New(mobyclient.FromEnv)
 		if err != nil {
 			fmt.Println("could not create docker client: ", err)
 			return
 		}
+		defer cli.Close()
+
+		ctx := context.Background()
 
 		// List all containers (running or not)
-		containers, err := cli.ListContainers(docker.ListContainersOptions{
+		result, err := cli.ContainerList(ctx, mobyclient.ContainerListOptions{
 			All: true,
 		})
 		if err != nil {
@@ -163,28 +168,27 @@ func main() {
 		targetLabel := "group"
 		targetValue := "lamassuiot-monolithic"
 
-		for _, container := range containers {
-			labels := container.Labels
+		for _, c := range result.Items {
+			labels := c.Labels
 			if val, ok := labels[targetLabel]; ok && val == targetValue {
-				log.Printf("Found container %s with label %s=%s", container.ID, targetLabel, targetValue)
+				log.Printf("Found container %s with label %s=%s", c.ID, targetLabel, targetValue)
 
 				// Stop the container
-				err := cli.StopContainer(container.ID, 10)
+				_, err := cli.ContainerStop(ctx, c.ID, mobyclient.ContainerStopOptions{})
 				if err != nil {
-					log.Printf("Error stopping container %s: %v", container.ID, err)
+					log.Printf("Error stopping container %s: %v", c.ID, err)
 				} else {
-					log.Printf("Stopped container %s", container.ID)
+					log.Printf("Stopped container %s", c.ID)
 				}
 
 				// Remove the container
-				err = cli.RemoveContainer(docker.RemoveContainerOptions{
-					ID:    container.ID,
+				_, err = cli.ContainerRemove(ctx, c.ID, mobyclient.ContainerRemoveOptions{
 					Force: true,
 				})
 				if err != nil {
-					log.Printf("Error removing container %s: %v", container.ID, err)
+					log.Printf("Error removing container %s: %v", c.ID, err)
 				} else {
-					log.Printf("Removed container %s", container.ID)
+					log.Printf("Removed container %s", c.ID)
 				}
 			}
 		}
@@ -372,16 +376,17 @@ func main() {
 	}
 
 	if !*disableUI {
-		containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
-			Tag:        "latest",                        // version
-			Env:        []string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors},
-			Labels: map[string]string{
+		containerCleanup, container, _, err := dockerrunner.RunDocker(
+			"ghcr.io/lamassuiot/lamassu-ui",
+			dockertest.WithTag("latest"),
+			dockertest.WithEnv([]string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors}),
+			dockertest.WithLabels(map[string]string{
 				"group": "lamassuiot-monolithic",
-			},
-		}, func(hc *docker.HostConfig) {
-			hc.AutoRemove = true
-		})
+			}),
+			dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
+				hc.AutoRemove = true
+			}),
+		)
 
 		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
 
@@ -400,11 +405,15 @@ func main() {
 		pgUser := storageConfig.Config["username"].(string)
 		pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
 
-		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository:   "ghcr.io/siemens/wfx",
-			Tag:          "latest",
-			ExposedPorts: []string{"9080/tcp", "9081/tcp"},
-			Env: []string{
+		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker("ghcr.io/siemens/wfx",
+			dockertest.WithTag("latest"),
+			dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
+				cfg.ExposedPorts = network.PortSet{
+					network.MustParsePort("9080/tcp"): struct{}{},
+					network.MustParsePort("9081/tcp"): struct{}{},
+				}
+			}),
+			dockertest.WithEnv([]string{
 				"PGHOST=host.docker.internal",
 				"PGPORT=" + pgPort,
 				"PGUSER=" + pgUser,
@@ -417,14 +426,15 @@ func main() {
 				"WFX_MGMT_PORT=9081",
 				"WFX_LOG_FORMAT=json",
 				"WFX_LOG_LEVEL=debug",
-			},
-			Labels: map[string]string{
+			}),
+			dockertest.WithLabels(map[string]string{
 				"group": "lamassuiot-monolithic",
-			},
-		}, func(hc *docker.HostConfig) {
-			hc.AutoRemove = true
-			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
-		})
+			}),
+			dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
+				hc.AutoRemove = true
+				hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+			}),
+		)
 		if err != nil {
 			if wfxCleanup != nil {
 				wfxCleanup()

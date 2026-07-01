@@ -1,34 +1,34 @@
 package dockerrunner
 
 import (
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"context"
+
+	mobycontainer "github.com/moby/moby/api/types/container"
+	"github.com/ory/dockertest/v4"
 )
 
-func RunDocker(options dockertest.RunOptions, hcOpts func(*docker.HostConfig)) (func() error, *dockertest.Resource, *dockertest.Pool, error) {
-	pool, err := dockertest.NewPool("")
+func RunDocker(repository string, opts ...dockertest.RunOption) (func() error, dockertest.ClosableResource, dockertest.ClosablePool, error) {
+	ctx := context.Background()
+	pool, err := dockertest.NewPool(ctx, "")
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	fnConfig := func(config *docker.HostConfig) {
-		config.AutoRemove = true                     // set AutoRemove to true so that stopped container goes away by itself
-		config.RestartPolicy = docker.NeverRestart() // don't restart container
-	}
-
-	resource, err := pool.RunWithOptions(&options, fnConfig, hcOpts)
+	opts = append([]dockertest.RunOption{
+		dockertest.WithoutReuse(),
+		dockertest.WithHostConfig(func(config *mobycontainer.HostConfig) {
+			config.RestartPolicy = mobycontainer.RestartPolicy{Name: mobycontainer.RestartPolicyDisabled}
+			config.AutoRemove = true
+		}),
+	}, opts...)
+	resource, err := pool.Run(ctx, repository, opts...)
 	if err != nil {
+		pool.Close(ctx)
 		return nil, nil, nil, err
 	}
 
-	// call clean up function to release resource
 	fnCleanup := func() error {
-		err := resource.Close()
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return resource.Close(ctx)
 	}
 
 	return fnCleanup, resource, pool, nil

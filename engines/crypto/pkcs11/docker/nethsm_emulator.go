@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -13,8 +14,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
 	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/ory/dockertest/v4"
 )
 
 func RunNetHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func() error, func() error, pconfig.PKCS11Config, error) {
@@ -24,14 +24,12 @@ func RunNetHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func(
 	unlock := "a0b1c2d3e4f5"
 	operator := "0123456789"
 
-	containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "nitrokey/nethsm", // image
-		Tag:        "testing",         // version
-		Env:        []string{},
-		Labels: map[string]string{
+	containerCleanup, container, _, err := dockerrunner.RunDocker("nitrokey/nethsm",
+		dockertest.WithTag("testing"),
+		dockertest.WithLabels(map[string]string{
 			"group": "lamassuiot-monolithic",
-		},
-	}, func(hc *docker.HostConfig) {})
+		}),
+	)
 	if err != nil {
 		return nil, nil, pconfig.PKCS11Config{}, err
 	}
@@ -42,7 +40,7 @@ func RunNetHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func(
 		return nil, nil, pconfig.PKCS11Config{}, fmt.Errorf("could not parse container port: %w", err)
 	}
 
-	container.Exec([]string{"sh", "-c", "apk add --no-cache opensc"}, dockertest.ExecOptions{})
+	container.Exec(context.Background(), []string{"sh", "-c", "apk add --no-cache opensc"})
 
 	cli := &http.Client{
 		Transport: &http.Transport{
