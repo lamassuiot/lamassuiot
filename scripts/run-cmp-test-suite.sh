@@ -216,18 +216,32 @@ else
 fi
 
 # --- 2. venv + deps -----------------------------------------------------------
+# The suite is a flat-layout project with no [build-system] in pyproject.toml,
+# so it CANNOT be installed as a package: setuptools aborts with "Multiple
+# top-level packages discovered in a flat-layout". It doesn't need to be — Robot
+# runs it in place via `robot --pythonpath=./`, so we only install its runtime
+# dependencies (which include robotframework itself). `uv pip install -r
+# pyproject.toml` reads [project.dependencies] and installs exactly those
+# without building the project; the tomllib fallback covers the no-uv case.
 cd "${SUITE_DIR}"
 if [ ! -x "venv-cmp-tests/bin/robot" ]; then
     log "Creating Python venv and installing dependencies (first run only)"
     python3 -m venv venv-cmp-tests
     # shellcheck disable=SC1091
     source venv-cmp-tests/bin/activate
-    pip install --quiet uv && uv pip install -e . \
-        || pip install --quiet -e .
+    if pip install --quiet uv && uv pip install -r pyproject.toml; then
+        :
+    else
+        warn "uv install failed; falling back to pip with deps extracted from pyproject.toml"
+        python3 -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml","rb"))["project"]["dependencies"]))' \
+            | pip install --quiet -r /dev/stdin \
+            || die "Failed to install cmp-test-suite dependencies"
+    fi
 else
     # shellcheck disable=SC1091
     source venv-cmp-tests/bin/activate
 fi
+command -v robot >/dev/null 2>&1 || die "robot not found after dependency install (see output above)"
 
 # --- 3. apply compat patch if needed -----------------------------------------
 if git apply --reverse --check "${PATCH}" 2>/dev/null; then
