@@ -14,11 +14,13 @@ func RunDocker(repository string, opts ...dockertest.RunOption) (func() error, d
 		return nil, nil, nil, err
 	}
 
-	opts = append([]dockertest.RunOption{dockertest.WithoutReuse()}, opts...)
-	opts = append(opts, dockertest.WithHostConfig(func(config *mobycontainer.HostConfig) {
-		config.RestartPolicy = mobycontainer.RestartPolicy{Name: mobycontainer.RestartPolicyDisabled}
-		config.AutoRemove = true
-	}))
+	opts = append([]dockertest.RunOption{
+		dockertest.WithoutReuse(),
+		dockertest.WithHostConfig(func(config *mobycontainer.HostConfig) {
+			config.RestartPolicy = mobycontainer.RestartPolicy{Name: mobycontainer.RestartPolicyDisabled}
+			config.AutoRemove = true
+		}),
+	}, opts...)
 	resource, err := pool.Run(ctx, repository, opts...)
 	if err != nil {
 		pool.Close(ctx)
