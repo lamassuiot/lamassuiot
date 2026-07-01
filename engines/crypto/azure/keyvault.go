@@ -303,9 +303,13 @@ func (p *AzureKeyVaultCryptoEngine) RenameKey(oldID, newID string) error {
 }
 
 func (p *AzureKeyVaultCryptoEngine) DeleteKey(keyID string) error {
-	_, err := p.keyVaultCli.DeleteKey(context.Background(), keyID, nil)
+	keyName, err := p.findKeyNameByLamassuID(context.Background(), keyID)
 	if err != nil {
-		return fmt.Errorf("deleting key %s from Key Vault: %w", keyID, err)
+		return err
+	}
+	_, err = p.keyVaultCli.DeleteKey(context.Background(), keyName, nil)
+	if err != nil {
+		return fmt.Errorf("deleting key %s from Key Vault: %w", keyName, err)
 	}
 	return nil
 }
