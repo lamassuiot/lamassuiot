@@ -16,7 +16,7 @@ type AwsSubsystem struct {
 }
 
 func (p *AwsSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBackend, error) {
-	awsCleanup, _, awsCfg, err := aws.RunAWSEmulationLocalStackDocker(exposeAsStandardPort)
+	awsCleanup, _, awsCfg, err := aws.RunAWSEmulationFlociDocker(exposeAsStandardPort)
 	if err != nil {
 		log.Fatalf("could not launch AWS Platform: %s", err)
 	}

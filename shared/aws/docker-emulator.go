@@ -10,7 +10,7 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunAWSEmulationLocalStackDocker(exposeAsStandardPort bool) (func() error, func() error, *AWSSDKConfig, error) {
+func RunAWSEmulationFlociDocker(exposeAsStandardPort bool) (func() error, func() error, *AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "floci/floci", // image
 		Tag:        "1.5.29",      // version
