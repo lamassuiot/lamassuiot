@@ -119,6 +119,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs:   svcLogs,
 			Server: svcServer,
 			CryptoEngineConfig: config.CryptoEngines{
@@ -142,8 +143,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			Logs:                     svcLogs,
-			Server:                   svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
+			Logs:   svcLogs,
+			Server: svcServer,
 			PublisherEventBus:        conf.PublisherEventBus,
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
@@ -162,6 +164,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs:   svcLogs,
 			Server: svcServer,
 			FilesystemStorage: cconfig.FSStorageConfig{
@@ -184,8 +187,17 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-			Logs:                  svcLogs,
-			Server:                svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
 			PublisherEventBus:     conf.PublisherEventBus,
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
@@ -205,8 +217,17 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			Logs:                      svcLogs,
-			Server:                    svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
@@ -224,8 +245,17 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
-			Logs:                  svcLogs,
-			Server:                svcServer,
+			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,

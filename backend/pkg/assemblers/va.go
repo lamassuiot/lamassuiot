@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	fssBuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/fs-storage/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
@@ -36,7 +37,13 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl, conf.AuthzClient)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.VA
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run VA http server: %s", err)
 	}

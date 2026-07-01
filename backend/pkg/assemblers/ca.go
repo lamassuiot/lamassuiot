@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
@@ -33,7 +34,13 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewCAHTTPLayer(httpGrp, *caService, conf.AuthzClient, lHttp)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.CA
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)
 	}

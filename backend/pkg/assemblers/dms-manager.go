@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
@@ -30,7 +31,13 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service, conf.AuthzClient)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.DMSManager
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run DMS Manager http server: %s", err)
 	}

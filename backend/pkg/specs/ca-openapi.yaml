@@ -33,9 +33,6 @@ paths:
       tags: [Certificate Authorities]
       summary: List certificate authorities
       operationId: getCAs
-      x-authz:
-        entity_type: ca_certificate
-        check: filter
       parameters:
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Bookmark'
@@ -59,9 +56,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Create a new certificate authority
       operationId: createCA
-      x-authz:
-        entity_type: ca_certificate
-        action: create
       requestBody:
         required: true
         content:
@@ -99,9 +93,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Import an existing certificate authority
       operationId: importCA
-      x-authz:
-        entity_type: ca_certificate
-        action: create
       requestBody:
         required: true
         content:
@@ -139,9 +130,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Get CA by identifier
       operationId: getCAById
-      x-authz:
-        entity_type: ca_certificate
-        action: read
       parameters:
         - $ref: '#/components/parameters/CAId'
       responses:
@@ -173,9 +161,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Delete CA by identifier
       operationId: deleteCA
-      x-authz:
-        entity_type: ca_certificate
-        action: delete
       parameters:
         - $ref: '#/components/parameters/CAId'
       responses:
@@ -205,9 +190,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Get CAs by common name
       operationId: getCAsByCommonName
-      x-authz:
-        entity_type: ca_certificate
-        check: filter
       parameters:
         - name: cn
           in: path
@@ -245,9 +227,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Update CA metadata
       operationId: updateCAMetadata
-      x-authz:
-        entity_type: ca_certificate
-        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -285,9 +264,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Patch CA metadata
       operationId: patchCAMetadata
-      x-authz:
-        entity_type: ca_certificate
-        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -312,9 +288,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Update CA status
       operationId: updateCAStatus
-      x-authz:
-        entity_type: ca_certificate
-        action: status-update
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -339,9 +312,6 @@ paths:
       tags: [Certificate Authorities]
       summary: Update CA issuance profile
       operationId: updateCAProfile
-      x-authz:
-        entity_type: ca_certificate
-        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -369,9 +339,6 @@ paths:
         Reissues an existing CA certificate with a new validity period.
         The CA must be in a valid state (not expired or revoked).
       operationId: reissueCA
-      x-authz:
-        entity_type: ca_certificate
-        action: reissue
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -411,9 +378,6 @@ paths:
       tags: [Certificates]
       summary: List certificates issued by a CA
       operationId: getCertificatesByCA
-      x-authz:
-        entity_type: certificate
-        check: filter
       parameters:
         - $ref: '#/components/parameters/CAId'
         - $ref: '#/components/parameters/PageSize'
@@ -437,9 +401,6 @@ paths:
       tags: [Certificates]
       summary: List certificates issued by a CA filtered by status
       operationId: getCertificatesByCAAndStatus
-      x-authz:
-        entity_type: certificate
-        check: filter
       parameters:
         - $ref: '#/components/parameters/CAId'
         - name: status
@@ -467,9 +428,6 @@ paths:
       tags: [Certificates]
       summary: Sign a CSR with a CA
       operationId: signCertificate
-      x-authz:
-        entity_type: ca_certificate
-        action: sign
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -494,9 +452,6 @@ paths:
       tags: [Certificates]
       summary: Sign arbitrary message with CA private key
       operationId: caSignatureSign
-      x-authz:
-        entity_type: ca_certificate
-        action: sign
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -521,9 +476,6 @@ paths:
       tags: [Certificates]
       summary: Verify signature using CA public key
       operationId: caSignatureVerify
-      x-authz:
-        entity_type: ca_certificate
-        action: read
       parameters:
         - $ref: '#/components/parameters/CAId'
       requestBody:
@@ -548,9 +500,6 @@ paths:
       tags: [Certificates]
       summary: Get certificate by serial number for a CA
       operationId: getCertificateBySerial
-      x-authz:
-        entity_type: certificate
-        action: read
       parameters:
         - $ref: '#/components/parameters/CAId'
         - $ref: '#/components/parameters/SerialNumber'
@@ -570,9 +519,6 @@ paths:
       tags: [Certificates]
       summary: List all certificates
       operationId: getCertificates
-      x-authz:
-        entity_type: certificate
-        check: filter
       parameters:
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Bookmark'
@@ -617,9 +563,6 @@ paths:
       tags: [Certificates]
       summary: List certificates filtered by status
       operationId: getCertificatesByStatus
-      x-authz:
-        entity_type: certificate
-        check: filter
       parameters:
         - name: status
           in: path
@@ -645,9 +588,6 @@ paths:
       tags: [Certificates]
       summary: List certificates by expiration window
       operationId: getCertificatesByExpiration
-      x-authz:
-        entity_type: certificate
-        check: filter
       parameters:
         - name: expires_after
           in: query
@@ -680,9 +620,6 @@ paths:
       tags: [Certificates]
       summary: Get certificate by serial number
       operationId: getCertificate
-      x-authz:
-        entity_type: certificate
-        action: read
       parameters:
         - $ref: '#/components/parameters/SerialNumber'
       responses:
@@ -699,9 +636,6 @@ paths:
       tags: [Certificates]
       summary: Delete certificate by serial number
       operationId: deleteCertificate
-      x-authz:
-        entity_type: certificate
-        action: delete
       parameters:
         - $ref: '#/components/parameters/SerialNumber'
       responses:
@@ -715,9 +649,6 @@ paths:
       tags: [Certificates]
       summary: Update certificate status
       operationId: updateCertificateStatus
-      x-authz:
-        entity_type: certificate
-        action: status-update
       parameters:
         - $ref: '#/components/parameters/SerialNumber'
       requestBody:
@@ -742,9 +673,6 @@ paths:
       tags: [Certificates]
       summary: Update certificate metadata
       operationId: updateCertificateMetadata
-      x-authz:
-        entity_type: certificate
-        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/SerialNumber'
       requestBody:
@@ -767,9 +695,6 @@ paths:
       tags: [Certificates]
       summary: Patch certificate metadata
       operationId: patchCertificateMetadata
-      x-authz:
-        entity_type: certificate
-        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/SerialNumber'
       requestBody:
@@ -794,9 +719,6 @@ paths:
       tags: [Certificates]
       summary: Import an existing certificate
       operationId: importCertificate
-      x-authz:
-        entity_type: certificate
-        action: import
       requestBody:
         required: true
         content:
@@ -818,9 +740,6 @@ paths:
       tags: [Stats]
       summary: Get CA and certificate statistics
       operationId: getStats
-      x-authz:
-        entity_type: ca_certificate
-        check: filter
       responses:
         '200':
           description: CA statistics
@@ -835,9 +754,6 @@ paths:
       tags: [Stats]
       summary: Get statistics for a CA
       operationId: getStatsByCA
-      x-authz:
-        entity_type: ca_certificate
-        action: read
       parameters:
         - $ref: '#/components/parameters/CAId'
       responses:
@@ -854,9 +770,6 @@ paths:
       tags: [Issuance Profiles]
       summary: List issuance profiles
       operationId: getIssuanceProfiles
-      x-authz:
-        entity_type: issuance_profile
-        check: filter
       parameters:
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Bookmark'
@@ -875,9 +788,6 @@ paths:
       tags: [Issuance Profiles]
       summary: Create issuance profile
       operationId: createIssuanceProfile
-      x-authz:
-        entity_type: issuance_profile
-        action: create
       requestBody:
         required: true
         content:
@@ -899,9 +809,6 @@ paths:
       tags: [Issuance Profiles]
       summary: Get issuance profile
       operationId: getIssuanceProfile
-      x-authz:
-        entity_type: issuance_profile
-        action: read
       parameters:
         - $ref: '#/components/parameters/ProfileId'
       responses:
@@ -917,9 +824,6 @@ paths:
       tags: [Issuance Profiles]
       summary: Update issuance profile
       operationId: updateIssuanceProfile
-      x-authz:
-        entity_type: issuance_profile
-        action: update
       parameters:
         - $ref: '#/components/parameters/ProfileId'
       requestBody:
@@ -942,9 +846,6 @@ paths:
       tags: [Issuance Profiles]
       summary: Delete issuance profile
       operationId: deleteIssuanceProfile
-      x-authz:
-        entity_type: issuance_profile
-        action: delete
       parameters:
         - $ref: '#/components/parameters/ProfileId'
       responses:

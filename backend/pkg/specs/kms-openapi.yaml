@@ -33,9 +33,6 @@ paths:
       summary: Get key statistics
       description: Retrieves statistics about keys including total count and distributions by engine and algorithm. Supports optional filtering.
       operationId: getKeyStats
-      x-authz:
-        entity_type: kms_key
-        check: filter
       parameters:
         - name: filter
           in: query
@@ -95,9 +92,6 @@ paths:
       summary: Get crypto engine provider information
       description: Retrieves information about the configured crypto engine provider
       operationId: getCryptoEngineProvider
-      x-authz:
-        entity_type: kms_key
-        check: filter
       responses:
         '200':
           description: Crypto engine provider information
@@ -120,9 +114,6 @@ paths:
       summary: List all keys
       description: Retrieves a paginated list of all keys with optional filtering
       operationId: getKeys
-      x-authz:
-        entity_type: kms_key
-        check: filter
       parameters:
         - name: limit
           in: query
@@ -166,9 +157,6 @@ paths:
       summary: Create a new key
       description: Creates a new cryptographic key with specified algorithm and size
       operationId: createKey
-      x-authz:
-        entity_type: kms_key
-        action: create
       requestBody:
         required: true
         content:
@@ -202,9 +190,6 @@ paths:
       summary: Import an existing key
       description: Imports an existing private key into the KMS
       operationId: importKey
-      x-authz:
-        entity_type: kms_key
-        action: create
       requestBody:
         required: true
         content:
@@ -238,9 +223,6 @@ paths:
       summary: Get key by ID
       description: Retrieves detailed information about a specific key
       operationId: getKeyById
-      x-authz:
-        entity_type: kms_key
-        action: read
       parameters:
         - name: id
           in: path
@@ -280,9 +262,6 @@ paths:
       summary: Delete a key
       description: Deletes a key from the KMS
       operationId: deleteKeyById
-      x-authz:
-        entity_type: kms_key
-        action: delete
       parameters:
         - name: id
           in: path
@@ -327,9 +306,6 @@ paths:
       summary: Update key aliases
       description: Updates the aliases for a key using JSON Patch operations
       operationId: updateKeyAliases
-      x-authz:
-        entity_type: kms_key
-        action: update
       parameters:
         - name: id
           in: path
@@ -376,9 +352,6 @@ paths:
       summary: Update key name
       description: Updates the name of a key
       operationId: updateKeyName
-      x-authz:
-        entity_type: kms_key
-        action: update
       parameters:
         - name: id
           in: path
@@ -425,9 +398,6 @@ paths:
       summary: Update key tags
       description: Updates the tags associated with a key
       operationId: updateKeyTags
-      x-authz:
-        entity_type: kms_key
-        action: update
       parameters:
         - name: id
           in: path
@@ -474,9 +444,6 @@ paths:
       summary: Update key metadata
       description: Updates the metadata of a key using JSON Patch operations
       operationId: updateKeyMetadata
-      x-authz:
-        entity_type: kms_key
-        action: update
       parameters:
         - name: id
           in: path
@@ -523,9 +490,6 @@ paths:
       summary: Sign a message
       description: Signs a message using the specified key
       operationId: signMessage
-      x-authz:
-        entity_type: kms_key
-        action: sign
       parameters:
         - name: id
           in: path
@@ -572,9 +536,6 @@ paths:
       summary: Verify a signature
       description: Verifies a signature against a message using the specified key
       operationId: verifySignature
-      x-authz:
-        entity_type: kms_key
-        action: read
       parameters:
         - name: id
           in: path

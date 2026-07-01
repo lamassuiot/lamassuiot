@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
@@ -35,7 +36,13 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewKMSHTTPLayer(httpGrp, *kmsService, conf.AuthzClient, lHttp)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.KMS
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run KMS Service http server: %s", err)
 	}
