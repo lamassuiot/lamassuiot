@@ -28,7 +28,7 @@ index 33f07c8..788d827 100644
      if cert_template is None:
          cert_template = certbuildutils.prepare_cert_template(
 diff --git a/resources/keywords.resource b/resources/keywords.resource
-index 30a97b6..69c5122 100644
+index 30a97b6..eb1b3a0 100644
 --- a/resources/keywords.resource
 +++ b/resources/keywords.resource
 @@ -74,6 +74,11 @@ Set Up Test Suite
@@ -43,6 +43,24 @@ index 30a97b6..69c5122 100644
          END
          ${response}=   Exchange Migration PKIMessage    ${protected_ir}    ${CA_BASE_URL}    ${INIT_SUFFIX}
          PKIStatus Must Be    ${response}   accepted
+@@ -118,8 +123,15 @@ Initialize PQ Cert And Key Variables
+     VAR   &{PQ_STATEFUL_SIG_KEYS_VERBOSE}     scope=Global
+     VAR   &{PQ_STATEFUL_SIG_CERTS_VERBOSE}   scope=Global
+     VAR   &{PQ_STATEFUL_SIG_CERT_CONF_CERTS}    scope=Global
+-    Load PQ Stateful Sig Keys
+-    Load Verbose PQ Stateful Sig Keys
++    # Lamassu compat: loading stateful PQ keys instantiates oqs.StatefulSignature,
++    # which requires the liboqs binding (and triggers a full liboqs source build
++    # on first import). Lamassu runs the suite with PQ excluded (--exclude pqc),
++    # so a missing/unavailable liboqs must not abort the global suite setup — that
++    # previously cascaded into every suite failing (DEFAULT_PROTECTION_VALS unset).
++    # Keep the empty global dicts above and load the PQ keys best-effort so the
++    # classical suite runs without any post-quantum dependency.
++    Run Keyword And Warn On Failure    Load PQ Stateful Sig Keys
++    Run Keyword And Warn On Failure    Load Verbose PQ Stateful Sig Keys
+ 
+ Get PQ Stateful Sig Key
+     [Documentation]    Get the stateful PQ signature key from the global variable.
 diff --git a/resources/protectionutils.py b/resources/protectionutils.py
 index 0bb0387..07e2892 100644
 --- a/resources/protectionutils.py
