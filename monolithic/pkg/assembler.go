@@ -1,9 +1,12 @@
 package pkg
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -16,6 +19,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	authzapi "github.com/lamassuiot/authz/pkg/api"
 	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -94,6 +98,28 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		// --- service assembly ---
 
+		var authzClientConf config.AuthzClient
+		var authzPort int
+		if conf.AuthzConfig != nil {
+			authzCfg := *conf.AuthzConfig
+			authzCfg.OpenAPI = cconfig.OpenAPIConfig{Enabled: true}
+			_, _, _, _, aPort, aErr := authzapi.AssembleAuthzServiceWithHTTPServer(authzCfg, apiInfo)
+			if aErr != nil {
+				return -1, -1, fmt.Errorf("could not assemble Authz Service: %s", aErr)
+			}
+			authzPort = aPort
+			authzClientConf = config.AuthzClient{
+				HTTPClient: cconfig.HTTPClient{
+					LogLevel: cconfig.Info,
+					AuthMode: cconfig.NoAuth,
+					HTTPConnection: cconfig.HTTPConnection{
+						Protocol:        cconfig.HTTP,
+						BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: authzPort},
+					},
+				},
+			}
+		}
+
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs:   svcLogs,
@@ -105,6 +131,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			},
 			PublisherEventBus: conf.PublisherEventBus,
 			Storage:           conf.Storage,
+			AuthzClient:       authzClientConf,
 		}, apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
@@ -112,7 +139,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		kmsConn := localConn(kmsPort)
 		kmsSDKBuilder := func(serviceID, src string) services.KMSService {
-			return sdk.NewHttpKMSClient(buildLocalClient(serviceID, src, "LMS SDK - KMS Client", kmsConn), baseURL(kmsConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - KMS Client", kmsConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpKMSClient(cli, baseURL(kmsConn))
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
@@ -123,6 +152,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
 			VAServerDomains:          vaDomains,
+			AuthzClient:              authzClientConf,
 		}, kmsSDKBuilder("KMS", models.KMSSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
@@ -130,7 +160,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		caConn := localConn(caPort)
 		caSDKBuilder := func(serviceID, src string) services.CAService {
-			return sdk.NewHttpCAClient(buildLocalClient(serviceID, src, "LMS SDK - CA Client", caConn), baseURL(caConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - CA Client", caConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpCAClient(cli, baseURL(caConn))
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
@@ -150,6 +182,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			PublisherEventBus:     conf.PublisherEventBus,
 			Storage:               conf.Storage,
 			VADomains:             vaDomains,
+			AuthzClient:           authzClientConf,
 		}, caSDKBuilder("VA", models.VASource), kmsSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
@@ -172,6 +205,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,
 			SSEEnabled:            conf.SSEEnabled,
+			AuthzClient:           authzClientConf,
 		}, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
@@ -179,7 +213,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		devConn := localConn(devPort)
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
-			return sdk.NewHttpDeviceManagerClient(buildLocalClient(serviceID, src, "LMS SDK - DevManager Client", devConn), baseURL(devConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - DevManager Client", devConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpDeviceManagerClient(cli, baseURL(devConn))
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
@@ -197,6 +233,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
+			AuthzClient:               authzClientConf,
 		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
@@ -204,7 +241,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		dmsConn := localConn(dmsPort)
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
-			return sdk.NewHttpDMSManagerClient(buildLocalClient(serviceID, src, "LMS SDK - DMSManager Client", dmsConn), baseURL(dmsConn))
+			cli := buildLocalClient(serviceID, src, "LMS SDK - DMSManager Client", dmsConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpDMSManagerClient(cli, baseURL(dmsConn))
 		}
 
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
@@ -222,6 +261,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			SubscriberEventBus:    conf.SubscriberEventBus,
 			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
 			Storage:               conf.Storage,
+			AuthzClient:           authzClientConf,
 		}, apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
@@ -242,11 +282,23 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		engine.Use(
 			gin.Recovery(),
 			cors.New(corsConfig),
+			stripIncomingHeaders(),
 			clientCertsToHeaderUsingEnvoyStyle(),
 		)
 
+		// When authz is disabled (no authz service running), bypass service-level authz
+		// checks by injecting admin-mode. This runs after stripIncomingHeaders so external
+		// clients cannot forge the header.
+		if authzPort == 0 {
+			engine.Use(func(c *gin.Context) {
+				c.Request.Header.Set("X-Principal-ID", "admin-mode")
+				c.Next()
+			})
+		}
+
 		routeMaps := make(map[string]func(c *gin.Context))
 		routeList := make([]string, 0)
+		authzProxy := newMonolithicAuthzProxy(authzPort, authzProxyPrefixes(conf))
 
 		// registerRoute registers a reverse proxy route. sourcePath is the incoming
 		// path prefix; targetPath is the prefix to replace it with on the upstream.
@@ -271,6 +323,28 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			color.Unset()
 			fmt.Printf("\n")
 			routeMaps[sourcePath] = func(c *gin.Context) {
+				if authzProxy != nil && authzProxy.protects(c.Request.URL.Path) {
+					statusCode, err := authzProxy.authorize(c.Request)
+					if err != nil {
+						log.WithError(err).WithFields(log.Fields{
+							"method": c.Request.Method,
+							"path":   c.Request.URL.RequestURI(),
+							"status": statusCode,
+						}).Error("monolithic proxy authz check failed")
+						c.Status(statusCode)
+						return
+					}
+					if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+						log.WithFields(log.Fields{
+							"method": c.Request.Method,
+							"path":   c.Request.URL.RequestURI(),
+							"status": statusCode,
+						}).Info("monolithic proxy authz denied request")
+						c.Status(statusCode)
+						return
+					}
+				}
+
 				remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", servicePort))
 				if err != nil {
 					panic(err)
@@ -352,6 +426,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			registerRoute("wfx SBI", "/api/wfx/sbi/", conf.WfxSouthPort, "/api/wfx/")
 		}
 
+		if authzPort > 0 {
+			addRouteMap("Authz", "/api/authz/", authzPort)
+		}
+
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
 			proxy := func(c *gin.Context) {
 				var realProxy func(c *gin.Context)
@@ -418,19 +496,153 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 	return -1, -1, fmt.Errorf("unsupported mode")
 }
 
+type monolithicAuthzProxy struct {
+	port     int
+	prefixes []string
+	client   *http.Client
+}
+
+func newMonolithicAuthzProxy(port int, prefixes []string) *monolithicAuthzProxy {
+	if port <= 0 || len(prefixes) == 0 {
+		return nil
+	}
+	return &monolithicAuthzProxy{
+		port:     port,
+		prefixes: prefixes,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+}
+
+func authzProxyPrefixes(conf MonolithicConfig) []string {
+	if conf.AuthzProxyPrefixes != nil {
+		return normalizePathPrefixes(conf.AuthzProxyPrefixes)
+	}
+	if conf.WfxNorthPort > 0 || conf.WfxSouthPort > 0 {
+		return []string{"/api/wfx/nbi/", "/api/wfx/sbi/"}
+	}
+	return nil
+}
+
+func normalizePathPrefixes(prefixes []string) []string {
+	out := make([]string, 0, len(prefixes))
+	for _, prefix := range prefixes {
+		prefix = strings.TrimSpace(prefix)
+		if prefix == "" {
+			continue
+		}
+		if !strings.HasPrefix(prefix, "/") {
+			prefix = "/" + prefix
+		}
+		out = append(out, prefix)
+	}
+	return out
+}
+
+func (proxy *monolithicAuthzProxy) protects(path string) bool {
+	for _, prefix := range proxy.prefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (proxy *monolithicAuthzProxy) authorize(req *http.Request) (int, error) {
+	body, err := readAndRestoreRequestBody(req)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("read request body for authz check: %w", err)
+	}
+
+	checkURL := fmt.Sprintf("http://127.0.0.1:%d/v1/ext_authz/check%s", proxy.port, req.URL.RequestURI())
+	checkReq, err := http.NewRequestWithContext(req.Context(), req.Method, checkURL, bytes.NewReader(body))
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("create authz check request: %w", err)
+	}
+	checkReq.Header = req.Header.Clone()
+	checkReq.Header.Set("x-envoy-original-path", req.URL.RequestURI())
+
+	resp, err := proxy.client.Do(checkReq)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("call authz check endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		propagateAuthzHeaders(req.Header, resp.Header)
+	}
+	return resp.StatusCode, nil
+}
+
+func readAndRestoreRequestBody(req *http.Request) ([]byte, error) {
+	if req.Body == nil {
+		return nil, nil
+	}
+	body, readErr := io.ReadAll(req.Body)
+	closeErr := req.Body.Close()
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
+	}
+	req.ContentLength = int64(len(body))
+	if readErr != nil {
+		return body, readErr
+	}
+	return body, closeErr
+}
+
+func propagateAuthzHeaders(reqHeaders, authzHeaders http.Header) {
+	if currentUser := authzHeaders.Get("x-current-user"); currentUser != "" {
+		reqHeaders.Set("x-current-user", currentUser)
+		reqHeaders.Set("x-principal-id", currentUser)
+	}
+}
+
+// gatewayStripHeaders are headers that clients must not be allowed to inject —
+// they are either set by this gateway or by internal services only.
+var gatewayStripHeaders = []string{
+	"X-Principal-Id",
+	"X-Lms-Source",
+	"X-Request-Id", // gateway assigns its own UUID downstream
+	"X-Forwarded-Cert",
+	"X-Forwarded-Client-Cert", // set by gateway after TLS inspection
+	"Ssl-Client-Cert",         // nginx mTLS proxy header
+	"X-Amzn-Mtls-Clientcert",  // AWS ALB mTLS header
+}
+
+func stripIncomingHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		for _, h := range gatewayStripHeaders {
+			c.Request.Header.Del(h)
+		}
+		c.Next()
+	}
+}
+
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.TLS != nil {
 			if len(c.Request.TLS.PeerCertificates) > 0 {
-				fullChain := ""
-				for _, crt := range c.Request.TLS.PeerCertificates {
-					fullChain += chelpers.CertificateToPEM(crt)
-				}
-				chainURLEnc := url.QueryEscape(fullChain)
-				c.Request.Header.Add("x-forwarded-client-cert", fmt.Sprintf("Chain=%q", chainURLEnc))
+				c.Request.Header.Add("x-forwarded-client-cert", envoyStyleClientCertHeader(c.Request.TLS.PeerCertificates))
 			}
 		}
 
 		c.Next()
 	}
+}
+
+func envoyStyleClientCertHeader(certs []*x509.Certificate) string {
+	if len(certs) == 0 {
+		return ""
+	}
+
+	leafURLEnc := url.QueryEscape(chelpers.CertificateToPEM(certs[0]))
+	fullChain := ""
+	for _, crt := range certs {
+		fullChain += chelpers.CertificateToPEM(crt)
+	}
+	chainURLEnc := url.QueryEscape(fullChain)
+	return fmt.Sprintf("Cert=%q;Chain=%q", leafURLEnc, chainURLEnc)
 }

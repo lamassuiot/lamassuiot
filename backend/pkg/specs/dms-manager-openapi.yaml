@@ -30,6 +30,9 @@ paths:
         Retrieve statistics about DMS instances. Supports filtering to get statistics
         for a specific subset of DMS instances based on fields like name, metadata, etc.
       operationId: getDmsStats
+      x-authz:
+        entity_type: dms
+        check: filter
       parameters:
         - $ref: '#/components/parameters/Filter'
       responses:
@@ -47,6 +50,9 @@ paths:
       tags: [DMS]
       summary: List DMS instances
       operationId: getDmsList
+      x-authz:
+        entity_type: dms
+        check: filter
       parameters:
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Bookmark'
@@ -65,6 +71,9 @@ paths:
       tags: [DMS]
       summary: Create DMS
       operationId: createDms
+      x-authz:
+        entity_type: dms
+        action: create
       requestBody:
         required: true
         content:
@@ -86,6 +95,9 @@ paths:
       tags: [DMS]
       summary: Get DMS by ID
       operationId: getDmsById
+      x-authz:
+        entity_type: dms
+        action: read
       parameters:
         - $ref: '#/components/parameters/DmsId'
       responses:
@@ -101,6 +113,9 @@ paths:
       tags: [DMS]
       summary: Update DMS
       operationId: updateDms
+      x-authz:
+        entity_type: dms
+        action: update
       parameters:
         - $ref: '#/components/parameters/DmsId'
       requestBody:
@@ -123,6 +138,9 @@ paths:
       tags: [DMS]
       summary: Delete DMS
       operationId: deleteDms
+      x-authz:
+        entity_type: dms
+        action: delete
       parameters:
         - $ref: '#/components/parameters/DmsId'
       responses:
@@ -135,6 +153,9 @@ paths:
       tags: [DMS]
       summary: Update DMS metadata
       operationId: updateDmsMetadata
+      x-authz:
+        entity_type: dms
+        action: update
       parameters:
         - $ref: '#/components/parameters/DmsId'
       requestBody:
@@ -157,6 +178,9 @@ paths:
       tags: [DMS]
       summary: Patch DMS metadata
       operationId: patchDmsMetadata
+      x-authz:
+        entity_type: dms
+        action: update
       parameters:
         - $ref: '#/components/parameters/DmsId'
       requestBody:
@@ -181,6 +205,9 @@ paths:
       tags: [DMS]
       summary: Bind an identity certificate to a device
       operationId: bindIdentityToDevice
+      x-authz:
+        entity_type: dms
+        action: bind-identity
       requestBody:
         required: true
         content:

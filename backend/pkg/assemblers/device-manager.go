@@ -35,11 +35,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	if sseHub != nil {
-		routes.NewDeviceManagerHTTPLayerWithSSE(httpGrp, *service, sseHub)
-	} else {
-		routes.NewDeviceManagerHTTPLayer(httpGrp, *service)
-	}
+	routes.NewDeviceManagerHTTPLayerWithSSE(httpGrp, *service, sseHub, conf.AuthzClient, lHttp)
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
@@ -102,6 +98,10 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	}
 
 	var sseHub *controllers.DeviceEventSSEHub
+
+	if conf.SSEEnabled && !conf.SubscriberEventBus.Enabled {
+		return nil, nil, fmt.Errorf("SSEEnabled requires SubscriberEventBus to be enabled")
+	}
 
 	if conf.SubscriberEventBus.Enabled {
 		if !conf.SubscriberDLQEventBus.Enabled {

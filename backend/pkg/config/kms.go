@@ -11,6 +11,7 @@ type KMSConfig struct {
 	Server             cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus  cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	AuthzClient        AuthzClient                    `mapstructure:"authz_client"`
 	CryptoEngineConfig CryptoEngines                  `mapstructure:"crypto_engines"`
 }
 

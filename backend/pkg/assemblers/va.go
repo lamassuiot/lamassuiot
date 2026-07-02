@@ -36,7 +36,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl)
+	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl, conf.AuthzClient)
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {

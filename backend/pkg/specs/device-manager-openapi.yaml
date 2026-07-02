@@ -34,6 +34,9 @@ paths:
         Filtering by status is not permitted as the endpoint always returns the status distribution for the matching devices.
         When no filters are provided, returns statistics for all devices.
       operationId: getDeviceStats
+      x-authz:
+        entity_type: device
+        check: filter
       parameters:
         - $ref: '#/components/parameters/Filter'
       responses:
@@ -74,6 +77,9 @@ paths:
       tags: [Devices]
       summary: List devices
       operationId: getDevices
+      x-authz:
+        entity_type: device
+        check: filter
       parameters:
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Bookmark'
@@ -92,6 +98,9 @@ paths:
       tags: [Devices]
       summary: Create device
       operationId: createDevice
+      x-authz:
+        entity_type: device
+        action: create
       requestBody:
         required: true
         content:
@@ -113,6 +122,9 @@ paths:
       tags: [Devices]
       summary: Get device by ID
       operationId: getDeviceById
+      x-authz:
+        entity_type: device
+        action: read
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       responses:
@@ -129,6 +141,9 @@ paths:
       tags: [Devices]
       summary: Delete device
       operationId: deleteDevice
+      x-authz:
+        entity_type: device
+        action: delete
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       responses:
@@ -141,6 +156,9 @@ paths:
       tags: [Devices]
       summary: Update identity slot
       operationId: updateDeviceIdentitySlot
+      x-authz:
+        entity_type: device
+        action: provision
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       requestBody:
@@ -164,6 +182,9 @@ paths:
       tags: [Devices]
       summary: Update device metadata
       operationId: updateDeviceMetadata
+      x-authz:
+        entity_type: device
+        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       requestBody:
@@ -186,6 +207,9 @@ paths:
       tags: [Devices]
       summary: Patch device metadata
       operationId: patchDeviceMetadata
+      x-authz:
+        entity_type: device
+        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       requestBody:
@@ -215,6 +239,9 @@ paths:
         switches to a Server-Sent Events stream of new events instead of returning a
         paginated JSON list.
       operationId: getDeviceEvents
+      x-authz:
+        entity_type: device
+        action: read
       parameters:
         - $ref: '#/components/parameters/DeviceId'
         - $ref: '#/components/parameters/PageSize'
@@ -250,6 +277,9 @@ paths:
       tags: [Devices]
       summary: Create a device event
       operationId: createDeviceEvent
+      x-authz:
+        entity_type: device
+        action: metadata-update
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       requestBody:
@@ -274,6 +304,9 @@ paths:
       tags: [Devices]
       summary: Decommission device
       operationId: decommissionDevice
+      x-authz:
+        entity_type: device
+        action: decommission
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       responses:
@@ -286,6 +319,9 @@ paths:
       tags: [Devices]
       summary: List devices managed by a DMS
       operationId: getDevicesByDMS
+      x-authz:
+        entity_type: device
+        check: filter
       parameters:
         - name: id
           in: path
@@ -316,6 +352,9 @@ paths:
         Retrieve all device groups with optional pagination, sorting, and filtering.
         Device groups can be organized hierarchically with parent-child relationships.
       operationId: getDeviceGroups
+      x-authz:
+        entity_type: device_group
+        check: filter
       parameters:
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Bookmark'
@@ -370,6 +409,9 @@ paths:
         
         Filter operands are returned as human-readable names (e.g., "contains", "eq").
       operationId: createDeviceGroup
+      x-authz:
+        entity_type: device_group
+        action: create
       requestBody:
         required: true
         content:
@@ -444,6 +486,9 @@ paths:
         
         Filter operands are returned as human-readable names (e.g., "contains", "eq").
       operationId: getDeviceGroupByID
+      x-authz:
+        entity_type: device_group
+        action: read
       parameters:
         - name: id
           in: path
@@ -471,6 +516,9 @@ paths:
         Filter operands are returned as human-readable names (e.g., "contains", "eq").
 
       operationId: updateDeviceGroup
+      x-authz:
+        entity_type: device_group
+        action: update
       parameters:
         - name: id
           in: path
@@ -520,6 +568,9 @@ paths:
         Delete a device group. Child groups are not automatically deleted.
         If a group has children, consider reassigning or deleting them first.
       operationId: deleteDeviceGroup
+      x-authz:
+        entity_type: device_group
+        action: delete
       parameters:
         - name: id
           in: path
@@ -542,6 +593,9 @@ paths:
         Criteria are inherited and composed from parent groups in the hierarchy.
         Supports additional filtering, pagination, and sorting.
       operationId: getDevicesByGroup
+      x-authz:
+        entity_type: device
+        check: filter
       parameters:
         - name: id
           in: path
@@ -588,6 +642,9 @@ paths:
         Returns total device count and distribution across all status types.
         Criteria are inherited from parent groups in the hierarchy.
       operationId: getDeviceGroupStats
+      x-authz:
+        entity_type: device_group
+        action: read
       parameters:
         - name: id
           in: path

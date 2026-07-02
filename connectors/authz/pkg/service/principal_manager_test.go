@@ -1,0 +1,434 @@
+package service
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/pem"
+	"math/big"
+	"testing"
+	"time"
+
+	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func createTestCAAndLeafCerts(t *testing.T) (*x509.Certificate, *x509.Certificate, *rsa.PrivateKey) {
+	t.Helper()
+
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1001),
+		Subject:               pkix.Name{CommonName: "Test Root CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		SubjectKeyId:          []byte{0x14, 0xAF, 0x9C, 0x22, 0x11, 0x8B, 0x7E, 0x4A},
+	}
+
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	require.NoError(t, err)
+
+	caCert, err := x509.ParseCertificate(caDER)
+	require.NoError(t, err)
+
+	leafKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	leafTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(2002),
+		Subject:               pkix.Name{CommonName: "sensor-001.example.com"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		AuthorityKeyId:        caCert.SubjectKeyId,
+	}
+
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCert, &leafKey.PublicKey, caKey)
+	require.NoError(t, err)
+
+	leafCert, err := x509.ParseCertificate(leafDER)
+	require.NoError(t, err)
+
+	return caCert, leafCert, caKey
+}
+
+func sha256FingerprintFromDER(der []byte) string {
+	h := sha256.Sum256(der)
+	return "SHA256:" + hex.EncodeToString(h[:])
+}
+
+func formatAKIValue(aki []byte) string {
+	return hex.EncodeToString(aki)
+}
+
+func base64PEMFromCert(cert *x509.Certificate) string {
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+	return base64.StdEncoding.EncodeToString(certPEM)
+}
+
+func TestPrincipalManager_MatchX509_CNAndCA_AuthorityKeyID(t *testing.T) {
+	caCert, leafCert, _ := createTestCAAndLeafCerts(t)
+
+	principal := models.Principal{
+		AuthConfig: map[string]interface{}{
+			"match_mode": "cn_and_ca",
+			"subject_cn": "sensor-*.example.com",
+			"ca_trust": map[string]interface{}{
+				"pem":           base64PEMFromCert(caCert),
+				"identity_type": "authority_key_id",
+				"value":         formatAKIValue(leafCert.AuthorityKeyId),
+			},
+		},
+	}
+
+	matched, err := store.X509Matcher{}.Match([]models.Principal{principal}, leafCert)
+	require.NoError(t, err)
+	assert.NotEmpty(t, matched)
+}
+
+func TestPrincipalManager_MatchX509_AnyFromCA_FingerprintSelfSignedCA(t *testing.T) {
+	caCert, _, _ := createTestCAAndLeafCerts(t)
+
+	principal := models.Principal{
+		AuthConfig: map[string]interface{}{
+			"match_mode": "any_from_ca",
+			"ca_trust": map[string]interface{}{
+				"pem":           base64PEMFromCert(caCert),
+				"identity_type": "fingerprint",
+				"value":         sha256FingerprintFromDER(caCert.Raw),
+			},
+		},
+	}
+
+	matched, err := store.X509Matcher{}.Match([]models.Principal{principal}, caCert)
+	require.NoError(t, err)
+	assert.NotEmpty(t, matched)
+}
+
+func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
+	caCert, _, _ := createTestCAAndLeafCerts(t)
+
+	// A principal with missing PEM is silently skipped — per-principal errors
+	// are non-fatal in X509Matcher so that one bad config doesn't block others.
+	principal := models.Principal{
+		AuthConfig: map[string]interface{}{
+			"match_mode": "any_from_ca",
+			"ca_trust": map[string]interface{}{
+				"identity_type": "fingerprint",
+				"value":         sha256FingerprintFromDER(caCert.Raw),
+			},
+		},
+	}
+
+	matched, err := store.X509Matcher{}.Match([]models.Principal{principal}, caCert)
+	require.NoError(t, err)
+	assert.Empty(t, matched)
+}
+
+func TestPrincipalManager_CreatePrincipal(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Test creating a principal
+	principal := &models.Principal{
+		ID:          "user-1",
+		Name:        "John Doe",
+		Description: "Initial description",
+		Active:      true,
+	}
+
+	err = pm.CreatePrincipal(ctx, principal)
+	assert.NoError(t, err)
+
+	// Verify it was created
+	retrieved, err := pm.GetPrincipal(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, "John Doe", retrieved.Name)
+	assert.Equal(t, "Initial description", retrieved.Description)
+	assert.True(t, retrieved.Active)
+}
+
+func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	principal := &models.Principal{
+		ID:          "user-1",
+		Name:        "John Doe",
+		Description: "Before update",
+		Active:      true,
+	}
+	err = pm.CreatePrincipal(ctx, principal)
+	require.NoError(t, err)
+
+	principal.Description = "After update"
+	err = pm.UpdatePrincipal(ctx, principal)
+	require.NoError(t, err)
+
+	retrieved, err := pm.GetPrincipal(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, "After update", retrieved.Description)
+}
+
+func TestPrincipalManager_GrantPolicy(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Create a principal
+	principal := &models.Principal{
+		ID:   "user-1",
+		Name: "John Doe",
+	}
+	err = pm.CreatePrincipal(ctx, principal)
+	require.NoError(t, err)
+
+	// Grant a policy
+	err = pm.GrantPolicy(ctx, "user-1", "policy-iot-admin", "admin")
+	assert.NoError(t, err)
+
+	// Verify the grant
+	hasPolicy, err := pm.HasPolicy(ctx, "user-1", "policy-iot-admin")
+	require.NoError(t, err)
+	assert.True(t, hasPolicy)
+
+	// Get policies
+	grants, _, err := pm.GetPrincipalPolicies(ctx, "user-1", nil)
+	require.NoError(t, err)
+	assert.Len(t, grants, 1)
+	assert.Equal(t, "policy-iot-admin", grants[0].PolicyID)
+	assert.Equal(t, "admin", grants[0].GrantedBy)
+	assert.False(t, grants[0].GrantedAt.IsZero())
+}
+
+func TestPrincipalManager_RevokePolicy(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Create principal and grant policy
+	principal := &models.Principal{
+		ID:   "user-1",
+		Name: "John Doe",
+	}
+	err = pm.CreatePrincipal(ctx, principal)
+	require.NoError(t, err)
+
+	err = pm.GrantPolicy(ctx, "user-1", "policy-iot-admin", "admin")
+	require.NoError(t, err)
+
+	// Revoke the policy
+	err = pm.RevokePolicy(ctx, "user-1", "policy-iot-admin")
+	assert.NoError(t, err)
+
+	// Verify it was revoked
+	hasPolicy, err := pm.HasPolicy(ctx, "user-1", "policy-iot-admin")
+	require.NoError(t, err)
+	assert.False(t, hasPolicy)
+}
+
+func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Create principal
+	principal := &models.Principal{
+		ID:   "user-1",
+		Name: "John Doe",
+	}
+	err = pm.CreatePrincipal(ctx, principal)
+	require.NoError(t, err)
+
+	// Grant multiple policies (grant the same policy once - duplicate should be skipped)
+	policyIDs := []string{"policy-iot-admin"}
+	err = pm.GrantPolicies(ctx, "user-1", policyIDs, "admin")
+	assert.NoError(t, err)
+
+	// Verify it was granted
+	count, err := pm.CountPrincipalPolicies(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+}
+
+func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Create multiple principals
+	for i := 1; i <= 3; i++ {
+		principal := &models.Principal{
+			ID:   "user-" + string(rune('0'+i)),
+			Name: "User " + string(rune('0'+i)),
+		}
+		err = pm.CreatePrincipal(ctx, principal)
+		require.NoError(t, err)
+	}
+
+	// Grant the same policy to all principals
+	for i := 1; i <= 3; i++ {
+		err = pm.GrantPolicy(ctx, "user-"+string(rune('0'+i)), "policy-iot-admin", "admin")
+		require.NoError(t, err)
+	}
+
+	// Get all principals with this policy
+	principals, err := pm.GetPolicyPrincipals(ctx, "policy-iot-admin")
+	require.NoError(t, err)
+	assert.Len(t, principals, 3)
+
+	// Count principals
+	count, err := pm.CountPolicyPrincipals(ctx, "policy-iot-admin")
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), count)
+}
+
+func TestPrincipalManager_DeletePrincipal(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Create principal and grant policies
+	principal := &models.Principal{
+		ID:   "user-1",
+		Name: "John Doe",
+	}
+	err = pm.CreatePrincipal(ctx, principal)
+	require.NoError(t, err)
+
+	err = pm.GrantPolicy(ctx, "user-1", "policy-iot-admin", "admin")
+	require.NoError(t, err)
+
+	// Delete the principal
+	err = pm.DeletePrincipal(ctx, "user-1")
+	assert.NoError(t, err)
+
+	// Verify it was deleted
+	_, err = pm.GetPrincipal(ctx, "user-1")
+	assert.Error(t, err)
+
+	// Verify policy associations were also deleted
+	count, err := pm.CountPrincipalPolicies(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
+}
+
+func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Create principal
+	principal := &models.Principal{
+		ID:     "user-1",
+		Name:   "John Doe",
+		Active: true,
+	}
+	err = pm.CreatePrincipal(ctx, principal)
+	require.NoError(t, err)
+
+	// Deactivate
+	err = pm.SetPrincipalActive(ctx, "user-1", false)
+	assert.NoError(t, err)
+
+	// Verify
+	retrieved, err := pm.GetPrincipal(ctx, "user-1")
+	require.NoError(t, err)
+	assert.False(t, retrieved.Active)
+
+	// Reactivate
+	err = pm.SetPrincipalActive(ctx, "user-1", true)
+	assert.NoError(t, err)
+
+	retrieved, err = pm.GetPrincipal(ctx, "user-1")
+	require.NoError(t, err)
+	assert.True(t, retrieved.Active)
+}
+
+func TestPrincipalManager_ListPrincipals(t *testing.T) {
+	ctx := context.Background()
+
+	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
+
+	pm, err := NewPrincipalManager(db, "", false)
+	require.NoError(t, err)
+
+	// Create active principals
+	for i := 1; i <= 3; i++ {
+		principal := &models.Principal{
+			ID:     "user-" + string(rune('0'+i)),
+			Name:   "Active User " + string(rune('0'+i)),
+			Active: true,
+		}
+		err = pm.CreatePrincipal(ctx, principal)
+		require.NoError(t, err)
+	}
+
+	// Create inactive principal
+	inactive := &models.Principal{
+		ID:     "user-inactive",
+		Name:   "Inactive User",
+		Active: false,
+	}
+	err = pm.CreatePrincipal(ctx, inactive)
+	require.NoError(t, err)
+
+	// Explicitly set to inactive (since default might override)
+	err = pm.SetPrincipalActive(ctx, "user-inactive", false)
+	require.NoError(t, err)
+
+	// List all principals
+	all, _, err := pm.ListPrincipals(ctx, nil)
+	require.NoError(t, err)
+	assert.Len(t, all, 4)
+
+	// List only active principals
+	activeFilter := &resources.QueryParameters{
+		Filters: []resources.FilterOption{
+			{Field: "active", FilterOperation: resources.EnumEqual, Value: "true"},
+		},
+	}
+	active, _, err := pm.ListPrincipals(ctx, activeFilter)
+	require.NoError(t, err)
+	assert.Len(t, active, 3)
+}

@@ -112,6 +112,7 @@ func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, re
 		tp := sdktrace.NewTracerProvider(
 			sdktrace.WithSampler(sdktrace.NeverSample()),
 			sdktrace.WithResource(resources),
+			sdktrace.WithSpanProcessor(authContextSpanProcessor{}),
 		)
 		otel.SetTracerProvider(tp)
 		return nil
@@ -148,6 +149,7 @@ func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, re
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(resources),
+		sdktrace.WithSpanProcessor(authContextSpanProcessor{}),
 	)
 
 	// Register the global tracer provider

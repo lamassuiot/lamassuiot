@@ -1,0 +1,59 @@
+{
+  "id": "lamassu.77fb978b-3c25-4d2f-8402-d02541b9a708",
+  "name": "Certificate - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "ca",
+      "entity_type": "ca_certificate",
+      "actions": [
+        "create",
+        "status-update",
+        "delete",
+        "read",
+        "sign",
+        "metadata-update",
+        "reissue",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "ca",
+      "entity_type": "certificate",
+      "actions": [
+        "read",
+        "delete",
+        "import",
+        "ui",
+        "status-update",
+        "metadata-update"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "ca",
+      "entity_type": "issuance_profile",
+      "actions": [
+        "read",
+        "delete",
+        "update",
+        "ui",
+        "create"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

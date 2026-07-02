@@ -33,7 +33,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewCAHTTPLayer(httpGrp, *caService)
+	routes.NewCAHTTPLayer(httpGrp, *caService, conf.AuthzClient, lHttp)
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {

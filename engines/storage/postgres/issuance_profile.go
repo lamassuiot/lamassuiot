@@ -11,7 +11,7 @@ import (
 
 type PostgresIssuanceStorage struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.IssuanceProfile]
+	querier *DBQuerier[models.IssuanceProfile]
 }
 
 func NewIssuanceProfileRepository(logger *logrus.Entry, db *gorm.DB) (storage.IssuanceProfileRepo, error) {
@@ -27,11 +27,11 @@ func NewIssuanceProfileRepository(logger *logrus.Entry, db *gorm.DB) (storage.Is
 }
 
 func (db *PostgresIssuanceStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
+	return db.querier.Count(ctx, []GormExtraOps{})
 }
 
 func (db *PostgresIssuanceStorage) SelectAll(ctx context.Context, req storage.StorageListRequest[models.IssuanceProfile]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresIssuanceStorage) SelectByID(ctx context.Context, id string) (bool, *models.IssuanceProfile, error) {
