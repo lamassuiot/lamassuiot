@@ -33,7 +33,7 @@ func NewDeviceManagerHTTPLayerWithSSE(router *gin.RouterGroup, svc services.Devi
 	rv1.PUT("/devices/:id/idslot", authzMw.AuthzCheck("provision"), routes.UpdateDeviceIdentitySlot)
 	rv1.PUT("/devices/:id/metadata", authzMw.AuthzCheck("metadata-update"), routes.UpdateDeviceMetadata)
 	rv1.PATCH("/devices/:id/metadata", authzMw.AuthzCheck("metadata-update"), routes.UpdateDeviceMetadata)
-	rv1.DELETE("/devices/:id/decommission", authzMw.AuthzCheck("decomission"), routes.DecommissionDevice)
+	rv1.DELETE("/devices/:id/decommission", authzMw.AuthzCheck("decommission"), routes.DecommissionDevice)
 	rv1.GET("/devices/dms/:id", authzMw.AuthListCheck(), routes.GetDevicesByDMS)
 
 	// Device Groups routes

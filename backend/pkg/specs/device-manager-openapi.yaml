@@ -306,7 +306,7 @@ paths:
       operationId: decommissionDevice
       x-authz:
         entity_type: device
-        action: decomission
+        action: decommission
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       responses:

@@ -3,6 +3,7 @@ package gorm
 import (
 	"strings"
 
+	authzsdk "github.com/lamassuiot/authz/sdk"
 	"gorm.io/gorm"
 )
 
@@ -29,7 +30,7 @@ func (p *AuthzGormPlugin) injectAuthzQuery(db *gorm.DB) {
 		return
 	}
 
-	authzQuery := ctx.Value("authz_query")
+	authzQuery := ctx.Value(authzsdk.AuthzQueryKey)
 	if authzQuery == nil {
 		return
 	}

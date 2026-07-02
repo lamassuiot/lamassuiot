@@ -27,7 +27,7 @@
         "read",
         "delete",
         "provision",
-        "decomission",
+        "decommission",
         "metadata-update",
         "create",
         "ui"

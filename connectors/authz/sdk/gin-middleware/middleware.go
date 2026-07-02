@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/core"
+	authzsdk "github.com/lamassuiot/authz/sdk"
 	lamassucore "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
@@ -120,7 +121,7 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 		if len(authorizedList) != 0 {
 			c.Set("authz_query", authorizedList)
 
-			reqCtx := context.WithValue(c.Request.Context(), "authz_query", authorizedList)
+			reqCtx := context.WithValue(c.Request.Context(), authzsdk.AuthzQueryKey, authorizedList)
 			c.Request = c.Request.WithContext(reqCtx)
 		}
 
