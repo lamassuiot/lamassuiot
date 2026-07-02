@@ -15,7 +15,7 @@ const deviceGroupsDBName = "device_groups"
 type PostgresDeviceGroupsStore struct {
 	db      *gorm.DB
 	logger  *logrus.Entry
-	querier *postgresDBQuerier[models.DeviceGroup]
+	querier *DBQuerier[models.DeviceGroup]
 }
 
 func NewDeviceGroupsRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceGroupsRepo, error) {
@@ -32,11 +32,11 @@ func NewDeviceGroupsRepository(logger *logrus.Entry, db *gorm.DB) (storage.Devic
 }
 
 func (db *PostgresDeviceGroupsStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
+	return db.querier.Count(ctx, []GormExtraOps{})
 }
 
 func (db *PostgresDeviceGroupsStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.DeviceGroup]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresDeviceGroupsStore) SelectByID(ctx context.Context, id string) (bool, *models.DeviceGroup, error) {

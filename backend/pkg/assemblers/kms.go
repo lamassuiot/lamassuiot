@@ -35,7 +35,7 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewKMSHTTPLayer(httpGrp, *kmsService)
+	routes.NewKMSHTTPLayer(httpGrp, *kmsService, conf.AuthzClient, lHttp)
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {

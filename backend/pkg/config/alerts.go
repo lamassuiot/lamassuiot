@@ -10,6 +10,7 @@ type AlertsConfig struct {
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
 	SubscriberDLQEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
 	Storage               cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	AuthzClient           AuthzClient                    `mapstructure:"authz_client"`
 	SMTPConfig            SMTPServer                     `mapstructure:"smtp_server"`
 }
 

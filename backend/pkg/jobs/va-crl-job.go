@@ -26,7 +26,7 @@ func NewVACrlMonitorJob(logger *logrus.Entry, service services.CRLService, blind
 }
 
 func (svc *VACrlMonitor) Run() {
-	ctx := helpers.InitContext()
+	ctx := helpers.InitJobContext("va-crl-monitor")
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 	lFunc.Info("starting periodic VA CRL check")
 	svc.processVARoles(ctx, lFunc)

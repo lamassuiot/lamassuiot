@@ -1,0 +1,20 @@
+{
+  "id": "lamassu.c3e714c9-863f-4714-a0b3-4d4b068a4228",
+  "name": "DMS Manager - Reader",
+  "description": "Read-only access to DMS resources",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "dmsmanager",
+      "entity_type": "dms",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

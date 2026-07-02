@@ -31,7 +31,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewAlertsHTTPLayer(httpGrp, *service)
+	routes.NewAlertsHTTPLayer(lHttp, httpGrp, *service, conf.AuthzClient)
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {

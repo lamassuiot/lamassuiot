@@ -53,7 +53,7 @@ func main() {
 	}
 
 	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.DeviceManagerSource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.DeviceManagerSource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
 

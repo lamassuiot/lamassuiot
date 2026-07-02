@@ -18,5 +18,6 @@ type DMSconfig struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"device_manager_client"`
 
-	DownstreamCertificateFile string `mapstructure:"downstream_cert_file"`
+	AuthzClient               AuthzClient                    `mapstructure:"authz_client"`
+	DownstreamCertificateFile string                         `mapstructure:"downstream_cert_file"`
 }

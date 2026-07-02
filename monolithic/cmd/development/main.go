@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -12,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/fatih/color"
+	authzconfig "github.com/lamassuiot/authz/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -106,6 +107,13 @@ func main() {
 	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
+	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
+	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json", "path to PKI schema JSON file for authz service")
+	authzSchema := flag.String("authz-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json", "path to Authz schema JSON file for authz service")
+	authzHTTPSchemas := flag.String("authz-http-schemas", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json", "comma-separated list of HTTP schema JSON file paths for Envoy ext_authz (e.g. ./connectors/authz/examples/wfx/http-schema.json)")
+	authzProxyPrefixes := flag.String("authz-proxy-prefixes", "/api/wfx/nbi/,/api/wfx/sbi/", "comma-separated gateway path prefixes protected by monolithic ext_authz checks")
+	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
+	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -243,7 +251,7 @@ func main() {
 	} else {
 		fmt.Println(">> launching docker: Postgres ...")
 		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "wfx"})
+		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "authz"})
 		backend, err := posgresSubsystem.Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
@@ -256,6 +264,7 @@ func main() {
 		fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
 	}
 
+	storageConfig.LogLevel = cconfig.Trace
 	fmt.Println("Crypto Engines")
 
 	var vaultCryptoEngine cconfig.CryptoEngineConfig
@@ -523,6 +532,8 @@ func main() {
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
+		AuthzProxyPrefixes: splitCommaSeparated(*authzProxyPrefixes),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -551,28 +562,19 @@ func main() {
 		},
 	}
 
-	time.Sleep(3 * time.Second)
-	kmsSDK := sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/kms", conf.GatewayPortHttps))
-	engines, err := kmsSDK.GetCryptoEngineProvider(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("==================== Available Crypto Engines ==========================")
-	for _, engine := range engines {
-		fmt.Println(engine.ID)
-	}
-	fmt.Println("========================================================================")
+	http.DefaultClient = sdk.HttpClientWithCustomHeaders(http.DefaultClient, "X-Principal-ID", "admin-mode")
 
 	// Populate sample data if enabled
 	if *sampleData {
 		logger := chelpers.SetupLogger(cconfig.Info, "SampleData", "Populator")
 		// Use the internal HTTP ports since services are behind the gateway
 		// We'll construct URLs using the gateway
+		kmsServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/kms", conf.GatewayPortHttp)
 		caServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/ca", conf.GatewayPortHttp)
+		dmsServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/dmsmanager", conf.GatewayPortHttp)
 		deviceServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/devmanager", conf.GatewayPortHttp)
 
-		err := sampledata.PopulateSampleData(context.Background(), logger, caServiceURL, deviceServiceURL)
+		err := sampledata.PopulateSampleData(context.Background(), logger, kmsServiceURL, caServiceURL, dmsServiceURL, deviceServiceURL)
 		if err != nil {
 			fmt.Printf("Warning: Failed to populate sample data: %v\n", err)
 		}
@@ -618,4 +620,82 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 		dst[k] = v
 	}
 	return dst
+}
+
+func splitCommaSeparated(value string) []string {
+	out := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string) *authzconfig.AuthzConfig {
+	if !enabled || useSqlite {
+		return nil
+	}
+
+	// Silently ignore preload dir if it doesn't exist
+	if preloadDir != "" {
+		if _, err := os.Stat(preloadDir); os.IsNotExist(err) {
+			fmt.Printf(">> authz: preload directory %q not found, skipping preload\n", preloadDir)
+			preloadDir = ""
+		}
+	}
+
+	var bootstrap []authzconfig.BootstrapEntry
+	if bootstrapJSON != "" {
+		if err := json.Unmarshal([]byte(bootstrapJSON), &bootstrap); err != nil {
+			fmt.Printf(">> authz: invalid --authz-bootstrap JSON: %v\n", err)
+			bootstrap = nil
+		} else {
+			fmt.Printf(">> authz: loaded %d bootstrap entries from flag\n", len(bootstrap))
+		}
+	}
+
+	// The monolithic Postgres container uses a single database ("pki") with per-service
+	// PostgreSQL schemas inside it. Clone the shared credentials and inject the correct
+	// database + schema for each authz connection.
+	authzDB := storageConfig
+	authzDB.Config = deepCopy(storageConfig.Config)
+	authzDB.Config["database"] = "pki"
+	authzDB.Config["schema"] = "authz"
+
+	pkiDB := storageConfig
+	pkiDB.Config = deepCopy(storageConfig.Config)
+	pkiDB.Config["database"] = "pki"
+	pkiDB.Config["schema"] = "ca"
+
+	return &authzconfig.AuthzConfig{
+		Logs: cconfig.Logging{Level: cconfig.Debug},
+		Server: cconfig.HttpServer{
+			LogLevel:      cconfig.Debug,
+			Port:          0,
+			ListenAddress: "0.0.0.0",
+			Protocol:      cconfig.HTTP,
+		},
+		AuthzDB: authzDB,
+		Schemas: map[string]string{
+			"authz": authzSchema,
+			"pki":   pkiSchema,
+		},
+		Credentials: map[string]cconfig.PluggableStorageEngine{
+			"authz": authzDB,
+			"pki":   pkiDB,
+		},
+		HTTPSchemas: func() []string {
+			var out []string
+			for _, p := range strings.Split(httpSchemas, ",") {
+				if p = strings.TrimSpace(p); p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
+		}(),
+		PublisherEventBus: publisherEventBus,
+		PreloadDir:        preloadDir,
+		Bootstrap:         bootstrap,
+	}
 }
