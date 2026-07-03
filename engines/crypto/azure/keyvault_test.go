@@ -30,7 +30,7 @@ func TestNewAzureKeyVaultEngine(t *testing.T) {
 	kvEngine := engine.(*AzureKeyVaultCryptoEngine)
 	assert.Equal(t, models.CryptoEngineInfo{
 		Type:          models.AzureKeyVault,
-		SecurityLevel: models.SL1,
+		SecurityLevel: models.SL2,
 		Provider:      "Microsoft Azure",
 		Name:          "Key Vault",
 		Metadata:      metadata,
