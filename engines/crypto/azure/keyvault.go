@@ -69,7 +69,7 @@ func NewAzureKeyVaultEngine(logger *logrus.Entry, vaultURL string, credential az
 		softCryptoEngine: software.NewSoftwareCryptoEngine(lAzureKV),
 		config: models.CryptoEngineInfo{
 			Type:          models.AzureKeyVault,
-			SecurityLevel: models.SL1,
+			SecurityLevel: models.SL2,
 			Provider:      "Microsoft Azure",
 			Name:          "Key Vault",
 			Metadata:      metadata,
