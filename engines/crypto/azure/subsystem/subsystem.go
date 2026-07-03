@@ -16,9 +16,10 @@ type AzureSubsystem struct {
 }
 
 func (p *AzureSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBackend, error) {
-	azureCleanup, _, azureCfg, err := azure.RunAzureEmulationFlociAZDocker(exposeAsStandardPort)
+	cleanupBeforeEach, containerCleanup, azureCfg, err := azure.RunAzureEmulationFlociAZDocker(exposeAsStandardPort)
 	if err != nil {
-		log.Fatalf("could not launch Azure Platform: %s", err)
+		log.Printf("could not launch Azure Platform: %s", err)
+		return nil, err
 	}
 
 	cryptoEngine, err := config.CryptoEngineConfigAdapter[azure.AzureSDKConfig]{
@@ -27,15 +28,16 @@ func (p *AzureSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBa
 		Type:     config.AzureKeyVaultProvider,
 		Config:   *azureCfg,
 	}.Unmarshal()
-
 	if err != nil {
-		log.Fatalf("could not marshal Azure Platform config: %s", err)
+		log.Printf("could not marshal Azure Platform config: %s", err)
+		_ = containerCleanup()
+		return nil, err
 	}
 
 	return &subsystems.SubsystemBackend{
 		Config:     *cryptoEngine,
-		BeforeEach: func() error { return nil },
-		AfterSuite: func() { azureCleanup() },
+		BeforeEach: cleanupBeforeEach,
+		AfterSuite: func() { _ = containerCleanup() },
 	}, nil
 
 }
