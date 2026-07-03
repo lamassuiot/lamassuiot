@@ -298,7 +298,7 @@ func (p *AzureKeyVaultCryptoEngine) registerCreatedKey(ctx context.Context, kid 
 		Tags: map[string]*string{lamassuIDTag: &keyID},
 	}, nil)
 	if err != nil {
-		lAzureKV.Warnf("could not tag Key Vault key %s with lamassu ID: %s", keyName, err)
+		return "", nil, fmt.Errorf("tagging Key Vault key %s with lamassu ID: %w", keyName, err)
 	}
 
 	return keyID, signer, nil
@@ -317,7 +317,7 @@ func (p *AzureKeyVaultCryptoEngine) registerImportedKey(ctx context.Context, key
 		Tags: map[string]*string{lamassuIDTag: &keyID},
 	}, nil)
 	if err != nil {
-		p.logger.Warnf("could not tag imported key %s with lamassu ID: %s", keyName, err)
+		return nil, fmt.Errorf("tagging Key Vault key %s with lamassu ID: %w", keyName, err)
 	}
 
 	return newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
