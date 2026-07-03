@@ -23,8 +23,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var lAzureKV *logrus.Entry
-
 // lamassuIDTag is the Key Vault tag key used to store the Lamassu key ID
 // (hex-encoded SHA256 of the PKIX public key). Key Vault key names are UUIDs
 // because the public key hash is only known after creation; this tag bridges
@@ -43,7 +41,7 @@ type AzureKeyVaultCryptoEngine struct {
 // any token value, so this satisfies the requirement without a real credential.
 
 func NewAzureKeyVaultEngine(logger *logrus.Entry, vaultURL string, credential azcore.TokenCredential, allowHTTP bool, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
-	lAzureKV = logger.WithField("subsystem-provider", "Azure Key Vault Client")
+	lAzureKV := logger.WithField("subsystem-provider", "Azure Key Vault Client")
 
 	clientOpts := &azkeys.ClientOptions{}
 
@@ -137,7 +135,7 @@ func (p *AzureKeyVaultCryptoEngine) findKeyNameByLamassuID(ctx context.Context, 
 }
 
 func (p *AzureKeyVaultCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
-	lAzureKV.Debugf("Getting the private key with Lamassu ID: %s", keyID)
+	p.logger.Debugf("Getting the private key with Lamassu ID: %s", keyID)
 	keyName, err := p.findKeyNameByLamassuID(context.Background(), keyID)
 	if err != nil {
 		return nil, err
@@ -146,7 +144,7 @@ func (p *AzureKeyVaultCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Sign
 }
 
 func (p *AzureKeyVaultCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
-	lAzureKV.Debugf("Creating RSA key with size %d", keySize)
+	p.logger.Debugf("Creating RSA key with size %d", keySize)
 
 	switch keySize {
 	case 2048, 3072, 4096:
@@ -170,7 +168,7 @@ func (p *AzureKeyVaultCryptoEngine) CreateRSAPrivateKey(ctx context.Context, key
 }
 
 func (p *AzureKeyVaultCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
-	lAzureKV.Debugf("Creating ECDSA key with curve %s", curve.Params().Name)
+	p.logger.Debugf("Creating ECDSA key with curve %s", curve.Params().Name)
 
 	crv, err := ecCurveToAzure(curve)
 	if err != nil {
