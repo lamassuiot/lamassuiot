@@ -212,12 +212,13 @@ func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (st
 		QI:  key.Precomputed.Qinv.Bytes(),
 	}
 
-	_, err = p.keyVaultCli.ImportKey(context.Background(), keyID, azkeys.ImportKeyParameters{Key: jwk}, nil)
+	keyName := uuid.NewString()
+	resp, err := p.keyVaultCli.ImportKey(context.Background(), keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("importing RSA key into Key Vault: %w", err)
 	}
 
-	signer, err := newKeyVaultSignerWrapper(p.keyVaultCli, keyID)
+	signer, err := p.registerImportedKey(context.Background(), keyName, keyID, resp.Key.KID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -246,12 +247,13 @@ func (p *AzureKeyVaultCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey)
 		D:   padLeft(key.D.Bytes(), byteLen),
 	}
 
-	_, err = p.keyVaultCli.ImportKey(context.Background(), keyID, azkeys.ImportKeyParameters{Key: jwk}, nil)
+	keyName := uuid.NewString()
+	resp, err := p.keyVaultCli.ImportKey(context.Background(), keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("importing ECDSA key into Key Vault: %w", err)
 	}
 
-	signer, err := newKeyVaultSignerWrapper(p.keyVaultCli, keyID)
+	signer, err := p.registerImportedKey(context.Background(), keyName, keyID, resp.Key.KID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -300,6 +302,25 @@ func (p *AzureKeyVaultCryptoEngine) registerCreatedKey(ctx context.Context, kid 
 	}
 
 	return keyID, signer, nil
+}
+
+// registerImportedKey tags an imported Key Vault key with the x-lamassu-id tag
+// and returns a signer for it. keyName is the UUID used as the Key Vault key
+// name; keyID is the Lamassu ID (PKIX digest) stored in the tag.
+func (p *AzureKeyVaultCryptoEngine) registerImportedKey(ctx context.Context, keyName, keyID string, kid *azkeys.ID) (crypto.Signer, error) {
+	keyVersion := ""
+	if kid != nil {
+		keyVersion = kid.Version()
+	}
+
+	_, err := p.keyVaultCli.UpdateKey(ctx, keyName, keyVersion, azkeys.UpdateKeyParameters{
+		Tags: map[string]*string{lamassuIDTag: &keyID},
+	}, nil)
+	if err != nil {
+		p.logger.Warnf("could not tag imported key %s with lamassu ID: %s", keyName, err)
+	}
+
+	return newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
 }
 
 // ---- helpers ----
