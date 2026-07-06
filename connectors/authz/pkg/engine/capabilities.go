@@ -71,17 +71,18 @@ func (e *Engine) GetGlobalCapabilities(ctx context.Context, policies *PolicyRegi
 				for _, rule := range policy.Rules {
 					if ruleMatchesSchema(rule, schema) && rule.HasAction(action) {
 						result.addGlobalAction(namespacedKey, action)
-						log.WithFields(logrus.Fields{
-							"action":      action,
-							"entity_type": namespacedKey,
-							"policy_id":   policy.ID,
-						}).Debug("global action granted")
 						break
 					}
 				}
 			}
 		}
 	}
+
+	log.WithFields(logrus.Fields{
+		"schemas_checked":      len(allSchemas),
+		"policies_checked":     len(policies.GetAll()),
+		"total_global_actions": len(result),
+	}).Debug("global capabilities computed")
 
 	return result, nil
 }
