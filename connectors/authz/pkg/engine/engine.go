@@ -108,7 +108,6 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 	return e.authorizeAtomic(ctx, policies, schema, schemaName, action, entityType, namespace, entityKey)
 }
 
-
 func (e *Engine) authorizeGlobal(log *logrus.Entry, policies *PolicyRegistry, schema *SchemaDefinition, action, entityType, namespace string) (bool, error) {
 	matchedRules := 0
 	for _, rule := range policies.GetRules() {
