@@ -8,6 +8,10 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -65,10 +69,28 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	return e, nil
 }
 
+const engineTracer = "github.com/lamassuiot/authz/engine"
+
 // Authorize checks if an action is allowed.
 // For atomic actions: checks against a specific entity key in the database.
 // For global actions: checks policy grants without database queries (entityKey is ignored).
-func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, error) {
+func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namespace, schemaName, action, entityType string, entityKey map[string]string) (allowed bool, err error) {
+	ctx, span := otel.Tracer(engineTracer).Start(ctx, "engine.Authorize",
+		trace.WithAttributes(
+			attribute.String("authz.namespace", namespace),
+			attribute.String("authz.schema", schemaName),
+			attribute.String("authz.action", action),
+			attribute.String("authz.entity_type", entityType),
+		),
+	)
+	defer func() {
+		span.SetAttributes(attribute.Bool("authz.allowed", allowed))
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 	log := helpers.ConfigureLogger(ctx, e.logger)
 	schema, err := e.schemas.GetBySchemaEntity(schemaName, entityType)
 	if err != nil {
@@ -85,6 +107,7 @@ func (e *Engine) Authorize(ctx context.Context, policies *PolicyRegistry, namesp
 	}
 	return e.authorizeAtomic(ctx, policies, schema, schemaName, action, entityType, namespace, entityKey)
 }
+
 
 func (e *Engine) authorizeGlobal(log *logrus.Entry, policies *PolicyRegistry, schema *SchemaDefinition, action, entityType, namespace string) (bool, error) {
 	matchedRules := 0
@@ -108,7 +131,21 @@ func (e *Engine) authorizeGlobal(log *logrus.Entry, policies *PolicyRegistry, sc
 	return false, nil
 }
 
-func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, schema *SchemaDefinition, schemaName, action, entityType, namespace string, entityKey map[string]string) (bool, error) {
+func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, schema *SchemaDefinition, schemaName, action, entityType, namespace string, entityKey map[string]string) (authorized bool, err error) {
+	ctx, span := otel.Tracer(engineTracer).Start(ctx, "engine.Authorize.atomic",
+		trace.WithAttributes(
+			attribute.String("authz.entity_type", entityType),
+			attribute.String("authz.table", schema.QualifiedTableName()),
+		),
+	)
+	defer func() {
+		span.SetAttributes(attribute.Bool("authz.allowed", authorized))
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 	log := helpers.ConfigureLogger(ctx, e.logger)
 	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
 	if err != nil {
@@ -142,11 +179,12 @@ func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, 
 	log.WithFields(logrus.Fields{
 		"action": action, "entity_type": entityType, "where_clause": whereClause,
 	}).Trace("authorization filter detail")
+	span.AddEvent("db.query", trace.WithAttributes(attribute.Int("authz.condition_count", len(result.Conditions))))
 	query = query.Where(whereClause).Select("1").Limit(1).Find(&exists)
 	if query.Error != nil {
 		return false, fmt.Errorf("database query failed: %w", query.Error)
 	}
-	authorized := query.RowsAffected > 0
+	authorized = query.RowsAffected > 0
 	fields := logrus.Fields{
 		"action": action, "entity_type": entityType, "namespace": namespace,
 		"allowed": authorized, "reason": "denied: entity key did not match any policy-permitted entity",
@@ -256,7 +294,27 @@ func (e *Engine) CheckHTTP(ctx context.Context, policies *PolicyRegistry, method
 
 // CheckHTTPRequest evaluates HTTP route action grants plus optional route
 // constraints against each subject independently.
-func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (HTTPCheckResult, error) {
+func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (result HTTPCheckResult, err error) {
+	ctx, span := otel.Tracer(engineTracer).Start(ctx, "engine.CheckHTTP",
+		trace.WithAttributes(
+			attribute.String("http.method", req.Method),
+			attribute.String("http.path", req.Path),
+			attribute.Int("authz.subject_count", len(req.Subjects)),
+		),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.Bool("authz.allowed", result.Allowed),
+			attribute.String("authz.matched_policy_id", result.MatchedPolicyID),
+			attribute.String("authz.matched_principal_id", result.MatchedPrincipalID),
+		)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	_ = ctx // ctx is used by the span; pass through if needed by future sub-calls
 	for _, subjectPolicies := range req.Subjects {
 		if subjectPolicies.Policies == nil {
 			continue
