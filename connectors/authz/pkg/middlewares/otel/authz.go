@@ -1,5 +1,4 @@
 package otelmw
-package otelmw
 
 import (
 	"context"
