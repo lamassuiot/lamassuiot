@@ -13,8 +13,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const svcTracerName = "github.com/lamassuiot/authz"
-
 // noMatchError is returned when auth material matches no active principals.
 // It implements HTTPStatusCode() so the gin middleware maps it to 401.
 type noMatchError struct{}
@@ -57,7 +55,7 @@ func NewIdentityResolver(match principalMatcher, grants engine.GrantStore, polic
 
 // loadGrantedPolicies fetches each policy referenced by grants and registers it in registry.
 func (r *IdentityResolver) loadGrantedPolicies(ctx context.Context, registry *engine.PolicyRegistry, grants []models.PrincipalPolicy) error {
-	ctx, span := otel.Tracer(svcTracerName).Start(ctx, "authz.policy.load",
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.policy.load",
 		trace.WithAttributes(attribute.Int("authz.grant_count", len(grants))),
 	)
 	loaded := 0
@@ -86,7 +84,7 @@ func (r *IdentityResolver) loadGrantedPolicies(ctx context.Context, registry *en
 // and returns a populated PolicyRegistry ready for Engine.Authorize or Engine.GetListFilter.
 // Returns ErrNoMatch (check with errors.Is) when no principals matched.
 func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}, authType string) (*engine.PolicyRegistry, []string, error) {
-	matchCtx, matchSpan := otel.Tracer(svcTracerName).Start(ctx, "authz.principal.match",
+	matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
 		trace.WithAttributes(attribute.String("authz.auth_type", authType)),
 	)
 	principalIDs, err := r.match.MatchPrincipals(matchCtx, authMaterial, authType)
@@ -122,7 +120,7 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.SubjectPolicySet, []string, error) {
 	var subjects []engine.ResolvedSubject
 	if matcher, ok := r.match.(subjectMatcher); ok {
-		matchCtx, matchSpan := otel.Tracer(svcTracerName).Start(ctx, "authz.principal.match",
+		matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
 			trace.WithAttributes(
 				attribute.String("authz.auth_type", authType),
 				attribute.String("authz.match_mode", "subject"),
@@ -139,7 +137,7 @@ func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial int
 		matchSpan.End()
 		subjects = matchedSubjects
 	} else {
-		matchCtx, matchSpan := otel.Tracer(svcTracerName).Start(ctx, "authz.principal.match",
+		matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
 			trace.WithAttributes(
 				attribute.String("authz.auth_type", authType),
 				attribute.String("authz.match_mode", "principal"),
@@ -193,7 +191,7 @@ func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial int
 // GetPoliciesForPrincipal loads policies for a single known principal ID and returns
 // a populated PolicyRegistry. Used by the by-ID authorization path.
 func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principalID string) (reg *engine.PolicyRegistry, err error) {
-	ctx, span := otel.Tracer(svcTracerName).Start(ctx, "authz.policy.load_for_principal",
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.policy.load_for_principal",
 		trace.WithAttributes(attribute.String("authz.principal_id", principalID)),
 	)
 	defer func() {

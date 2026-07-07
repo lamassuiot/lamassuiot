@@ -25,7 +25,7 @@ type policyByIDLoader interface {
 
 // GetPrincipalPolicies loads policies for a principal.
 func GetPrincipalPolicies(ctx context.Context, e *engine.Engine, pm principalWithPoliciesLoader, polm policyByIDLoader, principalID string) (reg *engine.PolicyRegistry, err error) {
-	ctx, span := otel.Tracer(svcTracerName).Start(ctx, "authz.principal.get_with_policies",
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.get_with_policies",
 		trace.WithAttributes(attribute.String("authz.principal_id", principalID)),
 	)
 	defer func() {
