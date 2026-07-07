@@ -61,28 +61,19 @@ func (b *Backend) Name() string { return b.name }
 
 func (b *Backend) Capabilities() cryptoenginesv2.BackendCapabilities {
 	return cryptoenginesv2.BackendCapabilities{
-		Algorithms: []cryptoenginesv2.AlgorithmID{
-			// RSA — sign + encrypt + wrap
-			cryptoenginesv2.AlgRSASSAPKCS1V15SHA256, cryptoenginesv2.AlgRSASSAPKCS1V15SHA384, cryptoenginesv2.AlgRSASSAPKCS1V15SHA512,
-			cryptoenginesv2.AlgRSASSAPSSSHA256, cryptoenginesv2.AlgRSASSAPSSSHA384, cryptoenginesv2.AlgRSASSAPSSSHA512,
-			cryptoenginesv2.AlgRSAESOAEPSHA12048, cryptoenginesv2.AlgRSAESOAEPSHA13072, cryptoenginesv2.AlgRSAESOAEPSHA14096,
-			cryptoenginesv2.AlgRSAESOAEPSHA2562048, cryptoenginesv2.AlgRSAESOAEPSHA2563072, cryptoenginesv2.AlgRSAESOAEPSHA2564096,
-			cryptoenginesv2.AlgRSAESOAEPSHA3842048, cryptoenginesv2.AlgRSAESOAEPSHA3843072, cryptoenginesv2.AlgRSAESOAEPSHA3844096,
-			cryptoenginesv2.AlgRSAESOAEPSHA5122048, cryptoenginesv2.AlgRSAESOAEPSHA5123072, cryptoenginesv2.AlgRSAESOAEPSHA5124096,
-			cryptoenginesv2.AlgRSAESPKCS1V152048, cryptoenginesv2.AlgRSAESPKCS1V153072, cryptoenginesv2.AlgRSAESPKCS1V154096, // legacy
-			// ECDSA
-			cryptoenginesv2.AlgECDSASHA256, cryptoenginesv2.AlgECDSASHA384, cryptoenginesv2.AlgECDSASHA512,
-			// EdDSA
-			cryptoenginesv2.AlgED25519,
-			// ECDH
-			cryptoenginesv2.AlgECDHNISTP256, cryptoenginesv2.AlgECDHNISTP384, cryptoenginesv2.AlgECDHNISTP521, cryptoenginesv2.AlgECDHX25519,
+		KeySpecs: []cryptoenginesv2.KeySpec{
+			// RSA — one keypair serves signing, OAEP encryption and wrapping.
+			cryptoenginesv2.KeySpecRSA2048, cryptoenginesv2.KeySpecRSA3072, cryptoenginesv2.KeySpecRSA4096,
+			// EC — one keypair serves ECDSA signing and ECDH agreement.
+			cryptoenginesv2.KeySpecECCNISTP256, cryptoenginesv2.KeySpecECCNISTP384, cryptoenginesv2.KeySpecECCNISTP521,
+			// X25519 (agreement only)
+			cryptoenginesv2.KeySpecX25519,
 			// ML-KEM (stdlib ships 768 and 1024)
-			cryptoenginesv2.AlgMLKEM768, cryptoenginesv2.AlgMLKEM1024,
+			cryptoenginesv2.KeySpecMLKEM768, cryptoenginesv2.KeySpecMLKEM1024,
 			// Symmetric AEAD
-			cryptoenginesv2.AlgAESGCM128, cryptoenginesv2.AlgAESGCM192, cryptoenginesv2.AlgAESGCM256,
-			cryptoenginesv2.AlgAESCBC128, cryptoenginesv2.AlgAESCBC192, cryptoenginesv2.AlgAESCBC256, // legacy decrypt
+			cryptoenginesv2.KeySpecSymmetricDefault, cryptoenginesv2.KeySpecAES128, cryptoenginesv2.KeySpecAES192,
 			// HMAC
-			cryptoenginesv2.AlgHMACSHA256, cryptoenginesv2.AlgHMACSHA384, cryptoenginesv2.AlgHMACSHA512,
+			cryptoenginesv2.KeySpecHMAC256, cryptoenginesv2.KeySpecHMAC384, cryptoenginesv2.KeySpecHMAC512,
 		},
 		Operations: []cryptoenginesv2.Operation{
 			cryptoenginesv2.OpSign, cryptoenginesv2.OpVerify,
@@ -101,12 +92,12 @@ func (b *Backend) Generate(ctx context.Context, spec cryptoenginesv2.CreateKeySp
 		return nil, errors.New("soft: spec.KeyID must be assigned by the Service before calling Generate")
 	}
 
-	priv, pub, err := generateMaterial(spec.Algorithm)
+	priv, pub, err := generateMaterial(spec.KeySpec)
 	if err != nil {
-		return nil, fmt.Errorf("soft: generate %s: %w", spec.Algorithm, err)
+		return nil, fmt.Errorf("soft: generate %s: %w", spec.KeySpec, err)
 	}
 
-	blob, err := encodePrivate(spec.Algorithm, priv)
+	blob, err := encodePrivate(spec.KeySpec, priv)
 	if err != nil {
 		return nil, fmt.Errorf("soft: encode private: %w", err)
 	}
@@ -119,7 +110,7 @@ func (b *Backend) Generate(ctx context.Context, spec cryptoenginesv2.CreateKeySp
 
 	meta := cryptoenginesv2.KeyMetadata{
 		KeyID:      spec.KeyID,
-		Algorithm:  spec.Algorithm,
+		KeySpec:    spec.KeySpec,
 		Operations: spec.Operations,
 		State:      cryptoenginesv2.StateEnabled,
 		PublicKey:  pub,
@@ -140,9 +131,9 @@ func (b *Backend) Import(ctx context.Context, spec cryptoenginesv2.ImportKeySpec
 		return nil, errors.New("soft: spec.KeyMaterial is empty")
 	}
 
-	pub, err := publicFromPrivate(spec.Algorithm, spec.KeyMaterial)
+	pub, err := publicFromPrivate(spec.KeySpec, spec.KeyMaterial)
 	if err != nil {
-		return nil, fmt.Errorf("soft: parse imported %s: %w", spec.Algorithm, err)
+		return nil, fmt.Errorf("soft: parse imported %s: %w", spec.KeySpec, err)
 	}
 
 	// Persist the imported bytes verbatim. The caller chose plain-bytes
@@ -154,7 +145,7 @@ func (b *Backend) Import(ctx context.Context, spec cryptoenginesv2.ImportKeySpec
 
 	meta := cryptoenginesv2.KeyMetadata{
 		KeyID:      spec.KeyID,
-		Algorithm:  spec.Algorithm,
+		KeySpec:    spec.KeySpec,
 		Operations: spec.Operations,
 		State:      cryptoenginesv2.StateEnabled,
 		PublicKey:  pub,
@@ -189,16 +180,17 @@ func (b *Backend) Destroy(ctx context.Context, ref cryptoenginesv2.BackendRef) e
 // ---------------------------------------------------------------------------
 
 func (b *Backend) newHandle(meta cryptoenginesv2.KeyMetadata, uri string) (cryptoenginesv2.KeyHandle, error) {
-	base := handleBase{
+	base := &handleBase{
 		backend: b,
 		meta:    meta,
 		uri:     uri,
 	}
 
-	switch family := familyOf(meta.Algorithm); family {
+	switch family := familyOfKeySpec(meta.KeySpec); family {
 	case cryptoenginesv2.FamilyRSA:
 		return &rsaHandle{handleBase: base}, nil
 	case cryptoenginesv2.FamilyECDSA:
+		// EC keys sign (ECDSA) and agree (ECDH) from the same handle.
 		return &ecdsaHandle{handleBase: base}, nil
 	// case cryptoenginesv2.FamilyEdDSA:
 	// 	return &ed25519Handle{handleBase: base}, nil
@@ -211,7 +203,7 @@ func (b *Backend) newHandle(meta cryptoenginesv2.KeyMetadata, uri string) (crypt
 	case cryptoenginesv2.FamilyHMAC:
 		return &hmacHandle{handleBase: base}, nil
 	default:
-		return nil, fmt.Errorf("soft: unsupported algorithm family %q for %s", family, meta.Algorithm)
+		return nil, fmt.Errorf("soft: unsupported key spec family %q for %s", family, meta.KeySpec)
 	}
 }
 

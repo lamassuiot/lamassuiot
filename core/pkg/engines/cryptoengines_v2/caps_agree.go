@@ -5,9 +5,10 @@ import (
 	"crypto"
 )
 
-// Key agreement
+// Key agreement. alg selects the agreement algorithm (ECDH) and must be
+// compatible with the key's KeySpec.
 type KeyAgreementer interface {
 	KeyHandle
-	Agree(ctx context.Context, peerPublic crypto.PublicKey) (sharedSecret []byte, err error)
-	AgreeAndDerive(ctx context.Context, peerPublic crypto.PublicKey, kdf KDFParams) (derivedKey []byte, err error)
+	Agree(ctx context.Context, peerPublic crypto.PublicKey, alg AlgorithmID) (sharedSecret []byte, err error)
+	AgreeAndDerive(ctx context.Context, peerPublic crypto.PublicKey, alg AlgorithmID, kdf KDFParams) (derivedKey []byte, err error)
 }

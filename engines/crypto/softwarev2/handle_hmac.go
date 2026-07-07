@@ -14,23 +14,23 @@ import (
 
 // hmacHandle implements cryptoenginesv2.MACer for HMAC-SHA-{256,384,512} keys.
 type hmacHandle struct {
-	handleBase
+	*handleBase
 }
 
-func (h *hmacHandle) hashFunc() (func() hash.Hash, error) {
-	switch h.meta.Algorithm {
-	case "HMAC_SHA_256":
+func (h *hmacHandle) hashFunc(alg cryptoenginesv2.AlgorithmID) (func() hash.Hash, error) {
+	switch alg {
+	case cryptoenginesv2.AlgHMACSHA256:
 		return sha256.New, nil
-	case "HMAC_SHA_384":
+	case cryptoenginesv2.AlgHMACSHA384:
 		return sha512.New384, nil
-	case "HMAC_SHA_512":
+	case cryptoenginesv2.AlgHMACSHA512:
 		return sha512.New, nil
 	}
-	return nil, fmt.Errorf("soft: unsupported HMAC algorithm %s", h.meta.Algorithm)
+	return nil, fmt.Errorf("soft: unsupported HMAC algorithm %s", alg)
 }
 
-func (h *hmacHandle) MAC(ctx context.Context, message []byte) ([]byte, error) {
-	newHash, err := h.hashFunc()
+func (h *hmacHandle) MAC(ctx context.Context, message []byte, alg cryptoenginesv2.AlgorithmID) ([]byte, error) {
+	newHash, err := h.hashFunc(alg)
 	if err != nil {
 		return nil, err
 	}
@@ -45,8 +45,8 @@ func (h *hmacHandle) MAC(ctx context.Context, message []byte) ([]byte, error) {
 	return mac.Sum(nil), nil
 }
 
-func (h *hmacHandle) VerifyMAC(ctx context.Context, message, expected []byte) error {
-	computed, err := h.MAC(ctx, message)
+func (h *hmacHandle) VerifyMAC(ctx context.Context, message, expected []byte, alg cryptoenginesv2.AlgorithmID) error {
+	computed, err := h.MAC(ctx, message, alg)
 	if err != nil {
 		return err
 	}

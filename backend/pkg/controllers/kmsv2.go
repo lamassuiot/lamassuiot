@@ -97,8 +97,9 @@ func (r *kmsV2HttpRoutes) CreateOrImportKey(ctx *gin.Context) {
 			return
 		}
 		handle, err = r.svc.ImportKey(ctx.Request.Context(), cryptoenginesv2.ImportKeySpec{
-			Algorithm:   body.Algorithm,
+			KeySpec:     body.KeySpec,
 			Operations:  body.Operations,
+			KeyUsages:   body.KeyUsages,
 			KeyMaterial: raw,
 			Tags:        body.Tags,
 			PolicyID:    body.PolicyID,
@@ -108,9 +109,10 @@ func (r *kmsV2HttpRoutes) CreateOrImportKey(ctx *gin.Context) {
 		})
 	} else {
 		handle, err = r.svc.CreateKey(ctx.Request.Context(), cryptoenginesv2.CreateKeySpec{
-			Algorithm:  body.Algorithm,
-			Operations: body.Operations,
-			Tags:       body.Tags,
+			KeySpec:     body.KeySpec,
+			Operations:  body.Operations,
+			KeyUsages:   body.KeyUsages,
+			Tags:        body.Tags,
 			PolicyID:    body.PolicyID,
 			NotBefore:   body.NotBefore,
 			NotAfter:    body.NotAfter,

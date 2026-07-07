@@ -25,12 +25,17 @@ func NewService(r Registry, m MetadataStore, b BackendRegistry) Service {
 }
 
 func (s *service) CreateKey(ctx context.Context, spec CreateKeySpec) (KeyHandle, error) {
-	algSpec, err := s.registry.Get(spec.Algorithm)
+	specInfo, err := s.registry.GetKeySpec(spec.KeySpec)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := validateOpsAgainstAlgorithm(algSpec, spec.Operations); err != nil {
+	// Resolve the authorized operation set: any coarse KeyUsages are expanded
+	// and merged with explicit Operations; an empty result defaults to the
+	// KeySpec's full supported set.
+	spec.Operations = resolveOperations(specInfo, spec.Operations, spec.KeyUsages)
+
+	if err := validateOpsAgainstKeySpec(specInfo, spec.Operations); err != nil {
 		return nil, err
 	}
 
@@ -49,7 +54,7 @@ func (s *service) CreateKey(ctx context.Context, spec CreateKeySpec) (KeyHandle,
 	rec := KeyRecord{
 		Metadata: KeyMetadata{
 			KeyID:       spec.KeyID,
-			Algorithm:   spec.Algorithm,
+			KeySpec:     spec.KeySpec,
 			Operations:  spec.Operations,
 			State:       StateEnabled,
 			PublicKey:   handle.Metadata().PublicKey,

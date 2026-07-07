@@ -6,17 +6,24 @@ info:
     Key Management Service (KMS) v2 API for Lamassu IoT Platform.
 
     Manages the full lifecycle of cryptographic keys — classical (RSA, ECDSA, ECDH,
-    EdDSA, AES, HMAC) and post-quantum (ML-KEM-768, ML-KEM-1024). This API covers
-    key management only; cryptographic operations (sign, encrypt, MAC, …) are
-    performed server-side once a key is provisioned.
+    EdDSA, AES, HMAC) and post-quantum (ML-KEM). This API covers key management only;
+    cryptographic operations (sign, encrypt, MAC, …) are performed server-side once a
+    key is provisioned, with the per-operation algorithm chosen at call time.
 
     ## Key concepts
 
-    - **Algorithm IDs** are stable string identifiers such as `ECDSA_SHA_256` or
-      `ML_KEM_768`. They encode both the family and the parameters, so no separate
-      key-size field is needed.
-    - **Operations** declare what a key may be used for at creation time. Requesting
-      an operation not permitted by the algorithm is rejected with `400`.
+    - **Key specs** (`key_spec`) describe the key *material* — e.g. `RSA_2048`,
+      `ECC_NIST_P256`, `SYMMETRIC_DEFAULT`, `HMAC_256`. This is fixed at creation
+      time and determines what the key can do.
+    - **Algorithm IDs** are stable *per-operation* identifiers such as
+      `RSASSA_PSS_SHA_256` or `RSAES_OAEP_SHA_256`. Following AWS KMS, one key spec
+      is compatible with many algorithm IDs; the algorithm is chosen per operation
+      at sign/encrypt time, not baked into the key. A single `RSA_2048` key serves
+      all six RSASSA signing algorithms and RSA-OAEP encryption.
+    - **Operations** / **key usages** declare what a key may be used for at creation
+      time. `key_usages` (e.g. `SIGN_VERIFY`) is a coarse convenience expanded into
+      the fine-grained `operations` set. Requesting an operation the key spec cannot
+      perform is rejected with `400`.
     - **State machine**: `enabled ⇄ disabled → pendingDeletion → destroyed`.
       `DELETE /keys/{id}` triggers a soft-delete (202); the key stays accessible
       until the pending window elapses.
@@ -92,23 +99,23 @@ paths:
               $ref: '#/components/schemas/CreateKeyRequest'
             examples:
               generateECDSA:
-                summary: Generate ECDSA P-256 signing key
+                summary: Generate EC P-256 key (signs with ECDSA, agrees with ECDH)
                 value:
-                  algorithm: ECDSA_SHA_256
-                  operations: [sign, verify]
+                  key_spec: ECC_NIST_P256
+                  key_usages: [SIGN_VERIFY, KEY_AGREEMENT]
                   policy_id: pol-default
                   tags:
                     device_id: sensor-42
               generateMLKEM:
                 summary: Generate ML-KEM-768 (post-quantum)
                 value:
-                  algorithm: ML_KEM_768
-                  operations: [encapsulate, decapsulate]
+                  key_spec: ML_KEM_768
+                  key_usages: [ENCAPSULATE_DECAPSULATE]
               importRSA:
-                summary: Import existing RSA 2048 key
+                summary: Import existing RSA 2048 key (serves PKCS1v15, PSS and OAEP)
                 value:
-                  algorithm: RSASSA_PKCS1_V1_5_SHA_256
-                  operations: [sign, verify]
+                  key_spec: RSA_2048
+                  key_usages: [SIGN_VERIFY, ENCRYPT_DECRYPT]
                   key_material: MIIEvAIBADANBgkqhkiG9w0BAQEFAASC...
       responses:
         '201':
@@ -314,7 +321,7 @@ paths:
       summary: Restore key from backup
       description: |
         Imports a key from a previously exported backup blob. The restored key
-        receives a new UUID; its metadata and algorithm are preserved from the blob.
+        receives a new UUID; its metadata and key spec are preserved from the blob.
       operationId: restoreKey
       requestBody:
         required: true
@@ -491,7 +498,7 @@ components:
   responses:
 
     BadRequest:
-      description: Bad request — invalid input or operation not permitted by algorithm
+      description: Bad request — invalid input or operation not supported by the key spec
       content:
         application/json:
           schema:
@@ -517,60 +524,173 @@ components:
     # Core domain types
     # -------------------------------------------------------------------------
 
+    KeySpec:
+      type: string
+      description: |
+        Describes the key *material* — fixed at creation time. Determines what a
+        key can do and which `AlgorithmID`s it is compatible with. Following AWS
+        KMS, the key spec does NOT encode the per-operation scheme or hash.
+
+        | Key spec | Family | Key bits | Supported operations | Notes |
+        |----------|--------|----------|----------------------|-------|
+        | `RSA_2048` | RSA | 2048 | sign, verify, encrypt, decrypt, wrapKey, unwrapKey | Serves all RSASSA + RSAES algorithms |
+        | `RSA_3072` | RSA | 3072 | (same) | |
+        | `RSA_4096` | RSA | 4096 | (same) | |
+        | `ECC_NIST_P256` | ECDSA | 256 | sign, verify, agreeKey, deriveKey | ECDSA + ECDH from one key |
+        | `ECC_NIST_P384` | ECDSA | 384 | (same) | |
+        | `ECC_NIST_P521` | ECDSA | 521 | (same) | |
+        | `ECC_SECG_P256K1` | ECDSA | 256 | (same) | secp256k1; requires external dep |
+        | `ED25519` | EdDSA | 255 | sign, verify | Signs full message |
+        | `X25519` | ECDH | 255 | agreeKey, deriveKey | Key agreement only |
+        | `SYMMETRIC_DEFAULT` | AES | 256 | encrypt, decrypt | AES-256-GCM |
+        | `AES_128` | AES | 128 | encrypt, decrypt | |
+        | `AES_192` | AES | 192 | encrypt, decrypt | |
+        | `HMAC_256` | HMAC | 256 | mac, verifyMac | |
+        | `HMAC_384` | HMAC | 384 | mac, verifyMac | |
+        | `HMAC_512` | HMAC | 512 | mac, verifyMac | |
+        | `ML_KEM_768` | ML-KEM | — | encapsulate, decapsulate, wrapKey, unwrapKey | 🔒 PQC · FIPS 203 (recommended) |
+        | `ML_KEM_1024` | ML-KEM | — | (same) | 🔒 PQC · FIPS 203 · category 5 |
+      enum:
+        - RSA_2048
+        - RSA_3072
+        - RSA_4096
+        - ECC_NIST_P256
+        - ECC_NIST_P384
+        - ECC_NIST_P521
+        - ECC_SECG_P256K1
+        - ED25519
+        - X25519
+        - SYMMETRIC_DEFAULT
+        - AES_128
+        - AES_192
+        - HMAC_256
+        - HMAC_384
+        - HMAC_512
+        - ML_KEM_768
+        - ML_KEM_1024
+      example: ECC_NIST_P256
+
+    KeyUsage:
+      type: string
+      description: |
+        Coarse, API-facing grouping of operations, expanded into the fine-grained
+        `operations` set at key creation. A key MAY declare multiple usages.
+      enum:
+        - SIGN_VERIFY
+        - ENCRYPT_DECRYPT
+        - WRAP_UNWRAP
+        - GENERATE_VERIFY_MAC
+        - KEY_AGREEMENT
+        - ENCAPSULATE_DECAPSULATE
+      example: SIGN_VERIFY
+
     AlgorithmID:
       type: string
       description: |
-        Stable algorithm identifier. Encodes both family and parameters.
+        Stable *per-operation* algorithm identifier (scheme + hash), chosen at
+        sign/encrypt time. A single `KeySpec` is compatible with many algorithm
+        IDs; the size comes from the key, not the algorithm.
 
-        **RSA signing**
-        - `RSASSA_PKCS1_V1_5_SHA_256` / `_SHA_384` / `_SHA_512` — PKCS#1 v1.5 (2048/3072/4096-bit key)
-        - `RSASSA_PSS_SHA_256` / `_SHA_384` / `_SHA_512` — PSS (preferred for new code)
+        **Legend** — operation shorthands:
+        `S`=sign  `V`=verify  `E`=encrypt  `D`=decrypt  `W`=wrapKey  `U`=unwrapKey
+        `Ec`=encapsulate  `Dc`=decapsulate  `M`=mac  `Vm`=verifyMac
+        `A`=agreeKey  `K`=deriveKey
 
-        **RSA encryption / key wrap**
-        - `RSAES_OAEP_SHA_1_{2048,3072,4096}` — OAEP with SHA-1 label
-        - `RSAES_OAEP_SHA_256_{2048,3072,4096}` — OAEP with SHA-256 label
-        - `RSAES_OAEP_SHA_384_{2048,3072,4096}` — OAEP with SHA-384 label
-        - `RSAES_OAEP_SHA_512_{2048,3072,4096}` — OAEP with SHA-512 label
-        - `RSAES_PKCS1_V1_5_{2048,3072,4096}` — PKCS#1 v1.5 **legacy decrypt only**; never use for new encryption
+        | ID | Ops | Compatible key specs | Notes |
+        |----|-----|----------------------|-------|
+        | `RSASSA_PKCS1_V1_5_SHA_256` | S V | RSA_* | PKCS#1 v1.5; use PSS for new code |
+        | `RSASSA_PKCS1_V1_5_SHA_384` | S V | RSA_* | |
+        | `RSASSA_PKCS1_V1_5_SHA_512` | S V | RSA_* | |
+        | `RSASSA_PSS_SHA_256` | S V | RSA_* | Preferred for new signatures |
+        | `RSASSA_PSS_SHA_384` | S V | RSA_* | |
+        | `RSASSA_PSS_SHA_512` | S V | RSA_* | |
+        | `RSAES_OAEP_SHA_1` | E D W U | RSA_* | |
+        | `RSAES_OAEP_SHA_256` | E D W U | RSA_* | |
+        | `RSAES_OAEP_SHA_384` | E D W U | RSA_* | |
+        | `RSAES_OAEP_SHA_512` | E D W U | RSA_* | |
+        | `RSAES_PKCS1_V1_5` | D U | RSA_* | ⚠ Legacy decrypt only |
+        | `ECDSA_SHA_256` | S V | ECC_NIST_P256, ECC_SECG_P256K1 | |
+        | `ECDSA_SHA_384` | S V | ECC_NIST_P384 | |
+        | `ECDSA_SHA_512` | S V | ECC_NIST_P521 | |
+        | `ED25519` | S V | ED25519 | Signs full message |
+        | `SYMMETRIC_DEFAULT` | E D | SYMMETRIC_DEFAULT, AES_128, AES_192 | AES-GCM; 96-bit nonce |
+        | `AES_CBC` | D | AES_* | ⚠ Legacy decrypt only; not AEAD |
+        | `HMAC_SHA_256` | M Vm | HMAC_256 | RFC 2104 |
+        | `HMAC_SHA_384` | M Vm | HMAC_384 | |
+        | `HMAC_SHA_512` | M Vm | HMAC_512 | |
+        | `ECDH` | A K | ECC_NIST_*, ECC_SECG_P256K1, X25519 | Curve from the key |
+        | `ML_KEM_768` | Ec Dc W U | ML_KEM_768 | 🔒 PQC · FIPS 203 |
+        | `ML_KEM_1024` | Ec Dc W U | ML_KEM_1024 | 🔒 PQC · FIPS 203 |
+      enum:
+        - RSASSA_PKCS1_V1_5_SHA_256
+        - RSASSA_PKCS1_V1_5_SHA_384
+        - RSASSA_PKCS1_V1_5_SHA_512
+        - RSASSA_PSS_SHA_256
+        - RSASSA_PSS_SHA_384
+        - RSASSA_PSS_SHA_512
+        - RSAES_OAEP_SHA_1
+        - RSAES_OAEP_SHA_256
+        - RSAES_OAEP_SHA_384
+        - RSAES_OAEP_SHA_512
+        - RSAES_PKCS1_V1_5
+        - ECDSA_SHA_256
+        - ECDSA_SHA_384
+        - ECDSA_SHA_512
+        - ED25519
+        - SYMMETRIC_DEFAULT
+        - AES_CBC
+        - HMAC_SHA_256
+        - HMAC_SHA_384
+        - HMAC_SHA_512
+        - ECDH
+        - ML_KEM_768
+        - ML_KEM_1024
+      example: RSASSA_PSS_SHA_256
 
-        **ECDSA**
-        - `ECDSA_SHA_256` — P-256 + SHA-256
-        - `ECDSA_SHA_384` — P-384 + SHA-384
-        - `ECDSA_SHA_512` — P-521 + SHA-512
-
-        **EdDSA**
-        - `ED25519`
-
-        **ECDH key agreement**
-        - `ECDH_NIST_P256` / `ECDH_NIST_P384` / `ECDH_NIST_P521` / `ECDH_X25519`
-
-        **Symmetric AEAD**
-        - `AES_GCM_128` / `AES_GCM_192` / `AES_GCM_256`
-        - `AES_CBC_128` / `AES_CBC_192` / `AES_CBC_256` — **legacy decrypt only**
-
-        **HMAC**
-        - `HMAC_SHA_256` / `HMAC_SHA_384` / `HMAC_SHA_512`
-
-        **Post-quantum KEM (FIPS 203 — ML-KEM)**
-        - `ML_KEM_512` — security level 1
-        - `ML_KEM_768` — security level 3 (recommended)
-        - `ML_KEM_1024` — security level 5
-      example: ECDSA_SHA_256
+    Family:
+      type: string
+      description: Key material family grouping — useful for routing to the right backend capability.
+      enum:
+        - RSA
+        - ECDSA
+        - EdDSA
+        - ECDH
+        - ML-KEM
+        - AES
+        - HMAC
+      example: ECDSA
 
     KeyState:
       type: string
       enum: [enabled, disabled, pendingDeletion, destroyed]
       description: |
         Lifecycle state of the key.
-        - `enabled` — key is active and usable
-        - `disabled` — key is suspended; no operations permitted
-        - `pendingDeletion` — scheduled for permanent destruction
-        - `destroyed` — key material permanently erased; metadata retained for audit
+
+        | State | Description |
+        |-------|-------------|
+        | `enabled` | Key is active; all permitted operations allowed |
+        | `disabled` | Key is suspended; no cryptographic operations permitted |
+        | `pendingDeletion` | Scheduled for permanent destruction; still readable for audit |
+        | `destroyed` | Key material permanently erased; metadata retained for audit trail |
+
+        Valid transitions:
+
+        ```
+        enabled ⇄ disabled
+        enabled  → pendingDeletion
+        disabled → pendingDeletion
+        pendingDeletion → disabled   (cancel)
+        pendingDeletion → destroyed  (automatic after window)
+        ```
 
     KeyOrigin:
       type: string
       enum: [generated, imported, external]
-      description: How the key material was provisioned
+      description: |
+        How the key material was provisioned.
+        - `generated` — key was created by the KMS backend
+        - `imported` — key material was provided by the caller via `key_material`
+        - `external` — key lives in an external system; only a reference is stored
 
     Operation:
       type: string
@@ -587,7 +707,23 @@ components:
         - verifyMac
         - agreeKey
         - deriveKey
-      description: Cryptographic operation the key is authorised to perform
+      description: |
+        Cryptographic operation the key is authorised to perform.
+
+        | Operation | Description |
+        |-----------|-------------|
+        | `sign` | Produce a digital signature over a message digest |
+        | `verify` | Verify a digital signature |
+        | `encrypt` | Asymmetric or symmetric encryption |
+        | `decrypt` | Decryption |
+        | `wrapKey` | Encrypt another key's material (key wrapping) |
+        | `unwrapKey` | Decrypt wrapped key material |
+        | `encapsulate` | KEM encapsulation — generate shared secret + ciphertext |
+        | `decapsulate` | KEM decapsulation — recover shared secret from ciphertext |
+        | `mac` | Compute a Message Authentication Code |
+        | `verifyMac` | Verify a MAC |
+        | `agreeKey` | Perform a Diffie-Hellman-style key agreement |
+        | `deriveKey` | Derive keying material (HKDF, KDF) |
 
     KeyMetadata:
       type: object
@@ -598,8 +734,8 @@ components:
           format: uuid
           description: Stable unique identifier assigned at creation
           example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-        algorithm:
-          $ref: '#/components/schemas/AlgorithmID'
+        key_spec:
+          $ref: '#/components/schemas/KeySpec'
         operations:
           type: array
           items:
@@ -650,18 +786,26 @@ components:
 
     CreateKeyRequest:
       type: object
-      required: [algorithm]
+      required: [key_spec]
       properties:
-        algorithm:
-          $ref: '#/components/schemas/AlgorithmID'
+        key_spec:
+          $ref: '#/components/schemas/KeySpec'
+        key_usages:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeyUsage'
+          description: |
+            Coarse usages, expanded into `operations`. Optional; a key may declare
+            several. Ignored operations that the key spec cannot perform are rejected.
+          example: [SIGN_VERIFY]
         operations:
           type: array
           items:
             $ref: '#/components/schemas/Operation'
           description: |
-            Subset of operations to permit. Defaults to the algorithm's full
-            operation set when omitted. Must not include operations not permitted
-            by the algorithm.
+            Fine-grained operations to permit, merged with the expansion of
+            `key_usages`. Defaults to the key spec's full supported set when both
+            are omitted. Must not include operations the key spec cannot perform.
         tags:
           type: object
           additionalProperties:

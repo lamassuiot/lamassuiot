@@ -14,7 +14,7 @@ type Backend interface {
 }
 
 type BackendCapabilities struct {
-	Algorithms  []AlgorithmID
+	KeySpecs    []KeySpec
 	Operations  []Operation
 	Extractable bool // can WrapKey export the material for BackupKey?
 }

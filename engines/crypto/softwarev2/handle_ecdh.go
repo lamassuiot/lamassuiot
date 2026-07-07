@@ -11,9 +11,10 @@ import (
 	cryptoenginesv2 "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines_v2"
 )
 
-// ecdhHandle implements cryptoenginesv2.KeyAgreementer for ECDH keys.
+// ecdhHandle implements cryptoenginesv2.KeyAgreementer for X25519 keys.
+// (NIST EC keys agree via ecdsaHandle, which owns both signing and agreement.)
 type ecdhHandle struct {
-	handleBase
+	*handleBase
 }
 
 func (h *ecdhHandle) privateKey(ctx context.Context) (*ecdh.PrivateKey, error) {
@@ -31,14 +32,14 @@ func (h *ecdhHandle) privateKey(ctx context.Context) (*ecdh.PrivateKey, error) {
 	case *ecdh.PrivateKey:
 		return k, nil
 	case *ecdsa.PrivateKey:
-		// P-256/P-384/P-521 ECDH keys round-trip through PKCS#8 as *ecdsa.PrivateKey
+		// NIST ECDH keys round-trip through PKCS#8 as *ecdsa.PrivateKey
 		// because both families share the id-ecPublicKey OID.
 		return k.ECDH()
 	}
 	return nil, fmt.Errorf("soft: expected *ecdh.PrivateKey, got %T", priv)
 }
 
-func (h *ecdhHandle) Agree(ctx context.Context, peerPublic crypto.PublicKey) ([]byte, error) {
+func (h *ecdhHandle) Agree(ctx context.Context, peerPublic crypto.PublicKey, alg cryptoenginesv2.AlgorithmID) ([]byte, error) {
 	peer, ok := peerPublic.(*ecdh.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("soft: Agree requires *ecdh.PublicKey, got %T", peerPublic)
@@ -50,9 +51,9 @@ func (h *ecdhHandle) Agree(ctx context.Context, peerPublic crypto.PublicKey) ([]
 	return sk.ECDH(peer)
 }
 
-func (h *ecdhHandle) AgreeAndDerive(ctx context.Context, peerPublic crypto.PublicKey, kdf cryptoenginesv2.KDFParams) ([]byte, error) {
+func (h *ecdhHandle) AgreeAndDerive(ctx context.Context, peerPublic crypto.PublicKey, alg cryptoenginesv2.AlgorithmID, kdf cryptoenginesv2.KDFParams) ([]byte, error) {
 	// Raw ECDH shared secret — KDF application is left for follow-up phases.
-	return h.Agree(ctx, peerPublic)
+	return h.Agree(ctx, peerPublic, alg)
 }
 
 // ensure ecdhHandle satisfies the KeyAgreementer interface at compile time.

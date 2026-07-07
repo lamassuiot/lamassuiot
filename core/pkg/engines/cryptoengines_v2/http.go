@@ -5,8 +5,14 @@ import "time"
 // CreateKeyRequest is the body for POST /v2/kms/keys.
 // When KeyMaterial is non-empty the server treats it as an import (ImportKey);
 // otherwise a new key is generated (CreateKey).
+//
+// KeySpec describes the key material (e.g. RSA_2048). The authorized operations
+// are the union of Operations and the expansion of KeyUsages; if both are empty
+// the KeySpec's full supported set is authorized. The per-operation algorithm
+// (e.g. RSASSA_PSS_SHA_256) is chosen later, at sign/encrypt time.
 type CreateKeyRequest struct {
-	Algorithm   AlgorithmID       `json:"algorithm" binding:"required"`
+	KeySpec     KeySpec           `json:"key_spec" binding:"required"`
+	KeyUsages   []KeyUsage        `json:"key_usages"`
 	Operations  []Operation       `json:"operations"`
 	Tags        map[string]string `json:"tags"`
 	PolicyID    string            `json:"policy_id"`

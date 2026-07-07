@@ -7,11 +7,11 @@ import (
 )
 
 // multiRegistry routes by BackendHint when provided; otherwise picks the
-// first registered backend that supports the requested algorithm.
+// first registered backend that supports the requested key spec.
 //
 // Selection strategy when no BackendHint is given:
 //  1. Iterate backends in registration order.
-//  2. Pick the first whose Capabilities() include the spec.Algorithm.
+//  2. Pick the first whose Capabilities() include the spec.KeySpec.
 //  3. If none qualifies, return an error.
 //
 // "Registration order" matters: register the higher-assurance backend
@@ -57,21 +57,21 @@ func (r *multiRegistry) Select(spec cryptoenginesv2.CreateKeySpec) (cryptoengine
 		if err != nil {
 			return nil, err
 		}
-		if !backendSupports(b, spec.Algorithm) {
-			return nil, fmt.Errorf("backendregistry: backend %q (hinted) does not support algorithm %q",
-				hint, spec.Algorithm)
+		if !backendSupports(b, spec.KeySpec) {
+			return nil, fmt.Errorf("backendregistry: backend %q (hinted) does not support key spec %q",
+				hint, spec.KeySpec)
 		}
 		return b, nil
 	}
 
 	for _, name := range r.order {
 		b := r.byName[name]
-		if backendSupports(b, spec.Algorithm) {
+		if backendSupports(b, spec.KeySpec) {
 			return b, nil
 		}
 	}
-	return nil, fmt.Errorf("backendregistry: no backend supports algorithm %q (tried %v)",
-		spec.Algorithm, r.order)
+	return nil, fmt.Errorf("backendregistry: no backend supports key spec %q (tried %v)",
+		spec.KeySpec, r.order)
 }
 
 func (r *multiRegistry) List() []cryptoenginesv2.Backend {

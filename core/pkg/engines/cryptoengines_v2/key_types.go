@@ -31,7 +31,7 @@ const (
 
 type KeyMetadata struct {
 	KeyID      KeyID             `json:"id"`
-	Algorithm  AlgorithmID       `json:"algorithm"`
+	KeySpec    KeySpec           `json:"key_spec"`
 	Operations []Operation       `json:"operations"`
 	State      KeyState          `json:"state"`
 	PublicKey  crypto.PublicKey  `json:"-"` // serialized via MarshalJSON

@@ -43,11 +43,11 @@ func (r *singleRegistry) Select(spec cryptoenginesv2.CreateKeySpec) (cryptoengin
 		return nil, fmt.Errorf("backendregistry: BackendHint=%q does not match the only configured backend %q",
 			spec.BackendHint, r.backend.Name())
 	}
-	// Validate algorithm capability up-front so the error is clear at the
+	// Validate key spec capability up-front so the error is clear at the
 	// registry level rather than deep inside the backend.
-	if !backendSupports(r.backend, spec.Algorithm) {
-		return nil, fmt.Errorf("backendregistry: backend %q does not support algorithm %q",
-			r.backend.Name(), spec.Algorithm)
+	if !backendSupports(r.backend, spec.KeySpec) {
+		return nil, fmt.Errorf("backendregistry: backend %q does not support key spec %q",
+			r.backend.Name(), spec.KeySpec)
 	}
 	return r.backend, nil
 }

@@ -7,24 +7,21 @@ import (
 )
 
 type (
+	KeySpec       = cryptoenginesv2.KeySpec
+	KeySpecInfo   = cryptoenginesv2.KeySpecInfo
 	AlgorithmID   = cryptoenginesv2.AlgorithmID
-	AlgorithmSpec = cryptoenginesv2.AlgorithmSpec
+	AlgorithmInfo = cryptoenginesv2.AlgorithmInfo
 	Operation     = cryptoenginesv2.Operation
 )
 
 const (
-	FamilyRSA       = cryptoenginesv2.FamilyRSA
-	FamilyECDSA     = cryptoenginesv2.FamilyECDSA
-	FamilyEdDSA     = cryptoenginesv2.FamilyEdDSA
-	FamilyMLDSA     = cryptoenginesv2.FamilyMLDSA
-	FamilySLHDSA    = cryptoenginesv2.FamilySLHDSA
-	FamilyComposite = cryptoenginesv2.FamilyComposite
-	FamilyECDH      = cryptoenginesv2.FamilyECDH
-	FamilyMLKEM     = cryptoenginesv2.FamilyMLKEM
-	FamilyAES       = cryptoenginesv2.FamilyAES
-	FamilyChaCha    = cryptoenginesv2.FamilyChaCha
-	FamilyHMAC      = cryptoenginesv2.FamilyHMAC
-	FamilyHKDF      = cryptoenginesv2.FamilyHKDF
+	FamilyRSA   = cryptoenginesv2.FamilyRSA
+	FamilyECDSA = cryptoenginesv2.FamilyECDSA
+	FamilyEdDSA = cryptoenginesv2.FamilyEdDSA
+	FamilyECDH  = cryptoenginesv2.FamilyECDH
+	FamilyMLKEM = cryptoenginesv2.FamilyMLKEM
+	FamilyAES   = cryptoenginesv2.FamilyAES
+	FamilyHMAC  = cryptoenginesv2.FamilyHMAC
 )
 
 const (
@@ -42,589 +39,262 @@ const (
 	OpAgreeKey    = cryptoenginesv2.OpAgreeKey
 )
 
-// NewBuiltinRegistry returns the registry populated with every algorithm
-// supported by this version of the KMS.
+// Convenience aliases for the operation sets shared across algorithms.
+var (
+	opsSignVerify  = []Operation{OpSign, OpVerify}
+	opsEncDecWrap  = []Operation{OpEncrypt, OpDecrypt, OpWrapKey, OpUnwrapKey}
+	opsEncDec      = []Operation{OpEncrypt, OpDecrypt}
+	opsMAC         = []Operation{OpMAC, OpVerifyMAC}
+	opsAgree       = []Operation{OpAgreeKey, OpDeriveKey}
+	opsKEM         = []Operation{OpEncapsulate, OpDecapsulate, OpWrapKey, OpUnwrapKey}
+	rsaKeySpecs    = []KeySpec{cryptoenginesv2.KeySpecRSA2048, cryptoenginesv2.KeySpecRSA3072, cryptoenginesv2.KeySpecRSA4096}
+	aesKeySpecs    = []KeySpec{cryptoenginesv2.KeySpecSymmetricDefault, cryptoenginesv2.KeySpecAES128, cryptoenginesv2.KeySpecAES192}
+	ecAgreeKeySpec = []KeySpec{
+		cryptoenginesv2.KeySpecECCNISTP256, cryptoenginesv2.KeySpecECCNISTP384,
+		cryptoenginesv2.KeySpecECCNISTP521, cryptoenginesv2.KeySpecECCSECGP256K1,
+		cryptoenginesv2.KeySpecX25519,
+	}
+)
+
+// NewBuiltinRegistry returns the registry populated with every KeySpec and
+// per-operation algorithm supported by this version of the KMS.
 func NewBuiltinRegistry() cryptoenginesv2.Registry {
-	return NewStaticRegistry(builtinAlgorithms())
+	return NewStaticRegistry(builtinKeySpecs(), builtinAlgorithms())
 }
 
-// builtinAlgorithms returns the canonical, compiled-in list of algorithms
-// supported by this version of the KMS. The list is the single source of
-// truth for what the public API will accept; backends advertise their own
-// subset via BackendCapabilities, and the Service picks a backend able to
-// satisfy the requested spec.
-//
-// Conventions for this table:
-//   - ID strings prefer AWS-style algorithm names where they exist
-//     (RSASSA_PSS_SHA_256, ECDSA_SHA_256, HMAC_SHA_256) and uppercase
-//     AWS-like identifiers elsewhere.
-//   - Composite IDs follow the LAMPS draft pattern but are abbreviated for
-//     ergonomics; the precise OID mapping lives in the codec layer.
-//   - RequiresStdlib reflects what is achievable with Go 1.24+ crypto/*.
-//     ChaCha20-Poly1305 lives in golang.org/x/crypto so it is marked false
-//     even though the dependency is "almost stdlib".
-func builtinAlgorithms() []AlgorithmSpec {
-	var all []AlgorithmSpec
-	all = append(all, rsaSignAlgorithms()...)
-	all = append(all, rsaEncryptAlgorithms()...)
-	all = append(all, ecdsaAlgorithms()...)
-	all = append(all, eddsaAlgorithms()...)
-	all = append(all, mldsaAlgorithms()...)
-	all = append(all, slhdsaAlgorithms()...)
-	all = append(all, ecdhKEMAlgorithms()...)
-	all = append(all, mlkemAlgorithms()...)
-	all = append(all, compositeSignAlgorithms()...)
-	all = append(all, compositeKEMAlgorithms()...)
-	all = append(all, aesGCMAlgorithms()...)
-	all = append(all, aesCBCAlgorithms()...)
-	all = append(all, chachaAlgorithms()...)
-	all = append(all, hmacAlgorithms()...)
-	all = append(all, hkdfAlgorithms()...)
+// builtinKeySpecs is the canonical catalog of key material this KMS recognizes.
+// Backends advertise their own subset via BackendCapabilities; the Service
+// picks a backend able to satisfy the requested KeySpec.
+func builtinKeySpecs() []KeySpecInfo {
+	var all []KeySpecInfo
+
+	// RSA — one spec per modulus size; each serves signing, OAEP encryption
+	// and key wrapping.
+	for _, s := range []struct {
+		spec KeySpec
+		bits int
+	}{
+		{cryptoenginesv2.KeySpecRSA2048, 2048},
+		{cryptoenginesv2.KeySpecRSA3072, 3072},
+		{cryptoenginesv2.KeySpecRSA4096, 4096},
+	} {
+		all = append(all, KeySpecInfo{
+			KeySpec:             s.spec,
+			Family:              FamilyRSA,
+			KeyBits:             s.bits,
+			SupportedOperations: []Operation{OpSign, OpVerify, OpEncrypt, OpDecrypt, OpWrapKey, OpUnwrapKey},
+			Notes:               "RSA keypair. Serves every RSASSA_* signing algorithm and every RSAES_* encryption algorithm.",
+		})
+	}
+
+	// Elliptic curve — one EC keypair serves both ECDSA signing and ECDH
+	// key agreement.
+	for _, s := range []struct {
+		spec KeySpec
+		bits int
+	}{
+		{cryptoenginesv2.KeySpecECCNISTP256, 256},
+		{cryptoenginesv2.KeySpecECCNISTP384, 384},
+		{cryptoenginesv2.KeySpecECCNISTP521, 521},
+		{cryptoenginesv2.KeySpecECCSECGP256K1, 256},
+	} {
+		all = append(all, KeySpecInfo{
+			KeySpec:             s.spec,
+			Family:              FamilyECDSA,
+			KeyBits:             s.bits,
+			SupportedOperations: []Operation{OpSign, OpVerify, OpAgreeKey, OpDeriveKey},
+			Notes:               "EC keypair. Signs with ECDSA_* and agrees with ECDH from the same key.",
+		})
+	}
+
+	all = append(all,
+		KeySpecInfo{
+			KeySpec:             cryptoenginesv2.KeySpecED25519,
+			Family:              FamilyEdDSA,
+			KeyBits:             255,
+			SupportedOperations: opsSignVerify,
+			Notes:               "Ed25519 (RFC 8032). Signs the full message; no hash parameter.",
+		},
+		KeySpecInfo{
+			KeySpec:             cryptoenginesv2.KeySpecX25519,
+			Family:              FamilyECDH,
+			KeyBits:             255,
+			SupportedOperations: opsAgree,
+			Notes:               "X25519 (RFC 7748). Key agreement only.",
+		},
+	)
+
+	// Symmetric AEAD.
+	for _, s := range []struct {
+		spec KeySpec
+		bits int
+	}{
+		{cryptoenginesv2.KeySpecSymmetricDefault, 256},
+		{cryptoenginesv2.KeySpecAES128, 128},
+		{cryptoenginesv2.KeySpecAES192, 192},
+	} {
+		all = append(all, KeySpecInfo{
+			KeySpec:             s.spec,
+			Family:              FamilyAES,
+			KeyBits:             s.bits,
+			SupportedOperations: opsEncDec,
+			Notes:               "AES key. Encrypts with SYMMETRIC_DEFAULT (AES-GCM).",
+		})
+	}
+
+	// HMAC.
+	for _, s := range []struct {
+		spec KeySpec
+		bits int
+	}{
+		{cryptoenginesv2.KeySpecHMAC256, 256},
+		{cryptoenginesv2.KeySpecHMAC384, 384},
+		{cryptoenginesv2.KeySpecHMAC512, 512},
+	} {
+		all = append(all, KeySpecInfo{
+			KeySpec:             s.spec,
+			Family:              FamilyHMAC,
+			KeyBits:             s.bits,
+			SupportedOperations: opsMAC,
+			Notes:               "HMAC key (RFC 2104).",
+		})
+	}
+
+	// ML-KEM (FIPS 203).
+	for _, spec := range []KeySpec{cryptoenginesv2.KeySpecMLKEM768, cryptoenginesv2.KeySpecMLKEM1024} {
+		all = append(all, KeySpecInfo{
+			KeySpec:             spec,
+			Family:              FamilyMLKEM,
+			SupportedOperations: opsKEM,
+			IsPQC:               true,
+			Notes:               "ML-KEM (NIST FIPS 203). Encapsulation / key wrapping.",
+		})
+	}
+
 	return all
 }
 
-// ---------------------------------------------------------------------------
-// RSA signing — PKCS#1 v1.5 and PSS, 2048 / 3072 / 4096
-// ---------------------------------------------------------------------------
+// builtinAlgorithms is the canonical catalog of per-operation algorithms and
+// the KeySpecs each is valid on.
+func builtinAlgorithms() []AlgorithmInfo {
+	var all []AlgorithmInfo
 
-func rsaSignAlgorithms() []AlgorithmSpec {
-	specs := []AlgorithmSpec{}
-	for _, size := range []int{2048, 3072, 4096} {
-		// PKCS#1 v1.5: kept as a normal-mode algorithm because it remains
-		// widely required for X.509 interop. RSA-PSS is preferred for new
-		// signatures but PKCS#1 v1.5 is not deprecated for signing per
-		// current NIST guidance.
-		specs = append(specs, AlgorithmSpec{
-			ID:            AlgorithmID(rsaPKCS1Name(size, 256)),
-			Family:        FamilyRSA,
-			Operations:    []Operation{OpSign, OpVerify},
-			AllowedHashes: []crypto.Hash{crypto.SHA256, crypto.SHA384, crypto.SHA512},
-			KeySize:       size,
-
-			Notes: "RSASSA-PKCS1-v1_5 (RFC 8017). Use PSS for new code; this is for X.509 / JWT interop.",
-		})
-		// RSA-PSS
-		specs = append(specs, AlgorithmSpec{
-			ID:            AlgorithmID(rsaPSSName(size, 256)),
-			Family:        FamilyRSA,
-			Operations:    []Operation{OpSign, OpVerify},
-			AllowedHashes: []crypto.Hash{crypto.SHA256, crypto.SHA384, crypto.SHA512},
-			KeySize:       size,
-
-			Notes: "RSASSA-PSS (RFC 8017). Preferred over PKCS#1 v1.5 for new code.",
-		})
-	}
-	return specs
-}
-
-func rsaPKCS1Name(size, _ int) string {
-	switch size {
-	case 2048:
-		return "RSASSA_PKCS1_V1_5_SHA_256"
-	case 3072:
-		return "RSASSA_PKCS1_V1_5_SHA_384"
-	case 4096:
-		return "RSASSA_PKCS1_V1_5_SHA_512"
-	}
-	return ""
-}
-
-func rsaPSSName(size, _ int) string {
-	switch size {
-	case 2048:
-		return "RSASSA_PSS_SHA_256"
-	case 3072:
-		return "RSASSA_PSS_SHA_384"
-	case 4096:
-		return "RSASSA_PSS_SHA_512"
-	}
-	return ""
-}
-
-// ---------------------------------------------------------------------------
-// RSA asymmetric encryption — OAEP (normal) and PKCS#1 v1.5 (legacy decrypt)
-// ---------------------------------------------------------------------------
-
-func rsaEncryptAlgorithms() []AlgorithmSpec {
-	specs := []AlgorithmSpec{}
-
-	// RSA-OAEP for each modulus size and each MGF hash.
-	for _, size := range []int{2048, 3072, 4096} {
-		for _, h := range []struct {
-			name string
-			hash crypto.Hash
-		}{
-			{"RSAES_OAEP_SHA_1", crypto.SHA1},
-			{"RSAES_OAEP_SHA_256", crypto.SHA256},
-			{"RSAES_OAEP_SHA_384", crypto.SHA384},
-			{"RSAES_OAEP_SHA_512", crypto.SHA512},
-		} {
-			specs = append(specs, AlgorithmSpec{
-				ID:            AlgorithmID(h.name + "_" + bitLabel(size)),
-				Family:        FamilyRSA,
-				Operations:    []Operation{OpEncrypt, OpDecrypt, OpWrapKey, OpUnwrapKey},
-				AllowedHashes: []crypto.Hash{h.hash},
-				KeySize:       size,
-
-				Notes: "RSAES-OAEP (RFC 8017). Same algorithm serves Encrypt and WrapKey; policy distinguishes them.",
-			})
-		}
-	}
-
-	// RSA1_5 — decrypt-only legacy. NOT in Operations, only LegacyOperations.
-	// Per our decision: legacy algos are usable only for the consume side.
-	for _, size := range []int{2048, 3072, 4096} {
-		specs = append(specs, AlgorithmSpec{
-			ID:               AlgorithmID("RSAES_PKCS1_V1_5_" + bitLabel(size)),
-			Family:           FamilyRSA,
-			Operations:       nil, // intentionally empty in normal mode
-			LegacyOperations: []Operation{OpDecrypt, OpUnwrapKey},
-			KeySize:          size,
-
-			Notes: "RSAES-PKCS1-v1_5. Decrypt-only for migration of legacy ciphertexts. NEVER use for new encryption.",
+	// --- RSA signing (any RSA KeySpec) ---
+	for _, a := range []struct {
+		id     AlgorithmID
+		scheme string
+		hash   crypto.Hash
+	}{
+		{cryptoenginesv2.AlgRSASSAPKCS1V15SHA256, "pkcs1v15", crypto.SHA256},
+		{cryptoenginesv2.AlgRSASSAPKCS1V15SHA384, "pkcs1v15", crypto.SHA384},
+		{cryptoenginesv2.AlgRSASSAPKCS1V15SHA512, "pkcs1v15", crypto.SHA512},
+		{cryptoenginesv2.AlgRSASSAPSSSHA256, "pss", crypto.SHA256},
+		{cryptoenginesv2.AlgRSASSAPSSSHA384, "pss", crypto.SHA384},
+		{cryptoenginesv2.AlgRSASSAPSSSHA512, "pss", crypto.SHA512},
+	} {
+		all = append(all, AlgorithmInfo{
+			ID: a.id, Operations: opsSignVerify, Scheme: a.scheme, Hash: a.hash,
+			CompatibleKeySpecs: rsaKeySpecs,
+			Notes:              "RSA signature (RFC 8017).",
 		})
 	}
 
-	return specs
-}
-
-// ---------------------------------------------------------------------------
-// ECDSA — NIST P-curves and secp256k1
-// ---------------------------------------------------------------------------
-
-func ecdsaAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:            "ECDSA_SHA_256",
-			Family:        FamilyECDSA,
-			Operations:    []Operation{OpSign, OpVerify},
-			AllowedHashes: []crypto.Hash{crypto.SHA256},
-			KeySize:       256,
-
-			Notes: "ECDSA over NIST P-256 with SHA-256.",
-		},
-		{
-			ID:            "ECDSA_SHA_384",
-			Family:        FamilyECDSA,
-			Operations:    []Operation{OpSign, OpVerify},
-			AllowedHashes: []crypto.Hash{crypto.SHA384},
-			KeySize:       384,
-
-			Notes: "ECDSA over NIST P-384 with SHA-384.",
-		},
-		{
-			ID:            "ECDSA_SHA_512",
-			Family:        FamilyECDSA,
-			Operations:    []Operation{OpSign, OpVerify},
-			AllowedHashes: []crypto.Hash{crypto.SHA512},
-			KeySize:       521,
-
-			Notes: "ECDSA over NIST P-521 with SHA-512.",
-		},
-		{
-			ID:            "ECDSA_SHA_256_ECC_SECG_P256K1",
-			Family:        FamilyECDSA,
-			Operations:    []Operation{OpSign, OpVerify},
-			AllowedHashes: []crypto.Hash{crypto.SHA256},
-			KeySize:       256,
-			// secp256k1 not in stdlib
-			Notes: "ECDSA over secp256k1 with SHA-256. Requires external dependency (dcrec or btcec).",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// EdDSA
-// ---------------------------------------------------------------------------
-
-func eddsaAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:            "ED25519",
-			Family:        FamilyEdDSA,
-			Operations:    []Operation{OpSign, OpVerify},
-			AllowedHashes: nil, // signs the message, not a pre-hash
-			KeySize:       255,
-
-			Notes: "Ed25519 (RFC 8032). Signs the full message; the hash parameter is ignored.",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// ML-DSA (FIPS 204)
-// ---------------------------------------------------------------------------
-
-func mldsaAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:         "ML_DSA_44",
-			Family:     FamilyMLDSA,
-			Operations: []Operation{OpSign, OpVerify},
-			IsPQC:      true,
-			// CIRCL
-			Notes: "ML-DSA-44 (NIST FIPS 204), security category 2. Pure mode: signs message directly.",
-		},
-		{
-			ID:         "ML_DSA_65",
-			Family:     FamilyMLDSA,
-			Operations: []Operation{OpSign, OpVerify},
-			IsPQC:      true,
-
-			Notes: "ML-DSA-65 (NIST FIPS 204), security category 3. Recommended default.",
-		},
-		{
-			ID:         "ML_DSA_87",
-			Family:     FamilyMLDSA,
-			Operations: []Operation{OpSign, OpVerify},
-			IsPQC:      true,
-
-			Notes: "ML-DSA-87 (NIST FIPS 204), security category 5.",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// SLH-DSA (FIPS 205)
-// ---------------------------------------------------------------------------
-
-func slhdsaAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:         "SLH_DSA_SHA2_128S",
-			Family:     FamilySLHDSA,
-			Operations: []Operation{OpSign, OpVerify},
-			IsPQC:      true,
-
-			Notes: "SLH-DSA-SHA2-128s (NIST FIPS 205). Stateless hash-based. Slow signing, small keys, very long-term security.",
-		},
-		{
-			ID:         "SLH_DSA_SHA2_192S",
-			Family:     FamilySLHDSA,
-			Operations: []Operation{OpSign, OpVerify},
-			IsPQC:      true,
-
-			Notes: "SLH-DSA-SHA2-192s (NIST FIPS 205). Use for firmware signing requiring decades of security.",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// ECDH (key agreement) treated as KEM in this API
-// ---------------------------------------------------------------------------
-
-func ecdhKEMAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:         "ECDH_NIST_P256",
-			Family:     FamilyECDH,
-			Operations: []Operation{OpAgreeKey, OpEncapsulate, OpDecapsulate, OpDeriveKey},
-			KeySize:    256,
-
-			Notes: "ECDH over NIST P-256. Used standalone or as classical half of composite KEM.",
-		},
-		{
-			ID:         "ECDH_NIST_P384",
-			Family:     FamilyECDH,
-			Operations: []Operation{OpAgreeKey, OpEncapsulate, OpDecapsulate, OpDeriveKey},
-			KeySize:    384,
-
-			Notes: "ECDH over NIST P-384.",
-		},
-		{
-			ID:         "ECDH_NIST_P521",
-			Family:     FamilyECDH,
-			Operations: []Operation{OpAgreeKey, OpEncapsulate, OpDecapsulate, OpDeriveKey},
-			KeySize:    521,
-
-			Notes: "ECDH over NIST P-521.",
-		},
-		{
-			ID:         "ECDH_X25519",
-			Family:     FamilyECDH,
-			Operations: []Operation{OpAgreeKey, OpEncapsulate, OpDecapsulate, OpDeriveKey},
-			KeySize:    255,
-
-			Notes: "X25519 (RFC 7748). Preferred classical KEX for performance.",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// ML-KEM (FIPS 203)
-// ---------------------------------------------------------------------------
-
-func mlkemAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:         "ML_KEM_512",
-			Family:     FamilyMLKEM,
-			Operations: []Operation{OpEncapsulate, OpDecapsulate, OpWrapKey, OpUnwrapKey},
-			IsPQC:      true,
-			// stdlib only ships 768/1024; 512 via CIRCL
-			Notes: "ML-KEM-512 (NIST FIPS 203), security category 1. CIRCL only — stdlib does not ship 512.",
-		},
-		{
-			ID:         "ML_KEM_768",
-			Family:     FamilyMLKEM,
-			Operations: []Operation{OpEncapsulate, OpDecapsulate, OpWrapKey, OpUnwrapKey},
-			IsPQC:      true,
-
-			Notes: "ML-KEM-768 (NIST FIPS 203), security category 3. Recommended default. crypto/mlkem (Go 1.24+).",
-		},
-		{
-			ID:         "ML_KEM_1024",
-			Family:     FamilyMLKEM,
-			Operations: []Operation{OpEncapsulate, OpDecapsulate, OpWrapKey, OpUnwrapKey},
-			IsPQC:      true,
-
-			Notes: "ML-KEM-1024 (NIST FIPS 203), security category 5. crypto/mlkem (Go 1.24+).",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Composite signatures (LAMPS draft)
-// ---------------------------------------------------------------------------
-
-func compositeSignAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:                  "COMPOSITE_ML_DSA_44_ED25519",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpSign, OpVerify},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"ML_DSA_44", "ED25519"},
-			Notes:               "Composite signature: ML-DSA-44 + Ed25519. Mapped to id-MLDSA44-Ed25519 (LAMPS draft).",
-		},
-		{
-			ID:                  "COMPOSITE_ML_DSA_65_ECDSA_P256",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpSign, OpVerify},
-			AllowedHashes:       []crypto.Hash{crypto.SHA256},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"ML_DSA_65", "ECDSA_SHA_256"},
-			Notes:               "Composite signature: ML-DSA-65 + ECDSA-P256-SHA256.",
-		},
-		{
-			ID:                  "COMPOSITE_ML_DSA_65_RSA3072_PSS",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpSign, OpVerify},
-			AllowedHashes:       []crypto.Hash{crypto.SHA256},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"ML_DSA_65", "RSASSA_PSS_SHA_384"},
-			Notes:               "Composite signature: ML-DSA-65 + RSA-3072-PSS-SHA256.",
-		},
-		{
-			ID:                  "COMPOSITE_ML_DSA_87_ECDSA_P384",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpSign, OpVerify},
-			AllowedHashes:       []crypto.Hash{crypto.SHA384},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"ML_DSA_87", "ECDSA_SHA_384"},
-			Notes:               "Composite signature: ML-DSA-87 + ECDSA-P384-SHA384.",
-		},
-		{
-			ID:                  "COMPOSITE_SLH_DSA_128S_ED25519",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpSign, OpVerify},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"SLH_DSA_SHA2_128S", "ED25519"},
-			Notes:               "Composite signature: SLH-DSA-128s + Ed25519. For very long-term firmware signing.",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Composite KEM (LAMPS draft)
-// ---------------------------------------------------------------------------
-
-func compositeKEMAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:                  "COMPOSITE_ML_KEM_768_ECDH_P256",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpEncapsulate, OpDecapsulate, OpWrapKey, OpUnwrapKey},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"ML_KEM_768", "ECDH_NIST_P256"},
-			Notes:               "Composite KEM: ML-KEM-768 + ECDH-P256.",
-		},
-		{
-			ID:                  "COMPOSITE_ML_KEM_768_X25519",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpEncapsulate, OpDecapsulate, OpWrapKey, OpUnwrapKey},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"ML_KEM_768", "ECDH_X25519"},
-			Notes:               "Composite KEM: ML-KEM-768 + X25519. Matches Go 1.24 TLS X25519MLKEM768.",
-		},
-		{
-			ID:                  "COMPOSITE_ML_KEM_1024_ECDH_P384",
-			Family:              FamilyComposite,
-			Operations:          []Operation{OpEncapsulate, OpDecapsulate, OpWrapKey, OpUnwrapKey},
-			IsPQC:               true,
-			IsComposite:         true,
-			CompositeComponents: []AlgorithmID{"ML_KEM_1024", "ECDH_NIST_P384"},
-			Notes:               "Composite KEM: ML-KEM-1024 + ECDH-P384. Highest classical+PQC strength.",
-		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// AES-GCM
-// ---------------------------------------------------------------------------
-
-func aesGCMAlgorithms() []AlgorithmSpec {
-	specs := []AlgorithmSpec{}
-	for _, bits := range []int{128, 192, 256} {
-		specs = append(specs, AlgorithmSpec{
-			ID:         AlgorithmID("AES_GCM_" + bitLabel(bits)),
-			Family:     FamilyAES,
-			Operations: []Operation{OpEncrypt, OpDecrypt},
-			KeySize:    bits,
-
-			Notes: "AES-GCM (NIST SP 800-38D). 96-bit nonce required.",
+	// --- RSA encryption / wrapping (any RSA KeySpec) ---
+	for _, a := range []struct {
+		id   AlgorithmID
+		hash crypto.Hash
+	}{
+		{cryptoenginesv2.AlgRSAESOAEPSHA1, crypto.SHA1},
+		{cryptoenginesv2.AlgRSAESOAEPSHA256, crypto.SHA256},
+		{cryptoenginesv2.AlgRSAESOAEPSHA384, crypto.SHA384},
+		{cryptoenginesv2.AlgRSAESOAEPSHA512, crypto.SHA512},
+	} {
+		all = append(all, AlgorithmInfo{
+			ID: a.id, Operations: opsEncDecWrap, Scheme: "oaep", Hash: a.hash,
+			CompatibleKeySpecs: rsaKeySpecs,
+			Notes:              "RSAES-OAEP (RFC 8017). Serves Encrypt and WrapKey.",
 		})
 	}
-	return specs
-}
+	all = append(all, AlgorithmInfo{
+		ID: cryptoenginesv2.AlgRSAESPKCS1V15, Operations: []Operation{OpDecrypt, OpUnwrapKey},
+		Scheme: "pkcs1v15", CompatibleKeySpecs: rsaKeySpecs, Legacy: true,
+		Notes: "RSAES-PKCS1-v1_5. Decrypt-only for legacy migration. Never for new encryption.",
+	})
 
-// ---------------------------------------------------------------------------
-// AES-CBC — DECRYPT ONLY (legacy)
-// ---------------------------------------------------------------------------
-
-func aesCBCAlgorithms() []AlgorithmSpec {
-	specs := []AlgorithmSpec{}
-	for _, bits := range []int{128, 192, 256} {
-		specs = append(specs, AlgorithmSpec{
-			ID:               AlgorithmID("AES_CBC_" + bitLabel(bits)),
-			Family:           FamilyAES,
-			Operations:       nil, // legacy only
-			LegacyOperations: []Operation{OpDecrypt},
-			KeySize:          bits,
-
-			Notes: "AES-CBC with PKCS#7 padding. Decrypt-only for migration. NEVER use for new encryption (not AEAD).",
-		})
-	}
-	return specs
-}
-
-// ---------------------------------------------------------------------------
-// ChaCha20-Poly1305
-// ---------------------------------------------------------------------------
-
-func chachaAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:         "CHACHA20_POLY1305",
-			Family:     FamilyChaCha,
-			Operations: []Operation{OpEncrypt, OpDecrypt},
-			KeySize:    256,
-			// golang.org/x/crypto/chacha20poly1305
-			Notes: "ChaCha20-Poly1305 (RFC 8439). Useful for clients without AES hardware acceleration.",
+	// --- ECDSA (hash paired with curve, AWS convention) ---
+	all = append(all,
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgECDSASHA256, Operations: opsSignVerify, Scheme: "ecdsa", Hash: crypto.SHA256,
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecECCNISTP256, cryptoenginesv2.KeySpecECCSECGP256K1},
+			Notes:              "ECDSA with SHA-256 (P-256 / secp256k1).",
 		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// HMAC
-// ---------------------------------------------------------------------------
-
-func hmacAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:            "HMAC_SHA_256",
-			Family:        FamilyHMAC,
-			Operations:    []Operation{OpMAC, OpVerifyMAC},
-			AllowedHashes: []crypto.Hash{crypto.SHA256},
-			KeySize:       256,
-
-			Notes: "HMAC-SHA-256 (RFC 2104). Recommended key length 32 bytes.",
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgECDSASHA384, Operations: opsSignVerify, Scheme: "ecdsa", Hash: crypto.SHA384,
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecECCNISTP384},
+			Notes:              "ECDSA with SHA-384 (P-384).",
 		},
-		{
-			ID:            "HMAC_SHA_384",
-			Family:        FamilyHMAC,
-			Operations:    []Operation{OpMAC, OpVerifyMAC},
-			AllowedHashes: []crypto.Hash{crypto.SHA384},
-			KeySize:       384,
-
-			Notes: "HMAC-SHA-384.",
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgECDSASHA512, Operations: opsSignVerify, Scheme: "ecdsa", Hash: crypto.SHA512,
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecECCNISTP521},
+			Notes:              "ECDSA with SHA-512 (P-521).",
 		},
-		{
-			ID:            "HMAC_SHA_512",
-			Family:        FamilyHMAC,
-			Operations:    []Operation{OpMAC, OpVerifyMAC},
-			AllowedHashes: []crypto.Hash{crypto.SHA512},
-			KeySize:       512,
+	)
 
-			Notes: "HMAC-SHA-512.",
+	// --- EdDSA ---
+	all = append(all, AlgorithmInfo{
+		ID: cryptoenginesv2.AlgED25519, Operations: opsSignVerify, Scheme: "eddsa",
+		CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecED25519},
+		Notes:              "Ed25519 (RFC 8032).",
+	})
+
+	// --- Symmetric encryption ---
+	all = append(all,
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgSymmetricDefault, Operations: opsEncDec, Scheme: "gcm",
+			CompatibleKeySpecs: aesKeySpecs,
+			Notes:              "AES-GCM (NIST SP 800-38D). 96-bit nonce.",
 		},
-	}
-}
-
-// ---------------------------------------------------------------------------
-// HKDF
-// ---------------------------------------------------------------------------
-
-func hkdfAlgorithms() []AlgorithmSpec {
-	return []AlgorithmSpec{
-		{
-			ID:            "HKDF_SHA_256",
-			Family:        FamilyHKDF,
-			Operations:    []Operation{OpDeriveKey},
-			AllowedHashes: []crypto.Hash{crypto.SHA256},
-
-			Notes: "HKDF-Extract+Expand with SHA-256 (RFC 5869). crypto/hkdf (Go 1.24+).",
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgAESCBC, Operations: []Operation{OpDecrypt}, Scheme: "cbc",
+			CompatibleKeySpecs: aesKeySpecs, Legacy: true,
+			Notes: "AES-CBC. Decrypt-only for legacy migration (not AEAD).",
 		},
-		{
-			ID:            "HKDF_SHA_384",
-			Family:        FamilyHKDF,
-			Operations:    []Operation{OpDeriveKey},
-			AllowedHashes: []crypto.Hash{crypto.SHA384},
+	)
 
-			Notes: "HKDF with SHA-384.",
+	// --- MAC (each HMAC algorithm pairs with its HMAC KeySpec) ---
+	all = append(all,
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgHMACSHA256, Operations: opsMAC, Scheme: "hmac", Hash: crypto.SHA256,
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecHMAC256}, Notes: "HMAC-SHA-256.",
 		},
-		{
-			ID:            "HKDF_SHA_512",
-			Family:        FamilyHKDF,
-			Operations:    []Operation{OpDeriveKey},
-			AllowedHashes: []crypto.Hash{crypto.SHA512},
-
-			Notes: "HKDF with SHA-512.",
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgHMACSHA384, Operations: opsMAC, Scheme: "hmac", Hash: crypto.SHA384,
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecHMAC384}, Notes: "HMAC-SHA-384.",
 		},
-	}
-}
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgHMACSHA512, Operations: opsMAC, Scheme: "hmac", Hash: crypto.SHA512,
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecHMAC512}, Notes: "HMAC-SHA-512.",
+		},
+	)
 
-// ---------------------------------------------------------------------------
-// Small helpers
-// ---------------------------------------------------------------------------
+	// --- Key agreement ---
+	all = append(all, AlgorithmInfo{
+		ID: cryptoenginesv2.AlgECDH, Operations: opsAgree, Scheme: "ecdh",
+		CompatibleKeySpecs: ecAgreeKeySpec,
+		Notes:              "ECDH key agreement; the curve comes from the key.",
+	})
 
-func bitLabel(bits int) string {
-	switch bits {
-	case 128:
-		return "128"
-	case 192:
-		return "192"
-	case 256:
-		return "256"
-	case 384:
-		return "384"
-	case 512:
-		return "512"
-	case 521:
-		return "521"
-	case 2048:
-		return "2048"
-	case 3072:
-		return "3072"
-	case 4096:
-		return "4096"
-	}
-	return ""
+	// --- ML-KEM (parameter set fixed by KeySpec) ---
+	all = append(all,
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgMLKEM768, Operations: opsKEM, Scheme: "ml-kem",
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecMLKEM768}, Notes: "ML-KEM-768 (FIPS 203).",
+		},
+		AlgorithmInfo{
+			ID: cryptoenginesv2.AlgMLKEM1024, Operations: opsKEM, Scheme: "ml-kem",
+			CompatibleKeySpecs: []KeySpec{cryptoenginesv2.KeySpecMLKEM1024}, Notes: "ML-KEM-1024 (FIPS 203).",
+		},
+	)
+
+	return all
 }

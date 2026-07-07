@@ -12,83 +12,89 @@ import (
 )
 
 // rsaHandle implements cryptoenginesv2.Signer, cryptoenginesv2.Encrypter,
-// cryptoenginesv2.Decrypter, and cryptoenginesv2.KeyWrapper for
-// RSA keys. Material is loaded fresh on every operation and zeroized.
+// cryptoenginesv2.Decrypter, and cryptoenginesv2.KeyWrapper for RSA keys.
+// A single RSA key (KeySpec RSA_2048/3072/4096) serves every RSASSA_* signing
+// algorithm and every RSAES_* encryption algorithm; the per-operation algorithm
+// is chosen at call time. Material is loaded fresh on every operation and zeroized.
 type rsaHandle struct {
-	handleBase
+	*handleBase
 }
 
 // --- crypto.Signer / cryptoenginesv2.Signer ---
 
 func (h *rsaHandle) Public() crypto.PublicKey { return h.meta.PublicKey }
 
-// Sign implements crypto.Signer. It does not accept a context; the
-// background context is used. For context-aware callers, use SignContext.
+// Sign implements crypto.Signer. It infers the algorithm from opts: an
+// *rsa.PSSOptions selects PSS, otherwise PKCS#1 v1.5; the hash comes from opts.
 func (h *rsaHandle) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	_ = rand // backend uses its own randomness source
-	return h.signInternal(context.Background(), digest, opts)
+	scheme := "pkcs1v15"
+	var hash crypto.Hash
+	if pss, ok := opts.(*rsa.PSSOptions); ok {
+		scheme = "pss"
+		hash = pss.Hash
+	} else if opts != nil {
+		hash = opts.HashFunc()
+	}
+	return h.signInternal(context.Background(), digest, scheme, hash)
 }
 
-func (h *rsaHandle) SignContext(ctx context.Context, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
-	return h.signInternal(ctx, digest, opts)
+func (h *rsaHandle) SignContext(ctx context.Context, digest []byte, alg cryptoenginesv2.AlgorithmID, opts crypto.SignerOpts) ([]byte, error) {
+	scheme, hash, ok := rsaSignParams(alg)
+	if !ok {
+		return nil, fmt.Errorf("soft: %s is not an RSA signing algorithm", alg)
+	}
+	return h.signInternal(ctx, digest, scheme, hash)
 }
 
-func (h *rsaHandle) signInternal(ctx context.Context, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+func (h *rsaHandle) signInternal(ctx context.Context, digest []byte, scheme string, hash crypto.Hash) ([]byte, error) {
+	if hash == 0 {
+		return nil, errors.New("soft: RSA sign requires a hash")
+	}
+
 	blob, err := h.loadMaterial(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer zero(blob)
 
-	priv, err := decodePrivate(h.meta.Algorithm, blob)
+	priv, err := decodePrivate(h.meta.KeySpec, blob)
 	if err != nil {
 		return nil, err
 	}
 	sk, ok := priv.(*rsa.PrivateKey)
 	if !ok {
-		return nil, fmt.Errorf("soft: %s did not decode to RSA private key", h.meta.Algorithm)
+		return nil, fmt.Errorf("soft: %s did not decode to RSA private key", h.meta.KeySpec)
 	}
 
-	// Determine PSS vs PKCS#1 v1.5 from algorithm ID. If opts is *rsa.PSSOptions
-	// the caller forced PSS; otherwise fall back to the algorithm's default.
-	if pssOpts, isPSS := opts.(*rsa.PSSOptions); isPSS {
-		return rsa.SignPSS(randomReader, sk, pssOpts.Hash, digest, pssOpts)
-	}
-
-	var hash crypto.Hash
-	if opts != nil {
-		hash = opts.HashFunc()
-	}
-	if hash == 0 {
-		hash = rsaHashFor(h.meta.Algorithm)
-	}
-
-	switch h.meta.Algorithm {
-	case "RSASSA_PSS_SHA_256", "RSASSA_PSS_SHA_384", "RSASSA_PSS_SHA_512":
+	switch scheme {
+	case "pss":
 		return rsa.SignPSS(randomReader, sk, hash, digest, &rsa.PSSOptions{
 			SaltLength: rsa.PSSSaltLengthEqualsHash,
 			Hash:       hash,
 		})
-	case "RSASSA_PKCS1_V1_5_SHA_256", "RSASSA_PKCS1_V1_5_SHA_384", "RSASSA_PKCS1_V1_5_SHA_512":
+	case "pkcs1v15":
 		return rsa.SignPKCS1v15(randomReader, sk, hash, digest)
 	}
-	return nil, fmt.Errorf("soft: algorithm %s is not a signing algorithm", h.meta.Algorithm)
+	return nil, fmt.Errorf("soft: unknown RSA signing scheme %q", scheme)
 }
 
 // --- cryptoenginesv2.Encrypter ---
 
-func (h *rsaHandle) EncryptContext(ctx context.Context, plaintext []byte, opts cryptoenginesv2.EncryptOpts) ([]byte, error) {
+func (h *rsaHandle) EncryptContext(ctx context.Context, plaintext []byte, alg cryptoenginesv2.AlgorithmID, opts cryptoenginesv2.EncryptOpts) ([]byte, error) {
 	_ = ctx // public-key encryption does not need private material loading today
-	if !hasPrefix(string(h.meta.Algorithm), "RSAES_OAEP_") {
-		return nil, fmt.Errorf("soft: %s does not support encrypt", h.meta.Algorithm)
+	hash, ok := rsaOAEPHash(alg)
+	if !ok {
+		return nil, fmt.Errorf("soft: %s is not an RSA encryption algorithm", alg)
+	}
+	if opts.Hash != 0 {
+		hash = opts.Hash
 	}
 
 	pub, ok := h.meta.PublicKey.(*rsa.PublicKey)
 	if !ok || pub == nil {
 		return nil, errors.New("soft: missing RSA public key for encrypt")
 	}
-
-	hash := pickHash(opts.Hash, rsaHashFor(h.meta.Algorithm))
 	return rsa.EncryptOAEP(hash.New(), randomReader, pub, plaintext, opts.AssociatedData)
 }
 
@@ -96,33 +102,19 @@ func (h *rsaHandle) EncryptContext(ctx context.Context, plaintext []byte, opts c
 
 func (h *rsaHandle) Decrypt(rand io.Reader, msg []byte, opts crypto.DecrypterOpts) ([]byte, error) {
 	_ = rand
-	return h.decryptInternal(context.Background(), msg, opts)
+	// stdlib path: *rsa.OAEPOptions selects OAEP, otherwise PKCS#1 v1.5.
+	if oaep, ok := opts.(*rsa.OAEPOptions); ok {
+		hash := oaep.Hash
+		if hash == 0 {
+			hash = crypto.SHA256
+		}
+		return h.decryptInternal(context.Background(), msg, true, hash, oaep.Label)
+	}
+	return h.decryptInternal(context.Background(), msg, false, 0, nil)
 }
 
-func (h *rsaHandle) DecryptContext(ctx context.Context, ciphertext []byte, opts crypto.DecrypterOpts) ([]byte, error) {
-	return h.decryptInternal(ctx, ciphertext, opts)
-}
-
-func (h *rsaHandle) decryptInternal(ctx context.Context, ct []byte, opts crypto.DecrypterOpts) ([]byte, error) {
-	if !h.canDecrypt() {
-		return nil, fmt.Errorf("soft: algorithm %s is not a decryption algorithm", h.meta.Algorithm)
-	}
-
-	blob, err := h.loadMaterial(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer zero(blob)
-
-	priv, err := decodePrivate(h.meta.Algorithm, blob)
-	if err != nil {
-		return nil, err
-	}
-	sk := priv.(*rsa.PrivateKey)
-
-	// RSA-OAEP path
-	if hasPrefix(string(h.meta.Algorithm), "RSAES_OAEP_") {
-		hash := rsaHashFor(h.meta.Algorithm)
+func (h *rsaHandle) DecryptContext(ctx context.Context, ciphertext []byte, alg cryptoenginesv2.AlgorithmID, opts crypto.DecrypterOpts) ([]byte, error) {
+	if hash, ok := rsaOAEPHash(alg); ok {
 		var label []byte
 		if oaep, ok := opts.(*rsa.OAEPOptions); ok {
 			label = oaep.Label
@@ -130,54 +122,65 @@ func (h *rsaHandle) decryptInternal(ctx context.Context, ct []byte, opts crypto.
 				hash = oaep.Hash
 			}
 		}
-		return rsa.DecryptOAEP(hash.New(), randomReader, sk, ct, label)
+		return h.decryptInternal(ctx, ciphertext, true, hash, label)
 	}
-
-	// RSA PKCS#1 v1.5 — legacy decrypt only
-	if hasPrefix(string(h.meta.Algorithm), "RSAES_PKCS1_V1_5_") {
-		// Constant-time path to mitigate Bleichenbacher; rsa.DecryptPKCS1v15
-		// returns an error or the plaintext.
-		return rsa.DecryptPKCS1v15(randomReader, sk, ct)
+	if isRSALegacyPKCS1Enc(alg) {
+		return h.decryptInternal(ctx, ciphertext, false, 0, nil)
 	}
-
-	return nil, fmt.Errorf("soft: %s does not support decrypt", h.meta.Algorithm)
+	return nil, fmt.Errorf("soft: %s is not an RSA decryption algorithm", alg)
 }
 
-func (h *rsaHandle) canDecrypt() bool {
-	return hasPrefix(string(h.meta.Algorithm), "RSAES_OAEP_") ||
-		hasPrefix(string(h.meta.Algorithm), "RSAES_PKCS1_V1_5_")
+func (h *rsaHandle) decryptInternal(ctx context.Context, ct []byte, oaep bool, hash crypto.Hash, label []byte) ([]byte, error) {
+	blob, err := h.loadMaterial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer zero(blob)
+
+	priv, err := decodePrivate(h.meta.KeySpec, blob)
+	if err != nil {
+		return nil, err
+	}
+	sk, ok := priv.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("soft: %s did not decode to RSA private key", h.meta.KeySpec)
+	}
+
+	if oaep {
+		return rsa.DecryptOAEP(hash.New(), randomReader, sk, ct, label)
+	}
+	// RSA PKCS#1 v1.5 — legacy decrypt only. Constant-time path to mitigate
+	// Bleichenbacher.
+	return rsa.DecryptPKCS1v15(randomReader, sk, ct)
 }
 
 // --- cryptoenginesv2.KeyWrapper ---
 
 // WrapKey wraps arbitrary key material using RSA-OAEP. Only valid for
-// RSAES_OAEP_* algorithms (RSAES_PKCS1_V1_5_* is decrypt-only and never wraps).
-func (h *rsaHandle) WrapKey(ctx context.Context, keyMaterial []byte, opts cryptoenginesv2.WrapOpts) ([]byte, error) {
-	if !hasPrefix(string(h.meta.Algorithm), "RSAES_OAEP_") {
-		return nil, fmt.Errorf("soft: %s cannot wrap keys", h.meta.Algorithm)
+// RSAES_OAEP_* algorithms (RSAES_PKCS1_V1_5 is decrypt-only and never wraps).
+func (h *rsaHandle) WrapKey(ctx context.Context, keyMaterial []byte, alg cryptoenginesv2.AlgorithmID, opts cryptoenginesv2.WrapOpts) ([]byte, error) {
+	hash, ok := rsaOAEPHash(alg)
+	if !ok {
+		return nil, fmt.Errorf("soft: %s cannot wrap keys", alg)
+	}
+	if opts.Hash != 0 {
+		hash = opts.Hash
 	}
 	pub, ok := h.meta.PublicKey.(*rsa.PublicKey)
 	if !ok || pub == nil {
 		return nil, errors.New("soft: missing RSA public key for wrap")
 	}
-	hash := rsaHashFor(h.meta.Algorithm)
-	if opts.Hash != 0 {
-		hash = opts.Hash
-	}
 	return rsa.EncryptOAEP(hash.New(), randomReader, pub, keyMaterial, opts.AssociatedData)
 }
 
 // UnwrapKey reverses WrapKey.
-func (h *rsaHandle) UnwrapKey(ctx context.Context, wrapped []byte, opts cryptoenginesv2.WrapOpts) ([]byte, error) {
-	return h.decryptInternal(ctx, wrapped, &rsa.OAEPOptions{
-		Hash:  pickHash(opts.Hash, rsaHashFor(h.meta.Algorithm)),
-		Label: opts.AssociatedData,
-	})
-}
-
-func pickHash(want, fallback crypto.Hash) crypto.Hash {
-	if want != 0 {
-		return want
+func (h *rsaHandle) UnwrapKey(ctx context.Context, wrapped []byte, alg cryptoenginesv2.AlgorithmID, opts cryptoenginesv2.WrapOpts) ([]byte, error) {
+	hash, ok := rsaOAEPHash(alg)
+	if !ok {
+		return nil, fmt.Errorf("soft: %s cannot unwrap keys", alg)
 	}
-	return fallback
+	if opts.Hash != 0 {
+		hash = opts.Hash
+	}
+	return h.decryptInternal(ctx, wrapped, true, hash, opts.AssociatedData)
 }

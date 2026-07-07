@@ -4,38 +4,55 @@ import (
 	"fmt"
 )
 
-// validateOpsAgainstAlgorithm checks that every operation requested in a
-// CreateKey / ImportKey spec is permitted by the algorithm's spec in the
-// registry.
+// validateOpsAgainstKeySpec checks that every operation requested in a
+// CreateKey / ImportKey spec is supported by the KeySpec's material.
 //
 // Rules:
-//   - An empty 'requested' list means "use the algorithm's default operations"
-//     (alg.Operations) and is accepted.
-//   - Every requested op MUST appear in alg.Operations. Legacy operations
-//     (alg.LegacyOperations) are NOT acceptable at key-creation time: a key
-//     created today must use the algorithm in normal mode. Legacy ops are
-//     a runtime concession for consuming old data, not a way to provision
-//     keys.
-//   - Duplicate ops in the request are silently deduplicated (not an error,
-//     but the resulting metadata holds the deduped list).
+//   - An empty 'requested' list means "authorize the KeySpec's full supported
+//     set" (info.SupportedOperations) and is accepted.
+//   - Every requested op MUST appear in info.SupportedOperations.
+//   - Duplicate ops in the request are tolerated (the caller is responsible for
+//     the final persisted set).
 //
 // Returns ErrOperationNotAllowed wrapping a descriptive message on failure.
-func validateOpsAgainstAlgorithm(alg AlgorithmSpec, requested []Operation) error {
+func validateOpsAgainstKeySpec(info KeySpecInfo, requested []Operation) error {
 	if len(requested) == 0 {
-		// Caller did not narrow; accept defaults.
-		return nil
+		return nil // caller did not narrow; accept the KeySpec's defaults
 	}
 
-	allowed := make(map[Operation]struct{}, len(alg.Operations))
-	for _, op := range alg.Operations {
+	allowed := make(map[Operation]struct{}, len(info.SupportedOperations))
+	for _, op := range info.SupportedOperations {
 		allowed[op] = struct{}{}
 	}
 
 	for _, op := range requested {
 		if _, ok := allowed[op]; !ok {
-			return fmt.Errorf("%w: algorithm %q does not permit operation %q in normal mode (allowed: %v)",
-				ErrOperationNotAllowed, alg.ID, op, alg.Operations)
+			return fmt.Errorf("%w: key spec %q does not support operation %q (supported: %v)",
+				ErrOperationNotAllowed, info.KeySpec, op, info.SupportedOperations)
 		}
 	}
 	return nil
+}
+
+// resolveOperations computes the authorized operation set for a new key:
+// the deduplicated union of explicit ops and the expansion of any coarse
+// usages. When both are empty, it defaults to the KeySpec's full supported set.
+func resolveOperations(info KeySpecInfo, explicit []Operation, usages []KeyUsage) []Operation {
+	seen := make(map[Operation]struct{})
+	out := make([]Operation, 0, len(explicit)+len(usages)*2)
+	add := func(ops []Operation) {
+		for _, op := range ops {
+			if _, dup := seen[op]; dup {
+				continue
+			}
+			seen[op] = struct{}{}
+			out = append(out, op)
+		}
+	}
+	add(explicit)
+	add(ExpandUsages(usages))
+	if len(out) == 0 {
+		return append([]Operation(nil), info.SupportedOperations...)
+	}
+	return out
 }

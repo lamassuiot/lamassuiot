@@ -24,73 +24,102 @@ const (
 	FamilyAESKW     Family = "aes-kw"
 )
 
-// Registry resolves AlgorithmID -> AlgorithmSpec and answers capability
-// queries. It is the single source of truth for what each algorithm is
-// allowed to do (operations) and how it must be parameterized (hashes,
-// key sizes, composite components).
+// Registry is the single source of truth for the two orthogonal concepts of
+// the KMS key model:
+//
+//   - KeySpec  — the key *material* (RSA_2048, ECC_NIST_P256, …). Determines
+//     what is generated/stored and which operations the material can perform.
+//   - AlgorithmID — a *per-operation* algorithm (scheme + hash, e.g.
+//     RSASSA_PSS_SHA_256). Chosen per call and validated against the key's
+//     KeySpec and its authorized operations.
+//
+// A single KeySpec is compatible with many AlgorithmIDs. The Registry answers
+// both "what may this KeySpec do" and "is this AlgorithmID valid for this
+// KeySpec + operation".
 type Registry interface {
-	// Get returns the spec for id, or ErrAlgorithmNotSupported.
-	Get(id AlgorithmID) (AlgorithmSpec, error)
+	// GetKeySpec returns the material info for spec, or ErrKeySpecNotSupported.
+	GetKeySpec(spec KeySpec) (KeySpecInfo, error)
 
-	// List returns every registered algorithm, sorted by ID for stable
-	// output (useful for diagnostics endpoints and tests).
-	List() []AlgorithmSpec
+	// ListKeySpecs returns every registered KeySpec info, sorted by spec ID.
+	ListKeySpecs() []KeySpecInfo
 
-	// SupportsOperation reports whether id permits op in normal mode.
-	SupportsOperation(id AlgorithmID, op Operation) bool
+	// GetAlgorithm returns the per-operation algorithm info for id, or
+	// ErrAlgorithmNotSupported.
+	GetAlgorithm(id AlgorithmID) (AlgorithmInfo, error)
 
-	// SupportsLegacyOperation reports whether id permits op in legacy mode.
-	// Legacy operations are a superset of, but never override, normal ones:
-	// a caller asking to perform op must satisfy at least one of them.
-	SupportsLegacyOperation(id AlgorithmID, op Operation) bool
+	// ListAlgorithms returns every registered algorithm, sorted by ID.
+	ListAlgorithms() []AlgorithmInfo
+
+	// AlgorithmsFor returns the AlgorithmIDs valid for spec that perform op,
+	// sorted by ID. Empty if none.
+	AlgorithmsFor(spec KeySpec, op Operation) []AlgorithmID
+
+	// ValidateAlgorithm reports whether alg may perform op on a key of the
+	// given KeySpec. It checks that alg performs op and that spec is in alg's
+	// compatible KeySpecs. It does NOT check the key's authorized Operations
+	// set — that is the Service's responsibility. Returns nil when valid, or
+	// ErrAlgorithmNotSupported / ErrOperationNotAllowed otherwise.
+	ValidateAlgorithm(spec KeySpec, op Operation, alg AlgorithmID) error
 }
 
-// AlgorithmSpec is the canonical description of one algorithm. Every field
-// is documented because this struct is the contract between the registry
-// and the rest of the system (Service validation, Backend capability
-// negotiation, policy evaluation, audit metadata).
-type AlgorithmSpec struct {
-	// ID is the stable identifier used in API requests and persisted records.
-	ID AlgorithmID
+// KeySpecInfo is the canonical description of one KeySpec (the key material).
+type KeySpecInfo struct {
+	// KeySpec is the stable identifier used in API requests and persisted records.
+	KeySpec KeySpec
 
-	// Family groups related algorithms (rsa, ecdsa, ml-kem, ...).
+	// Family groups related key material (rsa, ecdsa, ml-kem, ...).
 	Family Family
 
-	// Operations the algorithm may perform in normal mode. A request asking
-	// for an operation not in this set (and not in LegacyOperations) MUST be
-	// rejected by the Service before reaching the Backend.
-	Operations []Operation
+	// KeyBits is the key size in bits when meaningful (RSA modulus, AES key
+	// length, EC field size). Zero means N/A (e.g. Ed25519, ML-KEM parameter
+	// sets fixed by the spec ID).
+	KeyBits int
 
-	// LegacyOperations are additionally allowed only for the "consume" side
-	// of deprecated algorithms (decrypt-only, verify-only) so existing data
-	// remains accessible. They never grant the producing side (no encrypt,
-	// no sign) for deprecated algorithms.
-	LegacyOperations []Operation
+	// SupportedOperations is the set of operations the material can perform.
+	// A CreateKey request may only authorize operations from this set. The
+	// actual per-operation algorithm is resolved separately via AlgorithmsFor.
+	SupportedOperations []Operation
 
-	// AllowedHashes lists hashes the algorithm accepts as a parameter.
-	// Empty means: the hash is fixed by the algorithm (Ed25519, ML-DSA) or
-	// not applicable (AES-KW, ChaCha20-Poly1305).
-	AllowedHashes []crypto.Hash
-
-	// KeySize is the key size in bits, when meaningful. For RSA it's the
-	// modulus size; for AES the key length; for ML-* and SLH-* it's the
-	// parameter-set-equivalent strength (informational only — the parameter
-	// set is fixed by ID). Zero means N/A.
-	KeySize int
-
-	// IsPQC is true for NIST post-quantum standards (ML-KEM, ML-DSA, SLH-DSA)
-	// and for composite algorithms whose PQC component is one of these.
+	// IsPQC is true for NIST post-quantum standards (ML-KEM, ML-DSA, SLH-DSA).
 	IsPQC bool
-
-	// IsComposite is true for hybrid classical+PQC algorithms. When true,
-	// CompositeComponents lists the component algorithm IDs in canonical
-	// order (PQC first, then classical, per the LAMPS draft convention).
-	IsComposite         bool
-	CompositeComponents []AlgorithmID
 
 	// Notes is free-form documentation surfaced in diagnostics and OpenAPI.
 	Notes string
 }
 
-// ErrAlgorithmNotSupported is returned by Registry.Get for unknown IDs.
-var ErrAlgorithmNotSupported = errors.New("algorithm not supported")
+// AlgorithmInfo is the canonical description of one per-operation algorithm.
+type AlgorithmInfo struct {
+	// ID is the stable identifier used in operation requests (RSASSA_PSS_SHA_256).
+	ID AlgorithmID
+
+	// Operations is the set of operations this algorithm performs, including
+	// the inverse: a signing algorithm covers {sign, verify}, OAEP covers
+	// {encrypt, decrypt, wrapKey, unwrapKey}, ECDH covers {agreeKey, deriveKey}.
+	// Callers pass the same AlgorithmID to an operation and its inverse.
+	Operations []Operation
+
+	// Scheme is a short mnemonic for the padding/signature scheme
+	// ("pkcs1v15", "pss", "oaep", "ecdsa", "eddsa", "gcm", "hmac", "ecdh", ...).
+	Scheme string
+
+	// Hash is the hash bound to this algorithm, or crypto.Hash(0) when the
+	// hash is fixed by the algorithm (Ed25519, ML-DSA) or not applicable.
+	Hash crypto.Hash
+
+	// CompatibleKeySpecs lists the KeySpecs this algorithm may be used with.
+	CompatibleKeySpecs []KeySpec
+
+	// Legacy marks consume-only algorithms (decrypt/verify of deprecated
+	// schemes). Their Operations list the permitted consume side only.
+	Legacy bool
+
+	// Notes is free-form documentation surfaced in diagnostics and OpenAPI.
+	Notes string
+}
+
+var (
+	// ErrAlgorithmNotSupported is returned for unknown/invalid AlgorithmIDs.
+	ErrAlgorithmNotSupported = errors.New("algorithm not supported")
+	// ErrKeySpecNotSupported is returned by Registry.GetKeySpec for unknown specs.
+	ErrKeySpecNotSupported = errors.New("key spec not supported")
+)

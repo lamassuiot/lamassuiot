@@ -11,12 +11,12 @@ import (
 
 // aesHandle implements cryptoenginesv2.SymmetricCipher for AES-GCM keys.
 type aesHandle struct {
-	handleBase
+	*handleBase
 }
 
-func (h *aesHandle) Encrypt(ctx context.Context, plaintext []byte, opts cryptoenginesv2.SymmetricOpts) (cryptoenginesv2.Ciphertext, error) {
-	if h.meta.Algorithm != "AES_GCM_128" && h.meta.Algorithm != "AES_GCM_192" && h.meta.Algorithm != "AES_GCM_256" {
-		return cryptoenginesv2.Ciphertext{}, fmt.Errorf("soft: %s does not support symmetric encrypt", h.meta.Algorithm)
+func (h *aesHandle) Encrypt(ctx context.Context, plaintext []byte, alg cryptoenginesv2.AlgorithmID, opts cryptoenginesv2.SymmetricOpts) (cryptoenginesv2.Ciphertext, error) {
+	if alg != cryptoenginesv2.AlgSymmetricDefault {
+		return cryptoenginesv2.Ciphertext{}, fmt.Errorf("soft: %s does not support symmetric algorithm %s", h.meta.KeySpec, alg)
 	}
 
 	keyMaterial, err := h.loadMaterial(ctx)
@@ -46,7 +46,7 @@ func (h *aesHandle) Encrypt(ctx context.Context, plaintext []byte, opts cryptoen
 
 	ct := aead.Seal(nil, nonce, plaintext, opts.AssociatedData)
 	return cryptoenginesv2.Ciphertext{
-		Algorithm: h.meta.Algorithm,
+		Algorithm: alg,
 		Nonce:     append([]byte(nil), nonce...),
 		Bytes:     ct,
 		AAD:       append([]byte(nil), opts.AssociatedData...),
@@ -54,8 +54,8 @@ func (h *aesHandle) Encrypt(ctx context.Context, plaintext []byte, opts cryptoen
 }
 
 func (h *aesHandle) Decrypt(ctx context.Context, ct cryptoenginesv2.Ciphertext, opts cryptoenginesv2.SymmetricOpts) ([]byte, error) {
-	if h.meta.Algorithm != "AES_GCM_128" && h.meta.Algorithm != "AES_GCM_192" && h.meta.Algorithm != "AES_GCM_256" {
-		return nil, fmt.Errorf("soft: %s does not support symmetric decrypt", h.meta.Algorithm)
+	if ct.Algorithm != cryptoenginesv2.AlgSymmetricDefault {
+		return nil, fmt.Errorf("soft: %s does not support symmetric algorithm %s", h.meta.KeySpec, ct.Algorithm)
 	}
 
 	keyMaterial, err := h.loadMaterial(ctx)

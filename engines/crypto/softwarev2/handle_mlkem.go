@@ -9,7 +9,7 @@ import (
 )
 
 type mlkemHandle struct {
-	handleBase
+	*handleBase
 }
 
 func (h *mlkemHandle) Public() crypto.PublicKey { return h.meta.PublicKey }
@@ -76,7 +76,7 @@ func (h *mlkemHandle) decapsulate(ctx context.Context, ct []byte) ([]byte, error
 	}
 	defer zero(blob)
 
-	priv, err := decodePrivate(h.meta.Algorithm, blob)
+	priv, err := decodePrivate(h.meta.KeySpec, blob)
 	if err != nil {
 		return nil, err
 	}
