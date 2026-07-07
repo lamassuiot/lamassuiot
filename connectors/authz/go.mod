@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/lamassuiot/lamassuiot/backend/v3 v3.8.0
 	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.8.0
 	github.com/lamassuiot/lamassuiot/sdk/v3 v3.8.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/pressly/goose/v3 v3.27.1
@@ -37,7 +38,6 @@ require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.11 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.9 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.22 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.21 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.27 // indirect
@@ -45,9 +45,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.27 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.28 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.11 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.14 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.27 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.22 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.1.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.26 // indirect
@@ -111,13 +109,11 @@ require (
 	github.com/kaptinlin/jsonpointer v0.4.19 // indirect
 	github.com/kaptinlin/jsonschema v0.7.10 // indirect
 	github.com/kaptinlin/messageformat-go v0.6.0 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 v3.8.0 // indirect
 	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.8.0 // indirect
 	github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3 v3.8.0 // indirect
 	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 v3.8.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.8.0 // indirect
 	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.0 // indirect
 	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.8.0 // indirect
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0 // indirect
@@ -172,6 +168,7 @@ require (
 	go.mozilla.org/pkcs7 v0.9.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/bridges/otellogrus v0.18.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.68.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/host v0.68.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0 // indirect

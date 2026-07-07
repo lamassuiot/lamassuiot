@@ -939,6 +939,7 @@ github.com/kr/pretty v0.3.0/go.mod h1:640gp4NfQd8pI5XOwp5fnNeVWj67G7CFk/SaSQn7NB
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lamassuiot/lamassuiot/connectors/awsiot/v3 v3.8.0/go.mod h1:lTqvQLQvAQ+cakQbREDRY6Qrqx81rCID+PR+vAXbDtg=
 github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 v3.8.0/go.mod h1:AQysineef/1vm3dV5IXRbls+OYmYEyyOach7v3lLkno=
+github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 v3.8.0/go.mod h1:fYt4vnENcBdeeoF7o23mgtcaYgFdvfVwbe3k7CgS/pw=
 github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3 v3.8.0/go.mod h1:wr3aeU/ZJh/6XkbRCDsip1BcIpFvEHv/4rd8KezJuSU=
 github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.0.0-20250125081925-9d327c393cdb/go.mod h1:KRYPhh319Zwrp0Es0ZtnuBzCOMJshMIsnN5DniR8DPY=
 github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3 v3.8.0/go.mod h1:aHKYdzVtQ7sXoNCOhme0kfmbZX19xi88Qu0snGGV7Ek=
