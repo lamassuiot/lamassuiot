@@ -63,26 +63,26 @@ func (b *Backend) Capabilities() cryptoenginesv2.BackendCapabilities {
 	return cryptoenginesv2.BackendCapabilities{
 		Algorithms: []cryptoenginesv2.AlgorithmID{
 			// RSA — sign + encrypt + wrap
-			"RSASSA_PKCS1_V1_5_SHA_256", "RSASSA_PKCS1_V1_5_SHA_384", "RSASSA_PKCS1_V1_5_SHA_512",
-			"RSASSA_PSS_SHA_256", "RSASSA_PSS_SHA_384", "RSASSA_PSS_SHA_512",
-			"RSAES_OAEP_SHA_1_2048", "RSAES_OAEP_SHA_1_3072", "RSAES_OAEP_SHA_1_4096",
-			"RSAES_OAEP_SHA_256_2048", "RSAES_OAEP_SHA_256_3072", "RSAES_OAEP_SHA_256_4096",
-			"RSAES_OAEP_SHA_384_2048", "RSAES_OAEP_SHA_384_3072", "RSAES_OAEP_SHA_384_4096",
-			"RSAES_OAEP_SHA_512_2048", "RSAES_OAEP_SHA_512_3072", "RSAES_OAEP_SHA_512_4096",
-			"RSAES_PKCS1_V1_5_2048", "RSAES_PKCS1_V1_5_3072", "RSAES_PKCS1_V1_5_4096", // legacy
+			cryptoenginesv2.AlgRSASSAPKCS1V15SHA256, cryptoenginesv2.AlgRSASSAPKCS1V15SHA384, cryptoenginesv2.AlgRSASSAPKCS1V15SHA512,
+			cryptoenginesv2.AlgRSASSAPSSSHA256, cryptoenginesv2.AlgRSASSAPSSSHA384, cryptoenginesv2.AlgRSASSAPSSSHA512,
+			cryptoenginesv2.AlgRSAESOAEPSHA12048, cryptoenginesv2.AlgRSAESOAEPSHA13072, cryptoenginesv2.AlgRSAESOAEPSHA14096,
+			cryptoenginesv2.AlgRSAESOAEPSHA2562048, cryptoenginesv2.AlgRSAESOAEPSHA2563072, cryptoenginesv2.AlgRSAESOAEPSHA2564096,
+			cryptoenginesv2.AlgRSAESOAEPSHA3842048, cryptoenginesv2.AlgRSAESOAEPSHA3843072, cryptoenginesv2.AlgRSAESOAEPSHA3844096,
+			cryptoenginesv2.AlgRSAESOAEPSHA5122048, cryptoenginesv2.AlgRSAESOAEPSHA5123072, cryptoenginesv2.AlgRSAESOAEPSHA5124096,
+			cryptoenginesv2.AlgRSAESPKCS1V152048, cryptoenginesv2.AlgRSAESPKCS1V153072, cryptoenginesv2.AlgRSAESPKCS1V154096, // legacy
 			// ECDSA
-			"ECDSA_SHA_256", "ECDSA_SHA_384", "ECDSA_SHA_512",
+			cryptoenginesv2.AlgECDSASHA256, cryptoenginesv2.AlgECDSASHA384, cryptoenginesv2.AlgECDSASHA512,
 			// EdDSA
-			"ED25519",
+			cryptoenginesv2.AlgED25519,
 			// ECDH
-			"ECDH_NIST_P256", "ECDH_NIST_P384", "ECDH_NIST_P521", "ECDH_X25519",
+			cryptoenginesv2.AlgECDHNISTP256, cryptoenginesv2.AlgECDHNISTP384, cryptoenginesv2.AlgECDHNISTP521, cryptoenginesv2.AlgECDHX25519,
 			// ML-KEM (stdlib ships 768 and 1024)
-			"ML_KEM_768", "ML_KEM_1024",
+			cryptoenginesv2.AlgMLKEM768, cryptoenginesv2.AlgMLKEM1024,
 			// Symmetric AEAD
-			"AES_GCM_128", "AES_GCM_192", "AES_GCM_256",
-			"AES_CBC_128", "AES_CBC_192", "AES_CBC_256", // legacy decrypt
+			cryptoenginesv2.AlgAESGCM128, cryptoenginesv2.AlgAESGCM192, cryptoenginesv2.AlgAESGCM256,
+			cryptoenginesv2.AlgAESCBC128, cryptoenginesv2.AlgAESCBC192, cryptoenginesv2.AlgAESCBC256, // legacy decrypt
 			// HMAC
-			"HMAC_SHA_256", "HMAC_SHA_384", "HMAC_SHA_512",
+			cryptoenginesv2.AlgHMACSHA256, cryptoenginesv2.AlgHMACSHA384, cryptoenginesv2.AlgHMACSHA512,
 		},
 		Operations: []cryptoenginesv2.Operation{
 			cryptoenginesv2.OpSign, cryptoenginesv2.OpVerify,

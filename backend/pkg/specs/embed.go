@@ -8,6 +8,9 @@ var CA []byte
 //go:embed kms-openapi.yaml
 var KMS []byte
 
+//go:embed kms-v2-openapi.yaml
+var KMSV2 []byte
+
 //go:embed va-openapi.yaml
 var VA []byte
 
