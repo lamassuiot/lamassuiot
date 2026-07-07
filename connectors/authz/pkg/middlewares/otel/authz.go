@@ -4,13 +4,12 @@ import (
 	"context"
 
 	"github.com/lamassuiot/authz/pkg/core"
+	"github.com/lamassuiot/authz/pkg/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
-
-const tracerName = "github.com/lamassuiot/authz"
 
 // AuthzOTelMiddleware wraps a core.AuthzEngine and creates an OTEL span for every
 // authorization call, recording the decision outcome and key request attributes.
@@ -24,7 +23,7 @@ func NewAuthzOTelMiddleware(next core.AuthzEngine) core.AuthzEngine {
 }
 
 func (mw *AuthzOTelMiddleware) Authorize(ctx context.Context, principalID, namespace, schemaName, action, entityType string, entityKey map[string]string) (allowed bool, err error) {
-	ctx, span := otel.Tracer(tracerName).Start(ctx, "authz.Authorize",
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.Authorize",
 		trace.WithAttributes(
 			attribute.String("authz.principal_id", principalID),
 			attribute.String("authz.namespace", namespace),
@@ -45,7 +44,7 @@ func (mw *AuthzOTelMiddleware) Authorize(ctx context.Context, principalID, names
 }
 
 func (mw *AuthzOTelMiddleware) GetFilter(ctx context.Context, principalID, namespace, schemaName, entityType string) (_ string, err error) {
-	ctx, span := otel.Tracer(tracerName).Start(ctx, "authz.GetFilter",
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.GetFilter",
 		trace.WithAttributes(
 			attribute.String("authz.principal_id", principalID),
 			attribute.String("authz.namespace", namespace),
@@ -64,7 +63,7 @@ func (mw *AuthzOTelMiddleware) GetFilter(ctx context.Context, principalID, names
 }
 
 func (mw *AuthzOTelMiddleware) MatchAndAuthorize(ctx context.Context, authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (allowed bool, principals []string, err error) {
-	ctx, span := otel.Tracer(tracerName).Start(ctx, "authz.MatchAndAuthorize",
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.MatchAndAuthorize",
 		trace.WithAttributes(
 			attribute.String("authz.auth_type", authType),
 			attribute.String("authz.namespace", namespace),
@@ -88,7 +87,7 @@ func (mw *AuthzOTelMiddleware) MatchAndAuthorize(ctx context.Context, authType, 
 }
 
 func (mw *AuthzOTelMiddleware) MatchAndGetFilter(ctx context.Context, authType, authMaterial, namespace, schemaName, entityType string) (_ string, principals []string, err error) {
-	ctx, span := otel.Tracer(tracerName).Start(ctx, "authz.MatchAndGetFilter",
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.MatchAndGetFilter",
 		trace.WithAttributes(
 			attribute.String("authz.auth_type", authType),
 			attribute.String("authz.namespace", namespace),
