@@ -897,8 +897,10 @@ func TestEngineCheckHTTPRequest_SchemaDefaultAction(t *testing.T) {
 
 // TestEngineCheckHTTPRequest_StaticParamConstraint covers the "static
 // parameter" feature: a policy grant can scope a dynamic route to one literal
-// path-parameter value that is written into the policy, not derived from the
-// requesting subject.
+// value that is written into the policy, not derived from the requesting
+// subject. It uses a plain unnamed regex capture group — the same style
+// already used by route-level subject constraints — so no schema changes are
+// needed to pin an existing dynamic route to a literal.
 func TestEngineCheckHTTPRequest_StaticParamConstraint(t *testing.T) {
 	schemaPath := writeHTTPSchemaTestFile(t, `[
 		{
@@ -907,7 +909,7 @@ func TestEngineCheckHTTPRequest_StaticParamConstraint(t *testing.T) {
 				{
 					"name": "system-info-read",
 					"methods": ["GET"],
-					"path": "^/api/mysvc/system/(?P<system_id>[^/]+)/info$",
+					"path": "^/api/mysvc/system/([^/]+)/info$",
 					"match_type": "regex",
 					"action": "system-info-read"
 				}
@@ -926,14 +928,18 @@ func TestEngineCheckHTTPRequest_StaticParamConstraint(t *testing.T) {
 				SchemaName: "mysvc",
 				Actions:    []string{"system-info-read"},
 				ParamConstraints: []*models.HTTPRuleParamConstraint{
-					{Action: "system-info-read", Params: map[string]string{"system_id": "1"}},
+					{
+						Action:  "system-info-read",
+						Request: models.HTTPRuleRequestRef{Source: "path_regex_group", Index: 1},
+						Equals:  "1",
+					},
 				},
 			},
 		},
 	}))
 
 	subject := SubjectPolicySet{
-		// The subject's own attributes have nothing to do with system_id —
+		// The subject's own attributes have nothing to do with the system ID —
 		// the "1" comes purely from the policy's param_constraints.
 		Subject:  ResolvedSubject{PrincipalID: "any-principal", Attributes: map[string]string{"device_id": "unrelated"}},
 		Policies: policies,
@@ -954,7 +960,65 @@ func TestEngineCheckHTTPRequest_StaticParamConstraint(t *testing.T) {
 		Subjects: []SubjectPolicySet{subject},
 	})
 	require.NoError(t, err)
-	assert.False(t, result.Allowed, "a different system_id must not be granted by a policy scoped to system_id 1")
+	assert.False(t, result.Allowed, "a different system id must not be granted by a policy scoped to system id 1")
+}
+
+// TestEngineCheckHTTPRequest_StaticParamConstraint_QueryHeaderBody covers that
+// param_constraints work against any of the same dynamic request sources
+// supported by route-level subject constraints, not just path segments.
+func TestEngineCheckHTTPRequest_StaticParamConstraint_QueryHeaderBody(t *testing.T) {
+	schemaPath := writeHTTPSchemaTestFile(t, `[
+		{
+			"name": "mysvc",
+			"routes": [
+				{"name": "query-read", "methods": ["GET"], "path": "/api/mysvc/query", "match_type": "exact", "action": "query-read"},
+				{"name": "header-read", "methods": ["GET"], "path": "/api/mysvc/header", "match_type": "exact", "action": "header-read"},
+				{"name": "body-write", "methods": ["POST"], "path": "/api/mysvc/body", "match_type": "exact", "action": "body-write"}
+			]
+		}
+	]`)
+	eng, err := NewEngine(nil, nil, WithHTTPSchemas([]string{schemaPath}))
+	require.NoError(t, err)
+
+	policies := NewPolicyRegistry()
+	require.NoError(t, policies.AddPolicy(&models.Policy{
+		ID:   "tenant-1-only",
+		Name: "Tenant 1 Only",
+		HTTPRules: []*models.HTTPRule{
+			{
+				SchemaName: "mysvc",
+				Actions:    []string{"query-read", "header-read", "body-write"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "query-read", Request: models.HTTPRuleRequestRef{Source: "query", Name: "tenant_id"}, Equals: "1"},
+					{Action: "header-read", Request: models.HTTPRuleRequestRef{Source: "header", Name: "x-tenant-id"}, Equals: "1"},
+					{Action: "body-write", Request: models.HTTPRuleRequestRef{Source: "json_body", Path: "$.tenant_id"}, Equals: "1"},
+				},
+			},
+		},
+	}))
+
+	subject := SubjectPolicySet{Subject: ResolvedSubject{PrincipalID: "any-principal"}, Policies: policies}
+
+	tests := []struct {
+		name string
+		req  HTTPCheckRequest
+		want bool
+	}{
+		{"query tenant 1 allowed", HTTPCheckRequest{Method: "GET", Path: "/api/mysvc/query", RawQuery: "tenant_id=1", Subjects: []SubjectPolicySet{subject}}, true},
+		{"query tenant 2 denied", HTTPCheckRequest{Method: "GET", Path: "/api/mysvc/query", RawQuery: "tenant_id=2", Subjects: []SubjectPolicySet{subject}}, false},
+		{"header tenant 1 allowed", HTTPCheckRequest{Method: "GET", Path: "/api/mysvc/header", Headers: map[string]string{"x-tenant-id": "1"}, Subjects: []SubjectPolicySet{subject}}, true},
+		{"header tenant 2 denied", HTTPCheckRequest{Method: "GET", Path: "/api/mysvc/header", Headers: map[string]string{"x-tenant-id": "2"}, Subjects: []SubjectPolicySet{subject}}, false},
+		{"body tenant 1 allowed", HTTPCheckRequest{Method: "POST", Path: "/api/mysvc/body", Body: []byte(`{"tenant_id":"1"}`), Subjects: []SubjectPolicySet{subject}}, true},
+		{"body tenant 2 denied", HTTPCheckRequest{Method: "POST", Path: "/api/mysvc/body", Body: []byte(`{"tenant_id":"2"}`), Subjects: []SubjectPolicySet{subject}}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := eng.CheckHTTPRequest(context.Background(), tt.req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, result.Allowed)
+		})
+	}
 }
 
 func writeHTTPSchemaTestFile(t *testing.T, content string) string {

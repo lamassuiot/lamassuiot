@@ -137,16 +137,24 @@ func validateHTTPRuleStruct(r *models.HTTPRule) error {
 		if !r.HasHTTPAction(pc.Action) {
 			return fmt.Errorf("param_constraints[%d]: action %q must also be listed in actions", i, pc.Action)
 		}
-		if len(pc.Params) == 0 {
-			return fmt.Errorf("param_constraints[%d]: path_params must not be empty", i)
+		if pc.Equals == "" {
+			return fmt.Errorf("param_constraints[%d]: equals is required", i)
 		}
-		for name, value := range pc.Params {
-			if name == "" {
-				return fmt.Errorf("param_constraints[%d]: path_params key must not be empty", i)
+		switch pc.Request.Source {
+		case "path_regex_group":
+			if pc.Request.Index <= 0 {
+				return fmt.Errorf("param_constraints[%d]: path_regex_group index must be greater than zero", i)
 			}
-			if value == "" {
-				return fmt.Errorf("param_constraints[%d]: path_params[%q] value must not be empty", i, name)
+		case "query", "header":
+			if pc.Request.Name == "" {
+				return fmt.Errorf("param_constraints[%d]: %s name is required", i, pc.Request.Source)
 			}
+		case "json_body":
+			if pc.Request.Path == "" {
+				return fmt.Errorf("param_constraints[%d]: json_body path is required", i)
+			}
+		default:
+			return fmt.Errorf("param_constraints[%d]: unsupported request source %q", i, pc.Request.Source)
 		}
 	}
 	return nil
