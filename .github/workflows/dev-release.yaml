@@ -8,6 +8,10 @@ on:
         required: false
         default: ""
 
+permissions:
+  contents: read
+  packages: read
+  
 jobs:
   validate_tag:
     runs-on: ubuntu-latest
