@@ -8,13 +8,12 @@ on:
         required: false
         default: ""
 
-permissions:
-  contents: read
-  packages: read
-  
 jobs:
   validate_tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Validate tag input
         run: |
