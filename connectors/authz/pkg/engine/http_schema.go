@@ -361,52 +361,30 @@ func httpRouteConstraintsMatch(route *HTTPRouteConfig, req HTTPCheckRequest, sub
 
 // httpRuleParamConstraintsMatch enforces a policy grant's param_constraints:
 // literal values, written into the policy itself rather than derived from the
-// subject, that a named regex capture group in the route's path must equal.
-// A grant with no param_constraints for this action is unrestricted (backward
-// compatible). Multiple constraints for the same action are ANDed.
+// subject, that a dynamic request value (regex-captured path segment, query,
+// header, or JSON body field) must equal. Reuses the same extraction as
+// route-level subject constraints, just comparing against a fixed literal
+// instead of a subject attribute — so it works on any existing dynamic route
+// without requiring named capture groups. A grant with no param_constraints
+// for this action is unrestricted (backward compatible). Multiple constraints
+// for the same action are ANDed.
 func httpRuleParamConstraintsMatch(route *HTTPRouteConfig, rule *models.HTTPRule, req HTTPCheckRequest) bool {
-	var applicable []*models.HTTPRuleParamConstraint
-	for i := range rule.ParamConstraints {
-		if rule.ParamConstraints[i].Action == route.Action {
-			applicable = append(applicable, rule.ParamConstraints[i])
+	for _, constraint := range rule.ParamConstraints {
+		if constraint.Action != route.Action {
+			continue
 		}
-	}
-	if len(applicable) == 0 {
-		return true
-	}
-
-	params := extractNamedPathParams(route, req.Path)
-	for _, constraint := range applicable {
-		for name, want := range constraint.Params {
-			got, ok := params[name]
-			if !ok || got != want {
-				return false
-			}
+		ref := HTTPRequestValueRef{
+			Source: constraint.Request.Source,
+			Name:   constraint.Request.Name,
+			Index:  constraint.Request.Index,
+			Path:   constraint.Request.Path,
+		}
+		value, ok := extractHTTPConstraintRequestValue(route, req, ref)
+		if !ok || value != constraint.Equals {
+			return false
 		}
 	}
 	return true
-}
-
-// extractNamedPathParams returns the route regex's named capture groups for
-// path, keyed by group name. Returns nil when the route has no compiled regex
-// or the path does not match.
-func extractNamedPathParams(route *HTTPRouteConfig, path string) map[string]string {
-	if route.compiledRegex == nil {
-		return nil
-	}
-	matches := route.compiledRegex.FindStringSubmatch(path)
-	if matches == nil {
-		return nil
-	}
-	names := route.compiledRegex.SubexpNames()
-	params := make(map[string]string, len(names))
-	for i, name := range names {
-		if i == 0 || name == "" {
-			continue
-		}
-		params[name] = matches[i]
-	}
-	return params
 }
 
 func extractHTTPConstraintRequestValue(route *HTTPRouteConfig, req HTTPCheckRequest, ref HTTPRequestValueRef) (string, bool) {
