@@ -24,6 +24,19 @@ func NewKMSV2HTTPLayer(parentRouterGroup *gin.RouterGroup, svc cryptoenginesv2.S
 	g.PUT("/keys/:id/backup", r.BackupKey)
 	g.POST("/keys/restore", r.RestoreKey) // static segment registered before :id wildcard
 
+	// Keys — cryptographic operations
+	g.POST("/keys/:id/sign", r.Sign)
+	g.POST("/keys/:id/verify", r.Verify)
+	g.POST("/keys/:id/encrypt", r.Encrypt)
+	g.POST("/keys/:id/decrypt", r.Decrypt)
+	g.POST("/keys/:id/mac", r.MAC)
+	g.POST("/keys/:id/verify-mac", r.VerifyMAC)
+	g.POST("/keys/:id/wrap", r.WrapKey)
+	g.POST("/keys/:id/unwrap", r.UnwrapKey)
+	g.POST("/keys/:id/encapsulate", r.Encapsulate)
+	g.POST("/keys/:id/decapsulate", r.Decapsulate)
+	g.POST("/keys/:id/agree", r.Agree)
+
 	// Aliases
 	g.PUT("/aliases/:name", r.UpsertAlias)
 	g.DELETE("/aliases/:name", r.DeleteAlias)

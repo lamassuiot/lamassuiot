@@ -6,9 +6,9 @@ info:
     Key Management Service (KMS) v2 API for Lamassu IoT Platform.
 
     Manages the full lifecycle of cryptographic keys — classical (RSA, ECDSA, ECDH,
-    EdDSA, AES, HMAC) and post-quantum (ML-KEM-768, ML-KEM-1024). This API covers
-    key management only; cryptographic operations (sign, encrypt, MAC, …) are
-    performed server-side once a key is provisioned.
+    EdDSA, AES, HMAC) and post-quantum (ML-KEM-768, ML-KEM-1024) — and performs
+    cryptographic operations (sign/verify, encrypt/decrypt, MAC, key wrap, KEM
+    encapsulation and key agreement) server-side against a provisioned key.
 
     ## Key concepts
 
@@ -38,6 +38,12 @@ servers:
 tags:
   - name: Keys
     description: Key lifecycle management
+  - name: Crypto
+    description: |
+      Cryptographic operations performed server-side against a provisioned key.
+      The key is resolved by UUID or alias. The operation is only permitted if
+      the key's `operations` set and `KeySpec` support it; otherwise `400` is
+      returned. All binary payloads are base64-encoded (standard encoding).
   - name: State
     description: Key state machine transitions
   - name: Backup
@@ -208,6 +214,373 @@ paths:
                   state:
                     type: string
                     example: pendingDeletion
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Cryptographic operations
+  # ---------------------------------------------------------------------------
+
+  /keys/{id}/sign:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Sign a digest
+      description: |
+        Produces a signature over a pre-computed message `digest` using the key's
+        private material. The digest's hash must match the one implied by
+        `algorithm` (e.g. SHA-256 for `RSASSA_PSS_SHA_256`). Requires a key that
+        authorises the `sign` operation.
+      operationId: sign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignRequest'
+            example:
+              algorithm: ECDSA_SHA_256
+              digest: 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=
+      responses:
+        '200':
+          description: Signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/verify:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Verify a signature
+      description: |
+        Verifies `signature` against `digest`. A cryptographic mismatch is a
+        successful `200` response with `valid: false` — not an error. Requires a
+        key that authorises the `verify` operation.
+      operationId: verify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/encrypt:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Encrypt plaintext
+      description: |
+        Encrypts `plaintext`. Works for both asymmetric keys (RSAES-OAEP, where
+        `associated_data` is the OAEP label) and symmetric AEAD keys
+        (`SYMMETRIC_DEFAULT`, AES-GCM). For symmetric keys the server generates a
+        random `nonce` when none is supplied and returns it alongside the
+        ciphertext. Requires a key that authorises the `encrypt` operation.
+      operationId: encrypt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptRequest'
+            examples:
+              rsaOaep:
+                summary: RSA-OAEP (asymmetric)
+                value:
+                  algorithm: RSAES_OAEP_SHA_256
+                  plaintext: c2VjcmV0IHBheWxvYWQ=
+              aesGcm:
+                summary: AES-GCM (symmetric)
+                value:
+                  algorithm: SYMMETRIC_DEFAULT
+                  plaintext: c2VjcmV0IHBheWxvYWQ=
+                  associated_data: aGVhZGVy
+      responses:
+        '200':
+          description: Ciphertext
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/decrypt:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Decrypt ciphertext
+      description: |
+        Decrypts `ciphertext` using the key's private material. For symmetric AEAD
+        keys, `nonce` (and any `associated_data`) must match the values used at
+        encrypt time. For RSA-OAEP, `associated_data` is the OAEP label. Requires
+        a key that authorises the `decrypt` operation.
+      operationId: decrypt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecryptRequest'
+      responses:
+        '200':
+          description: Plaintext
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecryptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/mac:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Compute a MAC
+      description: |
+        Computes a message authentication code over `message` using an HMAC key.
+        Requires a key that authorises the `mac` operation.
+      operationId: mac
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MACRequest'
+            example:
+              algorithm: HMAC_SHA_256
+              message: aGVsbG8gd29ybGQ=
+      responses:
+        '200':
+          description: MAC
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MACResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/verify-mac:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Verify a MAC
+      description: |
+        Verifies `mac` against `message`. A mismatch is a successful `200`
+        response with `valid: false`. Requires a key that authorises the
+        `verifyMac` operation.
+      operationId: verifyMac
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyMACRequest'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyMACResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/wrap:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Wrap key material
+      description: |
+        Encrypts (wraps) externally supplied `key_material` under this key,
+        typically for secure key transport. Requires a key that authorises the
+        `wrapKey` operation.
+      operationId: wrapKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WrapKeyRequest'
+            example:
+              algorithm: RSAES_OAEP_SHA_256
+              key_material: AAECAwQFBgcICQoLDA0ODw==
+      responses:
+        '200':
+          description: Wrapped key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WrapKeyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/unwrap:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Unwrap key material
+      description: |
+        Decrypts (unwraps) a previously wrapped blob, returning the raw key
+        material. Requires a key that authorises the `unwrapKey` operation.
+      operationId: unwrapKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnwrapKeyRequest'
+      responses:
+        '200':
+          description: Unwrapped key material
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnwrapKeyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/encapsulate:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: KEM encapsulate
+      description: |
+        Post-quantum KEM encapsulation (ML-KEM). Uses the key's public
+        encapsulation key to generate a fresh shared secret and the ciphertext
+        the holder of the private key needs to recover it. Takes no request body.
+        Requires a key that authorises the `encapsulate` operation.
+      operationId: encapsulate
+      responses:
+        '200':
+          description: Shared secret and encapsulation ciphertext
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncapsulateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/decapsulate:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: KEM decapsulate
+      description: |
+        Post-quantum KEM decapsulation (ML-KEM). Recovers the shared secret from
+        an encapsulation `ciphertext` using the key's private material. Requires a
+        key that authorises the `decapsulate` operation.
+      operationId: decapsulate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecapsulateRequest'
+      responses:
+        '200':
+          description: Recovered shared secret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecapsulateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /keys/{id}/agree:
+    parameters:
+      - $ref: '#/components/parameters/KeyID'
+    post:
+      tags: [Crypto]
+      summary: Key agreement (ECDH)
+      description: |
+        Derives a shared secret from this key's private material and a peer's
+        public key via ECDH. When `derive` is true the raw secret is further run
+        through the supplied KDF and the derived key is returned instead. Requires
+        a key that authorises the `agreeKey` (and `deriveKey`) operation.
+      operationId: agree
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgreeRequest'
+            example:
+              algorithm: ECDH
+              peer_public_key: "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...\n-----END PUBLIC KEY-----\n"
+      responses:
+        '200':
+          description: Shared (or derived) secret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgreeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -743,6 +1116,290 @@ components:
           maximum: 1024
           description: Number of random bytes to generate
           example: 32
+
+    # -------------------------------------------------------------------------
+    # Cryptographic operation bodies
+    # -------------------------------------------------------------------------
+
+    SignRequest:
+      type: object
+      required: [algorithm, digest]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        digest:
+          type: string
+          format: byte
+          description: Base64-encoded, pre-hashed message digest
+
+    SignResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Key UUID that produced the signature
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        signature:
+          type: string
+          format: byte
+          description: Base64-encoded signature
+
+    VerifyRequest:
+      type: object
+      required: [algorithm, digest, signature]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        digest:
+          type: string
+          format: byte
+          description: Base64-encoded, pre-hashed message digest
+        signature:
+          type: string
+          format: byte
+          description: Base64-encoded signature to verify
+
+    VerifyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        valid:
+          type: boolean
+          description: Whether the signature verified successfully
+
+    EncryptRequest:
+      type: object
+      required: [algorithm, plaintext]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        plaintext:
+          type: string
+          format: byte
+          description: Base64-encoded plaintext
+        nonce:
+          type: string
+          format: byte
+          description: Base64-encoded nonce (symmetric AEAD only; generated when omitted)
+        associated_data:
+          type: string
+          format: byte
+          description: Base64-encoded associated data (symmetric AEAD) or OAEP label (RSA-OAEP)
+
+    EncryptResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        ciphertext:
+          type: string
+          format: byte
+          description: Base64-encoded ciphertext
+        nonce:
+          type: string
+          format: byte
+          description: Base64-encoded nonce (symmetric AEAD only)
+
+    DecryptRequest:
+      type: object
+      required: [algorithm, ciphertext]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        ciphertext:
+          type: string
+          format: byte
+          description: Base64-encoded ciphertext
+        nonce:
+          type: string
+          format: byte
+          description: Base64-encoded nonce (symmetric AEAD only; must match encrypt)
+        associated_data:
+          type: string
+          format: byte
+          description: Base64-encoded associated data (symmetric AEAD) or OAEP label (RSA-OAEP)
+
+    DecryptResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        plaintext:
+          type: string
+          format: byte
+          description: Base64-encoded plaintext
+
+    MACRequest:
+      type: object
+      required: [algorithm, message]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        message:
+          type: string
+          format: byte
+          description: Base64-encoded message
+
+    MACResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        mac:
+          type: string
+          format: byte
+          description: Base64-encoded MAC
+
+    VerifyMACRequest:
+      type: object
+      required: [algorithm, message, mac]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        message:
+          type: string
+          format: byte
+          description: Base64-encoded message
+        mac:
+          type: string
+          format: byte
+          description: Base64-encoded MAC to verify
+
+    VerifyMACResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        valid:
+          type: boolean
+          description: Whether the MAC verified successfully
+
+    WrapKeyRequest:
+      type: object
+      required: [algorithm, key_material]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        key_material:
+          type: string
+          format: byte
+          description: Base64-encoded key material to wrap
+        associated_data:
+          type: string
+          format: byte
+          description: Base64-encoded associated data / OAEP label
+
+    WrapKeyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        wrapped_key:
+          type: string
+          format: byte
+          description: Base64-encoded wrapped key material
+
+    UnwrapKeyRequest:
+      type: object
+      required: [algorithm, wrapped_key]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        wrapped_key:
+          type: string
+          format: byte
+          description: Base64-encoded wrapped key material
+        associated_data:
+          type: string
+          format: byte
+          description: Base64-encoded associated data / OAEP label
+
+    UnwrapKeyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        key_material:
+          type: string
+          format: byte
+          description: Base64-encoded unwrapped key material
+
+    EncapsulateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        shared_secret:
+          type: string
+          format: byte
+          description: Base64-encoded shared secret generated by encapsulation
+        ciphertext:
+          type: string
+          format: byte
+          description: Base64-encoded encapsulation ciphertext for the private-key holder
+
+    DecapsulateRequest:
+      type: object
+      required: [ciphertext]
+      properties:
+        ciphertext:
+          type: string
+          format: byte
+          description: Base64-encoded encapsulation ciphertext
+
+    DecapsulateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        shared_secret:
+          type: string
+          format: byte
+          description: Base64-encoded recovered shared secret
+
+    AgreeRequest:
+      type: object
+      required: [algorithm, peer_public_key]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        peer_public_key:
+          type: string
+          description: PEM-encoded PKIX public key of the peer
+        derive:
+          type: boolean
+          description: When true, run the raw shared secret through the KDF below
+        kdf_algorithm:
+          $ref: '#/components/schemas/AlgorithmID'
+        kdf_salt:
+          type: string
+          format: byte
+          description: Base64-encoded KDF salt (used when `derive` is true)
+        kdf_info:
+          type: string
+          format: byte
+          description: Base64-encoded KDF context/info (used when `derive` is true)
+        kdf_length:
+          type: integer
+          description: Desired derived-key length in bytes (used when `derive` is true)
+
+    AgreeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        shared_secret:
+          type: string
+          format: byte
+          description: Base64-encoded shared secret (or derived key when `derive` was true)
 
     # -------------------------------------------------------------------------
     # Response bodies

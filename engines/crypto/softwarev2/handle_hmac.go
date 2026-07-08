@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
-	"errors"
 	"fmt"
 	"hash"
 
@@ -51,7 +50,7 @@ func (h *hmacHandle) VerifyMAC(ctx context.Context, message, expected []byte, al
 		return err
 	}
 	if !hmac.Equal(computed, expected) {
-		return errors.New("soft: HMAC verification failed")
+		return fmt.Errorf("soft: HMAC verification failed: %w", cryptoenginesv2.ErrVerificationFailed)
 	}
 	return nil
 }
