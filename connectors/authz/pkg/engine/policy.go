@@ -130,6 +130,25 @@ func validateHTTPRuleStruct(r *models.HTTPRule) error {
 	if len(r.Actions) == 0 {
 		return fmt.Errorf("actions must not be empty; use [\"*\"] to grant all")
 	}
+	for i, pc := range r.ParamConstraints {
+		if pc.Action == "" {
+			return fmt.Errorf("param_constraints[%d]: action is required", i)
+		}
+		if !r.HasHTTPAction(pc.Action) {
+			return fmt.Errorf("param_constraints[%d]: action %q must also be listed in actions", i, pc.Action)
+		}
+		if len(pc.Params) == 0 {
+			return fmt.Errorf("param_constraints[%d]: path_params must not be empty", i)
+		}
+		for name, value := range pc.Params {
+			if name == "" {
+				return fmt.Errorf("param_constraints[%d]: path_params key must not be empty", i)
+			}
+			if value == "" {
+				return fmt.Errorf("param_constraints[%d]: path_params[%q] value must not be empty", i, name)
+			}
+		}
+	}
 	return nil
 }
 

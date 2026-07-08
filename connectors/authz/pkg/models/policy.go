@@ -181,10 +181,24 @@ func (r RelationRule) MarshalJSON() ([]byte, error) {
 // has no relation to the SQL-based Rule type.
 type HTTPRule struct {
 	// SchemaName references an HTTPSchemaDefinition by its "name" field.
-	SchemaName string   `json:"http_schema_name"`
+	SchemaName string `json:"http_schema_name"`
 	// Actions is the list of logical action names from the schema that are granted.
 	// Use ["*"] to grant all actions defined in the schema.
-	Actions    []string `json:"actions"`
+	Actions []string `json:"actions"`
+	// ParamConstraints restricts granted actions to specific literal path
+	// parameter values written into this policy, independent of any subject
+	// attribute (e.g. grant "system-info-read" only for system_id "1").
+	ParamConstraints []*HTTPRuleParamConstraint `json:"param_constraints,omitempty"`
+}
+
+// HTTPRuleParamConstraint pins a route's named regex capture group to a static
+// value defined by the policy grant. Params keys must match named capture
+// groups in the target route's regex, e.g. "(?P<system_id>[^/]+)".
+type HTTPRuleParamConstraint struct {
+	// Action is the route action (from HTTPRule.Actions) this constraint applies to.
+	Action string `json:"action"`
+	// Params maps named regex capture group -> required literal value.
+	Params map[string]string `json:"path_params"`
 }
 
 // HasHTTPAction reports whether the rule grants a specific HTTP action.

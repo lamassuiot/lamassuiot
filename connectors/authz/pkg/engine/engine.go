@@ -314,6 +314,12 @@ func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (re
 		span.End()
 	}()
 	_ = ctx // ctx is used by the span; pass through if needed by future sub-calls
+
+	if overrideResult, decided := e.evaluateHTTPOverride(req); decided {
+		result = overrideResult
+		return
+	}
+
 	for _, subjectPolicies := range req.Subjects {
 		if subjectPolicies.Policies == nil {
 			continue
@@ -334,6 +340,9 @@ func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (re
 				if !httpRouteConstraintsMatch(route, req, subjectPolicies.Subject) {
 					continue
 				}
+				if !httpRuleParamConstraintsMatch(route, httpRule, req) {
+					continue
+				}
 				return HTTPCheckResult{
 					Allowed:            true,
 					MatchedPolicyID:    policy.ID,
@@ -344,6 +353,34 @@ func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (re
 		}
 	}
 	return HTTPCheckResult{}, nil
+}
+
+// evaluateHTTPOverride checks route-level authz exemptions (skip_authz) and
+// schema-level default actions (default_action for unmapped base_paths).
+// Both are independent of any subject's policy grants, so this runs before
+// the per-subject grant loop: a skip_authz route or a schema default fully
+// determines the outcome without consulting policies.
+func (e *Engine) evaluateHTTPOverride(req HTTPCheckRequest) (result HTTPCheckResult, decided bool) {
+	var bestSchema *HTTPSchemaDefinition
+	bestPrefixLen := -1
+
+	for _, schema := range e.httpSchemas.GetAll() {
+		route := schema.MatchRoute(req.Method, req.Path)
+		if route != nil {
+			if route.SkipAuthz {
+				return HTTPCheckResult{Allowed: true, MatchedAction: route.Action}, true
+			}
+			continue
+		}
+		if matched, prefixLen := schema.MatchesBasePath(req.Path); matched && prefixLen > bestPrefixLen {
+			bestSchema, bestPrefixLen = schema, prefixLen
+		}
+	}
+
+	if bestSchema == nil {
+		return HTTPCheckResult{}, false
+	}
+	return HTTPCheckResult{Allowed: bestSchema.DefaultAction == HTTPDefaultActionAllow}, true
 }
 
 func (e *Engine) getDBForSchema(schema *SchemaDefinition) (*gorm.DB, error) {

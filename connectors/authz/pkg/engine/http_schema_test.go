@@ -74,9 +74,12 @@ func TestHTTPSchemaRegistry_LoadWFXExampleGroups(t *testing.T) {
 	schema, err := registry.Get("Job Manager")
 	require.NoError(t, err)
 
+	assert.Equal(t, []string{"/api/wfx/nbi/v1", "/api/wfx/sbi/v1"}, schema.BasePaths)
+	assert.Equal(t, HTTPDefaultActionDeny, schema.DefaultAction)
+
 	require.Len(t, schema.Groups, 6)
 	assert.Equal(t, "Mgmt NBI System", schema.Groups[0].Name)
-	assert.Len(t, schema.Groups[0].Routes, 2)
+	assert.Len(t, schema.Groups[0].Routes, 3)
 	assert.Equal(t, "Mgmt NBI Workflows", schema.Groups[1].Name)
 	assert.Len(t, schema.Groups[1].Routes, 4)
 	assert.Equal(t, "Mgmt NBI Jobs", schema.Groups[2].Name)
@@ -92,6 +95,7 @@ func TestHTTPSchemaRegistry_LoadWFXExampleGroups(t *testing.T) {
 	assert.NotContains(t, schema.AllActions, "job")
 	assert.Contains(t, schema.AllActions, "nbi-job-delete")
 	assert.Contains(t, schema.AllActions, "sbi-job-status-update")
+	assert.Contains(t, schema.AllActions, "nbi-openapi-read")
 
 	route := schema.MatchRoute("DELETE", "/api/wfx/nbi/v1/jobs/job-1")
 	require.NotNil(t, route)
@@ -102,6 +106,11 @@ func TestHTTPSchemaRegistry_LoadWFXExampleGroups(t *testing.T) {
 	assert.Equal(t, "sbi-job-status-update", route.Action)
 	assert.Len(t, route.Constraints, 1)
 	assert.Nil(t, schema.MatchRoute("POST", "/api/wfx/sbi/v1/jobs"))
+
+	route = schema.MatchRoute("GET", "/api/wfx/nbi/v1/openapi.json")
+	require.NotNil(t, route)
+	assert.Equal(t, "nbi-openapi-read", route.Action)
+	assert.True(t, route.SkipAuthz)
 }
 
 func TestEngineCheckHTTP_WFXNBISBIActionsAreDistinct(t *testing.T) {
@@ -681,6 +690,271 @@ func TestHTTPSchemaRegistry_LoadFlatRoutes(t *testing.T) {
 	route := schema.MatchRoute("GET", "/api/v1/status")
 	require.NotNil(t, route)
 	assert.Equal(t, "status-read", route.Action)
+}
+
+// TestHTTPSchemaRegistry_DefaultActionValidation covers load-time validation
+// of the schema-level base_paths/default_action pair — a schema declaring a
+// default action without an owning base_path is ambiguous and must be
+// rejected rather than silently never applying.
+func TestHTTPSchemaRegistry_DefaultActionValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		schema  string
+		wantErr string
+	}{
+		{
+			name: "invalid default_action value",
+			schema: `{
+				"name": "svc",
+				"base_paths": ["/api/svc"],
+				"default_action": "maybe",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/svc/x", "match_type": "exact", "action": "r"}]
+			}`,
+			wantErr: `default_action must be "allow" or "deny"`,
+		},
+		{
+			name: "default_action without base_paths",
+			schema: `{
+				"name": "svc",
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/svc/x", "match_type": "exact", "action": "r"}]
+			}`,
+			wantErr: "default_action requires at least one base_path",
+		},
+		{
+			name: "base_paths entry not absolute",
+			schema: `{
+				"name": "svc",
+				"base_paths": ["api/svc"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/svc/x", "match_type": "exact", "action": "r"}]
+			}`,
+			wantErr: "must be a non-empty absolute path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewHTTPSchemaRegistry()
+			schemaPath := writeHTTPSchemaTestFile(t, "["+tt.schema+"]")
+			err := registry.Load(schemaPath)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+// TestHTTPSchemaRegistry_SkipAuthzRejectsConstraints covers load-time
+// validation that a skip_authz route cannot also declare subject constraints,
+// since the two are contradictory: skip_authz bypasses authz entirely while
+// constraints are themselves an authz decision.
+func TestHTTPSchemaRegistry_SkipAuthzRejectsConstraints(t *testing.T) {
+	registry := NewHTTPSchemaRegistry()
+	schemaPath := writeHTTPSchemaTestFile(t, `[
+		{
+			"name": "svc",
+			"routes": [
+				{
+					"name": "health-read",
+					"methods": ["GET"],
+					"path": "/api/svc/health",
+					"match_type": "exact",
+					"action": "health-read",
+					"skip_authz": true,
+					"constraints": [
+						{"request": {"source": "query", "name": "x"}, "equals_subject_attribute": "id"}
+					]
+				}
+			]
+		}
+	]`)
+	err := registry.Load(schemaPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "skip_authz routes cannot declare constraints")
+}
+
+// TestEngineCheckHTTPRequest_SkipAuthzAllowsWithoutPolicy covers the
+// "exclude authz but not authn" feature: a skip_authz route is allowed for an
+// authenticated subject even when no policy grants its action, but ordinary
+// routes in the same schema still require an explicit grant.
+func TestEngineCheckHTTPRequest_SkipAuthzAllowsWithoutPolicy(t *testing.T) {
+	schemaPath := writeHTTPSchemaTestFile(t, `[
+		{
+			"name": "svc",
+			"routes": [
+				{
+					"name": "health-read",
+					"methods": ["GET"],
+					"path": "/api/svc/health",
+					"match_type": "exact",
+					"action": "health-read",
+					"skip_authz": true
+				},
+				{
+					"name": "jobs-list",
+					"methods": ["GET"],
+					"path": "/api/svc/jobs",
+					"match_type": "exact",
+					"action": "jobs-list"
+				}
+			]
+		}
+	]`)
+	eng, err := NewEngine(nil, nil, WithHTTPSchemas([]string{schemaPath}))
+	require.NoError(t, err)
+
+	noPolicies := NewPolicyRegistry()
+	subject := SubjectPolicySet{
+		Subject:  ResolvedSubject{PrincipalID: "principal-1"},
+		Policies: noPolicies,
+	}
+
+	result, err := eng.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/svc/health",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, "health-read", result.MatchedAction)
+	assert.Empty(t, result.MatchedPolicyID)
+
+	result, err = eng.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/svc/jobs",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+}
+
+// TestEngineCheckHTTPRequest_SchemaDefaultAction covers the "global default"
+// feature: an unmapped path under a schema's base_paths resolves per the
+// schema's default_action, while a mapped route still requires a policy grant
+// regardless of the schema default.
+func TestEngineCheckHTTPRequest_SchemaDefaultAction(t *testing.T) {
+	schemaAllow := writeHTTPSchemaTestFile(t, `[
+		{
+			"name": "svc-allow",
+			"base_paths": ["/api/wfx"],
+			"default_action": "allow",
+			"routes": [
+				{"name": "jobs-list", "methods": ["GET"], "path": "/api/wfx/jobs", "match_type": "exact", "action": "jobs-list"}
+			]
+		}
+	]`)
+	engAllow, err := NewEngine(nil, nil, WithHTTPSchemas([]string{schemaAllow}))
+	require.NoError(t, err)
+
+	noPolicies := NewPolicyRegistry()
+	subject := SubjectPolicySet{Subject: ResolvedSubject{PrincipalID: "p1"}, Policies: noPolicies}
+
+	result, err := engAllow.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/wfx/unmapped-endpoint",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Allowed, "unmapped path under an allow-by-default base path should be allowed")
+
+	result, err = engAllow.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/wfx/jobs",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Allowed, "a mapped route must still require an explicit policy grant")
+
+	result, err = engAllow.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/other-service/anything",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Allowed, "paths outside any schema's base_paths keep the implicit deny")
+
+	schemaDeny := writeHTTPSchemaTestFile(t, `[
+		{
+			"name": "svc-deny",
+			"base_paths": ["/api/wfx"],
+			"default_action": "deny",
+			"routes": [
+				{"name": "jobs-list", "methods": ["GET"], "path": "/api/wfx/jobs", "match_type": "exact", "action": "jobs-list"}
+			]
+		}
+	]`)
+	engDeny, err := NewEngine(nil, nil, WithHTTPSchemas([]string{schemaDeny}))
+	require.NoError(t, err)
+
+	result, err = engDeny.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/wfx/unmapped-endpoint",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Allowed, "unmapped path under an explicit deny-by-default base path stays denied")
+}
+
+// TestEngineCheckHTTPRequest_StaticParamConstraint covers the "static
+// parameter" feature: a policy grant can scope a dynamic route to one literal
+// path-parameter value that is written into the policy, not derived from the
+// requesting subject.
+func TestEngineCheckHTTPRequest_StaticParamConstraint(t *testing.T) {
+	schemaPath := writeHTTPSchemaTestFile(t, `[
+		{
+			"name": "mysvc",
+			"routes": [
+				{
+					"name": "system-info-read",
+					"methods": ["GET"],
+					"path": "^/api/mysvc/system/(?P<system_id>[^/]+)/info$",
+					"match_type": "regex",
+					"action": "system-info-read"
+				}
+			]
+		}
+	]`)
+	eng, err := NewEngine(nil, nil, WithHTTPSchemas([]string{schemaPath}))
+	require.NoError(t, err)
+
+	policies := NewPolicyRegistry()
+	require.NoError(t, policies.AddPolicy(&models.Policy{
+		ID:   "system-1-only",
+		Name: "System 1 Only",
+		HTTPRules: []*models.HTTPRule{
+			{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Params: map[string]string{"system_id": "1"}},
+				},
+			},
+		},
+	}))
+
+	subject := SubjectPolicySet{
+		// The subject's own attributes have nothing to do with system_id —
+		// the "1" comes purely from the policy's param_constraints.
+		Subject:  ResolvedSubject{PrincipalID: "any-principal", Attributes: map[string]string{"device_id": "unrelated"}},
+		Policies: policies,
+	}
+
+	result, err := eng.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/mysvc/system/1/info",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, "system-1-only", result.MatchedPolicyID)
+
+	result, err = eng.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/mysvc/system/2/info",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Allowed, "a different system_id must not be granted by a policy scoped to system_id 1")
 }
 
 func writeHTTPSchemaTestFile(t *testing.T, content string) string {
