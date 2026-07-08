@@ -3229,6 +3229,11 @@ func TestUpdateCAStatus(t *testing.T) {
 
 				//Wait for the CA to expire
 				time.Sleep(time.Second * 5)
+
+				// Run the monitoring job once to detect the expired CA and update its DB status
+				lMonitor := chelpers.SetupLogger(cconfig.Info, "CA", "Monitor")
+				jobs.NewCryptoMonitor(svc, lMonitor).Run()
+
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
