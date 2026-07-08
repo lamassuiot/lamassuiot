@@ -20,9 +20,9 @@ import (
 )
 
 func TestManageSuscriptions(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "alerts", "kms").WithService(tests.ALERTS).Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test service: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	alertsTest := serverTest.Alerts
@@ -103,9 +103,9 @@ func TestManageSuscriptions(t *testing.T) {
 }
 
 func TestGetLastEvents(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "alerts", "kms").WithService(tests.ALERTS).Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test service: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	alertsTest := serverTest.Alerts
@@ -197,9 +197,10 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	outChannelMock.On("SendNotification", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	setupMockOutputChannel(outChannelMock)
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "alerts", "kms").WithService(tests.ALERTS).Build(t)
+
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test service: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	alertsTest := serverTest.Alerts
@@ -257,9 +258,10 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 	outChannelMock.On("SendNotification", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	setupMockOutputChannel(outChannelMock)
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "alerts", "kms").WithService(tests.ALERTS).Build(t)
+
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test service: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	alertsTest := serverTest.Alerts
@@ -317,10 +319,9 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	outChannelMock.On("SendNotification", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	setupMockOutputChannel(outChannelMock)
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "alerts", "kms").WithService(tests.ALERTS).Build(t)
-	if err != nil {
-		t.Fatalf("could not create test service: %s", err)
-	}
+
+	err := serverTest.BeforeEach()
+
 	alertsTest := serverTest.Alerts
 
 	schema := `{
@@ -392,11 +393,11 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 }
 
 func TestSubscriptionWithWebhookOutput(t *testing.T) {
-
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "alerts", "kms").WithService(tests.ALERTS).Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test service: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
+
 	alertsTest := serverTest.Alerts
 
 	router, url, cleanup, err := tests.StartWebhookServer()

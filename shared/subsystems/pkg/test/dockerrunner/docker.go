@@ -15,7 +15,6 @@ func RunDocker(repository string, opts ...dockertest.RunOption) (func() error, d
 	}
 
 	opts = append([]dockertest.RunOption{
-		dockertest.WithoutReuse(),
 		dockertest.WithHostConfig(func(config *mobycontainer.HostConfig) {
 			config.RestartPolicy = mobycontainer.RestartPolicy{Name: mobycontainer.RestartPolicyDisabled}
 			config.AutoRemove = true

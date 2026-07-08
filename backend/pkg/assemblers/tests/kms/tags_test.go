@@ -10,7 +10,7 @@ import (
 )
 
 func TestUpdateKeyTags(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -336,7 +336,7 @@ func TestUpdateKeyTags(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -356,7 +356,7 @@ func TestUpdateKeyTags(t *testing.T) {
 }
 
 func TestGetKeyWithTags(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -447,7 +447,7 @@ func TestGetKeyWithTags(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}

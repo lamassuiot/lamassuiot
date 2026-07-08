@@ -20,32 +20,11 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 )
 
-func StartDeviceManagerServiceTestServer(t *testing.T, withDMSManager, withEventBus bool) (*tests.DeviceManagerTestServer, *tests.TestServer, error) {
-	services := []tests.Service{tests.CA, tests.DEVICE_MANAGER}
-	dbs := []string{"kms", "ca", "devicemanager"}
-	if withDMSManager {
-		dbs = append(dbs, "dmsmanager")
-		services = append(services, tests.DMS_MANAGER)
-	}
-
-	builder := tests.TestServiceBuilder{}.WithDatabase(dbs...).WithService(services...)
-	if withEventBus {
-		builder = builder.WithEventBus()
-	}
-
-	testServer, err := builder.Build(t)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not create Device Manager test server: %s", err)
-	}
-
-	return testServer.DeviceManager, testServer, nil
-}
-
 func TestGetAllDevices(t *testing.T) {
 	// t.Parallel()
 	devsIds := [3]string{"test1", "test2", "test3"}
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -207,7 +186,7 @@ func TestGetDeviceStats(t *testing.T) {
 	devsIds := [3]string{"test1", "test2", "test3"}
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -293,7 +272,7 @@ func TestGetDeviceStats(t *testing.T) {
 func TestGetDeviceStatsFiltered(t *testing.T) {
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -673,7 +652,7 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 func TestGetDeviceByID(t *testing.T) {
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -753,7 +732,7 @@ func TestGetDeviceByID(t *testing.T) {
 
 func TestGetDeviceEvents(t *testing.T) {
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -811,7 +790,7 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 	// t.Parallel()
 
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -879,7 +858,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 	devDMS2 := [3]string{"test11", "test12", "test13"}
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t, true, false)
+	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1204,7 +1183,7 @@ func TestDecommissionDevice(t *testing.T) {
 
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t, true, false)
+	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1360,7 +1339,7 @@ func TestDecommissionDevice(t *testing.T) {
 
 func TestDuplicateDeviceCreation(t *testing.T) {
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1387,7 +1366,7 @@ func TestDuplicateDeviceCreation(t *testing.T) {
 
 func TestPagination(t *testing.T) {
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1568,7 +1547,7 @@ func TestPagination(t *testing.T) {
 func TestBasicDeviceManager(t *testing.T) {
 	ctx := context.Background()
 
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1871,7 +1850,7 @@ func TestDeleteDevice(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+			dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 			if err != nil {
 				t.Fatalf("could not create Device Manager test server: %s", err)
 			}

@@ -15,7 +15,7 @@ import (
 
 func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	ctx := context.Background()
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}

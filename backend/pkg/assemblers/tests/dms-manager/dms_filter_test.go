@@ -12,7 +12,7 @@ import (
 
 func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 	ctx := context.Background()
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -292,7 +292,7 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 
 func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 	ctx := context.Background()
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}

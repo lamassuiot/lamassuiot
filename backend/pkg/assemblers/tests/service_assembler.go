@@ -113,6 +113,39 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 	return testServer, nil
 }
 
+func (b TestServiceBuilder) BuildSuite() (*TestServer, error) {
+	var err error
+	eventBusConf := &TestEventBusConfig{
+		Config: cconfig.EventBusEngine{
+			Enabled: false,
+		},
+	}
+	if b.withEventBus {
+		eventBusConf, err = PrepareRabbitMQForTest()
+		if err != nil {
+			return nil, fmt.Errorf("could not prepare RabbitMQ test server: %s", err)
+		}
+	}
+
+	storageConfig, err := PreparePostgresForTest(b.withDatabase)
+	if err != nil {
+		return nil, fmt.Errorf("could not prepare Postgres test server: %s", err)
+	}
+
+	cryptoEngines := []CryptoEngine{GOLANG}
+	if b.withVault {
+		cryptoEngines = append(cryptoEngines, VAULT)
+	}
+
+	cryptoConfig := PrepareCryptoEnginesForTest(cryptoEngines)
+
+	if b.withService == nil {
+		b.withService = []Service{CA}
+	}
+
+	return AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withSmtp, b.withService, b.withMonitor, b.allowCascadeDelete)
+}
+
 type CryptoEngine int
 
 const (
