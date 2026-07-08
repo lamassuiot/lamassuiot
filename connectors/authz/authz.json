@@ -1,0 +1,87 @@
+[
+  {
+    "entity_type": "principal",
+    "table_name": "principals",
+    "primary_key": "id",
+    "relations": [],
+    "atomic_actions": [
+      "read",
+      "update",
+      "delete"
+
+    ],
+    "global_actions": [
+      "create",
+      "ui"
+    ],
+    "schema_name": "public",
+    "filterable": [
+      { "column": "id",          "type": "string"    },
+      { "column": "name",        "type": "string"    },
+      { "column": "description", "type": "string"    },
+      { "column": "type",        "type": "string"    },
+      { "column": "active",      "type": "bool"      },
+      { "column": "auth_config", "type": "jsonb"     },
+      { "column": "created_at",  "type": "timestamp" },
+      { "column": "updated_at",  "type": "timestamp" }
+    ]
+  }, 
+  {
+    "entity_type": "policy",
+    "table_name": "policies",
+    "primary_key": "id",
+    "relations": [],
+    "atomic_actions": [
+      "read",
+      "update",
+      "delete"
+    ],
+    "global_actions": [
+      "create",
+      "ui"
+    ],
+    "schema_name": "public",
+    "filterable": [
+      { "column": "id",          "type": "string"    },
+      { "column": "name",        "type": "string"    },
+      { "column": "description", "type": "string"    },
+      { "column": "rules",       "type": "jsonb"     },
+      { "column": "created_at",  "type": "timestamp" },
+      { "column": "updated_at",  "type": "timestamp" }
+    ]
+  },
+  {
+    "entity_type": "principal_policy",
+    "table_name": "principal_policies",
+    "primary_key": ["principal_id", "policy_id"],
+    "relations": [
+      {
+        "name": "principal",
+        "target_entity": "principal",
+        "foreign_key": "principal_id"
+      },
+      {
+        "name": "policy",
+        "target_entity": "policy",
+        "foreign_key": "policy_id"
+      }
+    ],
+    "atomic_actions": [
+      "delete"
+    ],
+    "global_actions": [
+      "create",
+      "read",
+      "grant",
+      "revoke"
+    ],
+    "schema_name": "public",
+    "filterable": [
+      { "column": "id",           "type": "int"       },
+      { "column": "principal_id", "type": "string"    },
+      { "column": "policy_id",    "type": "string"    },
+      { "column": "granted_at",   "type": "timestamp" },
+      { "column": "granted_by",   "type": "string"    }
+    ]
+  }
+]

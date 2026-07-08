@@ -11,7 +11,7 @@ import (
 
 type PostgresDeviceEventsStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.DeviceEventRecord]
+	querier *DBQuerier[models.DeviceEventRecord]
 }
 
 func NewDeviceEventsRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceEventsRepo, error) {
@@ -31,8 +31,8 @@ func (db *PostgresDeviceEventsStore) Insert(ctx context.Context, event *models.D
 }
 
 func (db *PostgresDeviceEventsStore) SelectByDeviceID(ctx context.Context, req storage.StorageListRequest[models.DeviceEventRecord], deviceID string) (string, error) {
-	opts := []gormExtraOps{
-		{query: "device_id = ?", additionalWhere: []any{deviceID}},
+	opts := []GormExtraOps{
+		{Query: "device_id = ?", AdditionalWhere: []any{deviceID}},
 	}
 
 	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)

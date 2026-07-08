@@ -574,8 +574,11 @@ func (svc DMSManagerServiceBackend) authenticateEST(
 	switch estAuthOptions.AuthMode {
 	case models.ESTAuthModeClientCertificate:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificate)
-		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
-		if !hasValue || len(clientCerts) == 0 {
+		var clientCerts []*x509.Certificate
+		if singleCert, ok := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).(*x509.Certificate); ok && singleCert != nil {
+			clientCerts = []*x509.Certificate{singleCert}
+		}
+		if len(clientCerts) == 0 {
 			lFunc.Errorf("aborting %s. No client certificate was presented", operation)
 			return lFunc, errs.ErrDMSAuthModeNotSupported
 		}
@@ -604,8 +607,11 @@ func (svc DMSManagerServiceBackend) authenticateEST(
 	case models.ESTAuthModeClientCertificateAndWebhook:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificateAndWebhook)
 		lFunc.Infof("combined auth: starting client certificate validation (step 1/2)")
-		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
-		if !hasValue || len(clientCerts) == 0 {
+		var clientCerts []*x509.Certificate
+		if singleCert, ok := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).(*x509.Certificate); ok && singleCert != nil {
+			clientCerts = []*x509.Certificate{singleCert}
+		}
+		if len(clientCerts) == 0 {
 			lFunc = lFunc.WithField("auth-status", "failed")
 			lFunc.Errorf("aborting %s. No client certificate was presented", operation)
 			return lFunc, errs.ErrDMSAuthModeNotSupported

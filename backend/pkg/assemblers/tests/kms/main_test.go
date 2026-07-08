@@ -87,7 +87,7 @@ func TestCreateKey(t *testing.T) {
 					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
 				}
 
-				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
+				keyUriParts, err := models.ParsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
 				}
@@ -115,7 +115,7 @@ func TestCreateKey(t *testing.T) {
 					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
 				}
 
-				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
+				keyUriParts, err := models.ParsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
 				}
@@ -1843,28 +1843,4 @@ func TestVerifySignature(t *testing.T) {
 			}
 		})
 	}
-}
-
-func parsePKCS11URI(uri string) (map[string]string, error) {
-	result := make(map[string]string)
-
-	// Strip the scheme ("pkcs11:") if present
-	uri = strings.TrimPrefix(uri, "pkcs11:")
-
-	// Split key=value pairs by ";"
-	parts := strings.Split(uri, ";")
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid part: %s", part)
-		}
-		key := kv[0]
-		val := kv[1]
-		result[key] = val
-	}
-
-	return result, nil
 }

@@ -30,7 +30,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service)
+	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service, conf.AuthzClient)
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {

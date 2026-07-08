@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"crypto/elliptic"
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -371,7 +370,7 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 
 	return &KMSTestServer{
 		Service:    *svc,
-		HttpKMSSDK: sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpKMSSDK: sdk.NewHttpKMSClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -411,7 +410,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 
 	return &CATestServer{
 		Service:   *svc,
-		HttpCASDK: sdk.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpCASDK: sdk.NewHttpCAClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -448,7 +447,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 
 	return &DeviceManagerTestServer{
 		Service:              *svc,
-		HttpDeviceManagerSDK: sdk.NewHttpDeviceManagerClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpDeviceManagerSDK: sdk.NewHttpDeviceManagerClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -509,16 +508,10 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		return nil, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
 
-	httpCli := http.Client{}
-	httpCli.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
 	return &DMSManagerTestServer{
 		Port:                 port,
 		Service:              *svc,
-		HttpDeviceManagerSDK: sdk.NewHttpDMSManagerClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		HttpDeviceManagerSDK: sdk.NewHttpDMSManagerClient(NewTestHTTPClientInsecure(), fmt.Sprintf("https://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -567,7 +560,7 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 		CRLService:    *crlSvc,
 		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
 		HttpCASDK:     caTestServer.HttpCASDK,
-		HttpVASDK:     sdk.NewHttpVAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpVASDK:     sdk.NewHttpVAClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -603,17 +596,10 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 		return nil, err
 	}
 
-	httpCli := http.Client{}
-	httpCli.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
-
 	return &AlertsTestServer{
 		Port:                 port,
 		Service:              *svc,
-		HttpAlertsManagerSDK: sdk.NewHttpAlertsClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		HttpAlertsManagerSDK: sdk.NewHttpAlertsClient(NewTestHTTPClientInsecure(), fmt.Sprintf("https://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},

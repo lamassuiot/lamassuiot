@@ -1,0 +1,14 @@
+[
+  {
+    "entity_type": "organization",
+    "table_name": "organizations",
+    "schema_name": "public",
+    "primary_key": "id",
+    "relations": [],
+    "atomic_actions": [
+      "read",
+      "delete"
+    ],
+    "global_actions": []
+  }
+]

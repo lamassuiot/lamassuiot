@@ -53,7 +53,7 @@ func main() {
 	}
 
 	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.DMSManagerSource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.DMSManagerSource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
 	lDeviceManagerClient := helpers.SetupLogger(conf.DevManagerClient.LogLevel, "DMS Manager", "LMS SDK - DeviceManager Client")
@@ -63,7 +63,7 @@ func main() {
 	}
 
 	deviceSDK := sdk.NewHttpDeviceManagerClient(
-		sdk.HttpClientWithSourceHeaderInjector(deviceMngrHttpCli, models.DMSManagerSource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(deviceMngrHttpCli, models.DMSManagerSource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 
