@@ -815,6 +815,81 @@ The packaged WFX HTTP schema constrains SBI job routes as follows:
 
 The `x-wfx-client-id` header is only used by authz for ownership scoping; WFX itself does not need to consume it.
 
+#### Schema-Level Default Action for Unmapped Routes
+
+A schema can declare `base_paths` (path prefixes it owns, e.g. `/api/wfx`) and a `default_action` (`"allow"` or `"deny"`) applied when a request falls under one of those prefixes but matches no configured route. This is independent of any policy — it never overrides a mapped route's own grant requirement, only decides what happens to endpoints the schema doesn't enumerate.
+
+```json
+{
+  "name": "Job Manager",
+  "base_paths": ["/api/wfx"],
+  "default_action": "deny",
+  "routes": [ ... ]
+}
+```
+
+- `default_action: "deny"` (or omitted) keeps the pre-existing implicit-deny behavior for unmapped paths, but makes it explicit and auditable.
+- `default_action: "allow"` opens unmapped endpoints under the base path to any authenticated subject, e.g. for a service where only a subset of routes need fine-grained control.
+- `default_action` requires at least one `base_paths` entry; a schema without `base_paths` never resolves this fallback.
+- A route match always takes precedence: if a route in the schema matches the request, `default_action` does not apply and the request falls through to normal policy evaluation.
+
+#### Excluding Authorization Without Excluding Authentication
+
+A route can set `skip_authz: true` to bypass the authorization decision while still requiring successful authentication (a resolved subject). This is for endpoints like health/version checks that any authenticated caller should reach, without needing an explicit policy grant.
+
+```json
+{
+  "name": "health-read",
+  "methods": ["GET"],
+  "path": "/api/wfx/nbi/v1/health",
+  "match_type": "exact",
+  "action": "nbi-health-read",
+  "skip_authz": true
+}
+```
+
+- `skip_authz` routes cannot declare `constraints` — constraints are themselves an authorization decision, which contradicts skipping authz.
+- Authentication happens upstream of the HTTP check (Envoy forwards XFCC/Bearer material, which `ExtAuthzController` resolves to a subject before consulting the engine); a request that fails authentication is rejected before `skip_authz` is ever considered.
+
+#### Static Path-Parameter Grants
+
+A policy's `http_rules` entry can restrict a granted action to one literal value of a named path parameter, via `param_constraints`. Unlike route `constraints` (which compare a request value to a *subject* attribute, varying per principal), `param_constraints` compares a request value to a *static literal* written into the policy itself — the same for every principal holding that policy.
+
+Route with a named capture group:
+
+```json
+{
+  "name": "system-info-read",
+  "methods": ["GET"],
+  "path": "^/api/mysvc/system/(?P<system_id>[^/]+)/info$",
+  "match_type": "regex",
+  "action": "system-info-read"
+}
+```
+
+Policy grant scoped to one system:
+
+```json
+{
+  "http_rules": [
+    {
+      "http_schema_name": "mysvc",
+      "actions": ["system-info-read"],
+      "param_constraints": [
+        { "action": "system-info-read", "path_params": { "system_id": "1" } }
+      ]
+    }
+  ]
+}
+```
+
+This grants `GET /api/mysvc/system/1/info` but not `GET /api/mysvc/system/2/info`, regardless of the requesting principal's attributes. Notes:
+
+- `path_params` keys must match named capture groups (`(?P<name>...)`) in the target route's regex.
+- An `http_rule` with no `param_constraints` for a given action is unrestricted, same as before this feature — fully backward compatible.
+- Multiple `param_constraints` entries for the same action are ANDed; multiple keys within one `path_params` map are also ANDed.
+- `param_constraints[].action` must be one of the rule's granted `actions` (or covered by a `"*"` wildcard) — validated at policy load time.
+
 #### HTTP Debug Check API
 
 The HTTP authorization engine can also be exercised directly for UI/debug flows. These endpoints return a JSON decision instead of the Envoy-style allow/deny status code used by `/ext_authz/check`.

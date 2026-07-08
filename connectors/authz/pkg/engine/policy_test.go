@@ -622,3 +622,94 @@ func TestPolicyRegistry_Load_WithSchemaNameFields(t *testing.T) {
 		t.Fatalf("Expected relation target devicemanager.device, got %s", rule.Relations[0].QualifiedTo())
 	}
 }
+
+// TestValidateHTTPRuleStruct_ParamConstraints covers load-time validation of
+// http_rule param_constraints — a misconfigured static grant must be rejected
+// rather than silently matching (or never matching) at check time.
+func TestValidateHTTPRuleStruct_ParamConstraints(t *testing.T) {
+	tests := []struct {
+		name    string
+		rule    *models.HTTPRule
+		wantErr string
+	}{
+		{
+			name: "valid param constraint",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Params: map[string]string{"system_id": "1"}},
+				},
+			},
+		},
+		{
+			name: "missing action",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Params: map[string]string{"system_id": "1"}},
+				},
+			},
+			wantErr: "action is required",
+		},
+		{
+			name: "action not granted by this rule",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-delete", Params: map[string]string{"system_id": "1"}},
+				},
+			},
+			wantErr: "must also be listed in actions",
+		},
+		{
+			name: "empty path_params",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Params: map[string]string{}},
+				},
+			},
+			wantErr: "path_params must not be empty",
+		},
+		{
+			name: "empty path_params value",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Params: map[string]string{"system_id": ""}},
+				},
+			},
+			wantErr: "value must not be empty",
+		},
+		{
+			name: "wildcard action grant covers any param constraint action",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"*"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Params: map[string]string{"system_id": "1"}},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateHTTPRuleStruct(tt.rule)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tt.wantErr, err)
+			}
+		})
+	}
+}
