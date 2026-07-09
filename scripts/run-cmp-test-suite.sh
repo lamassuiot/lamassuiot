@@ -393,13 +393,34 @@ t = r.find('.//statistics/total/stat')
 print("\n================ CMP TEST SUITE RESULT ================")
 print(f"  PASS={t.get('pass')}  FAIL={t.get('fail')}  SKIP={t.get('skip')}")
 print("  per suite:")
+names = []
 for s in r.findall('.//statistics/suite/stat'):
     name = s.text or ''
     if name.count('.') == 1:
-        print(f"    {name[6:]:24} pass={s.get('pass'):>3} fail={s.get('fail'):>3} skip={s.get('skip'):>3}")
+        short = name[6:]
+        names.append(short)
+        print(f"    {short:24} pass={s.get('pass'):>3} fail={s.get('fail'):>3} skip={s.get('skip'):>3}")
 print("=======================================================")
 print(f"  report: {__import__('os').getcwd()}/reports/report.html")
+with open('reports/.suite-names', 'w') as f:
+    f.write('\n'.join(names) + '\n')
 PY
+
+    # Split the combined output.xml into one standalone xUnit/JUnit file per
+    # top-level suite (reports/junit/<suite>.xml). CI uploads these together as
+    # a single artifact, and dorny/test-reporter's `path: '*.xml'` glob then
+    # renders one row per suite (Basic, Cert Conf Tests, ...) in the check
+    # summary instead of one flat list of every test case.
+    if [ -f reports/.suite-names ]; then
+        rm -rf reports/junit; mkdir -p reports/junit
+        while IFS= read -r suite; do
+            [ -n "${suite}" ] || continue
+            slug="$(echo "${suite}" | tr '[:upper:] ' '[:lower:]_')"
+            rebot --suite "${suite}" --nostatusrc --output NONE --report NONE --log NONE \
+                  --xunit "reports/junit/${slug}.xml" reports/output.xml >/dev/null 2>&1 || true
+        done < reports/.suite-names
+        rm -f reports/.suite-names
+    fi
 fi
 
 # Robot exits non-zero when any test fails; surface that but after the summary.
