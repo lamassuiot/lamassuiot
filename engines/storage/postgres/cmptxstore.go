@@ -17,21 +17,23 @@ import (
 // cmpTransactionRow is the GORM model that maps to the cmp_transactions table.
 // It is intentionally kept private; callers use the domain type storage.CMPTransaction.
 type cmpTransactionRow struct {
-	TransactionID     string    `gorm:"primaryKey;column:transaction_id"`
-	DMSID             string    `gorm:"column:dms_id;not null"`
-	CertSerialNumber  string    `gorm:"column:cert_serial_number;not null;default:''"`
-	Certificate       string    `gorm:"column:certificate"`                    // base64-PEM text; empty for PENDING rows
-	SentNonce         string    `gorm:"column:sent_nonce;not null;default:''"` // hex-encoded bytes
-	State             string    `gorm:"column:state;not null;default:ISSUED"`
-	ErrorMessage      string    `gorm:"column:error_message;not null;default:''"`
-	CSR               string    `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
-	IsReenrollment    bool      `gorm:"column:is_reenrollment;not null;default:false"`
-	RequestType       string    `gorm:"column:request_type;not null;default:''"`
-	SubjectCommonName string    `gorm:"column:subject_common_name;not null;default:''"`
-	WFXJobID          string    `gorm:"column:wfx_job_id;not null;default:''"`
-	ConfirmedAt       time.Time `gorm:"column:confirmed_at"`
-	ExpiresAt         time.Time `gorm:"column:expires_at;not null"`
-	CreatedAt         time.Time `gorm:"column:created_at;autoCreateTime"`
+	TransactionID        string    `gorm:"primaryKey;column:transaction_id"`
+	DMSID                string    `gorm:"column:dms_id;not null"`
+	CertSerialNumber     string    `gorm:"column:cert_serial_number;not null;default:''"`
+	Certificate          string    `gorm:"column:certificate"`                                // base64-PEM text; empty for PENDING rows
+	SentNonce            string    `gorm:"column:sent_nonce;not null;default:''"`             // hex-encoded bytes
+	ReceivedNonce        string    `gorm:"column:received_nonce;not null;default:''"`         // hex-encoded request senderNonce
+	SupersededCertSerial string    `gorm:"column:superseded_cert_serial;not null;default:''"` // kur: hex serial of the cert being updated
+	State                string    `gorm:"column:state;not null;default:ISSUED"`
+	ErrorMessage         string    `gorm:"column:error_message;not null;default:''"`
+	CSR                  string    `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
+	IsReenrollment       bool      `gorm:"column:is_reenrollment;not null;default:false"`
+	RequestType          string    `gorm:"column:request_type;not null;default:''"`
+	SubjectCommonName    string    `gorm:"column:subject_common_name;not null;default:''"`
+	WFXJobID             string    `gorm:"column:wfx_job_id;not null;default:''"`
+	ConfirmedAt          time.Time `gorm:"column:confirmed_at"`
+	ExpiresAt            time.Time `gorm:"column:expires_at;not null"`
+	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime"`
 }
 
 func certToString(c *models.X509Certificate) string {
@@ -117,6 +119,81 @@ func (s *PostgresCMPTransactionStorage) Exists(ctx context.Context, transactionI
 	return count > 0, nil
 }
 
+// HasUnconfirmedReenrollment reports whether an active (ISSUED, non-expired)
+// re-enrollment transaction is updating the certificate with the given hex
+// serial under the DMS. Scoped to the superseded certificate — not the device
+// CN — because one subject may hold several certificates over time; only the
+// specific certificate under update is locked (RFC 9483 §4.1.3). See the
+// CMPTransactionRepo interface doc.
+func (s *PostgresCMPTransactionStorage) HasUnconfirmedReenrollment(ctx context.Context, dmsID, supersededCertSerial string) (bool, error) {
+	if supersededCertSerial == "" {
+		// Unprotected (NO_AUTH) key updates record no superseded serial; there
+		// is nothing to lock on.
+		return false, nil
+	}
+	var count int64
+	result := s.db.WithContext(ctx).
+		Model(&cmpTransactionRow{}).
+		Where("dms_id = ? AND superseded_cert_serial = ? AND is_reenrollment = ? AND state = ? AND expires_at > "+nowExpr(s.db),
+			dmsID,
+			supersededCertSerial,
+			true,
+			string(storage.CMPTransactionStateIssued),
+		).
+		Count(&count)
+	if result.Error != nil {
+		s.logger.Errorf("cmp_transactions: has-unconfirmed-reenrollment dms=%s superseded=%s: %v", dmsID, supersededCertSerial, result.Error)
+		return false, result.Error
+	}
+	return count > 0, nil
+}
+
+// HasAbandonedReenrollment reports whether a re-enrollment (kur) transaction
+// updating the certificate with the given hex serial (SupersededCertSerial)
+// under the DMS was abandoned — issued but never confirmed and rolled back to
+// REVOKED on confirmation timeout. It is the post-timeout counterpart of
+// HasUnconfirmedReenrollment. See the CMPTransactionRepo interface doc.
+func (s *PostgresCMPTransactionStorage) HasAbandonedReenrollment(ctx context.Context, dmsID, supersededCertSerial string) (bool, error) {
+	if supersededCertSerial == "" {
+		return false, nil
+	}
+	var count int64
+	result := s.db.WithContext(ctx).
+		Model(&cmpTransactionRow{}).
+		Where("dms_id = ? AND superseded_cert_serial = ? AND is_reenrollment = ? AND state = ?",
+			dmsID,
+			supersededCertSerial,
+			true,
+			string(storage.CMPTransactionStateRevoked),
+		).
+		Count(&count)
+	if result.Error != nil {
+		s.logger.Errorf("cmp_transactions: has-abandoned-reenrollment dms=%s superseded=%s: %v", dmsID, supersededCertSerial, result.Error)
+		return false, result.Error
+	}
+	return count > 0, nil
+}
+
+// SelectByCertSerial returns the transaction that issued the certificate with
+// the given hex serial number, regardless of state or expiry. Rows are keyed
+// by transaction_id, so at most one row references a given issued cert. See
+// the CMPTransactionRepo interface doc for the superseded-cert classification
+// this enables.
+func (s *PostgresCMPTransactionStorage) SelectByCertSerial(ctx context.Context, certSerialNumber string) (storage.CMPTransaction, bool, error) {
+	var row cmpTransactionRow
+	result := s.db.WithContext(ctx).
+		Where("cert_serial_number = ?", certSerialNumber).
+		First(&row)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return storage.CMPTransaction{}, false, nil
+		}
+		s.logger.Errorf("cmp_transactions: select-by-cert-serial %s: %v", certSerialNumber, result.Error)
+		return storage.CMPTransaction{}, false, result.Error
+	}
+	return rowToDomain(row), true, nil
+}
+
 // nowExpr returns the SQL expression that yields "now" on the dialect of db.
 // Postgres and MySQL use NOW(); SQLite (used in tests / monolithic dev mode)
 // uses CURRENT_TIMESTAMP. Centralising this avoids application-side
@@ -148,21 +225,23 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 		state = storage.CMPTransactionStateIssued
 	}
 	row := cmpTransactionRow{
-		TransactionID:     tx.TransactionID,
-		DMSID:             tx.DMSID,
-		CertSerialNumber:  tx.CertSerialNumber,
-		Certificate:       certToString(tx.Certificate),
-		SentNonce:         tx.SentNonce,
-		State:             string(state),
-		ErrorMessage:      tx.ErrorMessage,
-		CSR:               csrToString(tx.CSR),
-		IsReenrollment:    tx.IsReenrollment,
-		RequestType:       tx.RequestType,
-		SubjectCommonName: tx.SubjectCommonName,
-		WFXJobID:          tx.WFXJobID,
-		ConfirmedAt:       tx.ConfirmedAt,
-		ExpiresAt:         tx.ExpiresAt,
-		CreatedAt:         tx.CreatedAt,
+		TransactionID:        tx.TransactionID,
+		DMSID:                tx.DMSID,
+		CertSerialNumber:     tx.CertSerialNumber,
+		Certificate:          certToString(tx.Certificate),
+		SentNonce:            tx.SentNonce,
+		ReceivedNonce:        tx.ReceivedNonce,
+		SupersededCertSerial: tx.SupersededCertSerial,
+		State:                string(state),
+		ErrorMessage:         tx.ErrorMessage,
+		CSR:                  csrToString(tx.CSR),
+		IsReenrollment:       tx.IsReenrollment,
+		RequestType:          tx.RequestType,
+		SubjectCommonName:    tx.SubjectCommonName,
+		WFXJobID:             tx.WFXJobID,
+		ConfirmedAt:          tx.ConfirmedAt,
+		ExpiresAt:            tx.ExpiresAt,
+		CreatedAt:            tx.CreatedAt,
 	}
 
 	// OnConflict(DoNothing) + RowsAffected==0 distinguishes a duplicate key
@@ -584,20 +663,22 @@ func (s *PostgresCMPTransactionStorage) SelectAllByDMS(
 
 func rowToDomain(row cmpTransactionRow) storage.CMPTransaction {
 	return storage.CMPTransaction{
-		TransactionID:     row.TransactionID,
-		DMSID:             row.DMSID,
-		CertSerialNumber:  row.CertSerialNumber,
-		Certificate:       stringToCert(row.Certificate),
-		SentNonce:         row.SentNonce,
-		State:             storage.CMPTransactionState(row.State),
-		ErrorMessage:      row.ErrorMessage,
-		CSR:               stringToCSR(row.CSR),
-		IsReenrollment:    row.IsReenrollment,
-		RequestType:       row.RequestType,
-		SubjectCommonName: row.SubjectCommonName,
-		WFXJobID:          row.WFXJobID,
-		ConfirmedAt:       row.ConfirmedAt,
-		ExpiresAt:         row.ExpiresAt,
-		CreatedAt:         row.CreatedAt,
+		TransactionID:        row.TransactionID,
+		DMSID:                row.DMSID,
+		CertSerialNumber:     row.CertSerialNumber,
+		Certificate:          stringToCert(row.Certificate),
+		SentNonce:            row.SentNonce,
+		ReceivedNonce:        row.ReceivedNonce,
+		SupersededCertSerial: row.SupersededCertSerial,
+		State:                storage.CMPTransactionState(row.State),
+		ErrorMessage:         row.ErrorMessage,
+		CSR:                  stringToCSR(row.CSR),
+		IsReenrollment:       row.IsReenrollment,
+		RequestType:          row.RequestType,
+		SubjectCommonName:    row.SubjectCommonName,
+		WFXJobID:             row.WFXJobID,
+		ConfirmedAt:          row.ConfirmedAt,
+		ExpiresAt:            row.ExpiresAt,
+		CreatedAt:            row.CreatedAt,
 	}
 }

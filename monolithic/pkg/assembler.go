@@ -171,12 +171,21 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			Logs:                         svcLogs,
-			Server:                       svcServer,
-			PublisherEventBus:            conf.PublisherEventBus,
-			DownstreamCertificateFile:    "proxy.crt",
-			Storage:                      conf.Storage,
-			CMPConfirmationMonitoringJob: conf.Monitoring,
+			Logs:                      svcLogs,
+			Server:                    svcServer,
+			PublisherEventBus:         conf.PublisherEventBus,
+			DownstreamCertificateFile: "proxy.crt",
+			Storage:                   conf.Storage,
+			// The CMP confirmation monitor rolls back unconfirmed key-updates by
+			// revoking the issued-but-unconfirmed certificate. It runs on a much
+			// shorter cadence than the CA/CRL monitors (conf.Monitoring, typically
+			// minutes) because the certConf window is per-device and short
+			// (seconds); a slow monitor would leave unconfirmed KURs in limbo well
+			// past their ConfirmationTimeout.
+			CMPConfirmationMonitoringJob: cconfig.MonitoringJob{
+				Enabled:   conf.Monitoring.Enabled,
+				Frequency: "5s",
+			},
 			WFX: config.DMSWFXConfig{
 				// CMP confirmation reporter talks to the WFX management API (NBI).
 				Enabled: conf.WfxNorthPort > 0,

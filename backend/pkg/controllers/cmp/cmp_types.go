@@ -1,4 +1,4 @@
-package controllers
+package cmp
 
 import (
 	"crypto/x509/pkix"

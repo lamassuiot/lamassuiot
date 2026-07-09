@@ -951,6 +951,35 @@ func PopulateSampleData(
 		} else {
 			logger.Infof("Created CMP protection certificate: serial=%s", protectionCert.SerialNumber)
 
+			// Device-enrollment profile for the CMP DMS. Unlike the enrollment
+			// CA's own (CA-shaped) profile, this honors the KeyUsage, Extended
+			// KeyUsage and extensions (e.g. SubjectAltName) requested in the CMP
+			// CertTemplate, so an EE that asks for keyAgreement/keyEncipherment or
+			// a NULL-DN + SAN certificate gets exactly that (RFC 9483 §4.1 / §5).
+			// HonorSubject stays true so the requested subject (incl. NULL-DN) is
+			// preserved. SignAsCA stays false: EE certs are never CA certs, which
+			// is also why an is_ca=true request is issued as a leaf, not a CA.
+			cmpEnrollProfile, cmpProfErr := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+				Profile: models.IssuanceProfile{
+					Name:                   "CMP Device Enrollment",
+					Description:            "Honors CMP CertTemplate KeyUsage/EKU/extensions for device enrollment",
+					Validity:               models.Validity{Type: models.Duration, Duration: models.TimeDuration(365 * 24 * time.Hour)},
+					SignAsCA:               false,
+					HonorKeyUsage:          true,
+					HonorExtendedKeyUsages: true,
+					HonorExtensions:        true,
+					HonorSubject:           true,
+					Subject:                models.Subject{},
+				},
+			})
+			cmpEnrollProfileID := ""
+			if cmpProfErr != nil {
+				logger.Warnf("Could not create CMP device enrollment profile (DMS will fall back to CA default): %v", cmpProfErr)
+			} else {
+				cmpEnrollProfileID = cmpEnrollProfile.ID
+				logger.Infof("Created CMP device enrollment profile: %s", cmpEnrollProfileID)
+			}
+
 			cmpDMSInput := services.CreateDMSInput{
 				ID:   "sample-cmp-dms",
 				Name: "Sample CMP DMS",
@@ -977,6 +1006,14 @@ func PopulateSampleData(
 							// includes id-it-implicitConfirm, the CA skips the certConf
 							// round-trip and echoes the OID in the response generalInfo.
 							AcceptImplicit: true,
+							// Short explicit-confirmation window (RFC 4210 §5.2.8). A KUR
+							// issued without implicit confirmation must be confirmed via
+							// certConf within this window; otherwise the confirmation
+							// monitor revokes the unconfirmed cert and the device keeps
+							// its previous identity. Kept short so the CMP compliance
+							// suite's "no update without confirmation" test observes the
+							// rollback quickly.
+							ConfirmationTimeout: models.TimeDuration(10 * time.Second),
 						},
 					},
 					ReEnrollmentSettings: models.ReEnrollmentSettings{
@@ -996,6 +1033,11 @@ func PopulateSampleData(
 						IncludeEnrollmentCA:    true,
 						IncludeLamassuSystemCA: true,
 					},
+					// Enroll against the device profile so the CertTemplate's
+					// requested KeyUsage/EKU/extensions are honored. Empty when
+					// the profile couldn't be created; the DMS then falls back to
+					// the enrollment CA's default profile.
+					IssuanceProfileID: cmpEnrollProfileID,
 				},
 			}
 
