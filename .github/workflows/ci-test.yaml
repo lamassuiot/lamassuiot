@@ -241,7 +241,6 @@ jobs:
   e2e-cmp:
     name: CMP E2E Tests
     runs-on: ubuntu-latest
-    needs: [test, test-pkcs11, test-backend-assemblers, test-backend-rest]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v5
@@ -320,15 +319,24 @@ jobs:
       actions: read   # required to fetch this run's test-results-* artifacts
       checks: write   # required to publish the check run with the results table
     steps:
+      # Download every test-results-<something> artifact uploaded by the jobs
+      # above into its own subfolder (test-results/<artifact-name>/*.xml), so
+      # same-named files (e.g. every Go module's junit.xml) don't collide.
+      - name: Download all test-result artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          path: test-results
+
+      # A single check consuming every downloaded file with one plain glob
+      # (no artifact regex fan-out) renders as ONE table with one row per
+      # file — the FluentValidation-style summary, not one collapsed section
+      # per module.
       - name: Publish test results
         uses: dorny/test-reporter@v2
         with:
-          # Consume every artifact named test-results-<something> uploaded by
-          # the jobs above. The capture group is substituted into `name` so
-          # each module gets its own check (e.g. "Tests: core", "Tests: cmp-e2e").
-          artifact: /test-results-(.*)/
-          name: 'Tests: $1'
-          path: '*.xml'
+          name: Test Results
+          path: 'test-results/**/*.xml'
           # gotestsum --junitfile and Robot --xunit both emit JUnit XML.
           reporter: java-junit
           # Don't fail this workflow when tests failed in CI — the table itself
