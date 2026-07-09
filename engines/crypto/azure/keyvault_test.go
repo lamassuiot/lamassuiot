@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"context"
 	"crypto/x509"
 	"testing"
 
@@ -86,7 +87,7 @@ func TestAzureKeyVaultCryptoEngine(t *testing.T) {
 // testRenameKeyReturnsError validates that RenameKey returns an error because
 // Azure Key Vault key names are immutable (no alias layer like AWS KMS).
 func testRenameKeyReturnsError(t *testing.T, engine cryptoengines.CryptoEngine) {
-	err := engine.RenameKey("any-old-id", "any-new-id")
+	err := engine.RenameKey(context.Background(), "any-old-id", "any-new-id")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "renaming keys is not supported")
 }

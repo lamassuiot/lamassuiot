@@ -81,10 +81,10 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) GetEngineConfig() models.CryptoE
 	return engine.config
 }
 
-func (engine *AzureKeyVaultSecretsCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (engine *AzureKeyVaultSecretsCryptoEngine) GetPrivateKeyByID(ctx context.Context, keyID string) (crypto.Signer, error) {
 	engine.logger.Debugf("Getting the private key with ID: %s", keyID)
 
-	result, err := engine.secretsCli.GetSecret(context.Background(), keyID, "", nil)
+	result, err := engine.secretsCli.GetSecret(ctx, keyID, "", nil)
 	if err != nil {
 		engine.logger.Errorf("could not get secret %s: %s", keyID, err)
 		return nil, err
@@ -112,13 +112,13 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) GetPrivateKeyByID(keyID string) 
 	return engine.softCryptoEngine.ParsePrivateKey(pemBytes)
 }
 
-func (engine *AzureKeyVaultSecretsCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+func (engine *AzureKeyVaultSecretsCryptoEngine) ListPrivateKeyIDs(ctx context.Context) ([]string, error) {
 	engine.logger.Debugf("listing private key IDs")
 
 	var keyIDs []string
 	pager := engine.secretsCli.NewListSecretPropertiesPager(nil)
 	for pager.More() {
-		page, err := pager.NextPage(context.Background())
+		page, err := pager.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("listing secrets: %w", err)
 		}
@@ -142,7 +142,7 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) CreateRSAPrivateKey(ctx context.
 		return "", nil, err
 	}
 
-	return engine.importKey(key)
+	return engine.importKey(ctx, key)
 }
 
 func (engine *AzureKeyVaultSecretsCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
@@ -154,13 +154,13 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) CreateECDSAPrivateKey(ctx contex
 		return "", nil, err
 	}
 
-	return engine.importKey(key)
+	return engine.importKey(ctx, key)
 }
 
-func (engine *AzureKeyVaultSecretsCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (engine *AzureKeyVaultSecretsCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 
-	keyID, signer, err := engine.importKey(key)
+	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
 		engine.logger.Errorf("could not import RSA key: %s", err)
 		return "", nil, err
@@ -169,10 +169,10 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) ImportRSAPrivateKey(key *rsa.Pri
 	return keyID, signer, nil
 }
 
-func (engine *AzureKeyVaultSecretsCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+func (engine *AzureKeyVaultSecretsCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing ECDSA private key")
 
-	keyID, signer, err := engine.importKey(key)
+	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
 		engine.logger.Errorf("could not import ECDSA key: %s", err)
 		return "", nil, err
@@ -181,21 +181,21 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) ImportECDSAPrivateKey(key *ecdsa
 	return keyID, signer, nil
 }
 
-func (engine *AzureKeyVaultSecretsCryptoEngine) importKey(key crypto.Signer) (string, crypto.Signer, error) {
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(key.Public())
+func (engine *AzureKeyVaultSecretsCryptoEngine) importKey(ctx context.Context, key crypto.Signer) (string, crypto.Signer, error) {
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, key.Public())
 	if err != nil {
 		engine.logger.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
 	}
 
-	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(key)
+	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(ctx, key)
 	if err != nil {
 		engine.logger.Errorf("could not marshal and encode private key: %s", err)
 		return "", nil, err
 	}
 
 	val := `{"key":"` + b64PemKey + `"}`
-	_, err = engine.secretsCli.SetSecret(context.Background(), keyID, azsecrets.SetSecretParameters{
+	_, err = engine.secretsCli.SetSecret(ctx, keyID, azsecrets.SetSecretParameters{
 		Value: &val,
 	}, nil)
 	if err != nil {
@@ -206,16 +206,16 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) importKey(key crypto.Signer) (st
 	return keyID, key, nil
 }
 
-func (engine *AzureKeyVaultSecretsCryptoEngine) RenameKey(oldID, newID string) error {
+func (engine *AzureKeyVaultSecretsCryptoEngine) RenameKey(ctx context.Context, oldID, newID string) error {
 	engine.logger.Debugf("renaming key %s -> %s", oldID, newID)
 
-	result, err := engine.secretsCli.GetSecret(context.Background(), oldID, "", nil)
+	result, err := engine.secretsCli.GetSecret(ctx, oldID, "", nil)
 	if err != nil {
 		engine.logger.Errorf("could not get secret %s: %s", oldID, err)
 		return fmt.Errorf("getting secret %s: %w", oldID, err)
 	}
 
-	_, err = engine.secretsCli.SetSecret(context.Background(), newID, azsecrets.SetSecretParameters{
+	_, err = engine.secretsCli.SetSecret(ctx, newID, azsecrets.SetSecretParameters{
 		Value: result.Value,
 	}, nil)
 	if err != nil {
@@ -224,13 +224,13 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) RenameKey(oldID, newID string) e
 	}
 
 	engine.logger.Debugf("key successfully renamed")
-	return engine.DeleteKey(oldID)
+	return engine.DeleteKey(ctx, oldID)
 }
 
-func (engine *AzureKeyVaultSecretsCryptoEngine) DeleteKey(keyID string) error {
+func (engine *AzureKeyVaultSecretsCryptoEngine) DeleteKey(ctx context.Context, keyID string) error {
 	engine.logger.Debugf("deleting key with ID: %s", keyID)
 
-	_, err := engine.secretsCli.DeleteSecret(context.Background(), keyID, nil)
+	_, err := engine.secretsCli.DeleteSecret(ctx, keyID, nil)
 	if err != nil {
 		engine.logger.Errorf("could not delete secret %s: %s", keyID, err)
 		return fmt.Errorf("deleting secret %s: %w", keyID, err)

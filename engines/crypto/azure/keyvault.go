@@ -99,11 +99,11 @@ func (p *AzureKeyVaultCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return p.config
 }
 
-func (p *AzureKeyVaultCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+func (p *AzureKeyVaultCryptoEngine) ListPrivateKeyIDs(ctx context.Context) ([]string, error) {
 	var keyIDs []string
 	pager := p.keyVaultCli.NewListKeyPropertiesPager(nil)
 	for pager.More() {
-		page, err := pager.NextPage(context.Background())
+		page, err := pager.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("listing keys: %w", err)
 		}
@@ -134,13 +134,13 @@ func (p *AzureKeyVaultCryptoEngine) findKeyNameByLamassuID(ctx context.Context, 
 	return "", fmt.Errorf("key with lamassu ID %q not found in Key Vault", keyID)
 }
 
-func (p *AzureKeyVaultCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (p *AzureKeyVaultCryptoEngine) GetPrivateKeyByID(ctx context.Context, keyID string) (crypto.Signer, error) {
 	p.logger.Debugf("Getting the private key with Lamassu ID: %s", keyID)
-	keyName, err := p.findKeyNameByLamassuID(context.Background(), keyID)
+	keyName, err := p.findKeyNameByLamassuID(ctx, keyID)
 	if err != nil {
 		return nil, err
 	}
-	return newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
+	return newKeyVaultSignerWrapper(ctx, p.keyVaultCli, keyName)
 }
 
 func (p *AzureKeyVaultCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
@@ -189,10 +189,10 @@ func (p *AzureKeyVaultCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, c
 	return p.registerCreatedKey(ctx, resp.Key.KID)
 }
 
-func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	key.Precompute()
 
-	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(&key.PublicKey)
+	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, &key.PublicKey)
 	if err != nil {
 		return "", nil, fmt.Errorf("encoding public key digest: %w", err)
 	}
@@ -211,12 +211,12 @@ func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (st
 	}
 
 	keyName := uuid.NewString()
-	resp, err := p.keyVaultCli.ImportKey(context.Background(), keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
+	resp, err := p.keyVaultCli.ImportKey(ctx, keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("importing RSA key into Key Vault: %w", err)
 	}
 
-	signer, err := p.registerImportedKey(context.Background(), keyName, keyID, resp.Key.KID)
+	signer, err := p.registerImportedKey(ctx, keyName, keyID, resp.Key.KID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -224,8 +224,8 @@ func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (st
 	return keyID, signer, nil
 }
 
-func (p *AzureKeyVaultCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
-	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(&key.PublicKey)
+func (p *AzureKeyVaultCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, &key.PublicKey)
 	if err != nil {
 		return "", nil, fmt.Errorf("encoding public key digest: %w", err)
 	}
@@ -246,12 +246,12 @@ func (p *AzureKeyVaultCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey)
 	}
 
 	keyName := uuid.NewString()
-	resp, err := p.keyVaultCli.ImportKey(context.Background(), keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
+	resp, err := p.keyVaultCli.ImportKey(ctx, keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("importing ECDSA key into Key Vault: %w", err)
 	}
 
-	signer, err := p.registerImportedKey(context.Background(), keyName, keyID, resp.Key.KID)
+	signer, err := p.registerImportedKey(ctx, keyName, keyID, resp.Key.KID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -260,16 +260,16 @@ func (p *AzureKeyVaultCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey)
 }
 
 // RenameKey is not supported by Azure Key Vault — key names are immutable once created.
-func (p *AzureKeyVaultCryptoEngine) RenameKey(oldID, newID string) error {
+func (p *AzureKeyVaultCryptoEngine) RenameKey(ctx context.Context, oldID, newID string) error {
 	return fmt.Errorf("renaming keys is not supported by Azure Key Vault: key names are immutable (old=%s, new=%s)", oldID, newID)
 }
 
-func (p *AzureKeyVaultCryptoEngine) DeleteKey(keyID string) error {
-	keyName, err := p.findKeyNameByLamassuID(context.Background(), keyID)
+func (p *AzureKeyVaultCryptoEngine) DeleteKey(ctx context.Context, keyID string) error {
+	keyName, err := p.findKeyNameByLamassuID(ctx, keyID)
 	if err != nil {
 		return err
 	}
-	_, err = p.keyVaultCli.DeleteKey(context.Background(), keyName, nil)
+	_, err = p.keyVaultCli.DeleteKey(ctx, keyName, nil)
 	if err != nil {
 		return fmt.Errorf("deleting key %s from Key Vault: %w", keyName, err)
 	}
@@ -282,12 +282,12 @@ func (p *AzureKeyVaultCryptoEngine) registerCreatedKey(ctx context.Context, kid 
 	keyName := kid.Name()
 	keyVersion := kid.Version()
 
-	signer, err := newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
+	signer, err := newKeyVaultSignerWrapper(ctx, p.keyVaultCli, keyName)
 	if err != nil {
 		return "", nil, err
 	}
 
-	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(signer.Public())
+	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, signer.Public())
 	if err != nil {
 		return "", nil, fmt.Errorf("encoding public key digest: %w", err)
 	}
@@ -318,7 +318,7 @@ func (p *AzureKeyVaultCryptoEngine) registerImportedKey(ctx context.Context, key
 		return nil, fmt.Errorf("tagging Key Vault key %s with lamassu ID: %w", keyName, err)
 	}
 
-	return newKeyVaultSignerWrapper(p.keyVaultCli, keyName)
+	return newKeyVaultSignerWrapper(ctx, p.keyVaultCli, keyName)
 }
 
 // ---- helpers ----
@@ -396,10 +396,11 @@ type keyVaultSignerWrapper struct {
 	version string
 	client  *azkeys.Client
 	pubKey  crypto.PublicKey
+	ctx     context.Context
 }
 
-func newKeyVaultSignerWrapper(client *azkeys.Client, keyName string) (crypto.Signer, error) {
-	resp, err := client.GetKey(context.Background(), keyName, "", nil)
+func newKeyVaultSignerWrapper(ctx context.Context, client *azkeys.Client, keyName string) (crypto.Signer, error) {
+	resp, err := client.GetKey(ctx, keyName, "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("fetching key %s from Key Vault: %w", keyName, err)
 	}
@@ -419,6 +420,7 @@ func newKeyVaultSignerWrapper(client *azkeys.Client, keyName string) (crypto.Sig
 		version: version,
 		client:  client,
 		pubKey:  pubKey,
+		ctx:     ctx,
 	}, nil
 }
 
@@ -432,7 +434,7 @@ func (k *keyVaultSignerWrapper) Sign(_ io.Reader, digest []byte, opts crypto.Sig
 		return nil, err
 	}
 
-	resp, err := k.client.Sign(context.Background(), k.keyName, k.version, azkeys.SignParameters{
+	resp, err := k.client.Sign(k.ctx, k.keyName, k.version, azkeys.SignParameters{
 		Algorithm: &alg,
 		Value:     digest,
 	}, nil)
