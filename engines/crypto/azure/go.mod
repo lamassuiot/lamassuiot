@@ -19,7 +19,6 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.8.0
-	github.com/lamassuiot/lamassuiot/shared/azure/v3 v3.8.0
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
