@@ -1,0 +1,16 @@
+{
+  "id": "lamassu.cecf72c8-5745-40df-bc42-2a5e681cfa58",
+  "name": "Job Manager - Mgmt NBI Workflow Observer",
+  "description": "Read-only management NBI Job Manager HTTP access for workflows.",
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": [
+        "nbi-health-read",
+        "nbi-version-read",
+        "nbi-workflow-list",
+        "nbi-workflow-read"
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	vconfig "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/config"
@@ -138,14 +139,15 @@ func (engine *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
 	}
 }
 
-func (engine *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
-	engine.logger.Debugf("requesting private key with ID [%s]", keyID)
-	key, err := engine.kvv2Client.Get(context.Background(), keyID)
+func (engine *VaultKV2Engine) GetPrivateKeyByID(ctx context.Context, keyID string) (crypto.Signer, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("requesting private key with ID [%s]", keyID)
+	key, err := engine.kvv2Client.Get(ctx, keyID)
 	if err != nil {
-		engine.logger.Errorf("could not get private key: %s", err)
+		lFunc.Errorf("could not get private key: %s", err)
 		return nil, errors.New("could not get private key")
 	}
-	engine.logger.Debugf("successfully retrieved private key")
+	lFunc.Debugf("successfully retrieved private key")
 
 	var b64Key string
 	mapValue, ok := key.Data["key"]
@@ -165,10 +167,10 @@ func (engine *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, er
 	return engine.softCryptoEngine.ParsePrivateKey(pemBytes)
 }
 
-func (engine *VaultKV2Engine) ListPrivateKeyIDs() ([]string, error) {
-	engine.logger.Debugf("listing private keys")
+func (engine *VaultKV2Engine) ListPrivateKeyIDs(ctx context.Context) ([]string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("listing private keys")
 
-	// Send the LIST request
 	resp, err := engine.vaultClient.Logical().List(fmt.Sprintf("%s/metadata", engine.mountPath))
 	if err != nil {
 		return nil, fmt.Errorf("error making request to vault: %w", err)
@@ -191,74 +193,79 @@ func (engine *VaultKV2Engine) ListPrivateKeyIDs() ([]string, error) {
 		keys = append(keys, key.(string))
 	}
 
-	engine.logger.Debugf("successfully retrieved private keys")
+	lFunc.Debugf("successfully retrieved private keys")
 	return keys, nil
 }
 
 func (engine *VaultKV2Engine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
-	engine.logger.Debugf("creating RSA private key")
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("creating RSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(ctx, keySize)
 	if err != nil {
-		engine.logger.Errorf("could not create RSA private key: %s", err)
+		lFunc.Errorf("could not create RSA private key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("RSA key successfully generated")
-	return engine.importKey(key)
+	lFunc.Debugf("RSA key successfully generated")
+	return engine.importKey(ctx, key)
 }
 
 func (engine *VaultKV2Engine) CreateECDSAPrivateKey(ctx context.Context, c elliptic.Curve) (string, crypto.Signer, error) {
-	engine.logger.Debugf("creating ECDSA private key")
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("creating ECDSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(ctx, c)
 	if err != nil {
-		engine.logger.Errorf("could not create ECDSA private key: %s", err)
+		lFunc.Errorf("could not create ECDSA private key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("ECDSA key successfully generated")
-	return engine.importKey(key)
+	lFunc.Debugf("ECDSA key successfully generated")
+	return engine.importKey(ctx, key)
 }
 
-func (engine *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	engine.logger.Debugf("importing RSA private key")
+func (engine *VaultKV2Engine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("importing RSA private key")
 
-	keyID, signer, err := engine.importKey(key)
+	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
-		engine.logger.Errorf("could not import RSA key: %s", err)
+		lFunc.Errorf("could not import RSA key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("RSA key successfully imported")
+	lFunc.Debugf("RSA key successfully imported")
 	return keyID, signer, nil
 }
 
-func (engine *VaultKV2Engine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
-	engine.logger.Debugf("importing ECDSA private key")
+func (engine *VaultKV2Engine) ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("importing ECDSA private key")
 
-	keyID, signer, err := engine.importKey(key)
+	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
-		engine.logger.Errorf("could not import ECDSA key: %s", err)
+		lFunc.Errorf("could not import ECDSA key: %s", err)
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("ECDSA key successfully imported")
+	lFunc.Debugf("ECDSA key successfully imported")
 	return keyID, signer, nil
 }
 
-func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) {
+func (engine *VaultKV2Engine) importKey(ctx context.Context, key any) (string, crypto.Signer, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 	pubKey := key.(crypto.Signer).Public()
 
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, pubKey)
 	if err != nil {
-		engine.logger.Errorf("could not encode public key digest: %s", err)
+		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
 	}
 
-	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(key)
+	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(ctx, key)
 	if err != nil {
-		engine.logger.Errorf("could not marshal and encode private key: %s", err)
+		lFunc.Errorf("could not marshal and encode private key: %s", err)
 		return "", nil, err
 	}
 
@@ -266,47 +273,46 @@ func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) 
 		"key": b64PemKey,
 	}
 
-	_, err = engine.kvv2Client.Put(context.Background(), keyID, keyMap)
+	_, err = engine.kvv2Client.Put(ctx, keyID, keyMap)
 	if err != nil {
-		engine.logger.Errorf("could not save the private key in vault: %s", err)
+		lFunc.Errorf("could not save the private key in vault: %s", err)
 		return "", nil, err
 	}
 
-	signer, err := engine.GetPrivateKeyByID(keyID)
+	signer, err := engine.GetPrivateKeyByID(ctx, keyID)
 	if err != nil {
-		engine.logger.Errorf("could not retrieve the private key from vault: %s", err)
+		lFunc.Errorf("could not retrieve the private key from vault: %s", err)
 		return "", nil, err
 	}
 
 	return keyID, signer, nil
 }
 
-func (engine *VaultKV2Engine) RenameKey(oldID, newID string) error {
-	key, err := engine.kvv2Client.Get(context.Background(), oldID)
+func (engine *VaultKV2Engine) RenameKey(ctx context.Context, oldID, newID string) error {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	key, err := engine.kvv2Client.Get(ctx, oldID)
 	if err != nil {
-		engine.logger.Errorf("could not get private key: %s", err)
+		lFunc.Errorf("could not get private key: %s", err)
 		return errors.New("could not get private key")
 	}
 
-	_, err = engine.kvv2Client.Put(context.Background(), newID, key.Data)
+	_, err = engine.kvv2Client.Put(ctx, newID, key.Data)
 	if err != nil {
-		engine.logger.Errorf("could not save the private key in vault: %s", err)
+		lFunc.Errorf("could not save the private key in vault: %s", err)
 		return err
 	}
 
-	// Delete the old key
-	err = engine.kvv2Client.Delete(context.Background(), oldID)
+	err = engine.kvv2Client.Delete(ctx, oldID)
 	if err != nil {
-		engine.logger.Errorf("could not delete the old key: %s", err)
+		lFunc.Errorf("could not delete the old key: %s", err)
 		return err
 	}
 
 	return nil
 }
 
-func (engine *VaultKV2Engine) DeleteKey(keyID string) error {
-	err := engine.kvv2Client.Delete(context.Background(), keyID)
-	return err
+func (engine *VaultKV2Engine) DeleteKey(ctx context.Context, keyID string) error {
+	return engine.kvv2Client.Delete(ctx, keyID)
 }
 
 // ---------------------

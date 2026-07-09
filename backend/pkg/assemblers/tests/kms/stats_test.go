@@ -19,7 +19,7 @@ func TestGetKeyStatsFiltered(t *testing.T) {
 	ctx := context.Background()
 
 	// Start KMS server once for all subtests
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}

@@ -91,3 +91,4 @@ func TestGetEventBodyNullData(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "cloud event data is null", err.Error())
 }
+

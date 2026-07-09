@@ -2,7 +2,9 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/resources"
+	backendresources "github.com/lamassuiot/lamassuiot/backend/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
@@ -44,7 +46,20 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 }
 
 func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
-	response, err := r.svc.GetLatestEventsPerEventType(ctx.Request.Context(), &services.GetLatestEventsPerEventTypeInput{})
+	queryParams, err := FilterQuery(ctx.Request, resources.AlertFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	events := []models.AlertLatestEvent{}
+	nextBookmark, err := r.svc.GetLatestEventsPerEventType(ctx.Request.Context(), &services.GetLatestEventsPerEventTypeInput{
+		QueryParameters: queryParams,
+		ExhaustiveRun:   false,
+		ApplyFunc: func(ev models.AlertLatestEvent) {
+			events = append(events, ev)
+		},
+	})
 
 	if err != nil {
 		switch err {
@@ -55,11 +70,16 @@ func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(200, response)
+	ctx.JSON(200, resources.GetAlertsResponse{
+		IterableList: resources.IterableList[models.AlertLatestEvent]{
+			NextBookmark: nextBookmark,
+			List:         events,
+		},
+	})
 }
 
 func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
-	var requestBody resources.SubscribeBody
+	var requestBody backendresources.SubscribeBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

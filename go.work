@@ -8,6 +8,7 @@ replace github.com/lamassuiot/lamassuiot/shared/azure/v3 v3.8.0 => ./shared/azur
 
 use (
 	./backend
+	./connectors/authz
 	./connectors/awsiot
 	./core
 	./engines/crypto/aws

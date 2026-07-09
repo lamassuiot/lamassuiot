@@ -12,29 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*tests.KMSTestServer, error) {
-	builder := tests.TestServiceBuilder{}.WithDatabase("kms", "ca").WithVault()
-	testServer, err := builder.Build(t)
-	if err != nil {
-		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
-	}
-
-	err = testServer.BeforeEach()
-	if err != nil {
-		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
-	}
-
-	return testServer.KMS, nil
-}
-
 func TestCryptoEngines(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -62,7 +46,7 @@ func TestCryptoEngines(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -77,7 +61,7 @@ func TestCryptoEngines(t *testing.T) {
 }
 
 func TestCreateKey(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -103,7 +87,7 @@ func TestCreateKey(t *testing.T) {
 					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
 				}
 
-				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
+				keyUriParts, err := models.ParsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
 				}
@@ -131,7 +115,7 @@ func TestCreateKey(t *testing.T) {
 					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
 				}
 
-				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
+				keyUriParts, err := models.ParsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
 				}
@@ -389,7 +373,7 @@ func TestCreateKey(t *testing.T) {
 }
 
 func TestImportKey(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -618,7 +602,7 @@ func TestImportKey(t *testing.T) {
 
 func TestGetKeys(t *testing.T) {
 	keysIds := [3]string{"ListKey1", "ListKey2", "ListKey3"}
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -816,7 +800,7 @@ func TestGetKeys(t *testing.T) {
 }
 
 func TestGetKey(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -905,7 +889,7 @@ func TestGetKey(t *testing.T) {
 }
 
 func TestDeleteKeyByID(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -996,7 +980,7 @@ func TestDeleteKeyByID(t *testing.T) {
 }
 
 func TestSignMessage(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1419,7 +1403,7 @@ func TestSignMessage(t *testing.T) {
 }
 
 func TestVerifySignature(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1859,28 +1843,4 @@ func TestVerifySignature(t *testing.T) {
 			}
 		})
 	}
-}
-
-func parsePKCS11URI(uri string) (map[string]string, error) {
-	result := make(map[string]string)
-
-	// Strip the scheme ("pkcs11:") if present
-	uri = strings.TrimPrefix(uri, "pkcs11:")
-
-	// Split key=value pairs by ";"
-	parts := strings.Split(uri, ";")
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid part: %s", part)
-		}
-		key := kv[0]
-		val := kv[1]
-		result[key] = val
-	}
-
-	return result, nil
 }

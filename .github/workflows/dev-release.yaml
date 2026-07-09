@@ -47,9 +47,9 @@ jobs:
             va,
             alerts,
             aws-connector,
+            authz,
             lamassu-db-migration,
             ca-to-kms-migration,
-            monolithic,
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest

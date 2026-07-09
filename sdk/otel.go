@@ -112,13 +112,23 @@ func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, re
 		tp := sdktrace.NewTracerProvider(
 			sdktrace.WithSampler(sdktrace.NeverSample()),
 			sdktrace.WithResource(resources),
+			sdktrace.WithSpanProcessor(authContextSpanProcessor{}),
 		)
 		otel.SetTracerProvider(tp)
 		return nil
 	}
 
+	u := &url.URL{
+		Scheme: config.Scheme,
+		Host:   fmt.Sprintf("%s:%d", config.Hostname, config.Port),
+	}
+	if config.BasePath != "" {
+		u.Path = path.Join("/", config.BasePath)
+	}
+	endpointURL := u.String()
+
 	options := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(fmt.Sprintf("%s:%d", config.Hostname, config.Port)),
+		otlptracehttp.WithEndpointURL(endpointURL),
 	}
 
 	if config.Scheme == "http" {
@@ -139,6 +149,7 @@ func setupTracerProvider(ctx context.Context, config config.OTELTracesConfig, re
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(resources),
+		sdktrace.WithSpanProcessor(authContextSpanProcessor{}),
 	)
 
 	// Register the global tracer provider

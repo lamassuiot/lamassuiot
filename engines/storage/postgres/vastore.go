@@ -11,7 +11,7 @@ import (
 
 type PostgresVAStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.VARole]
+	querier *DBQuerier[models.VARole]
 }
 
 func NewVARepository(logger *logrus.Entry, db *gorm.DB) (storage.VARepo, error) {
@@ -31,7 +31,7 @@ func (db *PostgresVAStore) Get(ctx context.Context, caSki string) (bool, *models
 }
 
 func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRequest[models.VARole]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresVAStore) Update(ctx context.Context, role *models.VARole) (*models.VARole, error) {

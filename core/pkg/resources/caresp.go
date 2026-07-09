@@ -6,6 +6,10 @@ type GetCAsResponse struct {
 	IterableList[models.CACertificate]
 }
 
+type GetAlertsResponse struct {
+	IterableList[models.AlertLatestEvent]
+}
+
 type GetItemsResponse[T any] struct {
 	IterableList[T]
 }

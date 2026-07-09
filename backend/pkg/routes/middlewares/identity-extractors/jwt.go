@@ -1,11 +1,13 @@
 package identityextractors
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,14 +28,29 @@ func (extractor JWTExtractor) ExtractAuthentication(ctx *gin.Context, req http.R
 		return
 	}
 
-	// Parse the JWT
 	tokenString := authToken[1]
-	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
+	claims, err := helpers.DecodeJWTPayload(tokenString)
 	if err != nil {
 		return
 	}
 
 	extractor.logger.Debugf("found JWT token in request headers")
 
-	ctx.Set(string(IdentityExtractorJWT), token)
+	callerID, _ := claims["sub"].(string)
+
+	ctx.Set(core.LamassuContextKeyAuthType, string(IdentityExtractorJWT))
+	ctx.Set(core.LamassuContextKeyAuthCredentialString, tokenString)
+	ctx.Set(core.LamassuContextKeyAuthCredentialStruct, claims)
+	ctx.Set(core.LamassuContextKeyAuthID, callerID)
+	ctx.Set(core.LamassuContextKeyAuthContext, claims)
+
+	reqCtx := req.Context()
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, string(IdentityExtractorJWT))
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialString, tokenString)
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, claims)
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthID, callerID)
+	reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthContext, claims)
+	if ctx.Request != nil {
+		ctx.Request = ctx.Request.WithContext(reqCtx)
+	}
 }

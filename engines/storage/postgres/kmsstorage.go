@@ -15,7 +15,7 @@ const kmsTableName = "kms_keys"
 
 type PostgresKMSStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.Key]
+	querier *DBQuerier[models.Key]
 }
 
 func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRepo, error) {
@@ -31,7 +31,7 @@ func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRe
 }
 
 func (db *PostgresKMSStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
+	return db.querier.Count(ctx, []GormExtraOps{})
 }
 
 func (db *PostgresKMSStore) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
@@ -39,12 +39,12 @@ func (db *PostgresKMSStore) CountWithFilters(ctx context.Context, queryParams *r
 		return db.Count(ctx)
 	}
 
-	return db.querier.CountFiltered(ctx, queryParams.Filters, []gormExtraOps{})
+	return db.querier.CountFiltered(ctx, queryParams.Filters, []GormExtraOps{})
 }
 
 func (db *PostgresKMSStore) CountByEngineWithFilters(ctx context.Context, engineID string, queryParams *resources.QueryParameters) (int, error) {
-	opts := []gormExtraOps{
-		{query: "engine_id = ?", additionalWhere: []any{engineID}},
+	opts := []GormExtraOps{
+		{Query: "engine_id = ?", AdditionalWhere: []any{engineID}},
 	}
 
 	if queryParams == nil {
@@ -55,7 +55,7 @@ func (db *PostgresKMSStore) CountByEngineWithFilters(ctx context.Context, engine
 }
 
 func (db *PostgresKMSStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Key]) (string, error) {
-	opts := []gormExtraOps{}
+	opts := []GormExtraOps{}
 	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 

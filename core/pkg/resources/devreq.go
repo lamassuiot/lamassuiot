@@ -1,6 +1,8 @@
 package resources
 
 import (
+	"time"
+
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
@@ -20,6 +22,17 @@ type UpdateDeviceIdentitySlotBody struct {
 
 type UpdateDeviceMetadataBody struct {
 	Patches []models.PatchOperation `json:"patches"`
+}
+
+type CreateDeviceEventBody struct {
+	// omitzero (Go 1.24+) is required here: stdlib `omitempty` has no effect on
+	// time.Time because it's a struct, so the zero value would still be marshalled
+	// as "0001-01-01T00:00:00Z" if a client encoded this struct directly.
+	Timestamp        time.Time              `json:"event_ts,omitzero"`
+	Type             models.DeviceEventType `json:"type"`
+	Description      string                 `json:"description"`
+	Source           string                 `json:"source"`
+	StructuredFields map[string]any         `json:"structured_fields"`
 }
 
 // Device Group Request Bodies

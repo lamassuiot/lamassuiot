@@ -18,6 +18,15 @@ type DeviceManagerRepo interface {
 
 	// DeviceGroups returns the device groups repository
 	DeviceGroups() DeviceGroupsRepo
+
+	// DeviceEvents returns the device events repository
+	DeviceEvents() DeviceEventsRepo
+}
+
+type DeviceEventsRepo interface {
+	Insert(ctx context.Context, event *models.DeviceEventRecord) (*models.DeviceEventRecord, error)
+	SelectByDeviceID(ctx context.Context, req StorageListRequest[models.DeviceEventRecord], deviceID string) (string, error)
+	DeleteByDeviceID(ctx context.Context, deviceID string) error
 }
 
 type DeviceGroupsRepo interface {

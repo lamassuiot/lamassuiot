@@ -5,14 +5,13 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type PostgresEventsStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.AlertLatestEvent]
+	querier *DBQuerier[models.AlertLatestEvent]
 }
 
 func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.EventRepository, error) {
@@ -23,7 +22,7 @@ func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.Eve
 
 	return &PostgresEventsStore{
 		db:      db,
-		querier: (*postgresDBQuerier[models.AlertLatestEvent])(querier),
+		querier: (*DBQuerier[models.AlertLatestEvent])(querier),
 	}, nil
 }
 
@@ -42,16 +41,6 @@ func (db *PostgresEventsStore) GetLatestEventByEventType(ctx context.Context, ev
 	return db.querier.SelectExists(ctx, string(eventType), nil)
 }
 
-func (db *PostgresEventsStore) GetLatestEvents(ctx context.Context) ([]*models.AlertLatestEvent, error) {
-	evs := []*models.AlertLatestEvent{}
-	_, err := db.querier.SelectAll(ctx, &resources.QueryParameters{}, []gormExtraOps{}, true, func(elem models.AlertLatestEvent) {
-		derefElem := elem
-		evs = append(evs, &derefElem)
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return evs, nil
+func (db *PostgresEventsStore) GetLatestEvents(ctx context.Context, req storage.StorageListRequest[models.AlertLatestEvent]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }

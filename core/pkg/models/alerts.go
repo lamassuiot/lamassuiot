@@ -56,7 +56,7 @@ type WebhookChannelConfig struct {
 }
 
 type AlertLatestEvent struct {
-	EventType EventType         `json:"event_types" gorm:"primaryKey"`
+	EventType EventType         `json:"event_type" gorm:"primaryKey"`
 	Event     cloudevents.Event `json:"event" gorm:"serializer:json"`
 	LastSeen  time.Time         `json:"seen_at"`
 	TotalSeen int               `json:"counter"`

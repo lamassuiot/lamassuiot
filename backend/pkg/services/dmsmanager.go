@@ -574,8 +574,11 @@ func (svc DMSManagerServiceBackend) authenticateEST(
 	switch estAuthOptions.AuthMode {
 	case models.ESTAuthModeClientCertificate:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificate)
-		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
-		if !hasValue || len(clientCerts) == 0 {
+		var clientCerts []*x509.Certificate
+		if singleCert, ok := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).(*x509.Certificate); ok && singleCert != nil {
+			clientCerts = []*x509.Certificate{singleCert}
+		}
+		if len(clientCerts) == 0 {
 			lFunc.Errorf("aborting %s. No client certificate was presented", operation)
 			return lFunc, errs.ErrDMSAuthModeNotSupported
 		}
@@ -604,8 +607,11 @@ func (svc DMSManagerServiceBackend) authenticateEST(
 	case models.ESTAuthModeClientCertificateAndWebhook:
 		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeClientCertificateAndWebhook)
 		lFunc.Infof("combined auth: starting client certificate validation (step 1/2)")
-		clientCerts, hasValue := ctx.Value(string(models.ESTAuthModeClientCertificate)).([]*x509.Certificate)
-		if !hasValue || len(clientCerts) == 0 {
+		var clientCerts []*x509.Certificate
+		if singleCert, ok := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).(*x509.Certificate); ok && singleCert != nil {
+			clientCerts = []*x509.Certificate{singleCert}
+		}
+		if len(clientCerts) == 0 {
 			lFunc = lFunc.WithField("auth-status", "failed")
 			lFunc.Errorf("aborting %s. No client certificate was presented", operation)
 			return lFunc, errs.ErrDMSAuthModeNotSupported
@@ -1262,6 +1268,8 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	}
 
 	idSlot := device.IdentitySlot
+	eventType := models.DeviceEventTypeProvisioned
+	eventDescription := ""
 	if idSlot == nil {
 		idSlot = &models.Slot[string]{
 			Status:         models.SlotActive,
@@ -1271,22 +1279,15 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 			Secrets: map[int]string{
 				0: crt.SerialNumber,
 			},
-			Events: map[time.Time]models.DeviceEvent{
-				time.Now(): {
-					EvenType: models.DeviceEventTypeProvisioned,
-				},
-			},
+			Events: map[time.Time]models.DeviceEvent{},
 		}
 	} else {
 		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
 		idSlot.Status = models.SlotActive
 		idSlot.ExpirationDate = &crt.ValidTo
 		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-
-		idSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          input.BindMode,
-			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
-		}
+		eventType = input.BindMode
+		eventDescription = fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion)
 	}
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 		ID:   crt.Subject.CommonName,
@@ -1294,6 +1295,18 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	})
 	if err != nil {
 		lFunc.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
+		return nil, err
+	}
+
+	_, err = svc.deviceManagerCli.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		DeviceID:    crt.Subject.CommonName,
+		Timestamp:   time.Now(),
+		Type:        eventType,
+		Description: eventDescription,
+		Source:      models.DMSManagerSource,
+	})
+	if err != nil {
+		lFunc.Errorf("could not create device event for device '%s': %s", device.ID, err)
 		return nil, err
 	}
 
