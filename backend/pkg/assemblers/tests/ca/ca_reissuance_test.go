@@ -7,18 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 func TestReissueCAService(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
 	var testcases = []struct {
@@ -562,7 +556,7 @@ func TestReissueCAService(t *testing.T) {
 	for _, tc := range testcases {
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -612,9 +606,8 @@ func TestReissueCAService(t *testing.T) {
 }
 
 func TestReissueCASDK(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -666,7 +659,7 @@ func TestReissueCASDK(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -18,11 +17,6 @@ import (
 
 // TestGetStatsFiltered tests filtered statistics for CAs and Certificates
 func TestGetStatsFiltered(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
 	// Helper function to create issuance profile
@@ -243,7 +237,7 @@ func TestGetStatsFiltered(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -269,9 +263,8 @@ func TestGetStatsFiltered(t *testing.T) {
 
 // TestGetStatsByCAIDFiltered tests filtered statistics for certificates within a CA
 func TestGetStatsByCAIDFiltered(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -414,7 +407,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}

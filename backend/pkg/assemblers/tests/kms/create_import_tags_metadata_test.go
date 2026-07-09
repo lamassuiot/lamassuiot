@@ -14,7 +14,7 @@ import (
 )
 
 func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -229,7 +229,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -248,7 +248,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 }
 
 func TestImportKeyWithTagsAndMetadata(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -441,7 +441,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -460,7 +460,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 }
 
 func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -522,7 +522,7 @@ func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}

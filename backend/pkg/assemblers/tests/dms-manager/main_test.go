@@ -34,29 +34,10 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
-func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*tests.DMSManagerTestServer, *tests.TestServer, error) {
-	builder := tests.TestServiceBuilder{}.WithDatabase("ca", "devicemanager", "dmsmanager", "kms").WithService(tests.CA, tests.DEVICE_MANAGER, tests.DMS_MANAGER)
-	if withEventBus {
-		builder = builder.WithEventBus()
-	}
-
-	testServer, err := builder.Build(t)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	err = testServer.BeforeEach()
-	if err != nil {
-		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
-	}
-
-	return testServer.DMSManager, testServer, nil
-}
-
 const dmsID = "1234-5678"
 
 func TestCreateDMS(t *testing.T) {
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -84,7 +65,7 @@ func TestCreateDMS(t *testing.T) {
 }
 
 func TestUpdateDMS(t *testing.T) {
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -115,7 +96,7 @@ func TestUpdateDMS(t *testing.T) {
 }
 
 func TestUpdateDMSMetadata(t *testing.T) {
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -223,7 +204,7 @@ func TestDeleteDMS(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+			dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 			if err != nil {
 				t.Fatalf("could not create DMS Manager test server: %s", err)
 			}
@@ -238,7 +219,7 @@ func TestDeleteDMS(t *testing.T) {
 }
 
 func TestUpdateMissingDMSShouldFail(t *testing.T) {
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -257,7 +238,7 @@ func TestUpdateMissingDMSShouldFail(t *testing.T) {
 }
 
 func TestGetMissingDMSShouldFail(t *testing.T) {
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -274,7 +255,7 @@ func TestESTEnroll(t *testing.T) {
 	// t.Parallel()
 	ctx := context.Background()
 
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -1558,7 +1539,7 @@ func TestESTEnroll(t *testing.T) {
 		// {
 		// 	name: "Err/ExternalRevokedCertificate",
 		// 	run: func() (caCert, cert *x509.Certificate, key any, err error) {
-		// 		_, externalTestServers, err := StartDMSManagerServiceTestServer(t, false)
+		// 		_, externalTestServers, err := StartDMSManagerServiceTestServer(t)
 		// 		if err != nil {
 		// 			t.Fatalf("could not create Second DMS Manager test server: %s", err)
 		// 		}
@@ -2723,7 +2704,7 @@ func TestESTEnroll(t *testing.T) {
 }
 
 func TestESTGetCACerts(t *testing.T) {
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -2960,7 +2941,7 @@ func TestESTServerKeyGen(t *testing.T) {
 	// t.Parallel()
 	ctx := context.Background()
 
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -3370,7 +3351,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 func TestESTReEnroll(t *testing.T) {
 	// t.Parallel()
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -4479,7 +4460,7 @@ func TestGetAllDMS(t *testing.T) {
 	// t.Parallel()
 	devsIds := [3]string{"test1", "test2", "test3"}
 	devsIds2 := [3]string{"test11", "test12", "test13"}
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}

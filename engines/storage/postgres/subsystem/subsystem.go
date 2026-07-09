@@ -75,6 +75,16 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize KMS tables: %s", err)
 				}
+			case "alerts":
+				_, err := postgres.NewSubscriptionsPostgresRepository(logger, postgresEngine.DB[schemaName])
+				if err != nil {
+					return fmt.Errorf("could not run reinitialize Subscriptions tables: %s", err)
+				}
+
+				_, err = postgres.NewEventsPostgresRepository(logger, postgresEngine.DB[schemaName])
+				if err != nil {
+					return fmt.Errorf("could not run reinitialize Events tables: %s", err)
+				}
 			default:
 				return fmt.Errorf("unknown schema name: %s", schemaName)
 			}

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -17,9 +16,9 @@ import (
 )
 
 func TestDeleteCertificateSDK(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -135,9 +134,9 @@ func TestDeleteCertificateSDK(t *testing.T) {
 }
 
 func TestDeleteCertificateService(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -187,9 +186,9 @@ func TestDeleteCertificateService(t *testing.T) {
 }
 
 func TestSignCertificateWithDefaultProfile(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -342,16 +341,12 @@ func createCertificateWithExtensions(t *testing.T, caSDK services.CAService, caI
 }
 
 func TestGetCertificatesFilterBySubjectKeyID(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
 	// Ensure clean DB and init CA
-	if err := serverTest.BeforeEach(); err != nil {
-		t.Fatalf("failed running BeforeEach: %s", err)
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 	_, err = initCA(caTest.Service)
 	if err != nil {
@@ -416,16 +411,12 @@ func TestGetCertificatesFilterBySubjectKeyID(t *testing.T) {
 }
 
 func TestGetCertificatesFilterBySubjectKeyIDNotIn(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
 	// Ensure clean DB and init CA
-	if err := serverTest.BeforeEach(); err != nil {
-		t.Fatalf("failed running BeforeEach: %s", err)
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 	_, err = initCA(caTest.Service)
 	if err != nil {
@@ -492,16 +483,12 @@ func TestGetCertificatesFilterBySubjectKeyIDNotIn(t *testing.T) {
 }
 
 func TestGetCertificatesFilterBySubjectKeyIDNotInIgnoreCase(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
 	// Ensure clean DB and init CA
-	if err := serverTest.BeforeEach(); err != nil {
-		t.Fatalf("failed running BeforeEach: %s", err)
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 	_, err = initCA(caTest.Service)
 	if err != nil {
@@ -570,15 +557,11 @@ func TestGetCertificatesFilterBySubjectKeyIDNotInIgnoreCase(t *testing.T) {
 }
 
 func TestGetCertificatesFilterByExtensionKeyUsage(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
-	if err := serverTest.BeforeEach(); err != nil {
-		t.Fatalf("failed running BeforeEach: %s", err)
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	ca := createActiveCA(t, caTest.HttpCASDK)
@@ -633,15 +616,11 @@ func TestGetCertificatesFilterByExtensionKeyUsage(t *testing.T) {
 }
 
 func TestGetCertificatesFilterByExtensionExtendedKeyUsageIgnoreCase(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
-	if err := serverTest.BeforeEach(); err != nil {
-		t.Fatalf("failed running BeforeEach: %s", err)
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	ca := createActiveCA(t, caTest.HttpCASDK)

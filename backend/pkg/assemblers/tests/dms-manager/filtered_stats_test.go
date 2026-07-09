@@ -18,7 +18,7 @@ func TestGetDMSStatsFiltered(t *testing.T) {
 	ctx := context.Background()
 
 	// Start server once for all subtests
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
