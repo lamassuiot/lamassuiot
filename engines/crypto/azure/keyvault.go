@@ -396,7 +396,6 @@ type keyVaultSignerWrapper struct {
 	version string
 	client  *azkeys.Client
 	pubKey  crypto.PublicKey
-	ctx     context.Context
 }
 
 func newKeyVaultSignerWrapper(ctx context.Context, client *azkeys.Client, keyName string) (crypto.Signer, error) {
@@ -420,7 +419,6 @@ func newKeyVaultSignerWrapper(ctx context.Context, client *azkeys.Client, keyNam
 		version: version,
 		client:  client,
 		pubKey:  pubKey,
-		ctx:     ctx,
 	}, nil
 }
 
@@ -434,7 +432,7 @@ func (k *keyVaultSignerWrapper) Sign(_ io.Reader, digest []byte, opts crypto.Sig
 		return nil, err
 	}
 
-	resp, err := k.client.Sign(k.ctx, k.keyName, k.version, azkeys.SignParameters{
+	resp, err := k.client.Sign(context.Background(), k.keyName, k.version, azkeys.SignParameters{
 		Algorithm: &alg,
 		Value:     digest,
 	}, nil)
