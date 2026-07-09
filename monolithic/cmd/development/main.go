@@ -531,11 +531,17 @@ func main() {
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,
 		PublisherEventBus:     eventBus,
-		Domains:               []string{"dev.lamassu.test", "localhost"},
-		GatewayPortHttps:      8443,
-		GatewayPortHttp:       8080,
-		AssemblyMode:          pkg.Http,
-		CryptoEngines:         cryptoEnginesConfig.CryptoEngines,
+		// Only FQDNs belong here: these domains are baked into issued certificates
+		// as OCSP/CRL (AIA/CRLDistributionPoints) URIs. "localhost" is a single
+		// label with no TLD and is not a valid URI host for a certificate
+		// (RFC 5280 / pkilint GeneralNameUriSyntaxValidator rejects it), so it is
+		// intentionally excluded. dev.lamassu.test resolves to 127.0.0.1 via
+		// /etc/hosts for local OCSP/CRL retrieval.
+		Domains:          []string{"dev.lamassu.test"},
+		GatewayPortHttps: 8443,
+		GatewayPortHttp:  8080,
+		AssemblyMode:     pkg.Http,
+		CryptoEngines:    cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
 			Enabled:   !*disableMonitor,
 			Frequency: "2m",

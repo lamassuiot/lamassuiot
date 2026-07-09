@@ -1,4 +1,4 @@
-package controllers
+package cmp
 
 import (
 	"crypto"
@@ -34,20 +34,28 @@ type rawResponsePKIMessage struct {
 
 // protectionAlgError flags a verifyRequestProtection failure rooted in the
 // protection AlgorithmIdentifier itself (unknown OID, deprecated hash, or
-// MAC-based protection). The CMP HTTP handler uses isProtectionAlgError to
-// map these into the PKIFailureInfo badAlg bit per RFC 9810 §5.1.3.
+// MAC-based protection). failInfo names the PKIFailureInfo bit the CMP HTTP
+// handler should emit: badAlg (0) for an unsupported/unknown algorithm, or
+// wrongIntegrity (12) when a MAC-based protection is used where a signature was
+// required (RFC 9483 §3.5 — the integrity type is wrong, not the algorithm
+// identifier unrecognized). Zero value means badAlg.
 type protectionAlgError struct {
-	msg string
+	msg      string
+	failInfo int
 }
 
 func (e *protectionAlgError) Error() string { return e.msg }
 
-// isProtectionAlgError reports whether err originates from a rejected
-// AlgorithmIdentifier. Used to choose between badAlg (0) and badMessageCheck
-// (1) when emitting PKIFailureInfo on verification failures.
-func isProtectionAlgError(err error) bool {
+// protectionAlgFailInfo returns the PKIFailureInfo bit for err when it is a
+// protectionAlgError, and (0, false) otherwise. Used to choose between badAlg,
+// wrongIntegrity and badMessageCheck when emitting PKIFailureInfo on
+// verification failures.
+func protectionAlgFailInfo(err error) (int, bool) {
 	var pae *protectionAlgError
-	return errors.As(err, &pae)
+	if errors.As(err, &pae) {
+		return pae.failInfo, true
+	}
+	return 0, false
 }
 
 // verifyRequestProtection verifies the signature-based protection of an
@@ -88,9 +96,15 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlg pkix.Algorith
 		return nil, nil
 	}
 
-	// Reject MAC-based protection algorithms unconditionally.
+	// Reject MAC-based protection algorithms unconditionally. This is a
+	// wrong-integrity-type failure (a MAC where a signature is required), which
+	// RFC 9483 §3.5 signals with wrongIntegrity rather than badAlg (the algorithm
+	// identifier is understood — it is simply the wrong kind of protection).
 	if protectionAlgOID.Equal(oidPasswordBasedMac) || protectionAlgOID.Equal(oidDHBasedMac) {
-		return nil, &protectionAlgError{msg: fmt.Sprintf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID)}
+		return nil, &protectionAlgError{
+			msg:      fmt.Sprintf("MAC-based CMP protection (OID %s) is not supported: only signature-based protection is accepted", protectionAlgOID),
+			failInfo: pkiFailureInfoWrongIntegrity,
+		}
 	}
 
 	if len(full.ExtraCerts) == 0 {
@@ -207,7 +221,29 @@ func marshalProtectedResponse(
 	if len(certChain) == 0 {
 		return nil, fmt.Errorf("marshalProtectedResponse: certChain must not be empty")
 	}
-	leaf := certChain[0]
+	// Ordinary case: the signer IS the leaf (extraCerts[0]).
+	return marshalProtectedResponseWithSigner(reqHeader, bodyTag, bodyDER, certChain, certChain[0], signer)
+}
+
+// marshalProtectedResponseWithSigner is marshalProtectedResponse with the
+// protection signer decoupled from extraCerts[0]. This is needed for RFC 9483
+// §4.1.6 KGA responses, where the CMS recipient/originator cert that MUST sit at
+// extraCerts[0] (so the compliance validator can match the recipient identifier
+// / run key agreement against it) is NOT the certificate whose key signs the
+// message protection. signerCert supplies the sender name and senderKID so the
+// recipient can still locate the protection certificate within extraCerts.
+func marshalProtectedResponseWithSigner(
+	reqHeader requestPKIHeader,
+	bodyTag int,
+	bodyDER []byte,
+	extraCertChain []*x509.Certificate,
+	signerCert *x509.Certificate,
+	signer crypto.Signer,
+) ([]byte, error) {
+	if len(extraCertChain) == 0 {
+		return nil, fmt.Errorf("marshalProtectedResponseWithSigner: extraCertChain must not be empty")
+	}
+	leaf := signerCert
 
 	protectionAlg, hash, err := cmpProtectionAlgorithm(signer)
 	if err != nil {
@@ -233,8 +269,8 @@ func marshalProtectedResponse(
 	}
 	respHeader.Sender = respSender
 
-	extraCerts := make([]responseCMPCerts, len(certChain))
-	for i, c := range certChain {
+	extraCerts := make([]responseCMPCerts, len(extraCertChain))
+	for i, c := range extraCertChain {
 		extraCerts[i] = responseCMPCerts{Raw: c.Raw}
 	}
 

@@ -121,6 +121,7 @@ if [ "${PER_SUITE}" = "1" ]; then
     source "${SUITE_DIR}/venv-cmp-tests/bin/activate" 2>/dev/null || true
     rebot --outputdir "${SUITE_DIR}/reports" --output combined.xml \
           --report combined-report.html --log combined-log.html \
+          --xunit xunit.xml \
           "${PARTS_DIR}"/*.xml || true
     python3 - "${SUITE_DIR}/reports/combined.xml" <<'PY'
 import sys, xml.etree.ElementTree as ET
@@ -276,6 +277,78 @@ if [ ! -f "config/lamassu.robot" ]; then
     fi
 fi
 
+# --- 3b. cross-certification trusted CA --------------------------------------
+# The cross-certification (ccr/ccp) tests protect the request with a CA whose
+# private key the suite must hold. Lamassu authorizes a ccr by the requester
+# being a CA (cA=TRUE in basicConstraints) — it does not require the CA to be
+# pre-registered — so a standalone self-signed CA is sufficient. Generate it at
+# the fixed path config/lamassu.robot points at (TRUSTED_CA_CERT/KEY/DIR).
+CROSSCERT_DIR="/tmp/cmp-crosscert"
+# TRUSTED_CA_DIR is scanned file-by-file as a certificate chain by the suite, so
+# the certificate lives in its own subdir (certs/) with NO key alongside it.
+CROSSCERT_CERTS="${CROSSCERT_DIR}/certs"
+if command -v openssl >/dev/null 2>&1; then
+    log "Generating self-signed trusted CA for cross-certification tests (${CROSSCERT_DIR})"
+    mkdir -p "${CROSSCERT_CERTS}"
+    if [ ! -f "${CROSSCERT_DIR}/trusted-ca.key" ] || [ ! -f "${CROSSCERT_CERTS}/trusted-ca.crt" ]; then
+        openssl ecparam -name prime256v1 -genkey -noout -out "${CROSSCERT_DIR}/trusted-ca.key" 2>/dev/null
+        # Single-RDN subject (CN only): the CMP sender/subject match compares the
+        # RDNSequence order-sensitively, and the suite rebuilds the sender from
+        # the cert subject; a single RDN avoids any attribute-ordering mismatch.
+        openssl req -new -x509 -key "${CROSSCERT_DIR}/trusted-ca.key" \
+            -out "${CROSSCERT_CERTS}/trusted-ca.crt" -days 3650 \
+            -subj "/CN=Cross-Cert Trusted CA" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign,digitalSignature" 2>/dev/null \
+            || warn "could not generate cross-cert trusted CA (ccr tests will be skipped/fail)"
+    fi
+else
+    warn "openssl not found; skipping cross-cert trusted CA generation"
+fi
+
+# --- 3b-2. foreign-PKI device credential -------------------------------------
+# `CA MUST Reject CR With Other PKI Management Entity Request` signs a cr with a
+# device certificate from a DIFFERENT PKI. Lamassu must reject it because the
+# signer does not chain to the DMS ValidationCAs. Generate a self-signed foreign
+# CA (never trusted by Lamassu) and a device cert under it; DEVICE_CERT_CHAIN is
+# the device cert + foreign CA in one PEM.
+FOREIGN_DIR="/tmp/cmp-foreign"
+if command -v openssl >/dev/null 2>&1; then
+    mkdir -p "${FOREIGN_DIR}"
+    if [ ! -f "${FOREIGN_DIR}/chain.pem" ]; then
+        openssl ecparam -name prime256v1 -genkey -noout -out "${FOREIGN_DIR}/foreign-ca.key" 2>/dev/null
+        openssl req -new -x509 -key "${FOREIGN_DIR}/foreign-ca.key" -out "${FOREIGN_DIR}/foreign-ca.crt" \
+            -days 3650 -subj "/CN=Foreign PKI Root" -addext "basicConstraints=critical,CA:TRUE" 2>/dev/null
+        openssl ecparam -name prime256v1 -genkey -noout -out "${FOREIGN_DIR}/device.key" 2>/dev/null
+        openssl req -new -key "${FOREIGN_DIR}/device.key" -out "${FOREIGN_DIR}/device.csr" \
+            -subj "/CN=foreign-device" 2>/dev/null
+        openssl x509 -req -in "${FOREIGN_DIR}/device.csr" -CA "${FOREIGN_DIR}/foreign-ca.crt" \
+            -CAkey "${FOREIGN_DIR}/foreign-ca.key" -CAcreateserial -out "${FOREIGN_DIR}/device.crt" \
+            -days 3650 2>/dev/null \
+            && cat "${FOREIGN_DIR}/device.crt" "${FOREIGN_DIR}/foreign-ca.crt" > "${FOREIGN_DIR}/chain.pem" \
+            || warn "could not generate foreign-PKI device cert (other-PKI test will skip)"
+    fi
+fi
+
+# --- 3c. resolvable VA hostname ----------------------------------------------
+# Issued certs carry AIA/CRL URLs for the VA at http://dev.lamassu.test:8080
+# (monolithic dev `Domains` — an FQDN, so pkilint accepts the URI syntax). The
+# revocation tests do a live OCSP request against that URL, but dev.lamassu.test
+# does not resolve in a clean environment. Rather than require an /etc/hosts
+# entry (root), teach the SUITE's Python to resolve it to loopback via a .pth
+# file in its venv — executed at interpreter startup, so requests/OCSP reach the
+# local server. Non-root and environment-independent.
+if [ -x "venv-cmp-tests/bin/python" ]; then
+    VENV_SITE=$(venv-cmp-tests/bin/python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
+    if [ -n "${VENV_SITE}" ] && [ -d "${VENV_SITE}" ]; then
+        printf '%s\n' "import socket; socket.getaddrinfo=(lambda _o: (lambda h,*a,**k: _o('127.0.0.1' if h=='dev.lamassu.test' else h, *a, **k)))(socket.getaddrinfo)" \
+            > "${VENV_SITE}/zz_va_host_alias.pth"
+        log "Installed venv resolver alias dev.lamassu.test -> 127.0.0.1 (${VENV_SITE}/zz_va_host_alias.pth)"
+    else
+        warn "could not locate venv site-packages; OCSP-based revocation tests may fail to resolve dev.lamassu.test"
+    fi
+fi
+
 # --- 4. CMP bootstrap ---------------------------------------------------------
 # The CA API comes up before sample-data finishes creating the CMP DMS, so wait
 # for the DMS itself (the gate the bootstrap actually needs) to avoid a race that
@@ -296,8 +369,14 @@ if [ "${DO_BOOTSTRAP}" = "1" ]; then
 fi
 
 # --- 5. run Robot Framework ---------------------------------------------------
-ROBOT_ARGS=( --pythonpath=./ --exclude verbose-tests --exclude pqc
-             --outputdir=reports --variable "environment:lamassu" )
+# Exclude post-quantum tests: `pqc` (hybrid/PQ suites), `pq` (the ML-DSA /
+# ML-KEM central-keygen cases in kga/extra_issuing) and `kem` (the ML-KEM /
+# hybrid-KEM encrypted-key cases in extra_issuing, which are tagged `kem` /
+# `hybrid-kem` without a bare `pq`). Lamassu runs PQ-free, so these are out of
+# scope; excluding `pq` also drops the liboqs-dependent paths. No classical test
+# is tagged `kem`, so this over-excludes nothing.
+ROBOT_ARGS=( --pythonpath=./ --exclude verbose-tests --exclude pqc --exclude pq --exclude kem
+             --outputdir=reports --xunit xunit.xml --variable "environment:lamassu" )
 [ -n "${INCLUDE}" ]  && ROBOT_ARGS+=( --include "${INCLUDE}" )
 [ -n "${TESTNAME}" ] && ROBOT_ARGS+=( --test "${TESTNAME}" )
 

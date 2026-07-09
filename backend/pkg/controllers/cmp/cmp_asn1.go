@@ -1,4 +1,4 @@
-package controllers
+package cmp
 
 import (
 	"crypto"
@@ -51,25 +51,25 @@ const (
 	// currently emit. Bit numbers are LITERAL RFC values — they are written on
 	// the wire and consumed by every other CMP implementation, so even a single
 	// off-by-one here means EEs see the wrong failure reason.
-	pkiFailureInfoBadAlg              = 0  // unrecognized or unsupported algorithm identifier
-	pkiFailureInfoBadMessageCheck     = 1  // integrity check (e.g. signature) failed
-	pkiFailureInfoBadRequest          = 2  // request not permitted / malformed for the server
-	pkiFailureInfoBadTime             = 3  // messageTime not sufficiently close to system time
-	pkiFailureInfoBadCertId           = 4  // no certificate could be found matching the request
-	pkiFailureInfoBadDataFormat       = 5  // the data submitted has the wrong format
-	pkiFailureInfoIncorrectData       = 7  // requester's data is incorrect (notary services)
-	pkiFailureInfoBadPOP              = 9  // proof-of-possession failed
-	pkiFailureInfoCertRevoked         = 10 // referenced/protection certificate is revoked
-	pkiFailureInfoWrongIntegrity      = 12 // wrong integrity type: MAC-based protection where a signature was required (RFC 9483 §3.5)
-	pkiFailureInfoBadRecipientNonce   = 13 // recipNonce did not match the expected senderNonce
+	pkiFailureInfoBadAlg             = 0  // unrecognized or unsupported algorithm identifier
+	pkiFailureInfoBadMessageCheck    = 1  // integrity check (e.g. signature) failed
+	pkiFailureInfoBadRequest         = 2  // request not permitted / malformed for the server
+	pkiFailureInfoBadTime            = 3  // messageTime not sufficiently close to system time
+	pkiFailureInfoBadCertId          = 4  // no certificate could be found matching the request
+	pkiFailureInfoBadDataFormat      = 5  // the data submitted has the wrong format
+	pkiFailureInfoIncorrectData      = 7  // requester's data is incorrect (notary services)
+	pkiFailureInfoBadPOP             = 9  // proof-of-possession failed
+	pkiFailureInfoCertRevoked        = 10 // referenced/protection certificate is revoked
+	pkiFailureInfoWrongIntegrity     = 12 // wrong integrity type: MAC-based protection where a signature was required (RFC 9483 §3.5)
+	pkiFailureInfoBadRecipientNonce  = 13 // recipNonce did not match the expected senderNonce
 	pkiFailureInfoAddInfoNotAvailable = 17 // request needs information the server cannot supply (RFC 9810 §5.1.3)
-	pkiFailureInfoBadSenderNonce      = 18 // sender nonce missing or too short (RFC 9483 §3.5)
-	pkiFailureInfoBadCertTemplate     = 19 // submitted CertTemplate is incomplete or invalid
-	pkiFailureInfoSignerNotTrusted    = 20 // protection signer cert not trusted / no trust anchor (RFC 9483 §3.5)
-	pkiFailureInfoTransactionIDInUse  = 21 // transactionID collides with an in-flight one (RFC 9810 §3.1)
-	pkiFailureInfoUnsupportedVersion  = 22 // pvno not understood (RFC 9810 §7 / RFC 9483 §3.5)
-	pkiFailureInfoNotAuthorized       = 23 // sender not authorized for the request (RFC 9810 §3.1)
-	pkiFailureInfoSystemFailure       = 25
+	pkiFailureInfoBadSenderNonce     = 18 // sender nonce missing or too short (RFC 9483 §3.5)
+	pkiFailureInfoBadCertTemplate    = 19 // submitted CertTemplate is incomplete or invalid
+	pkiFailureInfoSignerNotTrusted   = 20 // protection signer cert not trusted / no trust anchor (RFC 9483 §3.5)
+	pkiFailureInfoTransactionIDInUse = 21 // transactionID collides with an in-flight one (RFC 9810 §3.1)
+	pkiFailureInfoUnsupportedVersion = 22 // pvno not understood (RFC 9810 §7 / RFC 9483 §3.5)
+	pkiFailureInfoNotAuthorized      = 23 // sender not authorized for the request (RFC 9810 §3.1)
+	pkiFailureInfoSystemFailure      = 25
 	// pkiStatusWaiting is RFC 4210 §5.2.3 PKIStatus value 3, sent on the initial
 	// ip/cp/kup response in async-issuance mode to tell the EE that the
 	// certificate is not yet available and it should poll for it later.
@@ -626,10 +626,10 @@ type revDetails struct {
 //	    certDetails     CertTemplate,
 //	    crlEntryDetails Extensions OPTIONAL }
 //
-//	CertTemplate ::= SEQUENCE {
-//		    version      [0], serialNumber [1] INTEGER, signingAlg [2],
-//		    issuer       [3] Name, validity [4], subject [5] Name,
-//		    publicKey    [6] SubjectPublicKeyInfo, ..., extensions [9] }
+// CertTemplate ::= SEQUENCE {
+//	    version      [0], serialNumber [1] INTEGER, signingAlg [2],
+//	    issuer       [3] Name, validity [4], subject [5] Name,
+//	    publicKey    [6] SubjectPublicKeyInfo, ..., extensions [9] }
 //
 // Per RFC 4211, Name (a CHOICE) is EXPLICITLY tagged so issuer [3] / subject [5]
 // wrap a full Name TLV; SubjectPublicKeyInfo [6] is IMPLICITLY tagged so its
@@ -759,6 +759,7 @@ func collectCRLReasons(der []byte) (reasons []int, count int, decodeErr bool) {
 	}
 	return reasons, count, decodeErr
 }
+
 
 // rewrapBodyAsSequence re-wraps the raw content bytes of an IMPLICIT-tagged
 // body CHOICE (where the SEQUENCE outer tag was replaced by the CHOICE tag)

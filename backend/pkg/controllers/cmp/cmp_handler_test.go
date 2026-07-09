@@ -1,4 +1,4 @@
-package controllers
+package cmp
 
 import (
 	"bytes"
@@ -11,8 +11,8 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/base64"
+	"encoding/asn1"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -326,9 +326,7 @@ type mockServiceWithStoreAndWFX struct {
 	wfx   cmpwfx.CMPReporter
 }
 
-func (m *mockServiceWithStoreAndWFX) GetCMPTransactionRepo() storage.CMPTransactionRepo {
-	return m.store
-}
+func (m *mockServiceWithStoreAndWFX) GetCMPTransactionRepo() storage.CMPTransactionRepo { return m.store }
 func (m *mockServiceWithStoreAndWFX) GetCMPWFXReporter() cmpwfx.CMPReporter { return m.wfx }
 
 func newTestRouterWithStore(svc *cmpmock.MockLightweightCMPService) (*gin.Engine, *inMemoryCMPStore) {

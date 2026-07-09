@@ -68,7 +68,15 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.module.tag }}
+          path: ${{ matrix.module.path }}/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
@@ -105,7 +113,15 @@ jobs:
         env:
           PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-crypto-pkcs11
+          path: engines/crypto/pkcs11/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
@@ -161,7 +177,15 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.module.tag }}
+          path: ${{ matrix.module.path }}/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
@@ -195,7 +219,15 @@ jobs:
         id: run
         working-directory: backend
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-backend-rest
+          path: backend/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
@@ -264,3 +296,11 @@ jobs:
         with:
           name: cmp-e2e-report
           path: cmp-test-suite/reports/
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-cmp-e2e
+          path: cmp-test-suite/reports/xunit.xml
+          if-no-files-found: warn

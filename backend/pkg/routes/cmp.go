@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
+	cmpctl "github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
@@ -19,7 +19,7 @@ import (
 // A content-type guard middleware rejects requests that do not carry the
 // application/pkixcmp media type (RFC 6712 §3.1).
 func NewCMPHTTPLayer(logger *logrus.Entry, rg *gin.RouterGroup, svc services.LightweightCMPService) error {
-	routes, err := controllers.NewCMPHttpRoutes(logger, svc)
+	routes, err := cmpctl.NewCMPHttpRoutes(logger, svc)
 	if err != nil {
 		return err
 	}
