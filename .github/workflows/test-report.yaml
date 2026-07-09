@@ -1,0 +1,39 @@
+# Publishes a "quick view" test-results table (like the GitHub Actions checks
+# summary screenshot) from the JUnit/xUnit artifacts uploaded by the
+# "GO Unit Testing" workflow.
+#
+# It runs via `workflow_run` (not directly on pull_request) so it also works for
+# pull requests opened from forks: those runs get a read-only GITHUB_TOKEN and
+# cannot create check runs, whereas this workflow runs in the base repository
+# context with `checks: write`.
+name: Test Report
+
+on:
+  workflow_run:
+    workflows: ['GO Unit Testing']   # must match the `name:` of ci-test.yaml
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read      # required to download artifacts from the triggering run
+  checks: write      # required to publish the check run with the results table
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish test results
+        uses: dorny/test-reporter@v2
+        with:
+          # Consume every artifact named test-results-<something> uploaded by
+          # the CI run. The capture group is substituted into `name` so each
+          # module gets its own check (e.g. "Tests: core", "Tests: cmp-e2e").
+          artifact: /test-results-(.*)/
+          name: 'Tests: $1'
+          path: '*.xml'
+          # gotestsum --junitfile and Robot --xunit both emit JUnit XML.
+          reporter: java-junit
+          # Don't fail this workflow when tests failed in CI — the table itself
+          # is the signal; CI already reflects pass/fail on its own checks.
+          fail-on-error: false

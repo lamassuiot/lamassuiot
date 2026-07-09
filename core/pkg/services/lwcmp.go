@@ -80,6 +80,74 @@ type LightweightCMPProtectionProvider interface {
 	LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error)
 }
 
+// LightweightCMPConfirmer commits a deferred re-enrollment (kur) once the EE
+// has confirmed the newly issued certificate.
+//
+// Under RFC 9483 §4.1.3, a key-update is only final after the EE sends certConf
+// (or, when implicit confirmation is negotiated, at IP/KUP delivery). Until
+// then the device's active identity MUST remain the previous certificate so
+// that an unconfirmed update can be rolled back on timeout. LWCReenroll
+// therefore only issues the new certificate; the identity bind and supersession
+// of the previous certificate are deferred to LWCConfirmReenrollment, which the
+// CMP controller invokes from handleCertConf (explicit) or immediately after
+// issuance (implicit confirm).
+type LightweightCMPConfirmer interface {
+	// LWCConfirmReenrollment binds the newly issued certificate (identified by
+	// its hex serial number) as the device's active identity and supersedes the
+	// previously active certificate. aps is the DMS id. It is safe to call more
+	// than once for the same serial.
+	LWCConfirmReenrollment(ctx context.Context, aps string, certSerialNumber string) error
+}
+
+// KGAHelperPurpose selects which kind of ephemeral helper certificate the CMP
+// controller needs the service to issue for an RFC 9483 §4.1.6 central key
+// generation response.
+type KGAHelperPurpose int
+
+const (
+	// KGAHelperSigner is the KGA signing certificate: it carries the
+	// id-kp-cmKGA extendedKeyUsage and signs the CMS SignedData that wraps the
+	// centrally generated key. It must chain to a trust anchor.
+	KGAHelperSigner KGAHelperPurpose = iota
+	// KGAHelperKARIOriginator is the EC key-agreement originator certificate
+	// used for the KARI technique: it must carry keyAgreement (and
+	// digitalSignature, since it also signs the CMP response protection so it
+	// lands as extraCerts[0], which the recipient runs ECDH against).
+	KGAHelperKARIOriginator
+)
+
+// LightweightCMPKeyGenerator provides RFC 9483 §4.1.6 central key generation
+// support at the service layer: it issues the short-lived helper certificates a
+// KGA response needs, from the DMS's enrollment CA, WITHOUT registering a device
+// or binding an identity. The controller generates the corresponding private
+// keys in memory (software engine) and supplies a self-signed CSR.
+type LightweightCMPKeyGenerator interface {
+	// LWCIssueKGAHelperCertificate signs csr under the enrollment CA of the DMS
+	// identified by aps, using an issuance profile appropriate to purpose, and
+	// returns the issued leaf certificate together with its issuing chain
+	// (leaf-exclusive, root last) for embedding in the KGA SignedData so the
+	// recipient can validate the signer up to a trust anchor.
+	LWCIssueKGAHelperCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, purpose KGAHelperPurpose) (*x509.Certificate, []*x509.Certificate, error)
+}
+
+// LightweightCMPCrossCertifier provides CMP cross-certification (ccr/ccp,
+// RFC 4210bis §5.3.11): the DMS's enrollment CA issues a certificate for
+// another CA's key/subject (as described by the request CertTemplate). The
+// controller performs the CMP-level authorization (the requester must
+// authenticate as a CA) and CertTemplate validation before calling this.
+type LightweightCMPCrossCertifier interface {
+	// LWCIssueCrossCertificate signs csr under the enrollment CA of the DMS
+	// identified by aps and returns the issued cross-certificate together with
+	// its issuing chain (leaf-exclusive, root last) for the ccp response.
+	//
+	// reqNotBefore / reqNotAfter carry the validity requested in the ccr
+	// CertTemplate (RFC 4210bis App. D.6 requires the validity field). When
+	// non-nil they are honoured: the requested notBefore is applied as-is and the
+	// requested notAfter is honoured up to the profile's maximum cross-cert
+	// lifetime (capped, never extended). When nil, the profile default is used.
+	LWCIssueCrossCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, reqNotBefore, reqNotAfter *time.Time) (*x509.Certificate, []*x509.Certificate, error)
+}
+
 // LWCEnrollmentOptions is returned by LWCGetEnrollmentOptions and carries the
 // DMS-level CMP settings the controller needs to make dispatch decisions
 // (e.g. whether implicit confirmation is allowed).

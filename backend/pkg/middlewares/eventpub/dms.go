@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"crypto/x509"
 	"fmt"
+	"time"
 
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -207,6 +208,30 @@ func (mw dmsEventPublisher) LWCProtectionCredentials(ctx context.Context, aps st
 		return nil, nil, fmt.Errorf("cmp protection credentials not available")
 	}
 	return provider.LWCProtectionCredentials(ctx, aps)
+}
+
+func (mw dmsEventPublisher) LWCConfirmReenrollment(ctx context.Context, aps string, certSerialNumber string) error {
+	confirmer, ok := mw.next.(services.LightweightCMPConfirmer)
+	if !ok {
+		return fmt.Errorf("cmp reenrollment confirmer not available")
+	}
+	return confirmer.LWCConfirmReenrollment(ctx, aps, certSerialNumber)
+}
+
+func (mw dmsEventPublisher) LWCIssueKGAHelperCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, purpose services.KGAHelperPurpose) (*x509.Certificate, []*x509.Certificate, error) {
+	keyGen, ok := mw.next.(services.LightweightCMPKeyGenerator)
+	if !ok {
+		return nil, nil, fmt.Errorf("cmp central key generation not available")
+	}
+	return keyGen.LWCIssueKGAHelperCertificate(ctx, aps, csr, purpose)
+}
+
+func (mw dmsEventPublisher) LWCIssueCrossCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, reqNotBefore, reqNotAfter *time.Time) (*x509.Certificate, []*x509.Certificate, error) {
+	crossCertifier, ok := mw.next.(services.LightweightCMPCrossCertifier)
+	if !ok {
+		return nil, nil, fmt.Errorf("cmp cross certification not available")
+	}
+	return crossCertifier.LWCIssueCrossCertificate(ctx, aps, csr, reqNotBefore, reqNotAfter)
 }
 
 // GetCMPTransactionRepo forwards the optional cmpTransactionStorer interface

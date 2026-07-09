@@ -768,7 +768,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		eventDescription = fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion)
 	}
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-		ID:   crt.Subject.CommonName,
+		ID:   device.ID,
 		Slot: *idSlot,
 	})
 	if err != nil {
@@ -777,7 +777,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	}
 
 	_, err = svc.deviceManagerCli.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
-		DeviceID:    crt.Subject.CommonName,
+		DeviceID:    device.ID,
 		Timestamp:   time.Now(),
 		Type:        eventType,
 		Description: eventDescription,

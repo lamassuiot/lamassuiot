@@ -73,6 +73,18 @@ type CMPTransaction struct {
 	// The client echoes it back as recipNonce in certConf; the server checks
 	// they match (RFC 4210 §5.1.1).
 	SentNonce string
+	// ReceivedNonce is the hex-encoded senderNonce from the EE's initiating
+	// request (ir/cr/kur). The certConf MUST carry a *fresh* senderNonce, so the
+	// server rejects a certConf that reuses this value (RFC 9483 §3.1
+	// badSenderNonce). Empty for legacy rows written before this was tracked.
+	ReceivedNonce string
+	// SupersededCertSerial is, for key-update (kur) transactions, the hex serial
+	// number of the certificate being updated (the request's protection cert).
+	// While this transaction is ISSUED-but-unconfirmed, that certificate must
+	// not start further operations (RFC 9483 §4.1.3) — see
+	// HasUnconfirmedReenrollment. Empty for ir/cr transactions and for
+	// unprotected (NO_AUTH) key updates.
+	SupersededCertSerial string
 	// State is the lifecycle state of this transaction; see CMPTransactionState.
 	State CMPTransactionState
 	// ErrorMessage holds the CA failure reason when State == ISSUE_FAILED.
@@ -129,6 +141,30 @@ type CMPTransactionRepo interface {
 	// with the given hex transactionID is present. It is a read-only check
 	// used to reject replayed requests before any enrollment side-effects occur.
 	Exists(ctx context.Context, transactionID string) (bool, error)
+
+	// HasUnconfirmedReenrollment reports whether an active (ISSUED, non-expired)
+	// re-enrollment (kur) transaction exists that is updating the certificate
+	// with the given hex serial number (SupersededCertSerial) under the DMS.
+	// Used to reject further operations with that certificate — a second KUR,
+	// a new enrollment, a revocation — while its update is still awaiting
+	// certConf (RFC 9483 §4.1.3). Scoped to the certificate rather than the
+	// device CN because multiple certificates can legitimately share a subject
+	// (one CN may be re-enrolled repeatedly); it is the *certificate under
+	// update* that is locked, not the whole identity. Returns false once the
+	// prior transaction has been confirmed (CONFIRMED), rolled back on timeout
+	// (REVOKED), or has otherwise expired.
+	HasUnconfirmedReenrollment(ctx context.Context, dmsID, supersededCertSerial string) (bool, error)
+
+	// HasAbandonedReenrollment reports whether a re-enrollment (kur)
+	// transaction that was updating the certificate with the given hex serial
+	// number (SupersededCertSerial) under the DMS was abandoned: issued but
+	// never confirmed and then rolled back on confirmation timeout (state
+	// REVOKED). It is the post-timeout counterpart of HasUnconfirmedReenrollment
+	// (which covers the still-pending window). The ir/cr enrollment path uses it
+	// to force a device that abandoned a key-update to recover via a new kur
+	// rather than an initialization/certification request (RFC 9483 §4.1.3,
+	// sec-awareness). Scoped to the certificate, not the device CN.
+	HasAbandonedReenrollment(ctx context.Context, dmsID, supersededCertSerial string) (bool, error)
 
 	// Insert persists a new transaction.
 	// Returns ErrCMPTransactionAlreadyExists when a live transaction with the
@@ -192,6 +228,16 @@ type CMPTransactionRepo interface {
 	// successful CMP revocation request so the UI can show the full lifecycle.
 	// No-op if no matching transaction is found.
 	MarkRevokedByCertSerial(ctx context.Context, certSerialNumber string) error
+
+	// SelectByCertSerial returns the transaction that issued the certificate
+	// with the given hex serial number, regardless of state or expiry.
+	// Used by the enrollment paths to classify a non-active protection
+	// certificate: when the transaction that issued the device's current
+	// active cert is a confirmed key update (kur), the superseded cert can no
+	// longer authenticate (RFC 9483 §4.1.3 → certRevoked); a cert superseded
+	// by a plain replaceable re-enrollment stays usable.
+	// Returns (zero, false, nil) when no transaction references the serial.
+	SelectByCertSerial(ctx context.Context, certSerialNumber string) (CMPTransaction, bool, error)
 
 	// SelectExpiredIssued returns up to `limit` transactions in ISSUED state
 	// whose ExpiresAt is in the past, oldest first. The CMP confirmation

@@ -101,6 +101,49 @@ cmp_bootstrap_setup() {
     }
     echo "${sign_resp}" | jq -r '.certificate' | base64 -d > "${workdir}/signer.crt"
 
+    # 3b. RA credential for RFC 9483 §5.2.3.2 raVerified tests: a certificate
+    #     carrying id-kp-cmcRA (1.3.6.1.5.5.7.3.28), issued by the bootstrap CA so
+    #     it chains to a DMS ValidationCA. Lamassu accepts a raVerified POPO only
+    #     when the message-protection signer is such a trusted RA. Also used as
+    #     the added-protection RA (OTHER_TRUSTED_PKI) for the nested tests.
+    local ra_profile_resp ra_profile_id ra_sign_resp ra_dir="${workdir}/ra-certs"
+    mkdir -p "${ra_dir}"
+    ra_profile_resp=$(curl -sf -X POST "${server}/api/ca/v1/profiles" \
+        -H 'Content-Type: application/json' \
+        -d '{
+            "name": "cmp-bootstrap-ra-profile-'"${stamp}"'",
+            "description": "RA profile with id-kp-cmcRA for raVerified tests",
+            "validity": {"type": "Duration", "duration": "365d"},
+            "honor_key_usage": false,
+            "key_usage": ["DigitalSignature"],
+            "honor_extended_key_usages": false,
+            "extended_key_usages": [],
+            "extra_extended_key_usage_oids": ["1.3.6.1.5.5.7.3.28"]
+        }') && ra_profile_id=$(echo "${ra_profile_resp}" | jq -r '.id')
+    if [ -n "${ra_profile_id:-}" ] && [ "${ra_profile_id}" != "null" ]; then
+        openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "${workdir}/ra.key" 2>/dev/null
+        openssl req -new -key "${workdir}/ra.key" -out "${workdir}/ra.csr" -subj "/CN=cmp-trusted-ra" 2>/dev/null
+        local ra_csr_b64; ra_csr_b64=$(openssl req -in "${workdir}/ra.csr" -outform PEM 2>/dev/null | base64 -w0)
+        ra_sign_resp=$(curl -sf -X POST "${server}/api/ca/v1/cas/${ca_id}/certificates/sign" \
+            -H 'Content-Type: application/json' \
+            -d '{"csr": "'"${ra_csr_b64}"'", "profile_id": "'"${ra_profile_id}"'"}')
+        if [ -n "${ra_sign_resp}" ]; then
+            echo "${ra_sign_resp}" | jq -r '.certificate' | base64 -d > "${ra_dir}/ra.crt"
+            # Bootstrap CA cert completes the RA chain for the suite's
+            # `Build Cert Chain From Dir` (RA -> bootstrap CA). The CA object nests
+            # the base64 PEM at .certificate.certificate. Only write it if
+            # non-empty — an empty file would break the suite's chain parser.
+            local ca_pem; ca_pem=$(echo "${ca_resp}" | jq -r '.certificate.certificate // empty' | base64 -d 2>/dev/null)
+            if [ -n "${ca_pem}" ]; then
+                printf '%s\n' "${ca_pem}" > "${ra_dir}/bootstrap-ca.crt"
+            fi
+            export BOOTSTRAP_RA_KEY="${workdir}/ra.key"
+            export BOOTSTRAP_RA_CERT="${ra_dir}/ra.crt"
+            export BOOTSTRAP_RA_DIR="${ra_dir}"
+        fi
+    fi
+    [ -f "${ra_dir}/ra.crt" ] || echo "cmp_bootstrap_setup: RA cert provisioning skipped (raVerified/nested tests may fail)" >&2
+
     # 4. Patch the DMS: append the bootstrap CA to ValidationCAs (idempotent,
     #    dedup-on-PUT via `unique`). UpdateDMS replaces the whole resource so
     #    we read the current state and mutate just the field we care about.

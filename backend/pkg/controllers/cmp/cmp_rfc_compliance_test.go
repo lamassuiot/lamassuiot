@@ -1,4 +1,4 @@
-package controllers
+package cmp
 
 // RFC compliance tests for CMP v3 critical fixes C1–C10.
 //
@@ -1321,11 +1321,11 @@ func parseResponseSenderNonce(t *testing.T, responseDER []byte) []byte {
 //
 // Walks the full transaction:
 //
-//  1. EE → IR (pvno=3) → server issues, replies IP (pvno=3, dropped).
-//  2. EE → pollReq (pvno=3, same txID) → server redelivers cert in IP
-//     (pvno=3, with the same senderNonce as the original IP).
-//  3. EE → certConf (pvno=3, recipNonce = stored sentNonce) → server
-//     replies pkiConf (pvno=3) and transitions tx to CONFIRMED.
+//	1. EE → IR (pvno=3) → server issues, replies IP (pvno=3, dropped).
+//	2. EE → pollReq (pvno=3, same txID) → server redelivers cert in IP
+//	   (pvno=3, with the same senderNonce as the original IP).
+//	3. EE → certConf (pvno=3, recipNonce = stored sentNonce) → server
+//	   replies pkiConf (pvno=3) and transitions tx to CONFIRMED.
 //
 // RFC 9810 §7 line 3754 anchors the pvno-echo requirement; this test
 // exercises it across every step of the drop-recover flow.

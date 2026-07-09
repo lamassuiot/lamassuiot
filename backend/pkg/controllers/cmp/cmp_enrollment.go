@@ -1,4 +1,4 @@
-package controllers
+package cmp
 
 import (
 	"context"
@@ -458,8 +458,8 @@ func (r *cmpHttpRoutes) issueAndStore(
 		// ir/cr and for unprotected updates.
 		SupersededCertSerial: params.supersededCertSerial,
 		ConfirmedAt:          confirmedAt,
-		ExpiresAt:            time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
-		CreatedAt:            time.Now(),
+		ExpiresAt:         time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
+		CreatedAt:         time.Now(),
 	}); storeErr != nil {
 		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 			lFunc.Warnf("duplicate transactionID %s", txHex)

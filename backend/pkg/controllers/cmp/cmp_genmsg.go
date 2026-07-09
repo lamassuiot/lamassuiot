@@ -1,4 +1,4 @@
-package controllers
+package cmp
 
 import (
 	"context"
@@ -68,6 +68,7 @@ func selectSupportedLangTag(offered []string) (string, bool) {
 	}
 	return "", false
 }
+
 
 // genITAV is the decoded request InfoTypeAndValue. infoValue is OPTIONAL; an
 // absent value leaves InfoValue at its zero RawValue (FullBytes == nil).

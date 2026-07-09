@@ -133,6 +133,18 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		return nil, err
 	}
 
+	// Extended key usage purposes requested in the CSR that have no Go
+	// x509.ExtKeyUsage constant (e.g. the CMP OIDs id-kp-cmcRA/cmcCA/cmKGA) are
+	// dropped by ExtractKeyUsageFromCSR. Carry them through UnknownExtKeyUsage so
+	// a profile that honors extendedKeyUsage issues a certificate containing the
+	// requested purpose (otherwise the issued cert differs from the request and
+	// the CMP layer must downgrade the status to grantedWithMods).
+	unknownExtKu, err := chelpers.ExtractUnknownExtKeyUsageOIDsFromCSR(csr)
+	if err != nil {
+		lFunc.Errorf("could not extract custom extended key usage OIDs from CSR: %s", err)
+		return nil, err
+	}
+
 	// Build certificate template pre-populated with CSR data
 	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm:    csr.PublicKeyAlgorithm,
@@ -144,6 +156,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		Subject:               csr.Subject,
 		KeyUsage:              ku,
 		ExtKeyUsage:           extKu,
+		UnknownExtKeyUsage:    unknownExtKu,
 		OCSPServer:            []string{},
 		CRLDistributionPoints: []string{},
 	}
@@ -174,6 +187,17 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	if err != nil {
 		lFunc.Errorf("could not apply issuance profile to certificate template: %s", err)
 		return nil, err
+	}
+
+	// When the profile honours the requested subject, preserve its exact DER
+	// encoding (including the directory-string choice, e.g. UTF8String) by
+	// carrying the raw subject through. Otherwise x509.CreateCertificate
+	// re-encodes the parsed pkix.Name and may emit a PrintableString where the
+	// request used a UTF8String, which breaks byte-exact subject comparison
+	// (e.g. RFC 4210bis cross-certification requires the issued subject to match
+	// the requested CertTemplate subject exactly).
+	if profile.HonorSubject && len(csr.RawSubject) > 0 {
+		certificateTemplate.RawSubject = csr.RawSubject
 	}
 
 	entropy := software.NewLamassuEntropy(ctx)
@@ -318,6 +342,12 @@ func (engine X509Engine) applyIssuanceProfileToTemplate(ctx context.Context, tem
 
 	// Apply validity period
 	template.NotBefore = now
+	if profile.NotBefore != nil {
+		// Transient issuance-time override (e.g. CMP cross-certification honouring
+		// the requested CertTemplate validity start). NotAfter for Duration-type
+		// profiles is still measured from `now` to preserve existing semantics.
+		template.NotBefore = *profile.NotBefore
+	}
 	if profile.Validity.Type == models.Duration {
 		template.NotAfter = now.Add(time.Duration(profile.Validity.Duration))
 	} else {
@@ -353,7 +383,26 @@ func (engine X509Engine) applyIssuanceProfileToTemplate(ctx context.Context, tem
 			finalExtKeyUsage = append(finalExtKeyUsage, x509.ExtKeyUsage(usage))
 		}
 		template.ExtKeyUsage = finalExtKeyUsage
+		// Also discard any custom (unmapped) EKU OIDs sourced from the CSR: when
+		// the profile does not honor the request's extendedKeyUsage, only the
+		// profile-declared purposes (mapped set above, plus ExtraExtendedKeyUsageOIDs
+		// appended below) may appear in the issued certificate.
+		template.UnknownExtKeyUsage = nil
 		lFunc.Debugf("extended key usage overridden by profile: %v", template.ExtKeyUsage)
+	}
+
+	// Custom extendedKeyUsage purposes that have no Go x509.ExtKeyUsage constant
+	// (e.g. id-kp-cmKGA for RFC 9483 §4.1.6 central key generation) are carried as
+	// dotted OID strings and emitted via UnknownExtKeyUsage. These are always
+	// applied (independent of HonorExtendedKeyUsages, which only governs the
+	// mapped set) because they can only originate from the profile, never a CSR.
+	for _, rawOID := range profile.ExtraExtendedKeyUsageOIDs {
+		oid, err := chelpers.ParseObjectIdentifier(rawOID)
+		if err != nil {
+			return fmt.Errorf("invalid extra extended key usage OID %q: %w", rawOID, err)
+		}
+		template.UnknownExtKeyUsage = append(template.UnknownExtKeyUsage, oid)
+		lFunc.Debugf("added custom extended key usage OID from profile: %s", rawOID)
 	}
 
 	// Apply extensions - only keep allowed extensions if HonorExtensions is true
