@@ -305,3 +305,4 @@ jobs:
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.finalize.outputs.release_version }}
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:latest
           push: true
+          sbom: true

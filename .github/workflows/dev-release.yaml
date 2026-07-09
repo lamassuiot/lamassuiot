@@ -113,3 +113,4 @@ jobs:
           tags: |
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ env.TAG }}
           push: true
+          sbom: true
