@@ -302,5 +302,41 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-cmp-e2e
-          path: cmp-test-suite/reports/xunit.xml
+          # One JUnit/xUnit file per Robot suite (Basic, Cert Conf Tests, ...).
+          # The report job below globs '*.xml', so this renders as one row
+          # per suite in the summary instead of a single flattened report.
+          path: cmp-test-suite/reports/junit/*.xml
           if-no-files-found: warn
+
+  report:
+    name: Test Report
+    runs-on: ubuntu-latest
+    # Runs after every test job regardless of pass/fail, so the summary table
+    # always reflects the full run (including which suites/modules failed).
+    needs: [test, test-pkcs11, test-backend-assemblers, test-backend-rest, e2e-cmp]
+    if: always()
+    permissions:
+      contents: read
+      actions: read   # required to fetch this run's test-results-* artifacts
+      checks: write   # required to publish the check run with the results table
+    steps:
+      - name: Publish test results
+        uses: dorny/test-reporter@v2
+        with:
+          # Consume every artifact named test-results-<something> uploaded by
+          # the jobs above. The capture group is substituted into `name` so
+          # each module gets its own check (e.g. "Tests: core", "Tests: cmp-e2e").
+          artifact: /test-results-(.*)/
+          name: 'Tests: $1'
+          path: '*.xml'
+          # gotestsum --junitfile and Robot --xunit both emit JUnit XML.
+          reporter: java-junit
+          # Don't fail this workflow when tests failed in CI — the table itself
+          # is the signal; the individual test jobs already reflect pass/fail.
+          fail-on-error: false
+          # Compact table only (one row per result file with pass/fail/skip
+          # counts) — no per-test listing. Keeps the CMP e2e report readable
+          # (11 suite files) instead of dumping all ~250 individual tests.
+          only-summary: true
+          # Write the same table to this run's own Actions "Summary" page.
+          use-actions-summary: true
