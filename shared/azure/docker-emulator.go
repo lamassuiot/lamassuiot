@@ -1,13 +1,16 @@
 package azure
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strconv"
+	"time"
 
 	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/moby/moby/api/types/network"
+	"github.com/ory/dockertest/v4"
 )
 
 const (
@@ -21,21 +24,17 @@ const (
 // container teardown) plus a populated AzureSDKConfig that callers can use to
 // build Azure SDK clients against the emulator.
 func RunAzureEmulationFlociAZDocker(exposeAsStandardPort bool) (func() error, func() error, *AzureSDKConfig, error) {
-	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "floci/floci-az",
-		Tag:        "0.8.0",
-	}, func(hc *docker.HostConfig) {
-		if exposeAsStandardPort {
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"4577/tcp": {
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "4577",
-					},
-				},
-			}
-		}
-	})
+	runOpts := []dockertest.RunOption{
+		dockertest.WithTag("0.8.0"),
+	}
+	if exposeAsStandardPort {
+		runOpts = append(runOpts, dockertest.WithPortBindings(network.PortMap{
+			network.MustParsePort("4577/tcp"): []network.PortBinding{
+				{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "4577"},
+			},
+		}))
+	}
+	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker("floci/floci-az", runOpts...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -44,7 +43,7 @@ func RunAzureEmulationFlociAZDocker(exposeAsStandardPort bool) (func() error, fu
 	endpoint := fmt.Sprintf("http://127.0.0.1:%d", p)
 
 	// Retry until the emulator is ready to handle requests.
-	err = dockerHost.Retry(func() error {
+	err = dockerHost.Retry(context.Background(), time.Minute, func() error {
 		r, err := http.DefaultClient.Get(endpoint)
 		if err != nil {
 			return err
