@@ -356,9 +356,11 @@ jobs:
       # summary table is labeled just by its family name (core.xml, CA.xml,
       # DMS Manager.xml, ...) — no nested artifact path. Safe: the repo tracks
       # no *.xml at its root, so the glob below only ever matches these copies.
-      # The CMP artifact already holds one file per Robot suite (Basic.xml,
-      # Cert Conf Tests.xml, ...); prefix those with "CMP - " so they stay
-      # recognizable next to everything else.
+      # The CMP artifact holds one file per Robot suite (Basic.xml, Cert Conf
+      # Tests.xml, ...); those are MERGED into a single CMP.xml so the whole
+      # e2e suite shows as ONE grouped "CMP" row (aggregate pass/fail/skip)
+      # instead of 11 separate rows. The per-suite files stay in the uploaded
+      # artifact for anyone who wants the granular breakdown.
       - name: Flatten test-result files for a readable summary
         run: |
           for dir in test-results/test-results-*/; do
@@ -366,10 +368,22 @@ jobs:
             family="$(basename "${dir%/}")"
             family="${family#test-results-}"
             if [ "${family}" = "cmp-e2e" ]; then
-              for f in "${dir}"*.xml; do
-                [ -e "${f}" ] || continue
-                cp "${f}" "./CMP - $(basename "${f}")"
-              done
+              # Merge every per-suite file into one CMP.xml so dorny renders a
+              # single grouped "CMP" row (aggregate pass/fail/skip) instead of
+              # 11. Each file is <?xml ...?><testsuites ...><testsuite>...
+              # </testsuite></testsuites> (written by run-cmp-test-suite.sh);
+              # strip the xml declaration and the outer <testsuites> wrapper
+              # from each and re-wrap once around all of them.
+              cmp_files=("${dir}"*.xml)
+              if [ -e "${cmp_files[0]}" ]; then
+                {
+                  echo '<testsuites>'
+                  for f in "${cmp_files[@]}"; do
+                    tail -n +2 "${f}" | sed -E '1s/^<testsuites[^>]*>//; $s#</testsuites>$##'
+                  done
+                  echo '</testsuites>'
+                } > CMP.xml
+              fi
             elif [ -f "${dir}junit.xml" ]; then
               cp "${dir}junit.xml" "./${family}.xml"
             fi
