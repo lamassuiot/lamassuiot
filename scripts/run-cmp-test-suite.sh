@@ -388,36 +388,59 @@ t = r.find('.//statistics/total/stat')
 print("\n================ CMP TEST SUITE RESULT ================")
 print(f"  PASS={t.get('pass')}  FAIL={t.get('fail')}  SKIP={t.get('skip')}")
 print("  per suite:")
-names = []
 for s in r.findall('.//statistics/suite/stat'):
     name = s.text or ''
     if name.count('.') == 1:
         short = name[6:]
-        names.append(short)
         print(f"    {short:24} pass={s.get('pass'):>3} fail={s.get('fail'):>3} skip={s.get('skip'):>3}")
 print("=======================================================")
 print(f"  report: {__import__('os').getcwd()}/reports/report.html")
-with open('reports/.suite-names', 'w') as f:
-    f.write('\n'.join(names) + '\n')
 PY
 
-    # Split the combined output.xml into one standalone xUnit/JUnit file per
-    # top-level suite (reports/junit/<suite>.xml). CI uploads these together as
-    # a single artifact, and dorny/test-reporter's `path: '*.xml'` glob then
-    # renders one row per suite (Basic, Cert Conf Tests, ...) in the check
-    # summary instead of one flat list of every test case.
-    if [ -f reports/.suite-names ]; then
-        rm -rf reports/junit; mkdir -p reports/junit
-        while IFS= read -r suite; do
-            [ -n "${suite}" ] || continue
-            # Keep the human-readable suite name as the filename (spaces and
-            # all) — CI's test report labels each row by filename, so this
-            # renders as "Basic", "Cert Conf Tests", ... instead of slugs.
-            rebot --suite "${suite}" --nostatusrc --output NONE --report NONE --log NONE \
-                  --xunit "reports/junit/${suite}.xml" reports/output.xml >/dev/null 2>&1 || true
-        done < reports/.suite-names
-        rm -f reports/.suite-names
-    fi
+    # Emit one standalone JUnit file per top-level Robot suite
+    # (reports/junit/<suite>.xml) for CI to upload and dorny/test-reporter to
+    # render as one row per suite (Basic, Cert Conf Tests, ...).
+    #
+    # We must NOT use `rebot --xunit` here: Robot's xUnit output is a <testsuite>
+    # root with NESTED <testsuite> children, and every <testcase> lives in the
+    # leaves. dorny's java-junit parser only reads a suite's DIRECT <testcase>
+    # children and never recurses, so it counts the whole file as 0 tests and
+    # the CMP suite silently vanishes from the report. Instead we FLATTEN into
+    # dorny's expected shape: a <testsuites> root wrapping one flat <testsuite>
+    # per top-level suite, with all descendant <testcase>s as direct children.
+    rm -rf reports/junit; mkdir -p reports/junit
+    python3 - reports/xunit.xml reports/junit <<'PY'
+import os, sys, xml.etree.ElementTree as ET
+src, outdir = sys.argv[1], sys.argv[2]
+root = ET.parse(src).getroot()                 # outer <testsuite name="Tests">
+top = root.findall('testsuite') or [root]      # top-level Robot suites
+written = 0
+for suite in top:
+    name = suite.get('name') or 'Suite'
+    cases = suite.findall('.//testcase')       # all descendants, any depth
+    if not cases:
+        continue
+    fails = sum(1 for c in cases if c.find('failure') is not None or c.find('error') is not None)
+    skips = sum(1 for c in cases if c.find('skipped') is not None)
+    total = 0.0
+    for c in cases:
+        try: total += float(c.get('time') or 0)
+        except ValueError: pass
+    testsuites = ET.Element('testsuites', {'time': f'{total:.3f}'})
+    ts = ET.SubElement(testsuites, 'testsuite', {
+        'name': name, 'tests': str(len(cases)), 'failures': str(fails),
+        'errors': '0', 'skipped': str(skips), 'time': f'{total:.3f}'})
+    for c in cases:
+        ts.append(c)                           # direct child -> dorny reads it
+    # Keep the human-readable suite name as the filename (spaces and all) — CI's
+    # report labels each row by filename ("Basic", "Cert Conf Tests", ...).
+    ET.ElementTree(testsuites).write(os.path.join(outdir, f'{name}.xml'),
+                                     encoding='UTF-8', xml_declaration=True)
+    written += 1
+if not written:
+    print('[warn] no testcases found to flatten into reports/junit', file=sys.stderr)
+    sys.exit(1)
+PY
 fi
 
 # Robot exits non-zero when any test fails; surface that but after the summary.
