@@ -410,9 +410,11 @@ PY
         rm -rf reports/junit; mkdir -p reports/junit
         while IFS= read -r suite; do
             [ -n "${suite}" ] || continue
-            slug="$(echo "${suite}" | tr '[:upper:] ' '[:lower:]_')"
+            # Keep the human-readable suite name as the filename (spaces and
+            # all) — CI's test report labels each row by filename, so this
+            # renders as "Basic", "Cert Conf Tests", ... instead of slugs.
             rebot --suite "${suite}" --nostatusrc --output NONE --report NONE --log NONE \
-                  --xunit "reports/junit/${slug}.xml" reports/output.xml >/dev/null 2>&1 || true
+                  --xunit "reports/junit/${suite}.xml" reports/output.xml >/dev/null 2>&1 || true
         done < reports/.suite-names
         rm -f reports/.suite-names
     fi
