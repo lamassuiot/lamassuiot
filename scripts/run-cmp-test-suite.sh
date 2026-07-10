@@ -4,8 +4,9 @@
 #
 # Orchestrates the full flow so you don't have to remember the steps:
 #   1. (optional) start a clean SQLite-backed dev server for a pristine DB
-#   2. ensure the cmp-test-suite Python venv exists with deps installed
-#   3. apply the Lamassu compatibility patch if not already applied
+#   2. clone the Lamassu fork of the suite if not present (the fork carries
+#      the compatibility changes and config/lamassu.robot pre-applied)
+#   3. ensure the cmp-test-suite Python venv exists with deps installed
 #   4. run the CMP bootstrap (signer cert + trust CAs + replaceable enrollment)
 #   5. run Robot Framework and print a pass/fail summary
 #
@@ -40,7 +41,9 @@
 # Environment overrides:
 #   SERVER         Lamassu base URL              (default: http://localhost:8080)
 #   DMS_ID         CMP DMS id                    (default: sample-cmp-dms)
-#   SUITE_DIR      Path to the cmp-test-suite    (default: ~/cmp-test-suite)
+#   SUITE_DIR      Path to the cmp-test-suite    (default: ~/cmp-test-suite;
+#                  cloned from SUITE_REPO if missing)
+#   SUITE_REPO     Suite git URL                 (default: lamassuiot/cmp-test-suite fork)
 #   WORKDIR        Bootstrap working dir         (default: /tmp/cmp-bootstrap)
 #   LAMASSU_DIR    Path to the lamassuiot repo   (default: derived from this script)
 #
@@ -59,8 +62,9 @@ SUITE_DIR="${SUITE_DIR:-$HOME/cmp-test-suite}"
 WORKDIR="${WORKDIR:-/tmp/cmp-bootstrap}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAMASSU_DIR="${LAMASSU_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
-PATCH="${LAMASSU_DIR}/.github/patches/cmp-test-suite/0001-lamassu-compat.patch"
-CONFIG_SRC="${LAMASSU_DIR}/.github/patches/cmp-test-suite/lamassu.robot"  # optional seed
+# Lamassu fork of siemens/cmp-test-suite with the compatibility changes and
+# config/lamassu.robot committed — no patching step needed.
+SUITE_REPO="${SUITE_REPO:-https://github.com/lamassuiot/cmp-test-suite}"
 
 TARGET="tests/"
 INCLUDE=""
@@ -80,7 +84,7 @@ while [ $# -gt 0 ]; do
         --fresh-full)         FRESH=1; FULL_STACK=1; shift ;;
         --per-suite-isolated) PER_SUITE=1; FRESH=1; FULL_STACK=1; shift ;;
         --no-bootstrap)       DO_BOOTSTRAP=0; shift ;;
-        -h|--help)            sed -n '2,52p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)            sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)                    echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -89,8 +93,10 @@ log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ -d "${SUITE_DIR}" ] || die "cmp-test-suite not found at ${SUITE_DIR} (set SUITE_DIR=...)"
-[ -f "${PATCH}" ]     || die "compat patch not found at ${PATCH}"
+if [ ! -d "${SUITE_DIR}" ]; then
+    log "cmp-test-suite not found at ${SUITE_DIR}; cloning ${SUITE_REPO}"
+    git clone --depth 1 "${SUITE_REPO}" "${SUITE_DIR}" || die "could not clone ${SUITE_REPO}"
+fi
 
 # --- per-suite isolation ------------------------------------------------------
 # Run every suite file against its OWN clean full stack, then merge the reports
@@ -239,7 +245,7 @@ if [ ! -x "venv-cmp-tests/bin/robot" ]; then
         || die "Could not extract dependencies from pyproject.toml"
     # Note: liboqs (post-quantum) is deliberately NOT installed. The suite's
     # global setup loads stateful PQ keys, which would require the liboqs binding
-    # (and trigger a full liboqs source build on first import). The compat patch
+    # (and trigger a full liboqs source build on first import). The fork
     # makes that load best-effort so the classical suite runs PQ-free; PQ tests
     # are excluded at runtime via --exclude pqc.
     log "Installing $(grep -c . "${REQS_FILE}") runtime dependencies (no project build, no PQ)"
@@ -259,23 +265,12 @@ else
 fi
 command -v robot >/dev/null 2>&1 || die "robot not found after dependency install (see output above)"
 
-# --- 3. apply compat patch if needed -----------------------------------------
-if git apply --reverse --check "${PATCH}" 2>/dev/null; then
-    log "Compat patch already applied."
-else
-    log "Applying compat patch."
-    git apply "${PATCH}" || die "Failed to apply compat patch (tree not clean?)"
-fi
-
-# config/lamassu.robot is required by --variable environment:lamassu.
-if [ ! -f "config/lamassu.robot" ]; then
-    if [ -f "${CONFIG_SRC}" ]; then
-        log "Seeding config/lamassu.robot from ${CONFIG_SRC}"
-        cp "${CONFIG_SRC}" config/lamassu.robot
-    else
-        die "config/lamassu.robot is missing and no seed found at ${CONFIG_SRC}"
-    fi
-fi
+# --- 3. sanity-check the suite is the Lamassu fork ----------------------------
+# config/lamassu.robot (required by --variable environment:lamassu) is committed
+# in the fork; its absence means SUITE_DIR points at vanilla upstream.
+[ -f "config/lamassu.robot" ] || die \
+    "config/lamassu.robot missing — ${SUITE_DIR} is not the Lamassu fork.
+     Remove it (or set SUITE_DIR) so this script clones ${SUITE_REPO}."
 
 # --- 3b. cross-certification trusted CA --------------------------------------
 # The cross-certification (ccr/ccp) tests protect the request with a CA whose
