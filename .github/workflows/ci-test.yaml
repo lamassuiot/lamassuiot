@@ -319,6 +319,11 @@ jobs:
       actions: read   # required to fetch this run's test-results-* artifacts
       checks: write   # required to publish the check run with the results table
     steps:
+      # dorny/test-reporter runs `git ls-files` to resolve annotation paths,
+      # so a checkout must exist even though this job doesn't build anything.
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
       # Download every test-results-<something> artifact uploaded by the jobs
       # above into its own subfolder (test-results/<artifact-name>/*.xml), so
       # same-named files (e.g. every Go module's junit.xml) don't collide.
