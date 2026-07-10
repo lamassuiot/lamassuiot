@@ -323,24 +323,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v5
 
-      # Download every test-results-<something> artifact uploaded by the jobs
-      # above into its own subfolder (test-results/<artifact-name>/*.xml), so
-      # same-named files (e.g. every Go module's junit.xml) don't collide.
-      - name: Download all test-result artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: test-results-*
-          path: test-results
-
-      # A single check consuming every downloaded file with one plain glob
-      # (no artifact regex fan-out) renders as ONE table with one row per
-      # file — the FluentValidation-style summary, not one collapsed section
-      # per module.
       - name: Publish test results
         uses: dorny/test-reporter@v2
         with:
-          name: Test Results
-          path: 'test-results/**/*.xml'
+          # Consume every artifact named test-results-<something> uploaded by
+          # the jobs above. The capture group is substituted into `name` so
+          # each module/family gets its own check (e.g. "Tests: core",
+          # "Tests: backend-assemblers-ca", "Tests: cmp-e2e") instead of one
+          # giant flat table with a row per file.
+          artifact: /test-results-(.*)/
+          name: 'Tests: $1'
+          path: '*.xml'
           # gotestsum --junitfile and Robot --xunit both emit JUnit XML.
           reporter: java-junit
           # Don't fail this workflow when tests failed in CI — the table itself
@@ -352,3 +345,22 @@ jobs:
           only-summary: true
           # Write the same table to this run's own Actions "Summary" page.
           use-actions-summary: true
+
+  merge-artifacts:
+    name: Merge test result artifacts
+    runs-on: ubuntu-latest
+    # Runs after `report` so dorny/test-reporter has already read the
+    # individual test-results-* artifacts via the Artifacts API before they
+    # get merged away below.
+    needs: [report]
+    if: always()
+    steps:
+      # Collapses the ~20 per-module test-results-* artifacts into a single
+      # "test-results" artifact so the run's Artifacts panel isn't cluttered
+      # with one entry per module. delete-merged removes the originals.
+      - name: Merge per-module test-result artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: test-results
+          pattern: test-results-*
+          delete-merged: true
