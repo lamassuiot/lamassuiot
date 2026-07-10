@@ -16,7 +16,7 @@ require (
 	go.opentelemetry.io/otel/log v0.19.0
 	go.opentelemetry.io/otel/trace v1.43.0
 	gocloud.dev v0.45.0
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	gorm.io/gorm v1.31.1
 )
 

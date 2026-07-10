@@ -18,7 +18,7 @@ require (
 	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.8.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
