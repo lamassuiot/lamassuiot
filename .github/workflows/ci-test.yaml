@@ -183,7 +183,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.module.tag }}
+          # Uses the human-readable family name (CA, DMS Manager, ...) rather
+          # than the tag, so the report job's row label is already readable
+          # without needing a separate name-mapping step.
+          name: test-results-${{ matrix.module.name }}
           path: ${{ matrix.module.path }}/junit.xml
           if-no-files-found: warn
 
@@ -288,6 +291,23 @@ jobs:
         run: |
           bash scripts/run-cmp-test-suite.sh --fresh-full
 
+      # If reports/junit/*.xml is missing, the suite died before (or at) the
+      # Robot run, which is why CMP rows silently vanish from the Test Report.
+      # Surface the evidence in the job log so the failure is diagnosable
+      # instead of just a "no files found" warning on the upload step.
+      - name: Diagnose missing CMP results
+        if: always()
+        run: |
+          if ls cmp-test-suite/reports/junit/*.xml >/dev/null 2>&1; then
+            echo "CMP junit results present:"; ls -la cmp-test-suite/reports/junit/
+          else
+            echo "::error::CMP junit results were NOT generated — the suite died before Robot finished."
+            echo "--- cmp-test-suite/reports ---"
+            ls -laR cmp-test-suite/reports 2>/dev/null || echo "(no reports dir at all — Robot never ran)"
+            echo "--- last 200 lines of dev server log ---"
+            tail -200 /tmp/lamassu-cmp-test.log 2>/dev/null || echo "(no server log — server never started)"
+          fi
+
       - name: Upload Robot Framework report
         if: always()
         uses: actions/upload-artifact@v4
@@ -315,7 +335,7 @@ jobs:
     if: always()
     permissions:
       contents: read
-      actions: read   # required to fetch this run's test-results-* artifacts
+      actions: write  # fetch this run's test-results-* artifacts + delete them after publishing
       checks: write   # required to publish the check run with the results table
     steps:
       # dorny/test-reporter runs `git ls-files` to resolve annotation paths,
@@ -323,16 +343,43 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v5
 
+      # Download every test-results-<something> artifact uploaded by the jobs
+      # above into its own subfolder (test-results/<artifact-name>/*.xml), so
+      # same-named files (e.g. every Go module's junit.xml) don't collide.
+      - name: Download all test-result artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          path: test-results
+
+      # Flatten to <family>.xml at the workspace root so each row in the
+      # summary table is labeled just by its family name (core.xml, CA.xml,
+      # DMS Manager.xml, ...) — no nested artifact path. Safe: the repo tracks
+      # no *.xml at its root, so the glob below only ever matches these copies.
+      # The CMP artifact already holds one file per Robot suite (Basic.xml,
+      # Cert Conf Tests.xml, ...); prefix those with "CMP - " so they stay
+      # recognizable next to everything else.
+      - name: Flatten test-result files for a readable summary
+        run: |
+          for dir in test-results/test-results-*/; do
+            [ -d "${dir}" ] || continue
+            family="$(basename "${dir%/}")"
+            family="${family#test-results-}"
+            if [ "${family}" = "cmp-e2e" ]; then
+              for f in "${dir}"*.xml; do
+                [ -e "${f}" ] || continue
+                cp "${f}" "./CMP - $(basename "${f}")"
+              done
+            elif [ -f "${dir}junit.xml" ]; then
+              cp "${dir}junit.xml" "./${family}.xml"
+            fi
+          done
+          ls -la ./*.xml || echo "::warning::no test-result files found to report"
+
       - name: Publish test results
         uses: dorny/test-reporter@v2
         with:
-          # Consume every artifact named test-results-<something> uploaded by
-          # the jobs above. The capture group is substituted into `name` so
-          # each module/family gets its own check (e.g. "Tests: core",
-          # "Tests: backend-assemblers-ca", "Tests: cmp-e2e") instead of one
-          # giant flat table with a row per file.
-          artifact: /test-results-(.*)/
-          name: 'Tests: $1'
+          name: Test Results
           path: '*.xml'
           # gotestsum --junitfile and Robot --xunit both emit JUnit XML.
           reporter: java-junit
@@ -346,21 +393,18 @@ jobs:
           # Write the same table to this run's own Actions "Summary" page.
           use-actions-summary: true
 
-  merge-artifacts:
-    name: Merge test result artifacts
-    runs-on: ubuntu-latest
-    # Runs after `report` so dorny/test-reporter has already read the
-    # individual test-results-* artifacts via the Artifacts API before they
-    # get merged away below.
-    needs: [report]
-    if: always()
-    steps:
-      # Collapses the ~20 per-module test-results-* artifacts into a single
-      # "test-results" artifact so the run's Artifacts panel isn't cluttered
-      # with one entry per module. delete-merged removes the originals.
-      - name: Merge per-module test-result artifacts
-        uses: actions/upload-artifact/merge@v4
-        with:
-          name: test-results
-          pattern: test-results-*
-          delete-merged: true
+      # The test-results-* artifacts exist only to ferry junit files from the
+      # test jobs into this job; the report is now published, so delete them.
+      # This restores the pre-CMP Artifacts panel: the only artifact left on
+      # the run is cmp-e2e-report (the downloadable Robot HTML report).
+      - name: Delete intermediate test-result artifacts
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name | startswith("test-results-")) | .id' \
+          | while read -r id; do
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" \
+                || echo "::warning::could not delete artifact ${id}"
+            done
