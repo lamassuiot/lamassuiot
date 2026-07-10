@@ -247,16 +247,15 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      # The CMP compliance suite is a separate upstream repo; it MUST be checked
+      # The CMP compliance suite lives in the Lamassu fork of
+      # siemens/cmp-test-suite, which carries the compatibility changes and
+      # config/lamassu.robot committed — no patching step. It MUST be checked
       # out before any `working-directory: cmp-test-suite` step can run.
       - name: Checkout CMP test suite
         uses: actions/checkout@v5
         with:
-          repository: siemens/cmp-test-suite
-          # Pin to the exact upstream commit the compat patch was generated
-          # against, so the patch always applies and the test set is stable.
-          # Bump this together with 0001-lamassu-compat.patch when re-syncing.
-          ref: e918ccb525fd674f8586efa0b79d2b56daec611d
+          repository: lamassuiot/cmp-test-suite
+          ref: main
           path: cmp-test-suite
 
       - name: Setup Go
@@ -275,9 +274,9 @@ jobs:
         run: go work sync
 
       # run-cmp-test-suite.sh handles the full flow against a clean full stack
-      # (Postgres + RabbitMQ + WFX via Docker): applies the compat patch, seeds
-      # config/lamassu.robot, creates the venv, waits for sample-cmp-dms to
-      # exist, runs the CMP bootstrap, then executes the suite. --fresh-full
+      # (Postgres + RabbitMQ + WFX via Docker): creates the venv, waits for
+      # sample-cmp-dms to exist, runs the CMP bootstrap, then executes the
+      # suite. --fresh-full
       # starts and tears down the dev server itself, so no separate start/wait
       # steps are needed. continue-on-error: the suite has known unsupported
       # cases; the uploaded report is the source of truth, not a green check.

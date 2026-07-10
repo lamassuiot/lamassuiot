@@ -8,7 +8,7 @@
 #   scripts/cmp-tests.sh
 #
 # This script does NOT start, stop, or touch the monolithic server or Docker.
-# It only: waits for the sample CMP DMS, prepares the suite (patch/config/venv),
+# It only: waits for the sample CMP DMS, prepares the suite (clone/venv),
 # bootstraps CMP trust, and runs the tests.
 #
 # IMPORTANT — results are only reproducible if you run this against a FRESH
@@ -25,11 +25,13 @@ LAMASSU="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUITE="${SUITE_DIR:-$HOME/cmp-test-suite}"
 SERVER="${SERVER:-http://localhost:8080}"
 DMS="${DMS:-sample-cmp-dms}"
-PATCH="$LAMASSU/.github/patches/cmp-test-suite/0001-lamassu-compat.patch"
+# Lamassu fork of siemens/cmp-test-suite with the compatibility changes and
+# config/lamassu.robot committed — no patching step needed.
+SUITE_REPO="${SUITE_REPO:-https://github.com/lamassuiot/cmp-test-suite}"
 say() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ -d "$SUITE" ] || die "cmp-test-suite not found at $SUITE (set SUITE_DIR=...)"
+[ -d "$SUITE" ] || git clone --depth 1 "$SUITE_REPO" "$SUITE" || die "could not clone $SUITE_REPO"
 
 # 1. The monolithic must already be running.
 curl -sf "$SERVER/api/ca/v1/cas" >/dev/null 2>&1 || die \
@@ -44,11 +46,12 @@ for i in $(seq 1 60); do
     sleep 2
 done
 
-# 3. One-time suite prep (idempotent): patch, config, venv.
-say "Preparing the test suite (patch, config, venv)"
+# 3. One-time suite prep (idempotent): venv. The fork already carries the
+#    compat changes and config/lamassu.robot; its absence means $SUITE points
+#    at vanilla upstream.
+say "Preparing the test suite (venv)"
 cd "$SUITE"
-git apply --reverse --check "$PATCH" 2>/dev/null || git apply "$PATCH" || die "could not apply compat patch"
-cp "$LAMASSU/.github/patches/cmp-test-suite/lamassu.robot" config/lamassu.robot
+[ -f config/lamassu.robot ] || die "config/lamassu.robot missing — $SUITE is not the Lamassu fork ($SUITE_REPO)"
 if [ ! -x venv-cmp-tests/bin/robot ]; then
     python3 -m venv venv-cmp-tests
     venv-cmp-tests/bin/pip install -q uv && venv-cmp-tests/bin/uv pip install -e . \
