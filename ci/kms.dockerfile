@@ -1,6 +1,9 @@
 ARG BUILDER=golang:1.26.2-bookworm
 FROM ${BUILDER} AS builder
 WORKDIR /app
+# Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
+# this intermediate stage (in addition to the default final-stage scan).
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
 # go.work/go.work.sum rarely change — keep as an early cache layer.
 COPY go.work go.work
@@ -30,6 +33,9 @@ RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
       backend/cmd/kms/main.go
 
 FROM debian:bookworm-slim AS pkcs11-client-proxy
+# Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
+# this intermediate stage (in addition to the default final-stage scan).
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
 RUN apt-get update && apt-get install -y --no-install-recommends p11-kit
 
 # gcr.io/distroless/cc-debian13:nonroot provides glibc + libgcc (required for
