@@ -16,3 +16,4 @@ init.sql
 .DS_Store
 testdata
 .codexscripts/__pycache__/
+.claude/
