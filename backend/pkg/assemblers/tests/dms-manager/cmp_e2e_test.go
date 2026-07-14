@@ -37,7 +37,7 @@ func newCMPTestFixture(t *testing.T) *cmpTestFixture {
 	t.Helper()
 
 	ctx := context.Background()
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err)
 
 	return &cmpTestFixture{
