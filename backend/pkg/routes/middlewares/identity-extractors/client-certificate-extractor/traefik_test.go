@@ -47,7 +47,7 @@ func TestTraefikCertExtractorChain(t *testing.T) {
 	}
 }
 
-func TestTraefikLBCertExtractionEmpty(t *testing.T) {
+func TestTraefikCertExtractionEmpty(t *testing.T) {
 	headers := http.Header{}
 
 	logger := logrus.New().WithField("test", "traefik-test")
