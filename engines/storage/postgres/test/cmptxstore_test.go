@@ -53,13 +53,13 @@ func cmpTxTestMaterial() (*models.X509Certificate, *models.X509CertificateReques
 
 func setupCMPTxRepo(t *testing.T) (storage.CMPTransactionRepo, func()) {
 	t.Helper()
-	cfg, suite := BeforeSuite([]string{postgres.DMS_DB_NAME}, false)
+	cfg, suite := BeforeSuite([]string{postgres.DMS_SCHEMA}, false)
 	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "CMP-TX-Test")
 
-	err := postgres.MigrateDatabase(logger, cfg, postgres.DMS_DB_NAME)
+	err := postgres.MigrateDatabase(logger, cfg, postgres.DMS_SCHEMA)
 	require.NoError(t, err)
 
-	repo, err := postgres.NewCMPTransactionRepository(logger, suite.DB[postgres.DMS_DB_NAME])
+	repo, err := postgres.NewCMPTransactionRepository(logger, suite.DB[postgres.DMS_SCHEMA])
 	require.NoError(t, err)
 
 	return repo, suite.AfterSuite
