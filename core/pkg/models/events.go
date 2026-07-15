@@ -39,7 +39,6 @@ const (
 	EventDeleteKMSKey          EventType = "kms.delete"
 	EventSignMessageKMSKey     EventType = "kms.sign"
 	EventVerifySignatureKMSKey EventType = "kms.verify"
-	EventCreateHybridCAKey EventType = "ca.create.hybrid"
 
 	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
 	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"

@@ -113,10 +113,6 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 	return cert, key, nil
 }
 
-func GenerateSelfSignedChameleonCA(deltaKeyType, baseKeyType x509.PublicKeyAlgorithm, expirationTime time.Duration, commonName string) (*x509.Certificate, crypto.Signer, crypto.Signer, error) {
-	return nil, nil, nil, fmt.Errorf("x509.CreateChameleonCertificate: requires PQC-enabled Go build")
-}
-
 func generateKey(keyType x509.PublicKeyAlgorithm) (crypto.Signer, crypto.PublicKey, error) {
 	var key crypto.Signer
 	var pubKey crypto.PublicKey
