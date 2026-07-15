@@ -24,9 +24,6 @@ type CAService interface {
 	ReissueCA(ctx context.Context, input ReissueCAInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
-	// TODO -> revisit return values
-	CreateHybridCA(ctx context.Context, input CreateHybridCAInput) (*models.CACertificate, error)
-
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
 	SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error)
 
@@ -124,12 +121,6 @@ type CreateCAInput struct {
 	CAIssuanceProfile   *models.IssuanceProfile // Inline issuance profile definition
 }
 
-type CreateHybridCAInput struct {
-	CreateCAInput         CreateCAInput                `validate:"required"`
-	InnerKeyMetadata      models.KeyMetadata           `validate:"required"`
-	HybridCertificateType models.HybridCertificateType `validate:"required"`
-}
-
 type RequestCAInput struct {
 	ID          string
 	KeyMetadata models.KeyMetadata `validate:"required"`
@@ -225,14 +216,6 @@ type CertificateKeySpec struct {
 	// KeyIdentifier references an existing KMS key by its PKCS11URI, Alias, or KeyID. A bare
 	// KeyID resolves only while a single engine holds the key.
 	KeyIdentifier string `json:"key_identifier"`
-}
-
-type SignChameleonCertificateInput struct {
-	CAID              string                         `validate:"required"`
-	DeltaCertRequest  *models.X509CertificateRequest `validate:"required"`
-	BaseCertRequest   *models.X509CertificateRequest `validate:"required"`
-	IssuanceProfile   models.IssuanceProfile
-	IssuanceProfileID string
 }
 
 type CreateCertificateInput struct {
