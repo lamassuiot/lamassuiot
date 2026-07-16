@@ -58,6 +58,12 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 		})
 
 		reqCtx := req.Context()
+		// Publish the full presented chain under the extractor key. The
+		// shared EST/CMP authenticator reads this ([]*x509.Certificate) to
+		// run ValidationCAs and ChainLevelValidation against the whole chain;
+		// LamassuContextKeyAuthCredentialStruct below keeps carrying just the
+		// leaf for audit/identity consumers.
+		reqCtx = context.WithValue(reqCtx, string(IdentityExtractorClientCertificate), crts)
 		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, crt)
 		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialString, crtS.String())
 		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, string(IdentityExtractorClientCertificate))
