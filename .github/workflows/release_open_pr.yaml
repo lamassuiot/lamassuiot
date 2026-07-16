@@ -21,7 +21,7 @@ jobs:
     container: quay.io/git-chglog/git-chglog:0.15.0
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
@@ -57,7 +57,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:
           commit-message: "chore: release: prepare release ${{ github.event.inputs.release_version }}"
           branch: "release-${{ github.event.inputs.release_version }}"
