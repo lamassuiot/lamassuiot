@@ -30,6 +30,16 @@ var dmsValidate = validator.New()
 // post-approval row behaves like any other issued-awaiting-confirmation row.
 const cmpCertConfDefaultTTL = 5 * time.Minute
 
+// cmpApprovalMinDeliveryWindow floors the post-approval certConf window. A
+// phased-workflow EE is only allowed to poll again after the pollRep
+// checkAfter hint (the controller's defaultPollIntervalSeconds, 60s), so a
+// ConfirmationTimeout shorter than one poll cycle would let the confirmation
+// monitor revoke the just-approved certificate before the device is even
+// permitted to ask for it. Two minutes covers a full poll cycle plus transport
+// and clock slack; DMSes configuring a longer ConfirmationTimeout are
+// unaffected.
+const cmpApprovalMinDeliveryWindow = 2 * time.Minute
+
 type DMSManagerMiddleware func(services.DMSManagerService) services.DMSManagerService
 
 type DMSManagerServiceBackend struct {
@@ -193,6 +203,9 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 	confTimeout := time.Duration(dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ConfirmationTimeout)
 	if confTimeout <= 0 {
 		confTimeout = cmpCertConfDefaultTTL
+	}
+	if confTimeout < cmpApprovalMinDeliveryWindow {
+		confTimeout = cmpApprovalMinDeliveryWindow
 	}
 	issuedExpiry := time.Now().Add(confTimeout)
 
