@@ -290,7 +290,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
-	estAuthOpts := enrollSettings.EnrollmentOptionsESTRFC7030
+	estAuthOpts := reEnrollSettings.ReEnrollmentOptionsESTRFC7030
 
 	switch estAuthOpts.AuthMode {
 	case models.EnrollmentAuthModeClientCertificate, models.EnrollmentAuthModeClientCertificateAndWebhook:
@@ -678,4 +678,3 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 
 	return crt, privKey, nil
 }
-
