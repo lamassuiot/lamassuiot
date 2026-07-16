@@ -53,6 +53,7 @@ type headerOpts struct {
 	RecipNonce          []byte
 	OmitTransactionID   bool
 	OmitSenderNonce     bool
+	OmitMessageTime     bool
 	WithImplicitConfirm bool
 }
 
@@ -77,6 +78,11 @@ func buildHeaderDERCustom(t *testing.T, o headerOpts) []byte {
 	recipientDER := senderDER
 
 	content := concatBytes(pvnoDER, senderDER, recipientDER)
+
+	// messageTime [0] EXPLICIT GeneralizedTime — mandatory as of RFC 9483 §3.1.
+	if !o.OmitMessageTime {
+		content = append(content, messageTimeFieldDER(t, time.Now())...)
+	}
 
 	if !o.OmitTransactionID {
 		txID := o.TransactionID
@@ -172,37 +178,14 @@ func parseResponsePVNO(t *testing.T, responseDER []byte) int {
 // GeneralizedTime from a response header. Returns the zero time when absent.
 func parseResponseHeaderMessageTime(t *testing.T, responseDER []byte) time.Time {
 	t.Helper()
-	type rawMsg struct {
-		Header asn1.RawValue
-		Body   asn1.RawValue
+	f, ok := responseHeaderField(t, responseDER, 0)
+	if !ok {
+		return time.Time{}
 	}
-	var msg rawMsg
-	_, err := asn1.Unmarshal(responseDER, &msg)
+	var ts time.Time
+	_, err := asn1.UnmarshalWithParams(f.FullBytes, &ts, "generalized,explicit,tag:0")
 	require.NoError(t, err)
-
-	var headerSeq asn1.RawValue
-	_, err = asn1.Unmarshal(msg.Header.FullBytes, &headerSeq)
-	require.NoError(t, err)
-
-	remaining := headerSeq.Bytes
-	// Skip pvno, sender, recipient.
-	for i := 0; i < 3; i++ {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-	}
-	for len(remaining) > 0 {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-		if f.Class == asn1.ClassContextSpecific && f.Tag == 0 {
-			var ts time.Time
-			_, err = asn1.UnmarshalWithParams(f.FullBytes, &ts, "generalized,explicit,tag:0")
-			require.NoError(t, err)
-			return ts
-		}
-	}
-	return time.Time{}
+	return ts
 }
 
 // parseFailInfoBitString extracts the PKIFailureInfo BitString from an error
@@ -255,38 +238,8 @@ func bitSet(bs asn1.BitString, bit int) bool {
 // response header. Returns nil when absent.
 func parseResponseSenderKID(t *testing.T, responseDER []byte) []byte {
 	t.Helper()
-	type rawMsg struct {
-		Header asn1.RawValue
-		Body   asn1.RawValue
-	}
-	var msg rawMsg
-	_, err := asn1.Unmarshal(responseDER, &msg)
-	require.NoError(t, err)
-
-	var headerSeq asn1.RawValue
-	_, err = asn1.Unmarshal(msg.Header.FullBytes, &headerSeq)
-	require.NoError(t, err)
-
-	remaining := headerSeq.Bytes
-	// Skip pvno, sender, recipient.
-	for i := 0; i < 3; i++ {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-	}
-	for len(remaining) > 0 {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-		if f.Class == asn1.ClassContextSpecific && f.Tag == 2 {
-			// senderKID [2] EXPLICIT OCTET STRING — unwrap one level.
-			var inner []byte
-			if _, err := asn1.Unmarshal(f.Bytes, &inner); err == nil {
-				return inner
-			}
-		}
-	}
-	return nil
+	// senderKID [2] EXPLICIT OCTET STRING — unwrap one level.
+	return responseHeaderOctetString(t, responseDER, 2)
 }
 
 // ---------------------------------------------------------------------------
@@ -299,13 +252,7 @@ func parseResponseSenderKID(t *testing.T, responseDER []byte) []byte {
 func TestC1_PVNO_Request2_Response2(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-pvno-2")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
 	header := buildHeaderDERCustom(t, headerOpts{
 		PVNO:                intPtr(pvnoCMP2000),
 		WithImplicitConfirm: true,
@@ -325,13 +272,7 @@ func TestC1_PVNO_Request2_Response2(t *testing.T) {
 func TestC1_PVNO_Request3_Response3(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-pvno-3")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
 	header := buildHeaderDERCustom(t, headerOpts{
 		PVNO:                intPtr(pvnoCMP2021),
 		WithImplicitConfirm: true,
@@ -351,11 +292,7 @@ func TestC1_PVNO_Request3_Response3(t *testing.T) {
 // RFC 9483 §3.5 line 946: "The pvno MUST be cmp2000(2) or cmp2021(3).
 // (failInfo bit: unsupportedVersion)".
 func TestC1_PVNO_UnsupportedVersion_RejectedWithFailInfo(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 
 	for _, badPVNO := range []int{1, 0, 99} {
 		bad := badPVNO
@@ -387,13 +324,7 @@ func TestC1_PVNO_UnsupportedVersion_RejectedWithFailInfo(t *testing.T) {
 func TestC2_MessageTime_UnprotectedResponseIncludesIt(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-msgtime")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-msgtime", WithImplicitConfirm: true})
 
 	before := time.Now().Add(-time.Minute)
@@ -415,11 +346,7 @@ func TestC2_MessageTime_UnprotectedResponseIncludesIt(t *testing.T) {
 // "The senderNonce MUST be present and MUST contain at least 128 bits of data.
 // (failInfo bit: badSenderNonce)".
 func TestC3_SenderNonce_TooShort_RejectedBadSenderNonce(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 	header := buildHeaderDERCustom(t, headerOpts{
 		SenderNonce: []byte{0xAA, 0xBB}, // 16 bits — too short
 	})
@@ -439,11 +366,7 @@ func TestC3_SenderNonce_TooShort_RejectedBadSenderNonce(t *testing.T) {
 // TestC3_SenderNonce_Missing_Rejected — RFC 9483 §3.5: "The senderNonce MUST
 // be present".
 func TestC3_SenderNonce_Missing_Rejected(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 	header := buildHeaderDERCustom(t, headerOpts{OmitSenderNonce: true})
 	irDER := buildIRWithHeader(t, header, "device-no-nonce")
 
@@ -464,11 +387,7 @@ func TestC3_SenderNonce_Missing_Rejected(t *testing.T) {
 // "In the first message of a PKI management operation, MUST be 128 bits of
 // random data".
 func TestC4_TransactionID_TooShort_Rejected(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 	header := buildHeaderDERCustom(t, headerOpts{
 		TransactionID: []byte{0x01, 0x02, 0x03, 0x04}, // 32 bits — too short
 	})
@@ -486,11 +405,7 @@ func TestC4_TransactionID_TooShort_Rejected(t *testing.T) {
 // TestC4_TransactionID_Missing_Rejected — RFC 9483 §3.5 line 949:
 // "The transactionID MUST be present. (failInfo bit: badDataFormat)".
 func TestC4_TransactionID_Missing_Rejected(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 	header := buildHeaderDERCustom(t, headerOpts{OmitTransactionID: true})
 	irDER := buildIRWithHeader(t, header, "device-no-tx")
 
@@ -510,13 +425,7 @@ func TestC4_TransactionID_Missing_Rejected(t *testing.T) {
 func TestC5_RecipNonce_EchoesRequestSenderNonce(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-c5")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
 
 	knownNonce := make([]byte, 16)
 	for i := range knownNonce {
@@ -538,36 +447,7 @@ func TestC5_RecipNonce_EchoesRequestSenderNonce(t *testing.T) {
 
 func extractResponseRecipNonce(t *testing.T, responseDER []byte) []byte {
 	t.Helper()
-	type rawMsg struct {
-		Header asn1.RawValue
-		Body   asn1.RawValue
-	}
-	var msg rawMsg
-	_, err := asn1.Unmarshal(responseDER, &msg)
-	require.NoError(t, err)
-
-	var headerSeq asn1.RawValue
-	_, err = asn1.Unmarshal(msg.Header.FullBytes, &headerSeq)
-	require.NoError(t, err)
-
-	remaining := headerSeq.Bytes
-	for i := 0; i < 3; i++ {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-	}
-	for len(remaining) > 0 {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-		if f.Class == asn1.ClassContextSpecific && f.Tag == 6 {
-			var inner []byte
-			if _, err := asn1.Unmarshal(f.Bytes, &inner); err == nil {
-				return inner
-			}
-		}
-	}
-	return nil
+	return responseHeaderOctetString(t, responseDER, 6)
 }
 
 // ---------------------------------------------------------------------------
@@ -579,11 +459,7 @@ func extractResponseRecipNonce(t *testing.T, responseDER []byte) []byte {
 func TestC6_FailInfo_ProtectionVerificationFailure_BadMessageCheck(t *testing.T) {
 	signerCert, signerKey := buildSelfSignedCert(t, "signer-c6")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-c6-bad-sig"})
 	signedIR := signCMPMessage(t, irDER, signerCert, signerKey)
 
@@ -611,11 +487,7 @@ func TestC6_FailInfo_ProtectionVerificationFailure_BadMessageCheck(t *testing.T)
 // badPOP (bit 9) per RFC 9810 §5.1.3. The response uses an ip CertRepMessage
 // body (not the error body) per RFC 9483 §4.1.
 func TestC6_FailInfo_POPOFailure_BadPOP(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{EnforcePOPO: true}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{EnforcePOPO: true})
 	irDER, _, _ := buildTestIR(t, testIROptions{
 		CN:       "device-c6-bad-popo",
 		POPOMode: "badsig",
@@ -712,8 +584,7 @@ func TestC8_DecodeRequestHeader_CapturesProtectionAlgParameters(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	txID := make([]byte, 16)
-	rand.Read(txID)
+	txID := randomTxID(t)
 	txInner, _ := asn1.Marshal(txID)
 	txField, _ := asn1.Marshal(asn1.RawValue{
 		Class: asn1.ClassContextSpecific, Tag: 4, IsCompound: true, Bytes: txInner,
@@ -817,11 +688,7 @@ func TestC10_HashFromSignatureAlgOID_SHA1_Rejected(t *testing.T) {
 // TestC10_SHA1Protection_Rejected_BadAlg — end-to-end: a CMP message protected
 // with sha1WithRSAEncryption MUST be rejected with badAlg.
 func TestC10_SHA1Protection_Rejected_BadAlg(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-sha1"})
 
 	// Inject sha1WithRSAEncryption as protectionAlg, then attach an arbitrary
@@ -951,15 +818,8 @@ func TestFailInfo_BitNumbersMatchRFC9810(t *testing.T) {
 func TestFailInfo_RecipNonceMismatch_BadRecipientNonce(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-bad-recip")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
-
-	router, store := newTestRouterWithStore(svc)
-	txID := make([]byte, 16)
-	rand.Read(txID)
+	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
+	txID := randomTxID(t)
 
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-bad-recip", TransactionID: txID})
 	irResp := postCMP(t, router, "test-dms", irDER)
@@ -995,16 +855,9 @@ func TestFailInfo_RecipNonceMismatch_BadRecipientNonce(t *testing.T) {
 func TestFailInfo_DuplicateTransactionID_TransactionIDInUse(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-dup")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
+	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
 
-	router, _ := newTestRouterWithStore(svc)
-
-	txID := make([]byte, 16)
-	rand.Read(txID)
+	txID := randomTxID(t)
 	first, _, _ := buildTestIR(t, testIROptions{CN: "device-dup", TransactionID: txID})
 	resp1 := postCMP(t, router, "test-dms", first)
 	require.Equal(t, http.StatusOK, resp1.Code)
@@ -1033,8 +886,7 @@ func TestFailInfo_UnknownTransactionID_BadRequest(t *testing.T) {
 
 	router, _ := newTestRouterWithStore(svc)
 
-	txID := make([]byte, 16)
-	rand.Read(txID)
+	txID := randomTxID(t)
 	cert, _ := buildSelfSignedCert(t, "ghost-cert")
 	certConfDER := buildTestCertConf(t, txID, cert.Raw, nil)
 
@@ -1051,11 +903,7 @@ func TestFailInfo_UnknownTransactionID_BadRequest(t *testing.T) {
 // an unsupported CHOICE tag is a "transaction not permitted" failure
 // (badRequest), not a malformed structure failure (badDataFormat).
 func TestFailInfo_UnsupportedBodyTag_BadRequest(t *testing.T) {
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-
-	router, _ := newTestRouterWithStore(svc)
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 
 	// Build an IR, then rewrite its body CHOICE tag to an unsupported value (5,
 	// which is reserved but not handled by our dispatch table).
@@ -1120,22 +968,13 @@ func TestFailInfo_MalformedPKIMessage_BadDataFormat(t *testing.T) {
 func TestFailInfo_CertHashMismatch_BadCertId(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-hash-mismatch")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
-
-	router, store := newTestRouterWithStore(svc)
-	txID := make([]byte, 16)
-	rand.Read(txID)
+	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
+	txID := randomTxID(t)
 
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-hash-mismatch", TransactionID: txID})
 	postCMP(t, router, "test-dms", irDER)
 
-	storedTx, ok := store.Peek(hex.EncodeToString(txID))
-	require.True(t, ok)
-	sentNonce, _ := hex.DecodeString(storedTx.SentNonce)
+	sentNonce := peekSentNonce(t, store, txID)
 
 	// Confirm a *different* certificate so the hash check fails.
 	otherCert, _ := buildSelfSignedCert(t, "wrong-cert")
@@ -1218,34 +1057,6 @@ func TestFailInfo_AllErrorResponsesCarryFailInfo(t *testing.T) {
 //   4. certConf (pvno=3) completes the transaction with pkiConf (pvno=3).
 // ---------------------------------------------------------------------------
 
-// buildBodyTaggedSequenceContent wraps a content payload in a
-// [tag] context-specific IsCompound TLV. Used to build pollReq[25],
-// certConf[24] etc. bodies without going through buildTest* helpers.
-func buildBodyTaggedSequenceContent(t *testing.T, tag int, content []byte) []byte {
-	t.Helper()
-	der, err := asn1.Marshal(asn1.RawValue{
-		Class:      asn1.ClassContextSpecific,
-		Tag:        tag,
-		IsCompound: true,
-		Bytes:      content,
-	})
-	require.NoError(t, err)
-	return der
-}
-
-// wrapAsUniversalSequence wraps a content payload in a UNIVERSAL SEQUENCE.
-func wrapAsUniversalSequence(t *testing.T, content []byte) []byte {
-	t.Helper()
-	der, err := asn1.Marshal(asn1.RawValue{
-		Class:      asn1.ClassUniversal,
-		Tag:        asn1.TagSequence,
-		IsCompound: true,
-		Bytes:      content,
-	})
-	require.NoError(t, err)
-	return der
-}
-
 // buildPollReqWithHeader assembles a pollReq PKIMessage using a fully-
 // controlled header. The body carries a single certReqId entry per the
 // single-cert-per-transaction convention this server expects.
@@ -1256,8 +1067,8 @@ func buildPollReqWithHeader(t *testing.T, headerDER []byte, certReqID int) []byt
 	}
 	pollReqContent, err := asn1.Marshal([]pollReqEntry{{CertReqID: certReqID}})
 	require.NoError(t, err)
-	bodyDER := buildBodyTaggedSequenceContent(t, cmpBodyTagPollReq, pollReqContent)
-	return wrapAsUniversalSequence(t, concatBytes(headerDER, bodyDER))
+	bodyDER := ctxDER(t, cmpBodyTagPollReq, pollReqContent)
+	return seqDER(t, concatBytes(headerDER, bodyDER))
 }
 
 // buildCertConfWithHeader assembles a certConf PKIMessage using a fully-
@@ -1274,9 +1085,9 @@ func buildCertConfWithHeader(t *testing.T, headerDER []byte, certDER []byte) []b
 		CertReqID: 0,
 	})
 	require.NoError(t, err)
-	certConfContent := wrapAsUniversalSequence(t, certStatusDER)
-	bodyDER := buildBodyTaggedSequenceContent(t, cmpBodyTagCertConf, certConfContent)
-	return wrapAsUniversalSequence(t, concatBytes(headerDER, bodyDER))
+	certConfContent := seqDER(t, certStatusDER)
+	bodyDER := ctxDER(t, cmpBodyTagCertConf, certConfContent)
+	return seqDER(t, concatBytes(headerDER, bodyDER))
 }
 
 // parseResponseSenderNonce extracts the senderNonce [5] OCTET STRING from a
@@ -1284,36 +1095,7 @@ func buildCertConfWithHeader(t *testing.T, headerDER []byte, certDER []byte) []b
 // originally-persisted senderNonce so certConf can still match against it.
 func parseResponseSenderNonce(t *testing.T, responseDER []byte) []byte {
 	t.Helper()
-	type rawMsg struct {
-		Header asn1.RawValue
-		Body   asn1.RawValue
-	}
-	var msg rawMsg
-	_, err := asn1.Unmarshal(responseDER, &msg)
-	require.NoError(t, err)
-
-	var headerSeq asn1.RawValue
-	_, err = asn1.Unmarshal(msg.Header.FullBytes, &headerSeq)
-	require.NoError(t, err)
-
-	remaining := headerSeq.Bytes
-	for i := 0; i < 3; i++ {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-	}
-	for len(remaining) > 0 {
-		var f asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &f)
-		require.NoError(t, err)
-		if f.Class == asn1.ClassContextSpecific && f.Tag == 5 {
-			var inner []byte
-			if _, err := asn1.Unmarshal(f.Bytes, &inner); err == nil {
-				return inner
-			}
-		}
-	}
-	return nil
+	return responseHeaderOctetString(t, responseDER, 5)
 }
 
 // TestCMPv3_DropAndPoll_ExplicitConfirm — the canonical lost-response
@@ -1321,28 +1103,20 @@ func parseResponseSenderNonce(t *testing.T, responseDER []byte) []byte {
 //
 // Walks the full transaction:
 //
-//	1. EE → IR (pvno=3) → server issues, replies IP (pvno=3, dropped).
-//	2. EE → pollReq (pvno=3, same txID) → server redelivers cert in IP
-//	   (pvno=3, with the same senderNonce as the original IP).
-//	3. EE → certConf (pvno=3, recipNonce = stored sentNonce) → server
-//	   replies pkiConf (pvno=3) and transitions tx to CONFIRMED.
+//  1. EE → IR (pvno=3) → server issues, replies IP (pvno=3, dropped).
+//  2. EE → pollReq (pvno=3, same txID) → server redelivers cert in IP
+//     (pvno=3, with the same senderNonce as the original IP).
+//  3. EE → certConf (pvno=3, recipNonce = stored sentNonce) → server
+//     replies pkiConf (pvno=3) and transitions tx to CONFIRMED.
 //
 // RFC 9810 §7 line 3754 anchors the pvno-echo requirement; this test
 // exercises it across every step of the drop-recover flow.
 func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "v3-drop-poll-device")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
+	router, store, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
 
-	router, store := newTestRouterWithStore(svc)
-
-	txID := make([]byte, 16)
-	_, err := rand.Read(txID)
-	require.NoError(t, err)
+	txID := randomTxID(t)
 
 	// Step 1: IR with pvno=3. The response from this call is the IP that
 	// (in the dropped-response scenario) the EE never receives.
@@ -1435,17 +1209,9 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "v3-drop-poll-implicit")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
+	router, store, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
 
-	router, store := newTestRouterWithStore(svc)
-
-	txID := make([]byte, 16)
-	_, err := rand.Read(txID)
-	require.NoError(t, err)
+	txID := randomTxID(t)
 
 	// Step 1: IR with pvno=3 + implicitConfirm. Original IP dropped.
 	irHeader := buildHeaderDERCustom(t, headerOpts{
@@ -1507,16 +1273,9 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 func TestCMPv3_PollReq_PVNOMismatch_ResponseEchoesPollPVNO(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "v3-pvno-mismatch")
 
-	svc := &cmpmock.MockLightweightCMPService{}
-	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
-		Return(issuedCert, nil)
+	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
 
-	router, store := newTestRouterWithStore(svc)
-
-	txID := make([]byte, 16)
-	_, _ = rand.Read(txID)
+	txID := randomTxID(t)
 
 	// Step 1: IR with pvno=2.
 	irHeader := buildHeaderDERCustom(t, headerOpts{

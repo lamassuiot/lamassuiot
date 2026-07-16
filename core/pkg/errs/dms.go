@@ -55,4 +55,11 @@ var (
 	// the abandoned-update credential is no longer a valid basis for a fresh
 	// enrollment. Maps to PKIFailureInfo badRequest (2).
 	ErrCMPAbandonedUpdate error = errors.New("device has an abandoned key-update; a new key-update (kur) is required")
+
+	// ErrCMPDeviceOwnedByOtherDMS is returned by LWCEnroll when the CSR's
+	// device identity is already registered to a DMS other than the one the
+	// request was submitted to. The requester's protection cert may be
+	// perfectly trusted and sender-matched — it simply has no right to claim
+	// this identity. Maps to PKIFailureInfo notAuthorized (23), RFC 9483 §3.5.
+	ErrCMPDeviceOwnedByOtherDMS error = errors.New("device already registered to another DMS")
 )

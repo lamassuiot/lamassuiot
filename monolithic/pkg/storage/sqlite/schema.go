@@ -207,6 +207,8 @@ func initializeSchema(db *gorm.DB) error {
 			sent_nonce TEXT NOT NULL DEFAULT '',
 			received_nonce TEXT NOT NULL DEFAULT '',
 			superseded_cert_serial TEXT NOT NULL DEFAULT '',
+			reg_token TEXT NOT NULL DEFAULT '',
+			popo_challenge TEXT NOT NULL DEFAULT '',
 			state TEXT NOT NULL DEFAULT 'ISSUED',
 			error_message TEXT NOT NULL DEFAULT '',
 			csr TEXT NOT NULL DEFAULT '',

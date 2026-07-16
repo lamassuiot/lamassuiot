@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
 type responsePKIMessage struct {
@@ -56,6 +58,62 @@ func protectionAlgFailInfo(err error) (int, bool) {
 		return pae.failInfo, true
 	}
 	return 0, false
+}
+
+// requireClientCertProtection reports whether the DMS auth mode mandates a
+// signature-protected (client-certificate) CMP request. CLIENT_CERTIFICATE and
+// the combined CLIENT_CERTIFICATE + webhook mode require a signer cert (and
+// therefore protection); the other modes (NO_AUTH, EXTERNAL_WEBHOOK) accept
+// unsigned messages. Shared by the top-level dispatch and both nested paths.
+func requireClientCertProtection(enrollOpts *models.EnrollmentOptionsLWCRFC9483) bool {
+	return enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificate ||
+		enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificateAndWebhook
+}
+
+// protectionRejectFailInfo maps a verifyRequestProtection error to the
+// PKIFailureInfo bit to emit: a rejected protection AlgorithmIdentifier carries
+// its own bit (badAlg / wrongIntegrity via protectionAlgFailInfo); every other
+// failure (signature mismatch, missing extraCerts, malformed protection field)
+// maps to badMessageCheck (RFC 9810 §5.1.3 / RFC 9483 §3.6.4).
+func protectionRejectFailInfo(err error) int {
+	failBit := pkiFailureInfoBadMessageCheck
+	if algBit, ok := protectionAlgFailInfo(err); ok {
+		failBit = algBit
+	}
+	return failBit
+}
+
+// parseLeafExtraCert parses the leaf certificate from a single extraCerts entry
+// (ec0), tolerating the encodings Go's asn1 can produce for the [1] EXPLICIT
+// SEQUENCE OF Certificate. It tries, in order:
+//  1. ec0.FullBytes as a certificate
+//  2. the first element inside ec0.Bytes
+//  3. ec0.Bytes directly as a legacy fallback
+//
+// On success it returns the certificate; when all three fail it returns a
+// descriptive error (used verbatim by verifyRequestProtection;
+// parseFirstExtraCert maps it to a nil result).
+func parseLeafExtraCert(ec0 asn1.RawValue) (*x509.Certificate, error) {
+	eeCert, err := x509.ParseCertificate(ec0.FullBytes)
+	if err != nil {
+		// ec0 is likely the SEQUENCE OF wrapper; extract the first element.
+		var firstCert asn1.RawValue
+		if _, e := asn1.Unmarshal(ec0.Bytes, &firstCert); e == nil {
+			if c, e2 := x509.ParseCertificate(firstCert.FullBytes); e2 == nil {
+				eeCert = c
+				err = nil
+			}
+		}
+	}
+	if eeCert == nil {
+		var err2 error
+		eeCert, err2 = x509.ParseCertificate(ec0.Bytes)
+		if err2 != nil {
+			return nil, fmt.Errorf("parse EE certificate from extraCerts[0] (fb=%d,b=%d): fb_err=%v, b_err=%v",
+				len(ec0.FullBytes), len(ec0.Bytes), err, err2)
+		}
+	}
+	return eeCert, nil
 }
 
 // verifyRequestProtection verifies the signature-based protection of an
@@ -111,31 +169,9 @@ func verifyRequestProtection(full rawPKIMessageFull, protectionAlg pkix.Algorith
 		return nil, fmt.Errorf("protection present but extraCerts is empty: cannot identify EE certificate")
 	}
 
-	ec0 := full.ExtraCerts[0]
-	// extraCerts is usually encoded as [1] EXPLICIT { SEQUENCE OF Certificate }.
-	// When Go decodes that into []asn1.RawValue, ExtraCerts[0] may be the whole
-	// SEQUENCE OF wrapper rather than the first certificate. Try:
-	// 1. ec0.FullBytes as a certificate
-	// 2. the first element inside ec0.Bytes
-	// 3. ec0.Bytes directly as a legacy fallback
-	eeCert, err := x509.ParseCertificate(ec0.FullBytes)
+	eeCert, err := parseLeafExtraCert(full.ExtraCerts[0])
 	if err != nil {
-		// ec0 is likely the SEQUENCE OF wrapper; extract the first element.
-		var firstCert asn1.RawValue
-		if _, e := asn1.Unmarshal(ec0.Bytes, &firstCert); e == nil {
-			if c, e2 := x509.ParseCertificate(firstCert.FullBytes); e2 == nil {
-				eeCert = c
-				err = nil
-			}
-		}
-	}
-	if eeCert == nil {
-		var err2 error
-		eeCert, err2 = x509.ParseCertificate(ec0.Bytes)
-		if err2 != nil {
-			return nil, fmt.Errorf("parse EE certificate from extraCerts[0] (fb=%d,b=%d): fb_err=%v, b_err=%v",
-				len(ec0.FullBytes), len(ec0.Bytes), err, err2)
-		}
+		return nil, err
 	}
 
 	payload, err := marshalProtectedPayload(full.Header.FullBytes, full.Body.FullBytes)

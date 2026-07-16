@@ -370,14 +370,22 @@ jobs:
             if [ "${family}" = "cmp-e2e" ]; then
               # Merge every per-suite file into one CMP.xml so dorny renders a
               # single grouped "CMP" row (aggregate pass/fail/skip) instead of
-              # 11. Each file is <?xml ...?><testsuites ...><testsuite>...
-              # </testsuite></testsuites> (written by run-cmp-test-suite.sh);
-              # strip the xml declaration and the outer <testsuites> wrapper
-              # from each and re-wrap once around all of them.
+              # 11. Each file is <?xml ...?><testsuites time="t"><testsuite
+              # time="t">...</testsuite></testsuites> (written by
+              # run-cmp-test-suite.sh); sum each file's root time="..." for the
+              # merged total (dorny reads ONLY the root's time attribute for
+              # the row's Time column — without this it shows "NaNms"), then
+              # strip the xml declaration and outer <testsuites> wrapper from
+              # each and re-wrap once around all of them.
               cmp_files=("${dir}"*.xml)
               if [ -e "${cmp_files[0]}" ]; then
+                total=0
+                for f in "${cmp_files[@]}"; do
+                  t="$(grep -oE 'time="[0-9.]+"' "${f}" | head -1 | grep -oE '[0-9.]+')"
+                  total=$(awk -v a="${total}" -v b="${t:-0}" 'BEGIN{printf "%.3f", a+b}')
+                done
                 {
-                  echo '<testsuites>'
+                  echo "<testsuites time=\"${total}\">"
                   for f in "${cmp_files[@]}"; do
                     tail -n +2 "${f}" | sed -E '1s/^<testsuites[^>]*>//; $s#</testsuites>$##'
                   done
@@ -389,6 +397,24 @@ jobs:
             fi
           done
           ls -la ./*.xml || echo "::warning::no test-result files found to report"
+
+      # dorny/test-reporter always sorts rows alphabetically (ascending) by
+      # file name — it has no sort-by-time option, and the sort key IS the
+      # displayed name. To get rows ordered from longest- to shortest-running
+      # (top to bottom), rename each file with a prefix of (9999 - duration):
+      # the slowest suite gets the smallest prefix, so it sorts first. The
+      # real duration is kept right after it ("9509 - 490s - CA.xml") so the
+      # label still shows how long the suite actually took.
+      - name: Order report rows by execution time
+        run: |
+          for f in ./*.xml; do
+            [ -e "${f}" ] || continue
+            secs="$(grep -oE 'time="[0-9.]+"' "${f}" | head -1 | grep -oE '[0-9.]+')"
+            secs="${secs:-0}"
+            rank="$(awk -v s="${secs}" 'BEGIN{printf "%04.0f", 9999-s}')"
+            mv "${f}" "${rank} - $(printf '%.0f' "${secs}")s - $(basename "${f}")"
+          done
+          ls -la ./*.xml
 
       - name: Publish test results
         uses: dorny/test-reporter@v2

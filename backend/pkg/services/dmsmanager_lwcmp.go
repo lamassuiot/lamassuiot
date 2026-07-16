@@ -300,7 +300,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	if existingDevice != nil {
 		if existingDevice.DMSOwner != dms.ID {
 			lFunc.Errorf("aborting enrollment. device '%s' is registered with DMS '%s'", deviceID, existingDevice.DMSOwner)
-			return nil, fmt.Errorf("device already registered to another DMS")
+			return nil, errs.ErrCMPDeviceOwnedByOtherDMS
 		}
 		if !enrollSettings.EnableReplaceableEnrollment {
 			lFunc.Debugf("aborting enrollment. DMS forbids new enrollments. consider switching NewEnrollment option ON in the DMS")
@@ -733,12 +733,66 @@ func (svc DMSManagerServiceBackend) LWCCACerts(ctx context.Context, aps string) 
 func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	_, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: input.APS,
 	})
 	if err != nil {
 		lFunc.Errorf("aborting revocation. Could not get DMS '%s': %s", input.APS, err)
 		return errs.ErrDMSNotFound
+	}
+
+	// RFC 9483 §5.3.2: when the rr protection signer is NOT the certificate
+	// being revoked, only a trusted PKI management entity may act on another
+	// entity's behalf. Trust means BOTH the id-kp-cmcRA extendedKeyUsage AND a
+	// chain to one of the DMS validation CAs — the EKU alone is a self-issued
+	// claim anyone can mint.
+	//
+	// The self-revocation case (signer == target) MUST NOT rely solely on the
+	// controller's CertTemplate-vs-signer field match: serial/issuer/subject/
+	// publicKey there are read straight off the attacker-supplied signer
+	// certificate, so a self-signed certificate crafted to assert someone
+	// else's (non-secret) serial number and issuer name passes that match
+	// trivially without the attacker ever holding the real certificate. The
+	// signer MUST also chain to a CA this DMS actually trusts for CMP-issued
+	// certificates — that's what proves the certificate is genuine rather
+	// than a forgery. Without this, any party who has merely observed a
+	// target certificate's serial/issuer (e.g. via CT logs or a TLS
+	// handshake) could revoke it.
+	if signer := cmpSignerCertFromContext(ctx); signer != nil {
+		signerSN := helpers.SerialNumberToHexString(signer.SerialNumber)
+		selfRevocation := signerSN == input.SerialNumber
+
+		if !selfRevocation && !chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA) {
+			lFunc.Errorf("aborting revocation of '%s': signer SN=%s is neither the target certificate nor a PKI management entity (no id-kp-cmcRA)",
+				input.SerialNumber, signerSN)
+			return errs.ErrDMSEnrollInvalidCert
+		}
+
+		// The signer must chain to a CA this DMS trusts for CMP message
+		// protection: the LWCMP client-certificate ValidationCAs (the same
+		// list enrollment auth uses), plus the enrollment CA and any
+		// re-enrollment migration CAs. This applies to BOTH the RA-initiated
+		// and self-revocation cases — only the EKU requirement above differs
+		// between them.
+		candidateCAIDs := append(
+			[]string{dms.Settings.EnrollmentSettings.EnrollmentCA},
+			dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.AuthOptionsMTLS.ValidationCAs...)
+		candidateCAIDs = append(candidateCAIDs, dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs...)
+		// Self-revocation must still succeed against a device's own already-
+		// expired certificate — revoking an expired cert is always legitimate
+		// — so expiry alone doesn't block it; the RA-initiated case keeps the
+		// stricter non-expired requirement.
+		if _, vErr := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, selfRevocation); vErr != nil {
+			lFunc.Errorf("aborting revocation of '%s': signer CN=%s does not chain to a DMS-trusted CA: %s",
+				input.SerialNumber, signer.Subject.CommonName, vErr)
+			return errs.ErrDMSEnrollInvalidCert
+		}
+		if selfRevocation {
+			lFunc.Infof("revocation of '%s' authorized: signer is the certificate's own CA-validated protection cert", input.SerialNumber)
+		} else {
+			lFunc.Infof("revocation of '%s' authorized for trusted PKI management entity CN=%s (RFC 9483 §5.3.2)",
+				input.SerialNumber, signer.Subject.CommonName)
+		}
 	}
 
 	// Fetch the target certificate so we can validate the requested state

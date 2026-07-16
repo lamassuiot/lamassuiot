@@ -32,6 +32,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
+	"math/big"
 )
 
 // Technique is the CMS key-management technique used to deliver the CEK to the
@@ -83,6 +84,14 @@ type BuildInput struct {
 	// (extraCerts[0]) so its ECDH derivation matches. Required for KARI.
 	KARIOriginatorCert *x509.Certificate
 
+	// RecipientRID, when non-nil, overrides the RecipientInfo identifier with
+	// the issuerAndSerialNumber CHOICE carrying these values instead of the
+	// recipient certificate's SubjectKeyIdentifier. CMP's challenge-response
+	// proof of possession requires exactly this shape — a NULL-DN issuer with
+	// the certReqId as serialNumber (RFC 9810 §5.2.8.3.3) — because the
+	// recipient key is not yet certified, so no real issuer/serial exists.
+	RecipientRID *IssuerAndSerial
+
 	// KGACert is the KGA signing certificate (must carry the id-kp-cmKGA EKU and
 	// chain to a trust anchor). It is embedded in SignedData.certificates and its
 	// SubjectKeyId identifies the SignerInfo.
@@ -93,6 +102,20 @@ type BuildInput struct {
 	KGAChain []*x509.Certificate
 	// KGASigner is the KGA certificate's private key, used to sign the SignedData.
 	KGASigner crypto.Signer
+}
+
+// ContentTypeData is the CMS id-data content type (RFC 5652 §3), for callers
+// of BuildEnvelopedData whose encrypted content is arbitrary/unstructured
+// bytes (e.g. a bare certificate DER) rather than a nested CMS ContentInfo.
+var ContentTypeData = oidData
+
+// IssuerAndSerial carries the values for an issuerAndSerialNumber
+// RecipientIdentifier CHOICE (RFC 5652 §6.2.1) when BuildInput.RecipientRID
+// overrides the default SubjectKeyIdentifier-based identifier. IssuerDER is a
+// pre-encoded X.501 Name TLV (a NULL-DN is the two-byte empty RDNSequence).
+type IssuerAndSerial struct {
+	IssuerDER []byte
+	Serial    *big.Int
 }
 
 // TechniqueFor selects the CMS key-management technique from a recipient public
@@ -118,6 +141,25 @@ func BuildKeyPackage(in BuildInput) ([]byte, error) {
 	if in.KGACert == nil || in.KGASigner == nil {
 		return nil, fmt.Errorf("kga: KGACert and KGASigner are required")
 	}
+
+	// SignedData( AsymmetricKeyPackage(generatedKey) ), signed by the KGA.
+	signedDataDER, err := buildSignedData(in)
+	if err != nil {
+		return nil, fmt.Errorf("kga: build SignedData: %w", err)
+	}
+	return BuildEnvelopedData(signedDataDER, oidSignedData, in)
+}
+
+// BuildEnvelopedData wraps content in a CMS EnvelopedData (RFC 5652)
+// delivered to in.RecipientCert's public key via KTRI (RSA key transport) or
+// KARI (ECDH key agreement, requiring in.KARIOriginatorKey/Cert). It is the
+// confidentiality-only primitive BuildKeyPackage layers a KGA SignedData atop;
+// callers that need EnvelopedData around different content — e.g. delivering
+// a bare certificate for CMP's encrCert proof-of-possession method
+// (RFC 9483 §4.1.4 / RFC 4210bis §5.2.8.4) — call it directly, passing the
+// CMS content type that actually describes content (id-data for arbitrary
+// bytes such as a certificate; id-signedData for BuildKeyPackage's SignedData).
+func BuildEnvelopedData(content []byte, contentType asn1.ObjectIdentifier, in BuildInput) ([]byte, error) {
 	if in.RecipientCert == nil {
 		return nil, fmt.Errorf("kga: RecipientCert is required")
 	}
@@ -127,28 +169,22 @@ func BuildKeyPackage(in BuildInput) ([]byte, error) {
 		return nil, err
 	}
 
-	// 1. SignedData( AsymmetricKeyPackage(generatedKey) ), signed by the KGA.
-	signedDataDER, err := buildSignedData(in)
-	if err != nil {
-		return nil, fmt.Errorf("kga: build SignedData: %w", err)
-	}
-
-	// 2. Fresh CEK + AES-256-CBC encryption of the SignedData.
+	// 1. Fresh CEK + AES-256-CBC encryption of the content.
 	cek, err := randomBytes(contentEncryptionKeyLen)
 	if err != nil {
 		return nil, fmt.Errorf("kga: generate CEK: %w", err)
 	}
-	encContentInfo, err := encryptContent(cek, signedDataDER)
+	encContentInfo, err := encryptContent(cek, content, contentType)
 	if err != nil {
 		return nil, fmt.Errorf("kga: encrypt content: %w", err)
 	}
 
-	// 3. RecipientInfo delivering the CEK.
+	// 2. RecipientInfo delivering the CEK.
 	var recipInfoDER []byte
 	var envVersion int
 	switch technique {
 	case TechniqueKTRI:
-		recipInfoDER, err = buildKTRI(in.RecipientCert, cek)
+		recipInfoDER, err = buildKTRI(in, cek)
 		// ktri uses subjectKeyIdentifier rid (version 2) for SKI-bearing recipient
 		// certs ⇒ EnvelopedData CMSVersion 2 (RFC 5652 §6.1). The RFC 9483 §4.1.6
 		// validator also requires ktri version 2.
@@ -161,7 +197,7 @@ func BuildKeyPackage(in BuildInput) ([]byte, error) {
 		return nil, fmt.Errorf("kga: build %s recipientInfo: %w", technique, err)
 	}
 
-	// 4. EnvelopedData { recipientInfos SET OF, encryptedContentInfo }.
+	// 3. EnvelopedData { recipientInfos SET OF, encryptedContentInfo }.
 	recipInfosSet, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassUniversal,
 		Tag:        asn1.TagSet,

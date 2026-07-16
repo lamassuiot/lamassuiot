@@ -25,13 +25,13 @@ import (
 // the requested X.509 version, so the handler can enforce the RFC 4210bis
 // Appendix D.6 presence and version requirements before issuance.
 type crossCertTemplateInfo struct {
-	hasVersion   bool
-	version      int // X.509 version value: v1=0, v2=1, v3=2
+	hasVersion    bool
+	version       int // X.509 version value: v1=0, v2=1, v3=2
 	hasSigningAlg bool
-	hasIssuer    bool
-	hasValidity  bool
-	hasSubject   bool
-	hasPublicKey bool
+	hasIssuer     bool
+	hasValidity   bool
+	hasSubject    bool
+	hasPublicKey  bool
 	// notBefore / notAfter carry the requested validity bounds parsed from the
 	// CertTemplate validity field (nil when absent or unparseable).
 	notBefore *time.Time
@@ -60,7 +60,7 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	if err != nil {
 		var certRej *certRequestRejection
 		if ok := asErrCertRequestRejection(err, &certRej); ok {
-			r.sendCCPRejection(ctx, lFunc, header, dmsID, certRej.CertReqID, certRej.Reason, certRej.FailInfoBit)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, certRej)
 		} else {
 			lFunc.Errorf("ccr decode: %v", err)
 			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), "malformed ccr", dmsID, pkiFailureInfoBadDataFormat)
@@ -80,11 +80,26 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 		return
 	}
 
+	// An EncryptedKey POPO ([2] keyEncipherment / [3] keyAgreement) carries the
+	// requester's private key to the CA — the same MUST NOT as the ForKGA case
+	// above (RFC 4210bis §5.3.11). Screened BEFORE CertTemplate validation so a
+	// request that violates both rules surfaces the graver key-disclosure error
+	// rather than a template-completeness nit.
+	if req.POPORaw.Class == asn1.ClassContextSpecific && (req.POPORaw.Tag == 2 || req.POPORaw.Tag == 3) {
+		lFunc.Warnf("ccr rejected: EncryptedKey POPO discloses a private key")
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+			CertReqID:   req.CertReqID,
+			Reason:      "cross-certification must not disclose a private key (RFC 4210bis §5.3.11)",
+			FailInfoBit: pkiFailureInfoBadRequest,
+		})
+		return
+	}
+
 	// CertTemplate presence/version checks (RFC 4210bis Appendix D.6).
 	tmpl := parseCrossCertTemplate(body.Bytes)
 	if rej := validateCrossCertTemplate(req.CertReqID, tmpl); rej != nil {
 		lFunc.Warnf("ccr template rejected: %s", rej.Reason)
-		r.sendCCPRejection(ctx, lFunc, header, dmsID, rej.CertReqID, rej.Reason, rej.FailInfoBit)
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
 		return
 	}
 
@@ -101,16 +116,10 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	}
 
 	// Proof of possession. The requester MUST prove control of the template key
-	// with a POPOSigningKey; an absent POPO is badPOP, and an EncryptedKey POPO
-	// (which would disclose a private key) is badRequest + badPOP.
+	// with a POPOSigningKey; an absent POPO is badPOP. (EncryptedKey POPOs were
+	// already screened out before template validation above.)
 	switch req.POPORaw.Tag {
 	case 1: // signature (POPOSigningKey) — the only acceptable form.
-	case 2, 3: // keyEncipherment / keyAgreement (EncryptedKey) — key disclosure.
-		lFunc.Warnf("ccr rejected: EncryptedKey POPO discloses a private key")
-		r.sendCCPRejection(ctx, lFunc, header, dmsID, req.CertReqID,
-			"cross-certification must not disclose a private key (RFC 4210bis §5.3.11)",
-			pkiFailureInfoBadRequest)
-		return
 	default: // absent or raVerified — no proof of possession.
 		lFunc.Warnf("ccr rejected: missing POPOSigningKey")
 		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
@@ -129,7 +138,11 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
 	if err != nil {
 		lFunc.Errorf("ccr: build synthetic CSR: %v", err)
-		r.sendCCPRejection(ctx, lFunc, header, dmsID, req.CertReqID, "cannot build CSR from CertTemplate", pkiFailureInfoBadCertTemplate)
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+			CertReqID:   req.CertReqID,
+			Reason:      "cannot build CSR from CertTemplate",
+			FailInfoBit: pkiFailureInfoBadCertTemplate,
+		})
 		return
 	}
 
@@ -137,7 +150,11 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	crossCert, _, err := crossCertifier.LWCIssueCrossCertificate(issuanceCtx, dmsID, csr, tmpl.notBefore, tmpl.notAfter)
 	if err != nil {
 		lFunc.Errorf("ccr: issue cross certificate: %v", err)
-		r.sendCCPRejection(ctx, lFunc, header, dmsID, req.CertReqID, err.Error(), pkiFailureInfoSystemFailure)
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+			CertReqID:   req.CertReqID,
+			Reason:      err.Error(),
+			FailInfoBit: pkiFailureInfoSystemFailure,
+		})
 		return
 	}
 
@@ -150,19 +167,6 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	lFunc.Infof("ccr: issued cross certificate SN=%s for subject CN=%s",
 		hex.EncodeToString(crossCert.SerialNumber.Bytes()), csr.Subject.CommonName)
 	r.sendRawBody(ctx, lFunc, header, respTag, bodyDER, dmsID)
-}
-
-// sendCCPRejection sends a ccp body carrying a rejection status (used for
-// request-level failures where RFC 4210bis expects a ccp rather than an error).
-func (r *cmpHttpRoutes) sendCCPRejection(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, dmsID string, certReqID int, reason string, failInfoBit int) {
-	body, err := marshalCertRepRejectionBody(certReqID, reason, failInfoBit)
-	if err != nil {
-		lFunc.Errorf("build ccp rejection body: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID, failInfoBit)
-		return
-	}
-	header.ResponseImplicitConfirm = false
-	r.sendRawBody(ctx, lFunc, header, cmpBodyTagCCP, body, dmsID)
 }
 
 // validateCrossCertTemplate enforces the RFC 4210bis Appendix D.6 CertTemplate

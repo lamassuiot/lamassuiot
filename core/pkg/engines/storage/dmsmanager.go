@@ -85,6 +85,15 @@ type CMPTransaction struct {
 	// HasUnconfirmedReenrollment. Empty for ir/cr transactions and for
 	// unprotected (NO_AUTH) key updates.
 	SupersededCertSerial string
+	// RegToken is the RFC 4211 §6.1 id-regCtrl-regToken value carried by the
+	// request's CertRequest controls, when present. Empty when the request
+	// supplied none. Used to enforce one-time use — see HasSeenRegToken.
+	RegToken string
+	// PopoChallenge is the hex-encoded expected Rand.int value for an ir/cr
+	// transaction PENDING a challengeResp proof-of-possession round trip
+	// (RFC 4210bis §5.2.8.3, popdecc/popdecr). Empty for every other
+	// transaction, including phased-workflow PENDING rows.
+	PopoChallenge string
 	// State is the lifecycle state of this transaction; see CMPTransactionState.
 	State CMPTransactionState
 	// ErrorMessage holds the CA failure reason when State == ISSUE_FAILED.
@@ -165,6 +174,15 @@ type CMPTransactionRepo interface {
 	// rather than an initialization/certification request (RFC 9483 §4.1.3,
 	// sec-awareness). Scoped to the certificate, not the device CN.
 	HasAbandonedReenrollment(ctx context.Context, dmsID, supersededCertSerial string) (bool, error)
+
+	// HasSeenRegToken reports whether a transaction already exists under the
+	// DMS carrying the given RFC 4211 §6.1 id-regCtrl-regToken value (the
+	// CMPTransaction.RegToken field). regToken is intended for one-time use —
+	// once a request presenting a given value has been accepted, any later
+	// request presenting the same value must be rejected — so the check spans
+	// every state (including REVOKED/CONFIRMED), not just active rows. Returns
+	// false when regToken is empty.
+	HasSeenRegToken(ctx context.Context, dmsID, regToken string) (bool, error)
 
 	// Insert persists a new transaction.
 	// Returns ErrCMPTransactionAlreadyExists when a live transaction with the

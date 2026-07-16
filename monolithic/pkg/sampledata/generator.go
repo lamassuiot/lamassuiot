@@ -186,8 +186,9 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 				},
 				EnrollmentCA: importedCAID,
 				DeviceProvisionProfile: models.DeviceProvisionProfile{
-					Icon:      "Laptop",
-					IconColor: "#0066CC",
+					Icon: "Laptop",
+					// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
+					IconColor: "#0066CC-#F0F8FF",
 					Metadata: map[string]interface{}{
 						"sample": true,
 					},
@@ -975,8 +976,9 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 						EnrollmentProtocol: models.CMP,
 						EnrollmentCA:       generatedCAID,
 						DeviceProvisionProfile: models.DeviceProvisionProfile{
-							Icon:      "ShieldCheck",
-							IconColor: "#004466",
+							Icon: "ShieldCheck",
+							// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
+							IconColor: "#004466-#E0F2FE",
 							Metadata:  map[string]interface{}{"sample": true},
 							Tags:      []string{"sample", "cmp"},
 						},
@@ -997,6 +999,15 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 							// suite's "no update without confirmation" test observes the
 							// rollback quickly.
 							ConfirmationTimeout: models.TimeDuration(10 * time.Second),
+							// RFC 4211 §6.2 id-regCtrl-authenticator: the pre-shared
+							// security-question answer the CMP compliance suite's
+							// Authenticator-control tests expect ("MaidenName" for the
+							// positive case, a mismatched value for the negative one).
+							ExpectedAuthenticator: "MaidenName",
+							// RFC 9483 §4.1.6 central key generation (CKG) defaults to
+							// disabled per DMS; the compliance suite's Kga tests (Key
+							// Transport / Key Agreement, via ir and kur) require it.
+							ServerKeyGenEnabled: true,
 						},
 					},
 					ReEnrollmentSettings: models.ReEnrollmentSettings{

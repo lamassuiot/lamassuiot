@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -19,6 +16,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,6 +24,7 @@ import (
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -167,10 +166,15 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
 		return
 	}
+	if rej := validateGeneralInfo(reqHeader.GeneralInfo); rej != nil {
+		lFunc.Warnf("generalInfo validation: %s", rej.reason)
+		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
+		return
+	}
 
 	// RFC 9483 §3.1: recipNonce MUST be absent in the initial request of a
-	// transaction (ir/cr). If the EE set it, reject per §3.5 badRecipientNonce.
-	if (body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR) && len(reqHeader.RecipNonce) > 0 {
+	// transaction (ir/cr/p10cr). If the EE set it, reject per §3.5 badRecipientNonce.
+	if (body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR || body.Tag == cmpBodyTagP10CR) && len(reqHeader.RecipNonce) > 0 {
 		lFunc.Warnf("recipNonce present on initial %s message", cmpTagToString(body.Tag))
 		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
 			"recipNonce must be absent in the initial request (RFC 9483 §3.1)",
@@ -213,12 +217,12 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), cmpWorkflowCtxKey, workflowName))
 
 	// Received is only meaningful for enrollment-initiating messages
-	// (IR/CR/KUR). Follow-up messages (certConf, pollReq, rr) reference an
+	// (IR/CR/P10CR/KUR). Follow-up messages (certConf, pollReq, rr) reference an
 	// already-created WFX job that is well past Received; emitting it on such
 	// jobs would attempt an invalid backward transition (e.g. AwaitingCertConf
 	// → Received) which either gets rejected by WFX or silently resets the job
 	// to the wrong state.
-	if body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR || body.Tag == cmpBodyTagKUR {
+	if body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR || body.Tag == cmpBodyTagP10CR || body.Tag == cmpBodyTagKUR {
 		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 			TransactionID:     txHex,
 			DMSID:             dmsID,
@@ -244,7 +248,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// (NO_AUTH, EXTERNAL_WEBHOOK) accept unsigned messages. auth_mode is the
 	// single source of truth for the protection requirement — there is no
 	// separate enforce_request_protection knob.
-	requireProtection := enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificate || enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificateAndWebhook
+	requireProtection := requireClientCertProtection(enrollOpts)
 	signerCert, err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlg, requireProtection)
 	if err != nil {
 		lFunc.Warnf("protection verification failed: %v", err)
@@ -254,10 +258,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		// MAC-based protection where a signature was required); anything else
 		// (signature mismatch, missing extraCerts, malformed protection field)
 		// maps to badMessageCheck.
-		failBit := pkiFailureInfoBadMessageCheck
-		if algBit, ok := protectionAlgFailInfo(err); ok {
-			failBit = algBit
-		}
+		failBit := protectionRejectFailInfo(err)
 		r.rejectRequest(ctx, lFunc, reqHeader, body.Tag,
 			fmt.Sprintf("protection verification failed: %v", err), failBit, dmsID)
 		return
@@ -314,6 +315,8 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	switch body.Tag {
 	case cmpBodyTagIR, cmpBodyTagCR:
 		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantInitial)
+	case cmpBodyTagP10CR:
+		r.handleP10CR(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
 	case cmpBodyTagKUR:
 		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantUpdate)
 	case cmpBodyTagRR:
@@ -326,6 +329,8 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		r.handleCertConf(ctx, lFunc, reqHeader, body, bodyBytes, dmsID)
 	case cmpBodyTagPollReq:
 		r.handlePoll(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
+	case cmpBodyTagPopDecr:
+		r.handlePOPODecKeyResp(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
 	case cmpBodyTagGenMsg:
 		r.handleGeneralMessage(ctx, lFunc, reqHeader, body, dmsID)
 	default:
@@ -381,12 +386,39 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	}
 	revive := reason == crlReasonRemoveFromCRL
 
+	// version[9], when present, is asserted by the requester as additional
+	// information (RFC 9483 §4.2) and MUST match what every cert Lamassu
+	// issues carries: X.509 v3. Checked before the signer-bound comparisons
+	// below because it doesn't depend on having a signer cert at all.
+	if rd.HasVersion && rd.Version != 2 {
+		lFunc.Warnf("rr: CertTemplate version %d asserted, expected v3 (2)", rd.Version)
+		r.rejectRevocation(ctx, lFunc, header, fmt.Sprintf("CertTemplate version must be v3 (2), got %d (RFC 9483 §4.2)", rd.Version), pkiFailureInfoBadRequest, dmsID)
+		return
+	}
+
 	// --- CertTemplate validation against the protection certificate ---
 	// The cert being revoked signs its own rr, so its CertTemplate fields MUST
 	// match the signer cert. This is only enforced for protected requests; an
 	// unprotected request (NO_AUTH DMS, no signer cert) revokes by serial alone.
+	//
+	// Exception (RFC 9483 §5.3.2): a trusted PKI management entity (id-kp-cmcRA)
+	// may revoke ANOTHER entity's certificate. In that case the CertTemplate
+	// references the target certificate, not the signer, so the signer-match
+	// checks are skipped; authorization is enforced by the service layer, which
+	// chain-validates the RA signer against the DMS validation CAs before
+	// acting (an untrusted cert merely claiming the cmcRA EKU is rejected there
+	// with signerNotTrusted).
 	signer := cmpSignerCertFromGin(ctx)
-	if signer != nil {
+	raInitiated := signer != nil && rd.HasSerial && signer.SerialNumber != nil &&
+		new(big.Int).SetBytes(rd.SerialNumber).Cmp(signer.SerialNumber) != 0 &&
+		chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA)
+	if raInitiated {
+		lFunc.Infof("rr: RA-initiated revocation (signer CN=%s carries id-kp-cmcRA, target serial differs)", signer.Subject.CommonName)
+		if !rd.HasIssuer {
+			r.rejectRevocation(ctx, lFunc, header, "missing issuer in CertTemplate", pkiFailureInfoAddInfoNotAvailable, dmsID)
+			return
+		}
+	} else if signer != nil {
 		if !rd.HasIssuer {
 			r.rejectRevocation(ctx, lFunc, header, "missing issuer in CertTemplate", pkiFailureInfoAddInfoNotAvailable, dmsID)
 			return
@@ -417,6 +449,13 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 			r.rejectRevocation(ctx, lFunc, header, "publicKey does not match certificate", pkiFailureInfoBadCertId, dmsID)
 			return
 		}
+		// extensions[9], like subject/publicKey above, is optional additional
+		// information the requester asserts about the cert being revoked; RFC
+		// 9483 §4.2 requires it to match exactly when present.
+		if rd.HasExtensions && !extensionsMatch(rd.Extensions, signer.Extensions) {
+			r.rejectRevocation(ctx, lFunc, header, "extensions do not match certificate", pkiFailureInfoBadCertId, dmsID)
+			return
+		}
 	} else if !rd.HasSerial {
 		r.rejectRevocation(ctx, lFunc, header, "missing serialNumber in CertTemplate", pkiFailureInfoBadDataFormat, dmsID)
 		return
@@ -444,6 +483,11 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		switch {
 		case errors.Is(err, errs.ErrCertificateNotFound):
 			failBit = pkiFailureInfoBadCertId
+		case errors.Is(err, errs.ErrDMSEnrollInvalidCert):
+			// RA-initiated revocation whose signer does not chain to any DMS
+			// validation CA (RFC 9483 §5.3.2): the claimed management entity is
+			// not trusted.
+			failBit = pkiFailureInfoSignerNotTrusted
 		case errors.Is(err, errs.ErrCMPPendingUpdate):
 			// The device has a key-update awaiting certConf; its certificates'
 			// revocation state must not change until the open transaction
@@ -507,13 +551,14 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 			dmsID, pkiFailureInfoBadRequest)
 		return
 	}
-	// The certReqId of the first (and only) issued certificate is 0
-	// (RFC 9483 §4.1.1). A negative or non-zero value is malformed; p10cr's
-	// special -1 value is out of scope for this profile.
-	if statuses[0].CertReqID != 0 {
-		lFunc.Warnf("certConf: invalid certReqId %d (must be 0)", statuses[0].CertReqID)
+	// The certReqId of the first (and only) issued certificate is 0 for
+	// ir/cr/kur (RFC 9483 §4.1.1) and -1 for p10cr (RFC 4210 Errata 8806).
+	// Any other value is malformed regardless of the transaction; the exact
+	// per-transaction match is enforced below once the row is loaded.
+	if statuses[0].CertReqID != 0 && statuses[0].CertReqID != p10crCertReqID {
+		lFunc.Warnf("certConf: invalid certReqId %d (must be 0, or -1 for p10cr)", statuses[0].CertReqID)
 		r.rejectWithError(ctx, &header, PKIStatus(2),
-			fmt.Sprintf("certConf certReqId must be 0, got %d", statuses[0].CertReqID),
+			fmt.Sprintf("certConf certReqId must be 0 (or -1 for p10cr), got %d", statuses[0].CertReqID),
 			dmsID, pkiFailureInfoBadRequest)
 		return
 	}
@@ -564,6 +609,24 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		}
 		lFunc.Warnf("certConf: unknown transactionID %s", txHex)
 		r.rejectWithError(ctx, &header, PKIStatus(2), "unknown transactionID", dmsID, pkiFailureInfoBadRequest)
+		return
+	}
+
+	// Bind the certReqId to the transaction's request type: a p10cr-issued
+	// certificate is confirmed with certReqId -1 (RFC 4210 Errata 8806), an
+	// ir/cr/kur one with 0 (RFC 9483 §4.1.1). A mismatch means the EE is
+	// confirming under the wrong convention.
+	expectedCertReqID := 0
+	if tx.RequestType == cmpTagToString(cmpBodyTagP10CR) {
+		expectedCertReqID = p10crCertReqID
+	}
+	if statuses[0].CertReqID != expectedCertReqID {
+		lFunc.Warnf("certConf: certReqId %d does not match the %s transaction (expected %d)",
+			statuses[0].CertReqID, tx.RequestType, expectedCertReqID)
+		r.rejectWithError(ctx, &header, PKIStatus(2),
+			fmt.Sprintf("certConf certReqId must be %d for a %s transaction, got %d",
+				expectedCertReqID, tx.RequestType, statuses[0].CertReqID),
+			dmsID, pkiFailureInfoBadRequest)
 		return
 	}
 
@@ -661,10 +724,27 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 				"certificate was revoked before confirmation was processed", dmsID, pkiFailureInfoBadRequest)
 			return
 		case storage.CMPTransactionStateConfirmed:
-			// Idempotent replay: certConf is allowed to be re-delivered if
-			// the original pkiConf was lost in flight. Fall through to send
-			// a fresh pkiConf without re-emitting the WFX Confirmed state.
-			lFunc.Infof("certConf: tx %s already CONFIRMED — treating as idempotent replay", txHex)
+			// The transaction is already CONFIRMED. Two distinct cases:
+			//
+			//   - Confirmed implicitly at issuance (RFC 4210 §5.2.8): marked by
+			//     ConfirmedAt == CreatedAt exactly (issueAndStore stamps both
+			//     from one clock read). An EE MAY still send certConf even when
+			//     implicitConfirm was granted; that first confirmation is
+			//     answered with a normal pkiConf.
+			//   - Confirmed by an earlier certConf (Confirm() stamped a later
+			//     ConfirmedAt): this one is a duplicate. RFC 9483 §4.1.1 /
+			//     RFC 4210 §5.3.18 answer it with an error carrying failInfo
+			//     certConfirmed (11) — the EE still learns the certificate is
+			//     confirmed, so a client retrying a lost pkiConf isn't left blind.
+			if tx.ConfirmedAt.Equal(tx.CreatedAt) {
+				lFunc.Infof("certConf: tx %s was implicitly confirmed at issuance — acknowledging with pkiConf", txHex)
+				break
+			}
+			lFunc.Infof("certConf: tx %s already CONFIRMED — replying error(certConfirmed)", txHex)
+			r.rejectWithError(ctx, &header, PKIStatus(2),
+				"certificate confirmation was already received for this transaction",
+				dmsID, pkiFailureInfoCertConfirmed)
+			return
 		default:
 			lFunc.Errorf("certConf: tx %s in unexpected prior state %q for confirmation", txHex, prior)
 			r.rejectWithError(ctx, &header, PKIStatus(2),
@@ -796,15 +876,13 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			header.ResponseSenderNonce, _ = hex.DecodeString(tx.SentNonce)
 		}
 
-		// Decide whether this delivery is an IP (ir-derived) or CP (cr/kur).
+		// Decide whether this delivery is an IP (ir-derived) or CP (cr/p10cr/kur).
 		// PENDING rows store IsReenrollment; for sync-stored ISSUED rows
 		// (lost-response recovery) the original body tag is lost, so we default
 		// to CP — both IP and CP carry the same CertRepMessage structure and
 		// any modern CMP client accepts either as the cert-bearing response.
-		respTag := cmpBodyTagCP
-		if !tx.IsReenrollment {
-			respTag = cmpBodyTagIP
-		}
+		// A p10cr row is never an IP: its response is always cp (RFC 9483 §4.1.4).
+		respTag := pollRespTagFor(tx)
 		var txCertRaw []byte
 		if tx.Certificate != nil {
 			txCertRaw = tx.Certificate.Raw
@@ -864,10 +942,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// but the EE never received the IP. The pollReq retries; we re-deliver
 		// the cert and leave the row in CONFIRMED. No certConf will follow and
 		// no nonce echo is needed.
-		respTag := cmpBodyTagCP
-		if !tx.IsReenrollment {
-			respTag = cmpBodyTagIP
-		}
+		respTag := pollRespTagFor(tx)
 		var txCertRaw []byte
 		if tx.Certificate != nil {
 			txCertRaw = tx.Certificate.Raw
@@ -895,10 +970,33 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// service-layer error categories exist).
 		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID, pkiFailureInfoSystemFailure)
 
+	case storage.CMPTransactionStateRevoked:
+		// The confirmation monitor rolled the row back (the certConf/delivery
+		// window elapsed before the EE picked the cert up or confirmed it), or
+		// the certificate was revoked out-of-band via the API. Tell the EE
+		// precisely what happened — falling through to the generic
+		// unknown-state systemFailure reads as a server bug and gives the
+		// operator nothing to act on.
+		lFunc.Warnf("pollReq: tx %s REVOKED, returning CMP error", txHex)
+		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+			"certificate for this transaction has been revoked (confirmation window elapsed or revoked via API); start a new enrollment", dmsID, pkiFailureInfoCertRevoked)
+
 	default:
 		lFunc.Errorf("pollReq: tx %s has unknown state %q", txHex, tx.State)
 		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: unknown transaction state", dmsID, pkiFailureInfoSystemFailure)
 	}
+}
+
+// pollRespTagFor picks the cert-bearing response body tag for a pollReq
+// delivery from the persisted transaction: re-enrollments (kur) and p10cr
+// transactions get cp; everything else (ir/cr sync rows, where the historical
+// default is ip) gets ip. p10cr must never yield an ip — its response body is
+// cp in every phase of the exchange (RFC 9483 §4.1.4).
+func pollRespTagFor(tx storage.CMPTransaction) int {
+	if tx.IsReenrollment || tx.RequestType == cmpTagToString(cmpBodyTagP10CR) {
+		return cmpBodyTagCP
+	}
+	return cmpBodyTagIP
 }
 
 // isImplicitConfirm reports whether the current request should be treated as
@@ -1056,15 +1154,17 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHead
 	r.sendRawBody(ctx, r.logger, h, cmpBodyTagError, errBody, aps)
 }
 
+// writeCMPResponse logs and writes a fully-assembled response PKIMessage DER
+// to the Gin context. Shared by sendRawBody and sendRawBodyWithSigner.
+func writeCMPResponse(ctx *gin.Context, lFunc *logrus.Entry, bodyTag int, respDER []byte) {
+	lFunc.Infof("CMP response (tag=%d) PEM:\n%s", bodyTag,
+		pem.EncodeToMemory(&pem.Block{Type: "CMP MESSAGE", Bytes: respDER}))
+	ctx.Data(http.StatusOK, "application/pkixcmp", respDER)
+}
+
 // sendRawBody assembles a PKIMessage from a pre-encoded body CHOICE DER and
 // writes the result as application/pkixcmp to the Gin context.
 func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHeader requestPKIHeader, bodyTag int, bodyDER []byte, aps string) []byte {
-	sendResponse := func(respDER []byte) {
-		lFunc.Infof("CMP response (tag=%d) PEM:\n%s", bodyTag,
-			pem.EncodeToMemory(&pem.Block{Type: "CMP MESSAGE", Bytes: respDER}))
-		ctx.Data(http.StatusOK, "application/pkixcmp", respDER)
-	}
-
 	if aps != "" {
 		if provider, ok := r.svc.(services.LightweightCMPProtectionProvider); ok {
 			certChain, signer, credErr := provider.LWCProtectionCredentials(ctx.Request.Context(), aps)
@@ -1083,7 +1183,7 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 					ctx.Status(http.StatusInternalServerError)
 					return nil
 				}
-				sendResponse(respDER)
+				writeCMPResponse(ctx, lFunc, bodyTag, respDER)
 				return respDER
 			}
 		}
@@ -1095,7 +1195,24 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 		ctx.Status(http.StatusInternalServerError)
 		return nil
 	}
-	sendResponse(respDER)
+	writeCMPResponse(ctx, lFunc, bodyTag, respDER)
+	return respDER
+}
+
+// sendRawBodyWithSigner is sendRawBody for the rare case where the response
+// must be protection-signed by a specific key/cert chain rather than the
+// DMS's normal CMP protection credentials — currently only the ECDH
+// originator minted for a keyAgreement encrCert/challengeResp recipient (see
+// mintECDHOriginator in cmp_popo_indirect.go), whose certificate must be the
+// one the recipient finds in extraCerts to complete the key agreement.
+func (r *cmpHttpRoutes) sendRawBodyWithSigner(ctx *gin.Context, lFunc *logrus.Entry, reqHeader requestPKIHeader, bodyTag int, bodyDER []byte, certChain []*x509.Certificate, signer crypto.Signer) []byte {
+	respDER, err := marshalProtectedResponseWithSigner(reqHeader, bodyTag, bodyDER, certChain, certChain[0], signer)
+	if err != nil {
+		lFunc.Errorf("marshal protected response PKIMessage: %v", err)
+		ctx.Status(http.StatusInternalServerError)
+		return nil
+	}
+	writeCMPResponse(ctx, lFunc, bodyTag, respDER)
 	return respDER
 }
 
@@ -1186,6 +1303,16 @@ func (r *cmpHttpRoutes) resolveDeviceCN(ctx context.Context, body asn1.RawValue,
 			return ""
 		}
 		return extractCNFromSubjectDER(req.SubjectDER)
+	case cmpBodyTagP10CR:
+		csrDER, err := p10crCSRDER(body.Bytes)
+		if err != nil {
+			return ""
+		}
+		csr, err := x509.ParseCertificateRequest(csrDER)
+		if err != nil {
+			return ""
+		}
+		return csr.Subject.CommonName
 	case cmpBodyTagPollReq, cmpBodyTagCertConf, cmpBodyTagRR:
 		if txHex == "" {
 			return ""
@@ -1216,88 +1343,12 @@ func extractCNFromSubjectDER(subjectDER []byte) string {
 	return name.CommonName
 }
 
-type firstCertReq struct {
-	CertReqID    int
-	SubjectDER   []byte
-	PublicKeyDER []byte
-	// CertReqDER is the DER encoding of the CertRequest SEQUENCE.
-	// The POPO signature (RFC 4211 §4.1 clause 3) is computed over this value.
-	CertReqDER []byte
-	// POPORaw is the raw ASN.1 value of the ProofOfPossession CHOICE,
-	// as decoded from the CertReqMsg following the CertRequest.
-	POPORaw asn1.RawValue
-	// OldCertID carries the RFC 4211 §6.2 id-regCtrl-oldCertID control from the
-	// CertRequest's optional `controls` field, when present. For a KUR it names
-	// the certificate being updated (CertId = issuer + serialNumber). nil when no
-	// such control was supplied.
-	OldCertID *oldCertID
-	// Extensions holds the requested X.509 extensions from the CertTemplate
-	// `extensions [9]` field (KeyUsage/ExtKeyUsage/SubjectAltName). Empty when
-	// the template requested none. Carried into the synthesized CSR so the
-	// issuance profile can honor them (RFC 4211 §5 / RFC 9483 §4.1).
-	Extensions []pkix.Extension
-	// ControlsDER is the raw DER of the CertRequest optional `controls` field
-	// (RFC 4211 §5), i.e. everything following the CertTemplate inside the
-	// CertRequest SEQUENCE. Empty when no controls were supplied. Used to
-	// validate registration controls such as id-regCtrl-pkiPublicationInfo.
-	ControlsDER []byte
-	// RegInfoDER is the raw DER of the CertReqMsg optional `regInfo` field
-	// (RFC 4211 §6 / §7): a SEQUENCE OF AttributeTypeAndValue carrying, e.g.,
-	// id-regInfo-certReq (an RA-supplied alternate CertRequest). Empty when the
-	// message carried no regInfo.
-	RegInfoDER []byte
-	// ForKGA marks an RFC 9483 §4.1.6 central key generation request: the
-	// CertTemplate carries no usable public key (the publicKey field is either
-	// absent, or present with a zero-length subjectPublicKey) and no POPO, so the
-	// server generates the end-entity key pair and returns it in the response.
-	ForKGA bool
-	// KGAKeyAlgorithm is the public key algorithm hint from the CertTemplate's
-	// publicKey.algorithm when a for_kga request supplied one (RSA or ECDSA); it
-	// tells the server which key type to generate. UnknownPublicKeyAlgorithm when
-	// the request omitted the publicKey field entirely.
-	KGAKeyAlgorithm x509.PublicKeyAlgorithm
-}
-
 // oldCertID is the decoded RFC 4211 CertId { issuer GeneralName, serialNumber }
 // from the id-regCtrl-oldCertID control. IssuerNameDER is the DER of the issuer
 // directoryName ([4]) RDNSequence, directly comparable to x509.Certificate.RawIssuer.
 type oldCertID struct {
 	IssuerNameDER []byte
 	SerialNumber  *big.Int
-}
-
-// oidSubjectAltNameExt is the X.509 SubjectAltName extension OID (RFC 5280
-// §4.2.1.6).
-var oidSubjectAltNameExt = asn1.ObjectIdentifier{2, 5, 29, 17}
-
-// emptyRDNSequenceDER returns the DER of an empty RDNSequence (a zero-length
-// SEQUENCE, 0x30 0x00) — the canonical NULL-DN subject used when a CMP
-// CertTemplate omits the subject but supplies a SubjectAltName.
-func emptyRDNSequenceDER() []byte {
-	return []byte{0x30, 0x00}
-}
-
-// isEmptySubjectDER reports whether a decoded CertTemplate subject is absent or
-// a NULL-DN: either no bytes at all, or an empty RDNSequence (0x30 0x00).
-func isEmptySubjectDER(subjectDER []byte) bool {
-	if len(subjectDER) == 0 {
-		return true
-	}
-	if len(subjectDER) == 2 && subjectDER[0] == 0x30 && subjectDER[1] == 0x00 {
-		return true
-	}
-	return false
-}
-
-// hasSubjectAltNameExtension reports whether the requested CertTemplate
-// extensions include a SubjectAltName (RFC 5280 §4.2.1.6).
-func hasSubjectAltNameExtension(exts []pkix.Extension) bool {
-	for _, e := range exts {
-		if e.Id.Equal(oidSubjectAltNameExt) {
-			return true
-		}
-	}
-	return false
 }
 
 // requestedCriticalExtensionDropped reports whether the issuance dropped a
@@ -1344,229 +1395,6 @@ type responsePKIHeader struct {
 type infoTypeAndValueResp struct {
 	InfoType  asn1.ObjectIdentifier
 	InfoValue asn1.RawValue `asn1:"optional"`
-}
-
-// decodeFirstCertReq extracts the fields needed for enrollment from the first
-// CertReqMessage using manual ASN.1 peeling compatible with OpenSSL CMP.
-func decodeFirstCertReq(bodyBytes []byte) (*firstCertReq, error) {
-	var crMsgsSeq asn1.RawValue
-	if _, err := asn1.Unmarshal(bodyBytes, &crMsgsSeq); err != nil {
-		return nil, fmt.Errorf("CertReqMessages: %w", err)
-	}
-
-	var crMsg asn1.RawValue
-	crMsgsRest, err := asn1.Unmarshal(crMsgsSeq.Bytes, &crMsg)
-	if err != nil {
-		return nil, fmt.Errorf("CertReqMsg: %w", err)
-	}
-	// RFC 9483 §4.1: exactly one CertReqMsg is allowed per ir/cr/kur.
-	if len(crMsgsRest) > 0 {
-		return nil, &certRequestRejection{
-			CertReqID:   0,
-			Reason:      "ir/cr/kur must contain exactly one CertReqMsg (RFC 9483 §4.1)",
-			FailInfoBit: pkiFailureInfoBadRequest,
-		}
-	}
-
-	var certReqSeq asn1.RawValue
-	certReqMsgRest, err := asn1.Unmarshal(crMsg.Bytes, &certReqSeq)
-	if err != nil {
-		return nil, fmt.Errorf("CertRequest: %w", err)
-	}
-
-	// Try to decode the optional ProofOfPossession CHOICE that follows CertRequest.
-	var popoRaw asn1.RawValue
-	if len(certReqMsgRest) > 0 {
-		// Peek at the first TLV; any parse error just means POPO is absent.
-		if _, parseErr := asn1.Unmarshal(certReqMsgRest, &popoRaw); parseErr != nil {
-			popoRaw = asn1.RawValue{} // reset on error
-		}
-	}
-
-	var certReqIDRaw asn1.RawValue
-	rest, err := asn1.Unmarshal(certReqSeq.Bytes, &certReqIDRaw)
-	if err != nil {
-		return nil, fmt.Errorf("certReqId: %w", err)
-	}
-	if certReqIDRaw.Tag != asn1.TagInteger || certReqIDRaw.Class != asn1.ClassUniversal {
-		return nil, fmt.Errorf("expected INTEGER for certReqId, got class=%d tag=%d", certReqIDRaw.Class, certReqIDRaw.Tag)
-	}
-
-	var certReqID int
-	if _, err := asn1.Unmarshal(certReqIDRaw.FullBytes, &certReqID); err != nil {
-		return nil, fmt.Errorf("parse certReqId: %w", err)
-	}
-	// RFC 9483 §4.1: certReqId MUST be 0.
-	if certReqID != 0 {
-		return nil, &certRequestRejection{
-			CertReqID:   certReqID,
-			Reason:      fmt.Sprintf("certReqId must be 0 (RFC 9483 §4.1), got %d", certReqID),
-			FailInfoBit: pkiFailureInfoBadRequest,
-		}
-	}
-
-	var certTemplate asn1.RawValue
-	controlsRest, err := asn1.Unmarshal(rest, &certTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("CertTemplate: %w", err)
-	}
-	if certTemplate.Tag != asn1.TagSequence || certTemplate.Class != asn1.ClassUniversal {
-		return nil, fmt.Errorf("expected UNIVERSAL SEQUENCE for CertTemplate, got class=%d tag=%d", certTemplate.Class, certTemplate.Tag)
-	}
-
-	// Optional `controls` SEQUENCE follows the CertTemplate (RFC 4211 §5). We only
-	// care about id-regCtrl-oldCertID (KUR cert-to-update reference); ignore the
-	// rest. A malformed controls block is non-fatal — it just yields no oldCertID.
-	oldCID := parseOldCertIDControl(controlsRest)
-
-	// regInfo (RFC 4211 §6): the CertReqMsg may carry a SEQUENCE OF
-	// AttributeTypeAndValue after the CertRequest and optional POPO. POPO's
-	// CHOICE alternatives are all context-tagged, so the first UNIVERSAL SEQUENCE
-	// in the remainder is the regInfo. Captured raw for alt-CertReq validation.
-	regInfoDER := findRegInfoDER(certReqMsgRest)
-
-	var subjectDER []byte
-	var publicKeyDER []byte
-	var extensions []pkix.Extension
-	// KGA (RFC 9483 §4.1.6) detection state: whether a publicKey field was
-	// present at all, and whether it carried an empty subjectPublicKey (the
-	// "generate this for me" signal), plus the algorithm hint if any.
-	pubKeyPresent := false
-	pubKeyEmpty := false
-	kgaKeyAlg := x509.UnknownPublicKeyAlgorithm
-	remaining := certTemplate.Bytes
-	for len(remaining) > 0 {
-		var field asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &field)
-		if err != nil {
-			return nil, fmt.Errorf("CertTemplate field: %w", err)
-		}
-
-		switch {
-		case field.Class == asn1.ClassContextSpecific && field.Tag == 5:
-			subjectDER, err = normalizeSequenceDER(field.Bytes, "subject")
-			if err != nil {
-				return nil, err
-			}
-		case field.Class == asn1.ClassContextSpecific && field.Tag == 6:
-			pubKeyPresent = true
-			// The [6] content is a SubjectPublicKeyInfo body (algorithm ||
-			// subjectPublicKey). A for_kga request sends the algorithm hint with a
-			// zero-length subjectPublicKey; detect that and remember the key type.
-			pubKeyEmpty, kgaKeyAlg = inspectKGATemplateKey(field.Bytes)
-			publicKeyDER, err = wrapSequenceDER(field.Bytes, "SubjectPublicKeyInfo")
-			if err != nil {
-				return nil, err
-			}
-		case field.Class == asn1.ClassContextSpecific && field.Tag == 9:
-			// extensions [9] Extensions (RFC 4211 §5). The EE uses these to
-			// request KeyUsage/ExtKeyUsage/SubjectAltName; carry them so the
-			// synthesized CSR reflects the requested template and the issuance
-			// profile can honor them. A malformed extensions block is non-fatal:
-			// it just yields no extensions rather than aborting enrollment.
-			extensions = parseCertTemplateExtensions(field.Bytes)
-		}
-	}
-
-	if isEmptySubjectDER(subjectDER) {
-		// RFC 9483 §4.1.1 permits a NULL-DN (empty) subject when a
-		// SubjectAltName extension carries the identity. Reject only when there
-		// is neither a subject nor a SAN; otherwise normalize the subject to a
-		// valid empty RDNSequence so the synthesized CSR encodes a proper
-		// NULL-DN and the service derives the device identity from the SAN.
-		if !hasSubjectAltNameExtension(extensions) {
-			return nil, &certRequestRejection{
-				CertReqID:   certReqID,
-				Reason:      "subject field is required in CertTemplate unless a SubjectAltName extension is present (RFC 9483 §4.1.1)",
-				FailInfoBit: pkiFailureInfoBadCertTemplate,
-			}
-		}
-		subjectDER = emptyRDNSequenceDER()
-	}
-	// RFC 9483 §4.1.6 central key generation: the request deliberately omits a
-	// usable public key so the server generates the key pair. Recognise the two
-	// wire shapes the profile permits — publicKey present with a zero-length
-	// subjectPublicKey, or publicKey absent together with an absent POPO (a plain
-	// malformed request that merely forgot the key still carries a POPO, so this
-	// stays distinct from that error) — and defer key handling to the KGA path.
-	forKGA := pubKeyEmpty || (!pubKeyPresent && len(popoRaw.FullBytes) == 0)
-	if len(publicKeyDER) == 0 && !forKGA {
-		return nil, &certRequestRejection{
-			CertReqID:   certReqID,
-			Reason:      "publicKey field is required in CertTemplate (RFC 9483 §4.1.3)",
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
-		}
-	}
-
-	return &firstCertReq{
-		CertReqID:       certReqID,
-		SubjectDER:      subjectDER,
-		PublicKeyDER:    publicKeyDER,
-		CertReqDER:      certReqSeq.FullBytes,
-		POPORaw:         popoRaw,
-		OldCertID:       oldCID,
-		Extensions:      extensions,
-		ControlsDER:     controlsRest,
-		RegInfoDER:      regInfoDER,
-		ForKGA:          forKGA,
-		KGAKeyAlgorithm: kgaKeyAlg,
-	}, nil
-}
-
-// inspectKGATemplateKey examines the body of a CertTemplate publicKey [6] field
-// (a SubjectPublicKeyInfo: algorithm AlgorithmIdentifier, subjectPublicKey BIT
-// STRING). It reports whether the subjectPublicKey is empty — the RFC 9483
-// §4.1.6 "generate this key for me" signal — and, when it can, the public key
-// algorithm named by the AlgorithmIdentifier (so the server knows which key
-// type to generate). A parse failure yields (false, Unknown): treat it as a
-// normal (non-empty) key and let downstream validation handle malformations.
-func inspectKGATemplateKey(spkiBody []byte) (empty bool, alg x509.PublicKeyAlgorithm) {
-	var algID asn1.RawValue
-	rest, err := asn1.Unmarshal(spkiBody, &algID)
-	if err != nil {
-		return false, x509.UnknownPublicKeyAlgorithm
-	}
-	var subjectPublicKey asn1.BitString
-	if _, err := asn1.Unmarshal(rest, &subjectPublicKey); err != nil {
-		return false, x509.UnknownPublicKeyAlgorithm
-	}
-	if subjectPublicKey.BitLength != 0 {
-		return false, x509.UnknownPublicKeyAlgorithm
-	}
-	// Empty key ⇒ for_kga. Resolve the algorithm OID for the key-type hint.
-	var oid asn1.ObjectIdentifier
-	if _, err := asn1.Unmarshal(algID.Bytes, &oid); err != nil {
-		return true, x509.UnknownPublicKeyAlgorithm
-	}
-	switch {
-	case oid.Equal(oidRSAEncryption):
-		return true, x509.RSA
-	case oid.Equal(oidECPublicKey):
-		return true, x509.ECDSA
-	default:
-		return true, x509.UnknownPublicKeyAlgorithm
-	}
-}
-
-// parseCertTemplateExtensions decodes the content of a CertTemplate `extensions
-// [9]` field (RFC 4211 §5). The [9] tag is IMPLICIT over Extensions ::=
-// SEQUENCE OF Extension, so contentDER is the concatenation of Extension TLVs.
-// A parse error stops decoding and returns whatever was decoded so far — the
-// extensions are advisory (the issuance profile decides what to honor), so a
-// malformed trailer must not fail the enrollment.
-func parseCertTemplateExtensions(contentDER []byte) []pkix.Extension {
-	var exts []pkix.Extension
-	rest := contentDER
-	for len(rest) > 0 {
-		var ext pkix.Extension
-		var err error
-		rest, err = asn1.Unmarshal(rest, &ext)
-		if err != nil {
-			return exts
-		}
-		exts = append(exts, ext)
-	}
-	return exts
 }
 
 // oidExtBasicConstraints / oidExtKeyUsage identify the two extensions whose
@@ -1698,282 +1526,29 @@ func rsaKeyBits(spkiDER []byte) int {
 	return rsaPub.N.BitLen()
 }
 
-// RFC 4211 registration control / registration info OIDs.
-var (
-	// id-regCtrl-pkiPublicationInfo (1.3.6.1.5.5.7.5.1.3): asks the CA to
-	// publish (or not publish) the issued certificate (RFC 4211 §6.3).
-	oidRegCtrlPKIPublicationInfo = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 1, 3}
-	// id-regInfo-certReq (1.3.6.1.5.5.7.5.2.2): an RA-supplied alternate
-	// CertRequest carried in the CertReqMsg regInfo (RFC 4211 §7.2).
-	oidRegInfoCertReq = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 2, 2}
-)
-
-// findRegInfoDER extracts the CertReqMsg `regInfo` field from the bytes that
-// follow the CertRequest inside a CertReqMsg. That remainder is [ POPO? regInfo? ];
-// every ProofOfPossession CHOICE alternative is context-tagged, so the first
-// UNIVERSAL SEQUENCE encountered is the regInfo (SEQUENCE OF AttributeTypeAndValue).
-// Returns nil when no regInfo is present.
-func findRegInfoDER(afterCertReq []byte) []byte {
-	scan := afterCertReq
-	for len(scan) > 0 {
-		var tlv asn1.RawValue
-		rest, err := asn1.Unmarshal(scan, &tlv)
-		if err != nil {
-			return nil
-		}
-		if tlv.Class == asn1.ClassUniversal && tlv.Tag == asn1.TagSequence {
-			return tlv.FullBytes
-		}
-		scan = rest
-	}
-	return nil
-}
-
-// validatePKIPublicationInfoControls enforces the structural rules of the
-// id-regCtrl-pkiPublicationInfo control (RFC 4211 §6.3) when present in a
-// CertRequest's `controls`. It only inspects that one control OID, so other
-// controls (oldCertID, regToken, authenticator) are untouched.
-//
-//	PKIPublicationInfo ::= SEQUENCE {
-//	    action    INTEGER { dontPublish(0), pleasePublish(1) },
-//	    pubInfos  SEQUENCE SIZE (1..MAX) OF SinglePubInfo OPTIONAL }
-//	SinglePubInfo ::= SEQUENCE {
-//	    pubMethod   INTEGER { dontCare(0), x500(1), web(2), ldap(3) },
-//	    pubLocation GeneralName OPTIONAL }
-//
-// Rejections (badDataFormat):
-//   - action outside {dontPublish, pleasePublish};
-//   - dontPublish carrying any pubInfos (RFC 4211: none may be present);
-//   - a pubMethod outside {dontCare, x500, web, ldap};
-//   - pleasePublish with a concrete method (x500/web/ldap) but no pubLocation.
-func validatePKIPublicationInfoControls(certReqID int, controlsDER []byte) *certRequestRejection {
-	if len(controlsDER) == 0 {
-		return nil
-	}
-	var controlsSeq asn1.RawValue
-	if _, err := asn1.Unmarshal(controlsDER, &controlsSeq); err != nil {
-		return nil // malformed controls block: non-fatal, nothing to validate
-	}
-	if controlsSeq.Tag != asn1.TagSequence || controlsSeq.Class != asn1.ClassUniversal {
-		return nil
-	}
-
-	reject := func(reason string) *certRequestRejection {
+// rejectWeakOrOversizedRSAKey enforces the RSA modulus policy on the
+// SubjectPublicKeyInfo in spkiDER (min/max bits). It returns nil when the key
+// is not RSA or its size is within policy, or a populated *certRequestRejection
+// (badCertTemplate) — emitting the matching Warnf — when the modulus is too
+// short or too large. Shared by the CRMF enrollment path (logPrefix
+// "ir/cr"/"kur", req.CertReqID) and the p10cr path (logPrefix "p10cr",
+// p10crCertReqID); the caller delivers the rejection with rejectCertRequest.
+func rejectWeakOrOversizedRSAKey(spkiDER []byte, logPrefix string, certReqID int, lFunc *logrus.Entry) *certRequestRejection {
+	if bits := rsaKeyBits(spkiDER); bits > 0 && bits < minRSAKeyBits {
+		lFunc.Warnf("%s: RSA public key too short: %d-bit (minimum %d)", logPrefix, bits, minRSAKeyBits)
 		return &certRequestRejection{
 			CertReqID:   certReqID,
-			Reason:      reason,
-			FailInfoBit: pkiFailureInfoBadDataFormat,
+			Reason:      fmt.Sprintf("RSA public key too short: %d-bit key is below the %d-bit minimum (NIST SP 800-57)", bits, minRSAKeyBits),
+			FailInfoBit: pkiFailureInfoBadCertTemplate,
 		}
 	}
-
-	rest := controlsSeq.Bytes
-	for len(rest) > 0 {
-		var attr asn1.RawValue
-		var err error
-		rest, err = asn1.Unmarshal(rest, &attr)
-		if err != nil {
-			return nil
+	if bits := rsaKeyBits(spkiDER); bits > maxRSAKeyBits {
+		lFunc.Warnf("%s: RSA public key too large: %d-bit (maximum %d)", logPrefix, bits, maxRSAKeyBits)
+		return &certRequestRejection{
+			CertReqID:   certReqID,
+			Reason:      fmt.Sprintf("RSA public key too large: %d-bit key exceeds the %d-bit maximum", bits, maxRSAKeyBits),
+			FailInfoBit: pkiFailureInfoBadCertTemplate,
 		}
-		// AttributeTypeAndValue ::= SEQUENCE { type OID, value ANY }
-		var oid asn1.ObjectIdentifier
-		valueRest, err := asn1.Unmarshal(attr.Bytes, &oid)
-		if err != nil || !oid.Equal(oidRegCtrlPKIPublicationInfo) {
-			continue
-		}
-
-		// value is a PKIPublicationInfo SEQUENCE.
-		var pubInfo asn1.RawValue
-		if _, err := asn1.Unmarshal(valueRest, &pubInfo); err != nil {
-			return reject("malformed PKIPublicationInfo control (RFC 4211 §6.3)")
-		}
-		var action int
-		pubInfosRest, err := asn1.Unmarshal(pubInfo.Bytes, &action)
-		if err != nil {
-			return reject("malformed PKIPublicationInfo action (RFC 4211 §6.3)")
-		}
-		const actionDontPublish, actionPleasePublish = 0, 1
-		if action != actionDontPublish && action != actionPleasePublish {
-			return reject(fmt.Sprintf("invalid PKIPublicationInfo action %d (RFC 4211 §6.3)", action))
-		}
-
-		hasPubInfos := len(pubInfosRest) > 0
-		if action == actionDontPublish && hasPubInfos {
-			return reject("PKIPublicationInfo dontPublish must not carry pubInfos (RFC 4211 §6.3)")
-		}
-		if !hasPubInfos {
-			continue
-		}
-
-		// pleasePublish with pubInfos: validate each SinglePubInfo.
-		var pubInfosSeq asn1.RawValue
-		if _, err := asn1.Unmarshal(pubInfosRest, &pubInfosSeq); err != nil {
-			return reject("malformed PKIPublicationInfo pubInfos (RFC 4211 §6.3)")
-		}
-		entries := pubInfosSeq.Bytes
-		for len(entries) > 0 {
-			var single asn1.RawValue
-			entries, err = asn1.Unmarshal(entries, &single)
-			if err != nil {
-				return reject("malformed SinglePubInfo (RFC 4211 §6.3)")
-			}
-			var method int
-			locRest, err := asn1.Unmarshal(single.Bytes, &method)
-			if err != nil {
-				return reject("malformed SinglePubInfo pubMethod (RFC 4211 §6.3)")
-			}
-			const methodDontCare = 0
-			const methodLDAP = 3
-			if method < methodDontCare || method > methodLDAP {
-				return reject(fmt.Sprintf("invalid SinglePubInfo pubMethod %d (RFC 4211 §6.3)", method))
-			}
-			// A concrete publication method (x500/web/ldap) requires a location;
-			// only dontCare may omit it.
-			if method != methodDontCare && len(locRest) == 0 {
-				return reject("PKIPublicationInfo pleasePublish requires a pubLocation (RFC 4211 §6.3)")
-			}
-		}
-	}
-	return nil
-}
-
-// validateAltCertReqPublicKey enforces RFC 4211 §7.2: when the regInfo carries
-// an id-regInfo-certReq (an RA-supplied alternate CertRequest), its CertTemplate
-// public key must match the public key of the primary CertRequest. A mismatch
-// would invalidate the proof of possession, so it is rejected with
-// badCertTemplate. Returns nil when no such control is present or the keys match.
-func validateAltCertReqPublicKey(certReqID int, regInfoDER, mainPublicKeyDER []byte) *certRequestRejection {
-	if len(regInfoDER) == 0 {
-		return nil
-	}
-	var regInfoSeq asn1.RawValue
-	if _, err := asn1.Unmarshal(regInfoDER, &regInfoSeq); err != nil {
-		return nil
-	}
-	if regInfoSeq.Tag != asn1.TagSequence || regInfoSeq.Class != asn1.ClassUniversal {
-		return nil
-	}
-
-	rest := regInfoSeq.Bytes
-	for len(rest) > 0 {
-		var attr asn1.RawValue
-		var err error
-		rest, err = asn1.Unmarshal(rest, &attr)
-		if err != nil {
-			return nil
-		}
-		var oid asn1.ObjectIdentifier
-		valueRest, err := asn1.Unmarshal(attr.Bytes, &oid)
-		if err != nil || !oid.Equal(oidRegInfoCertReq) {
-			continue
-		}
-		// value is a CertRequest; extract its CertTemplate publicKey [6].
-		altPub := certRequestPublicKeyDER(valueRest)
-		if len(altPub) == 0 || len(mainPublicKeyDER) == 0 {
-			continue
-		}
-		if !bytes.Equal(altPub, mainPublicKeyDER) {
-			return &certRequestRejection{
-				CertReqID:   certReqID,
-				Reason:      "alternate CertRequest in regInfo carries a different public key than the primary request (RFC 4211 §7.2)",
-				FailInfoBit: pkiFailureInfoBadCertTemplate,
-			}
-		}
-	}
-	return nil
-}
-
-// certRequestPublicKeyDER decodes a CertRequest SEQUENCE and returns its
-// CertTemplate publicKey [6] re-wrapped as a SubjectPublicKeyInfo SEQUENCE, or
-// nil if absent/unparseable.
-func certRequestPublicKeyDER(certReqDER []byte) []byte {
-	var certReq asn1.RawValue
-	if _, err := asn1.Unmarshal(certReqDER, &certReq); err != nil {
-		return nil
-	}
-	// CertRequest ::= SEQUENCE { certReqId INTEGER, certTemplate SEQUENCE, ... }
-	inner := certReq.Bytes
-	var certReqID asn1.RawValue
-	inner, err := asn1.Unmarshal(inner, &certReqID)
-	if err != nil {
-		return nil
-	}
-	var certTemplate asn1.RawValue
-	if _, err := asn1.Unmarshal(inner, &certTemplate); err != nil {
-		return nil
-	}
-	fields := certTemplate.Bytes
-	for len(fields) > 0 {
-		var field asn1.RawValue
-		fields, err = asn1.Unmarshal(fields, &field)
-		if err != nil {
-			return nil
-		}
-		if field.Class == asn1.ClassContextSpecific && field.Tag == 6 {
-			spki, e := wrapSequenceDER(field.Bytes, "SubjectPublicKeyInfo")
-			if e != nil {
-				return nil
-			}
-			return spki
-		}
-	}
-	return nil
-}
-
-// oidRegCtrlOldCertID is RFC 4211 §6.2 id-regCtrl-oldCertID (1.3.6.1.5.5.7.5.1.5).
-var oidRegCtrlOldCertID = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 1, 5}
-
-// parseOldCertIDControl scans an optional CertRequest `controls` field
-// (SEQUENCE OF AttributeTypeAndValue) for id-regCtrl-oldCertID and decodes its
-// CertId value { issuer GeneralName, serialNumber INTEGER }. It returns nil if
-// controls is absent, the control is not present, or anything fails to parse —
-// the control is optional, so a parse problem must not break enrollment.
-func parseOldCertIDControl(controlsDER []byte) *oldCertID {
-	if len(controlsDER) == 0 {
-		return nil
-	}
-	var controlsSeq asn1.RawValue
-	if _, err := asn1.Unmarshal(controlsDER, &controlsSeq); err != nil {
-		return nil
-	}
-	if controlsSeq.Tag != asn1.TagSequence || controlsSeq.Class != asn1.ClassUniversal {
-		return nil
-	}
-
-	rest := controlsSeq.Bytes
-	for len(rest) > 0 {
-		var attr asn1.RawValue
-		var err error
-		rest, err = asn1.Unmarshal(rest, &attr)
-		if err != nil {
-			return nil
-		}
-		// AttributeTypeAndValue ::= SEQUENCE { type OID, value ANY }
-		var oid asn1.ObjectIdentifier
-		valDER, err := asn1.Unmarshal(attr.Bytes, &oid)
-		if err != nil || !oid.Equal(oidRegCtrlOldCertID) {
-			continue
-		}
-		// value is CertId ::= SEQUENCE { issuer GeneralName, serialNumber INTEGER }
-		var certIDSeq asn1.RawValue
-		if _, err := asn1.Unmarshal(valDER, &certIDSeq); err != nil {
-			return nil
-		}
-		inner := certIDSeq.Bytes
-		var issuer asn1.RawValue
-		inner, err = asn1.Unmarshal(inner, &issuer)
-		if err != nil {
-			return nil
-		}
-		// issuer GeneralName directoryName [4] EXPLICIT Name: issuer.Bytes is the
-		// RDNSequence DER, directly comparable to x509.Certificate.RawIssuer.
-		if issuer.Class != asn1.ClassContextSpecific || issuer.Tag != 4 {
-			return nil
-		}
-		var serial *big.Int
-		if _, err := asn1.Unmarshal(inner, &serial); err != nil {
-			return nil
-		}
-		return &oldCertID{IssuerNameDER: issuer.Bytes, SerialNumber: serial}
 	}
 	return nil
 }
@@ -2002,6 +1577,34 @@ func certTemplateNameMatches(der []byte, want pkix.Name) bool {
 	var got pkix.Name
 	got.FillFromRDNSequence(&rdn)
 	return got.String() == want.String()
+}
+
+// extensionsMatch reports whether requested is exactly the same SET of
+// extensions as actual — same count, and every (OID, Critical, Value) triple
+// in requested has an identical counterpart in actual. Used by handleRevoke
+// to enforce RFC 9483 §4.2's rule that an rr's optional CertTemplate
+// extensions[9], when present, MUST match the certificate being revoked: a
+// caller who bothers to assert the extensions at all must get them exactly
+// right, not just a subset.
+func extensionsMatch(requested, actual []pkix.Extension) bool {
+	if len(requested) != len(actual) {
+		return false
+	}
+	key := func(e pkix.Extension) string {
+		return e.Id.String() + "|" + strconv.FormatBool(e.Critical) + "|" + hex.EncodeToString(e.Value)
+	}
+	actualSet := make(map[string]int, len(actual))
+	for _, e := range actual {
+		actualSet[key(e)]++
+	}
+	for _, e := range requested {
+		k := key(e)
+		if actualSet[k] == 0 {
+			return false
+		}
+		actualSet[k]--
+	}
+	return true
 }
 
 // validateOldCertID checks that a KUR's id-regCtrl-oldCertID references the
@@ -2058,377 +1661,6 @@ func wrapSequenceDER(content []byte, label string) ([]byte, error) {
 	return der, nil
 }
 
-func decodeRequestHeader(headerDER []byte) (requestPKIHeader, error) {
-	var seq asn1.RawValue
-	if _, err := asn1.Unmarshal(headerDER, &seq); err != nil {
-		return requestPKIHeader{}, fmt.Errorf("PKIHeader: %w", err)
-	}
-	if seq.Class != asn1.ClassUniversal || seq.Tag != asn1.TagSequence {
-		return requestPKIHeader{}, fmt.Errorf("PKIHeader is not a SEQUENCE")
-	}
-
-	var header requestPKIHeader
-	remaining := seq.Bytes
-
-	var pvnoRaw asn1.RawValue
-	var err error
-	remaining, err = asn1.Unmarshal(remaining, &pvnoRaw)
-	if err != nil {
-		return requestPKIHeader{}, fmt.Errorf("pvno: %w", err)
-	}
-	if _, err := asn1.Unmarshal(pvnoRaw.FullBytes, &header.PVNO); err != nil {
-		return requestPKIHeader{}, fmt.Errorf("parse pvno: %w", err)
-	}
-
-	remaining, err = asn1.Unmarshal(remaining, &header.Sender)
-	if err != nil {
-		return requestPKIHeader{}, fmt.Errorf("sender: %w", err)
-	}
-
-	remaining, err = asn1.Unmarshal(remaining, &header.Recipient)
-	if err != nil {
-		return requestPKIHeader{}, fmt.Errorf("recipient: %w", err)
-	}
-
-	for len(remaining) > 0 {
-		var field asn1.RawValue
-		remaining, err = asn1.Unmarshal(remaining, &field)
-		if err != nil {
-			return requestPKIHeader{}, fmt.Errorf("optional header field: %w", err)
-		}
-		if field.Class != asn1.ClassContextSpecific {
-			continue
-		}
-
-		switch field.Tag {
-		case 0:
-			// messageTime [0] EXPLICIT GeneralizedTime OPTIONAL (RFC 9483 §3.1).
-			// field.Bytes is the inner GeneralizedTime TLV.
-			var ts time.Time
-			if _, e := asn1.Unmarshal(field.Bytes, &ts); e == nil {
-				header.MessageTime = ts
-			}
-		case 1:
-			// protectionAlg [1] AlgorithmIdentifier OPTIONAL.
-			// Per RFC 4210 IMPLICIT TAGS, the [1] tag replaces the SEQUENCE tag
-			// of AlgorithmIdentifier; field.Bytes therefore holds the SEQUENCE
-			// content (algorithm OID + optional parameters). For PSS the
-			// Parameters carry the hash OID and saltLength, so we capture the
-			// full AlgorithmIdentifier rather than just the OID.
-			var algOID asn1.ObjectIdentifier
-			rest, e := asn1.Unmarshal(field.Bytes, &algOID)
-			if e != nil {
-				// Fall back to the older "[1] EXPLICIT SEQUENCE" decoding
-				// (i.e. an extra SEQUENCE wrapper around AlgorithmIdentifier)
-				// for samples produced by OpenSSL-era clients.
-				var algSeq asn1.RawValue
-				if _, e2 := asn1.Unmarshal(field.Bytes, &algSeq); e2 == nil {
-					rest2, e3 := asn1.Unmarshal(algSeq.Bytes, &algOID)
-					if e3 == nil {
-						header.ProtectionAlg.Algorithm = algOID
-						if len(rest2) > 0 {
-							var params asn1.RawValue
-							if _, e4 := asn1.Unmarshal(rest2, &params); e4 == nil {
-								header.ProtectionAlg.Parameters = params
-							}
-						}
-					}
-				}
-			} else {
-				header.ProtectionAlg.Algorithm = algOID
-				if len(rest) > 0 {
-					var params asn1.RawValue
-					if _, e2 := asn1.Unmarshal(rest, &params); e2 == nil {
-						header.ProtectionAlg.Parameters = params
-					}
-				}
-			}
-		case 2:
-			// senderKID [2] OCTET STRING OPTIONAL (RFC 9483 §3.1).
-			// The CMP ASN.1 module declares IMPLICIT TAGS, but OpenSSL-derived
-			// clients (and this server's own response builder) emit the [2]
-			// wrapper EXPLICITLY around the inner OCTET STRING TLV — matching
-			// the same convention used for transactionID/senderNonce. We try
-			// the EXPLICIT form first and fall back to the literal-IMPLICIT
-			// form so we interoperate with both wire conventions.
-			var kid []byte
-			if _, e := asn1.Unmarshal(field.Bytes, &kid); e == nil {
-				header.SenderKID = kid
-			} else {
-				header.SenderKID = field.Bytes
-			}
-		case 4:
-			header.TransactionID, err = decodeExplicitOctetString(field.Bytes, "transactionID")
-		case 5:
-			header.SenderNonce, err = decodeExplicitOctetString(field.Bytes, "senderNonce")
-		case 6:
-			header.RecipNonce, err = decodeExplicitOctetString(field.Bytes, "recipNonce")
-		case 8:
-			header.GeneralInfo, err = decodeGeneralInfo(field.Bytes)
-		}
-		if err != nil {
-			return requestPKIHeader{}, err
-		}
-	}
-
-	return header, nil
-}
-
-// decodeGeneralInfo parses the content bytes of a [8] EXPLICIT generalInfo field.
-// generalInfo is SEQUENCE SIZE (1..MAX) OF InfoTypeAndValue, where each
-// InfoTypeAndValue is SEQUENCE { infoType OID, infoValue ANY OPTIONAL }.
-// We return the raw InfoTypeAndValue entries for inspection.
-func decodeGeneralInfo(bytes []byte) ([]asn1.RawValue, error) {
-	// bytes is the content of [8] EXPLICIT, which is a SEQUENCE OF InfoTypeAndValue.
-	var seq asn1.RawValue
-	if _, err := asn1.Unmarshal(bytes, &seq); err != nil {
-		return nil, fmt.Errorf("generalInfo SEQUENCE: %w", err)
-	}
-	var items []asn1.RawValue
-	rest := seq.Bytes
-	for len(rest) > 0 {
-		var item asn1.RawValue
-		var err error
-		rest, err = asn1.Unmarshal(rest, &item)
-		if err != nil {
-			return nil, fmt.Errorf("generalInfo item: %w", err)
-		}
-		items = append(items, item)
-	}
-	return items, nil
-}
-
-// hasImplicitConfirmOID reports whether any InfoTypeAndValue in the given
-// generalInfo slice carries the id-it-implicitConfirm OID (1.3.6.1.5.5.7.4.13).
-func hasImplicitConfirmOID(generalInfo []asn1.RawValue) bool {
-	for _, item := range generalInfo {
-		// Each item is a SEQUENCE { OID, ... }; we extract just the OID.
-		var oid asn1.ObjectIdentifier
-		if _, err := asn1.Unmarshal(item.Bytes, &oid); err != nil {
-			continue
-		}
-		if oid.Equal(oidImplicitConfirm) {
-			return true
-		}
-	}
-	return false
-}
-
-// extractOrigPKIMessage scans generalInfo for id-it-origPKIMessage
-// (1.3.6.1.5.5.7.4.15) and, if present, returns the first embedded PKIMessage
-// together with the protection AlgorithmIdentifier declared in its header.
-//
-// RFC 9483 §5.2.3 lets a PKI management entity (RA) forward the EE's original
-// message to the CA under this OID. The value is OrigPKIMessageValue ::=
-// PKIMessages (SEQUENCE OF PKIMessage); we return the first entry so the CA can
-// verify the EE's own protection over what it actually signed. The boolean is
-// false when no well-formed origPKIMessage is present.
-func extractOrigPKIMessage(generalInfo []asn1.RawValue) (*rawPKIMessageFull, pkix.AlgorithmIdentifier, bool) {
-	for _, item := range generalInfo {
-		// item is InfoTypeAndValue ::= SEQUENCE { infoType OID, infoValue ANY OPTIONAL }.
-		var itav struct {
-			OID   asn1.ObjectIdentifier
-			Value asn1.RawValue `asn1:"optional"`
-		}
-		if _, err := asn1.Unmarshal(item.FullBytes, &itav); err != nil {
-			continue
-		}
-		if !itav.OID.Equal(oidOrigPKIMessage) || len(itav.Value.Bytes) == 0 {
-			continue
-		}
-		// itav.Value is the PKIMessages SEQUENCE OF; its content bytes begin with
-		// the first PKIMessage TLV, which Unmarshal decodes here.
-		var orig rawPKIMessageFull
-		if _, err := asn1.Unmarshal(itav.Value.Bytes, &orig); err != nil {
-			continue
-		}
-		origHeader, err := decodeRequestHeader(orig.Header.FullBytes)
-		if err != nil {
-			continue
-		}
-		return &orig, origHeader.ProtectionAlg, true
-	}
-	return nil, pkix.AlgorithmIdentifier{}, false
-}
-
-func decodeExplicitOctetString(der []byte, label string) ([]byte, error) {
-	var value []byte
-	if _, err := asn1.Unmarshal(der, &value); err != nil {
-		return nil, fmt.Errorf("%s: %w", label, err)
-	}
-	return value, nil
-}
-
-func decodeCertConfStatuses(seqDER []byte) ([]certStatusASN1, error) {
-	var outer asn1.RawValue
-	if _, err := asn1.Unmarshal(seqDER, &outer); err != nil {
-		return nil, fmt.Errorf("CertConfirmContent: %w", err)
-	}
-	if outer.Class != asn1.ClassUniversal || outer.Tag != asn1.TagSequence {
-		return nil, fmt.Errorf("CertConfirmContent is not a SEQUENCE")
-	}
-
-	var statuses []certStatusASN1
-	remaining := outer.Bytes
-	for len(remaining) > 0 {
-		var certStatusSeq asn1.RawValue
-		var err error
-		remaining, err = asn1.Unmarshal(remaining, &certStatusSeq)
-		if err != nil {
-			return nil, fmt.Errorf("CertStatus: %w", err)
-		}
-		if certStatusSeq.Class != asn1.ClassUniversal || certStatusSeq.Tag != asn1.TagSequence {
-			return nil, fmt.Errorf("CertStatus is not a SEQUENCE")
-		}
-
-		var status certStatusASN1
-		status.CertHash, err = findFirstOctetString(certStatusSeq.FullBytes)
-		if err != nil {
-			return nil, fmt.Errorf("certHash: %w", err)
-		}
-		if len(status.CertHash) == 0 {
-			return nil, fmt.Errorf("certHash missing")
-		}
-
-		// Parse certReqId (INTEGER) and the optional statusInfo (PKIStatusInfo
-		// SEQUENCE) and hashAlg [0] from the CertStatus SEQUENCE fields. The
-		// caller relies on CertReqID and StatusInfo for the structural
-		// validation in handleCertConf (RFC 9483 §4.1.1).
-		parseCertStatusFields(certStatusSeq.Bytes, &status)
-
-		statuses = append(statuses, status)
-	}
-
-	return statuses, nil
-}
-
-// parseCertStatusFields walks the fields of a CertStatus SEQUENCE content and
-// fills CertReqID, StatusInfo and HashAlgOID on status.
-//
-//	CertStatus ::= SEQUENCE {
-//	    certHash   OCTET STRING,
-//	    certReqId  INTEGER,
-//	    statusInfo PKIStatusInfo            OPTIONAL,
-//	    hashAlg    [0] AlgorithmIdentifier  OPTIONAL }
-func parseCertStatusFields(content []byte, status *certStatusASN1) {
-	rest := content
-	seenOctet := false
-	for len(rest) > 0 {
-		var field asn1.RawValue
-		var err error
-		rest, err = asn1.Unmarshal(rest, &field)
-		if err != nil {
-			return
-		}
-		switch {
-		case field.Class == asn1.ClassContextSpecific && field.Tag == 0:
-			// hashAlg [0] AlgorithmIdentifier. The CMP ASN.1 module uses
-			// EXPLICIT tagging, so [0] wraps a full AlgorithmIdentifier
-			// SEQUENCE { algorithm OID, parameters OPTIONAL }. Some encoders
-			// emit it IMPLICIT (content starts directly with the OID). Handle
-			// both: first try to decode an AlgorithmIdentifier SEQUENCE, then
-			// fall back to a bare OID.
-			var algID struct {
-				Algorithm  asn1.ObjectIdentifier
-				Parameters asn1.RawValue `asn1:"optional"`
-			}
-			if _, e := asn1.Unmarshal(field.Bytes, &algID); e == nil && len(algID.Algorithm) > 0 {
-				status.HashAlgOID = algID.Algorithm
-			} else {
-				var oid asn1.ObjectIdentifier
-				if _, e := asn1.Unmarshal(field.Bytes, &oid); e == nil {
-					status.HashAlgOID = oid
-				}
-			}
-		case field.Class == asn1.ClassUniversal && field.Tag == asn1.TagOctetString && !seenOctet:
-			// certHash — already captured via findFirstOctetString.
-			seenOctet = true
-		case field.Class == asn1.ClassUniversal && field.Tag == asn1.TagInteger:
-			var n int
-			if _, e := asn1.Unmarshal(field.FullBytes, &n); e == nil {
-				status.CertReqID = n
-			}
-		case field.Class == asn1.ClassUniversal && field.Tag == asn1.TagSequence:
-			// statusInfo PKIStatusInfo
-			var si PKIStatusInfo
-			if _, e := asn1.Unmarshal(field.FullBytes, &si); e == nil {
-				status.StatusInfo = si
-			}
-		}
-	}
-}
-
-// extractHashAlgFromCertStatus scans the inner fields of a CertStatus SEQUENCE
-// for the optional hashAlg [0] IMPLICIT AlgorithmIdentifier. Returns the
-// algorithm OID if found, or nil when absent (caller should default to SHA-256).
-func extractHashAlgFromCertStatus(content []byte) asn1.ObjectIdentifier {
-	rest := content
-	for len(rest) > 0 {
-		var field asn1.RawValue
-		var err error
-		rest, err = asn1.Unmarshal(rest, &field)
-		if err != nil {
-			return nil
-		}
-		// hashAlg is [0] IMPLICIT — context-specific, tag 0, constructed.
-		if field.Class == asn1.ClassContextSpecific && field.Tag == 0 {
-			// Content is AlgorithmIdentifier: SEQUENCE { algorithm OID, ... }
-			var oid asn1.ObjectIdentifier
-			if _, e := asn1.Unmarshal(field.Bytes, &oid); e == nil {
-				return oid
-			}
-			// Might be wrapped in SEQUENCE
-			var inner asn1.RawValue
-			if _, e := asn1.Unmarshal(field.Bytes, &inner); e == nil {
-				if _, e2 := asn1.Unmarshal(inner.Bytes, &oid); e2 == nil {
-					return oid
-				}
-			}
-			return nil
-		}
-	}
-	return nil
-}
-
-func findFirstOctetString(der []byte) ([]byte, error) {
-	var root asn1.RawValue
-	if _, err := asn1.Unmarshal(der, &root); err != nil {
-		return nil, err
-	}
-	return findOctetStringInRaw(root)
-}
-
-func findOctetStringInRaw(rv asn1.RawValue) ([]byte, error) {
-	if rv.Class == asn1.ClassUniversal && rv.Tag == asn1.TagOctetString {
-		var out []byte
-		if _, err := asn1.Unmarshal(rv.FullBytes, &out); err != nil {
-			return nil, err
-		}
-		return out, nil
-	}
-	if !rv.IsCompound {
-		return nil, nil
-	}
-
-	remaining := rv.Bytes
-	for len(remaining) > 0 {
-		var child asn1.RawValue
-		var err error
-		remaining, err = asn1.Unmarshal(remaining, &child)
-		if err != nil {
-			return nil, err
-		}
-		found, err := findOctetStringInRaw(child)
-		if err != nil {
-			return nil, err
-		}
-		if len(found) > 0 {
-			return found, nil
-		}
-	}
-	return nil, nil
-}
-
 // verifyPOPO verifies the Proof-Of-Possession for an ir/cr CertReqMsg.
 //
 // Per RFC 9483 §4.1, the POPO signature (if present) is a self-signature by the
@@ -2439,274 +1671,18 @@ func findOctetStringInRaw(rv asn1.RawValue) ([]byte, error) {
 // caller maps this to PKIFailureInfo notAuthorized rather than badPOP.
 var errPOPORAVerifiedFromEE = errors.New("raVerified POPO not accepted from an end entity (RFC 9483 §4.1)")
 
-// absent and enforce is true the request is rejected. If raVerified [0] is set
-// the request is rejected as notAuthorized (see errPOPORAVerifiedFromEE).
-// For KUR, POPO is proven implicitly by the message-level protection key being the
-// old cert key (RFC 9483 §4.1.3), so this function is NOT called for KUR.
-func verifyPOPO(certReqDER []byte, popoRaw asn1.RawValue, pubKeyDER []byte, enforce bool) error {
-	isPOPOPresent := len(popoRaw.FullBytes) > 0
-
-	if !isPOPOPresent {
-		if enforce {
-			return fmt.Errorf("proof of possession (POPO) is required but absent in the certificate request")
-		}
-		return nil
-	}
-
-	switch {
-	case popoRaw.Class == asn1.ClassContextSpecific && popoRaw.Tag == 0:
-		// raVerified [0] NULL — asserts "an RA already verified POPO". On this
-		// endpoint the message-protection signer IS the requester (an EE); there
-		// is no trusted-RA path, so an EE asserting raVerified is bypassing POPO
-		// and MUST be rejected as notAuthorized (RFC 9483 §4.1 / RFC 4211 §4).
-		return errPOPORAVerifiedFromEE
-
-	case popoRaw.Class == asn1.ClassContextSpecific && popoRaw.Tag == 1:
-		// signature [1] POPOSigningKey
-		return checkPOPOSigningKey(certReqDER, popoRaw.Bytes, pubKeyDER)
-
-	default:
-		// keyEncipherment [2] / keyAgreement [3] are not used in the LWC profile.
-		if !enforce {
-			return nil
-		}
-		return fmt.Errorf("unsupported POPO type (class=%d tag=%d): only raVerified [0] and signature [1] are supported", popoRaw.Class, popoRaw.Tag)
-	}
-}
-
-// checkPOPOSigningKey verifies a POPOSigningKey against certReqDER.
-//
-// POPOSigningKey ::= SEQUENCE {
-//
-//	poposkInput  [0] POPOSigningKeyInput OPTIONAL,
-//	algorithmIdentifier AlgorithmIdentifier,
-//	signature   BIT STRING
-//
-// }
-//
-// The signature is over the DER encoding of CertRequest (certReqDER).
-func checkPOPOSigningKey(certReqDER, poposkContent, pubKeyDER []byte) error {
-	remaining := poposkContent
-
-	// Skip optional [0] poposkInput (only present when subject/key absent from certTemplate).
-	{
-		var first asn1.RawValue
-		peek, err := asn1.Unmarshal(remaining, &first)
-		if err != nil {
-			return fmt.Errorf("POPO: parse first field: %w", err)
-		}
-		if first.Class == asn1.ClassContextSpecific && first.Tag == 0 {
-			remaining = peek // consume the optional poposkInput
-		}
-	}
-
-	// Parse AlgorithmIdentifier.
-	var algID pkix.AlgorithmIdentifier
-	rest, err := asn1.Unmarshal(remaining, &algID)
-	if err != nil {
-		return fmt.Errorf("POPO: parse AlgorithmIdentifier: %w", err)
-	}
-
-	// Parse BIT STRING signature.
-	var sig asn1.BitString
-	if _, err := asn1.Unmarshal(rest, &sig); err != nil {
-		return fmt.Errorf("POPO: parse signature: %w", err)
-	}
-
-	// Parse the public key from SubjectPublicKeyInfo DER.
-	pubKey, err := x509.ParsePKIXPublicKey(pubKeyDER)
-	if err != nil {
-		return fmt.Errorf("POPO: parse public key: %w", err)
-	}
-
-	return popoVerifySignature(certReqDER, sig.Bytes, algID, pubKey)
-}
-
-// popoVerifySignature verifies a raw signature over data using the algorithm
-// identified by algID. Supports RSA PKCS#1v15, RSASSA-PSS, ECDSA, and Ed25519.
-func popoVerifySignature(data, sigBytes []byte, algID pkix.AlgorithmIdentifier, pub crypto.PublicKey) error {
-	// Use the AlgorithmIdentifier-aware helper so that id-RSASSA-PSS
-	// (OID 1.2.840.113549.1.1.10) resolves its hash from the Parameters
-	// SEQUENCE per RFC 4055 §3.1; the OID-only variant rejects PSS.
-	hashAlg, err := hashFromSignatureAlgID(algID)
-	if err != nil {
-		return fmt.Errorf("POPO: %w", err)
-	}
-
-	switch pub := pub.(type) {
-	case *rsa.PublicKey:
-		if hashAlg == 0 {
-			return fmt.Errorf("POPO: RSA key with no hash algorithm (OID %s)", algID.Algorithm)
-		}
-		h := hashAlg.New()
-		h.Write(data)
-		digest := h.Sum(nil)
-		// RFC 4055 §3.1: id-RSASSA-PSS uses RSA-PSS, not PKCS#1 v1.5.
-		// PSSOptions{SaltLength: PSSSaltLengthAuto} lets crypto/rsa derive
-		// the saltLength from the signature, matching what RFC 9481-compliant
-		// clients (OpenSSL, BouncyCastle, etc.) produce.
-		if algID.Algorithm.Equal(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 10}) {
-			if err := rsa.VerifyPSS(pub, hashAlg, digest, sigBytes, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto}); err != nil {
-				return fmt.Errorf("POPO: RSA-PSS signature verification failed: %w", err)
-			}
-			return nil
-		}
-		if err := rsa.VerifyPKCS1v15(pub, hashAlg, digest, sigBytes); err != nil {
-			return fmt.Errorf("POPO: RSA signature verification failed: %w", err)
-		}
-		return nil
-
-	case *ecdsa.PublicKey:
-		if hashAlg == 0 {
-			return fmt.Errorf("POPO: ECDSA key with no hash algorithm (OID %s)", algID.Algorithm)
-		}
-		h := hashAlg.New()
-		h.Write(data)
-		if !ecdsa.VerifyASN1(pub, h.Sum(nil), sigBytes) {
-			return fmt.Errorf("POPO: ECDSA signature verification failed")
-		}
-		return nil
-
-	case ed25519.PublicKey:
-		if !ed25519.Verify(pub, data, sigBytes) {
-			return fmt.Errorf("POPO: Ed25519 signature verification failed")
-		}
-		return nil
-
-	default:
-		return fmt.Errorf("POPO: unsupported public key type %T", pub)
-	}
-}
-
-// buildSyntheticCSR constructs a *x509.CertificateRequest from the Subject and
-// SubjectPublicKeyInfo carried in a CMP CertTemplate (RFC 4211 §5).
-//
-// Because POPO is handled at the CMP layer (not inside the CSR), the resulting
-// CSR has a dummy 1-byte zero signature. Set VerifyCSRSignature=false in the
-// DMS EnrollmentSettings when using CMP to bypass csr.CheckSignature().
-func buildSyntheticCSR(subjectDER, spkiDER []byte, extensions []pkix.Extension) (*x509.CertificateRequest, error) {
-	// Parse public key to determine signature algorithm.
-	pubKey, err := x509.ParsePKIXPublicKey(spkiDER)
-	if err != nil {
-		return nil, fmt.Errorf("parse public key: %w", err)
-	}
-
-	// Select a signature algorithm OID compatible with the key type.
-	var sigAlgOID asn1.ObjectIdentifier
-	switch pubKey.(type) {
-	case *rsa.PublicKey:
-		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11} // SHA256WithRSA
-	case *ecdsa.PublicKey:
-		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2} // ECDSAWithSHA256
-	default:
-		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11} // fallback RSA
-	}
-
-	// Assemble the CertificationRequestInfo attributes field ([0] IMPLICIT SET
-	// OF Attribute). It is REQUIRED by Go's x509.ParseCertificateRequest even
-	// when empty; omitting the tag causes "sequence truncated".
-	//
-	// The requested CertTemplate extensions (KeyUsage/ExtKeyUsage/SAN) MUST be
-	// carried inside the DER via a PKCS#9 extensionRequest attribute — NOT just
-	// attached to the parsed Go struct — because the CA client re-serializes the
-	// CSR from its .Raw bytes over HTTP, which would drop struct-only fields.
-	attrsContent, err := marshalExtensionRequestAttrs(extensions)
-	if err != nil {
-		return nil, fmt.Errorf("marshal CSR attributes: %w", err)
-	}
-	attrsField, err := asn1.Marshal(asn1.RawValue{
-		Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: attrsContent,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal attrs field: %w", err)
-	}
-	type pkcs10CRI struct {
-		Version int
-		Subject asn1.RawValue
-		SPKInfo asn1.RawValue
-		Attrs   asn1.RawValue
-	}
-	criDER, err := asn1.Marshal(pkcs10CRI{
-		Version: 0,
-		Subject: asn1.RawValue{FullBytes: subjectDER},
-		SPKInfo: asn1.RawValue{FullBytes: spkiDER},
-		Attrs:   asn1.RawValue{FullBytes: attrsField},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal CRI: %w", err)
-	}
-
-	// Assemble CertificationRequest with dummy signature.
-	sigAlgDER, err := asn1.Marshal(pkix.AlgorithmIdentifier{Algorithm: sigAlgOID})
-	if err != nil {
-		return nil, fmt.Errorf("marshal SigAlg: %w", err)
-	}
-
-	type pkcs10CSR struct {
-		CRI    asn1.RawValue
-		SigAlg asn1.RawValue
-		Sig    asn1.BitString
-	}
-	csrDER, err := asn1.Marshal(pkcs10CSR{
-		CRI:    asn1.RawValue{FullBytes: criDER},
-		SigAlg: asn1.RawValue{FullBytes: sigAlgDER},
-		Sig:    asn1.BitString{Bytes: []byte{0x00}, BitLength: 8},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal CSR DER: %w", err)
-	}
-
-	// Parse into *x509.CertificateRequest to populate all exported fields.
-	// x509.ParseCertificateRequest reads the extensionRequest attribute we
-	// embedded above into csr.Extensions, so the requested extensions survive
-	// the CA client's .Raw-based re-serialization. What actually lands on the
-	// issued cert is still gated by the issuance profile's Honor* flags.
-	return x509.ParseCertificateRequest(csrDER)
-}
-
-// oidExtensionRequest is the PKCS#9 extensionRequest attribute type
-// (1.2.840.113549.1.9.14, RFC 2985 §5.4.2) used to carry requested X.509
-// extensions inside a PKCS#10 CertificationRequest.
-var oidExtensionRequest = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 14}
-
-// marshalExtensionRequestAttrs returns the DER content of a CSR's attributes
-// SET OF Attribute. When exts is empty it returns nil (an empty attributes
-// set). Otherwise it emits a single extensionRequest attribute whose value is
-// the SEQUENCE OF Extension, so x509.ParseCertificateRequest surfaces them on
-// CertificateRequest.Extensions and they persist through DER re-serialization.
-func marshalExtensionRequestAttrs(exts []pkix.Extension) ([]byte, error) {
-	if len(exts) == 0 {
-		return nil, nil
-	}
-	// Extensions ::= SEQUENCE OF Extension
-	extsSeqDER, err := asn1.Marshal(exts)
-	if err != nil {
-		return nil, fmt.Errorf("marshal extensions sequence: %w", err)
-	}
-	// AttributeValue SET OF { Extensions }
-	valuesSetDER, err := asn1.Marshal(asn1.RawValue{
-		Class: asn1.ClassUniversal, Tag: asn1.TagSet, IsCompound: true, Bytes: extsSeqDER,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal attribute values set: %w", err)
-	}
-	// Attribute ::= SEQUENCE { type OID, values SET OF AttributeValue }
-	type pkcs10Attribute struct {
-		Type   asn1.ObjectIdentifier
-		Values asn1.RawValue
-	}
-	return asn1.Marshal(pkcs10Attribute{
-		Type:   oidExtensionRequest,
-		Values: asn1.RawValue{FullBytes: valuesSetDER},
-	})
-}
-
 func cmpTagToString(t int) string {
 	switch t {
 	case cmpBodyTagIR:
 		return "ir"
 	case cmpBodyTagCR:
 		return "cr"
+	case cmpBodyTagP10CR:
+		return "p10cr"
+	case cmpBodyTagPopDecc:
+		return "popdecc"
+	case cmpBodyTagPopDecr:
+		return "popdecr"
 	case cmpBodyTagKUR:
 		return "kur"
 	case cmpBodyTagCP:

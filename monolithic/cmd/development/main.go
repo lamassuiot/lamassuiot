@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/fatih/color"
@@ -328,6 +329,14 @@ func main() {
 
 	dlqEventBus := eventBus
 
+	// RabbitMQ (Docker) and wfx (Docker, below) are independent containers —
+	// wfx only needs the Postgres port info already resolved above, not
+	// RabbitMQ — so when both apply, launch RabbitMQ here in a goroutine and
+	// join it with wg.Wait() after kicking off wfx, instead of paying for two
+	// sequential container-creation round trips (~5-10s).
+	var wg sync.WaitGroup
+	var rabbitmqErr error
+
 	if !*disableEventbus && *useInMemoryEventbus {
 		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
 		eventBus = cconfig.EventBusEngine{
@@ -342,27 +351,32 @@ func main() {
 
 		fmt.Println(" 	-- inmemory eventbus: ephemeral GoChannel pub/sub")
 	} else if !*disableEventbus && !*useAwsEventbus {
-		fmt.Println(">> launching docker: RabbitMQ ...")
-		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(*standardDockerPorts)
-		if err != nil {
-			log.Fatalf("could not launch RabbitMQ: %s", err)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fmt.Println(">> launching docker: RabbitMQ ...")
+			rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(*standardDockerPorts)
+			if err != nil {
+				rabbitmqErr = fmt.Errorf("could not launch RabbitMQ: %w", err)
+				return
+			}
 
-		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
-		eventBus.LogLevel = cconfig.None
-		// make a copy for DLQ using deep copy
+			eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
+			eventBus.LogLevel = cconfig.None
+			// make a copy for DLQ using deep copy
 
-		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
-		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
+			adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
+			basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
 
-		dlqEventBus = eventBus
-		dlqEventBus.Config = deepCopy(eventBus.Config)
-		dlqEventBus.Config["exchange"] = "lamassu-dlq"
+			dlqEventBus = eventBus
+			dlqEventBus.Config = deepCopy(eventBus.Config)
+			dlqEventBus.Config["exchange"] = "lamassu-dlq"
 
-		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
-		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
-		fmt.Printf(" 	-- rabbitmq user: %s\n", basicAuth["username"].(string))
-		fmt.Printf(" 	-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
+			fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
+			fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
+			fmt.Printf(" 	-- rabbitmq user: %s\n", basicAuth["username"].(string))
+			fmt.Printf(" 	-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
+		}()
 	} else if !*disableEventbus && *useAwsEventbus {
 		fmt.Println(">> using AWS Eventbus")
 		internalConfig := awsBaseCryptoEngine.Config
@@ -406,56 +420,73 @@ func main() {
 		}
 	}
 
+	var wfxCleanup func() error
+	var wfxErr error
 	if !*disableWFX {
 		if storageConfig.Provider != cconfig.Postgres {
 			log.Fatalf("wfx requires Postgres storage; rerun without -sqlite or with -disable-wfx")
 		}
-		fmt.Println(">> launching docker: wfx ...")
-		pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
-		pgUser := storageConfig.Config["username"].(string)
-		pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fmt.Println(">> launching docker: wfx ...")
+			pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
+			pgUser := storageConfig.Config["username"].(string)
+			pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
 
-		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker("ghcr.io/siemens/wfx",
-			dockertest.WithTag("latest"),
-			dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
-				cfg.ExposedPorts = network.PortSet{
-					network.MustParsePort("9080/tcp"): struct{}{},
-					network.MustParsePort("9081/tcp"): struct{}{},
-				}
-			}),
-			dockertest.WithEnv([]string{
-				"PGHOST=host.docker.internal",
-				"PGPORT=" + pgPort,
-				"PGUSER=" + pgUser,
-				"PGPASSWORD=" + pgPassword,
-				"PGDATABASE=wfx",
-				"WFX_STORAGE=postgres",
-				"WFX_CLIENT_HOST=0.0.0.0",
-				"WFX_CLIENT_PORT=9080",
-				"WFX_MGMT_HOST=0.0.0.0",
-				"WFX_MGMT_PORT=9081",
-				"WFX_LOG_FORMAT=json",
-				"WFX_LOG_LEVEL=debug",
-			}),
-			dockertest.WithLabels(map[string]string{
-				"group": "lamassuiot-monolithic",
-			}),
-			dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
-				hc.AutoRemove = true
-				hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
-			}),
-		)
-		if err != nil {
-			if wfxCleanup != nil {
-				wfxCleanup()
+			cleanup, wfxContainer, _, err := dockerrunner.RunDocker("ghcr.io/siemens/wfx",
+				dockertest.WithTag("latest"),
+				dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
+					cfg.ExposedPorts = network.PortSet{
+						network.MustParsePort("9080/tcp"): struct{}{},
+						network.MustParsePort("9081/tcp"): struct{}{},
+					}
+				}),
+				dockertest.WithEnv([]string{
+					"PGHOST=host.docker.internal",
+					"PGPORT=" + pgPort,
+					"PGUSER=" + pgUser,
+					"PGPASSWORD=" + pgPassword,
+					"PGDATABASE=wfx",
+					"WFX_STORAGE=postgres",
+					"WFX_CLIENT_HOST=0.0.0.0",
+					"WFX_CLIENT_PORT=9080",
+					"WFX_MGMT_HOST=0.0.0.0",
+					"WFX_MGMT_PORT=9081",
+					"WFX_LOG_FORMAT=json",
+					"WFX_LOG_LEVEL=debug",
+				}),
+				dockertest.WithLabels(map[string]string{
+					"group": "lamassuiot-monolithic",
+				}),
+				dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
+					hc.AutoRemove = true
+					hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+				}),
+			)
+			wfxCleanup = cleanup
+			if err != nil {
+				wfxErr = fmt.Errorf("could not launch wfx: %w", err)
+				return
 			}
-			log.Fatalf("could not launch wfx: %s", err)
-		}
 
-		wfxNorthPort, _ = strconv.Atoi(wfxContainer.GetPort("9081/tcp"))
-		wfxSouthPort, _ = strconv.Atoi(wfxContainer.GetPort("9080/tcp"))
-		fmt.Printf(" \t-- wfx north port: %d\n", wfxNorthPort)
-		fmt.Printf(" \t-- wfx south port: %d\n", wfxSouthPort)
+			wfxNorthPort, _ = strconv.Atoi(wfxContainer.GetPort("9081/tcp"))
+			wfxSouthPort, _ = strconv.Atoi(wfxContainer.GetPort("9080/tcp"))
+			fmt.Printf(" \t-- wfx north port: %d\n", wfxNorthPort)
+			fmt.Printf(" \t-- wfx south port: %d\n", wfxSouthPort)
+		}()
+	}
+
+	wg.Wait()
+
+	if rabbitmqErr != nil {
+		log.Fatalf("%s", rabbitmqErr)
+	}
+	if wfxErr != nil {
+		if wfxCleanup != nil {
+			wfxCleanup()
+		}
+		log.Fatalf("%s", wfxErr)
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")

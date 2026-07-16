@@ -24,6 +24,8 @@ type cmpTransactionRow struct {
 	SentNonce            string    `gorm:"column:sent_nonce;not null;default:''"`             // hex-encoded bytes
 	ReceivedNonce        string    `gorm:"column:received_nonce;not null;default:''"`         // hex-encoded request senderNonce
 	SupersededCertSerial string    `gorm:"column:superseded_cert_serial;not null;default:''"` // kur: hex serial of the cert being updated
+	RegToken             string    `gorm:"column:reg_token;not null;default:''"`              // RFC 4211 §6.1 id-regCtrl-regToken, one-time use
+	PopoChallenge        string    `gorm:"column:popo_challenge;not null;default:''"`         // challengeResp POP: hex expected Rand.int
 	State                string    `gorm:"column:state;not null;default:ISSUED"`
 	ErrorMessage         string    `gorm:"column:error_message;not null;default:''"`
 	CSR                  string    `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
@@ -174,6 +176,26 @@ func (s *PostgresCMPTransactionStorage) HasAbandonedReenrollment(ctx context.Con
 	return count > 0, nil
 }
 
+// HasSeenRegToken reports whether any transaction under the DMS already
+// carries the given regToken value. Unlike HasUnconfirmedReenrollment, this
+// spans every state — a token is one-time-use for the lifetime of the DMS,
+// not just while the original transaction is in flight (RFC 4211 §6.1).
+func (s *PostgresCMPTransactionStorage) HasSeenRegToken(ctx context.Context, dmsID, regToken string) (bool, error) {
+	if regToken == "" {
+		return false, nil
+	}
+	var count int64
+	result := s.db.WithContext(ctx).
+		Model(&cmpTransactionRow{}).
+		Where("dms_id = ? AND reg_token = ?", dmsID, regToken).
+		Count(&count)
+	if result.Error != nil {
+		s.logger.Errorf("cmp_transactions: has-seen-reg-token dms=%s: %v", dmsID, result.Error)
+		return false, result.Error
+	}
+	return count > 0, nil
+}
+
 // SelectByCertSerial returns the transaction that issued the certificate with
 // the given hex serial number, regardless of state or expiry. Rows are keyed
 // by transaction_id, so at most one row references a given issued cert. See
@@ -232,6 +254,8 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 		SentNonce:            tx.SentNonce,
 		ReceivedNonce:        tx.ReceivedNonce,
 		SupersededCertSerial: tx.SupersededCertSerial,
+		RegToken:             tx.RegToken,
+		PopoChallenge:        tx.PopoChallenge,
 		State:                string(state),
 		ErrorMessage:         tx.ErrorMessage,
 		CSR:                  csrToString(tx.CSR),
@@ -375,17 +399,28 @@ func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transac
 // each other; SQLite has no row-level locking and falls back to a plain SELECT
 // (monolithic deployments run a single writer, so the contention is irrelevant).
 func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+	return s.selectLockedBatch(ctx, "select-pending",
+		"state = ? AND expires_at > "+nowExpr(s.db), string(storage.CMPTransactionStatePending),
+		"created_at ASC", limit, 16)
+}
+
+// selectLockedBatch runs the shared "claim a batch of rows" query used by
+// SelectPending, SelectExpiredPending and SelectExpiredIssued: default the
+// limit when non-positive, filter by whereExpr/whereArg, order by orderExpr,
+// and — on dialects that support it — take FOR UPDATE SKIP LOCKED so multiple
+// workers/replicas claim disjoint rows. GORM's Dialector.Name() returns the
+// short driver name ("postgres", "sqlite", "mysql", ...) so we whitelist
+// explicitly rather than try/fall-back; SQLite has no row-level locking and
+// falls back to a plain SELECT. logLabel names the operation in the error log.
+func (s *PostgresCMPTransactionStorage) selectLockedBatch(ctx context.Context, logLabel, whereExpr string, whereArg any, orderExpr string, limit, defaultLimit int) ([]storage.CMPTransaction, error) {
 	if limit <= 0 {
-		limit = 16
+		limit = defaultLimit
 	}
 	q := s.db.WithContext(ctx).
-		Where("state = ? AND expires_at > "+nowExpr(s.db), string(storage.CMPTransactionStatePending)).
-		Order("created_at ASC").
+		Where(whereExpr, whereArg).
+		Order(orderExpr).
 		Limit(limit)
 
-	// Apply row-level locking only on dialects that support it. GORM's
-	// Dialector.Name() returns the short driver name ("postgres", "sqlite",
-	// "mysql", ...) so we whitelist explicitly rather than try/fall-back.
 	switch s.db.Dialector.Name() {
 	case "postgres", "mysql":
 		q = q.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
@@ -393,7 +428,7 @@ func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit
 
 	var rows []cmpTransactionRow
 	if result := q.Find(&rows); result.Error != nil {
-		s.logger.Errorf("cmp_transactions: select-pending: %v", result.Error)
+		s.logger.Errorf("cmp_transactions: %s: %v", logLabel, result.Error)
 		return nil, result.Error
 	}
 	out := make([]storage.CMPTransaction, len(rows))
@@ -543,29 +578,9 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 // never acted on. Symmetric to SelectExpiredIssued: same SKIP LOCKED
 // behaviour on Postgres/MySQL so two replicas don't double-process.
 func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	q := s.db.WithContext(ctx).
-		Where("state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStatePending)).
-		Order("expires_at ASC").
-		Limit(limit)
-
-	switch s.db.Dialector.Name() {
-	case "postgres", "mysql":
-		q = q.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
-	}
-
-	var rows []cmpTransactionRow
-	if result := q.Find(&rows); result.Error != nil {
-		s.logger.Errorf("cmp_transactions: select-expired-pending: %v", result.Error)
-		return nil, result.Error
-	}
-	out := make([]storage.CMPTransaction, len(rows))
-	for i, r := range rows {
-		out[i] = rowToDomain(r)
-	}
-	return out, nil
+	return s.selectLockedBatch(ctx, "select-expired-pending",
+		"state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStatePending),
+		"expires_at ASC", limit, 100)
 }
 
 // SelectExpiredIssued returns up to `limit` ISSUED transactions whose
@@ -575,34 +590,14 @@ func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context
 // revocation: each cert is revoked at the CA and then the row itself is
 // transitioned to REVOKED via MarkRevokedByTransactionID for audit.
 func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	q := s.db.WithContext(ctx).
-		Where("state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStateIssued)).
-		Order("expires_at ASC").
-		Limit(limit)
-
 	// FOR UPDATE SKIP LOCKED ensures two backend replicas running the
 	// confirmation monitor concurrently each pick a disjoint set of rows
 	// rather than both racing to revoke the same certs at the CA
 	// (audit finding S4). SelectPending uses the same pattern; the omission
 	// here was the bug.
-	switch s.db.Dialector.Name() {
-	case "postgres", "mysql":
-		q = q.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
-	}
-
-	var rows []cmpTransactionRow
-	if result := q.Find(&rows); result.Error != nil {
-		s.logger.Errorf("cmp_transactions: select-expired-issued: %v", result.Error)
-		return nil, result.Error
-	}
-	out := make([]storage.CMPTransaction, len(rows))
-	for i, r := range rows {
-		out[i] = rowToDomain(r)
-	}
-	return out, nil
+	return s.selectLockedBatch(ctx, "select-expired-issued",
+		"state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStateIssued),
+		"expires_at ASC", limit, 100)
 }
 
 // MarkRevokedByTransactionID transitions the row identified by transactionID
@@ -670,6 +665,8 @@ func rowToDomain(row cmpTransactionRow) storage.CMPTransaction {
 		SentNonce:            row.SentNonce,
 		ReceivedNonce:        row.ReceivedNonce,
 		SupersededCertSerial: row.SupersededCertSerial,
+		RegToken:             row.RegToken,
+		PopoChallenge:        row.PopoChallenge,
 		State:                storage.CMPTransactionState(row.State),
 		ErrorMessage:         row.ErrorMessage,
 		CSR:                  stringToCSR(row.CSR),

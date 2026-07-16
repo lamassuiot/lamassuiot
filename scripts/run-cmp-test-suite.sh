@@ -325,6 +325,72 @@ if command -v openssl >/dev/null 2>&1; then
     fi
 fi
 
+# --- 3b-3. CA encryption certs for agreeMAC / encryptedKey POPO tests --------
+# extra_issuing.robot's agreeMAC and encryptedKey POPO tests (RFC 4210bis
+# §5.2.8.3) need a "CA encryption certificate" per algorithm to build a
+# request against — the client only ever uses its PUBLIC key (ECDH partner /
+# KTRI-KARI recipient), so a throwaway self-issued cert is sufficient; nothing
+# needs to chain to Lamassu or ever use the matching private key. Note: Lamassu
+# does not implement agreeMAC or the real encryptedKey POP method (only the
+# subsequentMessage encrCert/challengeResp indirect methods — see
+# popoIndirectUnsupported in backend/pkg/controllers/cmp/cmp.go), so setting
+# these turns the SKIPs into an honest PASS/FAIL split: the "MUST Reject
+# Invalid ..." tests pass (Lamassu already rejects with badPOP), the "MUST
+# Accept Valid ..." tests fail (that POP method isn't implemented).
+ENCR_CERTS_DIR="/tmp/cmp-encr-certs"
+if command -v openssl >/dev/null 2>&1; then
+    mkdir -p "${ENCR_CERTS_DIR}"
+    if [ ! -f "${ENCR_CERTS_DIR}/rsa-encr.crt" ]; then
+        log "Generating CA encryption certs (RSA/ECC/X25519/X448) for agreeMAC/encryptedKey POPO tests"
+        # A throwaway signing CA — its key is discarded after this block; these
+        # leaf certs are never chain-validated by the suite or Lamassu.
+        openssl ecparam -name prime256v1 -genkey -noout -out "${ENCR_CERTS_DIR}/signing-ca.key" 2>/dev/null
+        openssl req -new -x509 -key "${ENCR_CERTS_DIR}/signing-ca.key" -out "${ENCR_CERTS_DIR}/signing-ca.crt" \
+            -days 3650 -subj "/CN=Test Encryption CA" \
+            -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
+
+        # RSA (keyEncipherment): a normal CSR works — RSA can sign its own request.
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "${ENCR_CERTS_DIR}/rsa-encr.key" 2>/dev/null
+        openssl req -new -key "${ENCR_CERTS_DIR}/rsa-encr.key" -subj "/CN=rsa-encr" \
+            -out "${ENCR_CERTS_DIR}/rsa-encr.csr" 2>/dev/null
+        openssl x509 -req -in "${ENCR_CERTS_DIR}/rsa-encr.csr" -CA "${ENCR_CERTS_DIR}/signing-ca.crt" \
+            -CAkey "${ENCR_CERTS_DIR}/signing-ca.key" -CAcreateserial -days 365 \
+            -out "${ENCR_CERTS_DIR}/rsa-encr.crt" \
+            -extfile <(echo "keyUsage=keyEncipherment") 2>/dev/null
+
+        # ECC (keyAgreement): a normal CSR works — ECDSA can sign its own request.
+        openssl ecparam -name prime256v1 -genkey -noout -out "${ENCR_CERTS_DIR}/ecc-encr.key" 2>/dev/null
+        openssl req -new -key "${ENCR_CERTS_DIR}/ecc-encr.key" -subj "/CN=ecc-encr" \
+            -out "${ENCR_CERTS_DIR}/ecc-encr.csr" 2>/dev/null
+        openssl x509 -req -in "${ENCR_CERTS_DIR}/ecc-encr.csr" -CA "${ENCR_CERTS_DIR}/signing-ca.crt" \
+            -CAkey "${ENCR_CERTS_DIR}/signing-ca.key" -CAcreateserial -days 365 \
+            -out "${ENCR_CERTS_DIR}/ecc-encr.crt" \
+            -extfile <(echo "keyUsage=keyAgreement") 2>/dev/null
+
+        # X25519 / X448 (keyAgreement): neither key type can sign a CSR, so build
+        # a template CSR with a throwaway RSA key (subject fields only) and swap
+        # in the real X25519/X448 public key with -force_pubkey.
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "${ENCR_CERTS_DIR}/template.key" 2>/dev/null
+        for alg in X25519 X448; do
+            name="$(echo "${alg}" | tr 'A-Z' 'a-z')"
+            openssl genpkey -algorithm "${alg}" -out "${ENCR_CERTS_DIR}/${name}-encr.key" 2>/dev/null
+            openssl pkey -in "${ENCR_CERTS_DIR}/${name}-encr.key" -pubout -out "${ENCR_CERTS_DIR}/${name}-encr.pub" 2>/dev/null
+            openssl req -new -key "${ENCR_CERTS_DIR}/template.key" -subj "/CN=${name}-encr" \
+                -out "${ENCR_CERTS_DIR}/${name}-encr.csr" 2>/dev/null
+            openssl x509 -req -in "${ENCR_CERTS_DIR}/${name}-encr.csr" -force_pubkey "${ENCR_CERTS_DIR}/${name}-encr.pub" \
+                -CA "${ENCR_CERTS_DIR}/signing-ca.crt" -CAkey "${ENCR_CERTS_DIR}/signing-ca.key" -CAcreateserial \
+                -days 365 -out "${ENCR_CERTS_DIR}/${name}-encr.crt" \
+                -extfile <(echo "keyUsage=keyAgreement") 2>/dev/null
+        done
+
+        for f in rsa-encr.crt ecc-encr.crt x25519-encr.crt x448-encr.crt; do
+            [ -s "${ENCR_CERTS_DIR}/${f}" ] || warn "could not generate ${ENCR_CERTS_DIR}/${f} (agreeMAC/encryptedKey tests for it will skip)"
+        done
+    fi
+else
+    warn "openssl not found; skipping CA encryption cert generation (agreeMAC/encryptedKey POPO tests will skip)"
+fi
+
 # --- 3c. resolvable VA hostname ----------------------------------------------
 # Issued certs carry AIA/CRL URLs for the VA at http://dev.lamassu.test:8080
 # (monolithic dev `Domains` — an FQDN, so pkilint accepts the URI syntax). The
@@ -370,8 +436,29 @@ fi
 # `hybrid-kem` without a bare `pq`). Lamassu runs PQ-free, so these are out of
 # scope; excluding `pq` also drops the liboqs-dependent paths. No classical test
 # is tagged `kem`, so this over-excludes nothing.
-ROBOT_ARGS=( --pythonpath=./ --exclude verbose-tests --exclude pqc --exclude pq --exclude kem
+# `mac` excludes PKIMessage-level MAC protection (PasswordBasedMac/PBMAC1) —
+# Lamassu is CLIENT_CERTIFICATE-only (ALLOW_MAC_PROTECTION=${False} in
+# config/lamassu.robot). `agreeMAC` excludes the *POPO-level* keyAgreement MAC
+# method (RFC 4210bis §5.2.8.3, PKMACValue derived from an ECDH shared
+# secret) — same "no MAC anywhere" policy, different RFC layer; Lamassu never
+# implements/verifies it (popoIndirectUnsupported in
+# backend/pkg/controllers/cmp/cmp.go), so these would otherwise be permanent,
+# by-design failures rather than a gap worth tracking. `encryptedKey` excludes
+# the third POPO variant with the same fate — the client sends its actual new
+# private key wrapped in a CMS EnvelopedData (KTRI/KARI/PWRI) for the CA to
+# decrypt. RFC 4210bis offers two other mechanisms for the same "non-signing
+# key" problem — encrCert and challengeResp — which Lamassu already
+# implements and which don't require the CA to hold a persistent decryption
+# key; encryptedKey would be redundant exposure for no capability gain.
+ROBOT_ARGS=( --pythonpath=./ --exclude verbose-tests --exclude pqc --exclude pq --exclude kem --exclude mac --exclude agreeMAC --exclude encryptedKey
              --outputdir=reports --xunit xunit.xml --variable "environment:lamassu" )
+# `resource-intensive` excludes the single lwcmp.robot test that loads an
+# 8192-bit RSA key (LARGE_KEY_SIZE in config/lamassu.robot): ~50s of real
+# crypto/ASN.1 work, ~75% of that suite file's runtime, for one test. Skipped
+# by default for a fast day-to-day/CI run; pass `--include resource-intensive`
+# to run it (Robot excludes take priority over includes, so it's only added
+# here when not explicitly requested).
+[ "${INCLUDE}" != "resource-intensive" ] && ROBOT_ARGS+=( --exclude resource-intensive )
 [ -n "${INCLUDE}" ]  && ROBOT_ARGS+=( --include "${INCLUDE}" )
 [ -n "${TESTNAME}" ] && ROBOT_ARGS+=( --test "${TESTNAME}" )
 
