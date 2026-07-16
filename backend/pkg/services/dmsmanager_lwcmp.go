@@ -2,11 +2,13 @@ package services
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"fmt"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
@@ -17,6 +19,322 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
+
+// cmpCertConfDefaultTTL is the fallback certConf window applied to a phased
+// transaction once it is approved (moves PENDING → ISSUED) when the DMS does
+// not configure ConfirmationTimeout. Mirrors the controller's cmpTxTTL — the
+// post-approval row behaves like any other issued-awaiting-confirmation row.
+const cmpCertConfDefaultTTL = 5 * time.Minute
+
+// cmpApprovalMinDeliveryWindow floors the post-approval certConf window. A
+// phased-workflow EE is only allowed to poll again after the pollRep
+// checkAfter hint (the controller's defaultPollIntervalSeconds, 60s), so a
+// ConfirmationTimeout shorter than one poll cycle would let the confirmation
+// monitor revoke the just-approved certificate before the device is even
+// permitted to ask for it. Two minutes covers a full poll cycle plus transport
+// and clock slack; DMSes configuring a longer ConfirmationTimeout are
+// unaffected.
+const cmpApprovalMinDeliveryWindow = 2 * time.Minute
+
+// GetCMPTransactionRepo exposes the persistent CMP transaction store so that
+// the HTTP controller layer can access it without polluting the DMSManagerService
+// interface.  Controllers type-assert the service to CMPTransactionStorer.
+func (svc *DMSManagerServiceBackend) GetCMPTransactionRepo() storage.CMPTransactionRepo {
+	return svc.cmptxStorage
+}
+
+// GetCMPWFXReporter exposes the optional WFX reporter used to mirror CMP
+// transaction state transitions into WFX jobs.
+func (svc *DMSManagerServiceBackend) GetCMPWFXReporter() cmpwfx.CMPReporter {
+	return svc.cmpWFXReporter
+}
+
+// GetCMPTransactionsByDMS lists CMP transactions belonging to the given DMS,
+// honouring the standard pagination/sort/filter parameters. It verifies the
+// DMS exists first so callers get a 404 when targeting a bogus ID rather than
+// an empty list that could hide a typo. Both in-flight and stale rows are
+// included; expiry filtering is intentionally NOT applied at this layer
+// (operators want stale rows visible for diagnosis).
+func (svc DMSManagerServiceBackend) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	exists, _, err := svc.dmsStorage.SelectExists(ctx, input.DMSID)
+	if err != nil {
+		lFunc.Errorf("could not check DMS %s exists: %s", input.DMSID, err)
+		return "", err
+	}
+	if !exists {
+		return "", errs.ErrDMSNotFound
+	}
+
+	return svc.cmptxStorage.SelectAllByDMS(ctx, input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters)
+}
+
+// ApproveCMPTransaction releases a PENDING phased-workflow transaction: it
+// issues the certificate from the stored CSR, flips the row to ISSUED (so the
+// EE can fetch it via pollReq), and mirrors the AwaitingApproval → Responded →
+// AwaitingCertConf transitions into WFX. On issuance failure the row is moved
+// to ISSUE_FAILED so pollReq can surface the reason.
+func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*storage.CMPTransaction, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	if err := dmsValidate.Struct(input); err != nil {
+		lFunc.Errorf("ApproveCMPTransaction: invalid input: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.DMSID)
+	if err != nil {
+		lFunc.Errorf("could not check DMS %s exists: %s", input.DMSID, err)
+		return nil, err
+	}
+	if !exists {
+		return nil, errs.ErrDMSNotFound
+	}
+
+	tx, ok, err := svc.cmptxStorage.SelectIncludingExpired(ctx, input.TransactionID)
+	if err != nil {
+		lFunc.Errorf("ApproveCMPTransaction: lookup tx %s: %s", input.TransactionID, err)
+		return nil, err
+	}
+	// Cross-DMS access is treated as not-found so an operator scoped to one DMS
+	// cannot probe another DMS's transaction IDs.
+	if !ok || tx.DMSID != input.DMSID {
+		return nil, errs.ErrCMPTransactionNotFound
+	}
+	if tx.State != storage.CMPTransactionStatePending {
+		lFunc.Warnf("ApproveCMPTransaction: tx %s is in state %s, not PENDING", tx.TransactionID, tx.State)
+		return nil, errs.ErrCMPTransactionNotPending
+	}
+	if !tx.ExpiresAt.IsZero() && tx.ExpiresAt.Before(time.Now()) {
+		lFunc.Warnf("ApproveCMPTransaction: tx %s expired at %s", tx.TransactionID, tx.ExpiresAt)
+		return nil, errs.ErrCMPTransactionNotPending
+	}
+	if tx.CSR == nil {
+		lFunc.Errorf("ApproveCMPTransaction: tx %s has no stored CSR", tx.TransactionID)
+		return nil, errs.ErrCMPTransactionNotPending
+	}
+
+	csr := (*x509.CertificateRequest)(tx.CSR)
+	// Mark the context as pre-authenticated: the original IR/KUR was already
+	// authenticated at submission time, so LWCEnroll/LWCReenroll must not
+	// re-run client-cert validation (there is no CMP signer in the admin's
+	// approval context).
+	issuanceCtx := context.WithValue(ctx, core.LamassuContextKeyPreAuthenticated, true)
+	var cert *x509.Certificate
+	if tx.IsReenrollment {
+		cert, err = svc.service.LWCReenroll(issuanceCtx, csr, input.DMSID)
+	} else {
+		cert, err = svc.service.LWCEnroll(issuanceCtx, csr, input.DMSID)
+	}
+	if err != nil {
+		lFunc.Errorf("ApproveCMPTransaction: issuance failed for tx %s: %s", tx.TransactionID, err)
+		// Keep the existing (approval-window) expiry so the failed row stays
+		// visible to the operator rather than being swept on the short certConf
+		// schedule.
+		updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, storage.CMPTransactionStateIssueFailed, nil, err.Error(), tx.ExpiresAt)
+		if updErr != nil {
+			lFunc.Warnf("ApproveCMPTransaction: failed to mark tx %s ISSUE_FAILED: %s", tx.TransactionID, updErr)
+		} else if !updated {
+			// Row vanished between approval and persistence — likely swept by
+			// DeleteExpired. Audit signal only; we cannot recover further here.
+			lFunc.Warnf("ApproveCMPTransaction: no live row to mark ISSUE_FAILED for tx %s (already expired/deleted)", tx.TransactionID)
+		}
+		svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateRejected, "", err.Error())
+		return nil, err
+	}
+
+	// Re-base the TTL from the long approval window down to the certConf window:
+	// post-approval the row behaves exactly like a direct issuance awaiting
+	// certConf. With implicit confirmation there is no certConf message — the
+	// cert is confirmed the moment the device fetches it via pollReq — so this
+	// window simply bounds how long the (actively polling) device has to pick
+	// the certificate up.
+	confTimeout := time.Duration(dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ConfirmationTimeout)
+	if confTimeout <= 0 {
+		confTimeout = cmpCertConfDefaultTTL
+	}
+	if confTimeout < cmpApprovalMinDeliveryWindow {
+		confTimeout = cmpApprovalMinDeliveryWindow
+	}
+	issuedExpiry := time.Now().Add(confTimeout)
+
+	certSerial := helpers.SerialNumberToHexString(cert.SerialNumber)
+	updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, storage.CMPTransactionStateIssued, (*models.X509Certificate)(cert), "", issuedExpiry)
+	if updErr != nil {
+		lFunc.Errorf("ApproveCMPTransaction: failed to mark tx %s ISSUED: %s", tx.TransactionID, updErr)
+		return nil, updErr
+	}
+	if !updated {
+		// The certificate has been issued at the CA but the transaction row
+		// was already expired or removed. The cert is orphaned in Lamassu's
+		// view; surface it as an error so the caller (admin tooling) can
+		// reconcile rather than silently dropping the issuance.
+		lFunc.Errorf("ApproveCMPTransaction: tx %s row missing/expired when persisting ISSUED state — cert %s is now orphaned", tx.TransactionID, certSerial)
+		return nil, fmt.Errorf("CMP transaction %s no longer exists after issuance (cert %s orphaned; investigate cleanup vs approval timing)", tx.TransactionID, certSerial)
+	}
+	lFunc.Infof("ApproveCMPTransaction: tx %s approved, certificate %s issued", tx.TransactionID, certSerial)
+
+	// Mirror the admin-gated issuance into WFX: AwaitingApproval → Responded
+	// (admin) then Responded → AwaitingCertConf (server now awaits the EE's
+	// certConf, retrieved alongside the cert via pollReq).
+	svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateResponded, certSerial, "")
+	svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateAwaitingCertConf, certSerial, "")
+
+	// Reflect the issued outcome on the returned row in-memory; these are the
+	// only fields UpdateState changed.
+	tx.State = storage.CMPTransactionStateIssued
+	tx.Certificate = (*models.X509Certificate)(cert)
+	tx.CertSerialNumber = certSerial
+	tx.ExpiresAt = issuedExpiry
+	return &tx, nil
+}
+
+// RejectCMPTransaction denies a PENDING phased-workflow CMP transaction
+// without issuing a certificate: the row moves to ISSUE_FAILED carrying the
+// administrator's reason, which pollReq later surfaces as an error PKIMessage
+// to the EE. Mirrors ApproveCMPTransaction's validation, scoping, and WFX
+// emission semantics.
+func (svc DMSManagerServiceBackend) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*storage.CMPTransaction, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	if err := dmsValidate.Struct(input); err != nil {
+		lFunc.Errorf("RejectCMPTransaction: invalid input: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	exists, _, err := svc.dmsStorage.SelectExists(ctx, input.DMSID)
+	if err != nil {
+		lFunc.Errorf("could not check DMS %s exists: %s", input.DMSID, err)
+		return nil, err
+	}
+	if !exists {
+		return nil, errs.ErrDMSNotFound
+	}
+
+	tx, ok, err := svc.cmptxStorage.SelectIncludingExpired(ctx, input.TransactionID)
+	if err != nil {
+		lFunc.Errorf("RejectCMPTransaction: lookup tx %s: %s", input.TransactionID, err)
+		return nil, err
+	}
+	// Cross-DMS access is treated as not-found (same as ApproveCMPTransaction).
+	if !ok || tx.DMSID != input.DMSID {
+		return nil, errs.ErrCMPTransactionNotFound
+	}
+	if tx.State != storage.CMPTransactionStatePending {
+		lFunc.Warnf("RejectCMPTransaction: tx %s is in state %s, not PENDING", tx.TransactionID, tx.State)
+		return nil, errs.ErrCMPTransactionNotPending
+	}
+	if !tx.ExpiresAt.IsZero() && tx.ExpiresAt.Before(time.Now()) {
+		lFunc.Warnf("RejectCMPTransaction: tx %s expired at %s", tx.TransactionID, tx.ExpiresAt)
+		return nil, errs.ErrCMPTransactionNotPending
+	}
+
+	reason := input.Reason
+	if reason == "" {
+		reason = "transaction rejected by administrator"
+	}
+
+	// Keep the existing PENDING TTL on the ISSUE_FAILED row so the operator
+	// keeps seeing it until DeleteExpired sweeps it on the same schedule a
+	// timed-out approval would have followed.
+	updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, storage.CMPTransactionStateIssueFailed, nil, reason, tx.ExpiresAt)
+	if updErr != nil {
+		lFunc.Errorf("RejectCMPTransaction: failed to mark tx %s ISSUE_FAILED: %s", tx.TransactionID, updErr)
+		return nil, updErr
+	}
+	if !updated {
+		lFunc.Errorf("RejectCMPTransaction: tx %s row missing/expired when persisting ISSUE_FAILED state", tx.TransactionID)
+		return nil, errs.ErrCMPTransactionNotPending
+	}
+	lFunc.Infof("RejectCMPTransaction: tx %s rejected (%s)", tx.TransactionID, reason)
+
+	svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateRejected, "", reason)
+
+	tx.State = storage.CMPTransactionStateIssueFailed
+	tx.ErrorMessage = reason
+	return &tx, nil
+}
+
+// emitApprovalTransition pushes one phased-workflow state transition into WFX,
+// keyed to the transaction's existing job. No-op when WFX is disabled.
+func (svc DMSManagerServiceBackend) emitApprovalTransition(ctx context.Context, lFunc *logrus.Entry, tx storage.CMPTransaction, state cmpwfx.CMPState, certSerial, reason string) {
+	if svc.cmpWFXReporter == nil {
+		return
+	}
+	if _, err := svc.cmpWFXReporter.Emit(ctx, cmpwfx.CMPTransition{
+		TransactionID:     tx.TransactionID,
+		DMSID:             tx.DMSID,
+		RequestType:       tx.RequestType,
+		SubjectCommonName: tx.SubjectCommonName,
+		CertSerialNumber:  certSerial,
+		State:             state,
+		Reason:            reason,
+		Workflow:          cmpwfx.CMPWorkflowNamePhased,
+	}); err != nil {
+		lFunc.WithField("cmpState", state).Warnf("ApproveCMPTransaction: WFX transition export failed: %v", err)
+	}
+}
+
+func (svc DMSManagerServiceBackend) LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error) {
+	exists, dms, err := svc.dmsStorage.SelectExists(ctx, aps)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not look up DMS '%s': %w", aps, err)
+	}
+	if !exists {
+		return nil, nil, fmt.Errorf("DMS '%s' not found", aps)
+	}
+
+	protectionCertSN := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ProtectionCertificateSerialNumber
+	if protectionCertSN == "" {
+		// No protection cert configured: the DMS opts out of response signing.
+		// (nil chain, nil signer, nil error) signals "send unprotected response"
+		// to the controller — distinct from a true error such as KMS unreachable.
+		return nil, nil, nil
+	}
+
+	cert, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: protectionCertSN})
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get protection certificate '%s': %w", protectionCertSN, err)
+	}
+
+	caSigner := NewCertificateSigner(ctx, cert, svc.kmsClient)
+	leaf := (*x509.Certificate)(cert.Certificate)
+
+	chain := append([]*x509.Certificate{leaf}, svc.walkCAChain(ctx, cert.IssuerCAMetadata.ID)...)
+	return chain, caSigner, nil
+}
+
+// walkCAChain returns the issuer CA chain starting at startCAID and walking up
+// to the root. Returns an empty slice when startCAID is empty.
+// A maximum depth of 10 guards against pathological loops in misconfigured CA
+// hierarchies; in practice CA hierarchies are at most a few levels deep.
+func (svc DMSManagerServiceBackend) walkCAChain(ctx context.Context, startCAID string) []*x509.Certificate {
+	const maxDepth = 10
+	chain := make([]*x509.Certificate, 0, maxDepth)
+	currentID := startCAID
+	visited := make(map[string]struct{}, maxDepth)
+
+	for i := 0; i < maxDepth && currentID != ""; i++ {
+		if _, seen := visited[currentID]; seen {
+			break
+		}
+		visited[currentID] = struct{}{}
+
+		ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: currentID})
+		if err != nil || ca == nil {
+			break
+		}
+		chain = append(chain, (*x509.Certificate)(ca.Certificate.Certificate))
+
+		// Stop when the CA is self-signed (root) or no parent is recorded.
+		if ca.Certificate.IssuerCAMetadata.ID == "" || ca.Certificate.IssuerCAMetadata.ID == currentID {
+			break
+		}
+		currentID = ca.Certificate.IssuerCAMetadata.ID
+	}
+	return chain
+}
 
 // kgaHelperCertValidity is the lifetime of the ephemeral KGA helper
 // certificates (signer / KARI originator). They exist only to authenticate a
