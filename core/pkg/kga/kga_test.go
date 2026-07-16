@@ -167,10 +167,20 @@ func TestBuildKeyPackage_KTRI(t *testing.T) {
 	if !bytes.Equal(ktri.RID.Bytes, recipCert.SubjectKeyId) {
 		t.Fatal("ktri rid subjectKeyIdentifier does not match recipient SKI")
 	}
-	if !ktri.KeyEncryptionAlgorithm.Algorithm.Equal(oidRSAEncryption) {
-		t.Fatalf("ktri keyEncAlg = %v", ktri.KeyEncryptionAlgorithm.Algorithm)
+	if !ktri.KeyEncryptionAlgorithm.Algorithm.Equal(oidRSAESOAEP) {
+		t.Fatalf("ktri keyEncAlg = %v, want id-RSAES-OAEP", ktri.KeyEncryptionAlgorithm.Algorithm)
 	}
-	cek, err := rsa.DecryptPKCS1v15(rand.Reader, recipKey, ktri.EncryptedKey)
+	var oaepParams rsaesOAEPParams
+	if _, err := asn1.Unmarshal(ktri.KeyEncryptionAlgorithm.Parameters.FullBytes, &oaepParams); err != nil {
+		t.Fatalf("decode RSAES-OAEP-params: %v", err)
+	}
+	if !oaepParams.HashFunc.Algorithm.Equal(oidSHA256) {
+		t.Fatalf("OAEP hashFunc = %v, want SHA-256", oaepParams.HashFunc.Algorithm)
+	}
+	if !oaepParams.MaskGenFunc.Algorithm.Equal(oidMGF1) {
+		t.Fatalf("OAEP maskGenFunc = %v, want id-mgf1", oaepParams.MaskGenFunc.Algorithm)
+	}
+	cek, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, recipKey, ktri.EncryptedKey, nil)
 	if err != nil {
 		t.Fatalf("recover CEK: %v", err)
 	}

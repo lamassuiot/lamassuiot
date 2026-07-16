@@ -79,7 +79,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// pipeline (no client key ⇒ no POPO, key/template checks below don't apply),
 	// so it is handled entirely by handleKGAEnrollment.
 	if req.ForKGA {
-		r.handleKGAEnrollment(ctx, lFunc, header, req, dmsID, respTag, body.Tag, variant.enrollFn(r, dmsID))
+		r.handleKGAEnrollment(ctx, lFunc, header, req, dmsID, respTag, body.Tag, enrollOpts, variant.enrollFn(r, dmsID))
 		return
 	}
 
@@ -88,26 +88,27 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// POPO verification because Go refuses to even verify a 512-bit RSA POPO
 	// signature ("512-bit keys are insecure"), which would otherwise surface as a
 	// misleading badPOP. Applies to ir/cr/kur alike (kur skips inner POPO).
-	if bits := rsaKeyBits(req.PublicKeyDER); bits > 0 && bits < minRSAKeyBits {
-		lFunc.Warnf("%s: RSA public key too short: %d-bit (minimum %d)", variant.logPrefix, bits, minRSAKeyBits)
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
-			CertReqID:   req.CertReqID,
-			Reason:      fmt.Sprintf("RSA public key too short: %d-bit key is below the %d-bit minimum (NIST SP 800-57)", bits, minRSAKeyBits),
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
-		})
+	//
+	// Oversized RSA keys are rejected symmetrically: a modulus far above any
+	// practical size (e.g. 18000-bit) is a defective CertTemplate and a
+	// resource-exhaustion vector (verifying such a signature is itself
+	// expensive). Both bounds are enforced by rejectWeakOrOversizedRSAKey.
+	if rej := rejectWeakOrOversizedRSAKey(req.PublicKeyDER, variant.logPrefix, req.CertReqID, lFunc); rej != nil {
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
 		return
 	}
 
-	// Reject an oversized RSA key symmetrically: a modulus far above any
-	// practical size (e.g. 18000-bit) is a defective CertTemplate and a
-	// resource-exhaustion vector, so it is rejected with badCertTemplate before
-	// POPO verification (verifying such a signature is itself expensive).
-	if bits := rsaKeyBits(req.PublicKeyDER); bits > maxRSAKeyBits {
-		lFunc.Warnf("%s: RSA public key too large: %d-bit (maximum %d)", variant.logPrefix, bits, maxRSAKeyBits)
+	// RFC 9483 §5.2.3: raVerified MUST NOT be used in a kur — the proof of
+	// possession for a key update is the message protection made with the very
+	// certificate being updated, and no RA (trusted or not) can assert that on
+	// the EE's behalf. notAuthorized mirrors the ir/cr mapping for an entity
+	// asserting raVerified it has no right to use.
+	if variant.isReenrollment && req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 0 && len(req.POPORaw.FullBytes) > 0 {
+		lFunc.Warnf("kur: raVerified POPO is not permitted in a key update request (RFC 9483 §5.2.3)")
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
 			CertReqID:   req.CertReqID,
-			Reason:      fmt.Sprintf("RSA public key too large: %d-bit key exceeds the %d-bit maximum", bits, maxRSAKeyBits),
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			Reason:      "raVerified POPO is not permitted in a key update request (RFC 9483 §5.2.3)",
+			FailInfoBit: pkiFailureInfoNotAuthorized,
 		})
 		return
 	}
@@ -116,33 +117,60 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// RFC 4211 §4.1 clause 3). For kur, the protection certificate proves
 	// possession of the key being updated, so a separate inner-POPO check
 	// would be redundant (and is omitted by RFC 9483 §4.1.3).
+	useEncrCert := false
+	useChallengeResp := false
 	if variant.verifyInnerPOPO {
-		// RFC 9483 §5.2.3.2: a trusted RA that modified the CertTemplate verifies
-		// the EE's proof-of-possession itself and sets popo = raVerified. lamassu
-		// honours that only when the message-protection signer is a designated RA
-		// (carries id-kp-cmcRA) — otherwise raVerified from an end entity vouching
-		// for itself is notAuthorized. The signer is also chain-validated against
-		// the DMS ValidationCAs by LWCEnroll, so an untrusted "RA" cannot use this.
-		signer := cmpSignerCertFromGin(ctx)
-		isRAVerified := req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 0 && len(req.POPORaw.FullBytes) > 0
-		trustedRA := isRAVerified && chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA)
-
-		if trustedRA {
-			lFunc.Infof("%s: accepting raVerified POPO from trusted RA (id-kp-cmcRA) CN=%s", variant.logPrefix, signer.Subject.CommonName)
-		} else if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, enrollOpts.EnforcePOPO); err != nil {
-			// An EE asserting raVerified is notAuthorized (RFC 9483 §4.1); every
-			// other POPO failure is badPOP.
-			failBit := pkiFailureInfoBadPOP
-			if errors.Is(err, errPOPORAVerifiedFromEE) {
-				failBit = pkiFailureInfoNotAuthorized
+		// keyEncipherment [2] / keyAgreement [3]: the "indirect" POP methods
+		// (RFC 4210bis §5.2.8), where possession is proven by a subsequent
+		// message rather than a signature over the CertRequest. Neither needs
+		// verifyPOPO: encrCert's proof is the ability to decrypt the delivered
+		// certificate, and challengeResp's is answering popdecc with the
+		// decrypted random value — both handled after issuance-independent
+		// validation (regToken, CertTemplate policy, ...) runs below, exactly
+		// as for a normal signature POPO.
+		if req.POPORaw.Class == asn1.ClassContextSpecific && (req.POPORaw.Tag == 2 || req.POPORaw.Tag == 3) {
+			switch classifyPOPOIndirect(req.POPORaw.Bytes) {
+			case popoIndirectEncrCert:
+				lFunc.Infof("%s: encrCert POPO — certificate will be delivered confidentiality-protected (RFC 4210bis §5.2.8.4)", variant.logPrefix)
+				useEncrCert = true
+			case popoIndirectChallengeResp:
+				lFunc.Infof("%s: challengeResp POPO — issuance deferred until popdecr (RFC 4210bis §5.2.8.3)", variant.logPrefix)
+				useChallengeResp = true
+			case popoIndirectUnsupported:
+				// Fall through: verifyPOPO's default case rejects agreeMAC /
+				// encryptedKey / malformed POPOPrivKey content with badPOP,
+				// exactly as before this indirect-method support was added.
 			}
-			lFunc.Warnf("%s: POPO verification failed: %v", variant.logPrefix, err)
-			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
-				CertReqID:   req.CertReqID,
-				Reason:      fmt.Sprintf("proof of possession verification failed: %v", err),
-				FailInfoBit: failBit,
-			})
-			return
+		}
+
+		if !useEncrCert && !useChallengeResp {
+			// RFC 9483 §5.2.3.2: a trusted RA that modified the CertTemplate verifies
+			// the EE's proof-of-possession itself and sets popo = raVerified. lamassu
+			// honours that only when the message-protection signer is a designated RA
+			// (carries id-kp-cmcRA) — otherwise raVerified from an end entity vouching
+			// for itself is notAuthorized. The signer is also chain-validated against
+			// the DMS ValidationCAs by LWCEnroll, so an untrusted "RA" cannot use this.
+			signer := cmpSignerCertFromGin(ctx)
+			isRAVerified := req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 0 && len(req.POPORaw.FullBytes) > 0
+			trustedRA := isRAVerified && chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA)
+
+			if trustedRA {
+				lFunc.Infof("%s: accepting raVerified POPO from trusted RA (id-kp-cmcRA) CN=%s", variant.logPrefix, signer.Subject.CommonName)
+			} else if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, enrollOpts.EnforcePOPO); err != nil {
+				// An EE asserting raVerified is notAuthorized (RFC 9483 §4.1); every
+				// other POPO failure is badPOP.
+				failBit := pkiFailureInfoBadPOP
+				if errors.Is(err, errPOPORAVerifiedFromEE) {
+					failBit = pkiFailureInfoNotAuthorized
+				}
+				lFunc.Warnf("%s: POPO verification failed: %v", variant.logPrefix, err)
+				r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+					CertReqID:   req.CertReqID,
+					Reason:      fmt.Sprintf("proof of possession verification failed: %v", err),
+					FailInfoBit: failBit,
+				})
+				return
+			}
 		}
 	}
 
@@ -161,22 +189,23 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		}
 	}
 
-	// CertTemplate policy enforcement (RFC 9483 §5 / RFC 5280 §4.2.1.9). Lamassu
-	// only issues end-entity certificates over CMP, so a request for a CA
-	// certificate (BasicConstraints cA=TRUE or the keyCertSign KeyUsage) or a
-	// malformed BasicConstraints (pathLenConstraint present without cA=TRUE) is
-	// rejected here — before issuance — with the appropriate failInfo bit.
-	if rej := validateCertTemplatePolicy(req); rej != nil {
-		lFunc.Warnf("%s: cert template policy rejected: %s", variant.logPrefix, rej.Reason)
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
-		return
-	}
-
 	// RFC 4211 registration-control validation. Structurally-invalid
 	// id-regCtrl-pkiPublicationInfo controls (§6.3) and an id-regInfo-certReq
 	// alternate CertRequest whose public key differs from the primary request
-	// (§7.2) are rejected in an ip/cp body before issuance. Other controls
-	// (oldCertID, regToken, authenticator) are intentionally left untouched.
+	// (§7.2) are rejected in an ip/cp body before issuance. oldCertID is
+	// handled above (KUR cert-to-update reference) and regToken below
+	// (one-time-use, RFC 4211 §6.1 — see req.RegToken / HasSeenRegToken).
+	//
+	// id-regCtrl-authenticator (§6.2) is validated against the DMS's
+	// EnrollmentOptionsLWCRFC9483.ExpectedAuthenticator when configured — a
+	// pre-shared, non-cryptographic answer (e.g. a security-question response)
+	// distinct from regToken's one-time-use semantics. When the DMS has not
+	// configured an expected answer, the control is accepted unvalidated.
+	if rej := validateAuthenticatorControl(req.CertReqID, req.ControlsDER, enrollOpts.ExpectedAuthenticator); rej != nil {
+		lFunc.Warnf("%s: authenticator control rejected: %s", variant.logPrefix, rej.Reason)
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
+		return
+	}
 	if rej := validatePKIPublicationInfoControls(req.CertReqID, req.ControlsDER); rej != nil {
 		lFunc.Warnf("%s: pkiPublicationInfo control rejected: %s", variant.logPrefix, rej.Reason)
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
@@ -184,6 +213,47 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	}
 	if rej := validateAltCertReqPublicKey(req.CertReqID, req.RegInfoDER, req.PublicKeyDER); rej != nil {
 		lFunc.Warnf("%s: alt CertReq rejected: %s", variant.logPrefix, rej.Reason)
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
+		return
+	}
+	// RFC 4211 §7.2: once the alternate CertRequest's public key has been
+	// validated against the primary request above, its requested extensions —
+	// not the primary CertTemplate's — govern issuance. This lets an RA modify
+	// what gets certified (e.g. KeyUsage) while the EE's POPO, computed over the
+	// primary CertRequest, stays valid. Applied BEFORE the CertTemplate policy
+	// check below so that check (CA-cert / keyCertSign rejection) evaluates the
+	// extensions that will actually be issued.
+	if altExts := altCertReqExtensions(req.RegInfoDER); altExts != nil {
+		req.Extensions = altExts
+	}
+
+	// RFC 4211 §6.1: a regToken is one-time-use — reject a request presenting a
+	// value already carried by an earlier transaction under this DMS.
+	if req.RegToken != "" {
+		seen, err := r.store.HasSeenRegToken(ctx.Request.Context(), dmsID, req.RegToken)
+		if err != nil {
+			lFunc.Errorf("%s: check regToken: %v", variant.logPrefix, err)
+			r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+			return
+		}
+		if seen {
+			lFunc.Warnf("%s: regToken already used", variant.logPrefix)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+				CertReqID:   req.CertReqID,
+				Reason:      "the regToken control was already used (RFC 4211 §6.1)",
+				FailInfoBit: pkiFailureInfoBadRequest,
+			})
+			return
+		}
+	}
+
+	// CertTemplate policy enforcement (RFC 9483 §5 / RFC 5280 §4.2.1.9). Lamassu
+	// only issues end-entity certificates over CMP, so a request for a CA
+	// certificate (BasicConstraints cA=TRUE or the keyCertSign KeyUsage) or a
+	// malformed BasicConstraints (pathLenConstraint present without cA=TRUE) is
+	// rejected here — before issuance — with the appropriate failInfo bit.
+	if rej := validateCertTemplatePolicy(req); rej != nil {
+		lFunc.Warnf("%s: cert template policy rejected: %s", variant.logPrefix, rej.Reason)
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
 		return
 	}
@@ -200,13 +270,19 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		},
 	})
 
-	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
+	params := issueParams{
 		isReenrollment: variant.isReenrollment,
 		requestTag:     body.Tag,
 		respTag:        respTag,
 		wfxJobID:       wfxJobID,
+		useEncrCert:    useEncrCert,
 		enroll:         variant.enrollFn(r, dmsID),
-	})
+	}
+	if useChallengeResp {
+		r.handlePOPOChallenge(ctx, lFunc, &header, req, dmsID, enrollOpts, params)
+		return
+	}
+	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, params)
 }
 
 // isRevokedCertError reports whether an enroll/reenroll error is the service's
@@ -301,7 +377,19 @@ type issueParams struct {
 	// Persisted onto the transaction row so the pending-update check can lock
 	// exactly that certificate until certConf or timeout (RFC 9483 §4.1.3).
 	supersededCertSerial string
-	enroll               func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
+	// presetCSR, when non-nil, is used instead of synthesizing a CSR from the
+	// firstCertReq fields. Set by the p10cr handler, whose body IS a real
+	// signed PKCS#10 request — passing it through preserves the genuine
+	// signature for downstream verification instead of the dummy one
+	// buildSyntheticCSR emits.
+	presetCSR *x509.CertificateRequest
+	// useEncrCert is set when the request's inner POPO was keyEncipherment /
+	// keyAgreement with subsequentMessage(encrCert) (RFC 4210bis §5.2.8.4): the
+	// issued certificate must be delivered confidentiality-protected to the
+	// requested public key instead of in the clear. See
+	// buildEncryptedCertRepBody (cmp_popo_indirect.go).
+	useEncrCert bool
+	enroll      func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
 }
 
 // issueAndStore is the shared enrollment pipeline: build CSR, check duplicate
@@ -316,11 +404,15 @@ func (r *cmpHttpRoutes) issueAndStore(
 	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
 	params issueParams,
 ) {
-	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
-	if err != nil {
-		lFunc.Errorf("synthesize CSR: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, pkiFailureInfoBadCertTemplate)
-		return
+	csr := params.presetCSR
+	if csr == nil {
+		var err error
+		csr, err = buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
+		if err != nil {
+			lFunc.Errorf("synthesize CSR: %v", err)
+			r.rejectWithError(ctx, header, PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, pkiFailureInfoBadCertTemplate)
+			return
+		}
 	}
 	lFunc = lFunc.WithField("cn", csr.Subject.CommonName)
 	lFunc.Infof("enrollment request CN=%s (reenroll=%v)", csr.Subject.CommonName, params.isReenrollment)
@@ -394,6 +486,10 @@ func (r *cmpHttpRoutes) issueAndStore(
 			// Protection signer cert did not chain to any of the DMS's
 			// ValidationCAs → the requester is not trusted.
 			failBit = pkiFailureInfoSignerNotTrusted
+		case errors.Is(err, errs.ErrCMPDeviceOwnedByOtherDMS):
+			// Signer is trusted and sender-matched, but the CSR claims a
+			// device identity owned by a different DMS — RFC 9483 §3.5.
+			failBit = pkiFailureInfoNotAuthorized
 		case errors.Is(err, errs.ErrCMPPendingUpdate):
 			// Device has a key-update awaiting certConf: the open transaction
 			// must complete or time out before new operations (RFC 9483 §4.1.3).
@@ -425,20 +521,29 @@ func (r *cmpHttpRoutes) issueAndStore(
 		r.rejectWithError(ctx, header, PKIStatus(2), "internal error: nonce generation failed", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
-	if !implicitConfirm {
-		header.ResponseSenderNonce = senderNonce
-	}
+	// The response senderNonce is set on the wire even for implicit-confirm
+	// exchanges: RFC 4210 §5.2.8 says no certConf will follow, but an EE MAY
+	// still send one, and its recipNonce is then checked against tx.SentNonce
+	// — the wire nonce and the persisted one must never diverge.
+	header.ResponseSenderNonce = senderNonce
 	// When implicit confirmation is granted, RFC 4210 §5.2.8 considers the
 	// transaction successfully completed at IP delivery — no certConf will
 	// follow. Persist the row directly as CONFIRMED so the confirmation
 	// monitor does not revoke the cert at expires_at. The previous behaviour
 	// was to insert ISSUED with a 5-minute window and never transition it,
 	// which silently revoked every implicit-confirm enrollment.
+	//
+	// ConfirmedAt is set to EXACTLY CreatedAt (same time.Time value) — that
+	// equality is the marker handleCertConf uses to distinguish a row that was
+	// implicitly confirmed at issuance (a follow-up certConf is answered with
+	// pkiConf) from one confirmed by an earlier certConf (a duplicate, answered
+	// with error/certConfirmed).
+	now := time.Now()
 	initialState := storage.CMPTransactionStateIssued
 	var confirmedAt time.Time
 	if implicitConfirm {
 		initialState = storage.CMPTransactionStateConfirmed
-		confirmedAt = time.Now()
+		confirmedAt = now
 	}
 	if storeErr := r.store.Insert(issuanceCtx, storage.CMPTransaction{
 		TransactionID:     txHex,
@@ -457,9 +562,10 @@ func (r *cmpHttpRoutes) issueAndStore(
 		// lock exactly that certificate until certConf or timeout. Empty for
 		// ir/cr and for unprotected updates.
 		SupersededCertSerial: params.supersededCertSerial,
+		RegToken:             req.RegToken,
 		ConfirmedAt:          confirmedAt,
-		ExpiresAt:         time.Now().Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
-		CreatedAt:         time.Now(),
+		ExpiresAt:            now.Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
+		CreatedAt:            now,
 	}); storeErr != nil {
 		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 			lFunc.Warnf("duplicate transactionID %s", txHex)
@@ -488,13 +594,28 @@ func (r *cmpHttpRoutes) issueAndStore(
 		lFunc.Infof("issued cert omits a requested critical extension; responding grantedWithMods")
 		statusCode = 1
 	}
-	certRepDER, err := marshalCertRepBodyWithStatus(params.respTag, req.CertReqID, statusCode, cert.Raw)
+	var certRepDER []byte
+	var ecdhProtection *ecdhOriginator
+	if params.useEncrCert {
+		certRepDER, ecdhProtection, err = r.buildEncryptedCertRepBody(issuanceCtx, lFunc, dmsID, req.CertReqID, statusCode, cert, req.PublicKeyDER)
+	} else {
+		certRepDER, err = marshalCertRepBodyWithStatus(params.respTag, req.CertReqID, statusCode, cert.Raw)
+	}
 	if err != nil {
 		lFunc.Errorf("build cert rep body: %v", err)
 		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
-	responseDER := r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
+	var responseDER []byte
+	if ecdhProtection != nil {
+		// A keyAgreement encrCert recipient: the response MUST be protected by
+		// the same ECDH originator whose certificate the recipient uses to
+		// derive the CEK, not the DMS's normal protection credentials.
+		responseDER = r.sendRawBodyWithSigner(ctx, lFunc, *header, params.respTag, certRepDER,
+			append([]*x509.Certificate{ecdhProtection.cert}, ecdhProtection.chain...), ecdhProtection.key)
+	} else {
+		responseDER = r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
+	}
 	if len(responseDER) == 0 {
 		return
 	}
@@ -547,9 +668,24 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	req *firstCertReq,
 	dmsID string,
 	respTag, requestTag int,
+	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
 	enroll func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error),
 ) {
 	lFunc = lFunc.WithField("mode", "kga")
+
+	// RFC 9483 §4.1.6 / story: operators opt in per DMS before a device can
+	// have the server generate and deliver its private key. Checked before
+	// anything else in this path — no key generation, CA issuance, or helper
+	// certificate minting happens for a DMS that hasn't enabled this.
+	if enrollOpts == nil || !enrollOpts.ServerKeyGenEnabled {
+		lFunc.Warnf("kga: central key generation is not enabled for DMS '%s'", dmsID)
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+			CertReqID:   req.CertReqID,
+			Reason:      "central key generation is not enabled for this DMS (RFC 9483 §4.1.6)",
+			FailInfoBit: pkiFailureInfoNotAuthorized,
+		})
+		return
+	}
 
 	// Central key generation needs a signature-protected request: the protection
 	// signer certificate is the CMS recipient and carries the key usage that
@@ -626,19 +762,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	}
 
 	// 3. Ephemeral KGA signer (id-kp-cmKGA) that signs the CMS SignedData.
-	_, signerKey, err := sw.CreateECDSAPrivateKey(issuanceCtx, elliptic.P256())
-	if err != nil {
-		lFunc.Errorf("kga: generate KGA signer key: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
-		return
-	}
-	signerCSR, err := selfSignedCSR("Lamassu CMP KGA Signer", signerKey)
-	if err != nil {
-		lFunc.Errorf("kga: build KGA signer CSR: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
-		return
-	}
-	kgaCert, kgaChain, err := keyGen.LWCIssueKGAHelperCertificate(issuanceCtx, dmsID, signerCSR, services.KGAHelperSigner)
+	signerKey, kgaCert, kgaChain, err := mintHelperCert(issuanceCtx, lFunc, keyGen, dmsID, "Lamassu CMP KGA Signer", services.KGAHelperSigner)
 	if err != nil {
 		lFunc.Errorf("kga: issue KGA signer certificate: %v", err)
 		r.rejectWithError(ctx, &header, PKIStatus(2), "could not issue KGA signer certificate", dmsID, pkiFailureInfoSystemFailure)
@@ -663,19 +787,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	if technique == kga.TechniqueKARI {
 		// 4. Ephemeral EC originator: it is the ECDH peer AND signs the response
 		// protection so it lands at extraCerts[0] (matching the CMS originator).
-		_, origKey, err := sw.CreateECDSAPrivateKey(issuanceCtx, elliptic.P256())
-		if err != nil {
-			lFunc.Errorf("kga: generate KARI originator key: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
-			return
-		}
-		origCSR, err := selfSignedCSR("Lamassu CMP KARI Originator", origKey)
-		if err != nil {
-			lFunc.Errorf("kga: build KARI originator CSR: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
-			return
-		}
-		origCert, origChain, err := keyGen.LWCIssueKGAHelperCertificate(issuanceCtx, dmsID, origCSR, services.KGAHelperKARIOriginator)
+		origKey, origCert, origChain, err := mintHelperCert(issuanceCtx, lFunc, keyGen, dmsID, "Lamassu CMP KARI Originator", services.KGAHelperKARIOriginator)
 		if err != nil {
 			lFunc.Errorf("kga: issue KARI originator certificate: %v", err)
 			r.rejectWithError(ctx, &header, PKIStatus(2), "could not issue KARI originator certificate", dmsID, pkiFailureInfoSystemFailure)
@@ -818,6 +930,7 @@ func (r *cmpHttpRoutes) deferForApproval(
 		// pending-update lock (RFC 9483 §4.1.3) applies to phased key-updates
 		// exactly as it does to direct ones.
 		SupersededCertSerial: params.supersededCertSerial,
+		RegToken:             req.RegToken,
 		// Approval is a human action: give it a generous window so the request
 		// isn't swept before an operator can act on it (RFC 4210 §5.3.22 leaves
 		// the polling/approval window to server policy). Per-DMS via

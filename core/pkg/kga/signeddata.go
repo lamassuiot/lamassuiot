@@ -233,7 +233,7 @@ func buildCertificatesField(kga *x509.Certificate, chain []*x509.Certificate) ([
 // encryptContent AES-256-CBC-encrypts plaintext under cek and returns the
 // EncryptedContentInfo (contentType id-signedData, algorithm AES-256-CBC with
 // the IV in parameters, and the ciphertext in the IMPLICIT [0] field).
-func encryptContent(cek, plaintext []byte) (encryptedContentInfo, error) {
+func encryptContent(cek, plaintext []byte, contentType asn1.ObjectIdentifier) (encryptedContentInfo, error) {
 	block, err := aes.NewCipher(cek)
 	if err != nil {
 		return encryptedContentInfo{}, fmt.Errorf("new AES cipher: %w", err)
@@ -251,7 +251,7 @@ func encryptContent(cek, plaintext []byte) (encryptedContentInfo, error) {
 		return encryptedContentInfo{}, fmt.Errorf("marshal IV: %w", err)
 	}
 	return encryptedContentInfo{
-		ContentType: oidSignedData,
+		ContentType: contentType,
 		ContentEncryptionAlgorithm: pkix.AlgorithmIdentifier{
 			Algorithm:  oidAES256CBC,
 			Parameters: asn1.RawValue{FullBytes: ivParam},

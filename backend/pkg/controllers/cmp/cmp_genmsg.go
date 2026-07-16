@@ -32,6 +32,7 @@ var (
 	oidItRootCaCert       = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 20} // RFC 9483 §4.3.2 (genm)
 	oidItCrlStatusList    = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 22} // RFC 9483 §4.3.4 (genm)
 	oidItCrls             = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 23} // RFC 9483 §4.3.4 (genp)
+	oidItRevPassphrase    = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 12} // RFC 4210bis §5.3.19.9
 )
 
 // Algorithm OIDs advertised in signing/encryption key-pair-type and preferred
@@ -259,6 +260,20 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 			return nil, rejSystemFailure("cannot encode supportedLangTags")
 		}
 		respOID, respVal = oidItSuppLangTags, v
+
+	case oidItRevPassphrase.String(): // RFC 4210bis §5.3.19.9 Revocation Passphrase
+		// The EE hands over a passphrase (confidentiality-protected, typically
+		// PWRI-encrypted) that MAY later authorize revocation without the
+		// original credential. Lamassu does not wire it into the revocation
+		// path yet, but per the RFC the CA only MUST accept and MAY acknowledge
+		// — it need not decrypt or store the passphrase to be compliant. The
+		// request infoValue MUST be present (there is nothing to hand over
+		// otherwise); the response carries the same infoType with an absent
+		// infoValue (acknowledgment only).
+		if !hasValue {
+			return nil, rejBadRequest("id-it-revPassphrase request requires a value")
+		}
+		respOID = oidItRevPassphrase
 
 	default:
 		return nil, &cmpEnvelopeRejection{

@@ -37,8 +37,10 @@ func (e *cmpEnvelopeRejection) Error() string { return e.reason }
 //   - pvno ∈ {cmp2000, cmp2021}                      → unsupportedVersion
 //   - transactionID present and ≥128 bits             → badDataFormat
 //   - senderNonce present and ≥128 bits               → badSenderNonce
-//   - messageTime within cmpMaxMessageTimeSkew (when present and the EE
-//     thus declared a clock) → badTime  (RFC 9483 §3.5)
+//   - messageTime present and within cmpMaxMessageTimeSkew → badTime
+//     (RFC 9483 §3.1 line 725 requires messageTime on every signature-
+//     protected message; RFC 9483 §3.5 gives badTime for both "absent when
+//     required" and "outside the freshness window")
 //
 // The sender-vs-subject check is intentionally NOT performed here because
 // the protection cert is not known until verifyRequestProtection has run.
@@ -77,17 +79,81 @@ func validateRequestEnvelope(h requestPKIHeader, now time.Time, bodyTag int) *cm
 			failInfo: pkiFailureInfoBadSenderNonce,
 		}
 	}
-	if !h.MessageTime.IsZero() {
-		drift := now.Sub(h.MessageTime)
-		if drift < 0 {
-			drift = -drift
+	if h.MessageTime.IsZero() {
+		return &cmpEnvelopeRejection{
+			reason:   "messageTime is required (RFC 9483 §3.1)",
+			failInfo: pkiFailureInfoBadTime,
 		}
-		if drift > cmpMaxMessageTimeSkew {
-			return &cmpEnvelopeRejection{
-				reason: fmt.Sprintf("messageTime drift %s exceeds %s (RFC 9483 §3.5)",
-					drift.Round(time.Second), cmpMaxMessageTimeSkew),
-				failInfo: pkiFailureInfoBadTime,
-			}
+	}
+	drift := now.Sub(h.MessageTime)
+	if drift < 0 {
+		drift = -drift
+	}
+	if drift > cmpMaxMessageTimeSkew {
+		return &cmpEnvelopeRejection{
+			reason: fmt.Sprintf("messageTime drift %s exceeds %s (RFC 9483 §3.5)",
+				drift.Round(time.Second), cmpMaxMessageTimeSkew),
+			failInfo: pkiFailureInfoBadTime,
+		}
+	}
+	return nil
+}
+
+// oidConfirmWaitTime is id-it-confirmWaitTime (1.3.6.1.5.5.7.4.14).
+var oidConfirmWaitTime = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 14}
+
+// validateGeneralInfo enforces the RFC 9483 §3.1 rules on the PKIHeader
+// generalInfo entries that are meaningful regardless of body type:
+//
+//   - id-it-implicitConfirm's value, when the OID is present, MUST be NULL.
+//   - id-it-confirmWaitTime's value, when the OID is present, MUST be
+//     GeneralizedTime (not UTCTime or any other type).
+//   - the two are mutually exclusive — a response cannot both promise
+//     immediate implicit confirmation and tell the EE how long to wait for one.
+func validateGeneralInfo(generalInfo []asn1.RawValue) *cmpEnvelopeRejection {
+	var hasImplicitConfirm, hasConfirmWaitTime bool
+	var implicitConfirmValue, confirmWaitTimeValue asn1.RawValue
+
+	for _, item := range generalInfo {
+		var itav struct {
+			OID   asn1.ObjectIdentifier
+			Value asn1.RawValue `asn1:"optional"`
+		}
+		if _, err := asn1.Unmarshal(item.FullBytes, &itav); err != nil {
+			continue
+		}
+		switch {
+		case itav.OID.Equal(oidImplicitConfirm):
+			hasImplicitConfirm = true
+			implicitConfirmValue = itav.Value
+		case itav.OID.Equal(oidConfirmWaitTime):
+			hasConfirmWaitTime = true
+			confirmWaitTimeValue = itav.Value
+		}
+	}
+
+	if hasImplicitConfirm && hasConfirmWaitTime {
+		return &cmpEnvelopeRejection{
+			reason:   "implicitConfirm and confirmWaitTime are mutually exclusive in generalInfo (RFC 9483 §3.1)",
+			failInfo: pkiFailureInfoBadRequest,
+		}
+	}
+	// infoValue is OPTIONAL at the InfoTypeAndValue level (RFC 4210), and some
+	// clients omit it entirely rather than spell out NULL explicitly — both
+	// are valid for implicitConfirm. Only a PRESENT, non-NULL value (the
+	// negative case RFC 9483 §3.1 forbids) is rejected.
+	implicitConfirmPresent := len(implicitConfirmValue.FullBytes) > 0
+	if hasImplicitConfirm && implicitConfirmPresent &&
+		!(implicitConfirmValue.Class == asn1.ClassUniversal && implicitConfirmValue.Tag == asn1.TagNull) {
+		return &cmpEnvelopeRejection{
+			reason:   "implicitConfirm value must be NULL (RFC 9483 §3.1)",
+			failInfo: pkiFailureInfoBadRequest,
+		}
+	}
+	if hasConfirmWaitTime && !(confirmWaitTimeValue.Class == asn1.ClassUniversal && confirmWaitTimeValue.Tag == asn1.TagGeneralizedTime) {
+		return &cmpEnvelopeRejection{
+			reason:   "confirmWaitTime value must be GeneralizedTime (RFC 9483 §3.1)",
+			failInfo: pkiFailureInfoBadDataFormat,
 		}
 	}
 	return nil

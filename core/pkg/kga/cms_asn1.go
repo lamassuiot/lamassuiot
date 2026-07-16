@@ -31,6 +31,14 @@ var (
 	oidRSAEncryption     = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
 	oidECPublicKey       = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
 
+	// oidRSAESOAEP / oidMGF1 are the RSAES-OAEP key-transport algorithm (RFC
+	// 8017 §A.2.1 / RFC 4055 §4.1) and its mask-generation-function algorithm.
+	// RFC 9481 requires RSAES-OAEP (not the legacy PKCS#1 v1.5 encryption
+	// scheme, which is vulnerable to Bleichenbacher/ROBOT-style padding-oracle
+	// attacks) for CMP central-key-generation key transport.
+	oidRSAESOAEP = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 7}
+	oidMGF1      = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 8}
+
 	// Content and key-wrap symmetric algorithms.
 	oidAES256CBC  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 42}
 	oidAES256Wrap = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 45}
@@ -113,4 +121,15 @@ type keyTransRecipientInfo struct {
 type issuerAndSerialNumber struct {
 	Issuer       asn1.RawValue
 	SerialNumber *big.Int
+}
+
+// rsaesOAEPParams is RSAES-OAEP-params (RFC 8017 Appendix A.2.1 / RFC 4055
+// §4.1) — the id-RSAES-OAEP AlgorithmIdentifier.parameters payload. hashFunc
+// and maskGenFunc must be explicit here because SHA-256 (not the SHA-1
+// defaults implied by omitting them) is used; pSourceFunc is left absent to
+// take its default (pSpecifiedEmpty, an empty label), matching the empty
+// label passed to rsa.EncryptOAEP.
+type rsaesOAEPParams struct {
+	HashFunc    pkix.AlgorithmIdentifier `asn1:"explicit,tag:0"`
+	MaskGenFunc pkix.AlgorithmIdentifier `asn1:"explicit,tag:1"`
 }

@@ -55,6 +55,25 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// Defaults to false (Go zero value); set to true to enforce verification.
 	EnforcePOPO bool `json:"enforce_popo"`
 
+	// ExpectedAuthenticator is the pre-shared, non-cryptographic answer the CA
+	// compares against the RFC 4211 §6.2 id-regCtrl-authenticator control value
+	// (e.g. a security-question answer such as a mother's maiden name) when a
+	// CertRequest's controls carry that OID. When empty (the default), the
+	// Authenticator control is accepted unvalidated — its value is meaningful
+	// only to a DMS that has configured an expected answer here. When set, a
+	// CertRequest carrying an Authenticator control whose value does not match
+	// is rejected with PKIFailureInfo incorrectData (RFC 4211 §6.2).
+	ExpectedAuthenticator string `json:"expected_authenticator,omitempty"`
+
+	// ServerKeyGenEnabled controls whether this DMS permits RFC 9483 §4.1.6
+	// central key generation (CKG): an ir/cr whose CertTemplate carries an
+	// empty public key asks the server to generate the key pair itself and
+	// return it wrapped in the response. When false (the default), such
+	// requests are rejected with PKIFailureInfo notAuthorized instead of
+	// generating and delivering a server-side key — operators must opt in
+	// per DMS to allow devices to skip on-device key generation.
+	ServerKeyGenEnabled bool `json:"server_key_gen_enabled,omitempty"`
+
 	// Workflow selects the CMP transaction lifecycle the DMS follows:
 	//   - CMPWorkflowDirect (default): the cert is issued and returned inline
 	//     in response to the ir/cr/kur.
