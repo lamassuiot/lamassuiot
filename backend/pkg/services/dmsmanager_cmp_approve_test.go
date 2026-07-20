@@ -106,7 +106,7 @@ func TestApproveCMPTransaction_FloorsDeliveryWindow(t *testing.T) {
 	svc, txRepo, dmsMock := newApproveTestSubject(t, 10*time.Second)
 
 	issuedCert, _ := makeTestCA(t)
-	dmsMock.On("LWCEnroll", mock.Anything, mock.Anything, "dms-A").Return(issuedCert, nil)
+	dmsMock.On("LWCEnroll", mock.Anything, mock.Anything, "dms-A", mock.Anything).Return(issuedCert, nil)
 
 	before := time.Now()
 	updated, err := svc.ApproveCMPTransaction(context.Background(), services.ApproveCMPTransactionInput{
@@ -130,7 +130,7 @@ func TestApproveCMPTransaction_KeepsLongerConfirmationTimeout(t *testing.T) {
 	svc, txRepo, dmsMock := newApproveTestSubject(t, confTimeout)
 
 	issuedCert, _ := makeTestCA(t)
-	dmsMock.On("LWCEnroll", mock.Anything, mock.Anything, "dms-A").Return(issuedCert, nil)
+	dmsMock.On("LWCEnroll", mock.Anything, mock.Anything, "dms-A", mock.Anything).Return(issuedCert, nil)
 
 	before := time.Now()
 	_, err := svc.ApproveCMPTransaction(context.Background(), services.ApproveCMPTransactionInput{

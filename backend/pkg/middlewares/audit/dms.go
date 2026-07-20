@@ -124,12 +124,12 @@ func (mw DmsAuditEventPublisher) DeleteDMS(ctx context.Context, input services.D
 	return mw.next.DeleteDMS(ctx, input)
 }
 
-func (mw DmsAuditEventPublisher) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	return mw.next.LWCEnroll(ctx, csr, aps)
+func (mw DmsAuditEventPublisher) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	return mw.next.LWCEnroll(ctx, csr, aps, signerCert)
 }
 
-func (mw DmsAuditEventPublisher) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	return mw.next.LWCReenroll(ctx, csr, aps)
+func (mw DmsAuditEventPublisher) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	return mw.next.LWCReenroll(ctx, csr, aps, signerCert)
 }
 
 func (mw DmsAuditEventPublisher) LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {

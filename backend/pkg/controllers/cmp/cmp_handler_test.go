@@ -438,7 +438,7 @@ func TestHandleCMP_WFXStoresCMPPayloads(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 
 	reporter := &captureWFXReporter{}
@@ -541,7 +541,7 @@ func TestHandleCMP_Protection(t *testing.T) {
 				"rejected protection state must yield a CMP error body")
 			assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), tc.reasonMatch,
 				"error reason must reference the protection failure")
-			svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+			svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
 }
@@ -559,7 +559,7 @@ func TestHandleCMP_Response_ExtraCertsContainsChain(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPServiceWithProtection{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 	// Protection provider returns a 2-cert chain: [leaf, issuer].
 	svc.On("LWCProtectionCredentials", mock.Anything, "test-dms").
@@ -989,7 +989,7 @@ func TestHandleCMP_POPO(t *testing.T) {
 			reason, fi := parseCertRepRejection(t, resp.Body.Bytes())
 			assert.Contains(t, reason, "proof of possession", "statusString must reference POPO")
 			assert.True(t, bitSet(fi, tc.failInfoBit), "failInfo must set the expected bit")
-			svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+			svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
 }
@@ -1049,7 +1049,7 @@ func TestHandleCMP_KUR_POPO(t *testing.T) {
 				"unprotected KUR must be rejected when EnforcePOPO=true")
 			assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "proof of possession",
 				"error must reference POPO/protection requirement")
-			svc.AssertNotCalled(t, "LWCReenroll", mock.Anything, mock.Anything, mock.Anything)
+			svc.AssertNotCalled(t, "LWCReenroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
 }
@@ -1226,7 +1226,7 @@ func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
 	assert.NotNil(t, storedTx.CSR, "the CSR must be stored so approval can issue later")
 
 	svc.AssertExpectations(t)
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep verifies that
@@ -1340,7 +1340,7 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert1, nil).Once()
 
 	router, _ := newTestRouterWithStore(svc)
@@ -1351,7 +1351,7 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"first use of a regToken must be accepted")
 
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert2, nil).Maybe()
 
 	secondIR := buildTestIRWithRegToken(t, "regtoken-device-2", "SuperSecretRegToken")

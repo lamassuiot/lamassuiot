@@ -134,7 +134,7 @@ func TestHandleCMP_NestedBatch_DuplicateInnerTxID(t *testing.T) {
 	fi := parseFailInfoBitString(t, resp.Body.Bytes())
 	assert.True(t, bitSet(fi, pkiFailureInfoTransactionIDInUse), "failInfo must set transactionIdInUse (21)")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // TestHandleCMP_NestedBatch_OuterNonceNotFresh verifies that an outer
@@ -156,7 +156,7 @@ func TestHandleCMP_NestedBatch_OuterNonceNotFresh(t *testing.T) {
 	fi := parseFailInfoBitString(t, resp.Body.Bytes())
 	assert.True(t, bitSet(fi, pkiFailureInfoBadSenderNonce), "failInfo must set badSenderNonce (18)")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // TestHandleCMP_NestedAddedProtection_CopyRules verifies RFC 9483 §5.2.2.1:
@@ -170,7 +170,7 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 		svc := &cmpmock.MockLightweightCMPService{}
 		svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 			Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-		svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+		svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 			Return(issuedCert, nil)
 		return svc
 	}
@@ -245,7 +245,7 @@ func TestHandleCMP_KUR_RAVerified_Rejected(t *testing.T) {
 	assert.Contains(t, reason, "raVerified")
 	assert.True(t, bitSet(fi, pkiFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
 
-	svc.AssertNotCalled(t, "LWCReenroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCReenroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // buildRACert issues a self-signed certificate carrying id-kp-cmcRA

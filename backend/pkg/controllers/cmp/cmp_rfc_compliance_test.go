@@ -311,7 +311,7 @@ func TestC1_PVNO_UnsupportedVersion_RejectedWithFailInfo(t *testing.T) {
 		})
 	}
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +360,7 @@ func TestC3_SenderNonce_TooShort_RejectedBadSenderNonce(t *testing.T) {
 	assert.True(t, bitSet(bs, pkiFailureInfoBadSenderNonce),
 		"failInfo bit badSenderNonce (18) MUST be set per RFC 9483 §3.5")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // TestC3_SenderNonce_Missing_Rejected — RFC 9483 §3.5: "The senderNonce MUST
@@ -502,7 +502,7 @@ func TestC6_FailInfo_POPOFailure_BadPOP(t *testing.T) {
 	assert.True(t, bitSet(bs, pkiFailureInfoBadPOP),
 		"POPO failure MUST set badPOP (9) per RFC 9810 §5.1.3")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // ---------------------------------------------------------------------------
@@ -619,7 +619,7 @@ func TestC9_SenderKID_ProtectedResponseIncludesSKI(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPServiceWithProtection{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 	svc.On("LWCProtectionCredentials", mock.Anything, "test-dms").
 		Return([]*x509.Certificate{signerCert}, crypto.Signer(signerKey), nil)

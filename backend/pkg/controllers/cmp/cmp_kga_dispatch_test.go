@@ -176,7 +176,7 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").Return(issuedCert, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issuedCert, nil)
 
 	kgaSignerCert, _ := buildKeyUsageCert(t, "kga-signer", x509.KeyUsageDigitalSignature)
 
@@ -258,7 +258,7 @@ func TestHandleCMP_KGA_EmptyPublicKey_RequiresProtection(t *testing.T) {
 	reason, _ := parseCertRepRejection(t, resp.Body.Bytes())
 	assert.Contains(t, reason, "signature-protected")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	wrapped.AssertNotCalled(t, "LWCIssueKGAHelperCertificate", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
@@ -298,6 +298,6 @@ func TestHandleCMP_KGA_DisabledByDefault(t *testing.T) {
 	assert.Contains(t, reason, "not enabled")
 	assert.Equal(t, 1, failInfo.At(pkiFailureInfoNotAuthorized), "rejection must map to PKIFailureInfo notAuthorized")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	wrapped.AssertNotCalled(t, "LWCIssueKGAHelperCertificate", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
