@@ -1,3 +1,20 @@
+codecov:
+  # Report exactly ONCE, after every coverage upload for the commit has been
+  # received — not on the first upload while other test jobs are still running,
+  # and not stuck on the base branch's carried-forward numbers.
+  #
+  # after_n_builds counts uploads directly, so it does NOT rely on Codecov
+  # detecting GitHub Actions completion. `wait_for_ci` did rely on that and is
+  # unreliable in this matrix setup: it left the PR report showing only v4's
+  # carried-forward coverage and never folded in the run's own uploads.
+  #
+  # N = total codecov uploads across ci-test.yaml:
+  #   test matrix 14 + crypto-pkcs11 1 + backend-assemblers 6 + backend-rest 1 = 22
+  # The upload steps run with `if: always()`, so a failed/timed-out test job
+  # still uploads its (partial) profile and the count reliably reaches N.
+  notify:
+    after_n_builds: 22
+
 coverage:
   status:
     project:
