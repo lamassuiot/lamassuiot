@@ -401,11 +401,12 @@ func (svc DMSManagerServiceBackend) authenticateEnrollment(
 	operation string,
 ) error {
 	switch auth.AuthMode {
-	case models.EnrollmentAuthModeNoAuth, "NONE", "":
-		// "NONE" is the value the dashboard persists for No Auth, and "" is an
-		// unset auth mode; both previously fell through EST's permissive default
-		// and allowed enrollment. Treat them as NO_AUTH so those DMSs keep
-		// working exactly as before.
+	case models.EnrollmentAuthModeNoAuth, "NONE":
+		// "NONE" is the value the dashboard persists for an explicit No Auth
+		// choice. An unset/empty auth_mode is deliberately NOT included here —
+		// it falls through to default and is rejected, same as v4: a DMS that
+		// was never configured with an auth mode is misconfigured, not
+		// intentionally open.
 		lFunc = lFunc.WithField("auth-method", models.EnrollmentAuthModeNoAuth)
 		lFunc.Warnf("DMS is configured with NoAuth, allowing %s", operation)
 		return nil
@@ -800,6 +801,18 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", clientCert.Subject.CommonName, helpers.SerialNumberToHexString(clientCert.SerialNumber), clientCert.Issuer.CommonName))
 		lFunc.Debugf("presented client certificate")
 
+		// The presented client certificate must identify the same device as the
+		// CSR being renewed. Without this, any holder of a valid (non-revoked)
+		// certificate from this DMS's enrollment/validation CA could present
+		// their own certificate alongside a CSR for a DIFFERENT device's
+		// CommonName and obtain a fresh certificate for that other device
+		// (and, with RevokeOnReEnrollment, revoke its current one).
+		if clientCert.Subject.CommonName != csr.Subject.CommonName {
+			lFunc = lFunc.WithField("auth-status", "failed")
+			lFunc.Errorf("aborting reenrollment. certificate CommonName '%s' does not match CSR subject CommonName '%s'", clientCert.Subject.CommonName, csr.Subject.CommonName)
+			return nil, errs.ErrDMSEnrollInvalidCert
+		}
+
 		validCertificate := false
 		var validationCA *x509.Certificate
 
@@ -907,8 +920,18 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			return nil, err
 		}
 
+	case models.EnrollmentAuthModeNoAuth, "NONE":
+		lFunc = lFunc.WithField("auth-method", models.EnrollmentAuthModeNoAuth)
+		lFunc.Warnf("DMS is configured with NoAuth, allowing reenrollment")
+
 	default:
-		lFunc.Warnf("allowing reenroll: using NO AUTH mode")
+		// An unset/invalid auth mode is a misconfigured DMS, not an implicit
+		// NoAuth: reject it, same as v4. Every DMS created before the
+		// dashboard exposed a reenrollment auth mode selector defaults to this
+		// case, so leaving it permissive would silently allow unauthenticated
+		// reenrollment for all of them.
+		lFunc.Errorf("aborting reenrollment. DMS has no/invalid auth method configured (%q)", estAuthOpts.AuthMode)
+		return nil, errs.ErrDMSAuthModeNotSupported
 	}
 
 	lFunc = lFunc.WithField("auth-status", "verified")

@@ -15,7 +15,7 @@ type EnrollmentAuthSettings struct {
 type EnrollmentOptionsESTRFC7030 struct {
 	AuthMode                   EnrollmentAuthMode           `json:"auth_mode"`
 	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
-	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook"`
+	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook_settings"`
 }
 
 // AuthSettings returns the shared authentication policy for this EST DMS.

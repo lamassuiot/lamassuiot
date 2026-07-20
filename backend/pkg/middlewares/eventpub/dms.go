@@ -218,6 +218,14 @@ func (mw dmsEventPublisher) LWCConfirmReenrollment(ctx context.Context, aps stri
 	return confirmer.LWCConfirmReenrollment(ctx, aps, certSerialNumber)
 }
 
+func (mw dmsEventPublisher) LWCValidateRASigner(ctx context.Context, aps string, signer *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPRAValidator)
+	if !ok {
+		return fmt.Errorf("cmp RA signer validation not available")
+	}
+	return validator.LWCValidateRASigner(ctx, aps, signer)
+}
+
 func (mw dmsEventPublisher) LWCIssueKGAHelperCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, purpose services.KGAHelperPurpose) (*x509.Certificate, []*x509.Certificate, error) {
 	keyGen, ok := mw.next.(services.LightweightCMPKeyGenerator)
 	if !ok {

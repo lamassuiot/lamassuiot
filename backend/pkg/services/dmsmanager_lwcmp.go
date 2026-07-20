@@ -393,6 +393,58 @@ func (svc DMSManagerServiceBackend) validateCMPSignerAgainstCAs(
 	return nil, errs.ErrDMSEnrollInvalidCert
 }
 
+// trustedRACAIDs returns the CA IDs a trusted PKI management entity's
+// protection certificate must chain to for this DMS: the LWCMP client-
+// certificate ValidationCAs (the same list enrollment auth uses), plus the
+// enrollment CA and any re-enrollment migration CAs. Shared by every
+// operation that trusts a certificate asserting the id-kp-cmcRA role
+// (revocation-on-behalf-of and the ir/cr raVerified POPO shortcut) so they
+// apply one consistent trust boundary.
+func trustedRACAIDs(dms *models.DMS) []string {
+	candidateCAIDs := append(
+		[]string{dms.Settings.EnrollmentSettings.EnrollmentCA},
+		dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.AuthOptionsMTLS.ValidationCAs...)
+	return append(candidateCAIDs, dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs...)
+}
+
+// validateTrustedRASigner returns nil only when signer both (a) carries the
+// id-kp-cmcRA extendedKeyUsage AND (b) chains to a CA this DMS actually
+// trusts (trustedRACAIDs). The EKU alone is a self-issued claim anyone can
+// mint into a self-signed certificate — chain validation is what proves the
+// certificate is genuine rather than a forgery asserting the role.
+//
+// Callers that need this trust boundary MUST use this — checking
+// CertHasExtKeyUsageOID alone (as the RA-initiated revocation case and the
+// raVerified POPO shortcut once did) lets an attacker mint a throwaway
+// self-signed certificate carrying the EKU and have it trusted outright.
+func (svc DMSManagerServiceBackend) validateTrustedRASigner(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, signer *x509.Certificate) error {
+	if !chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA) {
+		return fmt.Errorf("signer does not carry id-kp-cmcRA")
+	}
+	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, trustedRACAIDs(dms), false); err != nil {
+		return fmt.Errorf("signer does not chain to a DMS-trusted CA: %w", err)
+	}
+	return nil
+}
+
+// LWCValidateRASigner reports whether signer is a certificate this DMS
+// trusts as a PKI management entity (RFC 9483 §5.3.2 / §5.2.3.2): it must
+// carry id-kp-cmcRA AND chain to a CA the DMS actually trusts. The CMP
+// controller uses this to decide whether to honour a raVerified POPO claim —
+// EKU presence alone is a self-issued claim anyone can mint, so it must never
+// be trusted without the chain check this method performs.
+func (svc DMSManagerServiceBackend) LWCValidateRASigner(ctx context.Context, aps string, signer *x509.Certificate) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: aps})
+	if err != nil {
+		lFunc.Errorf("could not get DMS '%s': %s", aps, err)
+		return errs.ErrDMSNotFound
+	}
+
+	return svc.validateTrustedRASigner(ctx, lFunc, dms, signer)
+}
+
 // classifySupersededSigner decides which error a CMP operation gets when its
 // protection (signer) certificate is NOT the device's active identity cert.
 //
@@ -1080,30 +1132,22 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 		signerSN := helpers.SerialNumberToHexString(signer.SerialNumber)
 		selfRevocation := signerSN == input.SerialNumber
 
-		if !selfRevocation && !chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA) {
-			lFunc.Errorf("aborting revocation of '%s': signer SN=%s is neither the target certificate nor a PKI management entity (no id-kp-cmcRA)",
-				input.SerialNumber, signerSN)
-			return errs.ErrDMSEnrollInvalidCert
-		}
-
-		// The signer must chain to a CA this DMS trusts for CMP message
-		// protection: the LWCMP client-certificate ValidationCAs (the same
-		// list enrollment auth uses), plus the enrollment CA and any
-		// re-enrollment migration CAs. This applies to BOTH the RA-initiated
-		// and self-revocation cases — only the EKU requirement above differs
-		// between them.
-		candidateCAIDs := append(
-			[]string{dms.Settings.EnrollmentSettings.EnrollmentCA},
-			dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.AuthOptionsMTLS.ValidationCAs...)
-		candidateCAIDs = append(candidateCAIDs, dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs...)
-		// Self-revocation must still succeed against a device's own already-
-		// expired certificate — revoking an expired cert is always legitimate
-		// — so expiry alone doesn't block it; the RA-initiated case keeps the
-		// stricter non-expired requirement.
-		if _, vErr := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, selfRevocation); vErr != nil {
-			lFunc.Errorf("aborting revocation of '%s': signer CN=%s does not chain to a DMS-trusted CA: %s",
-				input.SerialNumber, signer.Subject.CommonName, vErr)
-			return errs.ErrDMSEnrollInvalidCert
+		if !selfRevocation {
+			if vErr := svc.validateTrustedRASigner(ctx, lFunc, dms, signer); vErr != nil {
+				lFunc.Errorf("aborting revocation of '%s': signer SN=%s is not a trusted PKI management entity: %s",
+					input.SerialNumber, signerSN, vErr)
+				return errs.ErrDMSEnrollInvalidCert
+			}
+		} else {
+			// Self-revocation must still succeed against a device's own already-
+			// expired certificate — revoking an expired cert is always
+			// legitimate — so expiry alone doesn't block it.
+			candidateCAIDs := trustedRACAIDs(dms)
+			if _, vErr := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, true); vErr != nil {
+				lFunc.Errorf("aborting revocation of '%s': signer CN=%s does not chain to a DMS-trusted CA: %s",
+					input.SerialNumber, signer.Subject.CommonName, vErr)
+				return errs.ErrDMSEnrollInvalidCert
+			}
 		}
 		if selfRevocation {
 			lFunc.Infof("revocation of '%s' authorized: signer is the certificate's own CA-validated protection cert", input.SerialNumber)

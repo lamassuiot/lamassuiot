@@ -11,7 +11,7 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// §3.2) rather than a transport mTLS cert.
 	AuthMode                   EnrollmentAuthMode           `json:"auth_mode"`
 	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
-	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook"`
+	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook_settings"`
 
 	// AcceptImplicit controls whether the server is willing to skip the
 	// certConf round-trip when the EE asks for implicit confirmation
