@@ -21,6 +21,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -395,11 +396,11 @@ func TestHandleCMP_ConfirmModes(t *testing.T) {
 
 			if tc.op == "kur" {
 				router, store, svc = newReenrollRouter(t, opts, issuedCert)
-				wantTag = cmpBodyTagKUP
+				wantTag = corecmp.BodyTagKUP
 				reqDER = buildTestKUR(t, reqOpts)
 			} else {
 				router, store, svc = newEnrollRouter(t, opts, issuedCert)
-				wantTag = cmpBodyTagIP
+				wantTag = corecmp.BodyTagIP
 				reqDER, _, _ = buildTestIR(t, reqOpts)
 			}
 
@@ -423,7 +424,7 @@ func TestHandleCMP_ConfirmModes(t *testing.T) {
 				certConfDER := buildTestCertConf(t, txID, issuedCert.Raw, sentNonce)
 				confResp := postCMP(t, router, "test-dms", certConfDER)
 				require.Equal(t, http.StatusOK, confResp.Code)
-				assert.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
+				assert.Equal(t, corecmp.BodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
 					"certConf with correct hash must receive pkiConf")
 			}
 
@@ -521,7 +522,7 @@ func TestHandleCMP_Protection(t *testing.T) {
 				// A genuine MAC-protected message carries a protection value; we
 				// attach a fake one so the message reaches the MAC-algorithm gate
 				// rather than the "protection value absent" structural check.
-				withAlg := injectProtectionAlgOID(t, irDER, oidPasswordBasedMac)
+				withAlg := injectProtectionAlgOID(t, irDER, corecmp.OIDPasswordBasedMAC())
 				msg = attachFakeProtection(t, withAlg, []byte{0x00, 0xDE, 0xAD, 0xBE, 0xEF})
 			default:
 				t.Fatalf("unknown protMode %q", tc.protMode)
@@ -531,13 +532,13 @@ func TestHandleCMP_Protection(t *testing.T) {
 			require.Equal(t, http.StatusOK, resp.Code)
 
 			if tc.accepted {
-				assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+				assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 					"accepted protection state must yield an IP response")
 				svc.AssertExpectations(t)
 				return
 			}
 
-			assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+			assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
 				"rejected protection state must yield a CMP error body")
 			assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), tc.reasonMatch,
 				"error reason must reference the protection failure")
@@ -604,7 +605,7 @@ func buildTestKUR(t *testing.T, opts testIROptions) []byte {
 	bodyContent := buildTestIRBodyContent(t, cn, pubKeyDER)
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagKUR,
+		Tag:        corecmp.BodyTagKUR,
 		IsCompound: true,
 		Bytes:      bodyContent,
 	})
@@ -642,13 +643,13 @@ func TestHandleCMP_DuplicateTransactionID(t *testing.T) {
 	ir1, _, _ := buildTestIR(t, testIROptions{CN: "device-dup-tx", TransactionID: txID})
 	resp1 := postCMP(t, router, "test-dms", ir1)
 	require.Equal(t, http.StatusOK, resp1.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp1.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp1.Body.Bytes()))
 
 	// Second IR with same txID rejected.
 	ir2, _, _ := buildTestIR(t, testIROptions{CN: "device-dup-tx-2", TransactionID: txID})
 	resp2 := postCMP(t, router, "test-dms", ir2)
 	require.Equal(t, http.StatusOK, resp2.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp2.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp2.Body.Bytes()),
 		"duplicate transactionID must be rejected")
 	assert.Contains(t, parseCMPErrorReason(t, resp2.Body.Bytes()), "transactionID already in use")
 }
@@ -668,7 +669,7 @@ func TestHandleCMP_CertConf_WrongHash(t *testing.T) {
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-wrong-hash", TransactionID: txID})
 	irResp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, irResp.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
 
 	storedTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
@@ -678,7 +679,7 @@ func TestHandleCMP_CertConf_WrongHash(t *testing.T) {
 	certConfDER := buildTestCertConf(t, txID, wrongCert.Raw, sentNonce)
 	confResp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, confResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, confResp.Body.Bytes()),
 		"wrong certHash must be rejected")
 	assert.Contains(t, parseCMPErrorReason(t, confResp.Body.Bytes()), "certHash mismatch")
 }
@@ -714,7 +715,7 @@ func TestHandleCMP_UnsupportedBodyTag(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"unsupported body tag must return CMP error")
 	assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "unsupported body tag")
 }
@@ -732,14 +733,14 @@ func TestHandleCMP_CertConf_RecipNonceMismatch(t *testing.T) {
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-nonce-mismatch", TransactionID: txID})
 	irResp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, irResp.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
 
 	// Build certConf with a random (wrong) recipNonce.
 	wrongNonce := randomNonce(t)
 	certConfDER := buildTestCertConf(t, txID, issuedCert.Raw, wrongNonce)
 	confResp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, confResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, confResp.Body.Bytes()),
 		"wrong recipNonce must be rejected")
 	assert.Contains(t, parseCMPErrorReason(t, confResp.Body.Bytes()), "recipNonce mismatch")
 }
@@ -763,7 +764,7 @@ func TestHandleCMP_RR_Success(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", rrDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"valid rr must receive rp response")
 
 	svc.AssertExpectations(t)
@@ -790,9 +791,9 @@ func TestHandleCMP_RR_ServiceError(t *testing.T) {
 	// RFC 9483 §4.2: the response to an rr is always an rp body, even on
 	// failure — the rejection is conveyed via the rp PKIStatusInfo, never via a
 	// generic error body.
-	assert.Equal(t, cmpBodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"failed revocation must return an rp body with rejection status")
-	var rpMsg rawPKIMessage
+	var rpMsg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(resp.Body.Bytes(), &rpMsg)
 	require.NoError(t, err)
 	assert.Contains(t, scanFirstUTF8String(rpMsg.Body.Bytes), "certificate not found",
@@ -817,7 +818,7 @@ func TestHandleCMP_RR_DefaultReason(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", rrDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	svc.AssertExpectations(t)
 }
@@ -920,7 +921,7 @@ func buildTestRRBodyDER(t *testing.T, serial *big.Int, reason *int) []byte {
 	// PKIBody rr [11]
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagRR,
+		Tag:        corecmp.BodyTagRR,
 		IsCompound: true,
 		Bytes:      revReqContentDER,
 	})
@@ -946,13 +947,13 @@ func TestHandleCMP_POPO(t *testing.T) {
 		// Cycle 13: valid POPOSigningKey signature → accepted.
 		{name: "ValidSignature", enforcePOPO: true, popoMode: "signature", cn: "device-popo-valid", accepted: true},
 		// Cycle 14: corrupt signature → badPOP (9).
-		{name: "InvalidSignature", enforcePOPO: true, popoMode: "badsig", cn: "device-popo-badsig", accepted: false, failInfoBit: pkiFailureInfoBadPOP},
+		{name: "InvalidSignature", enforcePOPO: true, popoMode: "badsig", cn: "device-popo-badsig", accepted: false, failInfoBit: corecmp.PKIFailureInfoBadPOP},
 		// Cycle 15: POPO absent + EnforcePOPO=true → badPOP (9).
-		{name: "Absent_Enforced", enforcePOPO: true, popoMode: "", cn: "device-popo-absent", accepted: false, failInfoBit: pkiFailureInfoBadPOP},
+		{name: "Absent_Enforced", enforcePOPO: true, popoMode: "", cn: "device-popo-absent", accepted: false, failInfoBit: corecmp.PKIFailureInfoBadPOP},
 		// Cycle 16: POPO absent + EnforcePOPO=false → accepted (mTLS proves possession).
 		{name: "Absent_NotEnforced", enforcePOPO: false, popoMode: "", cn: "device-popo-notenforced", accepted: true},
 		// Cycle 17: raVerified asserted by an EE → notAuthorized (23).
-		{name: "RAVerified", enforcePOPO: true, popoMode: "raVerified", cn: "device-popo-raverified", accepted: false, failInfoBit: pkiFailureInfoNotAuthorized},
+		{name: "RAVerified", enforcePOPO: true, popoMode: "raVerified", cn: "device-popo-raverified", accepted: false, failInfoBit: corecmp.PKIFailureInfoNotAuthorized},
 	}
 
 	for _, tc := range tests {
@@ -979,7 +980,7 @@ func TestHandleCMP_POPO(t *testing.T) {
 			// Both accepted and rejected IR results are delivered inside an ip
 			// CertRepMessage (rejections are surfaced per-CertResponse, not as a
 			// top-level error body).
-			assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()))
+			assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 			if tc.accepted {
 				svc.AssertExpectations(t)
@@ -1039,13 +1040,13 @@ func TestHandleCMP_KUR_POPO(t *testing.T) {
 			require.Equal(t, http.StatusOK, resp.Code)
 
 			if tc.accepted {
-				assert.Equal(t, cmpBodyTagKUP, parseCMPResponseTag(t, resp.Body.Bytes()),
+				assert.Equal(t, corecmp.BodyTagKUP, parseCMPResponseTag(t, resp.Body.Bytes()),
 					"accepted KUR must be answered with a kup body")
 				svc.AssertExpectations(t)
 				return
 			}
 
-			assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+			assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
 				"unprotected KUR must be rejected when EnforcePOPO=true")
 			assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "proof of possession",
 				"error must reference POPO/protection requirement")
@@ -1112,10 +1113,10 @@ func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.Code)
 	tag := parseResponseBodyTag(t, resp.Body.Bytes())
-	assert.Contains(t, []int{cmpBodyTagIP, cmpBodyTagCP}, tag,
+	assert.Contains(t, []int{corecmp.BodyTagIP, corecmp.BodyTagCP}, tag,
 		"ISSUED-state pollReq must deliver via ip or cp")
 	status, hasCKP := parseIPBodyStatus(t, resp.Body.Bytes())
-	assert.Equal(t, pkiStatusAccepted, status, "delivered cert response must be accepted (0)")
+	assert.Equal(t, corecmp.PKIStatusAccepted, status, "delivered cert response must be accepted (0)")
 	assert.True(t, hasCKP, "delivered response must carry CertifiedKeyPair with the cert")
 
 	// Row remains so certConf can verify against it.
@@ -1135,7 +1136,7 @@ func TestHandleCMP_PollReq_UnknownTxID_ReturnsError(t *testing.T) {
 	resp := postCMP(t, router, "test-dms", pollDER)
 
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
 		"unknown transactionID on pollReq must yield a CMP error body")
 }
 
@@ -1159,7 +1160,7 @@ func TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason(t *testing.T) {
 	resp := postCMP(t, router, "test-dms", pollDER)
 
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
 		"ISSUE_FAILED state must produce a CMP error body, not pollRep")
 }
 
@@ -1188,10 +1189,10 @@ func TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked(t *testing.T) {
 	resp := postCMP(t, router, "test-dms", pollDER)
 
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
 		"REVOKED state must produce a CMP error body, not pollRep")
 	fi := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(fi, pkiFailureInfoCertRevoked),
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoCertRevoked),
 		"failInfo must set certRevoked (10), not systemFailure")
 }
 
@@ -1215,7 +1216,7 @@ func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "phased-device", TransactionID: txID})
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"phased IR must receive an IP (waiting) response")
 
 	storedTx, found := store.Peek(hex.EncodeToString(txID))
@@ -1247,7 +1248,7 @@ func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T
 	pollDER := buildTestPollReq(t, txID, 0)
 	resp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagPollRep, parseResponseBodyTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagPollRep, parseResponseBodyTag(t, resp.Body.Bytes()),
 		"pollReq on a PENDING (awaiting-approval) transaction must return pollRep")
 
 	svc.AssertExpectations(t)
@@ -1265,7 +1266,7 @@ func TestHandleCMP_CertConf_Duplicate_CertConfirmed(t *testing.T) {
 	irDER, txID, _ := buildTestIR(t, testIROptions{CN: "dup-certconf-device"})
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	sentNonce := peekSentNonce(t, store, txID)
 
@@ -1273,16 +1274,16 @@ func TestHandleCMP_CertConf_Duplicate_CertConfirmed(t *testing.T) {
 	confDER := buildTestCertConf(t, txID, issuedCert.Raw, sentNonce)
 	confResp := postCMP(t, router, "test-dms", confDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
-	require.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
 		"first certConf must be answered with pkiConf")
 
 	// Byte-identical replay → error(certConfirmed).
 	dupResp := postCMP(t, router, "test-dms", confDER)
 	require.Equal(t, http.StatusOK, dupResp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, dupResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, dupResp.Body.Bytes()),
 		"duplicate certConf must be answered with an error body")
 	bs := parseFailInfoBitString(t, dupResp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoCertConfirmed),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoCertConfirmed),
 		"failInfo must set certConfirmed (11)")
 }
 
@@ -1300,14 +1301,14 @@ func buildTestIRBodyDERWithRegToken(t *testing.T, cn string, pubKeyDER []byte, r
 		Type  asn1.ObjectIdentifier
 		Value asn1.RawValue
 	}{
-		Type:  oidRegCtrlRegToken,
+		Type:  corecmp.OIDRegCtrlRegToken(),
 		Value: asn1.RawValue{FullBytes: tokenValueDER},
 	})
 	require.NoError(t, err)
 	controlsDER := seqDER(t, attrDER)
 
 	certRequestDER := buildCertRequestDER(t, cn, pubKeyDER, controlsDER)
-	return ctxDER(t, cmpBodyTagIR, wrapCertReqMsgs(t, certRequestDER))
+	return ctxDER(t, corecmp.BodyTagIR, wrapCertReqMsgs(t, certRequestDER))
 }
 
 func buildTestIRWithRegToken(t *testing.T, cn, regToken string) []byte {
@@ -1348,7 +1349,7 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 	firstIR := buildTestIRWithRegToken(t, "regtoken-device-1", "SuperSecretRegToken")
 	resp := postCMP(t, router, "test-dms", firstIR)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"first use of a regToken must be accepted")
 
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
@@ -1357,11 +1358,11 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 	secondIR := buildTestIRWithRegToken(t, "regtoken-device-2", "SuperSecretRegToken")
 	resp2 := postCMP(t, router, "test-dms", secondIR)
 	require.Equal(t, http.StatusOK, resp2.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp2.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp2.Body.Bytes()),
 		"reuse of a regToken must be rejected via ip CertRepMessage")
 	reason, fi := parseCertRepRejection(t, resp2.Body.Bytes())
 	assert.Contains(t, reason, "regToken")
-	assert.True(t, bitSet(fi, pkiFailureInfoBadRequest), "failInfo must set badRequest (2)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadRequest), "failInfo must set badRequest (2)")
 
 	svc.AssertExpectations(t)
 }

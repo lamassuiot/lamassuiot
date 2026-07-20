@@ -22,7 +22,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/kga"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers/cmp/internal/kga"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	software "github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
@@ -192,7 +193,7 @@ func marshalPOPOChallengeEncryptedRand(witness, envelopedDataDER []byte) ([]byte
 	for _, part := range [][]byte{owfDER, witnessDER, emptyChallengeDER, encryptedRandDER} {
 		content = append(content, part...)
 	}
-	return wrapSequenceDER(content, "Challenge")
+	return corecmp.WrapSequenceDER(content, "Challenge")
 }
 
 // buildPOPOChallengeEntry builds the DER of a single Challenge entry and, for
@@ -205,7 +206,7 @@ func marshalPOPOChallengeEncryptedRand(witness, envelopedDataDER []byte) ([]byte
 func (r *cmpHttpRoutes) buildPOPOChallengeEntry(ctx context.Context, lFunc *logrus.Entry, dmsID string, pvno int, recipientPub crypto.PublicKey, recipientPubKeyDER []byte, challengeInt *big.Int, randDER []byte) (entryDER []byte, originator *ecdhOriginator, err error) {
 	witness := sha256.Sum256(challengeInt.Bytes())
 
-	if pvno == pvnoCMP2021 {
+	if pvno == corecmp.PVNOCMP2021 {
 		technique, terr := kga.TechniqueFor(recipientPub)
 		if terr != nil {
 			return nil, nil, fmt.Errorf("challengeResp: %w", terr)
@@ -217,7 +218,7 @@ func (r *cmpHttpRoutes) buildPOPOChallengeEntry(ctx context.Context, lFunc *logr
 			// certReqId (always 0 for ir/cr, RFC 9483 §4.1) as serialNumber —
 			// the recipient key is not certified yet, so no real identifiers
 			// exist for it.
-			RecipientRID: &kga.IssuerAndSerial{IssuerDER: emptyRDNSequenceDER(), Serial: big.NewInt(0)},
+			RecipientRID: &kga.IssuerAndSerial{IssuerDER: corecmp.EmptyRDNSequenceDER(), Serial: big.NewInt(0)},
 		}
 		if technique == kga.TechniqueKARI {
 			originator, err = r.mintECDHOriginator(ctx, lFunc, dmsID)
@@ -261,54 +262,54 @@ func (r *cmpHttpRoutes) buildPOPOChallengeEntry(ctx context.Context, lFunc *logr
 // popdecr. Called from handleEnrollment after every issuance-independent
 // validation (regToken, CertTemplate policy, alt CertReq, ...) has already
 // passed — the same point issueAndStore would otherwise be invoked from.
-func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entry, header *requestPKIHeader, req *firstCertReq, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, params issueParams) {
+func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entry, header *corecmp.RequestPKIHeader, req *corecmp.CertRequest, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, params issueParams) {
 	txHex := hex.EncodeToString(header.TransactionID)
 	if exists, err := r.store.Exists(ctx.Request.Context(), txHex); err != nil {
 		lFunc.Errorf("challengeResp: check existing txID: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	} else if exists {
 		lFunc.Warnf("challengeResp: duplicate transactionID %s", txHex)
-		r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
 		return
 	}
 
-	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
+	csr, err := corecmp.BuildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
 	if err != nil {
 		lFunc.Errorf("challengeResp: synthesize CSR: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, pkiFailureInfoBadCertTemplate)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, corecmp.PKIFailureInfoBadCertTemplate)
 		return
 	}
 
 	recipientPub, err := x509.ParsePKIXPublicKey(req.PublicKeyDER)
 	if err != nil {
 		lFunc.Errorf("challengeResp: parse recipient public key: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "malformed public key", dmsID, pkiFailureInfoBadCertTemplate)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "malformed public key", dmsID, corecmp.PKIFailureInfoBadCertTemplate)
 		return
 	}
 
 	challengeInt, err := randChallengeInt()
 	if err != nil {
 		lFunc.Errorf("challengeResp: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
-	randDER, err := asn1.Marshal(randChallenge{Int: challengeInt, Sender: defaultSenderGeneralName()})
+	randDER, err := asn1.Marshal(randChallenge{Int: challengeInt, Sender: corecmp.DefaultSenderGeneralName()})
 	if err != nil {
 		lFunc.Errorf("challengeResp: marshal Rand: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	entryDER, originator, err := r.buildPOPOChallengeEntry(ctx.Request.Context(), lFunc, dmsID, header.PVNO, recipientPub, req.PublicKeyDER, challengeInt, randDER)
 	if err != nil {
 		lFunc.Errorf("challengeResp: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	contentDER, err := asn1.Marshal([]asn1.RawValue{{FullBytes: entryDER}})
 	if err != nil {
 		lFunc.Errorf("challengeResp: marshal POPODecKeyChallContent: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -326,7 +327,7 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 		CreatedAt:         time.Now(),
 	}); storeErr != nil {
 		lFunc.Errorf("challengeResp: persist pending challenge: %v", storeErr)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -336,10 +337,10 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 		// EE locates its ECDH partner via extraCerts, so popdecc must be signed
 		// by (and carry) the minted originator, not the DMS's normal credentials.
 		chain := append([]*x509.Certificate{originator.cert}, originator.chain...)
-		r.sendRawBodyWithSigner(ctx, lFunc, *header, cmpBodyTagPopDecc, contentDER, chain, originator.key)
+		r.sendRawBodyWithSigner(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, chain, originator.key)
 		return
 	}
-	r.sendRawBody(ctx, lFunc, *header, cmpBodyTagPopDecc, contentDER, dmsID)
+	r.sendRawBody(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, dmsID)
 }
 
 // decodePOPODecKeyRespContent parses a popdecr body — POPODecKeyRespContent
@@ -363,11 +364,11 @@ func decodePOPODecKeyRespContent(bodyBytes []byte) (*big.Int, error) {
 // from the synthesized CSR stored at challenge time — exactly as
 // ApproveCMPTransaction resumes a phased-workflow PENDING row, just triggered
 // by a proof-of-possession round trip instead of an administrator.
-func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
 	submitted, err := decodePOPODecKeyRespContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("popdecr: decode: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed POPODecKeyRespContent", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "malformed POPODecKeyRespContent", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
@@ -379,25 +380,25 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 	tx, ok, err := r.store.SelectAndDelete(ctx.Request.Context(), txHex)
 	if err != nil {
 		lFunc.Errorf("popdecr: lookup transaction: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	if !ok || tx.State != models.CMPTransactionStatePending || tx.PopoChallenge == "" || tx.CSR == nil {
 		lFunc.Warnf("popdecr: unknown or non-challenge transactionID %s", txHex)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "unknown transactionID", dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "unknown transactionID", dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
 	expected, parsed := new(big.Int).SetString(tx.PopoChallenge, 16)
 	if !parsed || submitted.Cmp(expected) != 0 {
 		lFunc.Warnf("popdecr: challenge mismatch for tx %s", txHex)
-		r.rejectWithError(ctx, &header, PKIStatus(2),
-			"proof of possession verification failed: challenge response mismatch", dmsID, pkiFailureInfoBadPOP)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+			"proof of possession verification failed: challenge response mismatch", dmsID, corecmp.PKIFailureInfoBadPOP)
 		return
 	}
 
 	csr := (*x509.CertificateRequest)(tx.CSR)
-	req := &firstCertReq{
+	req := &corecmp.CertRequest{
 		CertReqID:    0,
 		SubjectDER:   csr.RawSubject,
 		PublicKeyDER: csr.RawSubjectPublicKeyInfo,
@@ -406,9 +407,9 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 	// challengeResp only ever originates from ir/cr (handleEnrollment's
 	// variant.verifyInnerPOPO is false for kur), so this two-way choice is
 	// exhaustive.
-	requestTag := cmpBodyTagCR
-	if tx.RequestType == cmpTagToString(cmpBodyTagIR) {
-		requestTag = cmpBodyTagIR
+	requestTag := corecmp.BodyTagCR
+	if tx.RequestType == cmpTagToString(corecmp.BodyTagIR) {
+		requestTag = corecmp.BodyTagIR
 	}
 	lFunc.Infof("popdecr: challenge verified for tx %s, resuming issuance", txHex)
 	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
@@ -431,7 +432,7 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 // challengeResp method in cmp_popo_challenge.go, which challenges the EE
 // BEFORE issuing).
 //
-// The wire encoding reuses core/pkg/kga's CMS EnvelopedData primitives
+// The wire encoding reuses the backend KGA package's CMS EnvelopedData primitives
 // (KeyTransRecipientInfo for RSA, KeyAgreeRecipientInfo for ECDSA) — the same
 // machinery RFC 9483 §4.1.6 central key generation uses to deliver a private
 // key, just wrapping the certificate DER directly instead of a KGA-signed
@@ -556,7 +557,7 @@ func (r *cmpHttpRoutes) buildEncryptedCertRepBody(ctx context.Context, lFunc *lo
 	if err != nil {
 		return nil, nil, fmt.Errorf("encrCert: build EnvelopedData: %w", err)
 	}
-	bodyDER, err = marshalCertRepBodyEncrypted(certReqID, statusCode, envDataDER)
+	bodyDER, err = corecmp.MarshalCertRepBodyEncrypted(certReqID, statusCode, envDataDER)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -695,7 +696,7 @@ func popoVerifySignature(data, sigBytes []byte, algID pkix.AlgorithmIdentifier, 
 	// Use the AlgorithmIdentifier-aware helper so that id-RSASSA-PSS
 	// (OID 1.2.840.113549.1.1.10) resolves its hash from the Parameters
 	// SEQUENCE per RFC 4055 §3.1; the OID-only variant rejects PSS.
-	hashAlg, err := hashFromSignatureAlgID(algID)
+	hashAlg, err := corecmp.HashFromSignatureAlgID(algID)
 	if err != nil {
 		return fmt.Errorf("POPO: %w", err)
 	}

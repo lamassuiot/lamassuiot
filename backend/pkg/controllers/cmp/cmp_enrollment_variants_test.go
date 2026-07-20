@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"testing"
 
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -51,7 +52,7 @@ func buildTestIRBodyDERWithIndirectPOPO(t *testing.T, cn string, pubKeyDER []byt
 	t.Helper()
 	certRequestDER := buildCertRequestDER(t, cn, pubKeyDER)
 	popoDER := buildIndirectPOPO(t, subsequentMessage)
-	return ctxDER(t, cmpBodyTagIR, wrapCertReqMsgs(t, certRequestDER, popoDER))
+	return ctxDER(t, corecmp.BodyTagIR, wrapCertReqMsgs(t, certRequestDER, popoDER))
 }
 
 func buildTestIRWithIndirectPOPO(t *testing.T, cn string, rsaPub *rsa.PublicKey, subsequentMessage int) (derMsg []byte, txID []byte) {
@@ -77,7 +78,7 @@ func buildTestIRWithIndirectPOPO(t *testing.T, cn string, rsaPub *rsa.PublicKey,
 // and returns the EnvelopedData DER.
 func extractEnvelopedDataDER(t *testing.T, responseDER []byte) []byte {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err)
 
@@ -160,7 +161,7 @@ func decryptKTRIEnvelopedData(t *testing.T, envelopedDataDER []byte, rsaKey *rsa
 	_, err = asn1.Unmarshal(rest, &encryptedKey)
 	require.NoError(t, err)
 
-	// buildKTRI (core/pkg/kga) wraps the CEK with RSA-OAEP/SHA-256, not the
+	// buildKTRI (the backend KGA package) wraps the CEK with RSA-OAEP/SHA-256, not the
 	// legacy PKCS#1 v1.5 encryption scheme.
 	cek, err := rsa.DecryptOAEP(sha256.New(), nil, rsaKey, encryptedKey, nil)
 	require.NoError(t, err)
@@ -203,7 +204,7 @@ func TestHandleCMP_EncrCertPOPO_RSA_IssuesEncryptedCert(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"encrCert POPO must be answered inline with ip, no popdecc round trip")
 
 	envDataDER := extractEnvelopedDataDER(t, resp.Body.Bytes())
@@ -226,7 +227,7 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagPopDecc, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagPopDecc, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"challengeResp POPO must be answered with popdecc")
 
 	tx, ok := store.Peek(hex.EncodeToString(txID))
@@ -252,7 +253,7 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 	popdecrDER := buildTestPopDecr(t, txID, rand_.Int)
 	popdecrResp := postCMP(t, router, "test-dms", popdecrDER)
 	require.Equal(t, http.StatusOK, popdecrResp.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, popdecrResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, popdecrResp.Body.Bytes()),
 		"a correct popdecr must resume issuance and yield ip")
 
 	svc.AssertExpectations(t)
@@ -267,17 +268,17 @@ func TestHandleCMP_ChallengeRespPOPO_WrongAnswer_Rejected(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagPopDecc, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagPopDecc, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	popdecrDER := buildTestPopDecr(t, txID, big.NewInt(1)) // never the real answer
 	popdecrResp := postCMP(t, router, "test-dms", popdecrDER)
 	require.Equal(t, http.StatusOK, popdecrResp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, popdecrResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, popdecrResp.Body.Bytes()),
 		"a wrong popdecr answer must be rejected")
 	reason := parseCMPErrorReason(t, popdecrResp.Body.Bytes())
 	assert.Contains(t, reason, "challenge response mismatch")
 	fi := parseFailInfoBitString(t, popdecrResp.Body.Bytes())
-	assert.True(t, bitSet(fi, pkiFailureInfoBadPOP), "failInfo must set badPOP (9)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadPOP), "failInfo must set badPOP (9)")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
@@ -286,7 +287,7 @@ func TestHandleCMP_ChallengeRespPOPO_WrongAnswer_Rejected(t *testing.T) {
 // first Challenge entry in a popdecc response body.
 func extractFirstPOPOChallengeValue(t *testing.T, responseDER []byte) []byte {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err)
 
@@ -307,7 +308,7 @@ func buildTestPopDecr(t *testing.T, txID []byte, value *big.Int) []byte {
 	contentDER, err := asn1.Marshal([]*big.Int{value})
 	require.NoError(t, err)
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
-		Class: asn1.ClassContextSpecific, Tag: cmpBodyTagPopDecr, IsCompound: true, Bytes: contentDER,
+		Class: asn1.ClassContextSpecific, Tag: corecmp.BodyTagPopDecr, IsCompound: true, Bytes: contentDER,
 	})
 	require.NoError(t, err)
 	msgDER, err := asn1.Marshal(asn1.RawValue{
@@ -370,7 +371,7 @@ func buildTestP10CR(t *testing.T, opts testP10CROptions) (derMsg []byte, txID []
 	// the full CSR SEQUENCE TLV.
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagP10CR,
+		Tag:        corecmp.BodyTagP10CR,
 		IsCompound: true,
 		Bytes:      csrDER,
 	})
@@ -415,7 +416,7 @@ func buildTestCertConfWithReqID(t *testing.T, txID []byte, certDER []byte, recip
 
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagCertConf,
+		Tag:        corecmp.BodyTagCertConf,
 		IsCompound: true,
 		Bytes:      certConfContent,
 	})
@@ -435,7 +436,7 @@ func buildTestCertConfWithReqID(t *testing.T, txID []byte, certDER []byte, recip
 // ip/cp/kup response.
 func parseCertRepCertReqID(t *testing.T, responseDER []byte) int {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err)
 
@@ -467,11 +468,11 @@ func TestHandleCMP_P10CR_IssuesCP(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"p10cr must be answered with a cp (3) body")
 
 	status, hasCert := parseIPBodyStatus(t, resp.Body.Bytes())
-	assert.Equal(t, pkiStatusAccepted, status)
+	assert.Equal(t, corecmp.PKIStatusAccepted, status)
 	assert.True(t, hasCert, "cp must carry the issued certificate")
 	assert.Equal(t, p10crCertReqID, parseCertRepCertReqID(t, resp.Body.Bytes()),
 		"p10cr response certReqId must be -1 (RFC 4210 Errata 8806)")
@@ -505,14 +506,14 @@ func TestHandleCMP_P10CR_ExplicitConfirm(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	sentNonce := peekSentNonce(t, store, txID)
 
 	confDER := buildTestCertConfWithReqID(t, txID, issuedCert.Raw, sentNonce, p10crCertReqID)
 	confResp := postCMP(t, router, "test-dms", confDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
-	assert.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
 		"certConf with certReqId -1 must be accepted for a p10cr transaction")
 }
 
@@ -525,14 +526,14 @@ func TestHandleCMP_P10CR_CertConf_WrongCertReqID(t *testing.T) {
 	msgDER, txID := buildTestP10CR(t, testP10CROptions{CN: "p10cr-wrongid"})
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	sentNonce := peekSentNonce(t, store, txID)
 
 	confDER := buildTestCertConfWithReqID(t, txID, issuedCert.Raw, sentNonce, 0)
 	confResp := postCMP(t, router, "test-dms", confDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, confResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, confResp.Body.Bytes()),
 		"certConf with certReqId 0 must be rejected for a p10cr transaction")
 }
 
@@ -545,11 +546,11 @@ func TestHandleCMP_P10CR_BadSignature(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"POP failure must be reported in a cp CertRepMessage")
 	reason, fi := parseCertRepRejection(t, resp.Body.Bytes())
 	assert.Contains(t, reason, "proof of possession")
-	assert.True(t, bitSet(fi, pkiFailureInfoBadPOP), "failInfo must set badPOP (9)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadPOP), "failInfo must set badPOP (9)")
 	assert.Equal(t, p10crCertReqID, parseCertRepCertReqID(t, resp.Body.Bytes()),
 		"rejection certReqId must also be -1 for p10cr")
 
@@ -573,10 +574,10 @@ func TestHandleCMP_P10CR_CATemplateRejected(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
 	reason, fi := parseCertRepRejection(t, resp.Body.Bytes())
 	assert.Contains(t, reason, "CA certificates")
-	assert.True(t, bitSet(fi, pkiFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
@@ -591,12 +592,12 @@ func TestHandleCMP_P10CR_PollReq_DeliversCP(t *testing.T) {
 	msgDER, txID := buildTestP10CR(t, testP10CROptions{CN: "p10cr-poll", WithImplicitConfirm: true})
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	pollDER := buildTestPollReq(t, txID, p10crCertReqID)
 	pollResp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, pollResp.Code)
-	assert.Equal(t, cmpBodyTagCP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
 		"pollReq recovery for a p10cr transaction must deliver a cp, not an ip")
 	assert.Equal(t, p10crCertReqID, parseCertRepCertReqID(t, pollResp.Body.Bytes()))
 }

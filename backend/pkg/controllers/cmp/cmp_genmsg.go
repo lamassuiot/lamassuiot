@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
@@ -38,9 +39,7 @@ var (
 // Algorithm OIDs advertised in signing/encryption key-pair-type and preferred
 // symmetric-algorithm responses.
 var (
-	oidRSAEncryption = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
-	oidECPublicKey   = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
-	oidAES256CBC     = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 42}
+	oidAES256CBC = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 42}
 )
 
 // cmpSupportedLangTags is the set of BCP 47 language tags the CA is willing to
@@ -70,7 +69,6 @@ func selectSupportedLangTag(offered []string) (string, bool) {
 	return "", false
 }
 
-
 // genITAV is the decoded request InfoTypeAndValue. infoValue is OPTIONAL; an
 // absent value leaves InfoValue at its zero RawValue (FullBytes == nil).
 type genITAV struct {
@@ -81,15 +79,15 @@ type genITAV struct {
 // handleGeneralMessage processes a genm (21) body and answers with a genp (22).
 // Signature protection has already been verified by HandleCMP; sender/senderKID
 // binding is intentionally not enforced for genm (see the dispatch in cmp.go).
-func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string) {
+func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string) {
 	itavs, err := decodeGenMsgContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("genm: decode GenMsgContent: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed GenMsgContent", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "malformed GenMsgContent", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 	if len(itavs) == 0 {
-		r.rejectWithError(ctx, &header, PKIStatus(2), "empty GenMsgContent", dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "empty GenMsgContent", dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
@@ -99,7 +97,7 @@ func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Ent
 		entryDER, rej := r.buildGenpEntry(ctx.Request.Context(), lFunc, dmsID, itav)
 		if rej != nil {
 			lFunc.Warnf("genm: rejecting %s: %s", itav.InfoType.String(), rej.reason)
-			r.rejectWithError(ctx, &header, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), rej.reason, dmsID, rej.failInfo)
 			return
 		}
 		respEntries = append(respEntries, entryDER)
@@ -108,10 +106,10 @@ func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Ent
 	genRepDER, err := marshalGenRepBody(respEntries)
 	if err != nil {
 		lFunc.Errorf("genm: build genp body: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build genp response", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build genp response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
-	r.sendRawBody(ctx, lFunc, header, cmpBodyTagGenRep, genRepDER, dmsID)
+	r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagGenRep, genRepDER, dmsID)
 }
 
 // buildGenpEntry maps a single request InfoTypeAndValue to its genp response
@@ -210,7 +208,7 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 		if hasValue {
 			return nil, rejBadRequest("id-it-signKeyPairTypes request infoValue MUST be absent")
 		}
-		v, err := encodeAlgIDList(oidRSAEncryption, oidECPublicKey)
+		v, err := encodeAlgIDList(corecmp.OIDRSAEncryption(), corecmp.OIDECPublicKey())
 		if err != nil {
 			return nil, rejSystemFailure("cannot encode signKeyPairTypes")
 		}
@@ -220,7 +218,7 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 		if hasValue {
 			return nil, rejBadRequest("id-it-encKeyPairTypes request infoValue MUST be absent")
 		}
-		v, err := encodeAlgIDList(oidRSAEncryption)
+		v, err := encodeAlgIDList(corecmp.OIDRSAEncryption())
 		if err != nil {
 			return nil, rejSystemFailure("cannot encode encKeyPairTypes")
 		}
@@ -278,7 +276,7 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 	default:
 		return nil, &cmpEnvelopeRejection{
 			reason:   "unsupported genm infoType " + itav.InfoType.String(),
-			failInfo: pkiFailureInfoBadRequest,
+			failInfo: corecmp.PKIFailureInfoBadRequest,
 		}
 	}
 
@@ -292,11 +290,11 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 // --- rejection helpers -----------------------------------------------------
 
 func rejBadRequest(reason string) *cmpEnvelopeRejection {
-	return &cmpEnvelopeRejection{reason: reason, failInfo: pkiFailureInfoBadRequest}
+	return &cmpEnvelopeRejection{reason: reason, failInfo: corecmp.PKIFailureInfoBadRequest}
 }
 
 func rejSystemFailure(reason string) *cmpEnvelopeRejection {
-	return &cmpEnvelopeRejection{reason: reason, failInfo: pkiFailureInfoSystemFailure}
+	return &cmpEnvelopeRejection{reason: reason, failInfo: corecmp.PKIFailureInfoSystemFailure}
 }
 
 // --- decoding --------------------------------------------------------------

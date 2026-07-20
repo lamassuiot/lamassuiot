@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,13 +46,13 @@ func TestParsePEMEncodedCMPMessages(t *testing.T) {
 		{
 			name:        "0001.ip - Initialization Request (ir, tag 0)",
 			file:        "0001.ip",
-			wantBodyTag: cmpBodyTagIR, // 0
+			wantBodyTag: corecmp.BodyTagIR,
 			wantCN:      "0e59a0d7-3bdc-45e5-82d1-3855089289cb",
 		},
 		{
 			name:        "0002.cr - Certificate Request (cr, tag 2)",
 			file:        "0002.cr",
-			wantBodyTag: cmpBodyTagCR, // 2
+			wantBodyTag: corecmp.BodyTagCR,
 			wantCN:      "a04908c9-7b75-4bd5-96b4-ca26b6872a6d",
 		},
 	}
@@ -69,7 +70,7 @@ func TestParsePEMEncodedCMPMessages(t *testing.T) {
 			assert.NotEmpty(t, block.Bytes, "PEM payload (DER) must not be empty")
 
 			// 2. DER → rawPKIMessage
-			var msg rawPKIMessage
+			var msg corecmp.RawPKIMessage
 			leftover, err := asn1.Unmarshal(block.Bytes, &msg)
 			require.NoError(t, err, "ASN.1 unmarshal into rawPKIMessage")
 			// Extra bytes after PKIMessage are Protection + ExtraCerts (intentionally not
@@ -77,9 +78,9 @@ func TestParsePEMEncodedCMPMessages(t *testing.T) {
 			_ = leftover
 
 			// 3. PKIHeader fields
-			header, err := decodeRequestHeader(msg.Header.FullBytes)
+			header, err := corecmp.DecodeRequestHeader(msg.Header.FullBytes)
 			require.NoError(t, err, "decoding PKIHeader")
-			assert.Equal(t, pvnoCMP2000, header.PVNO,
+			assert.Equal(t, corecmp.PVNOCMP2000, header.PVNO,
 				"PVNO must be cmp2000 (2) per RFC 9480 §2.20")
 
 			// 4. PKIBody tag and encoding
@@ -114,8 +115,8 @@ func TestParseCMPBodyTagMeaning(t *testing.T) {
 		tagName string
 		wantTag int
 	}{
-		{"0001.ip", "ir (Initialization Request)", cmpBodyTagIR},
-		{"0002.cr", "cr (Certificate Request)", cmpBodyTagCR},
+		{"0001.ip", "ir (Initialization Request)", corecmp.BodyTagIR},
+		{"0002.cr", "cr (Certificate Request)", corecmp.BodyTagCR},
 	}
 
 	for _, tc := range tests {
@@ -126,7 +127,7 @@ func TestParseCMPBodyTagMeaning(t *testing.T) {
 			block, _ := pem.Decode(data)
 			require.NotNil(t, block)
 
-			var msg rawPKIMessage
+			var msg corecmp.RawPKIMessage
 			_, err = asn1.Unmarshal(block.Bytes, &msg)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantTag, msg.Body.Tag)
@@ -175,7 +176,7 @@ func TestParseCMPPEM_Errors(t *testing.T) {
 		block, _ := pem.Decode(pemData)
 		require.NotNil(t, block)
 
-		var msg rawPKIMessage
+		var msg corecmp.RawPKIMessage
 		_, err := asn1.Unmarshal(block.Bytes, &msg)
 		assert.Error(t, err, "all-zero bytes cannot form a valid PKIMessage")
 	})
@@ -195,7 +196,7 @@ func TestParseCMPPEM_Errors(t *testing.T) {
 		block, _ := pem.Decode(truncated)
 		require.NotNil(t, block)
 
-		var msg rawPKIMessage
+		var msg corecmp.RawPKIMessage
 		_, err = asn1.Unmarshal(block.Bytes, &msg)
 		assert.Error(t, err, "truncated DER must fail ASN.1 unmarshal")
 	})
@@ -203,7 +204,7 @@ func TestParseCMPPEM_Errors(t *testing.T) {
 	t.Run("garbage body bytes fail CertReqMessages re-wrap", func(t *testing.T) {
 		// rewrapBodyAsSequence must not panic; asn1.Unmarshal on garbage returns an error.
 		garbage := []byte{0xFF, 0xFE, 0xFD, 0xFC}
-		seq, err := rewrapBodyAsSequence(garbage)
+		seq, err := corecmp.RewrapBodyAsSequence(garbage)
 		require.NoError(t, err, "rewrapBodyAsSequence itself never errors")
 
 		var out []interface{}
@@ -225,7 +226,7 @@ func TestParseCMPPEM_Errors(t *testing.T) {
 func TestCMPASN1Helpers(t *testing.T) {
 	t.Run("rewrapBodyAsSequence adds UNIVERSAL SEQUENCE header", func(t *testing.T) {
 		content := []byte{0x02, 0x01, 0x00} // INTEGER(0)
-		wrapped, err := rewrapBodyAsSequence(content)
+		wrapped, err := corecmp.RewrapBodyAsSequence(content)
 		require.NoError(t, err)
 
 		// Resulting bytes must be a SEQUENCE.
@@ -241,13 +242,13 @@ func TestCMPASN1Helpers(t *testing.T) {
 	t.Run("certHashSHA256 returns correct SHA-256 digest", func(t *testing.T) {
 		input := []byte("test-cert-der")
 		sum := sha256.Sum256(input)
-		got := certHashSHA256(input)
+		got := corecmp.CertHashSHA256(input)
 		assert.Equal(t, sum[:], got)
 		assert.Len(t, got, 32)
 	})
 
 	t.Run("marshalPKIConfBody produces raw NULL payload", func(t *testing.T) {
-		der, err := marshalPKIConfBody()
+		der, err := corecmp.MarshalPKIConfBody()
 		require.NoError(t, err)
 		require.NotEmpty(t, der)
 
@@ -260,7 +261,7 @@ func TestCMPASN1Helpers(t *testing.T) {
 	})
 
 	t.Run("marshalErrorBody produces raw ErrorMsgContent sequence", func(t *testing.T) {
-		der, err := marshalErrorBody(2, "test error reason")
+		der, err := corecmp.MarshalErrorBody(2, "test error reason")
 		require.NoError(t, err)
 		require.NotEmpty(t, der)
 
@@ -274,12 +275,12 @@ func TestCMPASN1Helpers(t *testing.T) {
 
 	t.Run("marshalErrorBody emits PKIFailureInfo BIT STRING when bits set", func(t *testing.T) {
 		// incorrectData (bit 7) → first BIT STRING content byte 0x01.
-		der, err := marshalErrorBody(2, "transaction expired", pkiFailureInfoIncorrectData)
+		der, err := corecmp.MarshalErrorBody(2, "transaction expired", corecmp.PKIFailureInfoIncorrectData)
 		require.NoError(t, err)
 
 		// Round-trip through gocmp's ErrorMsgContent to confirm the FailInfo
 		// field is populated with the expected bit.
-		var msg ErrorMsgContent
+		var msg corecmp.ErrorMsgContent
 		_, err = asn1.Unmarshal(der, &msg)
 		require.NoError(t, err)
 		require.NotEmpty(t, msg.PKIStatusInfo.FailInfo.Bytes,
@@ -295,10 +296,10 @@ func TestCMPASN1Helpers(t *testing.T) {
 		// entirely. Callers that don't pass failInfoBits (e.g. legacy
 		// rejection paths) must keep producing the smaller, pre-RFC9483
 		// shape so the wire size is identical to the prior baseline.
-		der, err := marshalErrorBody(2, "no failinfo here")
+		der, err := corecmp.MarshalErrorBody(2, "no failinfo here")
 		require.NoError(t, err)
 
-		var msg ErrorMsgContent
+		var msg corecmp.ErrorMsgContent
 		_, err = asn1.Unmarshal(der, &msg)
 		require.NoError(t, err)
 		assert.Empty(t, msg.PKIStatusInfo.FailInfo.Bytes,
@@ -308,7 +309,7 @@ func TestCMPASN1Helpers(t *testing.T) {
 
 	t.Run("encodePKIFailureInfo handles multi-byte positions", func(t *testing.T) {
 		// systemFailure(25) sits in the 4th byte (bit 25 → byte 3, bit 1 of that byte).
-		bs := encodePKIFailureInfo([]int{pkiFailureInfoSystemFailure})
+		bs := corecmp.EncodePKIFailureInfo([]int{corecmp.PKIFailureInfoSystemFailure})
 		require.Len(t, bs.Bytes, 4)
 		assert.Equal(t, 26, bs.BitLength)
 		assert.Equal(t, byte(0x40), bs.Bytes[3], "bit 25 → 0x80>>1 = 0x40 in the 4th byte")
@@ -323,7 +324,7 @@ func TestCMPASN1Helpers(t *testing.T) {
 			Bytes:      []byte{0x02, 0x01, 0x07}, // one INTEGER inside
 		})
 
-		der, err := marshalCertRepBody(cmpBodyTagIP, 0, fakeCertDER)
+		der, err := corecmp.MarshalCertRepBody(corecmp.BodyTagIP, 0, fakeCertDER)
 		require.NoError(t, err)
 
 		var rv asn1.RawValue
@@ -342,7 +343,7 @@ func TestCMPASN1Helpers(t *testing.T) {
 			Bytes:      []byte{0x02, 0x01, 0x07},
 		})
 
-		der, err := marshalCertRepBody(cmpBodyTagCP, 0, fakeCertDER)
+		der, err := corecmp.MarshalCertRepBody(corecmp.BodyTagCP, 0, fakeCertDER)
 		require.NoError(t, err)
 
 		var rv asn1.RawValue
@@ -353,14 +354,14 @@ func TestCMPASN1Helpers(t *testing.T) {
 	})
 
 	t.Run("hashesEqual is true for equal slices", func(t *testing.T) {
-		a := certHashSHA256([]byte("cert"))
-		b := certHashSHA256([]byte("cert"))
+		a := corecmp.CertHashSHA256([]byte("cert"))
+		b := corecmp.CertHashSHA256([]byte("cert"))
 		assert.True(t, hashesEqual(a, b))
 	})
 
 	t.Run("hashesEqual is false for different slices", func(t *testing.T) {
-		a := certHashSHA256([]byte("cert-a"))
-		b := certHashSHA256([]byte("cert-b"))
+		a := corecmp.CertHashSHA256([]byte("cert-a"))
+		b := corecmp.CertHashSHA256([]byte("cert-b"))
 		assert.False(t, hashesEqual(a, b))
 	})
 
@@ -498,7 +499,7 @@ func TestCertReqIDFromSamples(t *testing.T) {
 			block, _ := pem.Decode(data)
 			require.NotNil(t, block)
 
-			var msg rawPKIMessage
+			var msg corecmp.RawPKIMessage
 			_, err = asn1.Unmarshal(block.Bytes, &msg)
 			require.NoError(t, err)
 
@@ -530,7 +531,7 @@ func TestCertTemplatePublicKeyFromSamples(t *testing.T) {
 			block, _ := pem.Decode(data)
 			require.NotNil(t, block)
 
-			var msg rawPKIMessage
+			var msg corecmp.RawPKIMessage
 			_, err = asn1.Unmarshal(block.Bytes, &msg)
 			require.NoError(t, err)
 
@@ -558,7 +559,7 @@ func TestCertTemplatePublicKeyFromSamples(t *testing.T) {
 // This is the wire shape RFC 9483 §4.4 requires the RA to emit on the initial
 // ip/cp/kup response when the cert is not yet ready.
 func TestMarshalCertRepWaitingBody(t *testing.T) {
-	der, err := marshalCertRepWaitingBody(7)
+	der, err := corecmp.MarshalCertRepWaitingBody(7)
 	require.NoError(t, err)
 	require.NotEmpty(t, der)
 
@@ -600,7 +601,7 @@ func TestMarshalCertRepWaitingBody(t *testing.T) {
 	var status int
 	_, err = asn1.Unmarshal(statusInfo.Bytes, &status)
 	require.NoError(t, err)
-	assert.Equal(t, pkiStatusWaiting, status,
+	assert.Equal(t, corecmp.PKIStatusWaiting, status,
 		"PKIStatus in waiting body must be 3 per RFC 4210 §5.2.3")
 
 	// 6. No CertifiedKeyPair — leftover after PKIStatusInfo must be empty.
@@ -612,7 +613,7 @@ func TestMarshalCertRepWaitingBody(t *testing.T) {
 //   - both fields carry the values the caller supplied
 //   - exactly one entry per RFC 4210 §5.3.22 (single outstanding certReqId)
 func TestMarshalPollRepBody(t *testing.T) {
-	der, err := marshalPollRepBody(5, 60)
+	der, err := corecmp.MarshalPollRepBody(5, 60)
 	require.NoError(t, err)
 
 	var outer asn1.RawValue
@@ -626,7 +627,7 @@ func TestMarshalPollRepBody(t *testing.T) {
 	assert.Equal(t, asn1.TagSequence, entry.Tag)
 	assert.Empty(t, rest, "exactly one entry expected")
 
-	var got pollRepEntry
+	var got corecmp.PollRepEntry
 	_, err = asn1.Unmarshal(entry.FullBytes, &got)
 	require.NoError(t, err)
 	assert.Equal(t, 5, got.CertReqID, "certReqId echoed from EE's pollReq")
@@ -645,7 +646,7 @@ func TestDecodePollReqContent_RoundTrip(t *testing.T) {
 	der, err := asn1.Marshal([]pollReqEntry{{CertReqID: 42}})
 	require.NoError(t, err)
 
-	got, err := decodePollReqContent(der)
+	got, err := corecmp.DecodePollReqContent(der)
 	require.NoError(t, err)
 	assert.Equal(t, 42, got, "decoded certReqId must match the encoded one")
 }
@@ -654,14 +655,14 @@ func TestDecodePollReqContent_RoundTrip(t *testing.T) {
 // to themselves filter junk before invoking decodePollReqContent.
 func TestDecodePollReqContent_RejectsMalformed(t *testing.T) {
 	t.Run("garbage bytes", func(t *testing.T) {
-		_, err := decodePollReqContent([]byte{0xFF, 0xFE, 0xFD})
+		_, err := corecmp.DecodePollReqContent([]byte{0xFF, 0xFE, 0xFD})
 		assert.Error(t, err)
 	})
 
 	t.Run("not a SEQUENCE", func(t *testing.T) {
 		// An INTEGER instead of a SEQUENCE.
 		notSeq, _ := asn1.Marshal(7)
-		_, err := decodePollReqContent(notSeq)
+		_, err := corecmp.DecodePollReqContent(notSeq)
 		assert.Error(t, err)
 	})
 
@@ -669,7 +670,7 @@ func TestDecodePollReqContent_RejectsMalformed(t *testing.T) {
 		emptySeq, _ := asn1.Marshal(asn1.RawValue{
 			Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true,
 		})
-		_, err := decodePollReqContent(emptySeq)
+		_, err := corecmp.DecodePollReqContent(emptySeq)
 		assert.Error(t, err)
 	})
 }
@@ -678,8 +679,8 @@ func TestDecodePollReqContent_RejectsMalformed(t *testing.T) {
 // the new constants — broken logging fields are easy to miss in code review,
 // hard to find in production.
 func TestCmpTagToString_PollMessages(t *testing.T) {
-	assert.Equal(t, "pollReq", cmpTagToString(cmpBodyTagPollReq))
-	assert.Equal(t, "pollRep", cmpTagToString(cmpBodyTagPollRep))
+	assert.Equal(t, "pollReq", cmpTagToString(corecmp.BodyTagPollReq))
+	assert.Equal(t, "pollRep", cmpTagToString(corecmp.BodyTagPollRep))
 }
 
 // ---------------------------------------------------------------------------
@@ -692,8 +693,8 @@ func TestCmpTagToString_PollMessages(t *testing.T) {
 //  2. RecipNonce equals request SenderNonce → proves freshness (replay protection).
 //  3. A new SenderNonce is generated → starts the nonce chain for certConf.
 func TestBuildResponseHeader(t *testing.T) {
-	req := requestPKIHeader{
-		PVNO:          pvnoCMP2000,
+	req := corecmp.RequestPKIHeader{
+		PVNO:          corecmp.PVNOCMP2000,
 		TransactionID: []byte{0x01, 0x02, 0x03, 0x04},
 		SenderNonce:   []byte{0xAA, 0xBB, 0xCC, 0xDD},
 	}
@@ -701,7 +702,7 @@ func TestBuildResponseHeader(t *testing.T) {
 	resp, err := buildResponseHeader(req)
 	require.NoError(t, err)
 
-	assert.Equal(t, pvnoCMP2000, resp.PVNO, "response PVNO must be cmp2000 (2)")
+	assert.Equal(t, corecmp.PVNOCMP2000, resp.PVNO, "response PVNO must be cmp2000 (2)")
 
 	assert.Equal(t, req.TransactionID, resp.TransactionID,
 		"TransactionID must be echoed from request (correlation)")

@@ -15,6 +15,8 @@ import (
 	"encoding/asn1"
 	"math/big"
 	"testing"
+
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 )
 
 // makeCert builds a self-signed certificate for key with the given EKUs and a
@@ -192,6 +194,7 @@ func TestBuildKeyPackage_KTRI(t *testing.T) {
 	if !got.Equal(&genKey.PublicKey) {
 		t.Fatal("delivered key does not match the generated key")
 	}
+
 }
 
 func TestBuildKeyPackage_KARI(t *testing.T) {
@@ -261,6 +264,23 @@ func TestBuildKeyPackage_KARI(t *testing.T) {
 	got := delivered.Public().(*rsa.PublicKey)
 	if !got.Equal(&genKey.PublicKey) {
 		t.Fatal("delivered key does not match the generated key")
+	}
+
+	issuedCert := makeCert(t, genKey, "issued-kari", nil)
+	bodyDER, err := corecmp.MarshalKGACertRepBody(0, int(corecmp.StatusAccepted), issuedCert.Raw, der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientResult, err := corecmp.DecodeKGAResponse(corecmp.ParsedMessage{
+		Body:       corecmp.EncodedBody{Type: corecmp.BodyIP, DER: bodyDER},
+		ExtraCerts: []*x509.Certificate{origCert, kgaCert},
+	}, corecmp.KGADecryptOptions{Recipient: recipKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientKey, ok := clientResult.PrivateKey.(*rsa.PrivateKey)
+	if !ok || !clientKey.PublicKey.Equal(&genKey.PublicKey) {
+		t.Fatal("CMP client did not recover the KARI-delivered key")
 	}
 }
 

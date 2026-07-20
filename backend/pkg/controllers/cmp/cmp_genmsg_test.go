@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/stretchr/testify/assert"
@@ -58,7 +59,7 @@ func buildTestGenM(t *testing.T, txID []byte, itavDER ...[]byte) []byte {
 	senderNonce := randomNonce(t)
 	headerDER := buildTestPKIHeaderDER(t, txID, senderNonce, nil, false)
 	genMsgContent := seqDER(t, itavDER...)
-	bodyDER := ctxDER(t, cmpBodyTagGenMsg, genMsgContent)
+	bodyDER := ctxDER(t, corecmp.BodyTagGenMsg, genMsgContent)
 	msgDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassUniversal,
 		Tag:        asn1.TagSequence,
@@ -104,10 +105,10 @@ func genRepSingleEntry(t *testing.T, router *gin.Engine, dmsID string, msgDER []
 	resp := postCMP(t, router, dmsID, msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
 
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(resp.Body.Bytes(), &msg)
 	require.NoError(t, err)
-	require.Equal(t, cmpBodyTagGenRep, msg.Body.Tag, "genm must be answered with a genp (22) body")
+	require.Equal(t, corecmp.BodyTagGenRep, msg.Body.Tag, "genm must be answered with a genp (22) body")
 
 	entries := decodeTestGenRepEntries(t, msg.Body.Bytes)
 	require.Len(t, entries, 1)
@@ -239,7 +240,7 @@ func TestHandleCMP_GenM_UnknownInfoType(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"an unknown genm InfoType must be rejected with a CMP error body")
 
 	svc.AssertExpectations(t)

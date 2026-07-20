@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 )
@@ -38,14 +39,14 @@ import (
 const p10crCertReqID = -1
 
 // handleP10CR processes a p10cr (4) body.
-func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
-	const respTag = cmpBodyTagCP
+func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
+	const respTag = corecmp.BodyTagCP
 
 	csrDER, err := p10crCSRDER(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("p10cr: decode CertificationRequest: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"malformed PKCS#10 CertificationRequest", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"malformed PKCS#10 CertificationRequest", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
@@ -63,8 +64,8 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 	csr, err := x509.ParseCertificateRequest(csrDER)
 	if err != nil {
 		lFunc.Errorf("p10cr: parse CertificationRequest: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"malformed PKCS#10 CertificationRequest", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"malformed PKCS#10 CertificationRequest", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
@@ -75,8 +76,8 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 	// badPOP in a cp body by verifyP10CRPOP below.
 	if csr.SignatureAlgorithm == x509.UnknownSignatureAlgorithm {
 		lFunc.Warnf("p10cr: unrecognized CSR signature algorithm")
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"unrecognized PKCS#10 signature algorithm (RFC 9481 §3)", dmsID, pkiFailureInfoBadAlg)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"unrecognized PKCS#10 signature algorithm (RFC 9481 §3)", dmsID, corecmp.PKIFailureInfoBadAlg)
 		return
 	}
 
@@ -94,7 +95,7 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 	// uses so the CertTemplate policy checks (end-entity-only issuance) and
 	// issueAndStore apply unchanged. x509.ParseCertificateRequest has already
 	// lifted the PKCS#9 extensionRequest attribute into csr.Extensions.
-	req := &firstCertReq{
+	req := &corecmp.CertRequest{
 		CertReqID:    p10crCertReqID,
 		SubjectDER:   csr.RawSubject,
 		PublicKeyDER: csr.RawSubjectPublicKeyInfo,
@@ -104,11 +105,11 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 	// RFC 9483 §4.1.1: a NULL-DN subject is only acceptable when a
 	// SubjectAltName extension carries the identity — same rule as for the
 	// CRMF CertTemplate subject.
-	if isEmptySubjectDER(req.SubjectDER) && !hasSubjectAltNameExtension(req.Extensions) {
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+	if corecmp.IsEmptySubjectDER(req.SubjectDER) && !corecmp.HasSubjectAltNameExtension(req.Extensions) {
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   p10crCertReqID,
 			Reason:      "subject is required in the PKCS#10 request unless a SubjectAltName extension is present (RFC 9483 §4.1.1)",
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		})
 		return
 	}
@@ -122,7 +123,7 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 	wfxJobID := r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 		TransactionID:     hex.EncodeToString(header.TransactionID),
 		DMSID:             dmsID,
-		RequestType:       cmpTagToString(cmpBodyTagP10CR),
+		RequestType:       cmpTagToString(corecmp.BodyTagP10CR),
 		SubjectCommonName: csr.Subject.CommonName,
 		State:             cmpwfx.CMPStateValidated,
 		Metadata: map[string]any{
@@ -132,7 +133,7 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 
 	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, issueParams{
 		isReenrollment: false,
-		requestTag:     cmpBodyTagP10CR,
+		requestTag:     corecmp.BodyTagP10CR,
 		respTag:        respTag,
 		wfxJobID:       wfxJobID,
 		// Hand the REAL signed CSR to the service layer instead of a synthetic
@@ -164,7 +165,7 @@ func p10crCSRDER(bodyBytes []byte) ([]byte, error) {
 	if len(rest) > 0 {
 		// IMPLICIT tagging: `first` is the CertificationRequestInfo and the
 		// remainder is signatureAlgorithm + signature.
-		return rewrapBodyAsSequence(bodyBytes)
+		return corecmp.RewrapBodyAsSequence(bodyBytes)
 	}
 	return first.FullBytes, nil
 }
@@ -209,19 +210,19 @@ func p10crSubjectPublicKeyInfo(csrDER []byte) []byte {
 // the request itself carries. The signature algorithm is policy-gated first —
 // crypto/x509 would happily verify a SHA-1 signature, but RFC 9481 §3
 // (MSG_SIG_ALG) only permits SHA-256/384/512 with RSA/ECDSA and Ed25519.
-func verifyP10CRPOP(csr *x509.CertificateRequest) *certRequestRejection {
+func verifyP10CRPOP(csr *x509.CertificateRequest) *corecmp.CertRequestRejection {
 	if !p10crSignatureAlgorithmAllowed(csr.SignatureAlgorithm) {
-		return &certRequestRejection{
+		return &corecmp.CertRequestRejection{
 			CertReqID:   p10crCertReqID,
 			Reason:      fmt.Sprintf("proof of possession verification failed: PKCS#10 signature algorithm %s is not permitted by RFC 9481 §3 (MSG_SIG_ALG)", csr.SignatureAlgorithm),
-			FailInfoBit: pkiFailureInfoBadPOP,
+			FailInfoBit: corecmp.PKIFailureInfoBadPOP,
 		}
 	}
 	if err := csr.CheckSignature(); err != nil {
-		return &certRequestRejection{
+		return &corecmp.CertRequestRejection{
 			CertReqID:   p10crCertReqID,
 			Reason:      fmt.Sprintf("proof of possession verification failed: PKCS#10 self-signature invalid: %v", err),
-			FailInfoBit: pkiFailureInfoBadPOP,
+			FailInfoBit: corecmp.PKIFailureInfoBadPOP,
 		}
 	}
 	return nil

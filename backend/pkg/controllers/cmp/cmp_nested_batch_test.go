@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	cmpmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
@@ -36,7 +37,7 @@ func buildNestedMessage(t *testing.T, txID, senderNonce []byte, innerDERs ...[]b
 
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagNested,
+		Tag:        corecmp.BodyTagNested,
 		IsCompound: true,
 		Bytes:      seqDER(t, concatBytes(innerDERs...)),
 	})
@@ -53,12 +54,12 @@ func buildNestedMessage(t *testing.T, txID, senderNonce []byte, innerDERs ...[]b
 }
 
 // headerOf decodes the PKIHeader of a raw PKIMessage DER.
-func headerOf(t *testing.T, msgDER []byte) requestPKIHeader {
+func headerOf(t *testing.T, msgDER []byte) corecmp.RequestPKIHeader {
 	t.Helper()
-	var raw rawPKIMessage
+	var raw corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(msgDER, &raw)
 	require.NoError(t, err)
-	h, err := decodeRequestHeader(raw.Header.FullBytes)
+	h, err := corecmp.DecodeRequestHeader(raw.Header.FullBytes)
 	require.NoError(t, err)
 	return h
 }
@@ -66,10 +67,10 @@ func headerOf(t *testing.T, msgDER []byte) requestPKIHeader {
 // nestedResponses splits a nested (20) response body into its inner PKIMessage DERs.
 func nestedResponses(t *testing.T, responseDER []byte) [][]byte {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err)
-	require.Equal(t, cmpBodyTagNested, msg.Body.Tag, "response must be a nested body")
+	require.Equal(t, corecmp.BodyTagNested, msg.Body.Tag, "response must be a nested body")
 
 	var seq asn1.RawValue
 	_, err = asn1.Unmarshal(msg.Body.Bytes, &seq)
@@ -102,13 +103,13 @@ func TestHandleCMP_NestedBatch_ProcessesAll(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", nested)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagNested, parseCMPResponseTag(t, resp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagNested, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"batch must be answered with a nested body")
 
 	inners := nestedResponses(t, resp.Body.Bytes())
 	require.Len(t, inners, 2, "one response per batched request")
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, inners[0]))
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, inners[1]))
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, inners[0]))
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, inners[1]))
 	assert.Equal(t, tx1, headerOf(t, inners[0]).TransactionID, "first response echoes first request txID")
 	assert.Equal(t, tx2, headerOf(t, inners[1]).TransactionID, "second response echoes second request txID")
 
@@ -130,9 +131,9 @@ func TestHandleCMP_NestedBatch_DuplicateInnerTxID(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", nested)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 	fi := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(fi, pkiFailureInfoTransactionIDInUse), "failInfo must set transactionIdInUse (21)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoTransactionIDInUse), "failInfo must set transactionIdInUse (21)")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
@@ -152,9 +153,9 @@ func TestHandleCMP_NestedBatch_OuterNonceNotFresh(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", nested)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 	fi := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(fi, pkiFailureInfoBadSenderNonce), "failInfo must set badSenderNonce (18)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadSenderNonce), "failInfo must set badSenderNonce (18)")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
@@ -183,7 +184,7 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 		nested := buildNestedMessage(t, innerTx, innerNonce, inner)
 		resp := postCMP(t, router, "test-dms", nested)
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+		assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 			"valid added protection must yield the inner request's ip")
 	})
 
@@ -193,9 +194,9 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 		nested := buildNestedMessage(t, otherTx, innerNonce, inner)
 		resp := postCMP(t, router, "test-dms", nested)
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+		assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 		fi := parseFailInfoBitString(t, resp.Body.Bytes())
-		assert.True(t, bitSet(fi, pkiFailureInfoBadRequest), "failInfo must set badRequest (2)")
+		assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadRequest), "failInfo must set badRequest (2)")
 	})
 
 	t.Run("senderNonce not copied → badSenderNonce", func(t *testing.T) {
@@ -203,9 +204,9 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 		nested := buildNestedMessage(t, innerTx, randomNonce(t), inner)
 		resp := postCMP(t, router, "test-dms", nested)
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+		assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 		fi := parseFailInfoBitString(t, resp.Body.Bytes())
-		assert.True(t, bitSet(fi, pkiFailureInfoBadSenderNonce), "failInfo must set badSenderNonce (18)")
+		assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadSenderNonce), "failInfo must set badSenderNonce (18)")
 	})
 }
 
@@ -226,7 +227,7 @@ func TestHandleCMP_KUR_RAVerified_Rejected(t *testing.T) {
 	_, err = asn1.Unmarshal(irBody, &irBodyRV)
 	require.NoError(t, err)
 	kurBody, err := asn1.Marshal(asn1.RawValue{
-		Class: asn1.ClassContextSpecific, Tag: cmpBodyTagKUR, IsCompound: true, Bytes: irBodyRV.Bytes,
+		Class: asn1.ClassContextSpecific, Tag: corecmp.BodyTagKUR, IsCompound: true, Bytes: irBodyRV.Bytes,
 	})
 	require.NoError(t, err)
 	txID := randomTxID(t)
@@ -239,11 +240,11 @@ func TestHandleCMP_KUR_RAVerified_Rejected(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", kurDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagKUP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagKUP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"kur rejection must arrive in a kup CertRepMessage")
 	reason, fi := parseCertRepRejection(t, resp.Body.Bytes())
 	assert.Contains(t, reason, "raVerified")
-	assert.True(t, bitSet(fi, pkiFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
 
 	svc.AssertNotCalled(t, "LWCReenroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
@@ -301,7 +302,7 @@ func buildTestRRWithIssuer(t *testing.T, issuer pkix.Name, serial *big.Int) []by
 
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagRR,
+		Tag:        corecmp.BodyTagRR,
 		IsCompound: true,
 		Bytes:      revReqContentDER,
 	})
@@ -339,7 +340,7 @@ func TestHandleCMP_RR_TrustedRA_RevokesOtherCert(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", signedRR)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"RA-initiated revocation must be accepted and answered with rp")
 
 	svc.AssertExpectations(t)
@@ -357,9 +358,9 @@ func TestHandleCMP_RR_NonRASigner_StillMatched(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", signedRR)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()))
 	fi := parseRevRepFailInfo(t, resp.Body.Bytes())
-	assert.True(t, bitSet(fi, pkiFailureInfoBadCertId), "failInfo must set badCertId (4)")
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadCertID), "failInfo must set badCertId (4)")
 
 	svc.AssertNotCalled(t, "LWCRevokeCertificate", mock.Anything, mock.Anything, mock.Anything)
 }
@@ -368,10 +369,10 @@ func TestHandleCMP_RR_NonRASigner_StillMatched(t *testing.T) {
 // PKIStatusInfo of an rp (RevRepContent) response body.
 func parseRevRepFailInfo(t *testing.T, responseDER []byte) asn1.BitString {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err)
-	require.Equal(t, cmpBodyTagRP, msg.Body.Tag)
+	require.Equal(t, corecmp.BodyTagRP, msg.Body.Tag)
 
 	// RevRepContent ::= SEQUENCE { status SEQUENCE OF PKIStatusInfo, ... }
 	var revRep asn1.RawValue
@@ -380,7 +381,7 @@ func parseRevRepFailInfo(t *testing.T, responseDER []byte) asn1.BitString {
 	var statusSeqOf asn1.RawValue
 	_, err = asn1.Unmarshal(revRep.Bytes, &statusSeqOf)
 	require.NoError(t, err)
-	var psi PKIStatusInfo
+	var psi corecmp.PKIStatusInfo
 	_, err = asn1.Unmarshal(statusSeqOf.Bytes, &psi)
 	require.NoError(t, err)
 	return psi.FailInfo
