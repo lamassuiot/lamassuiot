@@ -1,5 +1,18 @@
 package models
 
+// CMPAuthMode selects how the RA authenticates a CMP enrollment request. It
+// mirrors ESTAuthMode's four modes (same names, same string values) since CMP
+// supports the same policy shapes as EST, but is kept as its own type so EST
+// and CMP DTOs stay independently named.
+type CMPAuthMode string
+
+const (
+	CMPAuthModeClientCertificate           CMPAuthMode = "CLIENT_CERTIFICATE"
+	CMPAuthModeExternalWebhook             CMPAuthMode = "EXTERNAL_WEBHOOK"
+	CMPAuthModeClientCertificateAndWebhook CMPAuthMode = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK"
+	CMPAuthModeNoAuth                      CMPAuthMode = "NO_AUTH"
+)
+
 // EnrollmentOptionsLWCRFC9483 holds CMP-specific enrollment settings as defined
 // by RFC 9483 (Lightweight CMP Profile) and RFC 4210.
 type EnrollmentOptionsLWCRFC9483 struct {
@@ -9,7 +22,7 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// the same authenticator. For CMP, CLIENT_CERTIFICATE means the
 	// signature-based message-protection signer cert (extraCerts[0], RFC 9483
 	// §3.2) rather than a transport mTLS cert.
-	AuthMode                   EnrollmentAuthMode           `json:"auth_mode"`
+	AuthMode                   CMPAuthMode                  `json:"auth_mode"`
 	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
 	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook_settings"`
 
@@ -88,7 +101,7 @@ type EnrollmentOptionsLWCRFC9483 struct {
 // AuthSettings returns the shared authentication policy for this CMP DMS.
 func (o EnrollmentOptionsLWCRFC9483) AuthSettings() EnrollmentAuthSettings {
 	return EnrollmentAuthSettings{
-		AuthMode:                   o.AuthMode,
+		AuthMode:                   EnrollmentAuthMode(o.AuthMode),
 		AuthOptionsMTLS:            o.AuthOptionsMTLS,
 		AuthOptionsExternalWebhook: o.AuthOptionsExternalWebhook,
 	}

@@ -473,7 +473,7 @@ func TestHandleCMP_WFXStoresCMPPayloads(t *testing.T) {
 func TestHandleCMP_Protection(t *testing.T) {
 	tests := []struct {
 		name        string
-		authMode    models.EnrollmentAuthMode
+		authMode    models.CMPAuthMode
 		protMode    string // "none" | "valid" | "wrongkey" | "mac"
 		cn          string
 		accepted    bool
@@ -484,8 +484,8 @@ func TestHandleCMP_Protection(t *testing.T) {
 		{name: "ProtectionVerification_InvalidSignature", protMode: "wrongkey", cn: "device-bad-sig", accepted: false, reasonMatch: "protection"},
 		{name: "ProtectionVerification_NoProtection", protMode: "none", cn: "device-no-prot", accepted: true},
 		// Cycle 5: auth_mode=CLIENT_CERTIFICATE makes protection mandatory.
-		{name: "EnforceProtection_RejectsUnprotected", authMode: models.EnrollmentAuthModeClientCertificate, protMode: "none", cn: "device-no-prot-enforced", accepted: false, reasonMatch: "protection"},
-		{name: "EnforceProtection_AcceptsSignedRequest", authMode: models.EnrollmentAuthModeClientCertificate, protMode: "valid", cn: "device-enforce-ok", accepted: true},
+		{name: "EnforceProtection_RejectsUnprotected", authMode: models.CMPAuthModeClientCertificate, protMode: "none", cn: "device-no-prot-enforced", accepted: false, reasonMatch: "protection"},
+		{name: "EnforceProtection_AcceptsSignedRequest", authMode: models.CMPAuthModeClientCertificate, protMode: "valid", cn: "device-enforce-ok", accepted: true},
 		// Cycle 6: MAC-based protection is always rejected.
 		{name: "MACProtection_Rejected", protMode: "mac", cn: "device-mac", accepted: false, reasonMatch: "MAC"},
 	}

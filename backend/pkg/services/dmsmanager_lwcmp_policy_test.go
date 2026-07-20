@@ -83,7 +83,7 @@ func dmsWithEnrollAuth(id string, replaceable bool) *models.DMS {
 				EnrollmentCA:                "test-ca",
 				EnableReplaceableEnrollment: replaceable,
 				EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
-					AuthMode: models.EnrollmentAuthModeNoAuth,
+					AuthMode: models.CMPAuthModeNoAuth,
 				},
 			},
 		},

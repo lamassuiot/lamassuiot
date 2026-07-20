@@ -1,5 +1,18 @@
 package models
 
+// EnrollmentAuthMode is the protocol-agnostic currency that EnrollmentAuthSettings
+// normalizes EST's ESTAuthMode and CMP's CMPAuthMode into, so authenticateEnrollment
+// can run a single switch shared by both protocols. It is not exposed on either
+// protocol's own DTO — EST and CMP each keep their own named type/constants.
+type EnrollmentAuthMode string
+
+const (
+	EnrollmentAuthModeClientCertificate           EnrollmentAuthMode = "CLIENT_CERTIFICATE"
+	EnrollmentAuthModeExternalWebhook             EnrollmentAuthMode = "EXTERNAL_WEBHOOK"
+	EnrollmentAuthModeClientCertificateAndWebhook EnrollmentAuthMode = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK"
+	EnrollmentAuthModeNoAuth                      EnrollmentAuthMode = "NO_AUTH"
+)
+
 // EnrollmentAuthSettings is the protocol-agnostic authentication policy shared
 // by EST and CMP enrollment. The auth *mechanism* differs by protocol (EST
 // presents an mTLS client certificate; CMP presents the signature-based
@@ -13,7 +26,7 @@ type EnrollmentAuthSettings struct {
 }
 
 type EnrollmentOptionsESTRFC7030 struct {
-	AuthMode                   EnrollmentAuthMode           `json:"auth_mode"`
+	AuthMode                   ESTAuthMode                  `json:"auth_mode"`
 	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
 	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook_settings"`
 }
@@ -21,7 +34,7 @@ type EnrollmentOptionsESTRFC7030 struct {
 // AuthSettings returns the shared authentication policy for this EST DMS.
 func (o EnrollmentOptionsESTRFC7030) AuthSettings() EnrollmentAuthSettings {
 	return EnrollmentAuthSettings{
-		AuthMode:                   o.AuthMode,
+		AuthMode:                   EnrollmentAuthMode(o.AuthMode),
 		AuthOptionsMTLS:            o.AuthOptionsMTLS,
 		AuthOptionsExternalWebhook: o.AuthOptionsExternalWebhook,
 	}

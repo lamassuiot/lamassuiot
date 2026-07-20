@@ -788,7 +788,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	estAuthOpts := reEnrollSettings.ReEnrollmentOptionsESTRFC7030
 
 	switch estAuthOpts.AuthMode {
-	case models.EnrollmentAuthModeClientCertificate, models.EnrollmentAuthModeClientCertificateAndWebhook:
+	case models.ESTAuthModeClientCertificate, models.ESTAuthModeClientCertificateAndWebhook:
 		lFunc = lFunc.WithField("auth-method", estAuthOpts.AuthMode)
 		clientCerts, _ := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).([]*x509.Certificate)
 		if len(clientCerts) == 0 {
@@ -907,21 +907,21 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			lFunc.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
 		}
 
-		if estAuthOpts.AuthMode == models.EnrollmentAuthModeClientCertificateAndWebhook {
+		if estAuthOpts.AuthMode == models.ESTAuthModeClientCertificateAndWebhook {
 			lFunc.Infof("combined auth: client certificate validated. Starting webhook validation (step 2/2)")
 			if err := invokeWebhook(ctx, lFunc, estAuthOpts.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
 				return nil, err
 			}
 		}
 
-	case models.EnrollmentAuthModeExternalWebhook:
-		lFunc = lFunc.WithField("auth-method", models.EnrollmentAuthModeExternalWebhook)
+	case models.ESTAuthModeExternalWebhook:
+		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeExternalWebhook)
 		if err := invokeWebhook(ctx, lFunc, estAuthOpts.AuthOptionsExternalWebhook, csr, aps, "reenrollment"); err != nil {
 			return nil, err
 		}
 
-	case models.EnrollmentAuthModeNoAuth, "NONE":
-		lFunc = lFunc.WithField("auth-method", models.EnrollmentAuthModeNoAuth)
+	case models.ESTAuthModeNoAuth, "NONE":
+		lFunc = lFunc.WithField("auth-method", models.ESTAuthModeNoAuth)
 		lFunc.Warnf("DMS is configured with NoAuth, allowing reenrollment")
 
 	default:

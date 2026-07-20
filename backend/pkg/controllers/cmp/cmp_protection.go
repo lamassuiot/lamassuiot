@@ -66,8 +66,8 @@ func protectionAlgFailInfo(err error) (int, bool) {
 // therefore protection); the other modes (NO_AUTH, EXTERNAL_WEBHOOK) accept
 // unsigned messages. Shared by the top-level dispatch and both nested paths.
 func requireClientCertProtection(enrollOpts *models.EnrollmentOptionsLWCRFC9483) bool {
-	return enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificate ||
-		enrollOpts.AuthMode == models.EnrollmentAuthModeClientCertificateAndWebhook
+	return enrollOpts.AuthMode == models.CMPAuthModeClientCertificate ||
+		enrollOpts.AuthMode == models.CMPAuthModeClientCertificateAndWebhook
 }
 
 // protectionRejectFailInfo maps a verifyRequestProtection error to the

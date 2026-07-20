@@ -158,7 +158,7 @@ func dmsForRevokeTest(id string) *models.DMS {
 			EnrollmentSettings: models.EnrollmentSettings{
 				EnrollmentCA: "test-ca",
 				EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
-					AuthMode: models.EnrollmentAuthModeClientCertificate,
+					AuthMode: models.CMPAuthModeClientCertificate,
 				},
 			},
 		},

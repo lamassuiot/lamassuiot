@@ -622,7 +622,7 @@ func TestApplyIssuanceProfileToTemplate_ExtraExtKeyUsageOIDs(t *testing.T) {
 	profile := models.IssuanceProfile{
 		Validity:                  models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
 		ExtendedKeyUsages:         []models.X509ExtKeyUsage{},
-		ExtraExtendedKeyUsageOIDs: []string{"1.3.6.1.5.5.7.3.32"}, // id-kp-cmKGA
+		ExtraExtendedKeyUsageOIDs: []string{"1.3.6.1.5.5.7.3.32"}, // id-kp-cmKGA CMC Key Generation Authority
 	}
 
 	if err := engine.applyIssuanceProfileToTemplate(ctx, template, profile, now); err != nil {
