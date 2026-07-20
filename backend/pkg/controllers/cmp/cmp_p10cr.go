@@ -38,7 +38,7 @@ import (
 const p10crCertReqID = -1
 
 // handleP10CR processes a p10cr (4) body.
-func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483) {
+func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
 	const respTag = cmpBodyTagCP
 
 	csrDER, err := p10crCSRDER(body.Bytes)
@@ -142,7 +142,7 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 		enroll: func(c context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
 			return r.svc.LWCEnroll(c, csr, dmsID, signerCert)
 		},
-	})
+	}, signerCert)
 }
 
 // p10crCSRDER returns the full DER TLV of the CertificationRequest carried in

@@ -21,7 +21,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -305,8 +304,6 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 				return
 			}
 		}
-		reqCtx := context.WithValue(ctx.Request.Context(), string(identityextractors.IdentityExtractorCMPSignerCertificate), signerCert)
-		ctx.Request = ctx.Request.WithContext(reqCtx)
 	}
 
 	// RFC 9483 §5.2.3: when a PKI management entity forwards the EE's original
@@ -329,23 +326,23 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// Dispatch on body CHOICE tag
 	switch body.Tag {
 	case cmpBodyTagIR, cmpBodyTagCR:
-		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantInitial)
+		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantInitial, signerCert)
 	case cmpBodyTagP10CR:
-		r.handleP10CR(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
+		r.handleP10CR(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
 	case cmpBodyTagKUR:
-		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantUpdate)
+		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantUpdate, signerCert)
 	case cmpBodyTagRR:
-		r.handleRevoke(ctx, lFunc, reqHeader, body, dmsID)
+		r.handleRevoke(ctx, lFunc, reqHeader, body, dmsID, signerCert)
 	case cmpBodyTagCCR:
-		r.handleCrossCertification(ctx, lFunc, reqHeader, body, dmsID)
+		r.handleCrossCertification(ctx, lFunc, reqHeader, body, dmsID, signerCert)
 	case cmpBodyTagNested:
 		r.handleNested(ctx, lFunc, reqHeader, body, dmsID)
 	case cmpBodyTagCertConf:
-		r.handleCertConf(ctx, lFunc, reqHeader, body, bodyBytes, dmsID)
+		r.handleCertConf(ctx, lFunc, reqHeader, body, bodyBytes, dmsID, signerCert)
 	case cmpBodyTagPollReq:
 		r.handlePoll(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
 	case cmpBodyTagPopDecr:
-		r.handlePOPODecKeyResp(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
+		r.handlePOPODecKeyResp(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
 	case cmpBodyTagGenMsg:
 		r.handleGeneralMessage(ctx, lFunc, reqHeader, body, dmsID)
 	default:
@@ -368,7 +365,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 // CRLReason rules, then calls LWCRevokeCertificate. A single removeFromCRL (8)
 // CRLReason is treated as a revive request. Every failure is reported via an rp
 // body's PKIStatusInfo (RFC 9483 §4.2), never a generic error body.
-func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string) {
+func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
 	rd, err := decodeRevDetails(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("rr: decode RevDetails: %v", err)
@@ -423,7 +420,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	// chain-validates the RA signer against the DMS validation CAs before
 	// acting (an untrusted cert merely claiming the cmcRA EKU is rejected there
 	// with signerNotTrusted).
-	signer := cmpSignerCertFromGin(ctx)
+	signer := signerCert
 	raInitiated := signer != nil && rd.HasSerial && signer.SerialNumber != nil &&
 		new(big.Int).SetBytes(rd.SerialNumber).Cmp(signer.SerialNumber) != 0 &&
 		chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA)
@@ -539,7 +536,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 
 // handleCertConf processes a certConf (24) body.
 // It verifies the SHA-256 certHash and responds with pkiConf (19).
-func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, requestDER []byte, dmsID string) {
+func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, requestDER []byte, dmsID string, signerCert *x509.Certificate) {
 	// The PKIBody CHOICE uses EXPLICIT tagging (RFC 4210 Appendix F module),
 	// so certConf [24] EXPLICIT CertConfirmContent means body.Bytes already
 	// holds the complete CertConfirmContent SEQUENCE TLV. Decode it directly —
@@ -673,7 +670,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	// so it is not a valid protection credential for this transaction. Detect
 	// this by comparing the certConf signer against the issued cert: if they are
 	// the same certificate, the confirmation used the wrong authority.
-	if signer := cmpSignerCertFromGin(ctx); signer != nil && tx.CertSerialNumber != "" {
+	if signer := signerCert; signer != nil && tx.CertSerialNumber != "" {
 		signerSerial := hex.EncodeToString(signer.SerialNumber.Bytes())
 		if signerSerial == tx.CertSerialNumber {
 			lFunc.Errorf("certConf: protected with the newly issued cert (SN=%s) instead of the request credential", signerSerial)
@@ -1566,15 +1563,6 @@ func rejectWeakOrOversizedRSAKey(spkiDER []byte, logPrefix string, certReqID int
 		}
 	}
 	return nil
-}
-
-// cmpSignerCertFromGin returns the verified CMP protection (signer) certificate
-// that HandleCMP stashed on the request context after protection verification,
-// or nil when the request was unprotected.
-func cmpSignerCertFromGin(ctx *gin.Context) *x509.Certificate {
-	v := ctx.Request.Context().Value(string(identityextractors.IdentityExtractorCMPSignerCertificate))
-	cert, _ := v.(*x509.Certificate)
-	return cert
 }
 
 // certTemplateNameMatches reports whether the DER-encoded X.501 Name in a CMP

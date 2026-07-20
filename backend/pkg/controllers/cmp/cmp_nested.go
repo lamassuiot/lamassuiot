@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 
 	"github.com/gin-gonic/gin"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -174,20 +173,17 @@ func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *log
 			r.rejectRequest(ctx, lFunc, innerHeader, inner.Body.Tag, rej.reason, rej.failInfo, dmsID)
 			return
 		}
-		reqCtx := context.WithValue(ctx.Request.Context(),
-			string(identityextractors.IdentityExtractorCMPSignerCertificate), signerCert)
-		ctx.Request = ctx.Request.WithContext(reqCtx)
 	}
 
 	if innerTag == cmpBodyTagP10CR {
-		r.handleP10CR(ctx, lFunc, innerHeader, inner.Body, dmsID, enrollOpts)
+		r.handleP10CR(ctx, lFunc, innerHeader, inner.Body, dmsID, enrollOpts, signerCert)
 		return
 	}
 	variant := enrollmentVariantInitial
 	if innerTag == cmpBodyTagKUR {
 		variant = enrollmentVariantUpdate
 	}
-	r.handleEnrollment(ctx, lFunc, innerHeader, inner.Body, dmsID, enrollOpts, variant)
+	r.handleEnrollment(ctx, lFunc, innerHeader, inner.Body, dmsID, enrollOpts, variant, signerCert)
 }
 
 // nestedInnerMessage pairs a decoded inner PKIMessage with its original DER

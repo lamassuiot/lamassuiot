@@ -40,7 +40,7 @@ import (
 // issueAndStore — but differ in how POPO is established and in the response
 // body tag. Those differences are captured in enrollmentVariant rather than
 // duplicated across two handlers.
-func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, variant enrollmentVariant) {
+func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, variant enrollmentVariant, signerCert *x509.Certificate) {
 	// KUR-only pre-check: RFC 9483 §4.1.3 ties POPO to the message-level
 	// protection because the EE must sign with the cert being updated. For
 	// ir/cr the inner POPO is checked below; for kur an absent protection
@@ -77,7 +77,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// pipeline (no client key ⇒ no POPO, key/template checks below don't apply),
 	// so it is handled entirely by handleKGAEnrollment.
 	if req.ForKGA {
-		r.handleKGAEnrollment(ctx, lFunc, header, req, dmsID, respTag, body.Tag, enrollOpts, variant.enrollFn(r, dmsID))
+		r.handleKGAEnrollment(ctx, lFunc, header, req, dmsID, respTag, body.Tag, enrollOpts, variant.enrollFn(r, dmsID), signerCert)
 		return
 	}
 
@@ -151,7 +151,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 			// for NO_AUTH/EXTERNAL_WEBHOOK DMSs it never inspects the protection cert
 			// at all, so checking the EKU alone would let anyone mint a throwaway
 			// self-signed certificate carrying id-kp-cmcRA and skip POPO entirely.
-			signer := cmpSignerCertFromGin(ctx)
+			signer := signerCert
 			isRAVerified := req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 0 && len(req.POPORaw.FullBytes) > 0
 			trustedRA := false
 			if isRAVerified && signer != nil {
@@ -193,7 +193,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// EE's current cert — and reject with badCertId in a kup CertRepMessage on
 	// mismatch, before the service-layer signer binding runs.
 	if variant.isReenrollment && req.OldCertID != nil {
-		if signer := cmpSignerCertFromGin(ctx); signer != nil {
+		if signer := signerCert; signer != nil {
 			if rej := validateOldCertID(req, signer); rej != nil {
 				lFunc.Warnf("kur: oldCertId mismatch: %s", rej.Reason)
 				r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
@@ -295,7 +295,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		r.handlePOPOChallenge(ctx, lFunc, &header, req, dmsID, enrollOpts, params)
 		return
 	}
-	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, params)
+	r.issueAndStore(ctx, lFunc, &header, req, dmsID, enrollOpts, params, signerCert)
 }
 
 // isRevokedCertError reports whether an enroll/reenroll error is the service's
@@ -416,6 +416,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	dmsID string,
 	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
 	params issueParams,
+	signerCert *x509.Certificate,
 ) {
 	csr := params.presetCSR
 	if csr == nil {
@@ -455,7 +456,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	// hold several certificates over time, and only the one under update is
 	// locked. Once the prior KUR is confirmed (CONFIRMED) or rolled back on
 	// timeout (REVOKED/expired) this check passes again.
-	signer := cmpSignerCertFromGin(ctx)
+	signer := signerCert
 	if signer != nil && params.isReenrollment {
 		params.supersededCertSerial = hex.EncodeToString(signer.SerialNumber.Bytes())
 	}
@@ -684,6 +685,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	respTag, requestTag int,
 	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
 	enroll func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error),
+	signerCert *x509.Certificate,
 ) {
 	lFunc = lFunc.WithField("mode", "kga")
 
@@ -704,7 +706,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	// Central key generation needs a signature-protected request: the protection
 	// signer certificate is the CMS recipient and carries the key usage that
 	// selects (and authorises) the key-management technique.
-	recipient := cmpSignerCertFromGin(ctx)
+	recipient := signerCert
 	if recipient == nil {
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
 			CertReqID:   req.CertReqID,
