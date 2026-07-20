@@ -992,7 +992,7 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 						},
 						RegistrationMode: models.JITP,
 						EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
-							AuthMode:                          models.EnrollmentAuthModeClientCertificate,
+							AuthMode:                          models.CMPAuthModeClientCertificate,
 							ProtectionCertificateSerialNumber: protectionCert.SerialNumber,
 							EnforcePOPO:                       true,
 							// Accept implicit confirmation (RFC 9483 §4.1.1): when the EE
