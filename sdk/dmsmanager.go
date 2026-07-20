@@ -205,7 +205,7 @@ func (cli *dmsManagerClient) LWCCACerts(ctx context.Context, aps string) ([]*x50
 	return nil, fmt.Errorf("not supported, use the cmp client instead")
 }
 
-func (cli *dmsManagerClient) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
+func (cli *dmsManagerClient) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
 	return fmt.Errorf("not supported, use the cmp client instead")
 }
 

@@ -47,7 +47,11 @@ type LightweightCMPService interface {
 
 	// RevokeCertificate requests revocation of a certificate (rr / rp).
 	// RFC 9483 §4.2.
-	LWCRevokeCertificate(ctx context.Context, input RevokeCertificateInput) error
+	//
+	// signerCert is the EE certificate that signature-protected the incoming
+	// PKIMessage (extraCerts[0], RFC 9483 §3.2), or nil when the request was
+	// unprotected.
+	LWCRevokeCertificate(ctx context.Context, input RevokeCertificateInput, signerCert *x509.Certificate) error
 
 	// GetRootCACertUpdate returns an updated root CA certificate set
 	// (genm id-it-rootCaCert / genp id-it-rootCaKeyUpdate).

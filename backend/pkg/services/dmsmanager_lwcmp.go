@@ -9,7 +9,6 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -346,20 +345,6 @@ const kgaHelperCertValidity = time.Hour
 // a requested notAfter within the window is applied exactly, while a longer
 // request is clamped to now + crossCertValidity.
 const crossCertValidity = 365 * 24 * time.Hour
-
-// cmpSignerCertFromContext returns the EE certificate the CMP handler stashed
-// after successfully verifying signature-based protection on the incoming
-// PKIMessage (extraCerts[0] per RFC 9483 §3.2). It returns nil when the
-// request was unprotected — the controller only stashes a cert when one
-// authenticated the message.
-func cmpSignerCertFromContext(ctx context.Context) *x509.Certificate {
-	v := ctx.Value(string(identityextractors.IdentityExtractorCMPSignerCertificate))
-	if v == nil {
-		return nil
-	}
-	cert, _ := v.(*x509.Certificate)
-	return cert
-}
 
 // validateCMPSignerAgainstCAs chains signerCert against each CA in candidateCAIDs
 // (in order) and returns the first matching CA on success. Each candidate ID is
@@ -1099,7 +1084,7 @@ func (svc DMSManagerServiceBackend) LWCCACerts(ctx context.Context, aps string) 
 	return svc.CACerts(ctx, aps)
 }
 
-func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
+func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
@@ -1127,7 +1112,7 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// than a forgery. Without this, any party who has merely observed a
 	// target certificate's serial/issuer (e.g. via CT logs or a TLS
 	// handshake) could revoke it.
-	if signer := cmpSignerCertFromContext(ctx); signer != nil {
+	if signer := signerCert; signer != nil {
 		signerSN := helpers.SerialNumberToHexString(signer.SerialNumber)
 		selfRevocation := signerSN == input.SerialNumber
 

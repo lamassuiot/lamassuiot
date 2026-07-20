@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	cmpmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/stretchr/testify/assert"

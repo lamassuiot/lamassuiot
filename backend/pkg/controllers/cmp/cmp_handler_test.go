@@ -754,7 +754,7 @@ func TestHandleCMP_RR_Success(t *testing.T) {
 		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(input services.RevokeCertificateInput) bool {
 		return input.APS == "test-dms" && input.Reason == models.RevocationReason(1) // KeyCompromise
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	router, _ := newTestRouterWithStore(svc)
 
@@ -777,7 +777,7 @@ func TestHandleCMP_RR_ServiceError(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
 		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
-	svc.On("LWCRevokeCertificate", mock.Anything, mock.Anything).
+	svc.On("LWCRevokeCertificate", mock.Anything, mock.Anything, mock.Anything).
 		Return(fmt.Errorf("certificate not found"))
 
 	router, _ := newTestRouterWithStore(svc)
@@ -808,7 +808,7 @@ func TestHandleCMP_RR_DefaultReason(t *testing.T) {
 		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(input services.RevokeCertificateInput) bool {
 		return input.Reason == models.RevocationReason(0) // Unspecified
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	router, _ := newTestRouterWithStore(svc)
 
