@@ -170,12 +170,12 @@ func (mw dmsEventPublisher) BindIdentityToDevice(ctx context.Context, input serv
 	return mw.next.BindIdentityToDevice(ctx, input)
 }
 
-func (mw dmsEventPublisher) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	return mw.next.LWCEnroll(ctx, csr, aps)
+func (mw dmsEventPublisher) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	return mw.next.LWCEnroll(ctx, csr, aps, signerCert)
 }
 
-func (mw dmsEventPublisher) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	return mw.next.LWCReenroll(ctx, csr, aps)
+func (mw dmsEventPublisher) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	return mw.next.LWCReenroll(ctx, csr, aps, signerCert)
 }
 
 func (mw dmsEventPublisher) LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {

@@ -194,11 +194,11 @@ func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.Certifi
 	return nil, nil, fmt.Errorf("not supported, use the estCli instead")
 }
 
-func (cli *dmsManagerClient) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (cli *dmsManagerClient) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the cmp client instead")
 }
 
-func (cli *dmsManagerClient) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (cli *dmsManagerClient) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the cmp client instead")
 }
 

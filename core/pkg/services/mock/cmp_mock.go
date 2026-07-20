@@ -15,14 +15,14 @@ type MockLightweightCMPService struct {
 	mock.Mock
 }
 
-func (m *MockLightweightCMPService) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	args := m.Called(ctx, csr, aps)
+func (m *MockLightweightCMPService) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	args := m.Called(ctx, csr, aps, signerCert)
 	cert, _ := args.Get(0).(*x509.Certificate)
 	return cert, args.Error(1)
 }
 
-func (m *MockLightweightCMPService) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	args := m.Called(ctx, csr, aps)
+func (m *MockLightweightCMPService) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	args := m.Called(ctx, csr, aps, signerCert)
 	cert, _ := args.Get(0).(*x509.Certificate)
 	return cert, args.Error(1)
 }

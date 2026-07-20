@@ -89,13 +89,13 @@ func (m *MockDMSManagerService) BindIdentityToDevice(ctx context.Context, input 
 	return args.Get(0).(*models.BindIdentityToDeviceOutput), args.Error(1)
 }
 
-func (m *MockDMSManagerService) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	args := m.Called(ctx, csr, aps)
+func (m *MockDMSManagerService) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	args := m.Called(ctx, csr, aps, signerCert)
 	return args.Get(0).(*x509.Certificate), args.Error(1)
 }
 
-func (m *MockDMSManagerService) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	args := m.Called(ctx, csr, aps)
+func (m *MockDMSManagerService) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	args := m.Called(ctx, csr, aps, signerCert)
 	return args.Get(0).(*x509.Certificate), args.Error(1)
 }
 

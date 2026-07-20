@@ -417,8 +417,8 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 		respTag:    pollRespTagFor(tx),
 		wfxJobID:   tx.WFXJobID,
 		presetCSR:  csr,
-		enroll: func(c context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-			return r.svc.LWCEnroll(c, csr, dmsID)
+		enroll: func(c context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
+			return r.svc.LWCEnroll(c, csr, dmsID, signerCert)
 		},
 	})
 }

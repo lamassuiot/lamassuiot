@@ -117,7 +117,7 @@ func TestLWCEnroll_DeviceOwnedByDifferentDMS(t *testing.T) {
 	// Pre-authenticate so the auth path is bypassed (NO_AUTH would also work
 	// but PreAuth makes the test independent of the auth-mode default).
 	ctx := context.WithValue(context.Background(), core.LamassuContextKeyPreAuthenticated, true)
-	_, err := svc.LWCEnroll(ctx, csr, "dms-A")
+	_, err := svc.LWCEnroll(ctx, csr, "dms-A", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already registered to another DMS")
 
@@ -137,7 +137,7 @@ func TestLWCEnroll_DeviceOwnedByDifferentDMS_EvenWithReplaceable(t *testing.T) {
 		Return(&models.Device{ID: "device-2", DMSOwner: "dms-Z"}, nil)
 
 	ctx := context.WithValue(context.Background(), core.LamassuContextKeyPreAuthenticated, true)
-	_, err := svc.LWCEnroll(ctx, csr, "dms-A")
+	_, err := svc.LWCEnroll(ctx, csr, "dms-A", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already registered to another DMS")
 	caMock.AssertNotCalled(t, "SignCertificate", mock.Anything, mock.Anything)
@@ -154,7 +154,7 @@ func TestLWCEnroll_ReplaceableEnrollmentDisabled(t *testing.T) {
 		Return(&models.Device{ID: "device-3", DMSOwner: "dms-A"}, nil)
 
 	ctx := context.WithValue(context.Background(), core.LamassuContextKeyPreAuthenticated, true)
-	_, err := svc.LWCEnroll(ctx, csr, "dms-A")
+	_, err := svc.LWCEnroll(ctx, csr, "dms-A", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "forbiddenNewEnrollment")
 	caMock.AssertNotCalled(t, "SignCertificate", mock.Anything, mock.Anything)
@@ -181,7 +181,7 @@ func TestLWCEnroll_PassesOwnershipAndProceeds(t *testing.T) {
 		Return((*models.CACertificate)(nil), errs.ErrCANotFound)
 
 	ctx := context.WithValue(context.Background(), core.LamassuContextKeyPreAuthenticated, true)
-	_, err := svc.LWCEnroll(ctx, csr, "dms-A")
+	_, err := svc.LWCEnroll(ctx, csr, "dms-A", nil)
 	require.Error(t, err)
 	// The error MUST NOT be the policy-rejection string — it must be a
 	// downstream failure proving the policy gate passed.

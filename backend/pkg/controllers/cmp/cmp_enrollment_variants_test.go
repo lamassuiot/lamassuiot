@@ -280,7 +280,7 @@ func TestHandleCMP_ChallengeRespPOPO_WrongAnswer_Rejected(t *testing.T) {
 	fi := parseFailInfoBitString(t, popdecrResp.Body.Bytes())
 	assert.True(t, bitSet(fi, pkiFailureInfoBadPOP), "failInfo must set badPOP (9)")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // extractFirstPOPOChallengeValue extracts the `challenge` OCTET STRING of the
@@ -554,7 +554,7 @@ func TestHandleCMP_P10CR_BadSignature(t *testing.T) {
 	assert.Equal(t, p10crCertReqID, parseCertRepCertReqID(t, resp.Body.Bytes()),
 		"rejection certReqId must also be -1 for p10cr")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // TestHandleCMP_P10CR_CATemplateRejected verifies the end-entity-only issuance
@@ -579,7 +579,7 @@ func TestHandleCMP_P10CR_CATemplateRejected(t *testing.T) {
 	assert.Contains(t, reason, "CA certificates")
 	assert.True(t, bitSet(fi, pkiFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
 
-	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // TestHandleCMP_P10CR_PollReq_DeliversCP verifies lost-response recovery: a

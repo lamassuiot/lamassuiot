@@ -114,6 +114,21 @@ func NewCMPHttpRoutes(logger *logrus.Entry, svc services.LightweightCMPService) 
 	return &cmpHttpRoutes{svc: svc, logger: logger, store: repo, wfx: reporter}, nil
 }
 
+// RequirePKIXCMP is a Gin middleware that rejects requests whose Content-Type
+// is not application/pkixcmp with HTTP 415 Unsupported Media Type.
+func RequirePKIXCMP() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		ct := ctx.GetHeader("Content-Type")
+		if ct != "application/pkixcmp" {
+			ctx.AbortWithStatusJSON(http.StatusUnsupportedMediaType, gin.H{
+				"error": "Content-Type must be application/pkixcmp",
+			})
+			return
+		}
+		ctx.Next()
+	}
+}
+
 // HandleCMP handles all inbound CMP messages posted to /.well-known/cmp/p/:id.
 //
 // It reads a DER-encoded PKIMessage, dispatches on the body CHOICE tag, calls

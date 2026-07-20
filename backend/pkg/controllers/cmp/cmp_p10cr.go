@@ -139,8 +139,8 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 		// one: the PKCS#10 signature is genuine, so downstream CSR-signature
 		// verification (when enabled on the DMS) can succeed.
 		presetCSR: csr,
-		enroll: func(c context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-			return r.svc.LWCEnroll(c, csr, dmsID)
+		enroll: func(c context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
+			return r.svc.LWCEnroll(c, csr, dmsID, signerCert)
 		},
 	})
 }

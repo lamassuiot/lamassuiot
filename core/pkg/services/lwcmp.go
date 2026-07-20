@@ -25,11 +25,21 @@ import (
 type LightweightCMPService interface {
 	// Enroll issues a certificate for a new end-entity (ir / cr / p10cr).
 	// RFC 9483 §4.1.1, §4.1.2, §4.1.4.
-	LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
+	//
+	// signerCert is the EE certificate that signature-protected the incoming
+	// PKIMessage (extraCerts[0], RFC 9483 §3.2), or nil when the request was
+	// unprotected or the caller is a phased-workflow admin approval (the
+	// original message was already authenticated at submission time).
+	LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error)
 
 	// Reenroll renews or rekeyes an existing certificate (kur).
 	// RFC 9483 §4.1.3.
-	LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
+	//
+	// signerCert is the EE certificate that signature-protected the incoming
+	// PKIMessage (extraCerts[0], RFC 9483 §3.2), or nil when the request was
+	// unprotected or the caller is a phased-workflow admin approval (the
+	// original message was already authenticated at submission time).
+	LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error)
 
 	// CACerts returns the issuing CA certificate chain (genm / caCerts).
 	// RFC 9483 §4.3.1.

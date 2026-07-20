@@ -123,9 +123,9 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 	issuanceCtx := context.WithValue(ctx, core.LamassuContextKeyPreAuthenticated, true)
 	var cert *x509.Certificate
 	if tx.IsReenrollment {
-		cert, err = svc.service.LWCReenroll(issuanceCtx, csr, input.DMSID)
+		cert, err = svc.service.LWCReenroll(issuanceCtx, csr, input.DMSID, nil)
 	} else {
-		cert, err = svc.service.LWCEnroll(issuanceCtx, csr, input.DMSID)
+		cert, err = svc.service.LWCEnroll(issuanceCtx, csr, input.DMSID, nil)
 	}
 	if err != nil {
 		lFunc.Errorf("ApproveCMPTransaction: issuance failed for tx %s: %s", tx.TransactionID, err)
@@ -591,7 +591,7 @@ func deviceIdentityFromCSR(csr *x509.CertificateRequest) string {
 	return ""
 }
 
-func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
@@ -620,7 +620,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	// step has no CMP signer cert in context).
 	if preAuth, _ := ctx.Value(core.LamassuContextKeyPreAuthenticated).(bool); !preAuth {
 		var signerChain []*x509.Certificate
-		if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
+		if signerCert != nil {
 			signerChain = []*x509.Certificate{signerCert}
 		}
 		if err := svc.authenticateEnrollment(ctx, lFunc, cmpOpts.AuthSettings(), signerChain, csr, aps, "enrollment"); err != nil {
@@ -635,7 +635,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		//     authenticate at all (→ certRevoked).
 		// Certificates that are not device identities (e.g. bootstrap signers)
 		// have no device record and pass through untouched.
-		if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
+		if signerCert != nil {
 			if err := svc.rejectStaleCMPSigner(ctx, lFunc, dms.ID, signerCert); err != nil {
 				return nil, err
 			}
@@ -739,7 +739,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	return (*x509.Certificate)(crt.Certificate), nil
 }
 
-func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
@@ -798,7 +798,7 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 	// controller already rejected this request at the wire layer per auth_mode,
 	// so we never reach this branch without a signer.
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
-	if signerCert := cmpSignerCertFromContext(ctx); signerCert != nil {
+	if signerCert != nil {
 		lFunc = lFunc.WithField("auth-method", "CMP_SIGNER_CERTIFICATE")
 		signerSN := helpers.SerialNumberToHexString(signerCert.SerialNumber)
 		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s",

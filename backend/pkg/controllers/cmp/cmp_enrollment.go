@@ -332,7 +332,7 @@ type enrollmentVariant struct {
 	verifyInnerPOPO                 bool
 	requireMessageProtectionForPOPO bool
 	respTagFor                      func(requestTag int) int
-	enrollFn                        func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
+	enrollFn                        func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error)
 }
 
 // enrollmentVariantInitial is the variant used for ir (0) and cr (2). The
@@ -348,9 +348,9 @@ var enrollmentVariantInitial = enrollmentVariant{
 		}
 		return cmpBodyTagCP
 	},
-	enrollFn: func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-		return func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-			return r.svc.LWCEnroll(ctx, csr, dmsID)
+	enrollFn: func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
+		return func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
+			return r.svc.LWCEnroll(ctx, csr, dmsID, signerCert)
 		}
 	},
 }
@@ -366,9 +366,9 @@ var enrollmentVariantUpdate = enrollmentVariant{
 	respTagFor: func(int) int {
 		return cmpBodyTagKUP
 	},
-	enrollFn: func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-		return func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-			return r.svc.LWCReenroll(ctx, csr, dmsID)
+	enrollFn: func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
+		return func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
+			return r.svc.LWCReenroll(ctx, csr, dmsID, signerCert)
 		}
 	},
 }
@@ -403,7 +403,7 @@ type issueParams struct {
 	// requested public key instead of in the clear. See
 	// buildEncryptedCertRepBody (cmp_popo_indirect.go).
 	useEncrCert bool
-	enroll      func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
+	enroll      func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error)
 }
 
 // issueAndStore is the shared enrollment pipeline: build CSR, check duplicate
@@ -456,7 +456,8 @@ func (r *cmpHttpRoutes) issueAndStore(
 	// hold several certificates over time, and only the one under update is
 	// locked. Once the prior KUR is confirmed (CONFIRMED) or rolled back on
 	// timeout (REVOKED/expired) this check passes again.
-	if signer := cmpSignerCertFromGin(ctx); signer != nil && params.isReenrollment {
+	signer := cmpSignerCertFromGin(ctx)
+	if signer != nil && params.isReenrollment {
 		params.supersededCertSerial = hex.EncodeToString(signer.SerialNumber.Bytes())
 	}
 	if params.supersededCertSerial != "" {
@@ -488,7 +489,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	// Detach from the HTTP connection so issuance completes even if the EE
 	// drops the TCP connection mid-request.
 	issuanceCtx := context.WithoutCancel(ctx.Request.Context())
-	cert, err := params.enroll(issuanceCtx, csr)
+	cert, err := params.enroll(issuanceCtx, csr, signer)
 	if err != nil {
 		lFunc.Errorf("enroll failed: %v", err)
 		// Map the few categories the service distinguishes to their RFC 9483
@@ -683,7 +684,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	dmsID string,
 	respTag, requestTag int,
 	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
-	enroll func(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error),
+	enroll func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error),
 ) {
 	lFunc = lFunc.WithField("mode", "kga")
 
@@ -764,7 +765,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build CSR", dmsID, pkiFailureInfoBadCertTemplate)
 		return
 	}
-	cert, err := enroll(issuanceCtx, csr)
+	cert, err := enroll(issuanceCtx, csr, recipient)
 	if err != nil {
 		lFunc.Errorf("kga: issue certificate: %v", err)
 		failBit := pkiFailureInfoSystemFailure

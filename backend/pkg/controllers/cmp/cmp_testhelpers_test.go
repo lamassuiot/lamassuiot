@@ -68,7 +68,7 @@ func newEnrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issu
 	t.Helper()
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").Return(issued, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issued, nil)
 	router, store := newTestRouterWithStore(svc)
 	return router, store, svc
 }
@@ -78,7 +78,7 @@ func newReenrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, is
 	t.Helper()
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
-	svc.On("LWCReenroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").Return(issued, nil)
+	svc.On("LWCReenroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issued, nil)
 	router, store := newTestRouterWithStore(svc)
 	return router, store, svc
 }
@@ -88,7 +88,7 @@ func newEnrollRouterWFX(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, i
 	t.Helper()
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
-	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms").Return(issued, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issued, nil)
 	router, store := newTestRouterWithStoreAndWFX(svc, reporter)
 	return router, store, svc
 }
