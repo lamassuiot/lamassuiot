@@ -19,7 +19,6 @@ import (
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/kga"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -147,12 +146,27 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 			// RFC 9483 §5.2.3.2: a trusted RA that modified the CertTemplate verifies
 			// the EE's proof-of-possession itself and sets popo = raVerified. lamassu
 			// honours that only when the message-protection signer is a designated RA
-			// (carries id-kp-cmcRA) — otherwise raVerified from an end entity vouching
-			// for itself is notAuthorized. The signer is also chain-validated against
-			// the DMS ValidationCAs by LWCEnroll, so an untrusted "RA" cannot use this.
+			// (carries id-kp-cmcRA) AND that signer chain-validates against a CA this
+			// DMS trusts (LWCValidateRASigner). Chain validation is essential here:
+			// LWCEnroll only validates the signer for CLIENT_CERTIFICATE auth modes —
+			// for NO_AUTH/EXTERNAL_WEBHOOK DMSs it never inspects the protection cert
+			// at all, so checking the EKU alone would let anyone mint a throwaway
+			// self-signed certificate carrying id-kp-cmcRA and skip POPO entirely.
 			signer := cmpSignerCertFromGin(ctx)
 			isRAVerified := req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 0 && len(req.POPORaw.FullBytes) > 0
-			trustedRA := isRAVerified && chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA)
+			trustedRA := false
+			if isRAVerified && signer != nil {
+				if validator, ok := r.svc.(services.LightweightCMPRAValidator); ok {
+					if vErr := validator.LWCValidateRASigner(ctx.Request.Context(), dmsID, signer); vErr != nil {
+						lFunc.Warnf("%s: raVerified POPO rejected: signer CN=%s is not a trusted PKI management entity: %v",
+							variant.logPrefix, signer.Subject.CommonName, vErr)
+					} else {
+						trustedRA = true
+					}
+				} else {
+					lFunc.Errorf("%s: raVerified POPO rejected: RA signer validation is not available", variant.logPrefix)
+				}
+			}
 
 			if trustedRA {
 				lFunc.Infof("%s: accepting raVerified POPO from trusted RA (id-kp-cmcRA) CN=%s", variant.logPrefix, signer.Subject.CommonName)

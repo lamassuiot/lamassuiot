@@ -80,6 +80,20 @@ type LightweightCMPProtectionProvider interface {
 	LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error)
 }
 
+// LightweightCMPRAValidator authorizes a certificate as a trusted PKI
+// management entity (RFC 9483 §5.3.2 / §5.2.3.2) for a given DMS: trust
+// requires BOTH the id-kp-cmcRA extendedKeyUsage AND a chain to a CA the DMS
+// actually trusts — the EKU alone is a self-issued claim anyone can mint into
+// a throwaway self-signed certificate. The CMP controller uses this before
+// honouring an ir/cr raVerified POPO claim from a signer other than the EE
+// itself, since that claim otherwise lets an unvalidated "RA" skip
+// proof-of-possession entirely.
+type LightweightCMPRAValidator interface {
+	// LWCValidateRASigner returns nil only when signer is a certificate the
+	// DMS identified by aps trusts as a PKI management entity.
+	LWCValidateRASigner(ctx context.Context, aps string, signer *x509.Certificate) error
+}
+
 // LightweightCMPConfirmer commits a deferred re-enrollment (kur) once the EE
 // has confirmed the newly issued certificate.
 //

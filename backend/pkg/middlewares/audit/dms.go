@@ -163,3 +163,11 @@ func (mw DmsAuditEventPublisher) LWCProtectionCredentials(ctx context.Context, a
 	}
 	return provider.LWCProtectionCredentials(ctx, aps)
 }
+
+func (mw DmsAuditEventPublisher) LWCValidateRASigner(ctx context.Context, aps string, signer *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPRAValidator)
+	if !ok {
+		return fmt.Errorf("cmp RA signer validation not available")
+	}
+	return validator.LWCValidateRASigner(ctx, aps, signer)
+}
