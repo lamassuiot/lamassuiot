@@ -25,11 +25,11 @@ var (
 	oidCTKPAKeyPackage = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 2, 1, 2, 78, 5}
 
 	// Digest and signature algorithms.
-	oidSHA256            = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
-	oidSHA256WithRSA     = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11}
-	oidECDSAWithSHA256   = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}
-	oidRSAEncryption     = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
-	oidECPublicKey       = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
+	oidSHA256          = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
+	oidSHA256WithRSA   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11}
+	oidECDSAWithSHA256 = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}
+	oidRSAEncryption   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
+	oidECPublicKey     = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
 
 	// oidRSAESOAEP / oidMGF1 are the RSAES-OAEP key-transport algorithm (RFC
 	// 8017 §A.2.1 / RFC 4055 §4.1) and its mask-generation-function algorithm.
@@ -67,8 +67,8 @@ type signedData struct {
 	Version          int
 	DigestAlgorithms []pkix.AlgorithmIdentifier `asn1:"set"`
 	EncapContentInfo encapsulatedContentInfo
-	Certificates     asn1.RawValue    `asn1:"optional,tag:0"`
-	SignerInfos      []signerInfo     `asn1:"set"`
+	Certificates     asn1.RawValue `asn1:"optional,tag:0"`
+	SignerInfos      []signerInfo  `asn1:"set"`
 }
 
 type encapsulatedContentInfo struct {

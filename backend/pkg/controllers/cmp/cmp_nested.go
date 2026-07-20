@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/gin-gonic/gin"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/sirupsen/logrus"
 )
 
@@ -42,21 +43,21 @@ import (
 const cmpNestedInnerKey cmpCtxKey = "cmp-nested-inner"
 
 // handleNested processes a nested (20) body.
-func (r *cmpHttpRoutes) handleNested(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string) {
+func (r *cmpHttpRoutes) handleNested(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string) {
 	lFunc = lFunc.WithField("op", "nested")
 
 	if inner, _ := ctx.Request.Context().Value(cmpNestedInnerKey).(bool); inner {
 		lFunc.Warnf("nested: nested message inside a nested batch is not supported")
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"nested messages may not be nested inside a batch", dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"nested messages may not be nested inside a batch", dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
 	inners, err := decodeNestedMessages(body.Bytes)
 	if err != nil {
 		lFunc.Warnf("nested: could not decode inner PKIMessages: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"malformed nested PKIMessage", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"malformed nested PKIMessage", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
@@ -72,36 +73,36 @@ func (r *cmpHttpRoutes) handleNested(ctx *gin.Context, lFunc *logrus.Entry, head
 	lFunc = lFunc.WithField("innerBodyTag", innerTag)
 
 	switch innerTag {
-	case cmpBodyTagIR, cmpBodyTagCR, cmpBodyTagP10CR, cmpBodyTagKUR:
+	case corecmp.BodyTagIR, corecmp.BodyTagCR, corecmp.BodyTagP10CR, corecmp.BodyTagKUR:
 		// RFC 9483 §5.2.2.1 "adding protection": a PKI management entity wraps its
 		// own (already verified) protection around an EE's protected enrollment
 		// request. The CA processes the INNER request on its own merits — verify
 		// the inner EE protection, then run the normal enrollment pipeline and
 		// return the resulting ip/cp/kup.
 		r.handleNestedAddedProtection(ctx, lFunc, header, inner, dmsID, innerTag)
-	case cmpBodyTagCCR:
+	case corecmp.BodyTagCCR:
 		// RFC 4210bis §5.3.11: a ccr may only be sent by a CA. The decision is
 		// made against the INNER message's own protection signer (its extraCerts),
 		// not the RA/CA cert that protects the outer envelope.
 		innerSigner := parseFirstExtraCert(inner.ExtraCerts)
 		if innerSigner == nil || !innerSigner.IsCA {
 			lFunc.Warnf("nested ccr rejected: inner request signer is not a CA (present=%v)", innerSigner != nil)
-			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 				"cross-certification requests may only be sent by a CA (RFC 4210bis §5.3.11)",
-				dmsID, pkiFailureInfoNotAuthorized)
+				dmsID, corecmp.PKIFailureInfoNotAuthorized)
 			return
 		}
 		// A CA-signed inner ccr would require full added-protection forwarding
 		// (validating the RA, honoring the inner protection, issuing and
 		// re-wrapping the response), which is not implemented.
 		lFunc.Warnf("nested ccr from a CA is not supported (added-protection forwarding not implemented)")
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"nested cross-certification forwarding is not supported", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"nested cross-certification forwarding is not supported", dmsID, corecmp.PKIFailureInfoSystemFailure)
 	default:
 		lFunc.Warnf("nested message with inner body tag %d is not supported", innerTag)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			fmt.Sprintf("nested message processing is not supported for inner body tag %d", innerTag),
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 	}
 }
 
@@ -111,12 +112,12 @@ func (r *cmpHttpRoutes) handleNested(ctx *gin.Context, lFunc *logrus.Entry, head
 // verify the INNER EE protection, bind the inner signer certificate onto the
 // request context, and hand the inner request to the shared enrollment pipeline
 // so the CA issues a certificate and replies with the corresponding ip/cp/kup.
-func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *logrus.Entry, outerHeader requestPKIHeader, inner *rawPKIMessageFull, dmsID string, innerTag int) {
-	innerHeader, err := decodeRequestHeader(inner.Header.FullBytes)
+func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *logrus.Entry, outerHeader corecmp.RequestPKIHeader, inner *corecmp.RawPKIMessageFull, dmsID string, innerTag int) {
+	innerHeader, err := corecmp.DecodeRequestHeader(inner.Header.FullBytes)
 	if err != nil {
 		lFunc.Warnf("nested added-protection: malformed inner PKIHeader: %v", err)
-		r.rejectWithError(ctx, nil, PKIStatus(pkiStatusRejection),
-			"malformed inner PKIHeader", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, nil, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"malformed inner PKIHeader", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
@@ -126,24 +127,24 @@ func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *log
 	// before acting on the inner message.
 	if !bytes.Equal(outerHeader.TransactionID, innerHeader.TransactionID) {
 		lFunc.Warnf("nested added-protection: outer transactionID does not copy the inner one (RFC 9483 §5.2.2.1)")
-		r.rejectWithError(ctx, &outerHeader, PKIStatus(pkiStatusRejection),
+		r.rejectWithError(ctx, &outerHeader, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"added-protection nested header must copy the inner transactionID (RFC 9483 §5.2.2.1)",
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 	if !bytes.Equal(outerHeader.SenderNonce, innerHeader.SenderNonce) {
 		lFunc.Warnf("nested added-protection: outer senderNonce does not copy the inner one (RFC 9483 §5.2.2.1)")
-		r.rejectWithError(ctx, &outerHeader, PKIStatus(pkiStatusRejection),
+		r.rejectWithError(ctx, &outerHeader, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"added-protection nested header must copy the inner senderNonce (RFC 9483 §5.2.2.1)",
-			dmsID, pkiFailureInfoBadSenderNonce)
+			dmsID, corecmp.PKIFailureInfoBadSenderNonce)
 		return
 	}
 
 	enrollOpts, err := r.svc.LWCGetEnrollmentOptions(ctx.Request.Context(), dmsID)
 	if err != nil {
 		lFunc.Errorf("nested added-protection: could not load enrollment options for DMS '%s': %v", dmsID, err)
-		r.rejectWithError(ctx, &innerHeader, PKIStatus(pkiStatusRejection),
-			"could not load DMS configuration", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &innerHeader, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"could not load DMS configuration", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -175,12 +176,12 @@ func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *log
 		}
 	}
 
-	if innerTag == cmpBodyTagP10CR {
+	if innerTag == corecmp.BodyTagP10CR {
 		r.handleP10CR(ctx, lFunc, innerHeader, inner.Body, dmsID, enrollOpts, signerCert)
 		return
 	}
 	variant := enrollmentVariantInitial
-	if innerTag == cmpBodyTagKUR {
+	if innerTag == corecmp.BodyTagKUR {
 		variant = enrollmentVariantUpdate
 	}
 	r.handleEnrollment(ctx, lFunc, innerHeader, inner.Body, dmsID, enrollOpts, variant, signerCert)
@@ -189,7 +190,7 @@ func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *log
 // nestedInnerMessage pairs a decoded inner PKIMessage with its original DER
 // (needed to re-dispatch a batched message through the full pipeline).
 type nestedInnerMessage struct {
-	msg rawPKIMessageFull
+	msg corecmp.RawPKIMessageFull
 	der []byte
 }
 
@@ -213,7 +214,7 @@ func decodeNestedMessages(nestedBytes []byte) ([]nestedInnerMessage, error) {
 		if err != nil {
 			return nil, fmt.Errorf("inner PKIMessage %d: %w", len(out), err)
 		}
-		var inner rawPKIMessageFull
+		var inner corecmp.RawPKIMessageFull
 		if _, err := asn1.Unmarshal(elem.FullBytes, &inner); err != nil {
 			return nil, fmt.Errorf("inner PKIMessage %d: %w", len(out), err)
 		}
@@ -240,27 +241,27 @@ func decodeNestedMessages(nestedBytes []byte) ([]nestedInnerMessage, error) {
 // (envelope validation, protection, dispatch) exactly as if it had been posted
 // on its own, and the responses are returned in request order inside a nested
 // response body whose outer header echoes the outer request header.
-func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, inners []nestedInnerMessage, dmsID string) {
+func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, inners []nestedInnerMessage, dmsID string) {
 	lFunc = lFunc.WithField("op", "nested-batch").WithField("batchSize", len(inners))
 
 	enrollOpts, err := r.svc.LWCGetEnrollmentOptions(ctx.Request.Context(), dmsID)
 	if err != nil {
 		lFunc.Errorf("nested batch: could not load enrollment options for DMS '%s': %v", dmsID, err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"could not load DMS configuration", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"could not load DMS configuration", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	requireProtection := requireClientCertProtection(enrollOpts)
 
 	seenTxIDs := map[string]bool{hex.EncodeToString(header.TransactionID): true}
 	seenNonces := map[string]bool{hex.EncodeToString(header.SenderNonce): true}
-	innerHeaders := make([]requestPKIHeader, len(inners))
+	innerHeaders := make([]corecmp.RequestPKIHeader, len(inners))
 	for i, inner := range inners {
-		ih, err := decodeRequestHeader(inner.msg.Header.FullBytes)
+		ih, err := corecmp.DecodeRequestHeader(inner.msg.Header.FullBytes)
 		if err != nil {
 			lFunc.Warnf("nested batch: malformed inner PKIHeader %d: %v", i, err)
-			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-				fmt.Sprintf("malformed PKIHeader in batched message %d", i), dmsID, pkiFailureInfoBadDataFormat)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+				fmt.Sprintf("malformed PKIHeader in batched message %d", i), dmsID, corecmp.PKIFailureInfoBadDataFormat)
 			return
 		}
 		innerHeaders[i] = ih
@@ -268,9 +269,9 @@ func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry,
 		tx := hex.EncodeToString(ih.TransactionID)
 		if seenTxIDs[tx] {
 			lFunc.Warnf("nested batch: transactionID of inner message %d is not fresh (RFC 9483 §5.2.2.2)", i)
-			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 				"batched messages must carry fresh, unique transactionIDs (RFC 9483 §5.2.2.2)",
-				dmsID, pkiFailureInfoTransactionIDInUse)
+				dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
 			return
 		}
 		seenTxIDs[tx] = true
@@ -278,9 +279,9 @@ func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry,
 		nonce := hex.EncodeToString(ih.SenderNonce)
 		if seenNonces[nonce] {
 			lFunc.Warnf("nested batch: senderNonce of inner message %d is not fresh (RFC 9483 §5.2.2.2)", i)
-			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 				"batched messages must carry fresh, unique senderNonces (RFC 9483 §5.2.2.2)",
-				dmsID, pkiFailureInfoBadSenderNonce)
+				dmsID, corecmp.PKIFailureInfoBadSenderNonce)
 			return
 		}
 		seenNonces[nonce] = true
@@ -294,7 +295,7 @@ func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry,
 		if _, err := verifyRequestProtection(inners[i].msg, innerHeaders[i].ProtectionAlg, requireProtection); err != nil {
 			lFunc.Warnf("nested batch: protection verification of inner message %d failed: %v", i, err)
 			failBit := protectionRejectFailInfo(err)
-			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 				fmt.Sprintf("protection verification failed for batched message %d: %v", i, err),
 				dmsID, failBit)
 			return
@@ -308,8 +309,8 @@ func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry,
 		respDER := r.processBatchedMessage(ctx, inner.der, dmsID)
 		if len(respDER) == 0 {
 			lFunc.Errorf("nested batch: no response produced for inner message %d", i)
-			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-				fmt.Sprintf("could not process batched message %d", i), dmsID, pkiFailureInfoSystemFailure)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+				fmt.Sprintf("could not process batched message %d", i), dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 		responsesDER = append(responsesDER, respDER...)
@@ -323,12 +324,12 @@ func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry,
 	})
 	if err != nil {
 		lFunc.Errorf("nested batch: marshal response PKIMessages: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"cannot build nested response", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"cannot build nested response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	lFunc.Infof("nested batch: processed %d inner messages", len(inners))
-	r.sendRawBody(ctx, lFunc, header, cmpBodyTagNested, nestedBody, dmsID)
+	r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagNested, nestedBody, dmsID)
 }
 
 // processBatchedMessage re-dispatches one batched inner PKIMessage through the
@@ -366,7 +367,7 @@ func parseFirstExtraCert(extraCerts []asn1.RawValue) *x509.Certificate {
 	if len(extraCerts) == 0 {
 		return nil
 	}
-	cert, err := parseLeafExtraCert(extraCerts[0])
+	cert, err := corecmp.ParseLeafExtraCert(extraCerts[0])
 	if err != nil {
 		return nil
 	}

@@ -6,6 +6,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"time"
 )
 
@@ -45,11 +46,11 @@ func (e *cmpEnvelopeRejection) Error() string { return e.reason }
 // The sender-vs-subject check is intentionally NOT performed here because
 // the protection cert is not known until verifyRequestProtection has run.
 // See verifySenderMatchesProtectionCert for that pairing.
-func validateRequestEnvelope(h requestPKIHeader, now time.Time, bodyTag int) *cmpEnvelopeRejection {
-	if h.PVNO != pvnoCMP2000 && h.PVNO != pvnoCMP2021 {
+func validateRequestEnvelope(h corecmp.RequestPKIHeader, now time.Time, bodyTag int) *cmpEnvelopeRejection {
+	if h.PVNO != corecmp.PVNOCMP2000 && h.PVNO != corecmp.PVNOCMP2021 {
 		return &cmpEnvelopeRejection{
 			reason:   fmt.Sprintf("unsupported protocol version %d (must be cmp2000(2) or cmp2021(3))", h.PVNO),
-			failInfo: pkiFailureInfoUnsupportedVersion,
+			failInfo: corecmp.PKIFailureInfoUnsupportedVersion,
 		}
 	}
 	if len(h.TransactionID) == 0 {
@@ -58,9 +59,9 @@ func validateRequestEnvelope(h requestPKIHeader, now time.Time, bodyTag int) *cm
 		// confirmation references a non-existent exchange) rather than the
 		// malformed-field semantics of badDataFormat used for the issuance
 		// request bodies.
-		failInfo := pkiFailureInfoBadDataFormat
-		if bodyTag == cmpBodyTagCertConf {
-			failInfo = pkiFailureInfoBadRequest
+		failInfo := corecmp.PKIFailureInfoBadDataFormat
+		if bodyTag == corecmp.BodyTagCertConf {
+			failInfo = corecmp.PKIFailureInfoBadRequest
 		}
 		return &cmpEnvelopeRejection{
 			reason:   "transactionID is required (RFC 9483 §3.5)",
@@ -70,19 +71,19 @@ func validateRequestEnvelope(h requestPKIHeader, now time.Time, bodyTag int) *cm
 	if len(h.TransactionID) < 16 {
 		return &cmpEnvelopeRejection{
 			reason:   "transactionID must contain at least 128 bits of data (RFC 9483 §3.1)",
-			failInfo: pkiFailureInfoBadDataFormat,
+			failInfo: corecmp.PKIFailureInfoBadDataFormat,
 		}
 	}
 	if len(h.SenderNonce) < 16 {
 		return &cmpEnvelopeRejection{
 			reason:   "senderNonce must be present and contain at least 128 bits (RFC 9483 §3.5)",
-			failInfo: pkiFailureInfoBadSenderNonce,
+			failInfo: corecmp.PKIFailureInfoBadSenderNonce,
 		}
 	}
 	if h.MessageTime.IsZero() {
 		return &cmpEnvelopeRejection{
 			reason:   "messageTime is required (RFC 9483 §3.1)",
-			failInfo: pkiFailureInfoBadTime,
+			failInfo: corecmp.PKIFailureInfoBadTime,
 		}
 	}
 	drift := now.Sub(h.MessageTime)
@@ -93,7 +94,7 @@ func validateRequestEnvelope(h requestPKIHeader, now time.Time, bodyTag int) *cm
 		return &cmpEnvelopeRejection{
 			reason: fmt.Sprintf("messageTime drift %s exceeds %s (RFC 9483 §3.5)",
 				drift.Round(time.Second), cmpMaxMessageTimeSkew),
-			failInfo: pkiFailureInfoBadTime,
+			failInfo: corecmp.PKIFailureInfoBadTime,
 		}
 	}
 	return nil
@@ -123,7 +124,7 @@ func validateGeneralInfo(generalInfo []asn1.RawValue) *cmpEnvelopeRejection {
 			continue
 		}
 		switch {
-		case itav.OID.Equal(oidImplicitConfirm):
+		case itav.OID.Equal(corecmp.OIDImplicitConfirm()):
 			hasImplicitConfirm = true
 			implicitConfirmValue = itav.Value
 		case itav.OID.Equal(oidConfirmWaitTime):
@@ -135,7 +136,7 @@ func validateGeneralInfo(generalInfo []asn1.RawValue) *cmpEnvelopeRejection {
 	if hasImplicitConfirm && hasConfirmWaitTime {
 		return &cmpEnvelopeRejection{
 			reason:   "implicitConfirm and confirmWaitTime are mutually exclusive in generalInfo (RFC 9483 §3.1)",
-			failInfo: pkiFailureInfoBadRequest,
+			failInfo: corecmp.PKIFailureInfoBadRequest,
 		}
 	}
 	// infoValue is OPTIONAL at the InfoTypeAndValue level (RFC 4210), and some
@@ -147,13 +148,13 @@ func validateGeneralInfo(generalInfo []asn1.RawValue) *cmpEnvelopeRejection {
 		!(implicitConfirmValue.Class == asn1.ClassUniversal && implicitConfirmValue.Tag == asn1.TagNull) {
 		return &cmpEnvelopeRejection{
 			reason:   "implicitConfirm value must be NULL (RFC 9483 §3.1)",
-			failInfo: pkiFailureInfoBadRequest,
+			failInfo: corecmp.PKIFailureInfoBadRequest,
 		}
 	}
 	if hasConfirmWaitTime && !(confirmWaitTimeValue.Class == asn1.ClassUniversal && confirmWaitTimeValue.Tag == asn1.TagGeneralizedTime) {
 		return &cmpEnvelopeRejection{
 			reason:   "confirmWaitTime value must be GeneralizedTime (RFC 9483 §3.1)",
-			failInfo: pkiFailureInfoBadDataFormat,
+			failInfo: corecmp.PKIFailureInfoBadDataFormat,
 		}
 	}
 	return nil
@@ -182,7 +183,7 @@ func verifySenderMatchesProtectionCert(senderRaw asn1.RawValue, eeCert *x509.Cer
 	if senderRaw.Class != asn1.ClassContextSpecific || senderRaw.Tag != 4 {
 		return &cmpEnvelopeRejection{
 			reason:   fmt.Sprintf("sender field must be a directoryName GeneralName (got class=%d tag=%d)", senderRaw.Class, senderRaw.Tag),
-			failInfo: pkiFailureInfoBadMessageCheck,
+			failInfo: corecmp.PKIFailureInfoBadMessageCheck,
 		}
 	}
 
@@ -190,7 +191,7 @@ func verifySenderMatchesProtectionCert(senderRaw asn1.RawValue, eeCert *x509.Cer
 	if _, err := asn1.Unmarshal(senderRaw.Bytes, &senderRDN); err != nil {
 		return &cmpEnvelopeRejection{
 			reason:   fmt.Sprintf("sender field RDNSequence: %v", err),
-			failInfo: pkiFailureInfoBadMessageCheck,
+			failInfo: corecmp.PKIFailureInfoBadMessageCheck,
 		}
 	}
 
@@ -199,7 +200,7 @@ func verifySenderMatchesProtectionCert(senderRaw asn1.RawValue, eeCert *x509.Cer
 		return &cmpEnvelopeRejection{
 			reason: fmt.Sprintf("sender DN does not match protection certificate subject (sender=%q, cert subject=%q) (RFC 9483 §3.5)",
 				senderRDN.String(), eeCert.Subject.String()),
-			failInfo: pkiFailureInfoBadMessageCheck,
+			failInfo: corecmp.PKIFailureInfoBadMessageCheck,
 		}
 	}
 	return nil
@@ -221,7 +222,7 @@ func verifySenderKIDMatchesProtectionCert(senderKID []byte, eeCert *x509.Certifi
 	if len(senderKID) == 0 {
 		return &cmpEnvelopeRejection{
 			reason:   "senderKID is required for signature-based protection (RFC 9483 §3.1)",
-			failInfo: pkiFailureInfoBadMessageCheck,
+			failInfo: corecmp.PKIFailureInfoBadMessageCheck,
 		}
 	}
 	if len(eeCert.SubjectKeyId) == 0 {
@@ -230,7 +231,7 @@ func verifySenderKIDMatchesProtectionCert(senderKID []byte, eeCert *x509.Certifi
 	if !bytes.Equal(senderKID, eeCert.SubjectKeyId) {
 		return &cmpEnvelopeRejection{
 			reason:   "senderKID does not match the protection certificate's SubjectKeyIdentifier (RFC 9483 §3.1)",
-			failInfo: pkiFailureInfoBadMessageCheck,
+			failInfo: corecmp.PKIFailureInfoBadMessageCheck,
 		}
 	}
 	return nil

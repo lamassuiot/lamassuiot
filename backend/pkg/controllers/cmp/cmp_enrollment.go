@@ -16,9 +16,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers/cmp/internal/kga"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/kga"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	software "github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
@@ -40,7 +41,7 @@ import (
 // issueAndStore — but differ in how POPO is established and in the response
 // body tag. Those differences are captured in enrollmentVariant rather than
 // duplicated across two handlers.
-func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, variant enrollmentVariant, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, variant enrollmentVariant, signerCert *x509.Certificate) {
 	// KUR-only pre-check: RFC 9483 §4.1.3 ties POPO to the message-level
 	// protection because the EE must sign with the cert being updated. For
 	// ir/cr the inner POPO is checked below; for kur an absent protection
@@ -48,25 +49,25 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	if variant.requireMessageProtectionForPOPO && enrollOpts.EnforcePOPO {
 		if len(header.ProtectionAlg.Algorithm) == 0 {
 			lFunc.Warnf("kur: POPO enforcement requires message-level protection (RFC 9483 §4.1.3)")
-			r.rejectWithError(ctx, &header, PKIStatus(2),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 				"KUR requires message-level signature protection as proof of possession (RFC 9483 §4.1.3)",
-				dmsID, pkiFailureInfoBadPOP)
+				dmsID, corecmp.PKIFailureInfoBadPOP)
 			return
 		}
 	}
 
 	respTag := variant.respTagFor(body.Tag)
 
-	req, err := decodeFirstCertReq(body.Bytes)
+	req, err := corecmp.DecodeFirstCertReq(body.Bytes)
 	if err != nil {
-		var certRej *certRequestRejection
+		var certRej *corecmp.CertRequestRejection
 		if errors.As(err, &certRej) {
 			// Cert-request-level rejection: respond with ip/cp body per RFC 9483 §4.1.
 			lFunc.Warnf("%s: cert request rejected: %v", variant.logPrefix, err)
 			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, certRej)
 		} else {
 			lFunc.Errorf("%s: decode CertReqMessage: %v", variant.logPrefix, err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "malformed CertReqMessage", dmsID, pkiFailureInfoBadDataFormat)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "malformed CertReqMessage", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		}
 		return
 	}
@@ -103,10 +104,10 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// asserting raVerified it has no right to use.
 	if variant.isReenrollment && req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 0 && len(req.POPORaw.FullBytes) > 0 {
 		lFunc.Warnf("kur: raVerified POPO is not permitted in a key update request (RFC 9483 §5.2.3)")
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "raVerified POPO is not permitted in a key update request (RFC 9483 §5.2.3)",
-			FailInfoBit: pkiFailureInfoNotAuthorized,
+			FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 		})
 		return
 	}
@@ -172,12 +173,12 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 			} else if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, enrollOpts.EnforcePOPO); err != nil {
 				// An EE asserting raVerified is notAuthorized (RFC 9483 §4.1); every
 				// other POPO failure is badPOP.
-				failBit := pkiFailureInfoBadPOP
+				failBit := corecmp.PKIFailureInfoBadPOP
 				if errors.Is(err, errPOPORAVerifiedFromEE) {
-					failBit = pkiFailureInfoNotAuthorized
+					failBit = corecmp.PKIFailureInfoNotAuthorized
 				}
 				lFunc.Warnf("%s: POPO verification failed: %v", variant.logPrefix, err)
-				r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+				r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 					CertReqID:   req.CertReqID,
 					Reason:      fmt.Sprintf("proof of possession verification failed: %v", err),
 					FailInfoBit: failBit,
@@ -214,17 +215,17 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// pre-shared, non-cryptographic answer (e.g. a security-question response)
 	// distinct from regToken's one-time-use semantics. When the DMS has not
 	// configured an expected answer, the control is accepted unvalidated.
-	if rej := validateAuthenticatorControl(req.CertReqID, req.ControlsDER, enrollOpts.ExpectedAuthenticator); rej != nil {
+	if rej := corecmp.ValidateAuthenticatorControl(req.CertReqID, req.ControlsDER, enrollOpts.ExpectedAuthenticator); rej != nil {
 		lFunc.Warnf("%s: authenticator control rejected: %s", variant.logPrefix, rej.Reason)
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
 		return
 	}
-	if rej := validatePKIPublicationInfoControls(req.CertReqID, req.ControlsDER); rej != nil {
+	if rej := corecmp.ValidatePKIPublicationInfoControls(req.CertReqID, req.ControlsDER); rej != nil {
 		lFunc.Warnf("%s: pkiPublicationInfo control rejected: %s", variant.logPrefix, rej.Reason)
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
 		return
 	}
-	if rej := validateAltCertReqPublicKey(req.CertReqID, req.RegInfoDER, req.PublicKeyDER); rej != nil {
+	if rej := corecmp.ValidateAltCertReqPublicKey(req.CertReqID, req.RegInfoDER, req.PublicKeyDER); rej != nil {
 		lFunc.Warnf("%s: alt CertReq rejected: %s", variant.logPrefix, rej.Reason)
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, rej)
 		return
@@ -236,7 +237,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// primary CertRequest, stays valid. Applied BEFORE the CertTemplate policy
 	// check below so that check (CA-cert / keyCertSign rejection) evaluates the
 	// extensions that will actually be issued.
-	if altExts := altCertReqExtensions(req.RegInfoDER); altExts != nil {
+	if altExts := corecmp.AltCertReqExtensions(req.RegInfoDER); altExts != nil {
 		req.Extensions = altExts
 	}
 
@@ -246,15 +247,15 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		seen, err := r.store.HasSeenRegToken(ctx.Request.Context(), dmsID, req.RegToken)
 		if err != nil {
 			lFunc.Errorf("%s: check regToken: %v", variant.logPrefix, err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 		if seen {
 			lFunc.Warnf("%s: regToken already used", variant.logPrefix)
-			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 				CertReqID:   req.CertReqID,
 				Reason:      "the regToken control was already used (RFC 4211 §6.1)",
-				FailInfoBit: pkiFailureInfoBadRequest,
+				FailInfoBit: corecmp.PKIFailureInfoBadRequest,
 			})
 			return
 		}
@@ -342,10 +343,10 @@ var enrollmentVariantInitial = enrollmentVariant{
 	verifyInnerPOPO:                 true,
 	requireMessageProtectionForPOPO: false,
 	respTagFor: func(requestTag int) int {
-		if requestTag == cmpBodyTagIR {
-			return cmpBodyTagIP
+		if requestTag == corecmp.BodyTagIR {
+			return corecmp.BodyTagIP
 		}
-		return cmpBodyTagCP
+		return corecmp.BodyTagCP
 	},
 	enrollFn: func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
 		return func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
@@ -363,7 +364,7 @@ var enrollmentVariantUpdate = enrollmentVariant{
 	verifyInnerPOPO:                 false,
 	requireMessageProtectionForPOPO: true,
 	respTagFor: func(int) int {
-		return cmpBodyTagKUP
+		return corecmp.BodyTagKUP
 	},
 	enrollFn: func(r *cmpHttpRoutes, dmsID string) func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
 		return func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
@@ -411,8 +412,8 @@ type issueParams struct {
 func (r *cmpHttpRoutes) issueAndStore(
 	ctx *gin.Context,
 	lFunc *logrus.Entry,
-	header *requestPKIHeader,
-	req *firstCertReq,
+	header *corecmp.RequestPKIHeader,
+	req *corecmp.CertRequest,
 	dmsID string,
 	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
 	params issueParams,
@@ -421,10 +422,10 @@ func (r *cmpHttpRoutes) issueAndStore(
 	csr := params.presetCSR
 	if csr == nil {
 		var err error
-		csr, err = buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
+		csr, err = corecmp.BuildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
 		if err != nil {
 			lFunc.Errorf("synthesize CSR: %v", err)
-			r.rejectWithError(ctx, header, PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, pkiFailureInfoBadCertTemplate)
+			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "cannot build CSR from CertTemplate", dmsID, corecmp.PKIFailureInfoBadCertTemplate)
 			return
 		}
 	}
@@ -439,11 +440,11 @@ func (r *cmpHttpRoutes) issueAndStore(
 	txHex := hex.EncodeToString(header.TransactionID)
 	if exists, err := r.store.Exists(ctx.Request.Context(), txHex); err != nil {
 		lFunc.Errorf("check existing txID: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	} else if exists {
 		lFunc.Warnf("duplicate transactionID %s (pre-enroll check)", txHex)
-		r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
 		return
 	}
 
@@ -464,14 +465,14 @@ func (r *cmpHttpRoutes) issueAndStore(
 		inProgress, ipErr := r.store.HasUnconfirmedReenrollment(ctx.Request.Context(), dmsID, params.supersededCertSerial)
 		if ipErr != nil {
 			lFunc.Errorf("check in-progress reenrollment: %v", ipErr)
-			r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 		if inProgress {
 			lFunc.Warnf("second KUR for cert %s while its previous key-update is unconfirmed", params.supersededCertSerial)
-			r.rejectWithError(ctx, header, PKIStatus(2),
+			r.rejectWithError(ctx, header, corecmp.PKIStatus(2),
 				"a previous key-update for this certificate is still awaiting confirmation (RFC 9483 §4.1.3)",
-				dmsID, pkiFailureInfoBadRequest)
+				dmsID, corecmp.PKIFailureInfoBadRequest)
 			return
 		}
 	}
@@ -495,45 +496,45 @@ func (r *cmpHttpRoutes) issueAndStore(
 		// Map the few categories the service distinguishes to their RFC 9483
 		// §3.5 failInfo bits; everything else is systemFailure (the broadest
 		// "server-side inability to complete the request" bit, RFC 9810 §5.1.3).
-		failBit := pkiFailureInfoSystemFailure
+		failBit := corecmp.PKIFailureInfoSystemFailure
 		switch {
 		case errors.Is(err, errs.ErrDMSEnrollInvalidCert):
 			// Protection signer cert did not chain to any of the DMS's
 			// ValidationCAs → the requester is not trusted.
-			failBit = pkiFailureInfoSignerNotTrusted
+			failBit = corecmp.PKIFailureInfoSignerNotTrusted
 		case errors.Is(err, errs.ErrCMPDeviceOwnedByOtherDMS):
 			// Signer is trusted and sender-matched, but the CSR claims a
 			// device identity owned by a different DMS — RFC 9483 §3.5.
-			failBit = pkiFailureInfoNotAuthorized
+			failBit = corecmp.PKIFailureInfoNotAuthorized
 		case errors.Is(err, errs.ErrCMPPendingUpdate):
 			// Device has a key-update awaiting certConf: the open transaction
 			// must complete or time out before new operations (RFC 9483 §4.1.3).
-			failBit = pkiFailureInfoBadRequest
+			failBit = corecmp.PKIFailureInfoBadRequest
 		case errors.Is(err, errs.ErrCMPCertSuperseded):
 			// Signer cert was replaced by a confirmed key-update — per
 			// RFC 9483 §4.1.3 it can no longer authenticate operations.
-			failBit = pkiFailureInfoCertRevoked
+			failBit = corecmp.PKIFailureInfoCertRevoked
 		case errors.Is(err, errs.ErrCMPSignerNotActive):
 			// kur signer binding failed: not the device's active cert and not
 			// a recognised superseded one.
-			failBit = pkiFailureInfoBadRequest
+			failBit = corecmp.PKIFailureInfoBadRequest
 		case errors.Is(err, errs.ErrCMPAbandonedUpdate):
 			// ir/cr from a device that abandoned a key-update: it must recover
 			// via kur, not initialization (RFC 9483 §4.1.3, sec-awareness).
-			failBit = pkiFailureInfoBadRequest
+			failBit = corecmp.PKIFailureInfoBadRequest
 		case isRevokedCertError(err):
-			failBit = pkiFailureInfoCertRevoked
+			failBit = corecmp.PKIFailureInfoCertRevoked
 		}
-		r.rejectWithError(ctx, header, PKIStatus(2), err.Error(), dmsID, failBit)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), err.Error(), dmsID, failBit)
 		return
 	}
 	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
 
 	// Persist ISSUED row for lost-response recovery via pollReq.
-	senderNonce, nonceErr := newNonce()
+	senderNonce, nonceErr := corecmp.NewNonce()
 	if nonceErr != nil {
 		lFunc.Errorf("nonce generation: %v", nonceErr)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error: nonce generation failed", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error: nonce generation failed", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	// The response senderNonce is set on the wire even for implicit-confirm
@@ -584,7 +585,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	}); storeErr != nil {
 		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 			lFunc.Warnf("duplicate transactionID %s", txHex)
-			r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
+			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
 			return
 		}
 		lFunc.Errorf("store transaction: %v", storeErr)
@@ -604,7 +605,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	// extension our relaxed policy strips rather than rejects), the issued
 	// certificate differs from the request, so the success status is
 	// grantedWithMods (1) instead of accepted (0).
-	statusCode := int(PKIStatus(0))
+	statusCode := int(corecmp.PKIStatus(0))
 	if requestedCriticalExtensionDropped(req.Extensions, cert) {
 		lFunc.Infof("issued cert omits a requested critical extension; responding grantedWithMods")
 		statusCode = 1
@@ -614,11 +615,11 @@ func (r *cmpHttpRoutes) issueAndStore(
 	if params.useEncrCert {
 		certRepDER, ecdhProtection, err = r.buildEncryptedCertRepBody(issuanceCtx, lFunc, dmsID, req.CertReqID, statusCode, cert, req.PublicKeyDER)
 	} else {
-		certRepDER, err = marshalCertRepBodyWithStatus(params.respTag, req.CertReqID, statusCode, cert.Raw)
+		certRepDER, err = corecmp.MarshalCertRepBodyWithStatus(params.respTag, req.CertReqID, statusCode, cert.Raw)
 	}
 	if err != nil {
 		lFunc.Errorf("build cert rep body: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	var responseDER []byte
@@ -668,7 +669,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 // handleKGAEnrollment implements RFC 9483 §4.1.6 central key generation. The
 // server generates the end-entity key pair, has the enrollment CA issue a
 // certificate for it, wraps the private key in a CMS EnvelopedData(SignedData)
-// (built by core/pkg/kga), and returns both in the CertifiedKeyPair.
+// (built by the backend KGA package), and returns both in the CertifiedKeyPair.
 //
 // The CMS recipient is the request's protection (signer) certificate: for KTRI
 // the CEK is RSA-encrypted to its key; for KARI a fresh EC originator is used
@@ -679,8 +680,8 @@ func (r *cmpHttpRoutes) issueAndStore(
 func (r *cmpHttpRoutes) handleKGAEnrollment(
 	ctx *gin.Context,
 	lFunc *logrus.Entry,
-	header requestPKIHeader,
-	req *firstCertReq,
+	header corecmp.RequestPKIHeader,
+	req *corecmp.CertRequest,
 	dmsID string,
 	respTag, requestTag int,
 	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
@@ -695,10 +696,10 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	// certificate minting happens for a DMS that hasn't enabled this.
 	if enrollOpts == nil || !enrollOpts.ServerKeyGenEnabled {
 		lFunc.Warnf("kga: central key generation is not enabled for DMS '%s'", dmsID)
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "central key generation is not enabled for this DMS (RFC 9483 §4.1.6)",
-			FailInfoBit: pkiFailureInfoNotAuthorized,
+			FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 		})
 		return
 	}
@@ -708,20 +709,20 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	// selects (and authorises) the key-management technique.
 	recipient := signerCert
 	if recipient == nil {
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "central key generation requires a signature-protected request (RFC 9483 §4.1.6)",
-			FailInfoBit: pkiFailureInfoBadRequest,
+			FailInfoBit: corecmp.PKIFailureInfoBadRequest,
 		})
 		return
 	}
 
 	technique, err := kga.TechniqueFor(recipient.PublicKey)
 	if err != nil {
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      fmt.Sprintf("central key generation: %v", err),
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		})
 		return
 	}
@@ -737,7 +738,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	keyGen, ok := r.svc.(services.LightweightCMPKeyGenerator)
 	if !ok {
 		lFunc.Errorf("kga: service does not implement LightweightCMPKeyGenerator")
-		r.rejectWithError(ctx, &header, PKIStatus(2), "central key generation not supported", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "central key generation not supported", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -748,7 +749,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	generated, err := generateKGAKey(issuanceCtx, sw, req.KGAKeyAlgorithm)
 	if err != nil {
 		lFunc.Errorf("kga: generate end-entity key: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "could not generate key", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "could not generate key", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -757,23 +758,23 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	spkiDER, err := x509.MarshalPKIXPublicKey(generated.Public())
 	if err != nil {
 		lFunc.Errorf("kga: marshal generated public key: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
-	csr, err := buildSyntheticCSR(req.SubjectDER, spkiDER, req.Extensions)
+	csr, err := corecmp.BuildSyntheticCSR(req.SubjectDER, spkiDER, req.Extensions)
 	if err != nil {
 		lFunc.Errorf("kga: build synthetic CSR: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build CSR", dmsID, pkiFailureInfoBadCertTemplate)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build CSR", dmsID, corecmp.PKIFailureInfoBadCertTemplate)
 		return
 	}
 	cert, err := enroll(issuanceCtx, csr, recipient)
 	if err != nil {
 		lFunc.Errorf("kga: issue certificate: %v", err)
-		failBit := pkiFailureInfoSystemFailure
+		failBit := corecmp.PKIFailureInfoSystemFailure
 		if errors.Is(err, errs.ErrDMSEnrollInvalidCert) {
-			failBit = pkiFailureInfoSignerNotTrusted
+			failBit = corecmp.PKIFailureInfoSignerNotTrusted
 		}
-		r.rejectWithError(ctx, &header, PKIStatus(2), err.Error(), dmsID, failBit)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), err.Error(), dmsID, failBit)
 		return
 	}
 
@@ -781,7 +782,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	signerKey, kgaCert, kgaChain, err := mintHelperCert(issuanceCtx, lFunc, keyGen, dmsID, "Lamassu CMP KGA Signer", services.KGAHelperSigner)
 	if err != nil {
 		lFunc.Errorf("kga: issue KGA signer certificate: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "could not issue KGA signer certificate", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "could not issue KGA signer certificate", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -806,7 +807,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		origKey, origCert, origChain, err := mintHelperCert(issuanceCtx, lFunc, keyGen, dmsID, "Lamassu CMP KARI Originator", services.KGAHelperKARIOriginator)
 		if err != nil {
 			lFunc.Errorf("kga: issue KARI originator certificate: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "could not issue KARI originator certificate", dmsID, pkiFailureInfoSystemFailure)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "could not issue KARI originator certificate", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 		buildIn.KARIOriginatorKey = origKey
@@ -832,15 +833,15 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	envelopedDataDER, err := kga.BuildKeyPackage(buildIn)
 	if err != nil {
 		lFunc.Errorf("kga: build key package: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "could not build key package", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "could not build key package", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
 	// 6. Assemble the ip/cp/kup body carrying the issued cert + enveloped key.
-	bodyDER, err := marshalKGACertRepBody(req.CertReqID, int(PKIStatus(0)), cert.Raw, envelopedDataDER)
+	bodyDER, err := corecmp.MarshalKGACertRepBody(req.CertReqID, int(corecmp.PKIStatus(0)), cert.Raw, envelopedDataDER)
 	if err != nil {
 		lFunc.Errorf("kga: marshal cert rep body: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -849,7 +850,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	respDER, err := marshalProtectedResponseWithSigner(header, respTag, bodyDER, extraCerts, protectionSignerCert, protectionSigner)
 	if err != nil {
 		lFunc.Errorf("kga: marshal protected response: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	lFunc.Infof("kga: issued cert SN=%s and delivered %s-wrapped generated key (CN=%s)",
@@ -860,22 +861,22 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 // validateKGARecipientKeyUsage checks that the recipient (request protection)
 // certificate carries the KeyUsage required by the selected KGA technique.
 // Returns a notAuthorized rejection when it does not (RFC 9483 §4.1.6).
-func validateKGARecipientKeyUsage(certReqID int, technique kga.Technique, recipient *x509.Certificate) *certRequestRejection {
+func validateKGARecipientKeyUsage(certReqID int, technique kga.Technique, recipient *x509.Certificate) *corecmp.CertRequestRejection {
 	switch technique {
 	case kga.TechniqueKTRI:
 		if recipient.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
-			return &certRequestRejection{
+			return &corecmp.CertRequestRejection{
 				CertReqID:   certReqID,
 				Reason:      "recipient certificate lacks the keyEncipherment KeyUsage required for key transport (RFC 9483 §4.1.6.1)",
-				FailInfoBit: pkiFailureInfoNotAuthorized,
+				FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 			}
 		}
 	case kga.TechniqueKARI:
 		if recipient.KeyUsage&x509.KeyUsageKeyAgreement == 0 {
-			return &certRequestRejection{
+			return &corecmp.CertRequestRejection{
 				CertReqID:   certReqID,
 				Reason:      "recipient certificate lacks the keyAgreement KeyUsage required for key agreement (RFC 9483 §4.1.6.2)",
-				FailInfoBit: pkiFailureInfoNotAuthorized,
+				FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 			}
 		}
 	}
@@ -918,8 +919,8 @@ func selfSignedCSR(cn string, key crypto.Signer) (*x509.CertificateRequest, erro
 func (r *cmpHttpRoutes) deferForApproval(
 	ctx *gin.Context,
 	lFunc *logrus.Entry,
-	header *requestPKIHeader,
-	req *firstCertReq,
+	header *corecmp.RequestPKIHeader,
+	req *corecmp.CertRequest,
 	csr *x509.CertificateRequest,
 	dmsID string,
 	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
@@ -957,18 +958,18 @@ func (r *cmpHttpRoutes) deferForApproval(
 	}); storeErr != nil {
 		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 			lFunc.Warnf("duplicate transactionID %s", txHex)
-			r.rejectWithError(ctx, header, PKIStatus(2), "transactionID already in use", dmsID, pkiFailureInfoTransactionIDInUse)
+			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
 			return
 		}
 		lFunc.Errorf("store PENDING transaction: %v", storeErr)
-		r.rejectWithError(ctx, header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
-	waitingDER, err := marshalCertRepWaitingBody(req.CertReqID)
+	waitingDER, err := corecmp.MarshalCertRepWaitingBody(req.CertReqID)
 	if err != nil {
 		lFunc.Errorf("build waiting cert rep body: %v", err)
-		r.rejectWithError(ctx, header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	responseDER := r.sendRawBody(ctx, lFunc, *header, params.respTag, waitingDER, dmsID)

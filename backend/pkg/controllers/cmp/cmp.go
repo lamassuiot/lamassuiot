@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -139,19 +139,19 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// Identify DMS from path /:id
 	dmsID := ctx.Param("id")
 	if dmsID == "" {
-		r.rejectWithError(ctx, nil, PKIStatus(2), "missing DMS id", "", pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, nil, corecmp.PKIStatus(2), "missing DMS id", "", corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
 	// Read DER body
 	bodyBytes, err := io.ReadAll(ctx.Request.Body)
 	if err != nil || len(bodyBytes) == 0 {
-		r.rejectWithError(ctx, nil, PKIStatus(2), "cannot read request body", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, nil, corecmp.PKIStatus(2), "cannot read request body", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
 	// Decode PKIMessage fully (including Protection and ExtraCerts for verification).
-	var fullMsg rawPKIMessageFull
+	var fullMsg corecmp.RawPKIMessageFull
 	if _, err := asn1.Unmarshal(bodyBytes, &fullMsg); err != nil {
 		// RFC 6712 §3.3: a body that cannot be parsed as a PKIMessage at all is a
 		// client-side input error. There is no valid PKIHeader to echo back, so a
@@ -165,10 +165,10 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	header := fullMsg.Header
 	body := fullMsg.Body
 
-	reqHeader, err := decodeRequestHeader(header.FullBytes)
+	reqHeader, err := corecmp.DecodeRequestHeader(header.FullBytes)
 	if err != nil {
 		lFunc.Warnf("failed to decode PKIHeader: %v", err)
-		r.rejectWithError(ctx, nil, PKIStatus(2), "malformed PKIHeader", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, nil, corecmp.PKIStatus(2), "malformed PKIHeader", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
@@ -177,22 +177,22 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// stays a dispatcher and each rule is unit-testable in isolation.
 	if rej := validateRequestEnvelope(reqHeader, time.Now(), body.Tag); rej != nil {
 		lFunc.Warnf("envelope validation: %s", rej.reason)
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
+		r.rejectWithError(ctx, &reqHeader, corecmp.PKIStatus(2), rej.reason, dmsID, rej.failInfo)
 		return
 	}
 	if rej := validateGeneralInfo(reqHeader.GeneralInfo); rej != nil {
 		lFunc.Warnf("generalInfo validation: %s", rej.reason)
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), rej.reason, dmsID, rej.failInfo)
+		r.rejectWithError(ctx, &reqHeader, corecmp.PKIStatus(2), rej.reason, dmsID, rej.failInfo)
 		return
 	}
 
 	// RFC 9483 §3.1: recipNonce MUST be absent in the initial request of a
 	// transaction (ir/cr/p10cr). If the EE set it, reject per §3.5 badRecipientNonce.
-	if (body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR || body.Tag == cmpBodyTagP10CR) && len(reqHeader.RecipNonce) > 0 {
+	if (body.Tag == corecmp.BodyTagIR || body.Tag == corecmp.BodyTagCR || body.Tag == corecmp.BodyTagP10CR) && len(reqHeader.RecipNonce) > 0 {
 		lFunc.Warnf("recipNonce present on initial %s message", cmpTagToString(body.Tag))
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
+		r.rejectWithError(ctx, &reqHeader, corecmp.PKIStatus(2),
 			"recipNonce must be absent in the initial request (RFC 9483 §3.1)",
-			dmsID, pkiFailureInfoBadRecipientNonce)
+			dmsID, corecmp.PKIFailureInfoBadRecipientNonce)
 		return
 	}
 
@@ -220,7 +220,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	enrollOpts, err := r.svc.LWCGetEnrollmentOptions(ctx.Request.Context(), dmsID)
 	if err != nil {
 		lFunc.Errorf("could not load enrollment options for DMS '%s': %v", dmsID, err)
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2), "could not load DMS configuration", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &reqHeader, corecmp.PKIStatus(2), "could not load DMS configuration", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
@@ -236,7 +236,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// jobs would attempt an invalid backward transition (e.g. AwaitingCertConf
 	// → Received) which either gets rejected by WFX or silently resets the job
 	// to the wrong state.
-	if body.Tag == cmpBodyTagIR || body.Tag == cmpBodyTagCR || body.Tag == cmpBodyTagP10CR || body.Tag == cmpBodyTagKUR {
+	if body.Tag == corecmp.BodyTagIR || body.Tag == corecmp.BodyTagCR || body.Tag == corecmp.BodyTagP10CR || body.Tag == corecmp.BodyTagKUR {
 		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 			TransactionID:     txHex,
 			DMSID:             dmsID,
@@ -284,7 +284,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		// keep the signature-integrity check above but skip the sender-DN and
 		// senderKID binding checks that are meaningful only for issuance/
 		// revocation requests bound to a specific certificate.
-		if body.Tag != cmpBodyTagGenMsg {
+		if body.Tag != corecmp.BodyTagGenMsg {
 			// RFC 9483 §3.5: with signature-based protection, the sender field MUST
 			// match the subject of the protection cert. Without this check, a
 			// captured & forwarded message with a tampered sender field would pass
@@ -313,42 +313,42 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// means that assertion cannot be trusted, so the request is rejected with
 	// badMessageCheck (RFC 9483 §3.5) regardless of the outer RA protection
 	// being valid.
-	if origFull, origAlg, ok := extractOrigPKIMessage(reqHeader.GeneralInfo); ok {
+	if origFull, origAlg, ok := corecmp.ExtractOrigPKIMessage(reqHeader.GeneralInfo); ok {
 		if _, err := verifyRequestProtection(*origFull, origAlg, true); err != nil {
 			lFunc.Warnf("origPKIMessage protection verification failed: %v", err)
 			r.rejectRequest(ctx, lFunc, reqHeader, body.Tag,
 				fmt.Sprintf("original PKIMessage (generalInfo) protection verification failed: %v", err),
-				pkiFailureInfoBadMessageCheck, dmsID)
+				corecmp.PKIFailureInfoBadMessageCheck, dmsID)
 			return
 		}
 	}
 
 	// Dispatch on body CHOICE tag
 	switch body.Tag {
-	case cmpBodyTagIR, cmpBodyTagCR:
+	case corecmp.BodyTagIR, corecmp.BodyTagCR:
 		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantInitial, signerCert)
-	case cmpBodyTagP10CR:
+	case corecmp.BodyTagP10CR:
 		r.handleP10CR(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
-	case cmpBodyTagKUR:
+	case corecmp.BodyTagKUR:
 		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantUpdate, signerCert)
-	case cmpBodyTagRR:
+	case corecmp.BodyTagRR:
 		r.handleRevoke(ctx, lFunc, reqHeader, body, dmsID, signerCert)
-	case cmpBodyTagCCR:
+	case corecmp.BodyTagCCR:
 		r.handleCrossCertification(ctx, lFunc, reqHeader, body, dmsID, signerCert)
-	case cmpBodyTagNested:
+	case corecmp.BodyTagNested:
 		r.handleNested(ctx, lFunc, reqHeader, body, dmsID)
-	case cmpBodyTagCertConf:
+	case corecmp.BodyTagCertConf:
 		r.handleCertConf(ctx, lFunc, reqHeader, body, bodyBytes, dmsID, signerCert)
-	case cmpBodyTagPollReq:
+	case corecmp.BodyTagPollReq:
 		r.handlePoll(ctx, lFunc, reqHeader, body, dmsID, enrollOpts)
-	case cmpBodyTagPopDecr:
+	case corecmp.BodyTagPopDecr:
 		r.handlePOPODecKeyResp(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
-	case cmpBodyTagGenMsg:
+	case corecmp.BodyTagGenMsg:
 		r.handleGeneralMessage(ctx, lFunc, reqHeader, body, dmsID)
 	default:
 		lFunc.Warnf("unsupported CMP body tag %d", body.Tag)
-		r.rejectWithError(ctx, &reqHeader, PKIStatus(2),
-			fmt.Sprintf("unsupported body tag %d", body.Tag), dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, &reqHeader, corecmp.PKIStatus(2),
+			fmt.Sprintf("unsupported body tag %d", body.Tag), dmsID, corecmp.PKIFailureInfoBadRequest)
 	}
 }
 
@@ -365,11 +365,11 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 // CRLReason rules, then calls LWCRevokeCertificate. A single removeFromCRL (8)
 // CRLReason is treated as a revive request. Every failure is reported via an rp
 // body's PKIStatusInfo (RFC 9483 §4.2), never a generic error body.
-func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
-	rd, err := decodeRevDetails(body.Bytes)
+func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
+	rd, err := corecmp.DecodeRevDetails(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("rr: decode RevDetails: %v", err)
-		r.rejectRevocation(ctx, lFunc, header, "malformed RevReqContent", pkiFailureInfoBadDataFormat, dmsID)
+		r.rejectRevocation(ctx, lFunc, header, "malformed RevReqContent", corecmp.PKIFailureInfoBadDataFormat, dmsID)
 		return
 	}
 
@@ -378,17 +378,17 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	// malformed request → badRequest.
 	if rd.ReasonExtCount > 1 {
 		lFunc.Warnf("rr: %d CRLReason extensions present", rd.ReasonExtCount)
-		r.rejectRevocation(ctx, lFunc, header, "more than one CRLReason extension", pkiFailureInfoBadRequest, dmsID)
+		r.rejectRevocation(ctx, lFunc, header, "more than one CRLReason extension", corecmp.PKIFailureInfoBadRequest, dmsID)
 		return
 	}
 	if rd.ReasonDecodeErr {
-		r.rejectRevocation(ctx, lFunc, header, "malformed CRLReason value", pkiFailureInfoBadDataFormat, dmsID)
+		r.rejectRevocation(ctx, lFunc, header, "malformed CRLReason value", corecmp.PKIFailureInfoBadDataFormat, dmsID)
 		return
 	}
 	for _, rc := range rd.Reasons {
-		if !isKnownCRLReason(rc) {
+		if !corecmp.IsKnownCRLReason(rc) {
 			lFunc.Warnf("rr: unknown CRLReason %d", rc)
-			r.rejectRevocation(ctx, lFunc, header, fmt.Sprintf("unknown CRLReason %d", rc), pkiFailureInfoBadDataFormat, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, fmt.Sprintf("unknown CRLReason %d", rc), corecmp.PKIFailureInfoBadDataFormat, dmsID)
 			return
 		}
 	}
@@ -396,7 +396,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	if len(rd.Reasons) == 1 {
 		reason = rd.Reasons[0]
 	}
-	revive := reason == crlReasonRemoveFromCRL
+	revive := reason == corecmp.CRLReasonRemoveFromCRL
 
 	// version[9], when present, is asserted by the requester as additional
 	// information (RFC 9483 §4.2) and MUST match what every cert Lamassu
@@ -404,7 +404,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	// below because it doesn't depend on having a signer cert at all.
 	if rd.HasVersion && rd.Version != 2 {
 		lFunc.Warnf("rr: CertTemplate version %d asserted, expected v3 (2)", rd.Version)
-		r.rejectRevocation(ctx, lFunc, header, fmt.Sprintf("CertTemplate version must be v3 (2), got %d (RFC 9483 §4.2)", rd.Version), pkiFailureInfoBadRequest, dmsID)
+		r.rejectRevocation(ctx, lFunc, header, fmt.Sprintf("CertTemplate version must be v3 (2), got %d (RFC 9483 §4.2)", rd.Version), corecmp.PKIFailureInfoBadRequest, dmsID)
 		return
 	}
 
@@ -427,21 +427,21 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	if raInitiated {
 		lFunc.Infof("rr: RA-initiated revocation (signer CN=%s carries id-kp-cmcRA, target serial differs)", signer.Subject.CommonName)
 		if !rd.HasIssuer {
-			r.rejectRevocation(ctx, lFunc, header, "missing issuer in CertTemplate", pkiFailureInfoAddInfoNotAvailable, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "missing issuer in CertTemplate", corecmp.PKIFailureInfoAddInfoNotAvailable, dmsID)
 			return
 		}
 	} else if signer != nil {
 		if !rd.HasIssuer {
-			r.rejectRevocation(ctx, lFunc, header, "missing issuer in CertTemplate", pkiFailureInfoAddInfoNotAvailable, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "missing issuer in CertTemplate", corecmp.PKIFailureInfoAddInfoNotAvailable, dmsID)
 			return
 		}
 		if !rd.HasSerial {
-			r.rejectRevocation(ctx, lFunc, header, "missing serialNumber in CertTemplate", pkiFailureInfoAddInfoNotAvailable, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "missing serialNumber in CertTemplate", corecmp.PKIFailureInfoAddInfoNotAvailable, dmsID)
 			return
 		}
 		if signer.SerialNumber != nil &&
 			new(big.Int).SetBytes(rd.SerialNumber).Cmp(signer.SerialNumber) != 0 {
-			r.rejectRevocation(ctx, lFunc, header, "serialNumber does not match certificate", pkiFailureInfoBadCertId, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "serialNumber does not match certificate", corecmp.PKIFailureInfoBadCertID, dmsID)
 			return
 		}
 		// Compare the issuer/subject Names semantically rather than by raw DER:
@@ -450,26 +450,26 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		// certificate's original RawIssuer/RawSubject even when the names are
 		// equal. A raw bytes.Equal here would reject every valid revocation.
 		if !certTemplateNameMatches(rd.IssuerDER, signer.Issuer) {
-			r.rejectRevocation(ctx, lFunc, header, "issuer does not match certificate", pkiFailureInfoBadCertId, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "issuer does not match certificate", corecmp.PKIFailureInfoBadCertID, dmsID)
 			return
 		}
 		if rd.HasSubject && !certTemplateNameMatches(rd.SubjectDER, signer.Subject) {
-			r.rejectRevocation(ctx, lFunc, header, "subject does not match certificate", pkiFailureInfoBadCertId, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "subject does not match certificate", corecmp.PKIFailureInfoBadCertID, dmsID)
 			return
 		}
 		if rd.HasPublicKey && !bytes.Equal(rd.PublicKeyDER, signer.RawSubjectPublicKeyInfo) {
-			r.rejectRevocation(ctx, lFunc, header, "publicKey does not match certificate", pkiFailureInfoBadCertId, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "publicKey does not match certificate", corecmp.PKIFailureInfoBadCertID, dmsID)
 			return
 		}
 		// extensions[9], like subject/publicKey above, is optional additional
 		// information the requester asserts about the cert being revoked; RFC
 		// 9483 §4.2 requires it to match exactly when present.
 		if rd.HasExtensions && !extensionsMatch(rd.Extensions, signer.Extensions) {
-			r.rejectRevocation(ctx, lFunc, header, "extensions do not match certificate", pkiFailureInfoBadCertId, dmsID)
+			r.rejectRevocation(ctx, lFunc, header, "extensions do not match certificate", corecmp.PKIFailureInfoBadCertID, dmsID)
 			return
 		}
 	} else if !rd.HasSerial {
-		r.rejectRevocation(ctx, lFunc, header, "missing serialNumber in CertTemplate", pkiFailureInfoBadDataFormat, dmsID)
+		r.rejectRevocation(ctx, lFunc, header, "missing serialNumber in CertTemplate", corecmp.PKIFailureInfoBadDataFormat, dmsID)
 		return
 	}
 
@@ -491,25 +491,25 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		//   - illegal status transition on a revive (target is
 		//     not revoked / cannot be revived)                    → badCertId
 		//   - anything else                                       → systemFailure
-		failBit := pkiFailureInfoSystemFailure
+		failBit := corecmp.PKIFailureInfoSystemFailure
 		switch {
 		case errors.Is(err, errs.ErrCertificateNotFound):
-			failBit = pkiFailureInfoBadCertId
+			failBit = corecmp.PKIFailureInfoBadCertID
 		case errors.Is(err, errs.ErrDMSEnrollInvalidCert):
 			// RA-initiated revocation whose signer does not chain to any DMS
 			// validation CA (RFC 9483 §5.3.2): the claimed management entity is
 			// not trusted.
-			failBit = pkiFailureInfoSignerNotTrusted
+			failBit = corecmp.PKIFailureInfoSignerNotTrusted
 		case errors.Is(err, errs.ErrCMPPendingUpdate):
 			// The device has a key-update awaiting certConf; its certificates'
 			// revocation state must not change until the open transaction
 			// completes or times out (RFC 9483 §4.1.3).
-			failBit = pkiFailureInfoBadRequest
+			failBit = corecmp.PKIFailureInfoBadRequest
 		case errors.Is(err, errs.ErrCertificateStatusTransitionNotAllowed):
 			if revive {
-				failBit = pkiFailureInfoBadCertId
+				failBit = corecmp.PKIFailureInfoBadCertID
 			} else {
-				failBit = pkiFailureInfoCertRevoked
+				failBit = corecmp.PKIFailureInfoCertRevoked
 			}
 		}
 		r.rejectRevocation(ctx, lFunc, header, err.Error(), failBit, dmsID)
@@ -525,28 +525,28 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	if revive {
 		statusText = "Certificate revived"
 	}
-	rpDER, err := marshalRevRepBody(PKIStatus(0), statusText)
+	rpDER, err := corecmp.MarshalRevRepBody(corecmp.PKIStatus(0), statusText)
 	if err != nil {
 		lFunc.Errorf("rr: build rp body: %v", err)
-		r.rejectRevocation(ctx, lFunc, header, "cannot build rp response", pkiFailureInfoSystemFailure, dmsID)
+		r.rejectRevocation(ctx, lFunc, header, "cannot build rp response", corecmp.PKIFailureInfoSystemFailure, dmsID)
 		return
 	}
-	r.sendRawBody(ctx, lFunc, header, cmpBodyTagRP, rpDER, dmsID)
+	r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagRP, rpDER, dmsID)
 }
 
 // handleCertConf processes a certConf (24) body.
 // It verifies the SHA-256 certHash and responds with pkiConf (19).
-func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, requestDER []byte, dmsID string, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, requestDER []byte, dmsID string, signerCert *x509.Certificate) {
 	// The PKIBody CHOICE uses EXPLICIT tagging (RFC 4210 Appendix F module),
 	// so certConf [24] EXPLICIT CertConfirmContent means body.Bytes already
 	// holds the complete CertConfirmContent SEQUENCE TLV. Decode it directly —
 	// do NOT re-wrap it in another SEQUENCE, otherwise the decoder would see a
 	// single element (the inner SEQUENCE) and silently collapse a multi-status
 	// / wrong-certReqId body into one accepted entry.
-	statuses, err := decodeCertConfStatuses(body.Bytes)
+	statuses, err := corecmp.DecodeCertConfStatuses(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("certConf: decode: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed certConf", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "malformed certConf", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 
@@ -558,9 +558,9 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	// confirmation MUST carry exactly one CertStatus.
 	if len(statuses) != 1 {
 		lFunc.Warnf("certConf: expected exactly one CertStatus, got %d", len(statuses))
-		r.rejectWithError(ctx, &header, PKIStatus(2),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 			fmt.Sprintf("certConf must carry exactly one CertStatus, got %d", len(statuses)),
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 	// The certReqId of the first (and only) issued certificate is 0 for
@@ -569,29 +569,29 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	// per-transaction match is enforced below once the row is loaded.
 	if statuses[0].CertReqID != 0 && statuses[0].CertReqID != p10crCertReqID {
 		lFunc.Warnf("certConf: invalid certReqId %d (must be 0, or -1 for p10cr)", statuses[0].CertReqID)
-		r.rejectWithError(ctx, &header, PKIStatus(2),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 			fmt.Sprintf("certConf certReqId must be 0 (or -1 for p10cr), got %d", statuses[0].CertReqID),
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 	// A CertStatus declaring status "accepted" MUST NOT also carry a failInfo —
 	// the two are mutually inconsistent (RFC 9483 §4.1.1 / RFC 4210 §5.2.3).
-	if statuses[0].StatusInfo.Status == PKIStatus(pkiStatusAccepted) && statuses[0].StatusInfo.FailInfo.BitLength > 0 {
+	if statuses[0].StatusInfo.Status == corecmp.PKIStatus(corecmp.PKIStatusAccepted) && statuses[0].StatusInfo.FailInfo.BitLength > 0 {
 		lFunc.Warnf("certConf: status 'accepted' carries a failInfo (inconsistent)")
-		r.rejectWithError(ctx, &header, PKIStatus(2),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 			"certConf status 'accepted' must not include a failInfo",
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 	// id-it-implicitConfirm is only permitted in the generalInfo of an
 	// ir/cr/kur/p10cr request or an ip/cp/kup response (RFC 9483 §3.1); it is
 	// prohibited on every other body, including certConf. An EE that sets it on
 	// a certConf sent a malformed header → badRequest (RFC 9483 §3.5).
-	if hasImplicitConfirmOID(header.GeneralInfo) {
+	if corecmp.HasImplicitConfirmOID(header.GeneralInfo) {
 		lFunc.Warnf("certConf: implicitConfirm present in generalInfo (prohibited outside ir/cr/kur/ip/cp/kup, RFC 9483 §3.1)")
-		r.rejectWithError(ctx, &header, PKIStatus(2),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 			"implicitConfirm is not permitted in a certConf message (RFC 9483 §3.1)",
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
@@ -599,7 +599,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	tx, ok, err := r.store.Select(ctx.Request.Context(), txHex)
 	if err != nil {
 		lFunc.Errorf("certConf: lookup transaction: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	if !ok {
@@ -614,13 +614,13 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 			// elapsed — RFC 9810 §5.1.3 incorrectData is "for notary services"
 			// and does not apply. badRequest is the closest fit: the request
 			// is no longer permitted at the current state of the transaction.
-			r.rejectWithError(ctx, &header, PKIStatus(2),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 				"transaction expired: confirmation_timeout exceeded", dmsID,
-				pkiFailureInfoBadRequest)
+				corecmp.PKIFailureInfoBadRequest)
 			return
 		}
 		lFunc.Warnf("certConf: unknown transactionID %s", txHex)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "unknown transactionID", dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "unknown transactionID", dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
@@ -629,16 +629,16 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	// ir/cr/kur one with 0 (RFC 9483 §4.1.1). A mismatch means the EE is
 	// confirming under the wrong convention.
 	expectedCertReqID := 0
-	if tx.RequestType == cmpTagToString(cmpBodyTagP10CR) {
+	if tx.RequestType == cmpTagToString(corecmp.BodyTagP10CR) {
 		expectedCertReqID = p10crCertReqID
 	}
 	if statuses[0].CertReqID != expectedCertReqID {
 		lFunc.Warnf("certConf: certReqId %d does not match the %s transaction (expected %d)",
 			statuses[0].CertReqID, tx.RequestType, expectedCertReqID)
-		r.rejectWithError(ctx, &header, PKIStatus(2),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 			fmt.Sprintf("certConf certReqId must be %d for a %s transaction, got %d",
 				expectedCertReqID, tx.RequestType, statuses[0].CertReqID),
-			dmsID, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
@@ -648,7 +648,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	sentNonce, _ := hex.DecodeString(tx.SentNonce)
 	if len(sentNonce) > 0 && !bytes.Equal(header.RecipNonce, sentNonce) {
 		lFunc.Errorf("certConf: recipNonce mismatch: got %x want %x", header.RecipNonce, sentNonce)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "recipNonce mismatch", dmsID, pkiFailureInfoBadRecipientNonce)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "recipNonce mismatch", dmsID, corecmp.PKIFailureInfoBadRecipientNonce)
 		return
 	}
 
@@ -658,9 +658,9 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	recvNonce, _ := hex.DecodeString(tx.ReceivedNonce)
 	if len(recvNonce) > 0 && bytes.Equal(header.SenderNonce, recvNonce) {
 		lFunc.Errorf("certConf: senderNonce reuses the initiating request's senderNonce")
-		r.rejectWithError(ctx, &header, PKIStatus(2),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 			"certConf senderNonce must be fresh, not reused from the initial request (RFC 9483 §3.1)",
-			dmsID, pkiFailureInfoBadSenderNonce)
+			dmsID, corecmp.PKIFailureInfoBadSenderNonce)
 		return
 	}
 
@@ -674,9 +674,9 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		signerSerial := hex.EncodeToString(signer.SerialNumber.Bytes())
 		if signerSerial == tx.CertSerialNumber {
 			lFunc.Errorf("certConf: protected with the newly issued cert (SN=%s) instead of the request credential", signerSerial)
-			r.rejectWithError(ctx, &header, PKIStatus(2),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 				"certConf must be protected with the original request credential, not the newly issued certificate (RFC 9483 §4.1.1)",
-				dmsID, pkiFailureInfoBadRequest)
+				dmsID, corecmp.PKIFailureInfoBadRequest)
 			return
 		}
 	}
@@ -690,19 +690,19 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		// syntax in a cmp2000-declared message. (RFC 9810 §7 reserves
 		// unsupportedVersion for the case where the server doesn't support the
 		// declared version at all.)
-		if len(s.HashAlgOID) > 0 && header.PVNO != pvnoCMP2021 {
+		if len(s.HashAlgOID) > 0 && header.PVNO != corecmp.PVNOCMP2021 {
 			lFunc.Warnf("certConf: entry %d carries hashAlg %v but pvno=%d (RFC 9810 §5.3.18 requires cmp2021)",
 				i, s.HashAlgOID, header.PVNO)
-			r.rejectWithError(ctx, &header, PKIStatus(2),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 				"CertStatus.hashAlg requires cmp2021(3) (RFC 9810 §5.3.18)",
-				dmsID, pkiFailureInfoBadDataFormat)
+				dmsID, corecmp.PKIFailureInfoBadDataFormat)
 			return
 		}
-		expected, hashErr := computeCertHash(tx.Certificate.Raw, s.HashAlgOID)
+		expected, hashErr := corecmp.ComputeCertHash(tx.Certificate.Raw, s.HashAlgOID)
 		if hashErr != nil {
 			lFunc.Errorf("certConf: entry %d unsupported hashAlg %v: %v", i, s.HashAlgOID, hashErr)
-			r.rejectWithError(ctx, &header, PKIStatus(2),
-				fmt.Sprintf("unsupported certConf hashAlg OID %v", s.HashAlgOID), dmsID, pkiFailureInfoBadAlg)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+				fmt.Sprintf("unsupported certConf hashAlg OID %v", s.HashAlgOID), dmsID, corecmp.PKIFailureInfoBadAlg)
 			return
 		}
 		if !hashesEqual(s.CertHash, expected) {
@@ -711,7 +711,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 			// are confirming a different certificate. badCertId (4) says
 			// "no certificate could be found matching the provided criteria"
 			// which fits more precisely than the generic badRequest.
-			r.rejectWithError(ctx, &header, PKIStatus(2), "certHash mismatch", dmsID, pkiFailureInfoBadCertId)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "certHash mismatch", dmsID, corecmp.PKIFailureInfoBadCertID)
 			return
 		}
 		lFunc.Debugf("certConf: entry %d certReqId=%d hash OK", i, s.CertReqID)
@@ -721,7 +721,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex)
 	if confirmErr != nil {
 		lFunc.Errorf("certConf: confirm storage error: %v", confirmErr)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: storage", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error: storage", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	if !updated {
@@ -732,8 +732,8 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 			// CA. The EE believes enrollment succeeded but the cert is gone.
 			// Reject so the EE re-enrolls instead of acting on a dead cert.
 			lFunc.Warnf("certConf: tx %s already REVOKED — race with confirmation monitor", txHex)
-			r.rejectWithError(ctx, &header, PKIStatus(2),
-				"certificate was revoked before confirmation was processed", dmsID, pkiFailureInfoBadRequest)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+				"certificate was revoked before confirmation was processed", dmsID, corecmp.PKIFailureInfoBadRequest)
 			return
 		case models.CMPTransactionStateConfirmed:
 			// The transaction is already CONFIRMED. Two distinct cases:
@@ -753,22 +753,22 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 				break
 			}
 			lFunc.Infof("certConf: tx %s already CONFIRMED — replying error(certConfirmed)", txHex)
-			r.rejectWithError(ctx, &header, PKIStatus(2),
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 				"certificate confirmation was already received for this transaction",
-				dmsID, pkiFailureInfoCertConfirmed)
+				dmsID, corecmp.PKIFailureInfoCertConfirmed)
 			return
 		default:
 			lFunc.Errorf("certConf: tx %s in unexpected prior state %q for confirmation", txHex, prior)
-			r.rejectWithError(ctx, &header, PKIStatus(2),
-				fmt.Sprintf("transaction in unexpected state %q for confirmation", prior), dmsID, pkiFailureInfoBadRequest)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+				fmt.Sprintf("transaction in unexpected state %q for confirmation", prior), dmsID, corecmp.PKIFailureInfoBadRequest)
 			return
 		}
 	}
 
-	pkiConfDER, err := marshalPKIConfBody()
+	pkiConfDER, err := corecmp.MarshalPKIConfBody()
 	if err != nil {
 		lFunc.Errorf("certConf: build pkiConf: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build pkiConf", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build pkiConf", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	// Commit the deferred key-update now that the EE has confirmed (RFC 9483
@@ -778,7 +778,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	if updated && tx.IsReenrollment {
 		r.commitReenrollment(ctx.Request.Context(), lFunc, dmsID, tx.CertSerialNumber)
 	}
-	responseDER := r.sendRawBody(ctx, lFunc, header, cmpBodyTagPKIConf, pkiConfDER, dmsID)
+	responseDER := r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagPKIConf, pkiConfDER, dmsID)
 	if len(responseDER) == 0 {
 		return
 	}
@@ -828,11 +828,11 @@ const (
 // In the current sync-only mode, an ISSUED row is always present after the
 // initial ip(cert), letting an EE recover when the original response was lost
 // in transit (per RFC 4210 §5.3.22).
-func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483) {
-	certReqID, err := decodePollReqContent(body.Bytes)
+func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483) {
+	certReqID, err := corecmp.DecodePollReqContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("pollReq: decode: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "malformed pollReq", dmsID, pkiFailureInfoBadDataFormat)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "malformed pollReq", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
 	lFunc = lFunc.WithField("certReqId", certReqID)
@@ -841,12 +841,12 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 	tx, ok, err := r.store.Select(ctx.Request.Context(), txHex)
 	if err != nil {
 		lFunc.Errorf("pollReq: lookup transaction: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	if !ok {
 		lFunc.Warnf("pollReq: unknown transactionID %s", txHex)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "unknown transactionID", dmsID, pkiFailureInfoBadRequest)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "unknown transactionID", dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
@@ -855,14 +855,14 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// Dead path in sync-only mode (no PENDING rows are created), but kept
 		// for forward-compatibility if async issuance is reintroduced.
 		checkAfter := defaultPollIntervalSeconds
-		repDER, err := marshalPollRepBody(certReqID, checkAfter)
+		repDER, err := corecmp.MarshalPollRepBody(certReqID, checkAfter)
 		if err != nil {
 			lFunc.Errorf("pollReq: build pollRep: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build pollRep", dmsID, pkiFailureInfoSystemFailure)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build pollRep", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 		lFunc.Infof("pollReq: tx %s still PENDING, replying pollRep(checkAfter=%ds)", txHex, checkAfter)
-		r.sendRawBody(ctx, lFunc, header, cmpBodyTagPollRep, repDER, dmsID)
+		r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagPollRep, repDER, dmsID)
 
 	case models.CMPTransactionStateIssued:
 		// Determine whether implicit confirm applies for this pollReq delivery.
@@ -899,10 +899,10 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		if tx.Certificate != nil {
 			txCertRaw = tx.Certificate.Raw
 		}
-		certRepDER, err := marshalCertRepBody(respTag, certReqID, txCertRaw)
+		certRepDER, err := corecmp.MarshalCertRepBody(respTag, certReqID, txCertRaw)
 		if err != nil {
 			lFunc.Errorf("pollReq: build cert rep body: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 
@@ -919,14 +919,14 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex)
 			if confirmErr != nil {
 				lFunc.Errorf("pollReq: confirm storage error: %v", confirmErr)
-				r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: storage", dmsID, pkiFailureInfoSystemFailure)
+				r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error: storage", dmsID, corecmp.PKIFailureInfoSystemFailure)
 				return
 			}
 			if !updated {
 				if prior == models.CMPTransactionStateRevoked {
 					lFunc.Warnf("pollReq: tx %s already REVOKED — race with confirmation monitor", txHex)
-					r.rejectWithError(ctx, &header, PKIStatus(2),
-						"certificate was revoked before implicit confirmation could be processed", dmsID, pkiFailureInfoBadRequest)
+					r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+						"certificate was revoked before implicit confirmation could be processed", dmsID, corecmp.PKIFailureInfoBadRequest)
 					return
 				}
 				// prior == CONFIRMED is fine (idempotent pollReq replay); any
@@ -959,10 +959,10 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		if tx.Certificate != nil {
 			txCertRaw = tx.Certificate.Raw
 		}
-		certRepDER, err := marshalCertRepBody(respTag, certReqID, txCertRaw)
+		certRepDER, err := corecmp.MarshalCertRepBody(respTag, certReqID, txCertRaw)
 		if err != nil {
 			lFunc.Errorf("pollReq: build cert rep body for CONFIRMED row: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 		// Echo the implicit-confirm OID so the EE sees the same negotiation it
@@ -980,7 +980,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// CA-layer issuance failure surfaced via pollReq — same rationale as
 		// the inline enroll-error path above (systemFailure until structured
 		// service-layer error categories exist).
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection), reason, dmsID, corecmp.PKIFailureInfoSystemFailure)
 
 	case models.CMPTransactionStateRevoked:
 		// The confirmation monitor rolled the row back (the certConf/delivery
@@ -990,12 +990,12 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// unknown-state systemFailure reads as a server bug and gives the
 		// operator nothing to act on.
 		lFunc.Warnf("pollReq: tx %s REVOKED, returning CMP error", txHex)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
-			"certificate for this transaction has been revoked (confirmation window elapsed or revoked via API); start a new enrollment", dmsID, pkiFailureInfoCertRevoked)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"certificate for this transaction has been revoked (confirmation window elapsed or revoked via API); start a new enrollment", dmsID, corecmp.PKIFailureInfoCertRevoked)
 
 	default:
 		lFunc.Errorf("pollReq: tx %s has unknown state %q", txHex, tx.State)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error: unknown transaction state", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error: unknown transaction state", dmsID, corecmp.PKIFailureInfoSystemFailure)
 	}
 }
 
@@ -1005,18 +1005,18 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 // default is ip) gets ip. p10cr must never yield an ip — its response body is
 // cp in every phase of the exchange (RFC 9483 §4.1.4).
 func pollRespTagFor(tx models.CMPTransaction) int {
-	if tx.IsReenrollment || tx.RequestType == cmpTagToString(cmpBodyTagP10CR) {
-		return cmpBodyTagCP
+	if tx.IsReenrollment || tx.RequestType == cmpTagToString(corecmp.BodyTagP10CR) {
+		return corecmp.BodyTagCP
 	}
-	return cmpBodyTagIP
+	return corecmp.BodyTagIP
 }
 
 // isImplicitConfirm reports whether the current request should be treated as
 // implicitly confirmed — i.e. the DMS is configured to accept implicit
 // confirmation AND the EE included the id-it-implicitConfirm OID in the
 // request's generalInfo header.
-func (r *cmpHttpRoutes) isImplicitConfirm(ctx context.Context, header requestPKIHeader, dmsID string) bool {
-	if !hasImplicitConfirmOID(header.GeneralInfo) {
+func (r *cmpHttpRoutes) isImplicitConfirm(ctx context.Context, header corecmp.RequestPKIHeader, dmsID string) bool {
+	if !corecmp.HasImplicitConfirmOID(header.GeneralInfo) {
 		return false
 	}
 	opts, err := r.svc.LWCGetEnrollmentOptions(ctx, dmsID)
@@ -1086,11 +1086,11 @@ func hashesEqual(a, b []byte) bool {
 // status is rejection. Use this for cert-request-level failures (bad POP,
 // missing subject, invalid certReqId, etc.) where RFC 9483 §4.1 requires the
 // CertRepMessage body type rather than the error body type.
-func (r *cmpHttpRoutes) rejectCertRequest(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, respTag int, dmsID string, rej *certRequestRejection) {
-	body, err := marshalCertRepRejectionBody(rej.CertReqID, rej.Reason, rej.FailInfoBit)
+func (r *cmpHttpRoutes) rejectCertRequest(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, respTag int, dmsID string, rej *corecmp.CertRequestRejection) {
+	body, err := corecmp.MarshalCertRepRejectionBody(rej.CertReqID, rej.Reason, rej.FailInfoBit)
 	if err != nil {
 		lFunc.Errorf("build cert rep rejection body: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), rej.Reason, dmsID, rej.FailInfoBit)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection), rej.Reason, dmsID, rej.FailInfoBit)
 		return
 	}
 	// A rejection carries no issued certificate, so implicit confirmation is
@@ -1107,36 +1107,36 @@ func (r *cmpHttpRoutes) rejectCertRequest(ctx *gin.Context, lFunc *logrus.Entry,
 // PKIStatusInfo (status=rejection, failInfo bit, statusString), never via a
 // generic error body. failInfoBit selects the PKIFailureInfo bit so the
 // response carries a populated BIT STRING.
-func (r *cmpHttpRoutes) rejectRevocation(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, reason string, failInfoBit int, dmsID string) {
-	body, err := marshalRevRepBody(PKIStatus(pkiStatusRejection), reason, failInfoBit)
+func (r *cmpHttpRoutes) rejectRevocation(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, reason string, failInfoBit int, dmsID string) {
+	body, err := corecmp.MarshalRevRepBody(corecmp.PKIStatus(corecmp.PKIStatusRejection), reason, failInfoBit)
 	if err != nil {
 		lFunc.Errorf("build rp rejection body: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID, failInfoBit)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection), reason, dmsID, failInfoBit)
 		return
 	}
 	header.ResponseImplicitConfirm = false
-	r.sendRawBody(ctx, lFunc, header, cmpBodyTagRP, body, dmsID)
+	r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagRP, body, dmsID)
 }
 
 // rejectRequest routes a pre-dispatch rejection (protection / sender / senderKID
 // failures) to the body type appropriate for the inbound request. For rr the
 // response MUST be an rp body (RFC 9483 §4.2); all other request types fall
 // back to the generic error body.
-func (r *cmpHttpRoutes) rejectRequest(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, bodyTag int, reason string, failInfoBit int, dmsID string) {
-	if bodyTag == cmpBodyTagRR {
+func (r *cmpHttpRoutes) rejectRequest(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, bodyTag int, reason string, failInfoBit int, dmsID string) {
+	if bodyTag == corecmp.BodyTagRR {
 		r.rejectRevocation(ctx, lFunc, header, reason, failInfoBit, dmsID)
 		return
 	}
-	r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID, failInfoBit)
+	r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection), reason, dmsID, failInfoBit)
 }
 
-func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHeader, status PKIStatus, reason string, aps string, failInfoBits ...int) {
-	errBody, err := marshalErrorBody(status, reason, failInfoBits...)
+func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *corecmp.RequestPKIHeader, status corecmp.PKIStatus, reason string, aps string, failInfoBits ...int) {
+	errBody, err := corecmp.MarshalErrorBody(status, reason, failInfoBits...)
 	if err != nil {
 		ctx.Status(http.StatusInternalServerError)
 		return
 	}
-	var h requestPKIHeader
+	var h corecmp.RequestPKIHeader
 	if header != nil {
 		h = *header
 		// An error PKIBody must never advertise implicit confirmation:
@@ -1163,7 +1163,7 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *requestPKIHead
 			Reason:            reason,
 		})
 	}
-	r.sendRawBody(ctx, r.logger, h, cmpBodyTagError, errBody, aps)
+	r.sendRawBody(ctx, r.logger, h, corecmp.BodyTagError, errBody, aps)
 }
 
 // writeCMPResponse logs and writes a fully-assembled response PKIMessage DER
@@ -1176,7 +1176,7 @@ func writeCMPResponse(ctx *gin.Context, lFunc *logrus.Entry, bodyTag int, respDE
 
 // sendRawBody assembles a PKIMessage from a pre-encoded body CHOICE DER and
 // writes the result as application/pkixcmp to the Gin context.
-func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHeader requestPKIHeader, bodyTag int, bodyDER []byte, aps string) []byte {
+func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHeader corecmp.RequestPKIHeader, bodyTag int, bodyDER []byte, aps string) []byte {
 	if aps != "" {
 		if provider, ok := r.svc.(services.LightweightCMPProtectionProvider); ok {
 			certChain, signer, credErr := provider.LWCProtectionCredentials(ctx.Request.Context(), aps)
@@ -1217,7 +1217,7 @@ func (r *cmpHttpRoutes) sendRawBody(ctx *gin.Context, lFunc *logrus.Entry, reqHe
 // originator minted for a keyAgreement encrCert/challengeResp recipient (see
 // mintECDHOriginator in cmp_popo_indirect.go), whose certificate must be the
 // one the recipient finds in extraCerts to complete the key agreement.
-func (r *cmpHttpRoutes) sendRawBodyWithSigner(ctx *gin.Context, lFunc *logrus.Entry, reqHeader requestPKIHeader, bodyTag int, bodyDER []byte, certChain []*x509.Certificate, signer crypto.Signer) []byte {
+func (r *cmpHttpRoutes) sendRawBodyWithSigner(ctx *gin.Context, lFunc *logrus.Entry, reqHeader corecmp.RequestPKIHeader, bodyTag int, bodyDER []byte, certChain []*x509.Certificate, signer crypto.Signer) []byte {
 	respDER, err := marshalProtectedResponseWithSigner(reqHeader, bodyTag, bodyDER, certChain, certChain[0], signer)
 	if err != nil {
 		lFunc.Errorf("marshal protected response PKIMessage: %v", err)
@@ -1235,13 +1235,13 @@ func (r *cmpHttpRoutes) sendRawBodyWithSigner(ctx *gin.Context, lFunc *logrus.En
 // the server supports it (we support both cmp2000(2) and cmp2021(3)). Per RFC
 // 9483 §3.1 line 725 messageTime SHOULD be present on responses for time-sync
 // purposes — we always emit it.
-func buildResponseHeader(req requestPKIHeader) (responsePKIHeader, error) {
-	sender := defaultSenderGeneralName()
+func buildResponseHeader(req corecmp.RequestPKIHeader) (corecmp.Header, error) {
+	sender := corecmp.DefaultSenderGeneralName()
 	if len(req.Recipient.FullBytes) > 0 {
 		sender = asn1.RawValue{FullBytes: req.Recipient.FullBytes}
 	}
 
-	recipient := defaultRecipientGeneralName()
+	recipient := corecmp.DefaultRecipientGeneralName()
 	if len(req.Sender.FullBytes) > 0 {
 		recipient = asn1.RawValue{FullBytes: req.Sender.FullBytes}
 	}
@@ -1249,27 +1249,27 @@ func buildResponseHeader(req requestPKIHeader) (responsePKIHeader, error) {
 	respSenderNonce := req.ResponseSenderNonce
 	if len(respSenderNonce) == 0 {
 		var err error
-		respSenderNonce, err = newNonce()
+		respSenderNonce, err = corecmp.NewNonce()
 		if err != nil {
-			return responsePKIHeader{}, err
+			return corecmp.Header{}, err
 		}
 	}
 
 	// RFC 9810 §7: echo the received pvno when supported. Fall back to cmp2000
 	// for malformed/legacy requests that never set a valid version.
-	respPVNO := pvnoCMP2000
-	if req.PVNO == pvnoCMP2021 {
-		respPVNO = pvnoCMP2021
+	respPVNO := corecmp.PVNOCMP2000
+	if req.PVNO == corecmp.PVNOCMP2021 {
+		respPVNO = corecmp.PVNOCMP2021
 	}
 
-	var generalInfo []infoTypeAndValueResp
+	var generalInfo []corecmp.InfoTypeAndValue
 	if req.ResponseImplicitConfirm {
-		generalInfo = []infoTypeAndValueResp{
-			{InfoType: oidImplicitConfirm, InfoValue: asn1.NullRawValue},
+		generalInfo = []corecmp.InfoTypeAndValue{
+			{InfoType: corecmp.OIDImplicitConfirm(), InfoValue: asn1.NullRawValue},
 		}
 	}
 
-	return responsePKIHeader{
+	return corecmp.Header{
 		PVNO:          respPVNO,
 		Sender:        sender,
 		Recipient:     recipient,
@@ -1279,18 +1279,6 @@ func buildResponseHeader(req requestPKIHeader) (responsePKIHeader, error) {
 		SenderNonce:   respSenderNonce,
 		GeneralInfo:   generalInfo,
 	}, nil
-}
-
-// newNonce generates a 16-byte cryptographically random nonce. Returns an
-// error if the CSPRNG fails — callers MUST surface the failure rather than
-// substitute a deterministic value, because a non-random nonce breaks the
-// RFC 4210 §5.1.1 freshness property (replayable transactions).
-func newNonce() ([]byte, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return nil, fmt.Errorf("CMP nonce CSPRNG read: %w", err)
-	}
-	return b, nil
 }
 
 // resolveDeviceCN returns the device CommonName associated with an incoming
@@ -1309,13 +1297,13 @@ func newNonce() ([]byte, error) {
 // malformed body has no useful device identity to track).
 func (r *cmpHttpRoutes) resolveDeviceCN(ctx context.Context, body asn1.RawValue, txHex string) string {
 	switch body.Tag {
-	case cmpBodyTagIR, cmpBodyTagCR, cmpBodyTagKUR:
-		req, err := decodeFirstCertReq(body.Bytes)
+	case corecmp.BodyTagIR, corecmp.BodyTagCR, corecmp.BodyTagKUR:
+		req, err := corecmp.DecodeFirstCertReq(body.Bytes)
 		if err != nil {
 			return ""
 		}
 		return extractCNFromSubjectDER(req.SubjectDER)
-	case cmpBodyTagP10CR:
+	case corecmp.BodyTagP10CR:
 		csrDER, err := p10crCSRDER(body.Bytes)
 		if err != nil {
 			return ""
@@ -1325,7 +1313,7 @@ func (r *cmpHttpRoutes) resolveDeviceCN(ctx context.Context, body asn1.RawValue,
 			return ""
 		}
 		return csr.Subject.CommonName
-	case cmpBodyTagPollReq, cmpBodyTagCertConf, cmpBodyTagRR:
+	case corecmp.BodyTagPollReq, corecmp.BodyTagCertConf, corecmp.BodyTagRR:
 		if txHex == "" {
 			return ""
 		}
@@ -1355,14 +1343,6 @@ func extractCNFromSubjectDER(subjectDER []byte) string {
 	return name.CommonName
 }
 
-// oldCertID is the decoded RFC 4211 CertId { issuer GeneralName, serialNumber }
-// from the id-regCtrl-oldCertID control. IssuerNameDER is the DER of the issuer
-// directoryName ([4]) RDNSequence, directly comparable to x509.Certificate.RawIssuer.
-type oldCertID struct {
-	IssuerNameDER []byte
-	SerialNumber  *big.Int
-}
-
 // requestedCriticalExtensionDropped reports whether the issuance dropped a
 // CRITICAL extension that the CertTemplate asked for. RFC 9483 §5 lets a CA
 // with a relaxed policy accept a request carrying an unrecognized/invalid
@@ -1386,27 +1366,6 @@ func requestedCriticalExtensionDropped(requested []pkix.Extension, issued *x509.
 		}
 	}
 	return false
-}
-
-type responsePKIHeader struct {
-	PVNO          int                      `asn1:"default:2"`
-	Sender        interface{}              // GeneralName
-	Recipient     interface{}              // GeneralName
-	MessageTime   time.Time                `asn1:"generalized,explicit,optional,tag:0,omitempty"`
-	ProtectionAlg pkix.AlgorithmIdentifier `asn1:"explicit,optional,tag:1,omitempty"`
-	SenderKID     []byte                   `asn1:"optional,explicit,tag:2,omitempty"` // RFC 9483 §3.1: SubjectKeyIdentifier of the protection cert
-	TransactionID []byte                   `asn1:"optional,explicit,tag:4,omitempty"`
-	SenderNonce   []byte                   `asn1:"optional,explicit,tag:5,omitempty"`
-	RecipNonce    []byte                   `asn1:"optional,explicit,tag:6,omitempty"`
-	GeneralInfo   []infoTypeAndValueResp   `asn1:"optional,explicit,tag:8,omitempty"`
-}
-
-// infoTypeAndValueResp is the encoded form of an InfoTypeAndValue used in a
-// response PKIHeader generalInfo. InfoValue carries the NULL value required by
-// RFC 4210 §5.3.2 (ImplicitConfirmValue ::= NULL) for id-it-implicitConfirm.
-type infoTypeAndValueResp struct {
-	InfoType  asn1.ObjectIdentifier
-	InfoValue asn1.RawValue `asn1:"optional"`
 }
 
 // oidExtBasicConstraints / oidExtKeyUsage identify the two extensions whose
@@ -1436,7 +1395,7 @@ type basicConstraints struct {
 //
 // The weak-RSA-key rejection is enforced earlier, before POPO verification
 // (see handleEnrollment), so it is not repeated here.
-func validateCertTemplatePolicy(req *firstCertReq) *certRequestRejection {
+func validateCertTemplatePolicy(req *corecmp.CertRequest) *corecmp.CertRequestRejection {
 	var bc *basicConstraints
 	var keyCertSign bool
 
@@ -1445,10 +1404,10 @@ func validateCertTemplatePolicy(req *firstCertReq) *certRequestRejection {
 		case ext.Id.Equal(oidExtBasicConstraints):
 			var parsed basicConstraints
 			if _, err := asn1.Unmarshal(ext.Value, &parsed); err != nil {
-				return &certRequestRejection{
+				return &corecmp.CertRequestRejection{
 					CertReqID:   req.CertReqID,
 					Reason:      "malformed BasicConstraints extension in CertTemplate",
-					FailInfoBit: pkiFailureInfoBadCertTemplate,
+					FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 				}
 			}
 			bc = &parsed
@@ -1466,28 +1425,28 @@ func validateCertTemplatePolicy(req *firstCertReq) *certRequestRejection {
 	// BasicConstraints cA=TRUE is a request to be issued a CA certificate, which
 	// Lamassu never does over CMP → notAuthorized (RFC 9483 §5).
 	if bc != nil && bc.IsCA {
-		return &certRequestRejection{
+		return &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "issuing CA certificates is not permitted over CMP (RFC 9483 §5): BasicConstraints cA=TRUE requested",
-			FailInfoBit: pkiFailureInfoNotAuthorized,
+			FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 		}
 	}
 	// keyCertSign without cA=TRUE is a self-inconsistent template: keyCertSign is
 	// only valid on a CA certificate (RFC 5280 §4.2.1.3) → badCertTemplate.
 	if keyCertSign {
-		return &certRequestRejection{
+		return &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "keyCertSign KeyUsage requested without BasicConstraints cA=TRUE (RFC 5280 §4.2.1.3)",
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		}
 	}
 	// pathLenConstraint is only meaningful when cA=TRUE; its presence on an
 	// end-entity template is a malformed CertTemplate (RFC 5280 §4.2.1.9).
 	if bc != nil && bc.PathLen > 0 {
-		return &certRequestRejection{
+		return &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "pathLenConstraint present with cA=FALSE (RFC 5280 §4.2.1.9)",
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		}
 	}
 	return nil
@@ -1522,7 +1481,7 @@ func rsaKeyBits(spkiDER []byte) int {
 	if _, err := asn1.Unmarshal(spkiDER, &spki); err != nil {
 		return 0
 	}
-	if !spki.Algorithm.Algorithm.Equal(oidRSAEncryption) {
+	if !spki.Algorithm.Algorithm.Equal(corecmp.OIDRSAEncryption()) {
 		return 0
 	}
 	var rsaPub struct {
@@ -1545,21 +1504,21 @@ func rsaKeyBits(spkiDER []byte) int {
 // short or too large. Shared by the CRMF enrollment path (logPrefix
 // "ir/cr"/"kur", req.CertReqID) and the p10cr path (logPrefix "p10cr",
 // p10crCertReqID); the caller delivers the rejection with rejectCertRequest.
-func rejectWeakOrOversizedRSAKey(spkiDER []byte, logPrefix string, certReqID int, lFunc *logrus.Entry) *certRequestRejection {
+func rejectWeakOrOversizedRSAKey(spkiDER []byte, logPrefix string, certReqID int, lFunc *logrus.Entry) *corecmp.CertRequestRejection {
 	if bits := rsaKeyBits(spkiDER); bits > 0 && bits < minRSAKeyBits {
 		lFunc.Warnf("%s: RSA public key too short: %d-bit (minimum %d)", logPrefix, bits, minRSAKeyBits)
-		return &certRequestRejection{
+		return &corecmp.CertRequestRejection{
 			CertReqID:   certReqID,
 			Reason:      fmt.Sprintf("RSA public key too short: %d-bit key is below the %d-bit minimum (NIST SP 800-57)", bits, minRSAKeyBits),
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		}
 	}
 	if bits := rsaKeyBits(spkiDER); bits > maxRSAKeyBits {
 		lFunc.Warnf("%s: RSA public key too large: %d-bit (maximum %d)", logPrefix, bits, maxRSAKeyBits)
-		return &certRequestRejection{
+		return &corecmp.CertRequestRejection{
 			CertReqID:   certReqID,
 			Reason:      fmt.Sprintf("RSA public key too large: %d-bit key exceeds the %d-bit maximum", bits, maxRSAKeyBits),
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		}
 	}
 	return nil
@@ -1615,7 +1574,7 @@ func extensionsMatch(requested, actual []pkix.Extension) bool {
 // Issuer (DER-compared against RawIssuer) and serialNumber must both match;
 // otherwise it returns a badCertId cert-request rejection. Returns nil when no
 // oldCertID control was supplied (it is optional, RFC 9483 §4.1.3).
-func validateOldCertID(req *firstCertReq, signer *x509.Certificate) *certRequestRejection {
+func validateOldCertID(req *corecmp.CertRequest, signer *x509.Certificate) *corecmp.CertRequestRejection {
 	oc := req.OldCertID
 	if oc == nil {
 		return nil
@@ -1626,42 +1585,11 @@ func validateOldCertID(req *firstCertReq, signer *x509.Certificate) *certRequest
 	if serialMatches && issuerMatches {
 		return nil
 	}
-	return &certRequestRejection{
+	return &corecmp.CertRequestRejection{
 		CertReqID:   req.CertReqID,
 		Reason:      "controls oldCertId does not match the certificate being updated (RFC 9483 §4.1.3)",
-		FailInfoBit: pkiFailureInfoBadCertId,
+		FailInfoBit: corecmp.PKIFailureInfoBadCertID,
 	}
-}
-
-func normalizeSequenceDER(der []byte, label string) ([]byte, error) {
-	var rv asn1.RawValue
-	if _, err := asn1.Unmarshal(der, &rv); err == nil && rv.Class == asn1.ClassUniversal && rv.Tag == asn1.TagSequence {
-		return rv.FullBytes, nil
-	}
-
-	wrapped, err := wrapSequenceDER(der, label)
-	if err != nil {
-		return nil, err
-	}
-
-	var wrappedRV asn1.RawValue
-	if _, err := asn1.Unmarshal(wrapped, &wrappedRV); err != nil {
-		return nil, fmt.Errorf("%s: %w", label, err)
-	}
-	return wrappedRV.FullBytes, nil
-}
-
-func wrapSequenceDER(content []byte, label string) ([]byte, error) {
-	der, err := asn1.Marshal(asn1.RawValue{
-		Class:      asn1.ClassUniversal,
-		Tag:        asn1.TagSequence,
-		IsCompound: true,
-		Bytes:      content,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("rewrap %s: %w", label, err)
-	}
-	return der, nil
 }
 
 // verifyPOPO verifies the Proof-Of-Possession for an ir/cr CertReqMsg.
@@ -1676,41 +1604,41 @@ var errPOPORAVerifiedFromEE = errors.New("raVerified POPO not accepted from an e
 
 func cmpTagToString(t int) string {
 	switch t {
-	case cmpBodyTagIR:
+	case corecmp.BodyTagIR:
 		return "ir"
-	case cmpBodyTagCR:
+	case corecmp.BodyTagCR:
 		return "cr"
-	case cmpBodyTagP10CR:
+	case corecmp.BodyTagP10CR:
 		return "p10cr"
-	case cmpBodyTagPopDecc:
+	case corecmp.BodyTagPopDecc:
 		return "popdecc"
-	case cmpBodyTagPopDecr:
+	case corecmp.BodyTagPopDecr:
 		return "popdecr"
-	case cmpBodyTagKUR:
+	case corecmp.BodyTagKUR:
 		return "kur"
-	case cmpBodyTagCP:
+	case corecmp.BodyTagCP:
 		return "cp"
-	case cmpBodyTagIP:
+	case corecmp.BodyTagIP:
 		return "ip"
-	case cmpBodyTagKUP:
+	case corecmp.BodyTagKUP:
 		return "kup"
-	case cmpBodyTagRR:
+	case corecmp.BodyTagRR:
 		return "rr"
-	case cmpBodyTagRP:
+	case corecmp.BodyTagRP:
 		return "rp"
-	case cmpBodyTagCertConf:
+	case corecmp.BodyTagCertConf:
 		return "certConf"
-	case cmpBodyTagPKIConf:
+	case corecmp.BodyTagPKIConf:
 		return "pkiConf"
-	case cmpBodyTagError:
+	case corecmp.BodyTagError:
 		return "error"
-	case cmpBodyTagPollReq:
+	case corecmp.BodyTagPollReq:
 		return "pollReq"
-	case cmpBodyTagPollRep:
+	case corecmp.BodyTagPollRep:
 		return "pollRep"
-	case cmpBodyTagGenMsg:
+	case corecmp.BodyTagGenMsg:
 		return "genm"
-	case cmpBodyTagGenRep:
+	case corecmp.BodyTagGenRep:
 		return "genp"
 	default:
 		return fmt.Sprintf("unknown(%d)", t)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -46,10 +47,71 @@ type mockKGAService struct {
 
 func (m *mockKGAService) GetCMPTransactionRepo() storage.CMPTransactionRepo { return m.store }
 
+func (m *mockKGAService) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	args := m.Called(ctx, csr, aps, signerCert)
+	template, _ := args.Get(0).(*x509.Certificate)
+	if template == nil || args.Error(1) != nil {
+		return template, args.Error(1)
+	}
+	issuerKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	issuedTemplate := *template
+	issuedTemplate.SignatureAlgorithm = x509.UnknownSignatureAlgorithm
+	issuer := &x509.Certificate{
+		SerialNumber: big.NewInt(100),
+		Subject:      pkix.Name{CommonName: "test-kga-issuer"},
+		PublicKey:    &issuerKey.PublicKey,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		IsCA:         true,
+		KeyUsage:     x509.KeyUsageCertSign,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &issuedTemplate, issuer, csr.PublicKey, issuerKey)
+	if err != nil {
+		return nil, err
+	}
+	return x509.ParseCertificate(certDER)
+}
+
 func (m *mockKGAService) LWCIssueKGAHelperCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, purpose services.KGAHelperPurpose) (*x509.Certificate, []*x509.Certificate, error) {
 	args := m.Called(ctx, aps, csr, purpose)
 	cert, _ := args.Get(0).(*x509.Certificate)
 	chain, _ := args.Get(1).([]*x509.Certificate)
+	if cert == nil && args.Error(2) == nil {
+		issuerKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			return nil, nil, err
+		}
+		ski := sha1.Sum(csr.RawSubjectPublicKeyInfo)
+		template := &x509.Certificate{
+			SerialNumber:       big.NewInt(2),
+			Subject:            csr.Subject,
+			NotBefore:          time.Now().Add(-time.Hour),
+			NotAfter:           time.Now().Add(24 * time.Hour),
+			KeyUsage:           x509.KeyUsageDigitalSignature,
+			SubjectKeyId:       ski[:],
+			UnknownExtKeyUsage: []asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 32}},
+		}
+		issuer := &x509.Certificate{
+			SerialNumber: big.NewInt(101),
+			Subject:      pkix.Name{CommonName: "test-kga-helper-issuer"},
+			PublicKey:    &issuerKey.PublicKey,
+			NotBefore:    time.Now().Add(-time.Hour),
+			NotAfter:     time.Now().Add(24 * time.Hour),
+			IsCA:         true,
+			KeyUsage:     x509.KeyUsageCertSign,
+		}
+		certDER, err := x509.CreateCertificate(rand.Reader, template, issuer, csr.PublicKey, issuerKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		cert, err = x509.ParseCertificate(certDER)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	return cert, chain, args.Error(2)
 }
 
@@ -57,7 +119,7 @@ func (m *mockKGAService) LWCIssueKGAHelperCertificate(ctx context.Context, aps s
 // KeyUsage bits and a SubjectKeyId (computed like buildSelfSignedCert),
 // suitable either as a CMP signature-protection signer or as a canned KGA
 // helper certificate.
-func buildKeyUsageCert(t *testing.T, cn string, keyUsage x509.KeyUsage) (*x509.Certificate, *rsa.PrivateKey) {
+func buildKeyUsageCert(t *testing.T, cn string, keyUsage x509.KeyUsage, unknownEKUs ...asn1.ObjectIdentifier) (*x509.Certificate, *rsa.PrivateKey) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -65,12 +127,13 @@ func buildKeyUsageCert(t *testing.T, cn string, keyUsage x509.KeyUsage) (*x509.C
 	require.NoError(t, err)
 	ski := sha1.Sum(pubDER)
 	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: cn},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
-		KeyUsage:     keyUsage,
-		SubjectKeyId: ski[:],
+		SerialNumber:       big.NewInt(1),
+		Subject:            pkix.Name{CommonName: cn},
+		NotBefore:          time.Now().Add(-time.Hour),
+		NotAfter:           time.Now().Add(24 * time.Hour),
+		KeyUsage:           keyUsage,
+		SubjectKeyId:       ski[:],
+		UnknownExtKeyUsage: unknownEKUs,
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	require.NoError(t, err)
@@ -102,7 +165,7 @@ func buildTestKGAIR(t *testing.T, txID []byte, cn string) []byte {
 	senderNonce := randomNonce(t)
 	headerDER := buildTestPKIHeaderDER(t, txID, senderNonce, nil, false)
 	certRequestDER := buildCertRequestDER(t, cn, buildEmptyRSASPKIDER(t))
-	bodyDER := ctxDER(t, cmpBodyTagIR, wrapCertReqMsgs(t, certRequestDER))
+	bodyDER := ctxDER(t, corecmp.BodyTagIR, wrapCertReqMsgs(t, certRequestDER))
 	msgDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassUniversal,
 		Tag:        asn1.TagSequence,
@@ -122,7 +185,7 @@ func buildTestKGAIR(t *testing.T, txID []byte, cn string) []byte {
 // encrypts the private key in a separate field, not the certificate.
 func extractKGAEnvelopedDataDER(t *testing.T, responseDER []byte) (certDER, envDataDER []byte) {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err)
 
@@ -178,12 +241,10 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issuedCert, nil)
 
-	kgaSignerCert, _ := buildKeyUsageCert(t, "kga-signer", x509.KeyUsageDigitalSignature)
-
 	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
 	wrapped.On("LWCIssueKGAHelperCertificate", mock.Anything, "test-dms",
 		mock.AnythingOfType("*x509.CertificateRequest"), services.KGAHelperSigner).
-		Return(kgaSignerCert, []*x509.Certificate{}, nil)
+		Return((*x509.Certificate)(nil), []*x509.Certificate{}, nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -203,7 +264,7 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 
 	resp := postCMP(t, router, "test-dms", signedDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"CKG must be answered inline with ip, carrying the issued cert + wrapped key")
 
 	certDER, envDataDER := extractKGAEnvelopedDataDER(t, resp.Body.Bytes())
@@ -213,10 +274,20 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 	assert.Equal(t, issuedCert.SerialNumber, decodedCert.SerialNumber,
 		"the plain (unencrypted) certOrEncCert must be the certificate LWCEnroll issued")
 
+	parsed, err := corecmp.ParseMessage(resp.Body.Bytes())
+	require.NoError(t, err)
+	clientResult, err := corecmp.DecodeKGAResponse(parsed, corecmp.KGADecryptOptions{Recipient: recipientKey})
+	require.NoError(t, err)
+	assert.Equal(t, issuedCert.SerialNumber, clientResult.Certificate.SerialNumber)
+	clientPublicDER, err := x509.MarshalPKIXPublicKey(clientResult.PrivateKey.Public())
+	require.NoError(t, err)
+	assert.Equal(t, clientResult.Certificate.RawSubjectPublicKeyInfo, clientPublicDER,
+		"the client-decoded private key must match the issued certificate")
+
 	// The generated private key is delivered as CMS SignedData(AsymmetricKeyPackage)
 	// wrapped in EnvelopedData; decrypting with the recipient's own key proves
 	// the KTRI wrapping actually targeted this recipient. Full signature-chain
-	// verification of the inner SignedData is covered by core/pkg/kga's own
+	// verification of the inner SignedData is covered by the backend KGA package's
 	// tests — this asserts the externally observable behavior this dispatch
 	// path is responsible for: decryptability and a well-formed payload.
 	plaintext := decryptKTRIEnvelopedData(t, envDataDER, recipientKey)
@@ -296,7 +367,7 @@ func TestHandleCMP_KGA_DisabledByDefault(t *testing.T) {
 	assert.False(t, hasCertifiedKeyPair)
 	reason, failInfo := parseCertRepRejection(t, resp.Body.Bytes())
 	assert.Contains(t, reason, "not enabled")
-	assert.Equal(t, 1, failInfo.At(pkiFailureInfoNotAuthorized), "rejection must map to PKIFailureInfo notAuthorized")
+	assert.Equal(t, 1, failInfo.At(corecmp.PKIFailureInfoNotAuthorized), "rejection must map to PKIFailureInfo notAuthorized")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	wrapped.AssertNotCalled(t, "LWCIssueKGAHelperCertificate", mock.Anything, mock.Anything, mock.Anything, mock.Anything)

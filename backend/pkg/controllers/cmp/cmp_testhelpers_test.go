@@ -23,6 +23,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -633,7 +634,7 @@ func buildTestCertConf(t *testing.T, txID []byte, certDER []byte, recipNonce []b
 	// PKIBody certConf [24]
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagCertConf,
+		Tag:        corecmp.BodyTagCertConf,
 		IsCompound: true,
 		Bytes:      certConfContent,
 	})
@@ -667,7 +668,7 @@ func messageTimeFieldDER(t *testing.T, when time.Time) []byte {
 func buildTestPKIHeaderDER(t *testing.T, txID, senderNonce, recipNonce []byte, withImplicitConfirm bool) []byte {
 	t.Helper()
 
-	pvnoDER, err := asn1.Marshal(pvnoCMP2000)
+	pvnoDER, err := asn1.Marshal(corecmp.PVNOCMP2000)
 	require.NoError(t, err)
 
 	// Use an empty DirectoryName GeneralName [4] for sender/recipient.
@@ -742,7 +743,7 @@ func buildImplicitConfirmGeneralInfo(t *testing.T) []byte {
 	infoTypeAndValue, err := asn1.Marshal(struct {
 		OID asn1.ObjectIdentifier
 	}{
-		OID: oidImplicitConfirm,
+		OID: corecmp.OIDImplicitConfirm(),
 	})
 	require.NoError(t, err)
 
@@ -806,7 +807,7 @@ func buildTestIRBodyDERWithPOPO(t *testing.T, cn string, pubKeyDER []byte, privK
 		t.Fatalf("unknown popoMode %q", popoMode)
 	}
 
-	return ctxDER(t, cmpBodyTagIR, wrapCertReqMsgs(t, certRequestDER, popo...))
+	return ctxDER(t, corecmp.BodyTagIR, wrapCertReqMsgs(t, certRequestDER, popo...))
 }
 
 // buildSubjectCN encodes an RDNSequence with a single CN attribute.
@@ -873,7 +874,7 @@ func buildSelfSignedCert(t *testing.T, cn string) (*x509.Certificate, *ecdsa.Pri
 func signCMPMessage(t *testing.T, msgDER []byte, signerCert *x509.Certificate, signerKey crypto.Signer) []byte {
 	t.Helper()
 
-	var rawMsg rawPKIMessage
+	var rawMsg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(msgDER, &rawMsg)
 	require.NoError(t, err)
 
@@ -895,7 +896,7 @@ func signCMPMessage(t *testing.T, msgDER []byte, signerCert *x509.Certificate, s
 	headerDER = injectSenderKIDInHeader(t, headerDER, signerCert.SubjectKeyId)
 	rawMsg.Header = asn1.RawValue{FullBytes: headerDER}
 
-	payload, err := marshalProtectedPayload(headerDER, rawMsg.Body.FullBytes)
+	payload, err := corecmp.MarshalProtectedPayload(headerDER, rawMsg.Body.FullBytes)
 	require.NoError(t, err)
 
 	digest := sha256.Sum256(payload)
@@ -995,7 +996,7 @@ func corruptProtectionSignature(t *testing.T, signedDER []byte) []byte {
 //	}
 func parseCertRepRejection(t *testing.T, responseDER []byte) (reason string, failInfo asn1.BitString) {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err, "response must be a valid DER PKIMessage")
 
@@ -1048,7 +1049,7 @@ func parseCertRepRejection(t *testing.T, responseDER []byte) (reason string, fai
 // parseCMPResponseTag returns the body CHOICE tag from a DER-encoded PKIMessage.
 func parseCMPResponseTag(t *testing.T, body []byte) int {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(body, &msg)
 	require.NoError(t, err, "response must be a valid DER PKIMessage")
 	return msg.Body.Tag
@@ -1057,10 +1058,10 @@ func parseCMPResponseTag(t *testing.T, body []byte) int {
 // parseCMPErrorReason scans the error body for the first UTF8String.
 func parseCMPErrorReason(t *testing.T, body []byte) string {
 	t.Helper()
-	var msg rawPKIMessage
+	var msg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(body, &msg)
 	require.NoError(t, err)
-	if msg.Body.Tag != cmpBodyTagError {
+	if msg.Body.Tag != corecmp.BodyTagError {
 		return ""
 	}
 	return scanFirstUTF8String(msg.Body.Bytes)
@@ -1088,7 +1089,7 @@ func buildTestPollReq(t *testing.T, txID []byte, certReqID int) []byte {
 	// EXPLICIT-style convention buildTestCertConf uses for [24]).
 	bodyDER, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassContextSpecific,
-		Tag:        cmpBodyTagPollReq,
+		Tag:        corecmp.BodyTagPollReq,
 		IsCompound: true,
 		Bytes:      pollReqContent,
 	})
@@ -1169,7 +1170,7 @@ func concatBytes(parts ...[]byte) []byte {
 func injectProtectionAlgOID(t *testing.T, msgDER []byte, algOID asn1.ObjectIdentifier) []byte {
 	t.Helper()
 
-	var rawMsg rawPKIMessage
+	var rawMsg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(msgDER, &rawMsg)
 	require.NoError(t, err)
 

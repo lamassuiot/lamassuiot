@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
@@ -40,9 +41,9 @@ type crossCertTemplateInfo struct {
 }
 
 // handleCrossCertification processes a ccr (13) body and answers with a ccp (14).
-func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
 	lFunc = lFunc.WithField("op", "ccr")
-	const respTag = cmpBodyTagCCP
+	const respTag = corecmp.BodyTagCCP
 
 	// RFC 4210bis §5.3.11: cross-certification requests are exchanged between
 	// CAs. The requester authenticates via message-protection, so its signer
@@ -51,20 +52,20 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	signer := signerCert
 	if signer == nil || !signer.IsCA {
 		lFunc.Warnf("ccr rejected: requester is not a CA (signer present=%v)", signer != nil)
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"cross-certification requests may only be sent by a CA (RFC 4210bis §5.3.11)",
-			dmsID, pkiFailureInfoNotAuthorized)
+			dmsID, corecmp.PKIFailureInfoNotAuthorized)
 		return
 	}
 
-	req, err := decodeFirstCertReq(body.Bytes)
+	req, err := corecmp.DecodeFirstCertReq(body.Bytes)
 	if err != nil {
-		var certRej *certRequestRejection
+		var certRej *corecmp.CertRequestRejection
 		if ok := asErrCertRequestRejection(err, &certRej); ok {
 			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, certRej)
 		} else {
 			lFunc.Errorf("ccr decode: %v", err)
-			r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), "malformed ccr", dmsID, pkiFailureInfoBadDataFormat)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection), "malformed ccr", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		}
 		return
 	}
@@ -75,9 +76,9 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	// a malformed request → badPOP + badRequest, delivered as an error body.
 	if req.ForKGA {
 		lFunc.Warnf("ccr rejected: central key generation is not allowed for cross-certification")
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"cross-certification must not request central key generation (RFC 4210bis §5.3.11)",
-			dmsID, pkiFailureInfoBadPOP, pkiFailureInfoBadRequest)
+			dmsID, corecmp.PKIFailureInfoBadPOP, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
@@ -88,10 +89,10 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	// rather than a template-completeness nit.
 	if req.POPORaw.Class == asn1.ClassContextSpecific && (req.POPORaw.Tag == 2 || req.POPORaw.Tag == 3) {
 		lFunc.Warnf("ccr rejected: EncryptedKey POPO discloses a private key")
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "cross-certification must not disclose a private key (RFC 4210bis §5.3.11)",
-			FailInfoBit: pkiFailureInfoBadRequest,
+			FailInfoBit: corecmp.PKIFailureInfoBadRequest,
 		})
 		return
 	}
@@ -110,9 +111,9 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	// is rejected as badCertTemplate + badAlg (RFC 4210bis §5.3.11).
 	if isNonSigningKeyAlgorithm(req.PublicKeyDER) {
 		lFunc.Warnf("ccr rejected: CertTemplate key algorithm cannot sign")
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"cross-certification requires a signing-capable key in the CertTemplate (RFC 4210bis §5.3.11)",
-			dmsID, pkiFailureInfoBadCertTemplate, pkiFailureInfoBadAlg)
+			dmsID, corecmp.PKIFailureInfoBadCertTemplate, corecmp.PKIFailureInfoBadAlg)
 		return
 	}
 
@@ -123,26 +124,26 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	case 1: // signature (POPOSigningKey) — the only acceptable form.
 	default: // absent or raVerified — no proof of possession.
 		lFunc.Warnf("ccr rejected: missing POPOSigningKey")
-		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"cross-certification requires a POPOSigningKey proof of possession (RFC 4210bis §5.3.11)",
-			dmsID, pkiFailureInfoBadPOP)
+			dmsID, corecmp.PKIFailureInfoBadPOP)
 		return
 	}
 
 	crossCertifier, ok := r.svc.(services.LightweightCMPCrossCertifier)
 	if !ok {
 		lFunc.Errorf("ccr: service does not implement LightweightCMPCrossCertifier")
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cross-certification not supported", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cross-certification not supported", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 
-	csr, err := buildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
+	csr, err := corecmp.BuildSyntheticCSR(req.SubjectDER, req.PublicKeyDER, req.Extensions)
 	if err != nil {
 		lFunc.Errorf("ccr: build synthetic CSR: %v", err)
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      "cannot build CSR from CertTemplate",
-			FailInfoBit: pkiFailureInfoBadCertTemplate,
+			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		})
 		return
 	}
@@ -151,18 +152,18 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	crossCert, _, err := crossCertifier.LWCIssueCrossCertificate(issuanceCtx, dmsID, csr, tmpl.notBefore, tmpl.notAfter)
 	if err != nil {
 		lFunc.Errorf("ccr: issue cross certificate: %v", err)
-		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &certRequestRejection{
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
 			Reason:      err.Error(),
-			FailInfoBit: pkiFailureInfoSystemFailure,
+			FailInfoBit: corecmp.PKIFailureInfoSystemFailure,
 		})
 		return
 	}
 
-	bodyDER, err := marshalCertRepBodyWithStatus(respTag, req.CertReqID, int(PKIStatus(0)), crossCert.Raw)
+	bodyDER, err := corecmp.MarshalCertRepBodyWithStatus(respTag, req.CertReqID, int(corecmp.PKIStatus(0)), crossCert.Raw)
 	if err != nil {
 		lFunc.Errorf("ccr: marshal ccp body: %v", err)
-		r.rejectWithError(ctx, &header, PKIStatus(2), "cannot build response", dmsID, pkiFailureInfoSystemFailure)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
 	lFunc.Infof("ccr: issued cross certificate SN=%s for subject CN=%s",
@@ -174,9 +175,9 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 // requirements for a ccr: version, signingAlg, issuer, validity, subject and
 // publicKey MUST all be present, and the version MUST be v3 or v1 (v2 rejected).
 // Returns a badCertTemplate rejection describing the first problem, or nil.
-func validateCrossCertTemplate(certReqID int, t crossCertTemplateInfo) *certRequestRejection {
-	bad := func(reason string) *certRequestRejection {
-		return &certRequestRejection{CertReqID: certReqID, Reason: reason, FailInfoBit: pkiFailureInfoBadCertTemplate}
+func validateCrossCertTemplate(certReqID int, t crossCertTemplateInfo) *corecmp.CertRequestRejection {
+	bad := func(reason string) *corecmp.CertRequestRejection {
+		return &corecmp.CertRequestRejection{CertReqID: certReqID, Reason: reason, FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate}
 	}
 	switch {
 	case !t.hasVersion:
@@ -347,8 +348,8 @@ func intFromBytes(b []byte) int {
 // asErrCertRequestRejection is a thin wrapper over errors.As kept local to avoid
 // importing errors in multiple spots; returns true when err is a
 // *certRequestRejection and assigns it to target.
-func asErrCertRequestRejection(err error, target **certRequestRejection) bool {
-	rej, ok := err.(*certRequestRejection)
+func asErrCertRequestRejection(err error, target **corecmp.CertRequestRejection) bool {
+	rej, ok := err.(*corecmp.CertRequestRejection)
 	if ok {
 		*target = rej
 	}

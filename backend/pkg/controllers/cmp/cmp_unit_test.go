@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	cmpmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
@@ -96,7 +97,7 @@ func TestIsImplicitConfirm_AllCombinations(t *testing.T) {
 			routes, err := NewCMPHttpRoutes(logrus.NewEntry(logrus.New()), wrapped)
 			require.NoError(t, err)
 
-			h := requestPKIHeader{}
+			h := corecmp.RequestPKIHeader{}
 			if tc.eeRequests {
 				h.GeneralInfo = []asn1.RawValue{makeImplicitConfirmGeneralInfo(t)}
 			}
@@ -117,7 +118,7 @@ func makeImplicitConfirmGeneralInfo(t *testing.T) asn1.RawValue {
 		Value asn1.RawValue `asn1:"optional"`
 	}
 	der, err := asn1.Marshal(itav{
-		Type:  oidImplicitConfirm,
+		Type:  corecmp.OIDImplicitConfirm(),
 		Value: asn1.NullRawValue,
 	})
 	require.NoError(t, err)
@@ -189,23 +190,23 @@ func TestMarshalProtectedResponse_AllSignerTypes(t *testing.T) {
 			signer, cert := tc.signer(t)
 
 			// Build a minimal request header so the response can echo it.
-			reqHeader := requestPKIHeader{
-				PVNO:          pvnoCMP2000,
+			reqHeader := corecmp.RequestPKIHeader{
+				PVNO:          corecmp.PVNOCMP2000,
 				TransactionID: []byte("0123456789abcdef"),
 				SenderNonce:   []byte("0123456789abcdef"),
 			}
 
 			// Body: pkiConf (empty NULL body content).
-			body, err := marshalPKIConfBody()
+			body, err := corecmp.MarshalPKIConfBody()
 			require.NoError(t, err)
 
-			out, err := marshalProtectedResponse(reqHeader, cmpBodyTagPKIConf, body, []*x509.Certificate{cert}, signer)
+			out, err := marshalProtectedResponse(reqHeader, corecmp.BodyTagPKIConf, body, []*x509.Certificate{cert}, signer)
 			require.NoError(t, err, "marshalProtectedResponse must succeed for %s", tc.name)
 			require.NotEmpty(t, out)
 
 			// Round-trip: parse the response and verify the signature against
 			// the same cert we signed with (mirrors what an EE would do).
-			var raw rawResponsePKIMessage
+			var raw corecmp.RawMessage
 			_, err = asn1.Unmarshal(out, &raw)
 			require.NoError(t, err, "response must parse as PKIMessage")
 			require.NotEmpty(t, raw.Protection.Bytes, "Protection field must be non-empty")
@@ -246,14 +247,14 @@ func TestValidateRequestEnvelope_AllRules(t *testing.T) {
 
 	cases := []struct {
 		name        string
-		header      requestPKIHeader
+		header      corecmp.RequestPKIHeader
 		wantReject  bool
 		wantFailBit int
 	}{
 		{
 			name: "valid envelope passes",
-			header: requestPKIHeader{
-				PVNO:          pvnoCMP2000,
+			header: corecmp.RequestPKIHeader{
+				PVNO:          corecmp.PVNOCMP2000,
 				TransactionID: goodTxID,
 				SenderNonce:   goodNonce,
 				MessageTime:   now.Add(-30 * time.Second),
@@ -262,64 +263,64 @@ func TestValidateRequestEnvelope_AllRules(t *testing.T) {
 		},
 		{
 			name: "envelope without messageTime is rejected",
-			header: requestPKIHeader{
-				PVNO:          pvnoCMP2021,
+			header: corecmp.RequestPKIHeader{
+				PVNO:          corecmp.PVNOCMP2021,
 				TransactionID: goodTxID,
 				SenderNonce:   goodNonce,
 			},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadTime,
+			wantFailBit: corecmp.PKIFailureInfoBadTime,
 		},
 		{
 			name:        "unsupported pvno",
-			header:      requestPKIHeader{PVNO: 99, TransactionID: goodTxID, SenderNonce: goodNonce},
+			header:      corecmp.RequestPKIHeader{PVNO: 99, TransactionID: goodTxID, SenderNonce: goodNonce},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoUnsupportedVersion,
+			wantFailBit: corecmp.PKIFailureInfoUnsupportedVersion,
 		},
 		{
 			name:        "missing transactionID",
-			header:      requestPKIHeader{PVNO: pvnoCMP2000, SenderNonce: goodNonce},
+			header:      corecmp.RequestPKIHeader{PVNO: corecmp.PVNOCMP2000, SenderNonce: goodNonce},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadDataFormat,
+			wantFailBit: corecmp.PKIFailureInfoBadDataFormat,
 		},
 		{
 			name:        "short transactionID",
-			header:      requestPKIHeader{PVNO: pvnoCMP2000, TransactionID: []byte{1, 2, 3}, SenderNonce: goodNonce},
+			header:      corecmp.RequestPKIHeader{PVNO: corecmp.PVNOCMP2000, TransactionID: []byte{1, 2, 3}, SenderNonce: goodNonce},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadDataFormat,
+			wantFailBit: corecmp.PKIFailureInfoBadDataFormat,
 		},
 		{
 			name:        "short senderNonce",
-			header:      requestPKIHeader{PVNO: pvnoCMP2000, TransactionID: goodTxID, SenderNonce: []byte{1, 2, 3}},
+			header:      corecmp.RequestPKIHeader{PVNO: corecmp.PVNOCMP2000, TransactionID: goodTxID, SenderNonce: []byte{1, 2, 3}},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadSenderNonce,
+			wantFailBit: corecmp.PKIFailureInfoBadSenderNonce,
 		},
 		{
 			name: "messageTime future drift",
-			header: requestPKIHeader{
-				PVNO:          pvnoCMP2000,
+			header: corecmp.RequestPKIHeader{
+				PVNO:          corecmp.PVNOCMP2000,
 				TransactionID: goodTxID,
 				SenderNonce:   goodNonce,
 				MessageTime:   now.Add(10 * time.Minute),
 			},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadTime,
+			wantFailBit: corecmp.PKIFailureInfoBadTime,
 		},
 		{
 			name: "messageTime past drift",
-			header: requestPKIHeader{
-				PVNO:          pvnoCMP2000,
+			header: corecmp.RequestPKIHeader{
+				PVNO:          corecmp.PVNOCMP2000,
 				TransactionID: goodTxID,
 				SenderNonce:   goodNonce,
 				MessageTime:   now.Add(-10 * time.Minute),
 			},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadTime,
+			wantFailBit: corecmp.PKIFailureInfoBadTime,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rej := validateRequestEnvelope(tc.header, now, cmpBodyTagIR)
+			rej := validateRequestEnvelope(tc.header, now, corecmp.BodyTagIR)
 			if !tc.wantReject {
 				assert.Nil(t, rej)
 				return
@@ -352,7 +353,7 @@ func TestVerifySenderMatchesProtectionCert(t *testing.T) {
 	t.Run("mismatched DN rejected", func(t *testing.T) {
 		rej := verifySenderMatchesProtectionCert(mismatchedSender, cert)
 		require.NotNil(t, rej)
-		assert.Equal(t, pkiFailureInfoBadMessageCheck, rej.failInfo)
+		assert.Equal(t, corecmp.PKIFailureInfoBadMessageCheck, rej.failInfo)
 	})
 
 	t.Run("non-directoryName CHOICE rejected", func(t *testing.T) {
@@ -363,7 +364,7 @@ func TestVerifySenderMatchesProtectionCert(t *testing.T) {
 		}
 		rej := verifySenderMatchesProtectionCert(rfc822Sender, cert)
 		require.NotNil(t, rej)
-		assert.Equal(t, pkiFailureInfoBadMessageCheck, rej.failInfo)
+		assert.Equal(t, corecmp.PKIFailureInfoBadMessageCheck, rej.failInfo)
 	})
 }
 
@@ -446,17 +447,17 @@ func TestValidateGeneralInfo(t *testing.T) {
 		},
 		{
 			name:    "implicitConfirm with NULL value passes",
-			entries: []asn1.RawValue{generalInfoEntry(t, oidImplicitConfirm, &nullRV)},
+			entries: []asn1.RawValue{generalInfoEntry(t, corecmp.OIDImplicitConfirm(), &nullRV)},
 		},
 		{
 			name:    "implicitConfirm with absent value passes",
-			entries: []asn1.RawValue{generalInfoEntry(t, oidImplicitConfirm, nil)},
+			entries: []asn1.RawValue{generalInfoEntry(t, corecmp.OIDImplicitConfirm(), nil)},
 		},
 		{
 			name:        "implicitConfirm with non-NULL value is rejected",
-			entries:     []asn1.RawValue{generalInfoEntry(t, oidImplicitConfirm, &garbageRV)},
+			entries:     []asn1.RawValue{generalInfoEntry(t, corecmp.OIDImplicitConfirm(), &garbageRV)},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadRequest,
+			wantFailBit: corecmp.PKIFailureInfoBadRequest,
 		},
 		{
 			name:    "confirmWaitTime with GeneralizedTime passes",
@@ -466,16 +467,16 @@ func TestValidateGeneralInfo(t *testing.T) {
 			name:        "confirmWaitTime with UTCTime is rejected",
 			entries:     []asn1.RawValue{generalInfoEntry(t, oidConfirmWaitTime, &utcTimeRV)},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadDataFormat,
+			wantFailBit: corecmp.PKIFailureInfoBadDataFormat,
 		},
 		{
 			name: "implicitConfirm and confirmWaitTime together is rejected",
 			entries: []asn1.RawValue{
-				generalInfoEntry(t, oidImplicitConfirm, &nullRV),
+				generalInfoEntry(t, corecmp.OIDImplicitConfirm(), &nullRV),
 				generalInfoEntry(t, oidConfirmWaitTime, &genTimeRV),
 			},
 			wantReject:  true,
-			wantFailBit: pkiFailureInfoBadRequest,
+			wantFailBit: corecmp.PKIFailureInfoBadRequest,
 		},
 	}
 
@@ -539,24 +540,24 @@ func TestInspectKGATemplateKey(t *testing.T) {
 	null := asn1.NullRawValue
 
 	// Empty RSA key ⇒ for_kga, RSA hint.
-	if empty, alg := inspectKGATemplateKey(spkiBody(t, oidRSAEncryption, null, nil)); !empty || alg != x509.RSA {
+	if empty, alg := corecmp.InspectKGATemplateKey(spkiBody(t, corecmp.OIDRSAEncryption(), null, nil)); !empty || alg != x509.RSA {
 		t.Fatalf("empty RSA: got empty=%v alg=%v, want true/RSA", empty, alg)
 	}
 	// Empty EC key ⇒ for_kga, ECDSA hint.
 	ecParams := asn1.RawValue{}
-	if empty, alg := inspectKGATemplateKey(spkiBody(t, oidECPublicKey, ecParams, nil)); !empty || alg != x509.ECDSA {
+	if empty, alg := corecmp.InspectKGATemplateKey(spkiBody(t, corecmp.OIDECPublicKey(), ecParams, nil)); !empty || alg != x509.ECDSA {
 		t.Fatalf("empty EC: got empty=%v alg=%v, want true/ECDSA", empty, alg)
 	}
 	// Non-empty key ⇒ NOT for_kga.
-	if empty, _ := inspectKGATemplateKey(spkiBody(t, oidRSAEncryption, null, []byte{0x01, 0x02, 0x03})); empty {
+	if empty, _ := corecmp.InspectKGATemplateKey(spkiBody(t, corecmp.OIDRSAEncryption(), null, []byte{0x01, 0x02, 0x03})); empty {
 		t.Fatal("non-empty key must not be flagged as for_kga")
 	}
 	// Empty key with an unknown algorithm ⇒ for_kga but no usable hint.
-	if empty, alg := inspectKGATemplateKey(spkiBody(t, asn1.ObjectIdentifier{1, 2, 3, 4}, null, nil)); !empty || alg != x509.UnknownPublicKeyAlgorithm {
+	if empty, alg := corecmp.InspectKGATemplateKey(spkiBody(t, asn1.ObjectIdentifier{1, 2, 3, 4}, null, nil)); !empty || alg != x509.UnknownPublicKeyAlgorithm {
 		t.Fatalf("empty unknown-alg: got empty=%v alg=%v, want true/Unknown", empty, alg)
 	}
 	// Garbage ⇒ safe default (treated as a normal key).
-	if empty, _ := inspectKGATemplateKey([]byte{0xFF, 0x00}); empty {
+	if empty, _ := corecmp.InspectKGATemplateKey([]byte{0xFF, 0x00}); empty {
 		t.Fatal("malformed SPKI body must default to non-KGA")
 	}
 }
@@ -587,13 +588,13 @@ func TestMarshalKGACertRepBody(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bodyDER, err := marshalKGACertRepBody(0, 0, certDER, envelopedDataDER)
+	bodyDER, err := corecmp.MarshalKGACertRepBody(0, 0, certDER, envelopedDataDER)
 	if err != nil {
 		t.Fatalf("marshalKGACertRepBody: %v", err)
 	}
 
 	// CertRepMessage ::= SEQUENCE { response SEQUENCE OF CertResponse }
-	var msg serverCertRepMessage
+	var msg corecmp.ServerCertRepMessage
 	if _, err := asn1.Unmarshal(bodyDER, &msg); err != nil {
 		t.Fatalf("decode CertRepMessage: %v", err)
 	}
@@ -712,7 +713,7 @@ func TestDecodeCertConfStatuses_MultiStatus(t *testing.T) {
 	cs := buildCertStatusTLV(t, hash, 0, nil)
 
 	body := buildCertConfirmContent(t, cs, cs, cs)
-	statuses, err := decodeCertConfStatuses(body)
+	statuses, err := corecmp.DecodeCertConfStatuses(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -727,7 +728,7 @@ func TestDecodeCertConfStatuses_NegativeCertReqID(t *testing.T) {
 	hash := make([]byte, 32)
 	cs := buildCertStatusTLV(t, hash, -1, nil)
 	body := buildCertConfirmContent(t, cs)
-	statuses, err := decodeCertConfStatuses(body)
+	statuses, err := corecmp.DecodeCertConfStatuses(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -769,14 +770,14 @@ func TestDecodeCertConfStatuses_AcceptedWithFailInfo(t *testing.T) {
 
 	cs := buildCertStatusTLV(t, hash, 0, siDER)
 	body := buildCertConfirmContent(t, cs)
-	statuses, err := decodeCertConfStatuses(body)
+	statuses, err := corecmp.DecodeCertConfStatuses(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
-	if statuses[0].StatusInfo.Status != PKIStatus(pkiStatusAccepted) {
+	if statuses[0].StatusInfo.Status != corecmp.PKIStatus(corecmp.PKIStatusAccepted) {
 		t.Fatalf("expected status accepted, got %d", statuses[0].StatusInfo.Status)
 	}
 	if statuses[0].StatusInfo.FailInfo.BitLength == 0 {
@@ -794,7 +795,7 @@ func TestDecodeCertConfStatuses_SingleAccepted(t *testing.T) {
 	}
 	cs := buildCertStatusTLV(t, hash, 0, nil)
 	body := buildCertConfirmContent(t, cs)
-	statuses, err := decodeCertConfStatuses(body)
+	statuses, err := corecmp.DecodeCertConfStatuses(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -856,7 +857,7 @@ func TestDecodeCertConfStatuses_ExplicitHashAlg(t *testing.T) {
 	}
 
 	body := buildCertConfirmContent(t, cs)
-	statuses, err := decodeCertConfStatuses(body)
+	statuses, err := corecmp.DecodeCertConfStatuses(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -884,7 +885,7 @@ func TestFindFirstOctetString_BoundsRecursionDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal innermost INTEGER: %v", err)
 	}
-	for i := 0; i < maxOctetStringSearchDepth+16; i++ {
+	for i := 0; i < corecmp.MaxOctetStringSearchDepth+16; i++ {
 		wrapped, err := asn1.Marshal(asn1.RawValue{
 			Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true, Bytes: inner,
 		})
@@ -894,7 +895,7 @@ func TestFindFirstOctetString_BoundsRecursionDepth(t *testing.T) {
 		inner = wrapped
 	}
 
-	_, err = findFirstOctetString(inner)
+	_, err = corecmp.FindFirstOctetString(inner)
 	if err == nil {
 		t.Fatal("expected an error for a pathologically nested ASN.1 structure, got nil (unbounded recursion regression)")
 	}

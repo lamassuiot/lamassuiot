@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	cmpmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +64,7 @@ func intPtr(v int) *int { return &v }
 func buildHeaderDERCustom(t *testing.T, o headerOpts) []byte {
 	t.Helper()
 
-	pvno := pvnoCMP2000
+	pvno := corecmp.PVNOCMP2000
 	if o.PVNO != nil {
 		pvno = *o.PVNO
 	}
@@ -199,7 +200,7 @@ func parseFailInfoBitString(t *testing.T, responseDER []byte) asn1.BitString {
 	var msg rawMsg
 	_, err := asn1.Unmarshal(responseDER, &msg)
 	require.NoError(t, err)
-	require.Equal(t, cmpBodyTagError, msg.Body.Tag, "expected error PKIMessage")
+	require.Equal(t, corecmp.BodyTagError, msg.Body.Tag, "expected error PKIMessage")
 
 	var errMsg asn1.RawValue
 	_, err = asn1.Unmarshal(msg.Body.Bytes, &errMsg)
@@ -253,14 +254,14 @@ func TestC1_PVNO_Request2_Response2(t *testing.T) {
 
 	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
 	header := buildHeaderDERCustom(t, headerOpts{
-		PVNO:                intPtr(pvnoCMP2000),
+		PVNO:                intPtr(corecmp.PVNOCMP2000),
 		WithImplicitConfirm: true,
 	})
 	irDER := buildIRWithHeader(t, header, "device-pvno-2")
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, pvnoCMP2000, parseResponsePVNO(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.PVNOCMP2000, parseResponsePVNO(t, resp.Body.Bytes()),
 		"response pvno MUST equal request pvno (cmp2000)")
 }
 
@@ -273,14 +274,14 @@ func TestC1_PVNO_Request3_Response3(t *testing.T) {
 
 	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
 	header := buildHeaderDERCustom(t, headerOpts{
-		PVNO:                intPtr(pvnoCMP2021),
+		PVNO:                intPtr(corecmp.PVNOCMP2021),
 		WithImplicitConfirm: true,
 	})
 	irDER := buildIRWithHeader(t, header, "device-pvno-3")
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, resp.Body.Bytes()),
+	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, resp.Body.Bytes()),
 		"response pvno MUST equal request pvno (cmp2021)")
 }
 
@@ -301,11 +302,11 @@ func TestC1_PVNO_UnsupportedVersion_RejectedWithFailInfo(t *testing.T) {
 
 			resp := postCMP(t, router, "test-dms", irDER)
 			require.Equal(t, http.StatusOK, resp.Code)
-			assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+			assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
 				"unsupported pvno MUST yield an error PKIMessage")
 
 			bs := parseFailInfoBitString(t, resp.Body.Bytes())
-			assert.True(t, bitSet(bs, pkiFailureInfoUnsupportedVersion),
+			assert.True(t, bitSet(bs, corecmp.PKIFailureInfoUnsupportedVersion),
 				"failInfo bit unsupportedVersion (16) MUST be set per RFC 9810 §7")
 		})
 	}
@@ -353,10 +354,10 @@ func TestC3_SenderNonce_TooShort_RejectedBadSenderNonce(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadSenderNonce),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadSenderNonce),
 		"failInfo bit badSenderNonce (18) MUST be set per RFC 9483 §3.5")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
@@ -371,10 +372,10 @@ func TestC3_SenderNonce_Missing_Rejected(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadSenderNonce),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadSenderNonce),
 		"missing senderNonce MUST set badSenderNonce per RFC 9483 §3.5")
 }
 
@@ -394,10 +395,10 @@ func TestC4_TransactionID_TooShort_Rejected(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadDataFormat),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadDataFormat),
 		"short/malformed transactionID MUST set badDataFormat per RFC 9483 §3.5")
 }
 
@@ -410,7 +411,7 @@ func TestC4_TransactionID_Missing_Rejected(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 }
 
 // ---------------------------------------------------------------------------
@@ -474,11 +475,11 @@ func TestC6_FailInfo_ProtectionVerificationFailure_BadMessageCheck(t *testing.T)
 
 	resp := postCMP(t, router, "test-dms", corrupted)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"corrupted protection signature must yield CMP error body")
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadMessageCheck),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadMessageCheck),
 		"protection verify failure MUST set badMessageCheck (1) per RFC 9483 §3.6.4")
 }
 
@@ -494,11 +495,11 @@ func TestC6_FailInfo_POPOFailure_BadPOP(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()),
 		"POPO failure must respond with ip CertRepMessage (RFC 9483 §4.1)")
 
 	_, bs := parseCertRepRejection(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadPOP),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadPOP),
 		"POPO failure MUST set badPOP (9) per RFC 9810 §5.1.3")
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
@@ -513,7 +514,7 @@ func TestC6_FailInfo_POPOFailure_BadPOP(t *testing.T) {
 // absent and the cert was issued under ECDSA-with-SHA256, default to SHA-256.
 func TestC7_ComputeCertHash_DefaultECDSAP256_SHA256(t *testing.T) {
 	certDER := buildSelfSignedECDSACert(t, elliptic.P256())
-	got, err := computeCertHash(certDER, nil)
+	got, err := corecmp.ComputeCertHash(certDER, nil)
 	require.NoError(t, err)
 	want := sha256.Sum256(certDER)
 	assert.Equal(t, want[:], got, "ECDSA-P256 cert defaults to SHA-256")
@@ -523,7 +524,7 @@ func TestC7_ComputeCertHash_DefaultECDSAP256_SHA256(t *testing.T) {
 // the implicit default for certs signed with ECDSA-with-SHA384.
 func TestC7_ComputeCertHash_DefaultECDSAP384_SHA384(t *testing.T) {
 	certDER := buildSelfSignedECDSACert(t, elliptic.P384())
-	got, err := computeCertHash(certDER, nil)
+	got, err := corecmp.ComputeCertHash(certDER, nil)
 	require.NoError(t, err)
 	want := sha512.Sum384(certDER)
 	assert.Equal(t, want[:], got,
@@ -533,7 +534,7 @@ func TestC7_ComputeCertHash_DefaultECDSAP384_SHA384(t *testing.T) {
 // TestC7_ComputeCertHash_DefaultECDSAP521_SHA512 — SHA-512 default for P-521.
 func TestC7_ComputeCertHash_DefaultECDSAP521_SHA512(t *testing.T) {
 	certDER := buildSelfSignedECDSACert(t, elliptic.P521())
-	got, err := computeCertHash(certDER, nil)
+	got, err := corecmp.ComputeCertHash(certDER, nil)
 	require.NoError(t, err)
 	want := sha512.Sum512(certDER)
 	assert.Equal(t, want[:], got,
@@ -568,7 +569,7 @@ func TestC8_DecodeRequestHeader_CapturesProtectionAlgParameters(t *testing.T) {
 	// Build a header containing protectionAlg [1] with non-NULL parameters
 	// (use sha256WithRSAEncryption + NULL params, but assert via the parsed
 	// AlgorithmIdentifier rather than just the OID).
-	pvnoDER, _ := asn1.Marshal(pvnoCMP2000)
+	pvnoDER, _ := asn1.Marshal(corecmp.PVNOCMP2000)
 	emptyName, _ := asn1.Marshal(pkix.RDNSequence{})
 	senderDER, _ := asn1.MarshalWithParams(asn1.RawValue{FullBytes: emptyName}, "tag:4")
 
@@ -595,7 +596,7 @@ func TestC8_DecodeRequestHeader_CapturesProtectionAlgParameters(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	parsed, err := decodeRequestHeader(headerDER)
+	parsed, err := corecmp.DecodeRequestHeader(headerDER)
 	require.NoError(t, err)
 	require.NotNil(t, parsed.ProtectionAlg.Algorithm, "ProtectionAlg.Algorithm must be parsed")
 	assert.True(t, parsed.ProtectionAlg.Algorithm.Equal(algID.Algorithm),
@@ -678,7 +679,7 @@ func TestC10_HashFromSignatureAlgOID_SHA1_Rejected(t *testing.T) {
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := hashFromSignatureAlgOID(tc.oid)
+			_, err := corecmp.HashFromSignatureAlgOID(tc.oid)
 			assert.Error(t, err, "%s MUST be rejected as MSG_SIG_ALG (RFC 9481 §3)", tc.name)
 		})
 	}
@@ -699,10 +700,10 @@ func TestC10_SHA1Protection_Rejected_BadAlg(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", withFake)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadAlg),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadAlg),
 		"SHA-1 protection MUST set badAlg (0) per RFC 9481 §3")
 }
 
@@ -713,7 +714,7 @@ func TestC10_SHA1Protection_Rejected_BadAlg(t *testing.T) {
 // signature verification (e.g. algorithm-OID gating).
 func attachFakeProtection(t *testing.T, msgDER []byte, sigBytes []byte) []byte {
 	t.Helper()
-	var rawMsg rawPKIMessage
+	var rawMsg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(msgDER, &rawMsg)
 	require.NoError(t, err)
 
@@ -752,7 +753,7 @@ func TestC10_HashFromSignatureAlgOID_AcceptsModern(t *testing.T) {
 	}
 	for _, tc := range accepted {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := hashFromSignatureAlgOID(tc.oid)
+			_, err := corecmp.HashFromSignatureAlgOID(tc.oid)
 			assert.NoError(t, err, "%s must remain accepted as MSG_SIG_ALG", tc.name)
 		})
 	}
@@ -790,20 +791,20 @@ func TestFailInfo_BitNumbersMatchRFC9810(t *testing.T) {
 		"systemFailure":      25,
 	}
 	got := map[string]int{
-		"badAlg":             pkiFailureInfoBadAlg,
-		"badMessageCheck":    pkiFailureInfoBadMessageCheck,
-		"badRequest":         pkiFailureInfoBadRequest,
-		"badTime":            pkiFailureInfoBadTime,
-		"badCertId":          pkiFailureInfoBadCertId,
-		"badDataFormat":      pkiFailureInfoBadDataFormat,
-		"incorrectData":      pkiFailureInfoIncorrectData,
-		"badPOP":             pkiFailureInfoBadPOP,
-		"badRecipientNonce":  pkiFailureInfoBadRecipientNonce,
-		"badSenderNonce":     pkiFailureInfoBadSenderNonce,
-		"badCertTemplate":    pkiFailureInfoBadCertTemplate,
-		"transactionIdInUse": pkiFailureInfoTransactionIDInUse,
-		"unsupportedVersion": pkiFailureInfoUnsupportedVersion,
-		"systemFailure":      pkiFailureInfoSystemFailure,
+		"badAlg":             corecmp.PKIFailureInfoBadAlg,
+		"badMessageCheck":    corecmp.PKIFailureInfoBadMessageCheck,
+		"badRequest":         corecmp.PKIFailureInfoBadRequest,
+		"badTime":            corecmp.PKIFailureInfoBadTime,
+		"badCertId":          corecmp.PKIFailureInfoBadCertID,
+		"badDataFormat":      corecmp.PKIFailureInfoBadDataFormat,
+		"incorrectData":      corecmp.PKIFailureInfoIncorrectData,
+		"badPOP":             corecmp.PKIFailureInfoBadPOP,
+		"badRecipientNonce":  corecmp.PKIFailureInfoBadRecipientNonce,
+		"badSenderNonce":     corecmp.PKIFailureInfoBadSenderNonce,
+		"badCertTemplate":    corecmp.PKIFailureInfoBadCertTemplate,
+		"transactionIdInUse": corecmp.PKIFailureInfoTransactionIDInUse,
+		"unsupportedVersion": corecmp.PKIFailureInfoUnsupportedVersion,
+		"systemFailure":      corecmp.PKIFailureInfoSystemFailure,
 	}
 	for name, expected := range cases {
 		assert.Equal(t, expected, got[name],
@@ -823,7 +824,7 @@ func TestFailInfo_RecipNonceMismatch_BadRecipientNonce(t *testing.T) {
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-bad-recip", TransactionID: txID})
 	irResp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, irResp.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
 
 	// Stored transaction has a real SentNonce; we send certConf with a
 	// deliberately-wrong recipNonce to trigger the mismatch path.
@@ -839,12 +840,12 @@ func TestFailInfo_RecipNonceMismatch_BadRecipientNonce(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadRecipientNonce),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadRecipientNonce),
 		"recipNonce mismatch MUST set badRecipientNonce(13) per RFC 9810 §5.1.3 — got bits %x", bs.Bytes)
-	assert.False(t, bitSet(bs, pkiFailureInfoBadRequest),
+	assert.False(t, bitSet(bs, corecmp.PKIFailureInfoBadRequest),
 		"badRequest is NOT the right bit for nonce mismatch — there is a dedicated badRecipientNonce")
 }
 
@@ -860,17 +861,17 @@ func TestFailInfo_DuplicateTransactionID_TransactionIDInUse(t *testing.T) {
 	first, _, _ := buildTestIR(t, testIROptions{CN: "device-dup", TransactionID: txID})
 	resp1 := postCMP(t, router, "test-dms", first)
 	require.Equal(t, http.StatusOK, resp1.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, resp1.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp1.Body.Bytes()),
 		"first IR with this txID must succeed")
 
 	// Second IR carrying the same transactionID — must be rejected.
 	second, _, _ := buildTestIR(t, testIROptions{CN: "device-dup", TransactionID: txID})
 	resp2 := postCMP(t, router, "test-dms", second)
 	require.Equal(t, http.StatusOK, resp2.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp2.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp2.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp2.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoTransactionIDInUse),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoTransactionIDInUse),
 		"duplicate transactionID MUST set transactionIdInUse(21) per RFC 9810 §5.1.3 — got bits %x", bs.Bytes)
 }
 
@@ -891,10 +892,10 @@ func TestFailInfo_UnknownTransactionID_BadRequest(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadRequest),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadRequest),
 		"unknown transactionID MUST set badRequest(2) per RFC 9810 §5.1.3 — got bits %x", bs.Bytes)
 }
 
@@ -911,10 +912,10 @@ func TestFailInfo_UnsupportedBodyTag_BadRequest(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", mutated)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadRequest),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadRequest),
 		"unsupported body tag MUST set badRequest(2) — got bits %x", bs.Bytes)
 }
 
@@ -922,7 +923,7 @@ func TestFailInfo_UnsupportedBodyTag_BadRequest(t *testing.T) {
 // by newTag, leaving everything else unchanged.
 func rewriteBodyTag(t *testing.T, msgDER []byte, newTag int) []byte {
 	t.Helper()
-	var rawMsg rawPKIMessage
+	var rawMsg corecmp.RawPKIMessage
 	_, err := asn1.Unmarshal(msgDER, &rawMsg)
 	require.NoError(t, err)
 
@@ -981,10 +982,10 @@ func TestFailInfo_CertHashMismatch_BadCertId(t *testing.T) {
 
 	resp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, cmpBodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()))
 
 	bs := parseFailInfoBitString(t, resp.Body.Bytes())
-	assert.True(t, bitSet(bs, pkiFailureInfoBadCertId),
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadCertID),
 		"certHash mismatch MUST set badCertId(4) — got bits %x", bs.Bytes)
 }
 
@@ -1066,7 +1067,7 @@ func buildPollReqWithHeader(t *testing.T, headerDER []byte, certReqID int) []byt
 	}
 	pollReqContent, err := asn1.Marshal([]pollReqEntry{{CertReqID: certReqID}})
 	require.NoError(t, err)
-	bodyDER := ctxDER(t, cmpBodyTagPollReq, pollReqContent)
+	bodyDER := ctxDER(t, corecmp.BodyTagPollReq, pollReqContent)
 	return seqDER(t, concatBytes(headerDER, bodyDER))
 }
 
@@ -1085,7 +1086,7 @@ func buildCertConfWithHeader(t *testing.T, headerDER []byte, certDER []byte) []b
 	})
 	require.NoError(t, err)
 	certConfContent := seqDER(t, certStatusDER)
-	bodyDER := ctxDER(t, cmpBodyTagCertConf, certConfContent)
+	bodyDER := ctxDER(t, corecmp.BodyTagCertConf, certConfContent)
 	return seqDER(t, concatBytes(headerDER, bodyDER))
 }
 
@@ -1120,16 +1121,16 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	// Step 1: IR with pvno=3. The response from this call is the IP that
 	// (in the dropped-response scenario) the EE never receives.
 	irHeader := buildHeaderDERCustom(t, headerOpts{
-		PVNO:          intPtr(pvnoCMP2021),
+		PVNO:          intPtr(corecmp.PVNOCMP2021),
 		TransactionID: txID,
 	})
 	irDER := buildIRWithHeader(t, irHeader, "v3-drop-poll-device")
 
 	irResp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, irResp.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()),
 		"IR must produce an IP response")
-	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()),
+	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()),
 		"IP response under cmp2021 IR MUST carry pvno=3 (RFC 9810 §7)")
 
 	// The ISSUED row must exist with a persisted sentNonce — that nonce is
@@ -1149,16 +1150,16 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	// server must redeliver the cert in an IP body — NOT a pollRep —
 	// because the row is ISSUED, not PENDING.
 	pollHeader := buildHeaderDERCustom(t, headerOpts{
-		PVNO:          intPtr(pvnoCMP2021),
+		PVNO:          intPtr(corecmp.PVNOCMP2021),
 		TransactionID: txID,
 	})
 	pollDER := buildPollReqWithHeader(t, pollHeader, 0)
 
 	pollResp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, pollResp.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
 		"ISSUED-state pollReq must deliver the cert via IP, not pollRep")
-	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
+	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
 		"pollReq under cmp2021 MUST receive a cmp2021 response (RFC 9810 §7)")
 
 	// CRITICAL: the senderNonce on the redelivered IP must equal the
@@ -1178,7 +1179,7 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 
 	// Step 3: certConf with pvno=3, recipNonce = the persisted sentNonce.
 	certConfHeader := buildHeaderDERCustom(t, headerOpts{
-		PVNO:          intPtr(pvnoCMP2021),
+		PVNO:          intPtr(corecmp.PVNOCMP2021),
 		TransactionID: txID,
 		RecipNonce:    persistedSentNonce,
 	})
@@ -1186,9 +1187,9 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 
 	confResp := postCMP(t, router, "test-dms", certConfDER)
 	require.Equal(t, http.StatusOK, confResp.Code)
-	require.Equal(t, cmpBodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
 		"certConf with valid certHash + recipNonce MUST yield pkiConf")
-	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, confResp.Body.Bytes()),
+	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, confResp.Body.Bytes()),
 		"pkiConf MUST carry pvno=3 to match the cmp2021 transaction")
 
 	// Tx is now CONFIRMED.
@@ -1214,7 +1215,7 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 
 	// Step 1: IR with pvno=3 + implicitConfirm. Original IP dropped.
 	irHeader := buildHeaderDERCustom(t, headerOpts{
-		PVNO:                intPtr(pvnoCMP2021),
+		PVNO:                intPtr(corecmp.PVNOCMP2021),
 		TransactionID:       txID,
 		WithImplicitConfirm: true,
 	})
@@ -1222,8 +1223,8 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 
 	irResp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, irResp.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
-	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()))
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
+	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()))
 
 	// Row is born CONFIRMED in implicit-confirm mode — RFC 4210 §5.2.8 says
 	// the transaction is complete upon IP delivery. The row persists in
@@ -1238,7 +1239,7 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 	// server redelivers the cert and, because the DMS grants implicit
 	// confirmation, transitions the row to CONFIRMED right away.
 	pollHeader := buildHeaderDERCustom(t, headerOpts{
-		PVNO:                intPtr(pvnoCMP2021),
+		PVNO:                intPtr(corecmp.PVNOCMP2021),
 		TransactionID:       txID,
 		WithImplicitConfirm: true,
 	})
@@ -1246,9 +1247,9 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 
 	pollResp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, pollResp.Code)
-	require.Equal(t, cmpBodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
 		"implicit-confirm pollReq against ISSUED row must deliver the cert via IP")
-	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
+	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
 		"redelivered IP MUST carry pvno=3 to match the cmp2021 transaction")
 
 	// Row stays CONFIRMED — already finalised at IR time. pollReq just
@@ -1278,25 +1279,25 @@ func TestCMPv3_PollReq_PVNOMismatch_ResponseEchoesPollPVNO(t *testing.T) {
 
 	// Step 1: IR with pvno=2.
 	irHeader := buildHeaderDERCustom(t, headerOpts{
-		PVNO:          intPtr(pvnoCMP2000),
+		PVNO:          intPtr(corecmp.PVNOCMP2000),
 		TransactionID: txID,
 	})
 	irDER := buildIRWithHeader(t, irHeader, "v3-pvno-mismatch")
 	irResp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, irResp.Code)
-	assert.Equal(t, pvnoCMP2000, parseResponsePVNO(t, irResp.Body.Bytes()))
+	assert.Equal(t, corecmp.PVNOCMP2000, parseResponsePVNO(t, irResp.Body.Bytes()))
 
 	_, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
 
 	// Step 2: pollReq with pvno=3 — server MUST echo pvno=3 on the redelivery.
 	pollHeader := buildHeaderDERCustom(t, headerOpts{
-		PVNO:          intPtr(pvnoCMP2021),
+		PVNO:          intPtr(corecmp.PVNOCMP2021),
 		TransactionID: txID,
 	})
 	pollDER := buildPollReqWithHeader(t, pollHeader, 0)
 	pollResp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, pollResp.Code)
-	assert.Equal(t, pvnoCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
+	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
 		"pollReq pvno is what determines the response pvno (RFC 9810 §7)")
 }
