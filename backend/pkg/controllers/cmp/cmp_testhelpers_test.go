@@ -259,11 +259,11 @@ func peekSentNonce(t *testing.T, store *inMemoryCMPStore, txID []byte) []byte {
 // inMemoryCMPStore is a thread-safe in-memory CMPTransactionRepo for unit tests.
 type inMemoryCMPStore struct {
 	mu  sync.Mutex
-	txs map[string]storage.CMPTransaction
+	txs map[string]models.CMPTransaction
 }
 
 func newInMemoryCMPStore() *inMemoryCMPStore {
-	return &inMemoryCMPStore{txs: make(map[string]storage.CMPTransaction)}
+	return &inMemoryCMPStore{txs: make(map[string]models.CMPTransaction)}
 }
 
 func (s *inMemoryCMPStore) Exists(_ context.Context, id string) (bool, error) {
@@ -273,7 +273,7 @@ func (s *inMemoryCMPStore) Exists(_ context.Context, id string) (bool, error) {
 	return ok, nil
 }
 
-func (s *inMemoryCMPStore) Insert(_ context.Context, tx storage.CMPTransaction) error {
+func (s *inMemoryCMPStore) Insert(_ context.Context, tx models.CMPTransaction) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.txs[tx.TransactionID]; exists {
@@ -283,45 +283,45 @@ func (s *inMemoryCMPStore) Insert(_ context.Context, tx storage.CMPTransaction) 
 	return nil
 }
 
-func (s *inMemoryCMPStore) SelectAndDelete(_ context.Context, id string) (storage.CMPTransaction, bool, error) {
+func (s *inMemoryCMPStore) SelectAndDelete(_ context.Context, id string) (models.CMPTransaction, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
 	if !ok {
-		return storage.CMPTransaction{}, false, nil
+		return models.CMPTransaction{}, false, nil
 	}
 	delete(s.txs, id)
 	return tx, true, nil
 }
 
-func (s *inMemoryCMPStore) Peek(id string) (storage.CMPTransaction, bool) {
+func (s *inMemoryCMPStore) Peek(id string) (models.CMPTransaction, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
 	return tx, ok
 }
 
-func (s *inMemoryCMPStore) Select(_ context.Context, id string) (storage.CMPTransaction, bool, error) {
+func (s *inMemoryCMPStore) Select(_ context.Context, id string) (models.CMPTransaction, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
 	if !ok {
-		return storage.CMPTransaction{}, false, nil
+		return models.CMPTransaction{}, false, nil
 	}
 	return tx, true, nil
 }
 
-func (s *inMemoryCMPStore) SelectIncludingExpired(_ context.Context, id string) (storage.CMPTransaction, bool, error) {
+func (s *inMemoryCMPStore) SelectIncludingExpired(_ context.Context, id string) (models.CMPTransaction, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
 	if !ok {
-		return storage.CMPTransaction{}, false, nil
+		return models.CMPTransaction{}, false, nil
 	}
 	return tx, true, nil
 }
 
-func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
+func (s *inMemoryCMPStore) UpdateState(_ context.Context, id string, state models.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
@@ -345,7 +345,7 @@ func (s *inMemoryCMPStore) HasUnconfirmedReenrollment(_ context.Context, dmsID, 
 	defer s.mu.Unlock()
 	for _, tx := range s.txs {
 		if tx.DMSID == dmsID && tx.SupersededCertSerial == supersededCertSerial &&
-			tx.IsReenrollment && tx.State == storage.CMPTransactionStateIssued &&
+			tx.IsReenrollment && tx.State == models.CMPTransactionStateIssued &&
 			time.Now().Before(tx.ExpiresAt) {
 			return true, nil
 		}
@@ -361,7 +361,7 @@ func (s *inMemoryCMPStore) HasAbandonedReenrollment(_ context.Context, dmsID, su
 	defer s.mu.Unlock()
 	for _, tx := range s.txs {
 		if tx.DMSID == dmsID && tx.SupersededCertSerial == supersededCertSerial &&
-			tx.IsReenrollment && tx.State == storage.CMPTransactionStateRevoked {
+			tx.IsReenrollment && tx.State == models.CMPTransactionStateRevoked {
 			return true, nil
 		}
 	}
@@ -382,7 +382,7 @@ func (s *inMemoryCMPStore) HasSeenRegToken(_ context.Context, dmsID, regToken st
 	return false, nil
 }
 
-func (s *inMemoryCMPStore) SelectByCertSerial(_ context.Context, certSerialNumber string) (storage.CMPTransaction, bool, error) {
+func (s *inMemoryCMPStore) SelectByCertSerial(_ context.Context, certSerialNumber string) (models.CMPTransaction, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, tx := range s.txs {
@@ -390,15 +390,15 @@ func (s *inMemoryCMPStore) SelectByCertSerial(_ context.Context, certSerialNumbe
 			return tx, true, nil
 		}
 	}
-	return storage.CMPTransaction{}, false, nil
+	return models.CMPTransaction{}, false, nil
 }
 
-func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]models.CMPTransaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]storage.CMPTransaction, 0)
+	out := make([]models.CMPTransaction, 0)
 	for _, tx := range s.txs {
-		if tx.State == storage.CMPTransactionStatePending {
+		if tx.State == models.CMPTransactionStatePending {
 			out = append(out, tx)
 			if limit > 0 && len(out) >= limit {
 				break
@@ -410,18 +410,18 @@ func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]storag
 
 func (s *inMemoryCMPStore) DeleteExpired(_ context.Context) error { return nil }
 
-func (s *inMemoryCMPStore) Confirm(_ context.Context, id string) (storage.CMPTransaction, storage.CMPTransactionState, bool, error) {
+func (s *inMemoryCMPStore) Confirm(_ context.Context, id string) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
 	if !ok {
-		return storage.CMPTransaction{}, "", false, nil
+		return models.CMPTransaction{}, "", false, nil
 	}
 	prior := tx.State
-	if tx.State != storage.CMPTransactionStateIssued {
-		return storage.CMPTransaction{}, prior, false, nil
+	if tx.State != models.CMPTransactionStateIssued {
+		return models.CMPTransaction{}, prior, false, nil
 	}
-	tx.State = storage.CMPTransactionStateConfirmed
+	tx.State = models.CMPTransactionStateConfirmed
 	tx.ConfirmedAt = time.Now()
 	s.txs[id] = tx
 	return tx, prior, true, nil
@@ -431,15 +431,15 @@ func (s *inMemoryCMPStore) MarkRevokedByCertSerial(_ context.Context, certSerial
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, tx := range s.txs {
-		if tx.CertSerialNumber == certSerial && tx.State == storage.CMPTransactionStateConfirmed {
-			tx.State = storage.CMPTransactionStateRevoked
+		if tx.CertSerialNumber == certSerial && tx.State == models.CMPTransactionStateConfirmed {
+			tx.State = models.CMPTransactionStateRevoked
 			s.txs[id] = tx
 		}
 	}
 	return nil
 }
 
-func (s *inMemoryCMPStore) SelectAllByDMS(_ context.Context, dmsID string, _ bool, applyFunc func(storage.CMPTransaction), _ *resources.QueryParameters) (string, error) {
+func (s *inMemoryCMPStore) SelectAllByDMS(_ context.Context, dmsID string, _ bool, applyFunc func(models.CMPTransaction), _ *resources.QueryParameters) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, tx := range s.txs {
@@ -450,12 +450,12 @@ func (s *inMemoryCMPStore) SelectAllByDMS(_ context.Context, dmsID string, _ boo
 	return "", nil
 }
 
-func (s *inMemoryCMPStore) SelectExpiredIssued(_ context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (s *inMemoryCMPStore) SelectExpiredIssued(_ context.Context, limit int) ([]models.CMPTransaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []storage.CMPTransaction
+	var out []models.CMPTransaction
 	for _, tx := range s.txs {
-		if tx.State == storage.CMPTransactionStateIssued && time.Now().After(tx.ExpiresAt) {
+		if tx.State == models.CMPTransactionStateIssued && time.Now().After(tx.ExpiresAt) {
 			out = append(out, tx)
 			if limit > 0 && len(out) >= limit {
 				break
@@ -465,12 +465,12 @@ func (s *inMemoryCMPStore) SelectExpiredIssued(_ context.Context, limit int) ([]
 	return out, nil
 }
 
-func (s *inMemoryCMPStore) SelectExpiredPending(_ context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (s *inMemoryCMPStore) SelectExpiredPending(_ context.Context, limit int) ([]models.CMPTransaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []storage.CMPTransaction
+	var out []models.CMPTransaction
 	for _, tx := range s.txs {
-		if tx.State == storage.CMPTransactionStatePending && time.Now().After(tx.ExpiresAt) {
+		if tx.State == models.CMPTransactionStatePending && time.Now().After(tx.ExpiresAt) {
 			out = append(out, tx)
 			if limit > 0 && len(out) >= limit {
 				break
@@ -487,7 +487,7 @@ func (s *inMemoryCMPStore) MarkRevokedByTransactionID(_ context.Context, transac
 	if !ok {
 		return nil
 	}
-	tx.State = storage.CMPTransactionStateRevoked
+	tx.State = models.CMPTransactionStateRevoked
 	s.txs[transactionID] = tx
 	return nil
 }

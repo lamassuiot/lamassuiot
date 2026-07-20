@@ -101,7 +101,7 @@ func (m *CMPConfirmationMonitor) Run() {
 //
 // Errors are logged but never returned: each row is independent, so a single
 // CA failure must not stop the rest of the batch.
-func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *logrus.Entry, tx storage.CMPTransaction) {
+func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *logrus.Entry, tx models.CMPTransaction) {
 	lFunc = lFunc.
 		WithField("cmp-tx", tx.TransactionID).
 		WithField("dms", tx.DMSID).
@@ -157,7 +157,7 @@ func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *l
 // DeleteExpired eventually sweeps it; until then a late pollReq sees the
 // rejection via the existing ISSUE_FAILED branch in handlePoll and operators
 // can inspect the row in the management UI.
-func (m *CMPConfirmationMonitor) expireUnapproved(ctx context.Context, lFunc *logrus.Entry, tx storage.CMPTransaction) {
+func (m *CMPConfirmationMonitor) expireUnapproved(ctx context.Context, lFunc *logrus.Entry, tx models.CMPTransaction) {
 	lFunc = lFunc.
 		WithField("cmp-tx", tx.TransactionID).
 		WithField("dms", tx.DMSID).
@@ -169,7 +169,7 @@ func (m *CMPConfirmationMonitor) expireUnapproved(ctx context.Context, lFunc *lo
 	)
 	updated, err := m.txStore.UpdateState(
 		ctx, tx.TransactionID,
-		storage.CMPTransactionStateIssueFailed,
+		models.CMPTransactionStateIssueFailed,
 		nil, reason,
 		time.Now().Add(cmpExpiredPendingRetention),
 	)
@@ -193,7 +193,7 @@ func (m *CMPConfirmationMonitor) expireUnapproved(ctx context.Context, lFunc *lo
 // revocation has already succeeded by the time we get here, so a WFX failure
 // must not turn into a job error — it's logged and dropped. Skipped silently
 // when WFX integration is disabled (m.wfx == nil).
-func (m *CMPConfirmationMonitor) reportRejected(ctx context.Context, lFunc *logrus.Entry, tx storage.CMPTransaction, reason string) {
+func (m *CMPConfirmationMonitor) reportRejected(ctx context.Context, lFunc *logrus.Entry, tx models.CMPTransaction, reason string) {
 	if m.wfx == nil {
 		return
 	}

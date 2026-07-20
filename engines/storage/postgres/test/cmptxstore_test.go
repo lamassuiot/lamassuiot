@@ -65,15 +65,15 @@ func setupCMPTxRepo(t *testing.T) (storage.CMPTransactionRepo, func()) {
 	return repo, suite.AfterSuite
 }
 
-func newTx(txID, dmsID string, ttl time.Duration) storage.CMPTransaction {
+func newTx(txID, dmsID string, ttl time.Duration) models.CMPTransaction {
 	cert, _, serial := cmpTxTestMaterial()
-	return storage.CMPTransaction{
+	return models.CMPTransaction{
 		TransactionID:    txID,
 		DMSID:            dmsID,
 		CertSerialNumber: serial,
 		Certificate:      cert,
 		SentNonce:        hex.EncodeToString([]byte("fake-nonce-16byt")),
-		State:            storage.CMPTransactionStateIssued,
+		State:            models.CMPTransactionStateIssued,
 		ExpiresAt:        time.Now().Add(ttl),
 		CreatedAt:        time.Now(),
 	}
@@ -82,14 +82,14 @@ func newTx(txID, dmsID string, ttl time.Duration) storage.CMPTransaction {
 // newPendingTx builds a PENDING transaction used to seed the async-issuance
 // worker path: cert is not yet issued, the row carries the CSR DER the worker
 // will hand to LWCEnroll/LWCReenroll once it picks the row up.
-func newPendingTx(txID, dmsID string, ttl time.Duration) storage.CMPTransaction {
+func newPendingTx(txID, dmsID string, ttl time.Duration) models.CMPTransaction {
 	_, csr, _ := cmpTxTestMaterial()
-	return storage.CMPTransaction{
+	return models.CMPTransaction{
 		TransactionID:  txID,
 		DMSID:          dmsID,
 		Certificate:    nil,
 		SentNonce:      hex.EncodeToString([]byte("fake-nonce-16byt")),
-		State:          storage.CMPTransactionStatePending,
+		State:          models.CMPTransactionStatePending,
 		CSR:            csr,
 		IsReenrollment: false,
 		ExpiresAt:      time.Now().Add(ttl),
@@ -276,7 +276,7 @@ func TestCMPTx_LifecycleRetryAfterExpiryAndCleanup(t *testing.T) {
 	// 4a) the confirmation monitor transitions the expired PENDING row to
 	// ISSUE_FAILED. DeleteExpired only reclaims expired ISSUE_FAILED rows, so
 	// give it a retention TTL that is already in the past.
-	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssueFailed, nil, "expired before confirmation", time.Now().Add(-1*time.Second))
+	updated, err := repo.UpdateState(ctx, txID, models.CMPTransactionStateIssueFailed, nil, "expired before confirmation", time.Now().Add(-1*time.Second))
 	require.NoError(t, err)
 	require.True(t, updated, "monitor must be able to transition the expired PENDING row")
 
@@ -307,7 +307,7 @@ func TestCMPTx_InsertPendingHasNoCert(t *testing.T) {
 	got, ok, err := repo.Select(ctx, txID)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, storage.CMPTransactionStatePending, got.State)
+	assert.Equal(t, models.CMPTransactionStatePending, got.State)
 	assert.Nil(t, got.Certificate, "PENDING row must have no cert yet")
 	assert.NotNil(t, got.CSR, "PENDING row must carry the CSR for the worker")
 	assert.False(t, got.IsReenrollment)
@@ -360,14 +360,14 @@ func TestCMPTx_UpdateStateToIssued(t *testing.T) {
 	require.NoError(t, repo.Insert(ctx, newPendingTx(txID, "dms-async", 5*time.Minute)))
 
 	issuedCert, _, _ := cmpTxTestMaterial()
-	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssued, issuedCert, "", time.Now().Add(5*time.Minute))
+	updated, err := repo.UpdateState(ctx, txID, models.CMPTransactionStateIssued, issuedCert, "", time.Now().Add(5*time.Minute))
 	require.NoError(t, err)
 	require.True(t, updated, "UpdateState must report the row as updated")
 
 	got, ok, err := repo.Select(ctx, txID)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, storage.CMPTransactionStateIssued, got.State)
+	assert.Equal(t, models.CMPTransactionStateIssued, got.State)
 	require.NotNil(t, got.Certificate, "cert must be written into the row by UpdateState")
 	assert.Equal(t, issuedCert.Raw, got.Certificate.Raw, "cert must be written into the row by UpdateState")
 	assert.Empty(t, got.ErrorMessage)
@@ -385,14 +385,14 @@ func TestCMPTx_UpdateStateToFailed(t *testing.T) {
 	require.NoError(t, repo.Insert(ctx, newPendingTx(txID, "dms-async", 5*time.Minute)))
 
 	reason := "CA returned: profile validation failed"
-	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssueFailed, nil, reason, time.Now().Add(5*time.Minute))
+	updated, err := repo.UpdateState(ctx, txID, models.CMPTransactionStateIssueFailed, nil, reason, time.Now().Add(5*time.Minute))
 	require.NoError(t, err)
 	require.True(t, updated, "UpdateState must report the row as updated")
 
 	got, ok, err := repo.Select(ctx, txID)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, storage.CMPTransactionStateIssueFailed, got.State)
+	assert.Equal(t, models.CMPTransactionStateIssueFailed, got.State)
 	assert.Nil(t, got.Certificate, "ISSUE_FAILED rows have no cert")
 	assert.Equal(t, reason, got.ErrorMessage)
 }
@@ -413,7 +413,7 @@ func TestCMPTx_UpdateState_TransitionsExpiredRow(t *testing.T) {
 
 	// The row is already past expiry. UpdateState must still transition it —
 	// here to ISSUE_FAILED with a fresh TTL, exactly as the monitor does.
-	updated, err := repo.UpdateState(ctx, txID, storage.CMPTransactionStateIssueFailed, nil, "expired before confirmation", time.Now().Add(5*time.Minute))
+	updated, err := repo.UpdateState(ctx, txID, models.CMPTransactionStateIssueFailed, nil, "expired before confirmation", time.Now().Add(5*time.Minute))
 	require.NoError(t, err)
 	assert.True(t, updated, "UpdateState must transition the row regardless of prior expiry")
 
@@ -422,7 +422,7 @@ func TestCMPTx_UpdateState_TransitionsExpiredRow(t *testing.T) {
 	got, ok, err := repo.Select(ctx, txID)
 	require.NoError(t, err)
 	require.True(t, ok, "terminal ISSUE_FAILED row must be visible after transition")
-	assert.Equal(t, storage.CMPTransactionStateIssueFailed, got.State)
+	assert.Equal(t, models.CMPTransactionStateIssueFailed, got.State)
 	assert.Equal(t, "expired before confirmation", got.ErrorMessage)
 }
 
@@ -465,7 +465,7 @@ func TestCMPTx_SelectPending_IgnoresNonPendingAndExpired(t *testing.T) {
 
 	failedTx := newPendingTx(hex.EncodeToString([]byte("failed")), "dms-async", 5*time.Minute)
 	require.NoError(t, repo.Insert(ctx, failedTx))
-	_, err := repo.UpdateState(ctx, failedTx.TransactionID, storage.CMPTransactionStateIssueFailed, nil, "nope", time.Now().Add(5*time.Minute))
+	_, err := repo.UpdateState(ctx, failedTx.TransactionID, models.CMPTransactionStateIssueFailed, nil, "nope", time.Now().Add(5*time.Minute))
 	require.NoError(t, err)
 
 	alive := newPendingTx(hex.EncodeToString([]byte("alive-pending")), "dms-async", 5*time.Minute)

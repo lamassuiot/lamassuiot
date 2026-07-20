@@ -43,18 +43,18 @@ func (f fakeDMSRepo) Delete(ctx context.Context, ID string) error { return nil }
 // expiry ApproveCMPTransaction persists via UpdateState.
 type approvalCapturingCMPTxRepo struct {
 	noopCMPTxRepo
-	tx             storage.CMPTransaction
+	tx             models.CMPTransaction
 	capturedExpiry time.Time
 }
 
-func (r *approvalCapturingCMPTxRepo) SelectIncludingExpired(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
+func (r *approvalCapturingCMPTxRepo) SelectIncludingExpired(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
 	if transactionID == r.tx.TransactionID {
 		return r.tx, true, nil
 	}
-	return storage.CMPTransaction{}, false, nil
+	return models.CMPTransaction{}, false, nil
 }
 
-func (r *approvalCapturingCMPTxRepo) UpdateState(ctx context.Context, transactionID string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
+func (r *approvalCapturingCMPTxRepo) UpdateState(ctx context.Context, transactionID string, state models.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
 	r.capturedExpiry = expiresAt
 	return true, nil
 }
@@ -74,10 +74,10 @@ func newApproveTestSubject(t *testing.T, confirmationTimeout time.Duration) (*DM
 		},
 	}
 	txRepo := &approvalCapturingCMPTxRepo{
-		tx: storage.CMPTransaction{
+		tx: models.CMPTransaction{
 			TransactionID: "aabbccdd00112233",
 			DMSID:         "dms-A",
-			State:         storage.CMPTransactionStatePending,
+			State:         models.CMPTransactionStatePending,
 			CSR:           (*models.X509CertificateRequest)(makeTestCSR(t, "phased-device")),
 			CreatedAt:     time.Now(),
 			ExpiresAt:     time.Now().Add(time.Hour),
@@ -114,7 +114,7 @@ func TestApproveCMPTransaction_FloorsDeliveryWindow(t *testing.T) {
 		TransactionID: "aabbccdd00112233",
 	})
 	require.NoError(t, err)
-	require.Equal(t, storage.CMPTransactionStateIssued, updated.State)
+	require.Equal(t, models.CMPTransactionStateIssued, updated.State)
 
 	minExpected := before.Add(cmpApprovalMinDeliveryWindow)
 	require.False(t, txRepo.capturedExpiry.Before(minExpected.Add(-2*time.Second)),

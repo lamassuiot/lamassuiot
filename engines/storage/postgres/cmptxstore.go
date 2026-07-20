@@ -15,7 +15,7 @@ import (
 )
 
 // cmpTransactionRow is the GORM model that maps to the cmp_transactions table.
-// It is intentionally kept private; callers use the domain type storage.CMPTransaction.
+// It is intentionally kept private; callers use the domain type models.CMPTransaction.
 type cmpTransactionRow struct {
 	TransactionID        string    `gorm:"primaryKey;column:transaction_id"`
 	DMSID                string    `gorm:"column:dms_id;not null"`
@@ -110,8 +110,8 @@ func (s *PostgresCMPTransactionStorage) Exists(ctx context.Context, transactionI
 		Model(&cmpTransactionRow{}).
 		Where("transaction_id = ? AND expires_at > "+nowExpr(s.db)+" AND state IN (?,?)",
 			transactionID,
-			string(storage.CMPTransactionStatePending),
-			string(storage.CMPTransactionStateIssued),
+			string(models.CMPTransactionStatePending),
+			string(models.CMPTransactionStateIssued),
 		).
 		Count(&count)
 	if result.Error != nil {
@@ -140,7 +140,7 @@ func (s *PostgresCMPTransactionStorage) HasUnconfirmedReenrollment(ctx context.C
 			dmsID,
 			supersededCertSerial,
 			true,
-			string(storage.CMPTransactionStateIssued),
+			string(models.CMPTransactionStateIssued),
 		).
 		Count(&count)
 	if result.Error != nil {
@@ -166,7 +166,7 @@ func (s *PostgresCMPTransactionStorage) HasAbandonedReenrollment(ctx context.Con
 			dmsID,
 			supersededCertSerial,
 			true,
-			string(storage.CMPTransactionStateRevoked),
+			string(models.CMPTransactionStateRevoked),
 		).
 		Count(&count)
 	if result.Error != nil {
@@ -201,17 +201,17 @@ func (s *PostgresCMPTransactionStorage) HasSeenRegToken(ctx context.Context, dms
 // by transaction_id, so at most one row references a given issued cert. See
 // the CMPTransactionRepo interface doc for the superseded-cert classification
 // this enables.
-func (s *PostgresCMPTransactionStorage) SelectByCertSerial(ctx context.Context, certSerialNumber string) (storage.CMPTransaction, bool, error) {
+func (s *PostgresCMPTransactionStorage) SelectByCertSerial(ctx context.Context, certSerialNumber string) (models.CMPTransaction, bool, error) {
 	var row cmpTransactionRow
 	result := s.db.WithContext(ctx).
 		Where("cert_serial_number = ?", certSerialNumber).
 		First(&row)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return storage.CMPTransaction{}, false, nil
+			return models.CMPTransaction{}, false, nil
 		}
 		s.logger.Errorf("cmp_transactions: select-by-cert-serial %s: %v", certSerialNumber, result.Error)
-		return storage.CMPTransaction{}, false, result.Error
+		return models.CMPTransaction{}, false, result.Error
 	}
 	return rowToDomain(row), true, nil
 }
@@ -240,11 +240,11 @@ func nowExpr(db *gorm.DB) string {
 // The caller chooses the initial state by setting tx.State. Sync issuance sets
 // ISSUED with Certificate populated; async issuance sets PENDING with CSR + the
 // IsReenrollment flag so the worker can later finish issuance.
-func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.CMPTransaction) error {
+func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx models.CMPTransaction) error {
 	state := tx.State
 	if state == "" {
 		// Backward-compatible default for callers that didn't yet set State.
-		state = storage.CMPTransactionStateIssued
+		state = models.CMPTransactionStateIssued
 	}
 	row := cmpTransactionRow{
 		TransactionID:        tx.TransactionID,
@@ -287,22 +287,22 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx storage.C
 // Select reads a transaction by ID without modifying it. For in-flight states
 // (PENDING, ISSUED) also checks expires_at; terminal states (CONFIRMED,
 // REVOKED, ISSUE_FAILED) are always visible regardless of expiry.
-func (s *PostgresCMPTransactionStorage) Select(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
+func (s *PostgresCMPTransactionStorage) Select(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
 	var row cmpTransactionRow
 	result := s.db.WithContext(ctx).
 		Where("transaction_id = ? AND (state IN (?,?,?) OR expires_at > "+nowExpr(s.db)+")",
 			transactionID,
-			string(storage.CMPTransactionStateConfirmed),
-			string(storage.CMPTransactionStateRevoked),
-			string(storage.CMPTransactionStateIssueFailed),
+			string(models.CMPTransactionStateConfirmed),
+			string(models.CMPTransactionStateRevoked),
+			string(models.CMPTransactionStateIssueFailed),
 		).
 		First(&row)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return storage.CMPTransaction{}, false, nil
+			return models.CMPTransaction{}, false, nil
 		}
 		s.logger.Errorf("cmp_transactions: select %s: %v", transactionID, result.Error)
-		return storage.CMPTransaction{}, false, result.Error
+		return models.CMPTransaction{}, false, result.Error
 	}
 	return rowToDomain(row), true, nil
 }
@@ -312,17 +312,17 @@ func (s *PostgresCMPTransactionStorage) Select(ctx context.Context, transactionI
 // existed" from "row past ExpiresAt but not yet swept by the monitor". Callers
 // must not act on the returned row's contents for issuance decisions — Select
 // is the right method for those.
-func (s *PostgresCMPTransactionStorage) SelectIncludingExpired(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
+func (s *PostgresCMPTransactionStorage) SelectIncludingExpired(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
 	var row cmpTransactionRow
 	result := s.db.WithContext(ctx).
 		Where("transaction_id = ?", transactionID).
 		First(&row)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return storage.CMPTransaction{}, false, nil
+			return models.CMPTransaction{}, false, nil
 		}
 		s.logger.Errorf("cmp_transactions: select-any %s: %v", transactionID, result.Error)
-		return storage.CMPTransaction{}, false, result.Error
+		return models.CMPTransaction{}, false, result.Error
 	}
 	return rowToDomain(row), true, nil
 }
@@ -333,7 +333,7 @@ func (s *PostgresCMPTransactionStorage) SelectIncludingExpired(ctx context.Conte
 // is needed, preventing TOCTOU races across concurrent server replicas.
 //
 // Expired rows are treated as non-existent: the caller sees (zero, false, nil).
-func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
+func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
 	var row cmpTransactionRow
 	result := s.db.WithContext(ctx).
 		Raw(
@@ -346,13 +346,13 @@ func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, tra
 
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return storage.CMPTransaction{}, false, nil
+			return models.CMPTransaction{}, false, nil
 		}
 		s.logger.Errorf("cmp_transactions: select-and-delete %s: %v", transactionID, result.Error)
-		return storage.CMPTransaction{}, false, result.Error
+		return models.CMPTransaction{}, false, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return storage.CMPTransaction{}, false, nil
+		return models.CMPTransaction{}, false, nil
 	}
 
 	return rowToDomain(row), true, nil
@@ -374,7 +374,7 @@ func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, tra
 // layer before calling UpdateState (see ApproveCMPTransaction). Returns
 // (true, nil) when a row was updated, (false, nil) when no row exists with
 // the given transaction_id.
-func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transactionID string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
+func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transactionID string, state models.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
 	updates := map[string]interface{}{
 		"state":         string(state),
 		"certificate":   certToString(cert),
@@ -398,9 +398,9 @@ func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transac
 // so multiple workers can claim disjoint rows in parallel without blocking
 // each other; SQLite has no row-level locking and falls back to a plain SELECT
 // (monolithic deployments run a single writer, so the contention is irrelevant).
-func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	return s.selectLockedBatch(ctx, "select-pending",
-		"state = ? AND expires_at > "+nowExpr(s.db), string(storage.CMPTransactionStatePending),
+		"state = ? AND expires_at > "+nowExpr(s.db), string(models.CMPTransactionStatePending),
 		"created_at ASC", limit, 16)
 }
 
@@ -412,7 +412,7 @@ func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit
 // short driver name ("postgres", "sqlite", "mysql", ...) so we whitelist
 // explicitly rather than try/fall-back; SQLite has no row-level locking and
 // falls back to a plain SELECT. logLabel names the operation in the error log.
-func (s *PostgresCMPTransactionStorage) selectLockedBatch(ctx context.Context, logLabel, whereExpr string, whereArg any, orderExpr string, limit, defaultLimit int) ([]storage.CMPTransaction, error) {
+func (s *PostgresCMPTransactionStorage) selectLockedBatch(ctx context.Context, logLabel, whereExpr string, whereArg any, orderExpr string, limit, defaultLimit int) ([]models.CMPTransaction, error) {
 	if limit <= 0 {
 		limit = defaultLimit
 	}
@@ -431,7 +431,7 @@ func (s *PostgresCMPTransactionStorage) selectLockedBatch(ctx context.Context, l
 		s.logger.Errorf("cmp_transactions: %s: %v", logLabel, result.Error)
 		return nil, result.Error
 	}
-	out := make([]storage.CMPTransaction, len(rows))
+	out := make([]models.CMPTransaction, len(rows))
 	for i, r := range rows {
 		out[i] = rowToDomain(r)
 	}
@@ -449,7 +449,7 @@ func (s *PostgresCMPTransactionStorage) selectLockedBatch(ctx context.Context, l
 func (s *PostgresCMPTransactionStorage) DeleteExpired(ctx context.Context) error {
 	result := s.db.WithContext(ctx).
 		Where("expires_at < "+nowExpr(s.db)+" AND state = ?",
-			string(storage.CMPTransactionStateIssueFailed),
+			string(models.CMPTransactionStateIssueFailed),
 		).
 		Delete(&cmpTransactionRow{})
 	if result.Error != nil {
@@ -475,7 +475,7 @@ func (s *PostgresCMPTransactionStorage) DeleteExpired(ctx context.Context) error
 // Implementation: a CTE captures the row state pre-update under FOR UPDATE so
 // the read/update pair is atomic, then the UPDATE conditionally fires only
 // when the state is still ISSUED. Both branches return one row to Scan.
-func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transactionID string) (storage.CMPTransaction, storage.CMPTransactionState, bool, error) {
+func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transactionID string) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
 	type confirmRow struct {
 		cmpTransactionRow
 		PriorState string `gorm:"column:prior_state"`
@@ -508,23 +508,23 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 				   FROM prior p
 				   LEFT JOIN updated u ON true`,
 				transactionID,
-				string(storage.CMPTransactionStateConfirmed),
+				string(models.CMPTransactionStateConfirmed),
 				transactionID,
-				string(storage.CMPTransactionStateIssued),
+				string(models.CMPTransactionStateIssued),
 			).
 			Scan(&row)
 
 		if result.Error != nil {
 			s.logger.Errorf("cmp_transactions: confirm %s: %v", transactionID, result.Error)
-			return storage.CMPTransaction{}, "", false, result.Error
+			return models.CMPTransaction{}, "", false, result.Error
 		}
 		if result.RowsAffected == 0 {
 			// CTE returned nothing → row does not exist.
-			return storage.CMPTransaction{}, "", false, nil
+			return models.CMPTransaction{}, "", false, nil
 		}
-		prior := storage.CMPTransactionState(row.PriorState)
+		prior := models.CMPTransactionState(row.PriorState)
 		if !row.Updated {
-			return storage.CMPTransaction{}, prior, false, nil
+			return models.CMPTransaction{}, prior, false, nil
 		}
 		return rowToDomain(row.cmpTransactionRow), prior, true, nil
 
@@ -533,7 +533,7 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 		// read+update in an explicit transaction. SQLite serialises writes
 		// per-database file so this is equally race-free for the single-process
 		// use cases it covers.
-		var prior storage.CMPTransactionState
+		var prior models.CMPTransactionState
 		var dataRow cmpTransactionRow
 		var updated bool
 		txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -545,28 +545,28 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 				}
 				return err
 			}
-			prior = storage.CMPTransactionState(current.State)
-			if current.State != string(storage.CMPTransactionStateIssued) {
+			prior = models.CMPTransactionState(current.State)
+			if current.State != string(models.CMPTransactionStateIssued) {
 				return nil
 			}
 			updates := map[string]interface{}{
-				"state":        string(storage.CMPTransactionStateConfirmed),
+				"state":        string(models.CMPTransactionStateConfirmed),
 				"confirmed_at": time.Now(),
 			}
 			if err := tx.Model(&current).Updates(updates).Error; err != nil {
 				return err
 			}
 			dataRow = current
-			dataRow.State = string(storage.CMPTransactionStateConfirmed)
+			dataRow.State = string(models.CMPTransactionStateConfirmed)
 			updated = true
 			return nil
 		})
 		if txErr != nil {
 			s.logger.Errorf("cmp_transactions: confirm %s: %v", transactionID, txErr)
-			return storage.CMPTransaction{}, "", false, txErr
+			return models.CMPTransaction{}, "", false, txErr
 		}
 		if !updated {
-			return storage.CMPTransaction{}, prior, false, nil
+			return models.CMPTransaction{}, prior, false, nil
 		}
 		return rowToDomain(dataRow), prior, true, nil
 	}
@@ -577,9 +577,9 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 // monitor uses this to find phased-workflow requests an administrator
 // never acted on. Symmetric to SelectExpiredIssued: same SKIP LOCKED
 // behaviour on Postgres/MySQL so two replicas don't double-process.
-func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	return s.selectLockedBatch(ctx, "select-expired-pending",
-		"state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStatePending),
+		"state = ? AND expires_at <= "+nowExpr(s.db), string(models.CMPTransactionStatePending),
 		"expires_at ASC", limit, 100)
 }
 
@@ -589,14 +589,14 @@ func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context
 // confirmation window. The confirmation monitor uses this to drive
 // revocation: each cert is revoked at the CA and then the row itself is
 // transitioned to REVOKED via MarkRevokedByTransactionID for audit.
-func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	// FOR UPDATE SKIP LOCKED ensures two backend replicas running the
 	// confirmation monitor concurrently each pick a disjoint set of rows
 	// rather than both racing to revoke the same certs at the CA
 	// (audit finding S4). SelectPending uses the same pattern; the omission
 	// here was the bug.
 	return s.selectLockedBatch(ctx, "select-expired-issued",
-		"state = ? AND expires_at <= "+nowExpr(s.db), string(storage.CMPTransactionStateIssued),
+		"state = ? AND expires_at <= "+nowExpr(s.db), string(models.CMPTransactionStateIssued),
 		"expires_at ASC", limit, 100)
 }
 
@@ -609,7 +609,7 @@ func (s *PostgresCMPTransactionStorage) MarkRevokedByTransactionID(ctx context.C
 	result := s.db.WithContext(ctx).
 		Model(&cmpTransactionRow{}).
 		Where("transaction_id = ?", transactionID).
-		Update("state", string(storage.CMPTransactionStateRevoked))
+		Update("state", string(models.CMPTransactionStateRevoked))
 	if result.Error != nil {
 		s.logger.Errorf("cmp_transactions: mark-revoked-by-tx %s: %v", transactionID, result.Error)
 		return result.Error
@@ -622,8 +622,8 @@ func (s *PostgresCMPTransactionStorage) MarkRevokedByTransactionID(ctx context.C
 func (s *PostgresCMPTransactionStorage) MarkRevokedByCertSerial(ctx context.Context, certSerialNumber string) error {
 	result := s.db.WithContext(ctx).
 		Model(&cmpTransactionRow{}).
-		Where("cert_serial_number = ? AND state = ?", certSerialNumber, string(storage.CMPTransactionStateConfirmed)).
-		Update("state", string(storage.CMPTransactionStateRevoked))
+		Where("cert_serial_number = ? AND state = ?", certSerialNumber, string(models.CMPTransactionStateConfirmed)).
+		Update("state", string(models.CMPTransactionStateRevoked))
 	if result.Error != nil {
 		s.logger.Errorf("cmp_transactions: mark-revoked serial=%s: %v", certSerialNumber, result.Error)
 		return result.Error
@@ -644,7 +644,7 @@ func (s *PostgresCMPTransactionStorage) SelectAllByDMS(
 	ctx context.Context,
 	dmsID string,
 	exhaustiveRun bool,
-	applyFunc func(storage.CMPTransaction),
+	applyFunc func(models.CMPTransaction),
 	queryParams *resources.QueryParameters,
 ) (string, error) {
 	extra := []GormExtraOps{{
@@ -656,8 +656,8 @@ func (s *PostgresCMPTransactionStorage) SelectAllByDMS(
 	})
 }
 
-func rowToDomain(row cmpTransactionRow) storage.CMPTransaction {
-	return storage.CMPTransaction{
+func rowToDomain(row cmpTransactionRow) models.CMPTransaction {
+	return models.CMPTransaction{
 		TransactionID:        row.TransactionID,
 		DMSID:                row.DMSID,
 		CertSerialNumber:     row.CertSerialNumber,
@@ -667,7 +667,7 @@ func rowToDomain(row cmpTransactionRow) storage.CMPTransaction {
 		SupersededCertSerial: row.SupersededCertSerial,
 		RegToken:             row.RegToken,
 		PopoChallenge:        row.PopoChallenge,
-		State:                storage.CMPTransactionState(row.State),
+		State:                models.CMPTransactionState(row.State),
 		ErrorMessage:         row.ErrorMessage,
 		CSR:                  stringToCSR(row.CSR),
 		IsReenrollment:       row.IsReenrollment,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/stretchr/testify/mock"
@@ -74,14 +73,14 @@ func (m *MockDMSManagerService) GetCMPTransactionsByDMS(ctx context.Context, inp
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockDMSManagerService) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*storage.CMPTransaction, error) {
+func (m *MockDMSManagerService) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*models.CMPTransaction, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*storage.CMPTransaction), args.Error(1)
+	return args.Get(0).(*models.CMPTransaction), args.Error(1)
 }
 
-func (m *MockDMSManagerService) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*storage.CMPTransaction, error) {
+func (m *MockDMSManagerService) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*models.CMPTransaction, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*storage.CMPTransaction), args.Error(1)
+	return args.Get(0).(*models.CMPTransaction), args.Error(1)
 }
 
 func (m *MockDMSManagerService) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
