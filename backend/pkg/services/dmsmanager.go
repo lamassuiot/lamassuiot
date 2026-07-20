@@ -18,7 +18,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	webhookclient "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers/webhook-client"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -624,7 +623,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	// (leaf first), stashed by the identity middleware as []*x509.Certificate.
 	// All four modes (NO_AUTH, CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, and both)
 	// are handled by the shared authenticator.
-	clientCerts, _ := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).([]*x509.Certificate)
+	clientCerts, _ := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).([]*x509.Certificate)
 	if err := svc.authenticateEnrollment(ctx, lFunc, estAuthOptions.AuthSettings(), clientCerts, csr, aps, "enrollment"); err != nil {
 		return nil, err
 	}
@@ -790,7 +789,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	switch estAuthOpts.AuthMode {
 	case models.ESTAuthModeClientCertificate, models.ESTAuthModeClientCertificateAndWebhook:
 		lFunc = lFunc.WithField("auth-method", estAuthOpts.AuthMode)
-		clientCerts, _ := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).([]*x509.Certificate)
+		clientCerts, _ := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).([]*x509.Certificate)
 		if len(clientCerts) == 0 {
 			lFunc.Errorf("aborting reenrollment. No client certificate was presented")
 			return nil, errs.ErrDMSAuthModeNotSupported
