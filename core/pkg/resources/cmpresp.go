@@ -8,7 +8,7 @@ import "time"
 // metadata. CertSerialNumber is the hex serial of the issued cert (lowercase)
 // when CertDER is populated; empty otherwise.
 //
-// State is the string form of storage.CMPTransactionState ("PENDING",
+// State is the string form of models.CMPTransactionState ("PENDING",
 // "ISSUED", "ISSUE_FAILED", "CONFIRMED", "REVOKED"); we keep it as a plain
 // string here to avoid an engines/storage import cycle from the resources package.
 type CMPTransactionResponse struct {

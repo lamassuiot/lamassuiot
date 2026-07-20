@@ -61,11 +61,11 @@ func (mw DmsAuditEventPublisher) GetCMPTransactionsByDMS(ctx context.Context, in
 	return mw.next.GetCMPTransactionsByDMS(ctx, input)
 }
 
-func (mw DmsAuditEventPublisher) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*storage.CMPTransaction, error) {
+func (mw DmsAuditEventPublisher) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*models.CMPTransaction, error) {
 	return mw.next.ApproveCMPTransaction(ctx, input)
 }
 
-func (mw DmsAuditEventPublisher) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*storage.CMPTransaction, error) {
+func (mw DmsAuditEventPublisher) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*models.CMPTransaction, error) {
 	return mw.next.RejectCMPTransaction(ctx, input)
 }
 

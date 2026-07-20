@@ -413,7 +413,7 @@ func TestHandleCMP_ConfirmModes(t *testing.T) {
 				storedTx, found := store.Peek(hex.EncodeToString(txID))
 				assert.True(t, found, "implicit confirm must persist a row for pollReq recovery")
 				if found {
-					assert.Equal(t, storage.CMPTransactionStateConfirmed, storedTx.State)
+					assert.Equal(t, models.CMPTransactionStateConfirmed, storedTx.State)
 					assert.NotNil(t, storedTx.Certificate)
 				}
 			} else {
@@ -1098,10 +1098,10 @@ func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 
 	txID := randomTxID(t)
-	require.NoError(t, store.Insert(context.Background(), storage.CMPTransaction{
+	require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
 		TransactionID: hex.EncodeToString(txID),
 		DMSID:         "test-dms",
-		State:         storage.CMPTransactionStateIssued,
+		State:         models.CMPTransactionStateIssued,
 		Certificate:   (*models.X509Certificate)(issuedCert),
 		ExpiresAt:     time.Now().Add(5 * time.Minute),
 		CreatedAt:     time.Now(),
@@ -1146,10 +1146,10 @@ func TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason(t *testing.T) {
 	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 
 	txID := randomTxID(t)
-	require.NoError(t, store.Insert(context.Background(), storage.CMPTransaction{
+	require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
 		TransactionID: hex.EncodeToString(txID),
 		DMSID:         "test-dms",
-		State:         storage.CMPTransactionStateIssueFailed,
+		State:         models.CMPTransactionStateIssueFailed,
 		ErrorMessage:  "CA returned: profile constraint violated",
 		ExpiresAt:     time.Now().Add(5 * time.Minute),
 		CreatedAt:     time.Now(),
@@ -1175,10 +1175,10 @@ func TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked(t *testing.T) {
 	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
 
 	txID := randomTxID(t)
-	require.NoError(t, store.Insert(context.Background(), storage.CMPTransaction{
+	require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
 		TransactionID: hex.EncodeToString(txID),
 		DMSID:         "test-dms",
-		State:         storage.CMPTransactionStateRevoked,
+		State:         models.CMPTransactionStateRevoked,
 		Certificate:   (*models.X509Certificate)(revokedCert),
 		ExpiresAt:     time.Now().Add(5 * time.Minute),
 		CreatedAt:     time.Now(),
@@ -1220,7 +1220,7 @@ func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
 
 	storedTx, found := store.Peek(hex.EncodeToString(txID))
 	require.True(t, found, "phased workflow must persist a PENDING transaction row")
-	assert.Equal(t, storage.CMPTransactionStatePending, storedTx.State,
+	assert.Equal(t, models.CMPTransactionStatePending, storedTx.State,
 		"phased transaction must be PENDING (not ISSUED) until approved")
 	assert.Nil(t, storedTx.Certificate, "no certificate is issued before approval")
 	assert.NotNil(t, storedTx.CSR, "the CSR must be stored so approval can issue later")
@@ -1240,7 +1240,7 @@ func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "phased-poll-device", TransactionID: txID})
 	require.Equal(t, http.StatusOK, postCMP(t, router, "test-dms", irDER).Code)
 	if tx, ok := store.Peek(hex.EncodeToString(txID)); ok {
-		require.Equal(t, storage.CMPTransactionStatePending, tx.State)
+		require.Equal(t, models.CMPTransactionStatePending, tx.State)
 	}
 
 	// pollReq while still PENDING → pollRep.

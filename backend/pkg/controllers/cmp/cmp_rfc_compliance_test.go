@@ -1138,7 +1138,7 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	// IP so the subsequent certConf can match recipNonce against it.
 	storedTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "IR must persist the ISSUED row for pollReq recovery")
-	require.Equal(t, storage.CMPTransactionStateIssued, storedTx.State)
+	require.Equal(t, models.CMPTransactionStateIssued, storedTx.State)
 	persistedSentNonce, err := hex.DecodeString(storedTx.SentNonce)
 	require.NoError(t, err)
 	require.Len(t, persistedSentNonce, 16, "stored sentNonce must be 128 bits")
@@ -1174,7 +1174,7 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	// Tx is still ISSUED — pollReq does not consume it.
 	storedAfterPoll, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "pollReq delivery must not delete the ISSUED row")
-	assert.Equal(t, storage.CMPTransactionStateIssued, storedAfterPoll.State,
+	assert.Equal(t, models.CMPTransactionStateIssued, storedAfterPoll.State,
 		"pollReq must not transition tx state in explicit-confirm mode")
 
 	// Step 3: certConf with pvno=3, recipNonce = the persisted sentNonce.
@@ -1195,7 +1195,7 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	// Tx is now CONFIRMED.
 	finalTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
-	assert.Equal(t, storage.CMPTransactionStateConfirmed, finalTx.State,
+	assert.Equal(t, models.CMPTransactionStateConfirmed, finalTx.State,
 		"successful certConf must transition tx to CONFIRMED")
 
 	svc.AssertExpectations(t)
@@ -1232,7 +1232,7 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 	// pollReq case below), and the confirmation monitor never touches it.
 	stored, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "implicit-confirm IR must persist a row for pollReq recovery")
-	require.Equal(t, storage.CMPTransactionStateConfirmed, stored.State,
+	require.Equal(t, models.CMPTransactionStateConfirmed, stored.State,
 		"implicit-confirm row is finalised at IP delivery, not at pollReq")
 
 	// Step 2: pollReq with pvno=3 + implicitConfirm (same as IR). The
@@ -1256,7 +1256,7 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 	// re-delivered the cert; it never demotes nor re-runs the finalisation.
 	finalTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
-	assert.Equal(t, storage.CMPTransactionStateConfirmed, finalTx.State,
+	assert.Equal(t, models.CMPTransactionStateConfirmed, finalTx.State,
 		"implicit-confirm row must stay CONFIRMED across pollReq replays")
 
 	svc.AssertExpectations(t)

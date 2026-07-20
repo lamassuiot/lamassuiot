@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/kga"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -313,10 +312,10 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 		return
 	}
 
-	if storeErr := r.store.Insert(ctx.Request.Context(), storage.CMPTransaction{
+	if storeErr := r.store.Insert(ctx.Request.Context(), models.CMPTransaction{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
-		State:             storage.CMPTransactionStatePending,
+		State:             models.CMPTransactionStatePending,
 		CSR:               (*models.X509CertificateRequest)(csr),
 		RequestType:       cmpTagToString(params.requestTag),
 		SubjectCommonName: csr.Subject.CommonName,
@@ -383,7 +382,7 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 		r.rejectWithError(ctx, &header, PKIStatus(2), "internal error", dmsID, pkiFailureInfoSystemFailure)
 		return
 	}
-	if !ok || tx.State != storage.CMPTransactionStatePending || tx.PopoChallenge == "" || tx.CSR == nil {
+	if !ok || tx.State != models.CMPTransactionStatePending || tx.PopoChallenge == "" || tx.CSR == nil {
 		lFunc.Warnf("popdecr: unknown or non-challenge transactionID %s", txHex)
 		r.rejectWithError(ctx, &header, PKIStatus(2), "unknown transactionID", dmsID, pkiFailureInfoBadRequest)
 		return

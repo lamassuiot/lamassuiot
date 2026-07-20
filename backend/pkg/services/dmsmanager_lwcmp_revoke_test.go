@@ -49,42 +49,42 @@ func (noopCMPTxRepo) HasAbandonedReenrollment(ctx context.Context, dmsID, supers
 func (noopCMPTxRepo) HasSeenRegToken(ctx context.Context, dmsID, regToken string) (bool, error) {
 	return false, nil
 }
-func (noopCMPTxRepo) Insert(ctx context.Context, tx storage.CMPTransaction) error { return nil }
-func (noopCMPTxRepo) Select(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
-	return storage.CMPTransaction{}, false, nil
+func (noopCMPTxRepo) Insert(ctx context.Context, tx models.CMPTransaction) error { return nil }
+func (noopCMPTxRepo) Select(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	return models.CMPTransaction{}, false, nil
 }
-func (noopCMPTxRepo) SelectIncludingExpired(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
-	return storage.CMPTransaction{}, false, nil
+func (noopCMPTxRepo) SelectIncludingExpired(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	return models.CMPTransaction{}, false, nil
 }
-func (noopCMPTxRepo) SelectAndDelete(ctx context.Context, transactionID string) (storage.CMPTransaction, bool, error) {
-	return storage.CMPTransaction{}, false, nil
+func (noopCMPTxRepo) SelectAndDelete(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	return models.CMPTransaction{}, false, nil
 }
-func (noopCMPTxRepo) Confirm(ctx context.Context, transactionID string) (storage.CMPTransaction, storage.CMPTransactionState, bool, error) {
-	return storage.CMPTransaction{}, "", false, nil
+func (noopCMPTxRepo) Confirm(ctx context.Context, transactionID string) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
+	return models.CMPTransaction{}, "", false, nil
 }
-func (noopCMPTxRepo) UpdateState(ctx context.Context, transactionID string, state storage.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
+func (noopCMPTxRepo) UpdateState(ctx context.Context, transactionID string, state models.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
 	return false, nil
 }
 func (noopCMPTxRepo) MarkRevokedByCertSerial(ctx context.Context, certSerialNumber string) error {
 	return nil
 }
-func (noopCMPTxRepo) SelectByCertSerial(ctx context.Context, certSerialNumber string) (storage.CMPTransaction, bool, error) {
-	return storage.CMPTransaction{}, false, nil
+func (noopCMPTxRepo) SelectByCertSerial(ctx context.Context, certSerialNumber string) (models.CMPTransaction, bool, error) {
+	return models.CMPTransaction{}, false, nil
 }
-func (noopCMPTxRepo) SelectExpiredIssued(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (noopCMPTxRepo) SelectExpiredIssued(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	return nil, nil
 }
 func (noopCMPTxRepo) MarkRevokedByTransactionID(ctx context.Context, transactionID string) error {
 	return nil
 }
-func (noopCMPTxRepo) SelectPending(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (noopCMPTxRepo) SelectPending(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	return nil, nil
 }
-func (noopCMPTxRepo) SelectExpiredPending(ctx context.Context, limit int) ([]storage.CMPTransaction, error) {
+func (noopCMPTxRepo) SelectExpiredPending(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	return nil, nil
 }
 func (noopCMPTxRepo) DeleteExpired(ctx context.Context) error { return nil }
-func (noopCMPTxRepo) SelectAllByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(storage.CMPTransaction), queryParams *resources.QueryParameters) (string, error) {
+func (noopCMPTxRepo) SelectAllByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.CMPTransaction), queryParams *resources.QueryParameters) (string, error) {
 	return "", nil
 }
 

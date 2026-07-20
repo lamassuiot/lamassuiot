@@ -232,7 +232,7 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 
 	tx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "a PENDING row must be parked awaiting popdecr")
-	assert.Equal(t, storage.CMPTransactionStatePending, tx.State)
+	assert.Equal(t, models.CMPTransactionStatePending, tx.State)
 	require.NotEmpty(t, tx.PopoChallenge)
 
 	// Decrypt the challenge exactly as a compliant EE would.

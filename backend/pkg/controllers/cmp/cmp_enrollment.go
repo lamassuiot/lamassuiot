@@ -17,7 +17,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/kga"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -554,13 +553,13 @@ func (r *cmpHttpRoutes) issueAndStore(
 	// pkiConf) from one confirmed by an earlier certConf (a duplicate, answered
 	// with error/certConfirmed).
 	now := time.Now()
-	initialState := storage.CMPTransactionStateIssued
+	initialState := models.CMPTransactionStateIssued
 	var confirmedAt time.Time
 	if implicitConfirm {
-		initialState = storage.CMPTransactionStateConfirmed
+		initialState = models.CMPTransactionStateConfirmed
 		confirmedAt = now
 	}
-	if storeErr := r.store.Insert(issuanceCtx, storage.CMPTransaction{
+	if storeErr := r.store.Insert(issuanceCtx, models.CMPTransaction{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
 		State:             initialState,
@@ -931,10 +930,10 @@ func (r *cmpHttpRoutes) deferForApproval(
 	header.ResponseImplicitConfirm = false
 
 	storeCtx := context.WithoutCancel(ctx.Request.Context())
-	if storeErr := r.store.Insert(storeCtx, storage.CMPTransaction{
+	if storeErr := r.store.Insert(storeCtx, models.CMPTransaction{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
-		State:             storage.CMPTransactionStatePending,
+		State:             models.CMPTransactionStatePending,
 		CSR:               (*models.X509CertificateRequest)(csr),
 		IsReenrollment:    params.isReenrollment,
 		RequestType:       cmpTagToString(params.requestTag),

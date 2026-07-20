@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
@@ -35,14 +34,14 @@ type DMSManagerService interface {
 	// ErrCMPTransactionNotFound / ErrCMPTransactionNotPending when the
 	// transaction is missing, belongs to another DMS, or is not awaiting
 	// approval.
-	ApproveCMPTransaction(ctx context.Context, input ApproveCMPTransactionInput) (*storage.CMPTransaction, error)
+	ApproveCMPTransaction(ctx context.Context, input ApproveCMPTransactionInput) (*models.CMPTransaction, error)
 
 	// RejectCMPTransaction denies a PENDING transaction in the phased
 	// (admin-gated) workflow without issuing a certificate. The row moves to
 	// ISSUE_FAILED carrying the rejection reason, which pollReq surfaces back
 	// to the EE as an error PKIMessage. Same error semantics as
 	// ApproveCMPTransaction.
-	RejectCMPTransaction(ctx context.Context, input RejectCMPTransactionInput) (*storage.CMPTransaction, error)
+	RejectCMPTransaction(ctx context.Context, input RejectCMPTransactionInput) (*models.CMPTransaction, error)
 }
 
 type GetDMSStatsInput struct {
@@ -85,7 +84,7 @@ type BindIdentityToDeviceInput struct {
 
 type GetCMPTransactionsByDMSInput struct {
 	DMSID string `validate:"required"`
-	resources.ListInput[storage.CMPTransaction]
+	resources.ListInput[models.CMPTransaction]
 }
 
 type ApproveCMPTransactionInput struct {

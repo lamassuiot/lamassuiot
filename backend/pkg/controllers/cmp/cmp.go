@@ -729,7 +729,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	}
 	if !updated {
 		switch prior {
-		case storage.CMPTransactionStateRevoked:
+		case models.CMPTransactionStateRevoked:
 			// Race we MUST surface (audit S1): between this handler's Select
 			// and Confirm, the confirmation monitor revoked the cert at the
 			// CA. The EE believes enrollment succeeded but the cert is gone.
@@ -738,7 +738,7 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 			r.rejectWithError(ctx, &header, PKIStatus(2),
 				"certificate was revoked before confirmation was processed", dmsID, pkiFailureInfoBadRequest)
 			return
-		case storage.CMPTransactionStateConfirmed:
+		case models.CMPTransactionStateConfirmed:
 			// The transaction is already CONFIRMED. Two distinct cases:
 			//
 			//   - Confirmed implicitly at issuance (RFC 4210 §5.2.8): marked by
@@ -854,7 +854,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 	}
 
 	switch tx.State {
-	case storage.CMPTransactionStatePending:
+	case models.CMPTransactionStatePending:
 		// Dead path in sync-only mode (no PENDING rows are created), but kept
 		// for forward-compatibility if async issuance is reintroduced.
 		checkAfter := defaultPollIntervalSeconds
@@ -867,7 +867,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		lFunc.Infof("pollReq: tx %s still PENDING, replying pollRep(checkAfter=%ds)", txHex, checkAfter)
 		r.sendRawBody(ctx, lFunc, header, cmpBodyTagPollRep, repDER, dmsID)
 
-	case storage.CMPTransactionStateIssued:
+	case models.CMPTransactionStateIssued:
 		// Determine whether implicit confirm applies for this pollReq delivery.
 		// When implicit, no certConf will follow and the row is transitioned to
 		// CONFIRMED below. When explicit, the row stays in ISSUED awaiting certConf.
@@ -926,7 +926,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 				return
 			}
 			if !updated {
-				if prior == storage.CMPTransactionStateRevoked {
+				if prior == models.CMPTransactionStateRevoked {
 					lFunc.Warnf("pollReq: tx %s already REVOKED — race with confirmation monitor", txHex)
 					r.rejectWithError(ctx, &header, PKIStatus(2),
 						"certificate was revoked before implicit confirmation could be processed", dmsID, pkiFailureInfoBadRequest)
@@ -951,7 +951,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		lFunc.Infof("pollReq: tx %s ISSUED, delivering cert via %s (implicitConfirm=%v)", txHex, cmpTagToString(respTag), implicitConfirm)
 		r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
 
-	case storage.CMPTransactionStateConfirmed:
+	case models.CMPTransactionStateConfirmed:
 		// Lost-response recovery for implicit-confirm enrollments: the IR
 		// already drove the row to CONFIRMED at IP delivery (RFC 4210 §5.2.8),
 		// but the EE never received the IP. The pollReq retries; we re-deliver
@@ -974,7 +974,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		lFunc.Infof("pollReq: tx %s CONFIRMED (implicit), re-delivering cert via %s", txHex, cmpTagToString(respTag))
 		r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
 
-	case storage.CMPTransactionStateIssueFailed:
+	case models.CMPTransactionStateIssueFailed:
 		reason := tx.ErrorMessage
 		if reason == "" {
 			reason = "issuance failed"
@@ -985,7 +985,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// service-layer error categories exist).
 		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection), reason, dmsID, pkiFailureInfoSystemFailure)
 
-	case storage.CMPTransactionStateRevoked:
+	case models.CMPTransactionStateRevoked:
 		// The confirmation monitor rolled the row back (the certConf/delivery
 		// window elapsed before the EE picked the cert up or confirmed it), or
 		// the certificate was revoked out-of-band via the API. Tell the EE
@@ -1007,7 +1007,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 // transactions get cp; everything else (ir/cr sync rows, where the historical
 // default is ip) gets ip. p10cr must never yield an ip — its response body is
 // cp in every phase of the exchange (RFC 9483 §4.1.4).
-func pollRespTagFor(tx storage.CMPTransaction) int {
+func pollRespTagFor(tx models.CMPTransaction) int {
 	if tx.IsReenrollment || tx.RequestType == cmpTagToString(cmpBodyTagP10CR) {
 		return cmpBodyTagCP
 	}

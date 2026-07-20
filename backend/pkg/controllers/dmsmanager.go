@@ -6,7 +6,6 @@ import (
 	"math/big"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -117,10 +116,10 @@ func (r *dmsManagerHttpRoutes) GetCMPTransactionsByDMS(ctx *gin.Context) {
 	out := []resources.CMPTransactionResponse{}
 	nextBookmark, err := r.svc.GetCMPTransactionsByDMS(ctx.Request.Context(), services.GetCMPTransactionsByDMSInput{
 		DMSID: params.ID,
-		ListInput: resources.ListInput[storage.CMPTransaction]{
+		ListInput: resources.ListInput[models.CMPTransaction]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(tx storage.CMPTransaction) {
+			ApplyFunc: func(tx models.CMPTransaction) {
 				out = append(out, cmpTransactionToResponse(tx))
 			},
 		},
@@ -145,7 +144,7 @@ func (r *dmsManagerHttpRoutes) GetCMPTransactionsByDMS(ctx *gin.Context) {
 // cmpTransactionToResponse adapts the storage row to the wire DTO. It parses
 // the cert serial out of CertDER when available so the UI can render a link
 // to the cert detail page without having to ship the whole DER blob.
-func cmpTransactionToResponse(tx storage.CMPTransaction) resources.CMPTransactionResponse {
+func cmpTransactionToResponse(tx models.CMPTransaction) resources.CMPTransactionResponse {
 	resp := resources.CMPTransactionResponse{
 		TransactionID:     tx.TransactionID,
 		DMSID:             tx.DMSID,

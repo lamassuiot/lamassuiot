@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -95,17 +94,17 @@ func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllIn
 }
 
 // GetCMPTransactionsByDMS streams CMP transactions for the given DMS. The
-// service-level domain type is storage.CMPTransaction, but the wire format
+// service-level domain type is models.CMPTransaction, but the wire format
 // is resources.CMPTransactionResponse — we translate per row via a wrapper
 // applyFunc so the SDK consumer sees domain objects regardless of transport.
 func (cli *dmsManagerClient) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
 	url := cli.baseUrl + "/v1/dms/" + input.DMSID + "/cmp/transactions"
 	wrap := func(item resources.CMPTransactionResponse) {
 		if input.ApplyFunc != nil {
-			input.ApplyFunc(storage.CMPTransaction{
+			input.ApplyFunc(models.CMPTransaction{
 				TransactionID:  item.TransactionID,
 				DMSID:          item.DMSID,
-				State:          storage.CMPTransactionState(item.State),
+				State:          models.CMPTransactionState(item.State),
 				IsReenrollment: item.IsReenrollment,
 				CreatedAt:      item.CreatedAt,
 				ExpiresAt:      item.ExpiresAt,
@@ -124,7 +123,7 @@ func (cli *dmsManagerClient) GetCMPTransactionsByDMS(ctx context.Context, input 
 // ApproveCMPTransaction approves a PENDING phased-workflow transaction, issuing
 // the certificate and returning the updated transaction. The wire format is
 // resources.CMPTransactionResponse; we translate it back to the domain type.
-func (cli *dmsManagerClient) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*storage.CMPTransaction, error) {
+func (cli *dmsManagerClient) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*models.CMPTransaction, error) {
 	url := cli.baseUrl + "/v1/dms/" + input.DMSID + "/cmp/transactions/" + input.TransactionID + "/approve"
 	resp, err := Post[resources.CMPTransactionResponse](ctx, cli.httpClient, url, struct{}{}, map[int][]error{
 		404: {errs.ErrCMPTransactionNotFound},
@@ -133,10 +132,10 @@ func (cli *dmsManagerClient) ApproveCMPTransaction(ctx context.Context, input se
 	if err != nil {
 		return nil, err
 	}
-	return &storage.CMPTransaction{
+	return &models.CMPTransaction{
 		TransactionID:     resp.TransactionID,
 		DMSID:             resp.DMSID,
-		State:             storage.CMPTransactionState(resp.State),
+		State:             models.CMPTransactionState(resp.State),
 		IsReenrollment:    resp.IsReenrollment,
 		RequestType:       resp.RequestType,
 		SubjectCommonName: resp.SubjectCommonName,
@@ -151,7 +150,7 @@ func (cli *dmsManagerClient) ApproveCMPTransaction(ctx context.Context, input se
 // RejectCMPTransaction denies a PENDING phased-workflow transaction. The row
 // transitions to ISSUE_FAILED carrying the reason, which pollReq surfaces to
 // the EE as an error PKIMessage. Same wire shape as ApproveCMPTransaction.
-func (cli *dmsManagerClient) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*storage.CMPTransaction, error) {
+func (cli *dmsManagerClient) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*models.CMPTransaction, error) {
 	url := cli.baseUrl + "/v1/dms/" + input.DMSID + "/cmp/transactions/" + input.TransactionID + "/reject"
 	body := struct {
 		Reason string `json:"reason,omitempty"`
@@ -163,10 +162,10 @@ func (cli *dmsManagerClient) RejectCMPTransaction(ctx context.Context, input ser
 	if err != nil {
 		return nil, err
 	}
-	return &storage.CMPTransaction{
+	return &models.CMPTransaction{
 		TransactionID:     resp.TransactionID,
 		DMSID:             resp.DMSID,
-		State:             storage.CMPTransactionState(resp.State),
+		State:             models.CMPTransactionState(resp.State),
 		IsReenrollment:    resp.IsReenrollment,
 		RequestType:       resp.RequestType,
 		SubjectCommonName: resp.SubjectCommonName,
