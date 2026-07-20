@@ -484,7 +484,7 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		APS:          dmsID,
 		SerialNumber: serialHex,
 		Reason:       models.RevocationReason(reason),
-	}); err != nil {
+	}, signer); err != nil {
 		lFunc.Errorf("rr: revoke failed: %v", err)
 		// Map the service-layer error to the appropriate PKIFailureInfo bit
 		// (RFC 9810 §5.1.3 / RFC 9483 §3.6.4) and deliver it in an rp body:

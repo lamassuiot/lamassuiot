@@ -331,7 +331,7 @@ func TestHandleCMP_RR_TrustedRA_RevokesOtherCert(t *testing.T) {
 		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(in services.RevokeCertificateInput) bool {
 		return in.SerialNumber == hex.EncodeToString(targetSerial.Bytes())
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	router, _ := newTestRouterWithStore(svc)
 	rrDER := buildTestRRWithIssuer(t, pkix.Name{CommonName: "Some Issuing CA"}, targetSerial)
@@ -361,7 +361,7 @@ func TestHandleCMP_RR_NonRASigner_StillMatched(t *testing.T) {
 	fi := parseRevRepFailInfo(t, resp.Body.Bytes())
 	assert.True(t, bitSet(fi, pkiFailureInfoBadCertId), "failInfo must set badCertId (4)")
 
-	svc.AssertNotCalled(t, "LWCRevokeCertificate", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "LWCRevokeCertificate", mock.Anything, mock.Anything, mock.Anything)
 }
 
 // parseRevRepFailInfo extracts the PKIFailureInfo BIT STRING from the first

@@ -33,8 +33,8 @@ func (m *MockLightweightCMPService) LWCCACerts(ctx context.Context, aps string) 
 	return certs, args.Error(1)
 }
 
-func (m *MockLightweightCMPService) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
-	args := m.Called(ctx, input)
+func (m *MockLightweightCMPService) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
+	args := m.Called(ctx, input, signerCert)
 	return args.Error(0)
 }
 

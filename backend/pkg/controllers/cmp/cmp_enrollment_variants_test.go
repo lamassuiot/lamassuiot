@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

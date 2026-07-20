@@ -135,8 +135,8 @@ func (mw DmsAuditEventPublisher) LWCCACerts(ctx context.Context, aps string) ([]
 	return mw.next.LWCCACerts(ctx, aps)
 }
 
-func (mw DmsAuditEventPublisher) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput) error {
-	return mw.next.LWCRevokeCertificate(ctx, input)
+func (mw DmsAuditEventPublisher) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
+	return mw.next.LWCRevokeCertificate(ctx, input, signerCert)
 }
 
 func (mw DmsAuditEventPublisher) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {

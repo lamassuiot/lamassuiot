@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
-	storage "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -181,11 +179,6 @@ func newRevokeTestSubject(t *testing.T, dms *models.DMS) (*DMSManagerServiceBack
 	return svc, caMock
 }
 
-func contextWithCMPSigner(signer *x509.Certificate) context.Context {
-	return context.WithValue(context.Background(),
-		string(identityextractors.IdentityExtractorCMPSignerCertificate), signer)
-}
-
 // TestLWCRevokeCertificate_SelfRevocation_RejectsForgedSelfSignedCert is the
 // critical regression test: a self-signed certificate that merely claims the
 // target's serial number (matching input.SerialNumber, so the "self
@@ -207,11 +200,10 @@ func TestLWCRevokeCertificate_SelfRevocation_RejectsForgedSelfSignedCert(t *test
 			Certificate: models.Certificate{Certificate: (*models.X509Certificate)(caCert)},
 		}, nil)
 
-	ctx := contextWithCMPSigner(forged)
-	err := svc.LWCRevokeCertificate(ctx, services.RevokeCertificateInput{
+	err := svc.LWCRevokeCertificate(context.Background(), services.RevokeCertificateInput{
 		APS:          "dms-A",
 		SerialNumber: helpers.SerialNumberToHexString(targetSerial),
-	})
+	}, forged)
 
 	require.Error(t, err, "a forged self-signed certificate must not authorize revocation")
 	caMock.AssertNotCalled(t, "GetCertificateBySerialNumber", mock.Anything, mock.Anything)
@@ -240,11 +232,10 @@ func TestLWCRevokeCertificate_SelfRevocation_AllowsCAValidatedCert(t *testing.T)
 		return in.SerialNumber == targetSerialHex && in.NewStatus == models.StatusRevoked
 	})).Return(&models.Certificate{SerialNumber: targetSerialHex, Status: models.StatusRevoked}, nil)
 
-	ctx := contextWithCMPSigner(real)
-	err := svc.LWCRevokeCertificate(ctx, services.RevokeCertificateInput{
+	err := svc.LWCRevokeCertificate(context.Background(), services.RevokeCertificateInput{
 		APS:          "dms-A",
 		SerialNumber: targetSerialHex,
-	})
+	}, real)
 
 	require.NoError(t, err)
 	caMock.AssertCalled(t, "UpdateCertificateStatus", mock.Anything, mock.Anything)
