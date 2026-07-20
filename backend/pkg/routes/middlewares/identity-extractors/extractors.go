@@ -12,6 +12,11 @@ type IdentityExtractor string
 
 const (
 	IdentityExtractorNoAuth IdentityExtractor = "NO_AUTH"
+	// IdentityExtractorCMPSignerCertificate is the context key HandleCMP uses to
+	// stash the verified CMP protection (signer) certificate for the duration of
+	// the request, so downstream handlers (cmpSignerCertFromGin,
+	// dmsmanager_lwcmp.go) can retrieve it without re-parsing the PKIMessage.
+	IdentityExtractorCMPSignerCertificate IdentityExtractor = "CMP_SIGNER_CERTIFICATE"
 )
 
 type HttpAuthReqExtractor interface {
