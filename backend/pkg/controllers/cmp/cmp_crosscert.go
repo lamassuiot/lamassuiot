@@ -2,6 +2,7 @@ package cmp
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/asn1"
 	"encoding/hex"
 	"time"
@@ -39,7 +40,7 @@ type crossCertTemplateInfo struct {
 }
 
 // handleCrossCertification processes a ccr (13) body and answers with a ccp (14).
-func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string) {
+func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
 	lFunc = lFunc.WithField("op", "ccr")
 	const respTag = cmpBodyTagCCP
 
@@ -47,7 +48,7 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	// CAs. The requester authenticates via message-protection, so its signer
 	// certificate MUST be a CA certificate; anything else is notAuthorized. The
 	// error is delivered in an error body (the suite expects `error` here).
-	signer := cmpSignerCertFromGin(ctx)
+	signer := signerCert
 	if signer == nil || !signer.IsCA {
 		lFunc.Warnf("ccr rejected: requester is not a CA (signer present=%v)", signer != nil)
 		r.rejectWithError(ctx, &header, PKIStatus(pkiStatusRejection),

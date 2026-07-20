@@ -363,7 +363,7 @@ func decodePOPODecKeyRespContent(bodyBytes []byte) (*big.Int, error) {
 // from the synthesized CSR stored at challenge time — exactly as
 // ApproveCMPTransaction resumes a phased-workflow PENDING row, just triggered
 // by a proof-of-possession round trip instead of an administrator.
-func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483) {
+func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Entry, header requestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
 	submitted, err := decodePOPODecKeyRespContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("popdecr: decode: %v", err)
@@ -419,7 +419,7 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 		enroll: func(c context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
 			return r.svc.LWCEnroll(c, csr, dmsID, signerCert)
 		},
-	})
+	}, signerCert)
 }
 
 // This file implements the encrCert proof-of-possession method (RFC 9483
