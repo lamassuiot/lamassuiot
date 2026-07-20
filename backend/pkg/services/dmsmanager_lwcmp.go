@@ -799,7 +799,6 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 	// so we never reach this branch without a signer.
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
 	if signerCert != nil {
-		lFunc = lFunc.WithField("auth-method", "CMP_SIGNER_CERTIFICATE")
 		signerSN := helpers.SerialNumberToHexString(signerCert.SerialNumber)
 		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s",
 			signerCert.Subject.CommonName, signerSN, signerCert.Issuer.CommonName))
