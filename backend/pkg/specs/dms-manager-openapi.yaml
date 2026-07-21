@@ -1,9 +1,10 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Lamassu DMS Manager API
   version: 1.0.0
   description: |
-    Device Management Service (DMS) API for managing registration authorities and EST enrollment flows.
+    Device Management Service (DMS) API for managing registration authorities
+    and EST/CMP enrollment flows.
   contact:
     name: Lamassu IoT
     url: https://github.com/lamassuiot/lamassuiot
@@ -20,9 +21,11 @@ tags:
     description: DMS lifecycle operations
   - name: EST
     description: Enrollment over Secure Transport (RFC 7030)
+  - name: CMP
+    description: Certificate Management Protocol (RFC 4210 / RFC 9483 Lightweight CMP Profile)
 
 paths:
-  /v1/stats:
+  /stats:
     get:
       tags: [DMS]
       summary: Get DMS statistics
@@ -45,7 +48,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms:
+  /dms:
     get:
       tags: [DMS]
       summary: List DMS instances
@@ -66,6 +69,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GetDMSsResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [DMS]
@@ -90,7 +94,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms/{id}:
+  /dms/{id}:
     get:
       tags: [DMS]
       summary: Get DMS by ID
@@ -148,7 +152,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms/{id}/metadata:
+  /dms/{id}/metadata:
     put:
       tags: [DMS]
       summary: Update DMS metadata
@@ -200,7 +204,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms/bind-identity:
+  /dms/bind-identity:
     post:
       tags: [DMS]
       summary: Bind an identity certificate to a device
@@ -224,7 +228,140 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /dms/{id}/cmp/transactions:
+    get:
+      tags: [CMP]
+      summary: List CMP transactions for a DMS
+      description: |
+        Lists the CMP enrollment transactions (ir/cr/kur/p10cr) tracked for a DMS,
+        following the standard list contract (page_size, bookmark, sort_by, filter).
+        The raw certificate/CSR DER blobs are not returned; fetch the certificate
+        body separately via the CA API using certificate_serial_number.
+      operationId: getCmpTransactionsByDms
+      x-authz:
+        entity_type: dms
+        action: read
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: CMP transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCMPTransactionsResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /dms/{id}/cmp/transactions/{txid}/approve:
+    post:
+      tags: [CMP]
+      summary: Approve a pending CMP transaction
+      description: |
+        Approves a PENDING phased-workflow CMP transaction, issuing the certificate
+        so the end entity can retrieve it via a subsequent pollReq. Only meaningful
+        for DMSs whose lwc_rfc9483_settings.workflow is "phased".
+      operationId: approveCmpTransaction
+      x-authz:
+        entity_type: dms
+        action: update
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+        - $ref: '#/components/parameters/CmpTransactionId'
+      responses:
+        '200':
+          description: Approved transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CMPTransactionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /dms/{id}/cmp/transactions/{txid}/reject:
+    post:
+      tags: [CMP]
+      summary: Reject a pending CMP transaction
+      description: |
+        Denies a PENDING phased-workflow CMP transaction. The transaction
+        transitions to ISSUE_FAILED carrying the given reason; the end entity
+        learns of the rejection on its next pollReq. The request body is optional.
+      operationId: rejectCmpTransaction
+      x-authz:
+        entity_type: dms
+        action: update
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+        - $ref: '#/components/parameters/CmpTransactionId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectCMPTransactionBody'
+      responses:
+        '200':
+          description: Rejected transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CMPTransactionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/cmp/p/{id}:
+    servers:
+      - url: /
+        description: Public CMP well-known endpoint
+    post:
+      tags: [CMP]
+      summary: CMP RA endpoint (RFC 9480 §3.3 well-known URI)
+      description: |
+        Accepts a DER-encoded CMP PKIMessage (ir/cr/p10cr/kur/rr/certConf/pollReq/
+        popdecr/genm/ccr/nested) and returns the corresponding response PKIMessage.
+        Understood natively by standard CMP clients, e.g.
+        `openssl cmp -server <host>/.well-known/cmp/p/<dms-id>`. Authentication is
+        carried inside the PKIMessage itself (message-level signature protection
+        per the DMS's configured auth_mode), not at the transport layer. Protocol
+        rejections are normally protected CMP error or operation-specific response
+        bodies returned with HTTP 200; HTTP error statuses are reserved for failures
+        where a CMP response cannot be constructed.
+      operationId: handleCmp
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+      requestBody:
+        required: true
+        content:
+          application/pkixcmp:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Response PKIMessage
+          content:
+            application/pkixcmp:
+              schema:
+                type: string
+                format: binary
+        '400': { description: Malformed PKIMessage (no signed CMP error body could be built) }
+        '415': { description: Content-Type is not application/pkixcmp }
+
   /.well-known/est/cacerts:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     get:
       tags: [EST]
       summary: Retrieve CA certificates for EST enrollment
@@ -238,9 +375,13 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/cacerts:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     get:
       tags: [EST]
       summary: Retrieve CA certificates for a specific EST authentication profile
@@ -256,9 +397,13 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/simpleenroll:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     post:
       tags: [EST]
       summary: EST simple enroll
@@ -280,9 +425,13 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/simpleenroll:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     post:
       tags: [EST]
       summary: EST simple enroll for authentication profile
@@ -306,9 +455,13 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/simplereenroll:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     post:
       tags: [EST]
       summary: EST simple reenroll
@@ -330,9 +483,13 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/simplereenroll:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     post:
       tags: [EST]
       summary: EST simple reenroll for authentication profile
@@ -356,9 +513,13 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/serverkeygen:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     post:
       tags: [EST]
       summary: EST server key generation enrollment
@@ -380,9 +541,13 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/serverkeygen:
+    servers:
+      - url: /
+        description: Public EST well-known endpoint
     post:
       tags: [EST]
       summary: EST server key generation for authentication profile
@@ -406,6 +571,7 @@ paths:
               schema:
                 type: string
                 format: byte
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
 components:
@@ -422,6 +588,13 @@ components:
       in: path
       required: true
       description: EST authentication profile selector
+      schema:
+        type: string
+    CmpTransactionId:
+      name: txid
+      in: path
+      required: true
+      description: Hex-encoded CMP transactionID (from the PKIHeader)
       schema:
         type: string
     PageSize:
@@ -461,6 +634,12 @@ components:
             $ref: '#/components/schemas/Error'
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Request conflicts with the resource's current state
       content:
         application/json:
           schema:
@@ -567,9 +746,11 @@ components:
       properties:
         protocol:
           type: string
-          enum: [EST_RFC7030]
+          enum: [EST_RFC7030, CMP_RFC9483]
         est_rfc7030_settings:
           $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
+        lwc_rfc9483_settings:
+          $ref: '#/components/schemas/EnrollmentOptionsLWCRFC9483'
         device_provisioning_profile:
           $ref: '#/components/schemas/DeviceProvisionProfile'
         enrollment_ca:
@@ -587,11 +768,94 @@ components:
       properties:
         auth_mode:
           type: string
+          enum: [CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK, NO_AUTH]
         client_certificate_settings:
           $ref: '#/components/schemas/AuthOptionsClientCertificate'
         external_webhook_settings:
           type: object
           additionalProperties: true
+
+    EnrollmentOptionsLWCRFC9483:
+      type: object
+      description: |
+        CMP-specific enrollment settings (RFC 9483 Lightweight CMP Profile / RFC 4210).
+        These are the settings read by the current handlers. There are no implemented
+        per-operation `enabled` flags: supported PKIBody tags are dispatched whenever
+        the DMS enrollment protocol is CMP_RFC9483. CRMF regToken is a per-request
+        control with automatic one-time-use enforcement, not a DMS setting.
+      properties:
+        auth_mode:
+          type: string
+          description: |
+            For CMP, CLIENT_CERTIFICATE means the signature-based message-protection
+            signer certificate (extraCerts[0], RFC 9483 §3.2) rather than a transport
+            mTLS certificate. CLIENT_CERTIFICATE and the combined mode require a
+            protected PKIMessage. EXTERNAL_WEBHOOK and NO_AUTH permit an unprotected
+            message, although any signature that is supplied is still verified.
+            NONE is accepted as the dashboard's legacy alias for NO_AUTH.
+          enum: [CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK, NO_AUTH, NONE]
+        client_certificate_settings:
+          $ref: '#/components/schemas/AuthOptionsClientCertificate'
+        external_webhook_settings:
+          type: object
+          additionalProperties: true
+        accept_implicit:
+          type: boolean
+          default: false
+          description: |
+            Whether the server may skip the certConf round-trip when an ir, cr, kur,
+            p10cr, or certificate-delivering pollReq asks for implicit confirmation
+            (id-it-implicitConfirm, RFC 4210 §5.2.8). This setting alone does not
+            enable implicit confirmation; the request must also carry the OID.
+        confirmation_timeout:
+          type: string
+          example: 5m
+          description: |
+            Positive Lamassu duration for the explicit certConf/delivery window
+            (for example 30s, 5m, or 1h). Zero or a negative value uses the runtime
+            default of 5m.
+        approval_timeout:
+          type: string
+          example: 1w
+          description: |
+            Positive Lamassu duration for a phased-workflow transaction to remain
+            PENDING for administrator approval. Zero or a negative value uses the
+            runtime default of 1w. Only meaningful when workflow is phased.
+        protection_certificate:
+          type: string
+          description: Serial number of the certificate whose KMS-backed key signs CMP response messages.
+        enforce_popo:
+          type: boolean
+          default: false
+          description: |
+            Whether IR/CR must carry an acceptable CRMF proof of possession and
+            whether KUR must be message-protected. A supplied POPOSigningKey is
+            verified even when this setting is false; trusted-RA raVerified and
+            supported indirect POP methods follow their own validation paths.
+            P10CR CSR signatures are always verified independently of this setting.
+        expected_authenticator:
+          type: string
+          description: |
+            Pre-shared answer matched against the RFC 4211 §6.2
+            id-regCtrl-authenticator control. When empty, a supplied authenticator
+            control is accepted without comparing its value.
+        server_key_gen_enabled:
+          type: boolean
+          default: false
+          description: |
+            Whether this DMS permits RFC 9483 §4.1.6 central key generation for
+            IR/CR with an absent public key. The request must still be signed by a
+            certificate usable as the CMS key-transport or key-agreement recipient.
+        workflow:
+          type: string
+          default: direct
+          description: |
+            direct: IR/CR/KUR/P10CR issuance is performed inline.
+            phased: issuance is deferred until an administrator approves the
+            transaction and the client retrieves the result with pollReq.
+            Central key generation and cross-certification currently bypass this
+            workflow selector.
+          enum: [direct, phased]
 
     AuthOptionsClientCertificate:
       type: object
@@ -674,6 +938,65 @@ components:
       properties:
         total:
           type: integer
+
+    CMPTransactionResponse:
+      type: object
+      description: |
+        Wire format for a single CMP enrollment transaction. The raw certificate/CSR
+        DER blobs are intentionally omitted; fetch the certificate body separately
+        via the CA API using certificate_serial_number.
+      properties:
+        transaction_id:
+          type: string
+          description: Hex-encoded transactionID from the CMP PKIHeader.
+        dms_id:
+          type: string
+        state:
+          type: string
+          enum: [PENDING, ISSUED, ISSUE_FAILED, CONFIRMED, REVOKED]
+        is_reenrollment:
+          type: boolean
+          description: True for a kur (key update) transaction, false for ir/cr/p10cr.
+        request_type:
+          type: string
+          enum: [ir, cr, kur, p10cr]
+        subject_common_name:
+          type: string
+        wfx_job_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+          description: CA failure or administrator rejection reason, present when state is ISSUE_FAILED.
+        certificate_serial_number:
+          type: string
+        has_certificate:
+          type: boolean
+
+    GetCMPTransactionsResponse:
+      type: object
+      properties:
+        next:
+          type: string
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/CMPTransactionResponse'
+
+    RejectCMPTransactionBody:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional rejection reason surfaced to the end entity on its next pollReq.
 
     PatchOperation:
       type: object

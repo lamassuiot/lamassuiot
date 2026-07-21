@@ -1,4 +1,4 @@
-package dmsmanager
+package cmp
 
 import (
 	"context"
