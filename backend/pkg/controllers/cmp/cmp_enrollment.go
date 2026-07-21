@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers/cmp/internal/kga"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -717,7 +716,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		return
 	}
 
-	technique, err := kga.TechniqueFor(recipient.PublicKey)
+	technique, err := kgaTechniqueFor(recipient.PublicKey)
 	if err != nil {
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
@@ -786,7 +785,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		return
 	}
 
-	buildIn := kga.BuildInput{
+	buildIn := kgaBuildInput{
 		GeneratedKey:  generated,
 		RecipientCert: recipient,
 		KGACert:       kgaCert,
@@ -801,7 +800,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	var protectionSignerCert *x509.Certificate
 	var protectionSigner crypto.Signer
 
-	if technique == kga.TechniqueKARI {
+	if technique == kgaTechniqueKARI {
 		// 4. Ephemeral EC originator: it is the ECDH peer AND signs the response
 		// protection so it lands at extraCerts[0] (matching the CMS originator).
 		origKey, origCert, origChain, err := mintHelperCert(issuanceCtx, lFunc, keyGen, dmsID, "Lamassu CMP KARI Originator", services.KGAHelperKARIOriginator)
@@ -830,7 +829,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	}
 
 	// 5. Build the EnvelopedData(SignedData(AsymmetricKeyPackage)).
-	envelopedDataDER, err := kga.BuildKeyPackage(buildIn)
+	envelopedDataDER, err := buildKGAKeyPackage(buildIn)
 	if err != nil {
 		lFunc.Errorf("kga: build key package: %v", err)
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "could not build key package", dmsID, corecmp.PKIFailureInfoSystemFailure)
@@ -861,9 +860,9 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 // validateKGARecipientKeyUsage checks that the recipient (request protection)
 // certificate carries the KeyUsage required by the selected KGA technique.
 // Returns a notAuthorized rejection when it does not (RFC 9483 §4.1.6).
-func validateKGARecipientKeyUsage(certReqID int, technique kga.Technique, recipient *x509.Certificate) *corecmp.CertRequestRejection {
+func validateKGARecipientKeyUsage(certReqID int, technique kgaTechnique, recipient *x509.Certificate) *corecmp.CertRequestRejection {
 	switch technique {
-	case kga.TechniqueKTRI:
+	case kgaTechniqueKTRI:
 		if recipient.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
 			return &corecmp.CertRequestRejection{
 				CertReqID:   certReqID,
@@ -871,7 +870,7 @@ func validateKGARecipientKeyUsage(certReqID int, technique kga.Technique, recipi
 				FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 			}
 		}
-	case kga.TechniqueKARI:
+	case kgaTechniqueKARI:
 		if recipient.KeyUsage&x509.KeyUsageKeyAgreement == 0 {
 			return &corecmp.CertRequestRejection{
 				CertReqID:   certReqID,

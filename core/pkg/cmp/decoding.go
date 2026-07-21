@@ -2,12 +2,13 @@ package cmp
 
 import (
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
 	"time"
+
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/cms"
 )
 
 func DecodeRequestHeader(headerDER []byte) (RequestPKIHeader, error) {
@@ -402,15 +403,15 @@ func BuildSyntheticCSR(subjectDER, spkiDER []byte, extensions []pkix.Extension) 
 		return nil, fmt.Errorf("parse public key: %w", err)
 	}
 
-	// Select a signature algorithm OID compatible with the key type.
+	// Select a signature algorithm OID compatible with the key type. These are
+	// the SHA-256-profile signature OIDs shared with the CMS layer, so they come
+	// from the cms package (the single source of truth) rather than inline literals.
 	var sigAlgOID asn1.ObjectIdentifier
 	switch pubKey.(type) {
-	case *rsa.PublicKey:
-		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11}
 	case *ecdsa.PublicKey:
-		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}
+		sigAlgOID = cms.OIDECDSAWithSHA256()
 	default:
-		sigAlgOID = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11}
+		sigAlgOID = cms.OIDSHA256WithRSA()
 	}
 
 	attrsContent, err := marshalExtensionRequestAttrs(extensions)

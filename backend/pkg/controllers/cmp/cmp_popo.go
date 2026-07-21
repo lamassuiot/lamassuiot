@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers/cmp/internal/kga"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/cms"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -207,20 +207,20 @@ func (r *cmpHttpRoutes) buildPOPOChallengeEntry(ctx context.Context, lFunc *logr
 	witness := sha256.Sum256(challengeInt.Bytes())
 
 	if pvno == corecmp.PVNOCMP2021 {
-		technique, terr := kga.TechniqueFor(recipientPub)
+		technique, terr := kgaTechniqueFor(recipientPub)
 		if terr != nil {
 			return nil, nil, fmt.Errorf("challengeResp: %w", terr)
 		}
-		buildIn := kga.BuildInput{
+		buildIn := kgaBuildInput{
 			RecipientCert: &x509.Certificate{PublicKey: recipientPub, SubjectKeyId: computeSKI(recipientPubKeyDER)},
 			// RFC 9810 §5.2.8.3.3: the encryptedRand rid MUST be the
 			// issuerAndSerialNumber CHOICE with a NULL-DN issuer and the
 			// certReqId (always 0 for ir/cr, RFC 9483 §4.1) as serialNumber —
 			// the recipient key is not certified yet, so no real identifiers
 			// exist for it.
-			RecipientRID: &kga.IssuerAndSerial{IssuerDER: corecmp.EmptyRDNSequenceDER(), Serial: big.NewInt(0)},
+			RecipientRID: &issuerAndSerialOverride{IssuerDER: corecmp.EmptyRDNSequenceDER(), Serial: big.NewInt(0)},
 		}
-		if technique == kga.TechniqueKARI {
+		if technique == kgaTechniqueKARI {
 			originator, err = r.mintECDHOriginator(ctx, lFunc, dmsID)
 			if err != nil {
 				return nil, nil, fmt.Errorf("challengeResp: %w", err)
@@ -228,7 +228,7 @@ func (r *cmpHttpRoutes) buildPOPOChallengeEntry(ctx context.Context, lFunc *logr
 			buildIn.KARIOriginatorKey = originator.key
 			buildIn.KARIOriginatorCert = originator.cert
 		}
-		envDataDER, berr := kga.BuildEnvelopedData(randDER, kga.ContentTypeData, buildIn)
+		envDataDER, berr := buildEnvelopedData(randDER, cms.OIDData(), buildIn)
 		if berr != nil {
 			return nil, nil, fmt.Errorf("challengeResp: build EnvelopedData: %w", berr)
 		}
@@ -534,16 +534,16 @@ func (r *cmpHttpRoutes) buildEncryptedCertRepBody(ctx context.Context, lFunc *lo
 		return nil, nil, fmt.Errorf("encrCert: parse recipient public key: %w", err)
 	}
 
-	technique, err := kga.TechniqueFor(recipientPub)
+	technique, err := kgaTechniqueFor(recipientPub)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encrCert: %w", err)
 	}
 
-	buildIn := kga.BuildInput{
+	buildIn := kgaBuildInput{
 		RecipientCert: &x509.Certificate{PublicKey: recipientPub, SubjectKeyId: computeSKI(recipientPubKeyDER)},
 	}
 
-	if technique == kga.TechniqueKARI {
+	if technique == kgaTechniqueKARI {
 		originator, err := r.mintECDHOriginator(ctx, lFunc, dmsID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("encrCert: %w", err)
@@ -553,7 +553,7 @@ func (r *cmpHttpRoutes) buildEncryptedCertRepBody(ctx context.Context, lFunc *lo
 		protectionOverride = originator
 	}
 
-	envDataDER, err := kga.BuildEnvelopedData(cert.Raw, kga.ContentTypeData, buildIn)
+	envDataDER, err := buildEnvelopedData(cert.Raw, cms.OIDData(), buildIn)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encrCert: build EnvelopedData: %w", err)
 	}
