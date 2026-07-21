@@ -11,9 +11,9 @@ import (
 )
 
 func prepareEventBusForTest(t *testing.T) (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
-	cleanup, _, conf, err := aws.RunAWSEmulationLocalStackDocker(false)
+	cleanup, _, conf, err := aws.RunAWSEmulationFlociDocker(false)
 	if err != nil {
-		t.Fatalf("could not run RabbitMQ docker: %s", err)
+		t.Fatalf("could not run AWS emulation docker: %s", err)
 	}
 
 	lPub := helpers.SetupLogger(config.Info, "test", "test-pub")

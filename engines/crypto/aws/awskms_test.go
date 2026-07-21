@@ -77,9 +77,6 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 	}{
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
-		//TODO: LocalStack does not support RSA_PSS with fixed salt length. AWS KMS DOES support it. Follow issues:
-		// - https://github.com/localstack/localstack/pull/11649
-		// - https://github.com/localstack/localstack/issues/9602
 		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
 		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
 		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
@@ -87,8 +84,9 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
 		{"RenameKey", cryptoengines.SharedRenameKey},
-		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
-		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
+		// Floci does not support importing keys into KMS, so these tests are commented out
+		//{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
+		//{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 	}
 
 	for _, tt := range table {

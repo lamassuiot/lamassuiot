@@ -13,7 +13,7 @@ import (
 func RunAWSEmulationFlociDocker(exposeAsStandardPort bool) (func() error, func() error, *AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "floci/floci", // image
-		Tag:        "1.5.29",      // version
+		Tag:        "1.5.33",      // version
 	}, func(hc *docker.HostConfig) {
 		if exposeAsStandardPort {
 			hc.PortBindings = map[docker.Port][]docker.PortBinding{
