@@ -1,6 +1,7 @@
-package kga
+package cms
 
 import (
+	"bytes"
 	"crypto/aes"
 	"encoding/binary"
 	"fmt"
@@ -53,4 +54,37 @@ func aesKeyWrap(kek, plaintext []byte) ([]byte, error) {
 		out = append(out, r[i]...)
 	}
 	return out, nil
+}
+
+// aesKeyUnwrap is the RFC 3394 inverse of aesKeyWrap: it recovers the CEK from
+// its AES-wrapped form under kek, verifying the integrity check value.
+func aesKeyUnwrap(kek, wrapped []byte) ([]byte, error) {
+	if len(wrapped) < 24 || len(wrapped)%8 != 0 {
+		return nil, fmt.Errorf("invalid AES-wrapped key length %d", len(wrapped))
+	}
+	block, err := aes.NewCipher(kek)
+	if err != nil {
+		return nil, err
+	}
+	n := len(wrapped)/8 - 1
+	a := append([]byte(nil), wrapped[:8]...)
+	r := append([]byte(nil), wrapped[8:]...)
+	buffer := make([]byte, 16)
+	for j := 5; j >= 0; j-- {
+		for i := n; i >= 1; i-- {
+			t := uint64(n*j + i)
+			copy(buffer[:8], a)
+			for k := 0; k < 8; k++ {
+				buffer[7-k] ^= byte(t >> (8 * k))
+			}
+			copy(buffer[8:], r[(i-1)*8:i*8])
+			block.Decrypt(buffer, buffer)
+			copy(a, buffer[:8])
+			copy(r[(i-1)*8:i*8], buffer[8:])
+		}
+	}
+	if !bytes.Equal(a, rfc3394IV) {
+		return nil, fmt.Errorf("AES key-wrap integrity check failed")
+	}
+	return r, nil
 }
