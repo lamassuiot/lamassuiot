@@ -67,8 +67,13 @@ func main() {
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 
+	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "DMS Manager", "LMS SDK - KMS Client")
+	kmsHttpCli, err := sdk.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP KMS Client: %s", err)
+	}
 	kmsSDK := sdk.NewHttpKMSClient(
-		sdk.HttpClientWithSourceHeaderInjector(nil, models.DMSManagerSource),
+		sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.DMSManagerSource),
 		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
 	)
 
