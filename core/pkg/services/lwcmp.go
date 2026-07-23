@@ -176,6 +176,20 @@ type LightweightCMPCrossCertifier interface {
 	LWCIssueCrossCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, reqNotBefore, reqNotAfter *time.Time) (*x509.Certificate, []*x509.Certificate, error)
 }
 
+// LightweightCMPCrossCertRequesterValidator restricts which CAs may
+// successfully request cross-certification from a DMS, via RFC011's
+// CCR.TrustedRequesterCAIDs. Separate from LightweightCMPCrossCertifier
+// because the controller must reject an untrusted requester BEFORE issuance
+// (RequireCACertificate/RequireProofOfPossession are checked purely from the
+// signer certificate's own fields; this additionally checks it chains to an
+// allow-listed CA).
+type LightweightCMPCrossCertRequesterValidator interface {
+	// LWCValidateCCRRequester returns nil when CCR.TrustedRequesterCAIDs is
+	// empty (unrestricted) or when signer chain-validates against one of the
+	// listed CAs.
+	LWCValidateCCRRequester(ctx context.Context, aps string, signer *x509.Certificate) error
+}
+
 // LWCEnrollmentOptions is returned by LWCGetEnrollmentOptions and carries the
 // DMS-level CMP settings the controller needs to make dispatch decisions
 // (e.g. whether implicit confirmation is allowed).

@@ -653,6 +653,15 @@ var oidRegCtrlAuthenticator = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 1, 2
 // incorrect, not a malformed request); a malformed control value is rejected
 // with badDataFormat. An absent control is not itself an error — whether the
 // control is mandatory is a DMS policy decision outside this function's scope.
+// HasAuthenticatorControl reports whether controlsDER carries an
+// id-regCtrl-authenticator control at all, independent of whether the DMS has
+// an ExpectedAuthenticator configured. Used by RFC011's per-DMS
+// authenticator_control.mode (disabled/optional/required) to gate on presence
+// rather than value.
+func HasAuthenticatorControl(controlsDER []byte) bool {
+	return findControlValueDER(controlsDER, oidRegCtrlAuthenticator) != nil
+}
+
 func ValidateAuthenticatorControl(certReqID int, controlsDER []byte, expected string) *CertRequestRejection {
 	if expected == "" {
 		return nil

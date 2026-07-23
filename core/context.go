@@ -31,4 +31,13 @@ const (
 	// credential, and an abandoned (never-confirmed) update leaves the device
 	// untouched.
 	LamassuContextKeyCMPDeferredCommit string = "lamassu.io/ctx/cmp-deferred-commit"
+
+	// LamassuContextKeyCMPOperation carries which CMP request body — "ir",
+	// "cr", or "p10cr" — is driving the current LWCEnroll call. ir/cr/p10cr
+	// share this one service method, but RFC011 defines CR-only settings
+	// (certificate_behavior, allowed_profile_ids, require_existing_device,
+	// maximum_active_certificates) and per-operation registration_mode /
+	// existing_device_policy overrides that must not apply uniformly across
+	// all three. Absent or unrecognized is treated as "ir".
+	LamassuContextKeyCMPOperation string = "lamassu.io/ctx/cmp-operation"
 )

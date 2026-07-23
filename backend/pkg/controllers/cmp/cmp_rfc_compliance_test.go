@@ -618,7 +618,7 @@ func TestC9_SenderKID_ProtectedResponseIncludesSKI(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPServiceWithProtection{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}), nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 	svc.On("LWCProtectionCredentials", mock.Anything, "test-dms").
@@ -882,7 +882,7 @@ func TestFailInfo_DuplicateTransactionID_TransactionIDInUse(t *testing.T) {
 func TestFailInfo_UnknownTransactionID_BadRequest(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil).Maybe()
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil).Maybe()
 
 	router, _ := newTestRouterWithStore(svc)
 
@@ -1016,7 +1016,7 @@ func TestFailInfo_AllErrorResponsesCarryFailInfo(t *testing.T) {
 	t.Run("unsupported pvno → unsupportedVersion", func(t *testing.T) {
 		svc := &cmpmock.MockLightweightCMPService{}
 		svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-			Return(&models.EnrollmentOptionsLWCRFC9483{}, nil).Maybe()
+			Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil).Maybe()
 		router, _ := newTestRouterWithStore(svc)
 		bad := 99
 		header := buildHeaderDERCustom(t, headerOpts{PVNO: &bad})
@@ -1029,7 +1029,7 @@ func TestFailInfo_AllErrorResponsesCarryFailInfo(t *testing.T) {
 	t.Run("short senderNonce → badSenderNonce", func(t *testing.T) {
 		svc := &cmpmock.MockLightweightCMPService{}
 		svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-			Return(&models.EnrollmentOptionsLWCRFC9483{}, nil).Maybe()
+			Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil).Maybe()
 		router, _ := newTestRouterWithStore(svc)
 		header := buildHeaderDERCustom(t, headerOpts{SenderNonce: []byte{0x01}})
 		irDER := buildIRWithHeader(t, header, "x")

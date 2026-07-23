@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
@@ -79,7 +80,7 @@ type genITAV struct {
 // handleGeneralMessage processes a genm (21) body and answers with a genp (22).
 // Signature protection has already been verified by HandleCMP; sender/senderKID
 // binding is intentionally not enforced for genm (see the dispatch in cmp.go).
-func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string) {
+func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
 	itavs, err := decodeGenMsgContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("genm: decode GenMsgContent: %v", err)
@@ -91,9 +92,27 @@ func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Ent
 		return
 	}
 
+	// RFC011 GENM.AccessPolicy: public_discovery answers unauthenticated genm;
+	// require_signed answers only signature-protected requests.
+	if enrollOpts.GENM.AccessPolicy == models.CMPGENMAccessPolicyRequireSigned && signerCert == nil {
+		lFunc.Warnf("genm rejected: DMS requires signed general messages (GENM.AccessPolicy=require_signed)")
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+			"general messages require a signature-protected request for this DMS", dmsID, corecmp.PKIFailureInfoNotAuthorized)
+		return
+	}
+
 	respEntries := make([][]byte, 0, len(itavs))
 	for _, itav := range itavs {
 		lFunc.Infof("genm: infoType=%s", itav.InfoType.String())
+		// RFC011 GENM.InformationTypes: refuse to answer an id-it type the DMS
+		// has disabled.
+		if !genmInfoTypeEnabled(enrollOpts.GENM.InformationTypes, itav.InfoType) {
+			lFunc.Warnf("genm rejecting %s: information type disabled for this DMS", itav.InfoType.String())
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+				fmt.Sprintf("general message information type %s is not enabled for this DMS", itav.InfoType.String()),
+				dmsID, corecmp.PKIFailureInfoNotAuthorized)
+			return
+		}
 		entryDER, rej := r.buildGenpEntry(ctx.Request.Context(), lFunc, dmsID, itav)
 		if rej != nil {
 			lFunc.Warnf("genm: rejecting %s: %s", itav.InfoType.String(), rej.reason)
@@ -110,6 +129,36 @@ func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Ent
 		return
 	}
 	r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagGenRep, genRepDER, dmsID)
+}
+
+// genmInfoTypeEnabled reports whether the DMS permits answering a given id-it
+// general-message information type (RFC011 GENM.InformationTypes). Types with no
+// corresponding config field (e.g. revocation passphrase) are always allowed.
+func genmInfoTypeEnabled(it models.CMPGENMInformationTypes, oid asn1.ObjectIdentifier) bool {
+	switch oid.String() {
+	case oidItCaCerts.String():
+		return it.CACertificates
+	case oidItRootCaCert.String():
+		return it.RootCAUpdate
+	case oidItCertReqTemplate.String():
+		return it.CertificateRequestTemplate
+	case oidItCurrentCRL.String():
+		return it.CurrentCRL
+	case oidItCrlStatusList.String():
+		return it.CRLUpdate
+	case oidItCaProtEncCert.String():
+		return it.ProtocolEncryptionCertificate
+	case oidItSignKeyPairTypes.String():
+		return it.SigningKeyTypes
+	case oidItEncKeyPairTypes.String():
+		return it.EncryptionKeyTypes
+	case oidItPreferredSymmAlg.String():
+		return it.PreferredSymmetricAlgorithm
+	case oidItSuppLangTags.String():
+		return it.SupportedLanguages
+	default:
+		return true
+	}
 }
 
 // buildGenpEntry maps a single request InfoTypeAndValue to its genp response

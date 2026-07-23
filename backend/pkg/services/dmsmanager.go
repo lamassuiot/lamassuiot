@@ -213,6 +213,11 @@ func normalizeProtocolSettings(settings *models.DMSSettings) error {
 		settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483 = models.EnrollmentOptionsLWCRFC9483{}
 	case models.CMP:
 		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
+		// Fill the nested per-operation CMP schema defaults and resolve the two
+		// LIVE bridges (CKG toggle, KUR ↔ ReEnrollmentSettings reshape) so what
+		// gets persisted is already fully-populated and self-consistent. See
+		// models.ResolveCMPSettings / RFC011.
+		*settings = models.ResolveCMPSettings(*settings)
 	default:
 		return errs.ErrDMSInvalidProtocol
 	}
@@ -301,13 +306,30 @@ func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input servic
 
 	lFunc.Debugf("read DMS %s", dms.ID)
 
+	// Project legacy/partial rows into the fully-populated nested CMP shape and
+	// resolve the LIVE bridges on read, so enforcement paths that call
+	// GetDMSByID (LWCReenroll, reenroll window, monitoring deltas) observe the
+	// KUR ↔ ReEnrollmentSettings reshape and CKG toggle. No-op for non-CMP DMSs.
+	dms.Settings = models.ResolveCMPSettings(dms.Settings)
+
 	return dms, nil
 }
 
 func (svc DMSManagerServiceBackend) GetAll(ctx context.Context, input services.GetAllInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	bookmark, err := svc.dmsStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	// Project each row into the fully-populated nested CMP shape before handing
+	// it to the caller's ApplyFunc, matching what GetDMSByID returns. No-op for
+	// non-CMP DMSs. When no ApplyFunc is supplied there is nothing to wrap.
+	applyFunc := input.ApplyFunc
+	if applyFunc != nil {
+		applyFunc = func(dms models.DMS) {
+			dms.Settings = models.ResolveCMPSettings(dms.Settings)
+			input.ApplyFunc(dms)
+		}
+	}
+
+	bookmark, err := svc.dmsStorage.SelectAll(ctx, input.ExhaustiveRun, applyFunc, input.QueryParameters, nil)
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading all DMSs from storage engine: %s", err)
 		return "", err

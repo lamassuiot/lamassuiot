@@ -170,7 +170,7 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 	newSvc := func() *cmpmock.MockLightweightCMPService {
 		svc := &cmpmock.MockLightweightCMPService{}
 		svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-			Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
+			Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}), nil)
 		svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 			Return(issuedCert, nil)
 		return svc
@@ -329,7 +329,7 @@ func TestHandleCMP_RR_TrustedRA_RevokesOtherCert(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(in services.RevokeCertificateInput) bool {
 		return in.SerialNumber == hex.EncodeToString(targetSerial.Bytes())
 	}), mock.Anything).Return(nil)

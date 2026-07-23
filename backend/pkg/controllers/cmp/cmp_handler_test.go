@@ -438,7 +438,7 @@ func TestHandleCMP_WFXStoresCMPPayloads(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}), nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 
@@ -559,7 +559,7 @@ func TestHandleCMP_Response_ExtraCertsContainsChain(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPServiceWithProtection{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 	// Protection provider returns a 2-cert chain: [leaf, issuer].
@@ -752,7 +752,7 @@ func TestHandleCMP_CertConf_RecipNonceMismatch(t *testing.T) {
 func TestHandleCMP_RR_Success(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(input services.RevokeCertificateInput) bool {
 		return input.APS == "test-dms" && input.Reason == models.RevocationReason(1) // KeyCompromise
 	}), mock.Anything).Return(nil)
@@ -760,7 +760,8 @@ func TestHandleCMP_RR_Success(t *testing.T) {
 	router, _ := newTestRouterWithStore(svc)
 
 	serial := big.NewInt(0x1234ABCD)
-	rrDER := buildTestRR(t, serial, 1) // reason=1 (KeyCompromise)
+	reason := 1 // KeyCompromise
+	rrDER, _, _ := buildTestRRSelfRevocation(t, "rr-requester", serial, &reason)
 
 	resp := postCMP(t, router, "test-dms", rrDER)
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -777,14 +778,15 @@ func TestHandleCMP_RR_Success(t *testing.T) {
 func TestHandleCMP_RR_ServiceError(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.Anything, mock.Anything).
 		Return(fmt.Errorf("certificate not found"))
 
 	router, _ := newTestRouterWithStore(svc)
 
 	serial := big.NewInt(0xDEAD)
-	rrDER := buildTestRR(t, serial, 0)
+	reason := 0
+	rrDER, _, _ := buildTestRRSelfRevocation(t, "rr-requester", serial, &reason)
 
 	resp := postCMP(t, router, "test-dms", rrDER)
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -806,7 +808,7 @@ func TestHandleCMP_RR_ServiceError(t *testing.T) {
 func TestHandleCMP_RR_DefaultReason(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(input services.RevokeCertificateInput) bool {
 		return input.Reason == models.RevocationReason(0) // Unspecified
 	}), mock.Anything).Return(nil)
@@ -814,7 +816,7 @@ func TestHandleCMP_RR_DefaultReason(t *testing.T) {
 	router, _ := newTestRouterWithStore(svc)
 
 	serial := big.NewInt(42)
-	rrDER := buildTestRRNoReason(t, serial) // no crlEntryDetails
+	rrDER, _, _ := buildTestRRSelfRevocation(t, "rr-requester", serial, nil) // no crlEntryDetails
 
 	resp := postCMP(t, router, "test-dms", rrDER)
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -958,7 +960,15 @@ func TestHandleCMP_POPO(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			opts := models.EnrollmentOptionsLWCRFC9483{EnforcePOPO: tc.enforcePOPO, AcceptImplicit: true}
+			// RFC011: IR.ProofOfPossession.Required is what actually gates ir/cr
+			// POPO enforcement now (EnforcePOPO is the pre-RFC011 legacy flag,
+			// kept here for documentation/back-compat but no longer consulted
+			// for ir/cr).
+			opts := models.EnrollmentOptionsLWCRFC9483{
+				EnforcePOPO:    tc.enforcePOPO,
+				AcceptImplicit: true,
+				IR:             models.CMPIRSettings{ProofOfPossession: models.CMPProofOfPossession{Required: tc.enforcePOPO}},
+			}
 
 			var router *gin.Engine
 			var svc *cmpmock.MockLightweightCMPService
@@ -1204,9 +1214,9 @@ func TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked(t *testing.T) {
 func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{
 			Workflow: models.CMPWorkflowPhased,
-		}, nil)
+		}), nil)
 	// NOTE: LWCEnroll is intentionally NOT registered — if the phased path
 	// wrongly issues inline, the mock panics on an unexpected call.
 
@@ -1340,7 +1350,10 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(&models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, nil)
+		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{
+			AcceptImplicit: true,
+			IR:             models.CMPIRSettings{RegistrationToken: models.CMPControl{Mode: models.CMPControlModeOptional}},
+		}), nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert1, nil).Once()
 

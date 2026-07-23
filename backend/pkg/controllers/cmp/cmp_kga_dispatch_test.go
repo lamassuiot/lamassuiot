@@ -235,7 +235,7 @@ func extractKGAEnvelopedDataDER(t *testing.T, responseDER []byte) (certDER, envD
 
 func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true}
+	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
@@ -303,7 +303,7 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 
 func TestHandleCMP_KGA_EmptyPublicKey_RequiresProtection(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true}
+	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
@@ -343,7 +343,7 @@ func TestHandleCMP_KGA_EmptyPublicKey_RequiresProtection(t *testing.T) {
 // disable it.
 func TestHandleCMP_KGA_DisabledByDefault(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := models.EnrollmentOptionsLWCRFC9483{} // ServerKeyGenEnabled left at its zero value (false)
+	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{}) // ServerKeyGenEnabled left at its zero value (false)
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}

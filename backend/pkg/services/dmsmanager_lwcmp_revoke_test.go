@@ -150,16 +150,25 @@ func makeForgedSelfSignedCert(t *testing.T, cn string, serial *big.Int) *x509.Ce
 }
 
 func dmsForRevokeTest(id string) *models.DMS {
-	return &models.DMS{
-		ID: id,
-		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentCA: "test-ca",
-				EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
-					AuthMode: models.CMPAuthModeClientCertificate,
-				},
+	// Resolved via models.ResolveCMPSettings (mirroring what the real
+	// GetDMSByID/fakeDMSManagerService pairing does in production) so RR's
+	// RFC011 defaults (Authorization=self_only, AllowExpiredTarget=true,
+	// TrustedRA.RequireCMCRAEKU=true, AllowedReasons=[unspecified,
+	// key_compromise, cessation_of_operation, superseded]) are populated —
+	// a bare zero-value RR{} would reject every revocation via the new
+	// AllowedReasons allow-list gate before a test's actual scenario runs.
+	settings := models.ResolveCMPSettings(models.DMSSettings{
+		EnrollmentSettings: models.EnrollmentSettings{
+			EnrollmentProtocol: models.CMP,
+			EnrollmentCA:       "test-ca",
+			EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+				AuthMode: models.CMPAuthModeClientCertificate,
 			},
 		},
+	})
+	return &models.DMS{
+		ID:       id,
+		Settings: settings,
 	}
 }
 
