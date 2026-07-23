@@ -1,10 +1,14 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/x509"
 	"fmt"
+	"slices"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
@@ -120,10 +124,24 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 	// re-run client-cert validation (there is no CMP signer in the admin's
 	// approval context).
 	issuanceCtx := context.WithValue(ctx, core.LamassuContextKeyPreAuthenticated, true)
+	// tx.RequestType is already "ir"/"cr"/"p10cr"/"kur"/"ccr" (see
+	// cmpTagToString), so it can be forwarded verbatim as the RFC011
+	// operation-identity signal.
+	issuanceCtx = context.WithValue(issuanceCtx, core.LamassuContextKeyCMPOperation, tx.RequestType)
 	var cert *x509.Certificate
-	if tx.IsReenrollment {
+	switch {
+	case tx.RequestType == "ccr":
+		// Cross-certification admin approval: issue directly via svc (not
+		// svc.service) since LightweightCMPCrossCertifier is an optional
+		// capability, not part of the DMSManagerService interface — mirrors how
+		// the CMP controller's direct-workflow ccr path resolves it. The
+		// requested validity window is not persisted on the transaction (see
+		// deferCCRForApproval), so notBefore/notAfter fall back to
+		// CCR.MaximumValidity/profile default here.
+		cert, _, err = svc.LWCIssueCrossCertificate(issuanceCtx, input.DMSID, csr, nil, nil)
+	case tx.IsReenrollment:
 		cert, err = svc.service.LWCReenroll(issuanceCtx, csr, input.DMSID, nil)
-	} else {
+	default:
 		cert, err = svc.service.LWCEnroll(issuanceCtx, csr, input.DMSID, nil)
 	}
 	if err != nil {
@@ -402,8 +420,13 @@ func trustedRACAIDs(dms *models.DMS) []string {
 // CertHasExtKeyUsageOID alone (as the RA-initiated revocation case and the
 // raVerified POPO shortcut once did) lets an attacker mint a throwaway
 // self-signed certificate carrying the EKU and have it trusted outright.
-func (svc DMSManagerServiceBackend) validateTrustedRASigner(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, signer *x509.Certificate) error {
-	if !chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA) {
+func (svc DMSManagerServiceBackend) validateTrustedRASigner(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, signer *x509.Certificate, requireCMCRAEKU bool) error {
+	// The id-kp-cmcRA EKU is a self-issued claim on its own; the load-bearing
+	// check is always the chain to a DMS-trusted CA below. Whether the EKU is
+	// additionally mandatory is caller-controlled (RFC011 RR.TrustedRA.
+	// RequireCMCRAEKU for revocation; always required for the enrollment
+	// raVerified shortcut).
+	if requireCMCRAEKU && !chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA) {
 		return fmt.Errorf("signer does not carry id-kp-cmcRA")
 	}
 	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, trustedRACAIDs(dms), false); err != nil {
@@ -427,7 +450,31 @@ func (svc DMSManagerServiceBackend) LWCValidateRASigner(ctx context.Context, aps
 		return errs.ErrDMSNotFound
 	}
 
-	return svc.validateTrustedRASigner(ctx, lFunc, dms, signer)
+	return svc.validateTrustedRASigner(ctx, lFunc, dms, signer, true)
+}
+
+// LWCValidateCCRRequester implements
+// services.LightweightCMPCrossCertRequesterValidator: an empty
+// CCR.TrustedRequesterCAIDs means unrestricted (any CA satisfying
+// CCR.RequireCACertificate may request); a non-empty list requires the
+// requester's signer certificate to chain to one of the listed CAs.
+func (svc DMSManagerServiceBackend) LWCValidateCCRRequester(ctx context.Context, aps string, signer *x509.Certificate) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: aps})
+	if err != nil {
+		lFunc.Errorf("could not get DMS '%s': %s", aps, err)
+		return errs.ErrDMSNotFound
+	}
+
+	trustedCAIDs := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.CCR.TrustedRequesterCAIDs
+	if len(trustedCAIDs) == 0 {
+		return nil
+	}
+	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, trustedCAIDs, false); err != nil {
+		return fmt.Errorf("signer does not chain to a CA on CCR.TrustedRequesterCAIDs: %w", err)
+	}
+	return nil
 }
 
 // classifySupersededSigner decides which error a CMP operation gets when its
@@ -576,6 +623,100 @@ func deviceIdentityFromCSR(csr *x509.CertificateRequest) string {
 	return ""
 }
 
+// cmpOperationFromContext reads the RFC011 operation-identity signal set by
+// the CMP controller (core.LamassuContextKeyCMPOperation) so LWCEnroll — shared
+// across ir/cr/p10cr — can apply per-operation settings. Absent or
+// unrecognized defaults to "ir", the least-restrictive/backward-compatible
+// choice (ir has no allow-list-style fields like CR.AllowedProfileIDs).
+func cmpOperationFromContext(ctx context.Context) string {
+	if op, ok := ctx.Value(core.LamassuContextKeyCMPOperation).(string); ok {
+		switch op {
+		case "cr", "p10cr":
+			return op
+		}
+	}
+	return "ir"
+}
+
+// applyCMPOpRegistrationOverride overrides the DMS-general RegistrationMode /
+// EnableReplaceableEnrollment with an ir/p10cr operation's registration_mode /
+// existing_device_policy, when configured (non-"inherit"/non-empty). CR has no
+// such fields (a cr always targets an already-registered device per its own
+// RequireExistingDevice), so callers only invoke this for ir and p10cr.
+func applyCMPOpRegistrationOverride(enrollSettings models.EnrollmentSettings, mode models.CMPOpRegistrationMode, policy models.CMPExistingDevicePolicy) models.EnrollmentSettings {
+	switch mode {
+	case models.CMPOpRegistrationModeJITP:
+		enrollSettings.RegistrationMode = models.JITP
+	case models.CMPOpRegistrationModePreRegistration:
+		enrollSettings.RegistrationMode = models.PreRegistration
+	}
+	// Only "replace" overrides — it's a genuine per-op opt-in to allow
+	// replacement even under a stricter DMS-general policy. "reject" does NOT
+	// force EnableReplaceableEnrollment off: unlike registration_mode,
+	// CMPExistingDevicePolicy has no "inherit" sentinel and resolveIR/
+	// resolveP10CR always concretize an unset value to "reject", so "reject"
+	// is indistinguishable from "never configured" — treating it as an
+	// override would silently defeat a DMS that explicitly set the general
+	// EnableReplaceableEnrollment=true and never touched this per-op field.
+	if policy == models.CMPExistingDevicePolicyReplace {
+		enrollSettings.EnableReplaceableEnrollment = true
+	}
+	return enrollSettings
+}
+
+// countActiveDeviceCertificates counts the certificates recorded in a device's
+// identity slot (across all versions, not just the current ActiveVersion) that
+// the CA still reports as non-revoked. Backs CR.MaximumActiveCertificates:
+// there is no dedicated storage index for "certs currently held by device X",
+// so this walks the slot's version→serial map and checks each serial's live
+// CA status. A lookup failure for one serial is logged and skipped rather than
+// aborting the whole count, since a stale/pruned serial should not block new
+// enrollments indefinitely.
+func (svc DMSManagerServiceBackend) countActiveDeviceCertificates(ctx context.Context, lFunc *logrus.Entry, slot *models.Slot[string]) int {
+	if slot == nil {
+		return 0
+	}
+	count := 0
+	for _, serial := range slot.Secrets {
+		cert, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: serial})
+		if err != nil {
+			lFunc.Warnf("CR.MaximumActiveCertificates: could not check certificate %s status, skipping from count: %s", serial, err)
+			continue
+		}
+		if cert.Status != models.StatusRevoked {
+			count++
+		}
+	}
+	return count
+}
+
+// resolveCMPIssuanceProfile resolves the issuance profile for an ir/cr/p10cr
+// enrollment, honouring the operation's policy_overrides.issuance_profile_id
+// (pins a specific profile ahead of the DMS-general one) and allowed_profile_ids
+// (an allow-list; empty means unrestricted). ir has no allow-list field, so
+// callers pass nil/empty for allowedProfileIDs there.
+func (svc DMSManagerServiceBackend) resolveCMPIssuanceProfile(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, enrollmentCA string, overrideProfileID *string, allowedProfileIDs []string) (*models.IssuanceProfile, error) {
+	var profile *models.IssuanceProfile
+	var err error
+	if overrideProfileID != nil && *overrideProfileID != "" {
+		profile, err = svc.caClient.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{ProfileID: *overrideProfileID})
+		if err != nil {
+			lFunc.Errorf("could not get policy_overrides-pinned issuance profile %s: %s", *overrideProfileID, err)
+			return nil, err
+		}
+	} else {
+		profile, err = svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollmentCA)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(allowedProfileIDs) > 0 && !slices.Contains(allowedProfileIDs, profile.ID) {
+		lFunc.Errorf("issuance profile %s is not permitted by allowed_profile_ids", profile.ID)
+		return nil, fmt.Errorf("issuance profile %s is not permitted for this operation", profile.ID)
+	}
+	return profile, nil
+}
+
 func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -599,6 +740,9 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	// controller also derives its wire-level protection requirement from
 	// auth_mode (no separate enforce_request_protection knob exists).
 	cmpOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	// RFC011: which CMP body (ir/cr/p10cr) drove this call — see
+	// cmpOperationFromContext for why "ir" is the safe default.
+	cmpOp := cmpOperationFromContext(ctx)
 
 	// Skip authentication when the context signals pre-authenticated (phased
 	// workflow: the original IR was validated at submission; the admin approval
@@ -649,6 +793,24 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 
 	enrollSettings := dms.Settings.EnrollmentSettings
 
+	// RFC011: ir/p10cr may override the DMS-general registration_mode /
+	// existing_device_policy; cr has no such fields (see RequireExistingDevice
+	// below instead).
+	switch cmpOp {
+	case "ir":
+		enrollSettings = applyCMPOpRegistrationOverride(enrollSettings, cmpOpts.IR.RegistrationMode, cmpOpts.IR.ExistingDevicePolicy)
+	case "p10cr":
+		enrollSettings = applyCMPOpRegistrationOverride(enrollSettings, cmpOpts.P10CR.RegistrationMode, cmpOpts.P10CR.ExistingDevicePolicy)
+	}
+
+	// RFC011: a cr targets a device that already participates in the PKI; when
+	// the DMS requires that explicitly, reject a cr against an unregistered
+	// device rather than silently falling through to JITP/pre-registration.
+	if cmpOp == "cr" && existingDevice == nil && cmpOpts.CR.RequireExistingDevice {
+		lFunc.Errorf("aborting cr enrollment. DMS requires an existing device (CR.RequireExistingDevice) but '%s' is not registered", deviceID)
+		return nil, fmt.Errorf("certification request requires a pre-existing device identity")
+	}
+
 	// Mirror the EST enrollment guards (see Enroll): a device already registered
 	// to another DMS is rejected, and re-enrolling an existing device requires
 	// EnableReplaceableEnrollment (the superseded cert is then revoked).
@@ -662,14 +824,34 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 			return nil, fmt.Errorf("forbiddenNewEnrollment")
 		}
 		lFunc.Debugf("DMS allows replaceable enrollment. Continuing for device '%s'", deviceID)
-		// Revoke the superseded active certificate once the new one is issued,
-		// but only when the DMS opts in via ReEnrollmentSettings.RevokeOnReEnrollment.
-		// This mirrors the KUR/re-enrollment path (see LWCReenroll), where the
-		// superseded cert is revoked only when that flag is set. Without this
-		// gate the initial-enroll path revoked unconditionally, which is
-		// inconsistent with KUR and breaks flows that legitimately keep the
-		// previous certificate valid (e.g. a reused message-protection cert).
-		if existingDevice.IdentitySlot != nil && dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment {
+
+		// RFC011: for cr, CR.MaximumActiveCertificates caps how many
+		// non-revoked certificates the device may hold at once (0 = no cap).
+		if cmpOp == "cr" && cmpOpts.CR.MaximumActiveCertificates > 0 {
+			active := svc.countActiveDeviceCertificates(ctx, lFunc, existingDevice.IdentitySlot)
+			if active >= cmpOpts.CR.MaximumActiveCertificates {
+				lFunc.Errorf("aborting cr enrollment. device '%s' already holds %d active certificate(s), at CR.MaximumActiveCertificates=%d", deviceID, active, cmpOpts.CR.MaximumActiveCertificates)
+				return nil, fmt.Errorf("device has reached the maximum number of active certificates (%d) for this DMS", cmpOpts.CR.MaximumActiveCertificates)
+			}
+		}
+
+		// Revoke the superseded active certificate once the new one is issued.
+		// General enrollments (ir/p10cr) opt in via
+		// ReEnrollmentSettings.RevokeOnReEnrollment, mirroring the KUR path (see
+		// LWCReenroll) — without this gate the initial-enroll path revoked
+		// unconditionally, inconsistent with KUR and breaking flows that
+		// legitimately keep the previous certificate valid (e.g. a reused
+		// message-protection cert). A cr instead uses its own
+		// CertificateBehavior: "replace" supersedes the prior identity,
+		// "additional" keeps it valid (this DMS-model tracks one active
+		// identity slot per device, so "additional" cannot mint a second
+		// concurrently-active identity — it can only choose not to revoke the
+		// previous one).
+		revokeSuperseded := dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment
+		if cmpOp == "cr" {
+			revokeSuperseded = cmpOpts.CR.CertificateBehavior == models.CMPCertificateBehaviorReplace
+		}
+		if existingDevice.IdentitySlot != nil && revokeSuperseded {
 			supersededSN := existingDevice.IdentitySlot.Secrets[existingDevice.IdentitySlot.ActiveVersion]
 			defer func() {
 				if _, revErr := svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
@@ -690,7 +872,22 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		return nil, err
 	}
 
-	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollCA)
+	// RFC011: policy_overrides.issuance_profile_id pins a specific profile
+	// ahead of the DMS-general one; allowed_profile_ids (cr/p10cr only)
+	// restricts the resolved profile to an allow-list.
+	var profileOverride *string
+	var allowedProfiles []string
+	switch cmpOp {
+	case "ir":
+		profileOverride = cmpOpts.IR.PolicyOverrides.IssuanceProfileID
+	case "cr":
+		profileOverride = cmpOpts.CR.PolicyOverrides.IssuanceProfileID
+		allowedProfiles = cmpOpts.CR.AllowedProfileIDs
+	case "p10cr":
+		profileOverride = cmpOpts.P10CR.PolicyOverrides.IssuanceProfileID
+		allowedProfiles = cmpOpts.P10CR.AllowedProfileIDs
+	}
+	issuanceProfile, err := svc.resolveCMPIssuanceProfile(ctx, lFunc, dms, enrollCA, profileOverride, allowedProfiles)
 	if err != nil {
 		return nil, err
 	}
@@ -764,6 +961,30 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 	if currentDeviceCert.Status == models.StatusRevoked {
 		lFunc.Errorf("aborting reenrollment. certificate %s is revoked", currentDeviceCertSN)
 		return nil, fmt.Errorf("revoked certificate")
+	}
+
+	// RFC011 KUR key & identity policy: constrain how much the requested
+	// certificate may differ from the one being updated.
+	kur := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.KUR
+	oldX509 := (*x509.Certificate)(currentDeviceCert.Certificate)
+	if kur.KeyPolicy == models.CMPKeyPolicyRequireNew &&
+		bytes.Equal(csr.RawSubjectPublicKeyInfo, oldX509.RawSubjectPublicKeyInfo) {
+		lFunc.Errorf("aborting reenrollment: KUR.KeyPolicy=require_new_key but the request reuses the current public key")
+		return nil, fmt.Errorf("key update must present a new key")
+	}
+	switch kur.IdentityChangePolicy {
+	case models.CMPIdentityChangePolicyForbid:
+		if !bytes.Equal(csr.RawSubject, oldX509.RawSubject) || sanSignature(csr) != sanSignatureCert(oldX509) {
+			lFunc.Errorf("aborting reenrollment: KUR.IdentityChangePolicy=forbid but subject or SAN changed")
+			return nil, fmt.Errorf("key update must not change subject or SAN")
+		}
+	case models.CMPIdentityChangePolicySANOnly:
+		if !bytes.Equal(csr.RawSubject, oldX509.RawSubject) {
+			lFunc.Errorf("aborting reenrollment: KUR.IdentityChangePolicy=san_only but subject changed")
+			return nil, fmt.Errorf("key update must not change subject")
+		}
+	case models.CMPIdentityChangePolicySubjectAndSAN:
+		// Any subject/SAN change permitted.
 	}
 
 	// Authenticate the CMP signer cert (extraCerts[0]) for KUR.
@@ -1041,12 +1262,29 @@ func (svc DMSManagerServiceBackend) LWCIssueCrossCertificate(ctx context.Context
 	// notAfter defaults to the profile maximum (now + crossCertValidity); the
 	// requested notAfter is honoured only up to that cap — a request for a longer
 	// lifetime is clamped to the maximum rather than rejected.
+	ccr := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.CCR
+
+	// RFC011: subject/SAN constraints on the requested cross-certificate. An
+	// empty allow-list on either dimension means "no constraint" for that
+	// dimension; a non-empty list requires at least one match.
+	if rej := validateCCRSubjectConstraints(csr, ccr.SubjectConstraints); rej != "" {
+		lFunc.Errorf("aborting cross certification: %s", rej)
+		return nil, nil, fmt.Errorf("cross-certificate request violates subject constraints: %s", rej)
+	}
+
 	now := time.Now()
 	notBefore := now
 	if reqNotBefore != nil {
 		notBefore = *reqNotBefore
 	}
-	maxNotAfter := now.Add(crossCertValidity)
+	// RFC011 CCR.MaximumValidity replaces the fixed crossCertValidity cap when
+	// configured (non-zero); falls back to the historical default otherwise so
+	// DMSs saved before this schema existed keep their prior behavior.
+	maxLifetime := crossCertValidity
+	if ccr.MaximumValidity > 0 {
+		maxLifetime = time.Duration(ccr.MaximumValidity)
+	}
+	maxNotAfter := now.Add(maxLifetime)
 	notAfter := maxNotAfter
 	if reqNotAfter != nil && reqNotAfter.Before(maxNotAfter) {
 		notAfter = *reqNotAfter
@@ -1084,6 +1322,116 @@ func (svc DMSManagerServiceBackend) LWCCACerts(ctx context.Context, aps string) 
 	return svc.CACerts(ctx, aps)
 }
 
+// validateCCRSubjectConstraints checks a cross-certification request's subject
+// DN and dNSName SANs against RFC011 CCR.SubjectConstraints. An empty
+// AllowedDNPatterns / AllowedDNSSuffixes list imposes no constraint on that
+// dimension. A DN pattern matches when it is a substring of the request
+// subject's RFC 2253 string form; a DNS suffix matches when a SAN
+// case-insensitively ends with it. Returns "" when the request satisfies both
+// (configured) constraints, otherwise a human-readable rejection reason.
+func validateCCRSubjectConstraints(csr *x509.CertificateRequest, c models.CMPSubjectConstraints) string {
+	if len(c.AllowedDNPatterns) > 0 {
+		subject := csr.Subject.String()
+		matched := false
+		for _, pattern := range c.AllowedDNPatterns {
+			if strings.Contains(subject, pattern) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Sprintf("subject %q does not match any allowed DN pattern", subject)
+		}
+	}
+	if len(c.AllowedDNSSuffixes) > 0 {
+		for _, dns := range csr.DNSNames {
+			matched := false
+			for _, suffix := range c.AllowedDNSSuffixes {
+				if strings.HasSuffix(strings.ToLower(dns), strings.ToLower(suffix)) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return fmt.Sprintf("SAN %q does not match any allowed DNS suffix", dns)
+			}
+		}
+	}
+	return ""
+}
+
+// sanSignature / sanSignatureCert produce a canonical, order-independent string
+// of a request's / certificate's subjectAltName entries so KUR identity-change
+// policy (RFC011) can detect any SAN difference between the requested cert and
+// the one being updated.
+func sanSignature(csr *x509.CertificateRequest) string {
+	parts := make([]string, 0, len(csr.DNSNames)+len(csr.IPAddresses)+len(csr.EmailAddresses)+len(csr.URIs))
+	for _, d := range csr.DNSNames {
+		parts = append(parts, "dns:"+d)
+	}
+	for _, ip := range csr.IPAddresses {
+		parts = append(parts, "ip:"+ip.String())
+	}
+	for _, e := range csr.EmailAddresses {
+		parts = append(parts, "email:"+e)
+	}
+	for _, u := range csr.URIs {
+		parts = append(parts, "uri:"+u.String())
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+func sanSignatureCert(c *x509.Certificate) string {
+	parts := make([]string, 0, len(c.DNSNames)+len(c.IPAddresses)+len(c.EmailAddresses)+len(c.URIs))
+	for _, d := range c.DNSNames {
+		parts = append(parts, "dns:"+d)
+	}
+	for _, ip := range c.IPAddresses {
+		parts = append(parts, "ip:"+ip.String())
+	}
+	for _, e := range c.EmailAddresses {
+		parts = append(parts, "email:"+e)
+	}
+	for _, u := range c.URIs {
+		parts = append(parts, "uri:"+u.String())
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+// cmpRevocationReasonName maps an RFC 5280 CRLReason code to its CMP settings
+// allow-list name (RFC011). ok is false for reason codes with no CMP allow-list
+// representation (certificateHold, removeFromCRL, privilegeWithdrawn,
+// aaCompromise), which are governed elsewhere rather than by RR.AllowedReasons.
+func cmpRevocationReasonName(r models.RevocationReason) (models.CMPRevocationReason, bool) {
+	switch int(r) {
+	case 0:
+		return models.CMPRevocationReasonUnspecified, true
+	case 1:
+		return models.CMPRevocationReasonKeyCompromise, true
+	case 2:
+		return models.CMPRevocationReasonCACompromise, true
+	case 3:
+		return models.CMPRevocationReasonAffiliationChanged, true
+	case 4:
+		return models.CMPRevocationReasonSuperseded, true
+	case 5:
+		return models.CMPRevocationReasonCessationOfOperation, true
+	default:
+		return "", false
+	}
+}
+
+func cmpReasonAllowed(name models.CMPRevocationReason, allowed []models.CMPRevocationReason) bool {
+	for _, a := range allowed {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -1112,22 +1460,30 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// than a forgery. Without this, any party who has merely observed a
 	// target certificate's serial/issuer (e.g. via CT logs or a TLS
 	// handshake) could revoke it.
+	rr := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR
+
 	if signer := signerCert; signer != nil {
 		signerSN := helpers.SerialNumberToHexString(signer.SerialNumber)
 		selfRevocation := signerSN == input.SerialNumber
 
 		if !selfRevocation {
-			if vErr := svc.validateTrustedRASigner(ctx, lFunc, dms, signer); vErr != nil {
+			// RFC011: RR.Authorization=self_only forbids a third party (even a
+			// trusted RA) from revoking another entity's certificate.
+			if rr.Authorization == models.CMPRevocationAuthorizationSelfOnly {
+				lFunc.Errorf("aborting revocation of '%s': DMS permits self-revocation only (RR.Authorization=self_only)", input.SerialNumber)
+				return errs.ErrDMSEnrollInvalidCert
+			}
+			if vErr := svc.validateTrustedRASigner(ctx, lFunc, dms, signer, rr.TrustedRA.RequireCMCRAEKU); vErr != nil {
 				lFunc.Errorf("aborting revocation of '%s': signer SN=%s is not a trusted PKI management entity: %s",
 					input.SerialNumber, signerSN, vErr)
 				return errs.ErrDMSEnrollInvalidCert
 			}
 		} else {
-			// Self-revocation must still succeed against a device's own already-
-			// expired certificate — revoking an expired cert is always
-			// legitimate — so expiry alone doesn't block it.
+			// Self-revocation of a device's own already-expired certificate is
+			// permitted only when RR.AllowExpiredTarget is set (RFC011); the
+			// allowExpired flag on chain validation reflects that policy.
 			candidateCAIDs := trustedRACAIDs(dms)
-			if _, vErr := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, true); vErr != nil {
+			if _, vErr := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, rr.AllowExpiredTarget); vErr != nil {
 				lFunc.Errorf("aborting revocation of '%s': signer CN=%s does not chain to a DMS-trusted CA: %s",
 					input.SerialNumber, signer.Subject.CommonName, vErr)
 				return errs.ErrDMSEnrollInvalidCert
@@ -1170,6 +1526,13 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// it requests un-revocation rather than revocation.
 	revive := input.Reason == models.RevocationReason(ocsp.RemoveFromCRL)
 	if revive {
+		// RFC011: revival (removeFromCRL / un-revoke) is only permitted when the
+		// DMS opts in via RR.AllowRevival (default off). Otherwise the request is
+		// refused as an unauthorized state transition.
+		if !dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR.AllowRevival {
+			lFunc.Warnf("revive rejected: RR.AllowRevival is disabled for DMS '%s'", input.APS)
+			return errs.ErrCertificateStatusTransitionNotAllowed
+		}
 		// Only a currently-revoked certificate can be revived. Anything else
 		// (active, expired) is an invalid target → badCertId at the controller.
 		if cert.Status != models.StatusRevoked {
@@ -1191,6 +1554,24 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// → certRevoked at the controller.
 	if cert.Status == models.StatusRevoked {
 		lFunc.Warnf("revocation rejected: certificate '%s' is already revoked", input.SerialNumber)
+		return errs.ErrCertificateStatusTransitionNotAllowed
+	}
+
+	// RFC011: RR.AllowExpiredTarget gates whether an already-expired certificate
+	// may be revoked at all. Status is the authoritative expiry signal (kept
+	// current by the expiry monitor) — checked alone, not alongside a raw
+	// ValidTo comparison, since that field isn't guaranteed populated on every
+	// Certificate value a caller constructs.
+	if !rr.AllowExpiredTarget && cert.Status == models.StatusExpired {
+		lFunc.Warnf("revocation rejected: certificate '%s' is expired and RR.AllowExpiredTarget is disabled", input.SerialNumber)
+		return errs.ErrCertificateStatusTransitionNotAllowed
+	}
+
+	// RFC011: RR.AllowedReasons restricts which CRLReason codes the DMS accepts.
+	// Only reasons representable in the CMP allow-list are gated; reasons outside
+	// that set (e.g. certificateHold) are left to the controller's own validation.
+	if name, ok := cmpRevocationReasonName(input.Reason); ok && !cmpReasonAllowed(name, rr.AllowedReasons) {
+		lFunc.Warnf("revocation rejected: reason %q is not permitted by RR.AllowedReasons for DMS '%s'", name, input.APS)
 		return errs.ErrCertificateStatusTransitionNotAllowed
 	}
 

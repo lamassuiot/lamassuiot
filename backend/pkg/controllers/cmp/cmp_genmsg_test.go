@@ -137,7 +137,9 @@ func TestHandleCMP_GenM_CACerts(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_RootCACertUpdate(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{RootCAUpdate: true}},
+	})
 	newRoot, _ := buildSelfSignedCert(t, "new-root")
 	oldRoot, _ := buildSelfSignedCert(t, "old-root")
 	svc.On("LWCGetRootCACertUpdate", mock.Anything, services.GetRootCACertUpdateInput{APS: "test-dms"}).
@@ -156,7 +158,9 @@ func TestHandleCMP_GenM_RootCACertUpdate(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_RootCACertUpdate_NoneAvailable(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{RootCAUpdate: true}},
+	})
 	svc.On("LWCGetRootCACertUpdate", mock.Anything, services.GetRootCACertUpdateInput{APS: "test-dms"}).
 		Return(nil, nil)
 
@@ -170,7 +174,9 @@ func TestHandleCMP_GenM_RootCACertUpdate_NoneAvailable(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_CertReqTemplate(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CertificateRequestTemplate: true}},
+	})
 	svc.On("LWCGetCertReqTemplate", mock.Anything, services.GetCertReqTemplateInput{APS: "test-dms"}).
 		Return(&services.CertReqTemplateOutput{}, nil)
 
@@ -184,7 +190,9 @@ func TestHandleCMP_GenM_CertReqTemplate(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_CRLStatusList(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CRLUpdate: true}},
+	})
 
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)

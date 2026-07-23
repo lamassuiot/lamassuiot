@@ -55,9 +55,53 @@ import (
 // can keep customising it.
 // ---------------------------------------------------------------------------
 
+// resolveTestCMPOpts applies the same models.ResolveCMPSettings defaulting the
+// real DMSManagerServiceBackend.LWCGetEnrollmentOptions gets (via GetDMSByID)
+// to a bare test-authored options value. The router-helper mocks below stand
+// in for that real call, so without this a zero-value opts{} would leave
+// every per-operation "enabled" gate false and trip RFC011's dispatch gate
+// before the test's actual scenario runs.
+//
+// One default is deliberately downgraded from production: resolveIR/resolveCR
+// default ProofOfPossession.Required to true (RFC011's secure-by-default
+// policy), but the vast majority of this pre-existing suite predates per-op
+// POPO enforcement and was written against the legacy EnforcePOPO default
+// (false) — most tests build a POPO-less CertReqMsg because they're testing
+// something else entirely (confirmation modes, transaction persistence, WFX
+// payloads, protection chains...). Rather than touch every one of those call
+// sites, callers that did NOT explicitly opt into requiring POPO keep it
+// optional post-resolution; a test specifically exercising POPO enforcement
+// sets IR/CR.ProofOfPossession.Required itself and keeps that value.
+func resolveTestCMPOpts(opts models.EnrollmentOptionsLWCRFC9483) models.EnrollmentOptionsLWCRFC9483 {
+	irRequiredBefore := opts.IR.ProofOfPossession.Required
+	crRequiredBefore := opts.CR.ProofOfPossession.Required
+	resolved := models.ResolveCMPSettings(models.DMSSettings{
+		EnrollmentSettings: models.EnrollmentSettings{
+			EnrollmentProtocol:          models.CMP,
+			EnrollmentOptionsLWCRFC9483: opts,
+		},
+	})
+	out := resolved.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	if !irRequiredBefore {
+		out.IR.ProofOfPossession.Required = false
+	}
+	if !crRequiredBefore {
+		out.CR.ProofOfPossession.Required = false
+	}
+	return out
+}
+
+// resolvedOpts is resolveTestCMPOpts for call sites that build the mock's
+// LWCGetEnrollmentOptions return value as an inline literal.
+func resolvedOpts(opts models.EnrollmentOptionsLWCRFC9483) *models.EnrollmentOptionsLWCRFC9483 {
+	resolved := resolveTestCMPOpts(opts)
+	return &resolved
+}
+
 // newOptionsRouter registers only LWCGetEnrollmentOptions for "test-dms".
 func newOptionsRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
+	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 	router, store := newTestRouterWithStore(svc)
@@ -67,6 +111,7 @@ func newOptionsRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483) (*g
 // newEnrollRouter registers LWCGetEnrollmentOptions + LWCEnroll for "test-dms".
 func newEnrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issued *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
+	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issued, nil)
@@ -77,6 +122,7 @@ func newEnrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issu
 // newReenrollRouter registers LWCGetEnrollmentOptions + LWCReenroll for "test-dms".
 func newReenrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issued *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
+	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 	svc.On("LWCReenroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issued, nil)
@@ -87,6 +133,7 @@ func newReenrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, is
 // newEnrollRouterWFX is newEnrollRouter with a WFX reporter attached.
 func newEnrollRouterWFX(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issued *x509.Certificate, reporter cmpwfx.CMPReporter) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
+	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issued, nil)
@@ -843,6 +890,16 @@ func buildSubjectCN(t *testing.T, cn string) []byte {
 // buildSelfSignedCert generates a self-signed certificate for use in tests.
 func buildSelfSignedCert(t *testing.T, cn string) (*x509.Certificate, *ecdsa.PrivateKey) {
 	t.Helper()
+	return buildSelfSignedCertWithSerial(t, cn, big.NewInt(1))
+}
+
+// buildSelfSignedCertWithSerial is buildSelfSignedCert with a caller-chosen
+// serial number, needed for rr self-revocation fixtures: RFC011 requires rr to
+// be signature-protected, and a protected (non-RA-initiated) revocation's
+// CertTemplate issuer+serialNumber must match the signer cert exactly
+// (cmp.go's rr CertTemplate-vs-signer check).
+func buildSelfSignedCertWithSerial(t *testing.T, cn string, serial *big.Int) (*x509.Certificate, *ecdsa.PrivateKey) {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
@@ -854,7 +911,7 @@ func buildSelfSignedCert(t *testing.T, cn string) (*x509.Certificate, *ecdsa.Pri
 	ski := sha1.Sum(pubDER)
 
 	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
+		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: cn},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(24 * time.Hour),
@@ -866,6 +923,65 @@ func buildSelfSignedCert(t *testing.T, cn string) (*x509.Certificate, *ecdsa.Pri
 	cert, err := x509.ParseCertificate(certDER)
 	require.NoError(t, err)
 	return cert, key
+}
+
+// buildTestRRSelfRevocation builds a self-revocation rr PKIMessage whose
+// CertTemplate carries BOTH issuer and serialNumber matching a freshly
+// generated signer certificate, and signs the message with that certificate.
+// RFC011 requires rr to always be signature-protected, and a protected
+// (non-RA-initiated) revocation's CertTemplate must match the signer exactly
+// (cmp.go's rr CertTemplate-vs-signer check) — this is the fixture shape every
+// non-RA rr test needs post-RFC011. reason, when non-nil, adds a
+// crlEntryDetails CRLReason extension (RFC 5280 §5.3.1).
+func buildTestRRSelfRevocation(t *testing.T, cn string, serial *big.Int, reason *int) (rrDER []byte, signerCert *x509.Certificate, signerKey *ecdsa.PrivateKey) {
+	t.Helper()
+	signerCert, signerKey = buildSelfSignedCertWithSerial(t, cn, serial)
+
+	txID := randomTxID(t)
+	senderNonce := randomNonce(t)
+	headerDER := buildTestPKIHeaderDER(t, txID, senderNonce, nil, false)
+
+	serialDER, err := asn1.Marshal(serial)
+	require.NoError(t, err)
+	serialField, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassContextSpecific, Tag: 1, IsCompound: true, Bytes: serialDER,
+	})
+	require.NoError(t, err)
+
+	issuerNameDER, err := asn1.Marshal(signerCert.Issuer.ToRDNSequence())
+	require.NoError(t, err)
+	issuerField, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassContextSpecific, Tag: 3, IsCompound: true, Bytes: issuerNameDER,
+	})
+	require.NoError(t, err)
+
+	certTemplateDER := seqDER(t, concatBytes(serialField, issuerField))
+
+	revDetailsContent := certTemplateDER
+	if reason != nil {
+		revDetailsContent = append(revDetailsContent, buildCRLReasonExtension(t, *reason)...)
+	}
+	revDetailsDER := seqDER(t, revDetailsContent)
+	revReqContentDER := seqDER(t, revDetailsDER)
+
+	bodyDER, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassContextSpecific,
+		Tag:        corecmp.BodyTagRR,
+		IsCompound: true,
+		Bytes:      revReqContentDER,
+	})
+	require.NoError(t, err)
+
+	msgDER, err := asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassUniversal,
+		Tag:        asn1.TagSequence,
+		IsCompound: true,
+		Bytes:      concatBytes(headerDER, bodyDER),
+	})
+	require.NoError(t, err)
+
+	rrDER = signCMPMessage(t, msgDER, signerCert, signerKey)
+	return rrDER, signerCert, signerKey
 }
 
 // signCMPMessage adds ECDSA-SHA256 protection to a pre-built PKIMessage DER.

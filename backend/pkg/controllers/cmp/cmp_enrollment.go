@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers/cmp/internal/kga"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -41,6 +42,25 @@ import (
 // issueAndStore — but differ in how POPO is established and in the response
 // body tag. Those differences are captured in enrollmentVariant rather than
 // duplicated across two handlers.
+// cmpProofOfPossessionFor selects the ir or cr ProofOfPossession policy
+// (RFC011) by body tag. Only meaningful when called from the ir/cr inner-POPO
+// path (verifyInnerPOPO); kur never reaches it.
+func cmpProofOfPossessionFor(o *models.EnrollmentOptionsLWCRFC9483, tag int) models.CMPProofOfPossession {
+	if tag == corecmp.BodyTagCR {
+		return o.CR.ProofOfPossession
+	}
+	return o.IR.ProofOfPossession
+}
+
+func popoMethodAllowed(p models.CMPProofOfPossession, method models.CMPPOPOMethod) bool {
+	for _, m := range p.AllowedMethods {
+		if m == method {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, variant enrollmentVariant, signerCert *x509.Certificate) {
 	// KUR-only pre-check: RFC 9483 §4.1.3 ties POPO to the message-level
 	// protection because the EE must sign with the cert being updated. For
@@ -116,6 +136,12 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// RFC 4211 §4.1 clause 3). For kur, the protection certificate proves
 	// possession of the key being updated, so a separate inner-POPO check
 	// would be redundant (and is omitted by RFC 9483 §4.1.3).
+	// RFC011: ir/cr each have their own POPO policy (which methods are
+	// accepted, and whether POPO is mandatory). body.Tag selects the block —
+	// this function is the shared ir/cr/kur pipeline, but verifyInnerPOPO below
+	// is only true for ir/cr, so body.Tag is always IR or CR inside it.
+	popoPolicy := cmpProofOfPossessionFor(enrollOpts, body.Tag)
+
 	useEncrCert := false
 	useChallengeResp := false
 	if variant.verifyInnerPOPO {
@@ -130,9 +156,27 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		if req.POPORaw.Class == asn1.ClassContextSpecific && (req.POPORaw.Tag == 2 || req.POPORaw.Tag == 3) {
 			switch classifyPOPOIndirect(req.POPORaw.Bytes) {
 			case popoIndirectEncrCert:
+				if !popoMethodAllowed(popoPolicy, models.CMPPOPOMethodEncryptedCertificate) {
+					lFunc.Warnf("%s: encrCert POPO rejected: not permitted by DMS POPO allow-list", variant.logPrefix)
+					r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+						CertReqID:   req.CertReqID,
+						Reason:      "encrypted-certificate proof of possession is not permitted for this DMS",
+						FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
+					})
+					return
+				}
 				lFunc.Infof("%s: encrCert POPO — certificate will be delivered confidentiality-protected (RFC 4210bis §5.2.8.4)", variant.logPrefix)
 				useEncrCert = true
 			case popoIndirectChallengeResp:
+				if !popoMethodAllowed(popoPolicy, models.CMPPOPOMethodChallengeResponse) {
+					lFunc.Warnf("%s: challengeResp POPO rejected: not permitted by DMS POPO allow-list", variant.logPrefix)
+					r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+						CertReqID:   req.CertReqID,
+						Reason:      "challenge-response proof of possession is not permitted for this DMS",
+						FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
+					})
+					return
+				}
 				lFunc.Infof("%s: challengeResp POPO — issuance deferred until popdecr (RFC 4210bis §5.2.8.3)", variant.logPrefix)
 				useChallengeResp = true
 			case popoIndirectUnsupported:
@@ -155,7 +199,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 			signer := signerCert
 			isRAVerified := req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 0 && len(req.POPORaw.FullBytes) > 0
 			trustedRA := false
-			if isRAVerified && signer != nil {
+			if isRAVerified && signer != nil && popoMethodAllowed(popoPolicy, models.CMPPOPOMethodTrustedRA) {
 				if validator, ok := r.svc.(services.LightweightCMPRAValidator); ok {
 					if vErr := validator.LWCValidateRASigner(ctx.Request.Context(), dmsID, signer); vErr != nil {
 						lFunc.Warnf("%s: raVerified POPO rejected: signer CN=%s is not a trusted PKI management entity: %v",
@@ -168,9 +212,24 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 				}
 			}
 
+			// RFC011: a signature POPO (tag 1) requires "signature" on the
+			// operation's allow-list. Rejected before verifyPOPO so the failure is
+			// notAuthorized (policy) rather than badPOP (cryptographic failure).
+			isSignaturePOPO := req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 1
+			if !trustedRA && isSignaturePOPO && !popoMethodAllowed(popoPolicy, models.CMPPOPOMethodSignature) {
+				lFunc.Warnf("%s: signature POPO rejected: not permitted by DMS POPO allow-list", variant.logPrefix)
+				r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+					CertReqID:   req.CertReqID,
+					Reason:      "signature proof of possession is not permitted for this DMS",
+					FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
+				})
+				return
+			}
+
 			if trustedRA {
 				lFunc.Infof("%s: accepting raVerified POPO from trusted RA (id-kp-cmcRA) CN=%s", variant.logPrefix, signer.Subject.CommonName)
-			} else if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, enrollOpts.EnforcePOPO); err != nil {
+				// RFC011 POPO.Required override of the legacy EnforcePOPO flag.
+			} else if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, popoPolicy.Required); err != nil {
 				// An EE asserting raVerified is notAuthorized (RFC 9483 §4.1); every
 				// other POPO failure is badPOP.
 				failBit := corecmp.PKIFailureInfoBadPOP
@@ -210,6 +269,33 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// handled above (KUR cert-to-update reference) and regToken below
 	// (one-time-use, RFC 4211 §6.1 — see req.RegToken / HasSeenRegToken).
 	//
+	// RFC011: IR.authenticator_control.mode (disabled/optional/required) gates
+	// on the control's mere PRESENCE, independent of whether ExpectedAuthenticator
+	// is configured. Scoped to ir only — CMPCRSettings has no such field, so cr
+	// (and kur, which shares this code path) keep the unconditional check below.
+	if body.Tag == corecmp.BodyTagIR {
+		present := corecmp.HasAuthenticatorControl(req.ControlsDER)
+		mode := enrollOpts.IR.AuthenticatorControl.Mode
+		if mode == models.CMPControlModeDisabled && present {
+			lFunc.Warnf("%s: authenticator control rejected: disabled for this DMS (IR.AuthenticatorControl.Mode=disabled)", variant.logPrefix)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+				CertReqID:   req.CertReqID,
+				Reason:      "the authenticator control is not accepted for this DMS",
+				FailInfoBit: corecmp.PKIFailureInfoBadRequest,
+			})
+			return
+		}
+		if mode == models.CMPControlModeRequired && !present {
+			lFunc.Warnf("%s: authenticator control rejected: required but absent (IR.AuthenticatorControl.Mode=required)", variant.logPrefix)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+				CertReqID:   req.CertReqID,
+				Reason:      "the authenticator control is required for this DMS",
+				FailInfoBit: corecmp.PKIFailureInfoBadRequest,
+			})
+			return
+		}
+	}
+
 	// id-regCtrl-authenticator (§6.2) is validated against the DMS's
 	// EnrollmentOptionsLWCRFC9483.ExpectedAuthenticator when configured — a
 	// pre-shared, non-cryptographic answer (e.g. a security-question response)
@@ -239,6 +325,33 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// extensions that will actually be issued.
 	if altExts := corecmp.AltCertReqExtensions(req.RegInfoDER); altExts != nil {
 		req.Extensions = altExts
+	}
+
+	// RFC011: IR.registration_token.mode (disabled/optional/required) gates on
+	// presence — regToken values are provisioned out-of-band (never part of DMS
+	// config, see RFC011), so this only controls whether the control is
+	// accepted/mandatory at all. Scoped to ir only, same rationale as
+	// authenticator_control above.
+	if body.Tag == corecmp.BodyTagIR {
+		mode := enrollOpts.IR.RegistrationToken.Mode
+		if mode == models.CMPControlModeDisabled && req.RegToken != "" {
+			lFunc.Warnf("%s: regToken control rejected: disabled for this DMS (IR.RegistrationToken.Mode=disabled)", variant.logPrefix)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+				CertReqID:   req.CertReqID,
+				Reason:      "the regToken control is not accepted for this DMS",
+				FailInfoBit: corecmp.PKIFailureInfoBadRequest,
+			})
+			return
+		}
+		if mode == models.CMPControlModeRequired && req.RegToken == "" {
+			lFunc.Warnf("%s: regToken control rejected: required but absent (IR.RegistrationToken.Mode=required)", variant.logPrefix)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+				CertReqID:   req.CertReqID,
+				Reason:      "the regToken control is required for this DMS",
+				FailInfoBit: corecmp.PKIFailureInfoBadRequest,
+			})
+			return
+		}
 	}
 
 	// RFC 4211 §6.1: a regToken is one-time-use — reject a request presenting a
@@ -490,6 +603,9 @@ func (r *cmpHttpRoutes) issueAndStore(
 	// Detach from the HTTP connection so issuance completes even if the EE
 	// drops the TCP connection mid-request.
 	issuanceCtx := context.WithoutCancel(ctx.Request.Context())
+	// RFC011: tag the context with which CMP body drove this issuance so
+	// LWCEnroll (shared across ir/cr/p10cr) can apply CR-only settings.
+	issuanceCtx = context.WithValue(issuanceCtx, core.LamassuContextKeyCMPOperation, cmpTagToString(params.requestTag))
 	cert, err := params.enroll(issuanceCtx, csr, signer)
 	if err != nil {
 		lFunc.Errorf("enroll failed: %v", err)
@@ -677,6 +793,34 @@ func (r *cmpHttpRoutes) issueAndStore(
 // originator identifiers against the response's extraCerts[0] by SKI, so this
 // handler places the correct certificate there (the EE cert for KTRI, the
 // originator for KARI) while signing the response protection with a key it owns.
+// ckgRecipientMethodAllowed reports whether the CKG key-delivery mechanism
+// selected for this request (derived from the recipient key type) is permitted
+// by the operation's CentralKeyGeneration.AllowedRecipientMethods (RFC011).
+// requestTag selects the IR or CR block; an empty allow-list permits nothing.
+func ckgRecipientMethodAllowed(o *models.EnrollmentOptionsLWCRFC9483, requestTag int, t kga.Technique) bool {
+	var allowed []models.CMPCKGRecipientMethod
+	if requestTag == corecmp.BodyTagCR {
+		allowed = o.CR.CentralKeyGeneration.AllowedRecipientMethods
+	} else {
+		allowed = o.IR.CentralKeyGeneration.AllowedRecipientMethods
+	}
+	var want models.CMPCKGRecipientMethod
+	switch t {
+	case kga.TechniqueKTRI:
+		want = models.CMPCKGRecipientMethodRSAKeyTransport
+	case kga.TechniqueKARI:
+		want = models.CMPCKGRecipientMethodECDHKeyAgreement
+	default:
+		return true
+	}
+	for _, a := range allowed {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *cmpHttpRoutes) handleKGAEnrollment(
 	ctx *gin.Context,
 	lFunc *logrus.Entry,
@@ -723,6 +867,19 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 			CertReqID:   req.CertReqID,
 			Reason:      fmt.Sprintf("central key generation: %v", err),
 			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
+		})
+		return
+	}
+	// RFC011: the DMS may restrict which CKG recipient mechanisms it will use
+	// (CentralKeyGeneration.AllowedRecipientMethods, per operation). The
+	// mechanism is derived from the recipient key type (RSA→KTRI, EC→KARI); if
+	// that mechanism is not on the allow-list, the request is notAuthorized.
+	if !ckgRecipientMethodAllowed(enrollOpts, requestTag, technique) {
+		lFunc.Warnf("kga: recipient mechanism %s not permitted by DMS CKG allow-list", technique)
+		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+			CertReqID:   req.CertReqID,
+			Reason:      fmt.Sprintf("central key generation recipient mechanism %s is not permitted by this DMS", technique),
+			FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 		})
 		return
 	}

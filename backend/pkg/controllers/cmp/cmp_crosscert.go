@@ -5,10 +5,14 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
@@ -41,21 +45,42 @@ type crossCertTemplateInfo struct {
 }
 
 // handleCrossCertification processes a ccr (13) body and answers with a ccp (14).
-func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
 	lFunc = lFunc.WithField("op", "ccr")
 	const respTag = corecmp.BodyTagCCP
 
 	// RFC 4210bis §5.3.11: cross-certification requests are exchanged between
-	// CAs. The requester authenticates via message-protection, so its signer
-	// certificate MUST be a CA certificate; anything else is notAuthorized. The
-	// error is delivered in an error body (the suite expects `error` here).
+	// CAs. The requester authenticates via message-protection, so a signer
+	// certificate is always required. Whether that signer MUST additionally be a
+	// CA certificate is governed by CCR.RequireCACertificate (RFC011); it
+	// defaults on. The error is delivered in an error body (the suite expects
+	// `error` here).
 	signer := signerCert
-	if signer == nil || !signer.IsCA {
-		lFunc.Warnf("ccr rejected: requester is not a CA (signer present=%v)", signer != nil)
+	if signer == nil {
+		lFunc.Warnf("ccr rejected: requester presented no signer certificate")
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+			"cross-certification requests must be signature-protected (RFC 4210bis §5.3.11)",
+			dmsID, corecmp.PKIFailureInfoNotAuthorized)
+		return
+	}
+	if enrollOpts.CCR.RequireCACertificate && !signer.IsCA {
+		lFunc.Warnf("ccr rejected: requester is not a CA")
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"cross-certification requests may only be sent by a CA (RFC 4210bis §5.3.11)",
 			dmsID, corecmp.PKIFailureInfoNotAuthorized)
 		return
+	}
+	// RFC011 CCR.TrustedRequesterCAIDs: an empty list is unrestricted (any CA
+	// satisfying the check above may request); a non-empty list additionally
+	// requires the signer to chain to one of the listed CAs.
+	if validator, ok := r.svc.(services.LightweightCMPCrossCertRequesterValidator); ok {
+		if vErr := validator.LWCValidateCCRRequester(ctx.Request.Context(), dmsID, signer); vErr != nil {
+			lFunc.Warnf("ccr rejected: requester is not a trusted CA for this DMS: %v", vErr)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+				"requester is not a trusted CA for cross-certification with this DMS",
+				dmsID, corecmp.PKIFailureInfoNotAuthorized)
+			return
+		}
 	}
 
 	req, err := corecmp.DecodeFirstCertReq(body.Bytes)
@@ -117,17 +142,21 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 		return
 	}
 
-	// Proof of possession. The requester MUST prove control of the template key
-	// with a POPOSigningKey; an absent POPO is badPOP. (EncryptedKey POPOs were
-	// already screened out before template validation above.)
-	switch req.POPORaw.Tag {
-	case 1: // signature (POPOSigningKey) — the only acceptable form.
-	default: // absent or raVerified — no proof of possession.
-		lFunc.Warnf("ccr rejected: missing POPOSigningKey")
-		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
-			"cross-certification requires a POPOSigningKey proof of possession (RFC 4210bis §5.3.11)",
-			dmsID, corecmp.PKIFailureInfoBadPOP)
-		return
+	// Proof of possession. When CCR.RequireProofOfPossession is set (the
+	// default, RFC011) the requester MUST prove control of the template key with
+	// a POPOSigningKey; an absent POPO is badPOP. (EncryptedKey POPOs were
+	// already screened out before template validation above, unconditionally,
+	// since they disclose a private key.)
+	if enrollOpts.CCR.RequireProofOfPossession {
+		switch req.POPORaw.Tag {
+		case 1: // signature (POPOSigningKey) — the only acceptable form.
+		default: // absent or raVerified — no proof of possession.
+			lFunc.Warnf("ccr rejected: missing POPOSigningKey")
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+				"cross-certification requires a POPOSigningKey proof of possession (RFC 4210bis §5.3.11)",
+				dmsID, corecmp.PKIFailureInfoBadPOP)
+			return
+		}
 	}
 
 	crossCertifier, ok := r.svc.(services.LightweightCMPCrossCertifier)
@@ -145,6 +174,16 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 			Reason:      "cannot build CSR from CertTemplate",
 			FailInfoBit: corecmp.PKIFailureInfoBadCertTemplate,
 		})
+		return
+	}
+
+	// RFC011: CCR.Workflow=administrator_approval treats cross-certification —
+	// one CA vouching for another — as a privileged operation requiring a human
+	// in the loop, mirroring ir/cr's phased workflow (deferForApproval) but
+	// keyed on this operation's own setting rather than the general
+	// EnrollmentOptionsLWCRFC9483.Workflow.
+	if enrollOpts.CCR.Workflow == models.CMPCCRWorkflowAdministratorApproval {
+		r.deferCCRForApproval(ctx, lFunc, &header, req, csr, dmsID, enrollOpts, respTag)
 		return
 	}
 
@@ -169,6 +208,77 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	lFunc.Infof("ccr: issued cross certificate SN=%s for subject CN=%s",
 		hex.EncodeToString(crossCert.SerialNumber.Bytes()), csr.Subject.CommonName)
 	r.sendRawBody(ctx, lFunc, header, respTag, bodyDER, dmsID)
+}
+
+// deferCCRForApproval implements CCR.Workflow=administrator_approval: it
+// persists the request as a PENDING transaction (RequestType "ccr") and
+// returns a CMP "waiting" ccp response, mirroring cmp_enrollment.go's
+// deferForApproval for ir/cr/kur. An administrator later calls
+// ApproveCMPTransaction, which issues the cross-certificate via
+// LWCIssueCrossCertificate; the requesting CA retrieves it via pollReq.
+//
+// The requested validity window (tmpl.notBefore/notAfter) is NOT persisted —
+// admin-approved ccr issuance falls back to the DMS's configured
+// CCR.MaximumValidity/profile default, since CMPTransaction has no field for
+// it and administrator review is expected to re-derive validity from policy
+// rather than trust the pre-approval request verbatim.
+func (r *cmpHttpRoutes) deferCCRForApproval(
+	ctx *gin.Context,
+	lFunc *logrus.Entry,
+	header *corecmp.RequestPKIHeader,
+	req *corecmp.CertRequest,
+	csr *x509.CertificateRequest,
+	dmsID string,
+	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
+	respTag int,
+) {
+	header.ResponseImplicitConfirm = false
+
+	txHex := hex.EncodeToString(header.TransactionID)
+	storeCtx := context.WithoutCancel(ctx.Request.Context())
+	if storeErr := r.store.Insert(storeCtx, models.CMPTransaction{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		State:             models.CMPTransactionStatePending,
+		CSR:               (*models.X509CertificateRequest)(csr),
+		RequestType:       cmpTagToString(corecmp.BodyTagCCR),
+		SubjectCommonName: csr.Subject.CommonName,
+		ReceivedNonce:     hex.EncodeToString(header.SenderNonce),
+		ExpiresAt:         time.Now().Add(approvalTimeoutOrDefault(enrollOpts.ApprovalTimeout)),
+		CreatedAt:         time.Now(),
+	}); storeErr != nil {
+		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
+			lFunc.Warnf("ccr: duplicate transactionID %s", txHex)
+			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
+			return
+		}
+		lFunc.Errorf("ccr: store PENDING transaction: %v", storeErr)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
+		return
+	}
+
+	waitingDER, err := corecmp.MarshalCertRepWaitingBody(req.CertReqID)
+	if err != nil {
+		lFunc.Errorf("ccr: build waiting cert rep body: %v", err)
+		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
+		return
+	}
+	responseDER := r.sendRawBody(ctx, lFunc, *header, respTag, waitingDER, dmsID)
+	if len(responseDER) == 0 {
+		return
+	}
+	lFunc.Infof("ccr: administrator_approval workflow: tx %s parked awaiting admin approval, returned waiting response", txHex)
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(corecmp.BodyTagCCR),
+		SubjectCommonName: csr.Subject.CommonName,
+		State:             cmpwfx.CMPStateAwaitingApproval,
+		Metadata: withCMPMessageB64(map[string]any{
+			"certReqId":    req.CertReqID,
+			"responseType": cmpTagToString(respTag),
+		}, cmpMetadataResponseB64, responseDER),
+	})
 }
 
 // validateCrossCertTemplate enforces the RFC 4210bis Appendix D.6 CertTemplate

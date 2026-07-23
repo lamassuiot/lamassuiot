@@ -263,6 +263,13 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// single source of truth for the protection requirement — there is no
 	// separate enforce_request_protection knob.
 	requireProtection := requireClientCertProtection(enrollOpts)
+	// RFC 9483 §5.3.2 / RFC011: a revocation request (rr) MUST be
+	// signature-protected regardless of the DMS auth_mode — an unsigned rr is
+	// never accepted, even under NO_AUTH / EXTERNAL_WEBHOOK. This is a fixed
+	// protocol invariant, not a per-DMS toggle.
+	if body.Tag == corecmp.BodyTagRR {
+		requireProtection = true
+	}
 	signerCert, err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlg, requireProtection)
 	if err != nil {
 		lFunc.Warnf("protection verification failed: %v", err)
@@ -323,6 +330,19 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		}
 	}
 
+	// Per-operation enable gates (RFC011): a DMS may disable individual CMP
+	// operations. Rejected uniformly here at dispatch with notAuthorized before
+	// any handler runs. Follow-up/transport messages (certConf, pollReq,
+	// popdecr, nested) are not gated — they continue an already-authorized
+	// transaction.
+	if !operationEnabled(enrollOpts, body.Tag) {
+		lFunc.Warnf("CMP operation %s is disabled for DMS '%s'", cmpTagToString(body.Tag), dmsID)
+		r.rejectRequest(ctx, lFunc, reqHeader, body.Tag,
+			fmt.Sprintf("CMP operation %s is not enabled for this DMS", cmpTagToString(body.Tag)),
+			corecmp.PKIFailureInfoNotAuthorized, dmsID)
+		return
+	}
+
 	// Dispatch on body CHOICE tag
 	switch body.Tag {
 	case corecmp.BodyTagIR, corecmp.BodyTagCR:
@@ -332,9 +352,9 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	case corecmp.BodyTagKUR:
 		r.handleEnrollment(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, enrollmentVariantUpdate, signerCert)
 	case corecmp.BodyTagRR:
-		r.handleRevoke(ctx, lFunc, reqHeader, body, dmsID, signerCert)
+		r.handleRevoke(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
 	case corecmp.BodyTagCCR:
-		r.handleCrossCertification(ctx, lFunc, reqHeader, body, dmsID, signerCert)
+		r.handleCrossCertification(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
 	case corecmp.BodyTagNested:
 		r.handleNested(ctx, lFunc, reqHeader, body, dmsID)
 	case corecmp.BodyTagCertConf:
@@ -344,11 +364,36 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	case corecmp.BodyTagPopDecr:
 		r.handlePOPODecKeyResp(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
 	case corecmp.BodyTagGenMsg:
-		r.handleGeneralMessage(ctx, lFunc, reqHeader, body, dmsID)
+		r.handleGeneralMessage(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
 	default:
 		lFunc.Warnf("unsupported CMP body tag %d", body.Tag)
 		r.rejectWithError(ctx, &reqHeader, corecmp.PKIStatus(2),
 			fmt.Sprintf("unsupported body tag %d", body.Tag), dmsID, corecmp.PKIFailureInfoBadRequest)
+	}
+}
+
+// operationEnabled reports whether the DMS permits the CMP operation named by
+// the body tag (RFC011 per-operation enable gates). Follow-up/transport
+// messages that are not directly configurable operations return true — they
+// continue a transaction that was already authorized at its initiating request.
+func operationEnabled(o *models.EnrollmentOptionsLWCRFC9483, tag int) bool {
+	switch tag {
+	case corecmp.BodyTagIR:
+		return o.IR.Enabled
+	case corecmp.BodyTagCR:
+		return o.CR.Enabled
+	case corecmp.BodyTagP10CR:
+		return o.P10CR.Enabled
+	case corecmp.BodyTagKUR:
+		return o.KUR.Enabled
+	case corecmp.BodyTagRR:
+		return o.RR.Enabled
+	case corecmp.BodyTagCCR:
+		return o.CCR.Enabled
+	case corecmp.BodyTagGenMsg:
+		return o.GENM.Enabled
+	default:
+		return true
 	}
 }
 
@@ -365,7 +410,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 // CRLReason rules, then calls LWCRevokeCertificate. A single removeFromCRL (8)
 // CRLReason is treated as a revive request. Every failure is reported via an rp
 // body's PKIStatusInfo (RFC 9483 §4.2), never a generic error body.
-func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
 	rd, err := corecmp.DecodeRevDetails(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("rr: decode RevDetails: %v", err)
@@ -1005,6 +1050,9 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 // default is ip) gets ip. p10cr must never yield an ip — its response body is
 // cp in every phase of the exchange (RFC 9483 §4.1.4).
 func pollRespTagFor(tx models.CMPTransaction) int {
+	if tx.RequestType == cmpTagToString(corecmp.BodyTagCCR) {
+		return corecmp.BodyTagCCP
+	}
 	if tx.IsReenrollment || tx.RequestType == cmpTagToString(corecmp.BodyTagP10CR) {
 		return corecmp.BodyTagCP
 	}
@@ -1640,6 +1688,10 @@ func cmpTagToString(t int) string {
 		return "genm"
 	case corecmp.BodyTagGenRep:
 		return "genp"
+	case corecmp.BodyTagCCR:
+		return "ccr"
+	case corecmp.BodyTagCCP:
+		return "ccp"
 	default:
 		return fmt.Sprintf("unknown(%d)", t)
 	}
