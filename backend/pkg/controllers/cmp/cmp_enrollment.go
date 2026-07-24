@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers/cmp/internal/kga"
 	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	core "github.com/lamassuiot/lamassuiot/core/v3"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
@@ -805,7 +804,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 // selected for this request (derived from the recipient key type) is permitted
 // by the operation's CentralKeyGeneration.AllowedRecipientMethods (RFC011).
 // requestTag selects the IR or CR block; an empty allow-list permits nothing.
-func ckgRecipientMethodAllowed(o *models.EnrollmentOptionsLWCRFC9483, requestTag int, t kga.Technique) bool {
+func ckgRecipientMethodAllowed(o *models.EnrollmentOptionsLWCRFC9483, requestTag int, t kgaTechnique) bool {
 	var allowed []models.CMPCKGRecipientMethod
 	if requestTag == corecmp.BodyTagCR {
 		allowed = o.CR.CentralKeyGeneration.AllowedRecipientMethods
@@ -814,9 +813,9 @@ func ckgRecipientMethodAllowed(o *models.EnrollmentOptionsLWCRFC9483, requestTag
 	}
 	var want models.CMPCKGRecipientMethod
 	switch t {
-	case kga.TechniqueKTRI:
+	case kgaTechniqueKTRI:
 		want = models.CMPCKGRecipientMethodRSAKeyTransport
-	case kga.TechniqueKARI:
+	case kgaTechniqueKARI:
 		want = models.CMPCKGRecipientMethodECDHKeyAgreement
 	default:
 		return true
@@ -869,7 +868,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		return
 	}
 
-	technique, err := kga.TechniqueFor(recipient.PublicKey)
+	technique, err := kgaTechniqueFor(recipient.PublicKey)
 	if err != nil {
 		r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 			CertReqID:   req.CertReqID,
@@ -951,7 +950,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		return
 	}
 
-	buildIn := kga.BuildInput{
+	buildIn := kgaBuildInput{
 		GeneratedKey:  generated,
 		RecipientCert: recipient,
 		KGACert:       kgaCert,
@@ -975,7 +974,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	var fallbackCert *x509.Certificate
 	var fallbackSigner crypto.Signer
 
-	if technique == kga.TechniqueKARI {
+	if technique == kgaTechniqueKARI {
 		// 4. Ephemeral EC originator: the ECDH peer, kept at extraCerts[0].
 		origKey, origCert, origChain, err := mintHelperCert(issuanceCtx, lFunc, keyGen, dmsID, "Lamassu CMP KARI Originator", services.KGAHelperKARIOriginator)
 		if err != nil {
@@ -1020,7 +1019,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	}
 
 	// 5. Build the EnvelopedData(SignedData(AsymmetricKeyPackage)).
-	envelopedDataDER, err := kga.BuildKeyPackage(buildIn)
+	envelopedDataDER, err := buildKGAKeyPackage(buildIn)
 	if err != nil {
 		lFunc.Errorf("kga: build key package: %v", err)
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "could not build key package", dmsID, corecmp.PKIFailureInfoSystemFailure)
@@ -1051,9 +1050,9 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 // validateKGARecipientKeyUsage checks that the recipient (request protection)
 // certificate carries the KeyUsage required by the selected KGA technique.
 // Returns a notAuthorized rejection when it does not (RFC 9483 §4.1.6).
-func validateKGARecipientKeyUsage(certReqID int, technique kga.Technique, recipient *x509.Certificate) *corecmp.CertRequestRejection {
+func validateKGARecipientKeyUsage(certReqID int, technique kgaTechnique, recipient *x509.Certificate) *corecmp.CertRequestRejection {
 	switch technique {
-	case kga.TechniqueKTRI:
+	case kgaTechniqueKTRI:
 		if recipient.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
 			return &corecmp.CertRequestRejection{
 				CertReqID:   certReqID,
@@ -1061,7 +1060,7 @@ func validateKGARecipientKeyUsage(certReqID int, technique kga.Technique, recipi
 				FailInfoBit: corecmp.PKIFailureInfoNotAuthorized,
 			}
 		}
-	case kga.TechniqueKARI:
+	case kgaTechniqueKARI:
 		if recipient.KeyUsage&x509.KeyUsageKeyAgreement == 0 {
 			return &corecmp.CertRequestRejection{
 				CertReqID:   certReqID,

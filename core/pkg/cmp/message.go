@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/cms"
 )
 
 // InfoTypeAndValue is the CMP InfoTypeAndValue structure used by PKIHeader
@@ -200,7 +202,8 @@ func ProtectionAlgorithm(signer crypto.Signer) (pkix.AlgorithmIdentifier, crypto
 		case bits > 3072:
 			return pkix.AlgorithmIdentifier{Algorithm: asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 12}, Parameters: asn1.NullRawValue}, crypto.SHA384, nil
 		default:
-			return pkix.AlgorithmIdentifier{Algorithm: asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11}, Parameters: asn1.NullRawValue}, crypto.SHA256, nil
+			// SHA-256 profile: shared with the CMS layer, sourced from cms.
+			return pkix.AlgorithmIdentifier{Algorithm: cms.OIDSHA256WithRSA(), Parameters: asn1.NullRawValue}, crypto.SHA256, nil
 		}
 	case *ecdsa.PublicKey:
 		switch pub.Curve.Params().BitSize {
@@ -209,7 +212,8 @@ func ProtectionAlgorithm(signer crypto.Signer) (pkix.AlgorithmIdentifier, crypto
 		case 384:
 			return pkix.AlgorithmIdentifier{Algorithm: asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 3}}, crypto.SHA384, nil
 		default:
-			return pkix.AlgorithmIdentifier{Algorithm: asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}}, crypto.SHA256, nil
+			// SHA-256 profile: shared with the CMS layer, sourced from cms.
+			return pkix.AlgorithmIdentifier{Algorithm: cms.OIDECDSAWithSHA256()}, crypto.SHA256, nil
 		}
 	case ed25519.PublicKey:
 		return pkix.AlgorithmIdentifier{Algorithm: asn1.ObjectIdentifier{1, 3, 101, 112}}, 0, nil
