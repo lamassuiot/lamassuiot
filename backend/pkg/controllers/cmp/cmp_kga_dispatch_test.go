@@ -2,6 +2,7 @@ package cmp
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -73,6 +74,17 @@ func (m *mockKGAService) LWCEnroll(ctx context.Context, csr *x509.CertificateReq
 		return nil, err
 	}
 	return x509.ParseCertificate(certDER)
+}
+
+// LWCProtectionCredentials satisfies services.LightweightCMPProtectionProvider
+// so handleKGAEnrollment's KTRI branch can be tested against a DMS that has
+// configured normal response-protection credentials — see
+// TestHandleCMP_KGA_KTRI_ProtectedWithDMSCredentials.
+func (m *mockKGAService) LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error) {
+	args := m.Called(ctx, aps)
+	certs, _ := args.Get(0).([]*x509.Certificate)
+	signer, _ := args.Get(1).(crypto.Signer)
+	return certs, signer, args.Error(2)
 }
 
 func (m *mockKGAService) LWCIssueKGAHelperCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, purpose services.KGAHelperPurpose) (*x509.Certificate, []*x509.Certificate, error) {
@@ -245,6 +257,11 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 	wrapped.On("LWCIssueKGAHelperCertificate", mock.Anything, "test-dms",
 		mock.AnythingOfType("*x509.CertificateRequest"), services.KGAHelperSigner).
 		Return((*x509.Certificate)(nil), []*x509.Certificate{}, nil)
+	// No DMS protection credentials configured for this test — the response
+	// protection falls back to the KGA signer (see the identity-specific
+	// TestHandleCMP_KGA_KTRI_ProtectedWithDMSCredentials for the configured case).
+	wrapped.On("LWCProtectionCredentials", mock.Anything, "test-dms").
+		Return([]*x509.Certificate(nil), crypto.Signer(nil), nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -307,6 +324,11 @@ func TestHandleCMP_KGA_EmptyPublicKey_RequiresProtection(t *testing.T) {
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
+	// The rejection response itself goes through sendRawBody, which also
+	// resolves DMS protection credentials; unconfigured here, same as every
+	// other test that doesn't care about response protection identity.
+	wrapped.On("LWCProtectionCredentials", mock.Anything, "test-dms").
+		Return([]*x509.Certificate(nil), crypto.Signer(nil), nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -347,6 +369,8 @@ func TestHandleCMP_KGA_DisabledByDefault(t *testing.T) {
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
+	wrapped.On("LWCProtectionCredentials", mock.Anything, "test-dms").
+		Return([]*x509.Certificate(nil), crypto.Signer(nil), nil)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -371,4 +395,80 @@ func TestHandleCMP_KGA_DisabledByDefault(t *testing.T) {
 
 	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	wrapped.AssertNotCalled(t, "LWCIssueKGAHelperCertificate", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// senderCommonName decodes a response PKIMessage's PKIHeader.sender
+// (GeneralName, directoryName alternative) back into its CommonName.
+func senderCommonName(t *testing.T, responseDER []byte) string {
+	t.Helper()
+	var msg corecmp.Message
+	_, err := asn1.Unmarshal(responseDER, &msg)
+	require.NoError(t, err)
+	require.Equal(t, 4, msg.Header.Sender.Tag, "PKIHeader.sender must use the directoryName GeneralName alternative")
+	var rdn pkix.RDNSequence
+	_, err = asn1.Unmarshal(msg.Header.Sender.Bytes, &rdn)
+	require.NoError(t, err)
+	var name pkix.Name
+	name.FillFromRDNSequence(&rdn)
+	return name.CommonName
+}
+
+// TestHandleCMP_KGA_KTRI_ProtectedWithDMSCredentials is a regression test for
+// a real interop bug: handleKGAEnrollment used to sign the OUTER PKIMessage
+// response protection with the ephemeral "Lamassu CMP KGA Signer" helper
+// certificate instead of the DMS's own registered protection credentials —
+// for KTRI (RSA recipient), which (like buildEncryptedCertRepBody's own KTRI
+// branch) needs no separate ECDH-partner identity, so there was never a
+// reason to deviate from the DMS's usual response signer. Any client that
+// pins the expected response identity (e.g. `openssl cmp -srvcert`, which
+// checks the sender DN against the pinned certificate's subject) rejected the
+// response with "unexpected sender" even though the exchange was otherwise
+// entirely correct. This asserts the response is signed by — and its sender
+// DN names — the DMS's protection certificate, not the KGA helper cert.
+func TestHandleCMP_KGA_KTRI_ProtectedWithDMSCredentials(t *testing.T) {
+	svc := &cmpmock.MockLightweightCMPService{}
+	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
+
+	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issuedCert, nil)
+
+	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
+	wrapped.On("LWCIssueKGAHelperCertificate", mock.Anything, "test-dms",
+		mock.AnythingOfType("*x509.CertificateRequest"), services.KGAHelperSigner).
+		Return((*x509.Certificate)(nil), []*x509.Certificate{}, nil)
+
+	dmsProtectionCert, dmsProtectionKey := buildKeyUsageCert(t, "cmp-ra-protection", x509.KeyUsageDigitalSignature)
+	wrapped.On("LWCProtectionCredentials", mock.Anything, "test-dms").
+		Return([]*x509.Certificate{dmsProtectionCert}, crypto.Signer(dmsProtectionKey), nil)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	routes, err := NewCMPHttpRoutes(logrus.NewEntry(logrus.New()), wrapped)
+	require.NoError(t, err)
+	router.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
+
+	recipientCert, recipientKey := buildKeyUsageCert(t, "kga-recipient",
+		x509.KeyUsageDigitalSignature|x509.KeyUsageKeyEncipherment)
+
+	msgDER := buildTestKGAIR(t, randomTxID(t), "kga-device")
+	signedDER := signCMPMessage(t, msgDER, recipientCert, recipientKey)
+
+	resp := postCMP(t, router, "test-dms", signedDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()))
+
+	assert.Equal(t, "cmp-ra-protection", senderCommonName(t, resp.Body.Bytes()),
+		"KTRI CKG response must be protected by the DMS's normal credentials, not the ephemeral KGA helper cert")
+
+	// The KGA-signed key delivery itself must remain unaffected by which
+	// identity protects the outer PKIMessage.
+	_, envDataDER := extractKGAEnvelopedDataDER(t, resp.Body.Bytes())
+	plaintext := decryptKTRIEnvelopedData(t, envDataDER, recipientKey)
+	var innerSignedData asn1.RawValue
+	_, err = asn1.Unmarshal(plaintext, &innerSignedData)
+	require.NoError(t, err, "decrypted KGA payload must still be a well-formed CMS SignedData")
+
+	svc.AssertExpectations(t)
+	wrapped.AssertExpectations(t)
 }

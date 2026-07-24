@@ -9,16 +9,35 @@ package models
 // auth_mode, protection_certificate, enforce_popo, accept_implicit,
 // confirmation_timeout, workflow and approval_timeout are read directly by the
 // CMP controllers and are the values that policy_overrides.*:inherit resolves
-// to. The nested structs below persist and round-trip through create/update/
-// get, but — with the deliberate exceptions documented in
-// dms_cmp_settings.go (the KUR re-enrollment reshape and the CKG toggle) —
-// they are NOT yet consulted by request handlers. See
-// docs/rfcs/internal/RFC011-cmp-per-operation-settings.md.
+// to.
+//
+// As of a manual protocol-conformance audit (openssl cmp against a live
+// server, cross-referenced with the code), essentially every field below IS
+// consulted by request handlers — the schema is not "mostly aspirational" the
+// way earlier revisions of this comment implied. The confirmed, NAMED
+// exceptions — fields that genuinely persist and round-trip but are not yet
+// read by any handler — are:
+//   - CMPCentralKeyGeneration.AllowedRecipientMethods (the CMS wrap technique
+//     — KTRI vs KARI — is auto-selected from the recipient certificate's own
+//     key type, not from this allow-list)
+//   - CMPTrustedRA.ValidationCAIDs (an rr's trusted-RA boundary always uses the
+//     DMS-wide trustedRACAIDs; only sibling field RequireCMCRAEKU is live)
+//   - CMPCCRSettings.IssuanceProfileID (cross-certification issuance profile
+//     selection does not yet consult this)
+//   - CMPIRSettings.IdentitySource (subject_only vs subject_or_san selection is
+//     not implemented; the NULL-DN identity source is fixed)
+//   - CMPKURSettings.PolicyOverrides.IssuanceProfileID specifically: kur's
+//     Workflow/Confirmation overrides ARE live (same shared enrollment
+//     pipeline as ir/cr/p10cr — see EffectiveWorkflow/EffectiveAcceptImplicit
+//     below), but resolveCMPIssuanceProfile's per-operation profile-override
+//     switch in dmsmanager_lwcmp.go only has cases for ir/cr/p10cr.
+// See docs/rfcs/internal/RFC011-cmp-per-operation-settings.md for the original
+// design rationale; treat its "not yet enforced" callouts as superseded by
+// this comment and the per-struct notes below, not as current fact.
 //
 // The field/JSON shapes below intentionally match the product spec and the
-// Phase-1 dashboard editor (lamassu-dashboard CmpPlannedOperationTabs.tsx) 1:1
-// so that when the dashboard binds these controls (Phase 2) the payloads
-// round-trip unchanged.
+// dashboard editor (lamassu-dashboard CmpPlannedOperationTabs.tsx) 1:1 so that
+// dashboard-authored payloads round-trip unchanged.
 
 // ---------------------------------------------------------------------------
 // Enum types
@@ -43,7 +62,8 @@ const (
 )
 
 // CMPIdentitySource selects where the device identity is read from when a
-// request carries a NULL-DN subject (RFC 9483 §4.1.1).
+// request carries a NULL-DN subject (RFC 9483 §4.1.1). NOT YET enforced — see
+// the top-of-file note on IR.IdentitySource.
 type CMPIdentitySource string
 
 const (
@@ -118,9 +138,9 @@ const (
 	CMPRevocationAuthorizationSelfTrustedRA CMPRevocationAuthorization = "self_and_trusted_ra"
 )
 
-// CMPRevocationReason is a schema-only allow-list entry mirroring the RFC 5280
-// CRLReason names. It is persisted for future rr policy enforcement; the live
-// revocation path (LWCRevokeCertificate) does not yet consult it.
+// CMPRevocationReason mirrors the RFC 5280 CRLReason names accepted by an rr's
+// AllowedReasons allow-list. LIVE: LWCRevokeCertificate rejects a revocation
+// whose requested reason isn't in the DMS's RR.AllowedReasons.
 type CMPRevocationReason string
 
 const (
@@ -175,9 +195,14 @@ const (
 // ---------------------------------------------------------------------------
 // Shared sub-structs
 
-// CMPProofOfPossession configures per-operation POPO acceptance. NOTE: the LIVE
-// POPO gate is the DMS-general EnforcePOPO flag (see cmp_popo.go); Required and
-// AllowedMethods here persist for future per-operation refinement only.
+// CMPProofOfPossession configures per-operation POPO acceptance for ir/cr
+// (selected by body tag via cmpProofOfPossessionFor). LIVE: AllowedMethods
+// gates which POPO technique a request may use (verifyPOPO/popoMethodAllowed
+// reject a signature/raVerified/encrCert/challengeResp POPO absent from this
+// list with notAuthorized); Required gates whether an ABSENT POPO is tolerated
+// (verifyPOPO's `enforce` argument). The DMS-general EnforcePOPO flag is a
+// SEPARATE, narrower gate: it only requires message-level signature protection
+// on a kur (RFC 9483 §4.1.3), and does not affect ir/cr at all.
 type CMPProofOfPossession struct {
 	Required       bool            `json:"required"`
 	AllowedMethods []CMPPOPOMethod `json:"allowed_methods"`
@@ -219,9 +244,10 @@ type CMPSubjectConstraints struct {
 }
 
 // CMPTrustedRA scopes which RA certificates a self_and_trusted_ra rr trusts.
-// Empty ValidationCAIDs means "use the DMS trust boundary" (trustedRACAIDs).
-// RequireCMCRAEKU asks that a trusted RA cert carry the id-kp-cmcRA EKU.
-// Persisted only; the live rr trust boundary is computed in dmsmanager_lwcmp.go.
+// RequireCMCRAEKU is LIVE (validateTrustedRASigner in dmsmanager_lwcmp.go
+// requires the id-kp-cmcRA EKU on the signer when set). ValidationCAIDs is
+// NOT YET enforced — the rr trust boundary always uses the DMS-wide
+// trustedRACAIDs regardless of this field's value.
 type CMPTrustedRA struct {
 	ValidationCAIDs []string `json:"validation_ca_ids"`
 	RequireCMCRAEKU bool     `json:"require_cmc_ra_eku"`
@@ -247,9 +273,12 @@ type CMPIRSettings struct {
 // device that ALREADY participates in the PKI. It carries the
 // additional-vs-replace behaviour and an active-certificate cap.
 //
-// Persisted-only (no enforcement yet — the backend routes ir and cr through the
-// same enrollment service today): RequireExistingDevice, CertificateBehavior,
-// MaximumActiveCertificates, AllowedProfileIDs.
+// LIVE (all enforced in dmsmanager_lwcmp.go's shared enrollment path):
+// RequireExistingDevice (rejects a cr from an unregistered device),
+// CertificateBehavior (replace revokes the superseded certificate as part of
+// issuance), MaximumActiveCertificates (caps how many non-revoked certificates
+// a device may hold), AllowedProfileIDs (restricts the resolved issuance
+// profile to this allow-list).
 type CMPCRSettings struct {
 	Enabled                   bool                    `json:"enabled"`
 	RequireExistingDevice     bool                    `json:"require_existing_device"`
@@ -279,15 +308,21 @@ type CMPP10CRSettings struct {
 
 // CMPKURSettings configures the Key Update Request (kur, RFC 9483 §4.1.3).
 //
-// LIVE fields (reshaped 1:1 onto the shared ReEnrollmentSettings by
-// resolution, so existing enforcement honours them):
+// LIVE fields:
 //   - RenewalWindow               ↔ ReEnrollmentSettings.ReEnrollmentDelta
+//     (reshaped 1:1 onto the shared ReEnrollmentSettings by resolution)
 //   - AllowExpiredCertificate      ↔ ReEnrollmentSettings.EnableExpiredRenewal
 //   - AdditionalValidationCAIDs    ↔ ReEnrollmentSettings.AdditionalValidationCAs
 //   - RevokeSupersededCertificate  ↔ ReEnrollmentSettings.RevokeOnReEnrollment
+//   - KeyPolicy (require_new_key rejects a kur that reuses the current public
+//     key) and IdentityChangePolicy (forbid/san_only reject a subject/SAN
+//     change), both enforced in dmsmanager_lwcmp.go
+//   - PolicyOverrides.Workflow / .Confirmation, via the same shared
+//     enrollment pipeline ir/cr/p10cr use (EffectiveWorkflow/
+//     EffectiveAcceptImplicit below)
 //
-// Persisted-only (no enforcement yet): KeyPolicy, IdentityChangePolicy,
-// PolicyOverrides.
+// NOT YET enforced: PolicyOverrides.IssuanceProfileID — the per-operation
+// profile-override switch in dmsmanager_lwcmp.go only has cases for ir/cr/p10cr.
 //
 // Mandatory, non-configurable protocol invariants (documented, not fields):
 // the cert being updated MUST protect the request (RFC 9483 §4.1.3); concurrent
@@ -308,10 +343,14 @@ type CMPKURSettings struct {
 //
 // NOTE: an rr is ALWAYS signature-protected — that is a fixed RFC 9483 §5.3.2
 // protocol invariant independent of the DMS auth_mode, so there is
-// deliberately no "allow unprotected" option here. Authorization/AllowRevival/
-// AllowExpiredTarget/AllowedReasons/TrustedRA persist but are not yet enforced;
-// the live rr trust boundary is computed in dmsmanager_lwcmp.go
-// (LWCRevokeCertificate).
+// deliberately no "allow unprotected" option here.
+//
+// LIVE (all enforced in dmsmanager_lwcmp.go's LWCRevokeCertificate):
+// Authorization (self_only forbids a trusted-RA revoking on another's
+// behalf), AllowRevival (gates un-revoking a held certificate), AllowExpiredTarget
+// (gates revoking an already-expired certificate), AllowedReasons (rejects a
+// revocation whose reason isn't in the list), TrustedRA.RequireCMCRAEKU. The
+// one exception is TrustedRA.ValidationCAIDs — see its own doc comment.
 type CMPRRSettings struct {
 	Enabled            bool                       `json:"enabled"`
 	Authorization      CMPRevocationAuthorization `json:"authorization"`
@@ -339,7 +378,12 @@ type CMPRRSettings struct {
 //	  CRLUpdate                   → id-it-crlStatusList (LWCGetCRL → nil)
 //	  ProtocolEncryptionCertificate → id-it-caProtEncCert (not provisioned)
 //
-// These booleans persist but do NOT yet gate the handler in cmp_genmsg.go.
+// LIVE: genmInfoTypeEnabled in cmp_genmsg.go gates the handler on these
+// booleans — a genm asking for a DISABLED info type is refused outright
+// (notAuthorized). Flipping a STUB type to true does not grant new
+// capability: its data provider still returns nil, so buildGenpEntry answers
+// with an RFC-compliant absent infoValue ("not available") instead of
+// rejecting the request.
 type CMPGENMInformationTypes struct {
 	CACertificates                bool `json:"ca_certificates"`
 	SigningKeyTypes               bool `json:"signing_key_types"`
@@ -361,10 +405,18 @@ type CMPGENMSettings struct {
 }
 
 // CMPCCRSettings configures Cross-Certification Requests (ccr, RFC 4210bis
-// §5.3.11) — a privileged CA-to-CA operation, disabled by default. Entirely
-// persisted-only: no ccr policy is enforced from these fields; the live ccr
-// path is dmsmanager_lwcmp.go (LWCIssueCrossCertificate), currently always-on
-// with no per-DMS gating.
+// §5.3.11) — a privileged CA-to-CA operation, disabled by default.
+//
+// LIVE (enforced in cmp_crosscert.go / dmsmanager_lwcmp.go's
+// LWCIssueCrossCertificate): Enabled (via operationEnabled in cmp.go),
+// RequireCACertificate (signer must carry cA=TRUE), TrustedRequesterCAIDs (an
+// empty list is unrestricted; non-empty requires the signer chain to one of
+// them), RequireProofOfPossession, MaximumValidity (caps the issued
+// cross-certificate's lifetime), SubjectConstraints (DN pattern / dNSName SAN
+// allow-list), Workflow (administrator_approval defers issuance the same way
+// ir/cr's phased workflow does).
+//
+// NOT YET enforced: IssuanceProfileID.
 type CMPCCRSettings struct {
 	Enabled                  bool                  `json:"enabled"`
 	TrustedRequesterCAIDs    []string              `json:"trusted_requester_ca_ids"`
@@ -374,4 +426,67 @@ type CMPCCRSettings struct {
 	MaximumValidity          TimeDuration          `json:"maximum_validity"`
 	SubjectConstraints       CMPSubjectConstraints `json:"subject_constraints"`
 	Workflow                 CMPCCRWorkflow        `json:"workflow"`
+}
+
+// ---------------------------------------------------------------------------
+// Per-operation policy resolution (LIVE)
+//
+// These resolvers apply an enrollment operation's policy_overrides on top of
+// the DMS-general settings, and ARE consulted by the request handlers (see
+// cmp_enrollment.go and cmp.go). Only the enrollment-initiating operations
+// carry a workflow/confirmation override — ir, cr, p10cr and kur; every other
+// operation string resolves to the DMS-general value.
+//
+// The issuance_profile_id override in CMPPolicyOverrides is resolved separately,
+// at issuance time, by dmsmanager_lwcmp.go (resolveCMPIssuanceProfile).
+
+// PolicyOverridesForOperation returns the CMPPolicyOverrides for a CMP
+// enrollment operation ("ir"/"cr"/"p10cr"/"kur"). Any other operation yields
+// the zero value ({inherit, inherit, nil}), so callers cleanly fall back to the
+// DMS-general settings.
+func (o *EnrollmentOptionsLWCRFC9483) PolicyOverridesForOperation(op string) CMPPolicyOverrides {
+	switch op {
+	case "ir":
+		return o.IR.PolicyOverrides
+	case "cr":
+		return o.CR.PolicyOverrides
+	case "p10cr":
+		return o.P10CR.PolicyOverrides
+	case "kur":
+		return o.KUR.PolicyOverrides
+	default:
+		return CMPPolicyOverrides{}
+	}
+}
+
+// EffectiveWorkflow resolves the transaction workflow (direct vs phased) for a
+// CMP enrollment operation, applying policy_overrides.workflow on top of the
+// DMS-general Workflow. "inherit" (or empty) defers to the general value.
+func (o *EnrollmentOptionsLWCRFC9483) EffectiveWorkflow(op string) CMPWorkflow {
+	switch o.PolicyOverridesForOperation(op).Workflow {
+	case CMPInheritableWorkflowDirect:
+		return CMPWorkflowDirect
+	case CMPInheritableWorkflowPhased:
+		return CMPWorkflowPhased
+	default: // inherit / empty
+		return o.Workflow
+	}
+}
+
+// EffectiveAcceptImplicit resolves whether the server is willing to grant
+// implicit confirmation for a CMP enrollment operation, applying
+// policy_overrides.confirmation on top of the DMS-general AcceptImplicit.
+// "implicit" forces willingness, "explicit" forces a certConf round-trip, and
+// "inherit" (or empty) defers to the general value. Note this only expresses
+// the server's willingness — implicit confirmation is granted only when the EE
+// also requests it (id-it-implicitConfirm in generalInfo).
+func (o *EnrollmentOptionsLWCRFC9483) EffectiveAcceptImplicit(op string) bool {
+	switch o.PolicyOverridesForOperation(op).Confirmation {
+	case CMPInheritableConfirmationImplicit:
+		return true
+	case CMPInheritableConfirmationExplicit:
+		return false
+	default: // inherit / empty
+		return o.AcceptImplicit
+	}
 }

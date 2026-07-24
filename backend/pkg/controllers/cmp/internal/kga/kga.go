@@ -22,6 +22,19 @@
 // supply the generated key, the recipient credential, and the KGA signer; the
 // package returns the DER of the EnvelopedData to place in the protocol
 // response (for CMP: CertifiedKeyPair.privateKey [envelopedData]).
+//
+// KNOWN, PERMANENT client limitation: openssl's `cmp` CLI's CKG support only
+// consumes a bare key as the SignedData content — it cannot parse the
+// AsymmetricKeyPackage wrapper this package emits, even though the signature
+// and encoding are independently verified correct (see signeddata_test.go /
+// kga_test.go, which recompute the RFC 5652 §5.4 digest exactly like a real
+// verifier). The wrapper is not optional: RFC 9483 §4.1.6 and the Siemens
+// cmp-test-suite this DMS is validated against both require it, and the suite
+// passes all KGA tests against this exact response shape. Do NOT drop the
+// AsymmetricKeyPackage wrapper to accommodate openssl — that would trade a
+// documented, unfixable-on-our-side CLI gap for genuine RFC/suite
+// non-compliance. Operators needing openssl-cmp-driven CKG need a client
+// whose CKG implementation accepts the RFC-mandated wrapper.
 package kga
 
 import (
@@ -134,6 +147,18 @@ func TechniqueFor(pub crypto.PublicKey) (Technique, error) {
 // BuildKeyPackage produces the DER of the EnvelopedData delivering in.GeneratedKey
 // to the recipient, per RFC 9483 §4.1.6. The technique is derived from
 // in.RecipientPublicKey.
+//
+// KNOWN openssl-CLI INTEROP LIMITATION (do not "fix" by changing the wire
+// structure): the SignedData eContent here is an RFC 5958 AsymmetricKeyPackage
+// (SEQUENCE OF OneAsymmetricKey), as RFC 9483 §4.1.6 mandates and as the Siemens
+// compliance suite strictly validates. The `openssl cmp -centralkeygen` client
+// (through 3.6) does NOT descend into that SEQUENCE-OF wrapper — it hands the
+// eContent straight to its generic key decoder, which accepts a bare
+// OneAsymmetricKey but rejects the AsymmetricKeyPackage with
+// "unsupported: No supported data to decode ... Input structure: type-specific".
+// So openssl's CLI cannot consume our (correct) KTRI/KARI response. Emitting a
+// bare OneAsymmetricKey would satisfy openssl but break RFC compliance and the
+// suite; we deliberately keep the wrapper. See the KGA investigation notes.
 func BuildKeyPackage(in BuildInput) ([]byte, error) {
 	if in.GeneratedKey == nil {
 		return nil, fmt.Errorf("kga: GeneratedKey is required")
