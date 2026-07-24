@@ -6,6 +6,8 @@ permissions:
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/*.yaml"
 
 jobs:
   pinact:
