@@ -1,4 +1,5 @@
-FROM golang:1.26.2-bookworm AS builder
+ARG BUILDER=golang:1.26.2-bookworm
+FROM ${BUILDER} AS builder
 WORKDIR /app
 
 # go.work/go.work.sum rarely change — keep as an early cache layer.
