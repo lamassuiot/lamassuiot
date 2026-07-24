@@ -333,11 +333,12 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 
 	lFunc.Infof("challengeResp: tx %s parked awaiting popdecr", txHex)
 	if originator != nil {
-		// Same reasoning as buildEncryptedCertRepBody's protectionOverride: the
-		// EE locates its ECDH partner via extraCerts, so popdecc must be signed
-		// by (and carry) the minted originator, not the DMS's normal credentials.
-		chain := append([]*x509.Certificate{originator.cert}, originator.chain...)
-		r.sendRawBodyWithSigner(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, chain, originator.key)
+		// keyAgreement challenge: the EE locates its ECDH partner via
+		// extraCerts[0] (the minted originator), but the popdecc's outer
+		// protection is signed by the DMS's normal credentials so a
+		// -srvcert-pinning client still accepts the sender. See
+		// sendKARIProtectedResponse.
+		r.sendKARIProtectedResponse(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, dmsID, originator)
 		return
 	}
 	r.sendRawBody(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, dmsID)

@@ -454,11 +454,17 @@ func decodeAndVerifyKGAKeyPackage(der []byte, extraCerts []*x509.Certificate, op
 	if err := validateKGASignedAttributes(signerInfo.SignedAttrs, signedData.EncapContentInfo.EContent); err != nil {
 		return nil, nil, err
 	}
-	encapDER, err := asn1.Marshal(signedData.EncapContentInfo)
+	// RFC 5652 §5.4: the signature covers the DER of signedAttrs RE-TAGGED as a
+	// UNIVERSAL SET OF, not the IMPLICIT [0] wire encoding and not
+	// encapContentInfo.
+	signedAttrsForSigning, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSet, IsCompound: true,
+		Bytes: signerInfo.SignedAttrs.Bytes,
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-	digest := sha256.Sum256(encapDER)
+	digest := sha256.Sum256(signedAttrsForSigning)
 	if err := verifyKGASignature(signerCert, signerInfo, digest[:]); err != nil {
 		return nil, nil, err
 	}

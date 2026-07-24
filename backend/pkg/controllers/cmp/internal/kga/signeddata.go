@@ -15,10 +15,16 @@ import (
 // buildSignedData produces the DER of the CMS SignedData that wraps the
 // generated key as an AsymmetricKeyPackage and is signed by the KGA.
 //
-// RFC 9483 §4.1.6 quirk (as enforced by the compliance validator): the
-// SignerInfo signature is computed over the DER of the EncapsulatedContentInfo,
-// and signedAttrs (contentType + messageDigest) are present for structural
-// validation. Both are produced here.
+// Per RFC 5652 §5.4: when signedAttrs are present (as here — contentType +
+// messageDigest), "the result of the signature generation process ... is the
+// signature over the DER encoding of the SignedAttrs value" — re-tagged as a
+// UNIVERSAL SET OF for that computation, not the IMPLICIT [0] form used on the
+// wire (RFC 5652 §5.4 note: "the tag is not changed... a re-encoding is done
+// to compute the message digest [signature] on the signedAttrs"). NOT the
+// encapContentInfo — an earlier revision of this function signed over
+// encapContentInfo DER directly, which any RFC-5652-conformant verifier
+// (openssl included) rejects with a signature-verification failure, since it
+// independently recomputes the expected digest over signedAttrs.
 func buildSignedData(in BuildInput) ([]byte, error) {
 	// OneAsymmetricKey (RFC 5958 v2) → AsymmetricKeyPackage ::= SEQUENCE OF OneAsymmetricKey.
 	oneAsym, err := oneAsymmetricKeyV2(in.GeneratedKey)
@@ -39,25 +45,37 @@ func buildSignedData(in BuildInput) ([]byte, error) {
 		EContentType: oidCTKPAKeyPackage,
 		EContent:     aKeyPackage,
 	}
-	encapDER, err := asn1.Marshal(encap)
-	if err != nil {
-		return nil, fmt.Errorf("marshal encapContentInfo: %w", err)
-	}
 
 	// signedAttrs: id-contentType (= id-ct-KP-aKeyPackage) and id-messageDigest
 	// (= SHA-256 over the eContent, i.e. the AsymmetricKeyPackage DER).
 	msgDigest := sha256.Sum256(aKeyPackage)
-	signedAttrsImplicit, err := buildSignedAttrs(msgDigest[:])
+	attrsDER, err := marshalSignedAttrValues(msgDigest[:])
 	if err != nil {
 		return nil, err
 	}
+	// Wire form: IMPLICIT [0] (RFC 5652 §5.3 SignerInfo.signedAttrs).
+	signedAttrsImplicit, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: attrsDER,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal signedAttrs (implicit): %w", err)
+	}
+	// Signing form: UNIVERSAL SET OF — RFC 5652 §5.4 requires re-tagging
+	// signedAttrs this way before computing the signature; using the wire
+	// encoding's tag/class would sign different bytes than every conformant
+	// verifier recomputes.
+	signedAttrsForSigning, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSet, IsCompound: true, Bytes: attrsDER,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal signedAttrs (set, for signing): %w", err)
+	}
 
-	// Signature: over the encapContentInfo DER (RFC 9483 §4.1.6 validator).
 	sigAlg, err := signatureAlgorithmFor(in.KGASigner)
 	if err != nil {
 		return nil, err
 	}
-	h := sha256.Sum256(encapDER)
+	h := sha256.Sum256(signedAttrsForSigning)
 	signature, err := in.KGASigner.Sign(rand.Reader, h[:], crypto.SHA256)
 	if err != nil {
 		return nil, fmt.Errorf("KGA sign: %w", err)
@@ -168,9 +186,12 @@ func oneAsymmetricKeyV2(signer crypto.Signer) ([]byte, error) {
 	})
 }
 
-// buildSignedAttrs builds the SignerInfo signedAttrs field: an IMPLICIT [0]
-// SET OF Attribute carrying id-contentType and id-messageDigest.
-func buildSignedAttrs(messageDigest []byte) ([]byte, error) {
+// marshalSignedAttrValues encodes the concatenated Attribute values (id-
+// contentType and id-messageDigest) that make up a SignerInfo's signedAttrs —
+// WITHOUT the outer SET-OF tag, so callers can apply either the wire tag
+// (IMPLICIT [0], RFC 5652 §5.3) or the signing tag (UNIVERSAL SET OF,
+// RFC 5652 §5.4) over the identical inner bytes.
+func marshalSignedAttrValues(messageDigest []byte) ([]byte, error) {
 	// contentType attribute: values = SET { id-ct-KP-aKeyPackage }.
 	ctOID, err := asn1.Marshal(oidCTKPAKeyPackage)
 	if err != nil {
@@ -199,17 +220,7 @@ func buildSignedAttrs(messageDigest []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// IMPLICIT [0] over the concatenated attributes (SET OF Attribute).
-	implicit, err := asn1.Marshal(asn1.RawValue{
-		Class:      asn1.ClassContextSpecific,
-		Tag:        0,
-		IsCompound: true,
-		Bytes:      append(append([]byte{}, ctAttr...), mdAttr...),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return implicit, nil
+	return append(append([]byte{}, ctAttr...), mdAttr...), nil
 }
 
 // buildCertificatesField builds the SignedData certificates field: an IMPLICIT

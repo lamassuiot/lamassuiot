@@ -227,7 +227,11 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// Stash the resolved WFX workflow name on the request context so every
 	// reportCMPState call for this request lands in (and only transitions
 	// within) the DMS's selected workflow.
-	workflowName := cmpwfx.WorkflowNameFor(enrollOpts.Workflow)
+	// RFC011: resolve the effective workflow for the request's operation so the
+	// WFX job is created in the workflow that will actually run (a per-operation
+	// policy_overrides.workflow can differ from the DMS-general one). Non-
+	// enrollment tags resolve to the general workflow.
+	workflowName := cmpwfx.WorkflowNameFor(enrollOpts.EffectiveWorkflow(cmpTagToString(body.Tag)))
 	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), cmpWorkflowCtxKey, workflowName))
 
 	// Received is only meaningful for enrollment-initiating messages
@@ -1274,6 +1278,49 @@ func (r *cmpHttpRoutes) sendRawBodyWithSigner(ctx *gin.Context, lFunc *logrus.En
 	}
 	writeCMPResponse(ctx, lFunc, bodyTag, respDER)
 	return respDER
+}
+
+// sendKARIProtectedResponse sends a KARI (ECDH key-agreement) response — an
+// encrCert cp/ip or a challengeResp popdecc — whose EnvelopedData/Challenge was
+// built against an ephemeral ECDH originator. The OUTER PKIMessage protection
+// is signed by the DMS's normal CMP protection credentials when configured, so
+// clients that pin the responder identity (openssl cmp -srvcert / -expect_sender)
+// still see the expected sender — while the originator certificate is kept at
+// extraCerts[0] (where the RFC 9483 §4.1.6 compliance validator expects it, and
+// where any client locates its ECDH partner by SKI). Signing party and CMS
+// originator are independent: the recipient derives the CEK from the originator
+// in extraCerts regardless of who signed the message.
+//
+// Only when the DMS has no protection credentials configured does it fall back
+// to signing with the originator itself (the pre-fix behaviour). Previously ALL
+// KARI responses signed with the originator, which made a -srvcert-pinning
+// client reject them with "unexpected sender: /CN=Lamassu CMP ECDH Originator".
+func (r *cmpHttpRoutes) sendKARIProtectedResponse(ctx *gin.Context, lFunc *logrus.Entry, reqHeader corecmp.RequestPKIHeader, bodyTag int, bodyDER []byte, aps string, originator *ecdhOriginator) []byte {
+	origChain := append([]*x509.Certificate{originator.cert}, originator.chain...)
+	if aps != "" {
+		if provider, ok := r.svc.(services.LightweightCMPProtectionProvider); ok {
+			certChain, signer, credErr := provider.LWCProtectionCredentials(ctx.Request.Context(), aps)
+			if credErr != nil {
+				lFunc.Errorf("load cmp protection credentials: %v", credErr)
+				ctx.Status(http.StatusInternalServerError)
+				return nil
+			}
+			if len(certChain) > 0 && signer != nil {
+				// originator FIRST (extraCerts[0]); DMS chain appended so
+				// -trusted-only clients can still build the protection path.
+				extra := append(append([]*x509.Certificate{}, origChain...), certChain...)
+				respDER, err := marshalProtectedResponseWithSigner(reqHeader, bodyTag, bodyDER, extra, certChain[0], signer)
+				if err != nil {
+					lFunc.Errorf("marshal protected response PKIMessage: %v", err)
+					ctx.Status(http.StatusInternalServerError)
+					return nil
+				}
+				writeCMPResponse(ctx, lFunc, bodyTag, respDER)
+				return respDER
+			}
+		}
+	}
+	return r.sendRawBodyWithSigner(ctx, lFunc, reqHeader, bodyTag, bodyDER, origChain, originator.key)
 }
 
 // buildResponseHeader constructs a response PKIHeader mirroring the

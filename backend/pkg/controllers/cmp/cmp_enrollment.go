@@ -545,7 +545,13 @@ func (r *cmpHttpRoutes) issueAndStore(
 	lFunc = lFunc.WithField("cn", csr.Subject.CommonName)
 	lFunc.Infof("enrollment request CN=%s (reenroll=%v)", csr.Subject.CommonName, params.isReenrollment)
 
-	implicitConfirm := r.isImplicitConfirm(ctx.Request.Context(), *header, dmsID)
+	// RFC011: resolve the effective confirmation policy for THIS operation,
+	// applying its policy_overrides.confirmation on top of the DMS-general
+	// AcceptImplicit. Implicit confirmation is still only granted when the EE
+	// also asked for it (id-it-implicitConfirm in generalInfo).
+	op := cmpTagToString(params.requestTag)
+	implicitConfirm := corecmp.HasImplicitConfirmOID(header.GeneralInfo) &&
+		enrollOpts.EffectiveAcceptImplicit(op)
 	header.ResponseImplicitConfirm = implicitConfirm
 
 	// Early duplicate-transactionID check before calling the CA. The store is
@@ -595,7 +601,9 @@ func (r *cmpHttpRoutes) issueAndStore(
 	// response (RFC 9483 §4.4 / RFC 4210 §5.3.22). An administrator later
 	// approves the transaction, which issues the cert and flips the row to
 	// ISSUED; the EE retrieves it via pollReq.
-	if enrollOpts.Workflow == models.CMPWorkflowPhased {
+	// RFC011: resolve the effective workflow for THIS operation, applying its
+	// policy_overrides.workflow on top of the DMS-general Workflow.
+	if enrollOpts.EffectiveWorkflow(op) == models.CMPWorkflowPhased {
 		r.deferForApproval(ctx, lFunc, header, req, csr, dmsID, enrollOpts, params, txHex)
 		return
 	}
@@ -605,7 +613,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	issuanceCtx := context.WithoutCancel(ctx.Request.Context())
 	// RFC011: tag the context with which CMP body drove this issuance so
 	// LWCEnroll (shared across ir/cr/p10cr) can apply CR-only settings.
-	issuanceCtx = context.WithValue(issuanceCtx, core.LamassuContextKeyCMPOperation, cmpTagToString(params.requestTag))
+	issuanceCtx = context.WithValue(issuanceCtx, core.LamassuContextKeyCMPOperation, op)
 	cert, err := params.enroll(issuanceCtx, csr, signer)
 	if err != nil {
 		lFunc.Errorf("enroll failed: %v", err)
@@ -740,11 +748,11 @@ func (r *cmpHttpRoutes) issueAndStore(
 	}
 	var responseDER []byte
 	if ecdhProtection != nil {
-		// A keyAgreement encrCert recipient: the response MUST be protected by
-		// the same ECDH originator whose certificate the recipient uses to
-		// derive the CEK, not the DMS's normal protection credentials.
-		responseDER = r.sendRawBodyWithSigner(ctx, lFunc, *header, params.respTag, certRepDER,
-			append([]*x509.Certificate{ecdhProtection.cert}, ecdhProtection.chain...), ecdhProtection.key)
+		// keyAgreement encrCert recipient: keep the ECDH originator at
+		// extraCerts[0] (the recipient derives the CEK from it) but sign the
+		// outer message with the DMS's normal protection credentials so a
+		// -srvcert-pinning client still accepts the sender.
+		responseDER = r.sendKARIProtectedResponse(ctx, lFunc, *header, params.respTag, certRepDER, dmsID, ecdhProtection)
 	} else {
 		responseDER = r.sendRawBody(ctx, lFunc, *header, params.respTag, certRepDER, dmsID)
 	}
@@ -952,15 +960,23 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	}
 
 	// extraCerts[0] MUST be the certificate the validator matches CMS identifiers
-	// against; the response protection is signed with a key we own (which need
-	// not be extraCerts[0] — the recipient locates it via senderKID).
+	// against (for KARI the ECDH originator; for KTRI the EE recipient). The
+	// OUTER PKIMessage protection, though, is signed by the DMS's normal
+	// protection credentials whenever configured — for BOTH techniques — so the
+	// response's sender identity keeps matching what the client pinned (openssl
+	// cmp -srvcert / -expect_sender). Signing party and CMS originator are
+	// independent: a KARI recipient derives the CEK from the originator in
+	// extraCerts regardless of who signed the message. (An earlier revision
+	// signed KARI responses with the originator itself, which made a
+	// -srvcert-pinning client reject them as "unexpected sender: /CN=Lamassu
+	// CMP ECDH Originator".) fallbackCert/Signer are used only when the DMS has
+	// no protection credentials configured at all.
 	var extraCerts []*x509.Certificate
-	var protectionSignerCert *x509.Certificate
-	var protectionSigner crypto.Signer
+	var fallbackCert *x509.Certificate
+	var fallbackSigner crypto.Signer
 
 	if technique == kga.TechniqueKARI {
-		// 4. Ephemeral EC originator: it is the ECDH peer AND signs the response
-		// protection so it lands at extraCerts[0] (matching the CMS originator).
+		// 4. Ephemeral EC originator: the ECDH peer, kept at extraCerts[0].
 		origKey, origCert, origChain, err := mintHelperCert(issuanceCtx, lFunc, keyGen, dmsID, "Lamassu CMP KARI Originator", services.KGAHelperKARIOriginator)
 		if err != nil {
 			lFunc.Errorf("kga: issue KARI originator certificate: %v", err)
@@ -974,16 +990,33 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		extraCerts = append(extraCerts, origChain...)
 		extraCerts = append(extraCerts, kgaCert)
 		extraCerts = append(extraCerts, kgaChain...)
-		protectionSignerCert = origCert
-		protectionSigner = origKey
+		// If no DMS creds are configured, sign with the originator so it stays
+		// both findable (extraCerts[0]) and the verifiable signer.
+		fallbackCert = origCert
+		fallbackSigner = origKey
 	} else {
-		// KTRI: the EE recipient cert must be extraCerts[0]; sign the response
-		// with the KGA signer key (its cert is also carried in extraCerts).
+		// KTRI: the EE recipient cert must be extraCerts[0].
 		extraCerts = append(extraCerts, recipient)
 		extraCerts = append(extraCerts, kgaCert)
 		extraCerts = append(extraCerts, kgaChain...)
-		protectionSignerCert = kgaCert
-		protectionSigner = signerKey
+		fallbackCert = kgaCert
+		fallbackSigner = signerKey
+	}
+
+	var protectionSignerCert *x509.Certificate
+	var protectionSigner crypto.Signer
+	if provider, ok := r.svc.(services.LightweightCMPProtectionProvider); ok {
+		if dmsChain, dmsSigner, credErr := provider.LWCProtectionCredentials(issuanceCtx, dmsID); credErr == nil && len(dmsChain) > 0 && dmsSigner != nil {
+			protectionSignerCert = dmsChain[0]
+			protectionSigner = dmsSigner
+			// Append the DMS chain so -trusted-only clients can still build the
+			// protection path; the originator/recipient stays at extraCerts[0].
+			extraCerts = append(extraCerts, dmsChain...)
+		}
+	}
+	if protectionSignerCert == nil {
+		protectionSignerCert = fallbackCert
+		protectionSigner = fallbackSigner
 	}
 
 	// 5. Build the EnvelopedData(SignedData(AsymmetricKeyPackage)).

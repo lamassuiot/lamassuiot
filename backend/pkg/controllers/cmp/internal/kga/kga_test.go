@@ -71,7 +71,10 @@ func decryptContent(t *testing.T, eci encryptedContentInfo, cek []byte) []byte {
 }
 
 // verifyKeyPackage parses the decrypted SignedData, checks the eContentType,
-// signature over encapContentInfo, and returns the delivered private key.
+// independently recomputes the signedAttrs messageDigest and re-verifies the
+// signature exactly as a conformant RFC 5652 verifier (e.g. openssl) would —
+// NOT by reusing any of buildSignedData's internal helpers — and returns the
+// delivered private key.
 func verifyKeyPackage(t *testing.T, signedDataDER []byte, kgaCert *x509.Certificate) crypto.Signer {
 	t.Helper()
 	var sd signedData
@@ -88,12 +91,46 @@ func verifyKeyPackage(t *testing.T, signedDataDER []byte, kgaCert *x509.Certific
 		t.Fatalf("want exactly one SignerInfo v3, got %+v", sd.SignerInfos)
 	}
 
-	// Signature is over the DER of encapContentInfo (RFC 9483 §4.1.6 quirk).
-	encapDER, err := asn1.Marshal(sd.EncapContentInfo)
+	// signedAttrs must carry contentType + messageDigest(hash of eContent).
+	if len(sd.SignerInfos[0].SignedAttrs.FullBytes) == 0 {
+		t.Fatal("signedAttrs missing")
+	}
+	var attrs []attribute
+	if _, err := asn1.UnmarshalWithParams(sd.SignerInfos[0].SignedAttrs.FullBytes, &attrs, "tag:0"); err != nil {
+		t.Fatalf("decode signedAttrs: %v", err)
+	}
+	wantDigest := sha256.Sum256(sd.EncapContentInfo.EContent)
+	var gotDigest []byte
+	for _, a := range attrs {
+		if a.Type.Equal(oidMessageDigest) {
+			var values [][]byte
+			if _, err := asn1.UnmarshalWithParams(a.Values.FullBytes, &values, "set"); err != nil {
+				t.Fatalf("decode messageDigest attribute values: %v", err)
+			}
+			if len(values) != 1 {
+				t.Fatalf("messageDigest attribute has %d values, want 1", len(values))
+			}
+			gotDigest = values[0]
+		}
+	}
+	if gotDigest == nil {
+		t.Fatal("signedAttrs missing id-messageDigest")
+	}
+	if !bytes.Equal(gotDigest, wantDigest[:]) {
+		t.Fatalf("messageDigest attribute = %x, want sha256(eContent) = %x", gotDigest, wantDigest)
+	}
+
+	// RFC 5652 §5.4: the signature covers the DER of signedAttrs RE-TAGGED as a
+	// UNIVERSAL SET OF — not the IMPLICIT [0] wire encoding, and NOT
+	// encapContentInfo. This is the exact recomputation openssl performs.
+	signedAttrsForSigning, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSet, IsCompound: true,
+		Bytes: sd.SignerInfos[0].SignedAttrs.Bytes,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := sha256.Sum256(encapDER)
+	h := sha256.Sum256(signedAttrsForSigning)
 	switch pub := kgaCert.PublicKey.(type) {
 	case *rsa.PublicKey:
 		if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, h[:], sd.SignerInfos[0].Signature); err != nil {
@@ -103,11 +140,6 @@ func verifyKeyPackage(t *testing.T, signedDataDER []byte, kgaCert *x509.Certific
 		if !ecdsa.VerifyASN1(pub, h[:], sd.SignerInfos[0].Signature) {
 			t.Fatal("KGA ECDSA signature verify failed")
 		}
-	}
-
-	// signedAttrs must carry contentType + messageDigest(hash of eContent).
-	if len(sd.SignerInfos[0].SignedAttrs.FullBytes) == 0 {
-		t.Fatal("signedAttrs missing")
 	}
 
 	// eContent = AsymmetricKeyPackage (SEQUENCE OF OneAsymmetricKey).
