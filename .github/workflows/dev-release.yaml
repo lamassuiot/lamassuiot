@@ -19,7 +19,7 @@ on:
           - other
         default: golang:1.26.2-bookworm
       other:
-        description: "Only used when go = 'other'"
+        description: "Only used when go = 'other'."
         type: string
         default: ""
  
