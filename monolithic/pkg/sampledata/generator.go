@@ -1016,6 +1016,161 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 							// disabled per DMS; the compliance suite's Kga tests (Key
 							// Transport / Key Agreement, via ir and kur) require it.
 							ServerKeyGenEnabled: true,
+							// Nested per-operation CMP schema (RFC011). These blocks
+							// persist and round-trip through create/get; only the two
+							// LIVE bridges are enforced today (settings resolution
+							// fills them in — see models.ResolveCMPSettings):
+							//   - CKG: ir/cr.central_key_generation.enabled is unified
+							//     with the flat ServerKeyGenEnabled above (logical OR),
+							//     so mirroring it here keeps the effective toggle on.
+							//   - KUR: renewal_window/allow_expired/additional_ca_ids/
+							//     revoke_superseded reshape onto ReEnrollmentSettings.
+							//     Left at their zero values so they inherit the
+							//     ReEnrollmentSettings below (no behaviour change).
+							// Every other nested field now HAS a live enforcement path
+							// (RFC011 — see docs/rfcs/internal/RFC011-cmp-per-operation-
+							// settings.md). This sample DMS predates that enforcement and
+							// was tuned to the CMP compliance suite's expectations back
+							// when every one of these fields was persisted-only; the
+							// blocks below make the resolved (post-enforcement) behavior
+							// match what the suite has always exercised, rather than
+							// falling back to RFC011's secure-by-default resolution
+							// (which is deliberately stricter than "everything open").
+							//
+							// NOTE on "fresh" defaulting (models.ResolveCMPSettings): each
+							// operation's resolver only fills its safe defaults when a
+							// designated trigger field is empty ("fresh"). Overriding any
+							// OTHER field in that same fresh block requires also setting
+							// the trigger field, or the resolver silently stomps the
+							// override back to its default. CR (trigger:
+							// CertificateBehavior) and CCR/RR (trigger: Workflow /
+							// Authorization) are set explicitly below for exactly this
+							// reason — see resolveCR/resolveCCR/resolveRR.
+							IR: models.CMPIRSettings{
+								Enabled: true,
+								ProofOfPossession: models.CMPProofOfPossession{
+									Required: true,
+									// The suite's Kga tests (Key Transport / Key Agreement,
+									// via ir with an empty public key) rely on the indirect
+									// encrCert/challengeResp POPO methods, not just signature.
+									AllowedMethods: []models.CMPPOPOMethod{
+										models.CMPPOPOMethodSignature,
+										models.CMPPOPOMethodTrustedRA,
+										models.CMPPOPOMethodChallengeResponse,
+										models.CMPPOPOMethodEncryptedCertificate,
+									},
+								},
+								// The suite's Authenticator-control and RegToken tests send
+								// these controls; `optional` validates them when present
+								// (id-regCtrl-authenticator against ExpectedAuthenticator
+								// below, regToken for one-time-use) without requiring every
+								// other IR test to also carry one.
+								RegistrationToken:    models.CMPControl{Mode: models.CMPControlModeOptional},
+								AuthenticatorControl: models.CMPControl{Mode: models.CMPControlModeOptional},
+								CentralKeyGeneration: models.CMPCentralKeyGeneration{Enabled: true},
+							},
+							CR: models.CMPCRSettings{
+								Enabled: true,
+								// Setting CertificateBehavior (CR's "fresh" trigger field)
+								// makes RequireExistingDevice below actually stick — see the
+								// NOTE above. Lamassu has always routed cr through the same
+								// enrollment path as ir with no pre-existing-device
+								// requirement, so keep that: RFC011's own fresh default
+								// (RequireExistingDevice=true) would otherwise reject every
+								// cr test that doesn't pre-register the device first.
+								CertificateBehavior:   models.CMPCertificateBehaviorAdditional,
+								RequireExistingDevice: false,
+								ProofOfPossession: models.CMPProofOfPossession{
+									Required: true,
+									AllowedMethods: []models.CMPPOPOMethod{
+										models.CMPPOPOMethodSignature,
+										models.CMPPOPOMethodTrustedRA,
+										models.CMPPOPOMethodChallengeResponse,
+										models.CMPPOPOMethodEncryptedCertificate,
+									},
+								},
+								CentralKeyGeneration: models.CMPCentralKeyGeneration{Enabled: true},
+							},
+							KUR: models.CMPKURSettings{
+								Enabled: true,
+								// Mirror ReEnrollmentSettings.RevokeOnReEnrollment=false
+								// so the shared bridge keeps the superseded cert usable.
+								RevokeSupersededCertificate: false,
+								// The CMP compliance suite's "CA MUST Either Reject Or
+								// Accept Valid KUR With Same Key" test expects acceptance
+								// (ALLOW_KUR_SAME_KEY=True in config/lamassu.robot).
+								KeyPolicy: models.CMPKeyPolicyPermitReuse,
+								// The suite's re-enrollment tests exercise subject/SAN
+								// changes across kur requests; RFC011's own fresh default
+								// (forbid) would reject those, so allow both.
+								IdentityChangePolicy: models.CMPIdentityChangePolicySubjectAndSAN,
+							},
+							RR: models.CMPRRSettings{
+								Enabled: true,
+								// Setting Authorization (RR's "fresh" trigger field) so the
+								// suite's RA-initiated revocation tests (using the same
+								// id-kp-cmcRA credential the raVerified POPO tests use) are
+								// authorized alongside plain self-revocation.
+								Authorization:      models.CMPRevocationAuthorizationSelfTrustedRA,
+								AllowRevival:       true,
+								AllowExpiredTarget: true,
+								// All six RFC 5280 CRLReasons the suite's revocation-reason
+								// tests cycle through — RFC011's own fresh default only
+								// allows four (missing ca_compromise/affiliation_changed).
+								AllowedReasons: []models.CMPRevocationReason{
+									models.CMPRevocationReasonUnspecified,
+									models.CMPRevocationReasonKeyCompromise,
+									models.CMPRevocationReasonCACompromise,
+									models.CMPRevocationReasonAffiliationChanged,
+									models.CMPRevocationReasonSuperseded,
+									models.CMPRevocationReasonCessationOfOperation,
+								},
+								TrustedRA: models.CMPTrustedRA{RequireCMCRAEKU: true},
+							},
+							// p10cr (a plain PKCS#10 CSR) is a privileged-CA-op-style
+							// RFC011 gate too, off by default — the suite's P10cr tests
+							// need it on. No pre-existing-device requirement, matching cr.
+							P10CR: models.CMPP10CRSettings{
+								Enabled:              true,
+								ExistingDevicePolicy: models.CMPExistingDevicePolicyReplace,
+							},
+							// The suite's genm tests exercise all id-it information types,
+							// including the ones with only a stub data provider
+							// (root CA update, cert request template, current CRL, CRL
+							// update, protocol encryption cert) — RFC011's fresh default
+							// leaves those off. Enabling the gate here just lets the
+							// request reach the (still-stub) provider, same as before this
+							// gate existed.
+							GENM: models.CMPGENMSettings{
+								InformationTypes: models.CMPGENMInformationTypes{
+									CACertificates:                true,
+									SigningKeyTypes:               true,
+									EncryptionKeyTypes:            true,
+									PreferredSymmetricAlgorithm:   true,
+									SupportedLanguages:            true,
+									RootCAUpdate:                  true,
+									CertificateRequestTemplate:    true,
+									CurrentCRL:                    true,
+									CRLUpdate:                     true,
+									ProtocolEncryptionCertificate: true,
+								},
+							},
+							// Cross-certification (ccr/ccp): the suite's cross-cert tests
+							// expect synchronous issuance (a ccp back immediately), not
+							// RFC011's fresh default of administrator_approval — which
+							// would park every ccr as PENDING with no admin to approve it
+							// in the test flow. Setting Workflow (CCR's "fresh" trigger)
+							// to `direct` means RequireCACertificate/RequireProofOfPossession
+							// /MaximumValidity must also be set explicitly (see the NOTE
+							// above) — same values RFC011's own fresh default would have
+							// used, so behavior is otherwise unchanged from a fresh DMS.
+							CCR: models.CMPCCRSettings{
+								Enabled:                  true,
+								Workflow:                 models.CMPCCRWorkflowDirect,
+								RequireCACertificate:     true,
+								RequireProofOfPossession: true,
+								MaximumValidity:          models.TimeDuration(8760 * time.Hour),
+							},
 						},
 					},
 					ReEnrollmentSettings: models.ReEnrollmentSettings{

@@ -76,6 +76,13 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// only to a DMS that has configured an expected answer here. When set, a
 	// CertRequest carrying an Authenticator control whose value does not match
 	// is rejected with PKIFailureInfo incorrectData (RFC 4211 §6.2).
+	//
+	// LEGACY: this stores a plaintext shared secret on the DMS, which the
+	// nested per-operation schema (IR/CR.AuthenticatorControl below) explicitly
+	// avoids — that control carries ONLY a mode, never a value. The plaintext
+	// value here is NOT migrated into the nested schema (RFC011 Open Q2). It
+	// remains live for cmp_popo.go's existing check; new configuration should
+	// prefer the mode-only control once its "required" semantics are designed.
 	ExpectedAuthenticator string `json:"expected_authenticator,omitempty"`
 
 	// ServerKeyGenEnabled controls whether this DMS permits RFC 9483 §4.1.6
@@ -96,6 +103,21 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	//     certificate via pollReq once approval has happened.
 	// Empty is treated as CMPWorkflowDirect.
 	Workflow CMPWorkflow `json:"workflow,omitempty"`
+
+	// Nested per-operation CMP settings (RFC 9483). These live ALONGSIDE the
+	// flat fields above (the "general" level) and are populated with defaults by
+	// ResolveCMPSettings (see dms_cmp_settings.go). Except for the KUR
+	// re-enrollment reshape and the CKG toggle (both bridged to their existing
+	// live enforcement by resolution), these persist and round-trip but are
+	// not yet consulted by request handlers. See
+	// docs/rfcs/internal/RFC011-cmp-per-operation-settings.md.
+	IR    CMPIRSettings    `json:"ir"`
+	CR    CMPCRSettings    `json:"cr"`
+	P10CR CMPP10CRSettings `json:"p10cr"`
+	KUR   CMPKURSettings   `json:"kur"`
+	RR    CMPRRSettings    `json:"rr"`
+	GENM  CMPGENMSettings  `json:"genm"`
+	CCR   CMPCCRSettings   `json:"ccr"`
 }
 
 // AuthSettings returns the shared authentication policy for this CMP DMS.

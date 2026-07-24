@@ -199,7 +199,9 @@ func TestHandleCMP_EncrCertPOPO_RSA_IssuesEncryptedCert(t *testing.T) {
 
 	issuedCert, _ := buildSelfSignedCert(t, "encrcert-rsa-device")
 
-	router, _, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+	router, _, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		IR: models.CMPIRSettings{ProofOfPossession: models.CMPProofOfPossession{AllowedMethods: []models.CMPPOPOMethod{models.CMPPOPOMethodEncryptedCertificate}}},
+	}, issuedCert)
 	irDER, _ := buildTestIRWithIndirectPOPO(t, "encrcert-rsa-device", &rsaKey.PublicKey, 0 /* encrCert */)
 
 	resp := postCMP(t, router, "test-dms", irDER)
@@ -222,7 +224,10 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 
 	issuedCert, _ := buildSelfSignedCert(t, "challenge-rsa-device")
 
-	router, store, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
+	router, store, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		AcceptImplicit: true,
+		IR:             models.CMPIRSettings{ProofOfPossession: models.CMPProofOfPossession{AllowedMethods: []models.CMPPOPOMethod{models.CMPPOPOMethodChallengeResponse}}},
+	}, issuedCert)
 	irDER, txID := buildTestIRWithIndirectPOPO(t, "challenge-rsa-device", &rsaKey.PublicKey, 1 /* challengeResp */)
 
 	resp := postCMP(t, router, "test-dms", irDER)
@@ -263,7 +268,9 @@ func TestHandleCMP_ChallengeRespPOPO_WrongAnswer_Rejected(t *testing.T) {
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		IR: models.CMPIRSettings{ProofOfPossession: models.CMPProofOfPossession{AllowedMethods: []models.CMPPOPOMethod{models.CMPPOPOMethodChallengeResponse}}},
+	})
 	irDER, txID := buildTestIRWithIndirectPOPO(t, "challenge-wrong-device", &rsaKey.PublicKey, 1)
 
 	resp := postCMP(t, router, "test-dms", irDER)
@@ -463,7 +470,7 @@ func parseCertRepCertReqID(t *testing.T, responseDER []byte) int {
 func TestHandleCMP_P10CR_IssuesCP(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "p10cr-device")
 
-	router, store, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
+	router, store, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true, P10CR: models.CMPP10CRSettings{Enabled: true}}, issuedCert)
 	msgDER, txID := buildTestP10CR(t, testP10CROptions{CN: "p10cr-device", WithImplicitConfirm: true})
 
 	resp := postCMP(t, router, "test-dms", msgDER)
@@ -501,7 +508,7 @@ func TestHandleCMP_P10CR_IssuesCP(t *testing.T) {
 func TestHandleCMP_P10CR_ExplicitConfirm(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "p10cr-confirm")
 
-	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{P10CR: models.CMPP10CRSettings{Enabled: true}}, issuedCert)
 	msgDER, txID := buildTestP10CR(t, testP10CROptions{CN: "p10cr-confirm"})
 
 	resp := postCMP(t, router, "test-dms", msgDER)
@@ -522,7 +529,7 @@ func TestHandleCMP_P10CR_ExplicitConfirm(t *testing.T) {
 func TestHandleCMP_P10CR_CertConf_WrongCertReqID(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "p10cr-wrongid")
 
-	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{P10CR: models.CMPP10CRSettings{Enabled: true}}, issuedCert)
 	msgDER, txID := buildTestP10CR(t, testP10CROptions{CN: "p10cr-wrongid"})
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -541,7 +548,7 @@ func TestHandleCMP_P10CR_CertConf_WrongCertReqID(t *testing.T) {
 // does not verify is rejected in a cp body with failInfo badPOP: the PKCS#10
 // signature IS the proof of possession (RFC 9483 §4.1.4).
 func TestHandleCMP_P10CR_BadSignature(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{P10CR: models.CMPP10CRSettings{Enabled: true}})
 	msgDER, _ := buildTestP10CR(t, testP10CROptions{CN: "p10cr-badsig", CorruptSignature: true})
 
 	resp := postCMP(t, router, "test-dms", msgDER)
@@ -561,7 +568,7 @@ func TestHandleCMP_P10CR_BadSignature(t *testing.T) {
 // policy also applies to p10cr: a CSR requesting BasicConstraints cA=TRUE is
 // rejected notAuthorized.
 func TestHandleCMP_P10CR_CATemplateRejected(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{P10CR: models.CMPP10CRSettings{Enabled: true}})
 
 	caBC, err := asn1.Marshal(basicConstraints{IsCA: true})
 	require.NoError(t, err)
@@ -588,7 +595,7 @@ func TestHandleCMP_P10CR_CATemplateRejected(t *testing.T) {
 func TestHandleCMP_P10CR_PollReq_DeliversCP(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "p10cr-poll")
 
-	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
+	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true, P10CR: models.CMPP10CRSettings{Enabled: true}}, issuedCert)
 	msgDER, txID := buildTestP10CR(t, testP10CROptions{CN: "p10cr-poll", WithImplicitConfirm: true})
 	resp := postCMP(t, router, "test-dms", msgDER)
 	require.Equal(t, http.StatusOK, resp.Code)
