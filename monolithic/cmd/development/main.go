@@ -417,9 +417,10 @@ func main() {
 		}
 
 		_, opaAPIContainer, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository: "openpolicyagent/opa", // image
-			Tag:        "latest",              // version
-			ExtraHosts: []string{"host.docker.internal:host-gateway"},
+			Repository:   "openpolicyagent/opa", // image
+			Tag:          "latest",              // version
+			ExposedPorts: []string{"8181/tcp"},
+			ExtraHosts:   []string{"host.docker.internal:host-gateway"},
 			Labels: map[string]string{
 				"group": "lamassuiot-monolithic",
 			},
@@ -942,6 +943,11 @@ mk_finding(component, rule, status, property, value) := {
 	"eccg_status": status,
 	"property": property,
 	"value": value,
+}
+
+print_eccg_v2_assessment(component, finding) if {
+	print("ECCG v2 asset:", component)
+	print("ECCG v2 assessment result:", finding)
 }
 
 ############################
@@ -1512,6 +1518,7 @@ eccg_v2.findings contains finding if {
 		s.property,
 		s.value,
 	)
+	print_eccg_v2_assessment(component, finding)
 }
 
 eccg_v2.findings contains finding if {
@@ -1524,6 +1531,7 @@ eccg_v2.findings contains finding if {
 		s.property,
 		s.value,
 	)
+	print_eccg_v2_assessment(component, finding)
 }
 
 eccg_v2.findings contains finding if {
@@ -1536,5 +1544,6 @@ eccg_v2.findings contains finding if {
 		s.property,
 		s.value,
 	)
+	print_eccg_v2_assessment(component, finding)
 }
 `
