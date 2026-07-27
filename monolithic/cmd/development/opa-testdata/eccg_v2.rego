@@ -18,6 +18,8 @@ name(component) := normalize(object.get(component, "name", ""))
 
 bom_ref(component) := object.get(component, "bom-ref", "")
 
+component_type(component) := normalize(object.get(component, "type", ""))
+
 crypto(component) := object.get(component, "cryptoProperties", {})
 
 alg_props(component) := object.get(crypto(component), "algorithmProperties", {})
@@ -104,7 +106,7 @@ status_to_result(status) := "quantum-safe" if {
 	status == "legacy"
 } else := "quantum-vulnerable" if {
 	status == "not-agreed"
-} else := "NA" if {
+} else := "na" if {
 	status == "na"
 } else := "unknown"
 
@@ -117,23 +119,31 @@ mk_finding(component, rule, status, property, value) := {
 	"value": value,
 }
 
+print_eccg_v2_assessment(component, finding) if {
+	print("ECCG v2 asset:", component)
+	print("ECCG v2 assessment result:", finding)
+}
+
 ############################
 # Classification helpers
 ############################
 
 is_crypto_asset(component) if {
-	asset_type(component) == "cryptographic-asset"
+	component_type(component) == "cryptographic-asset"
 }
 
 is_algorithm(component) if {
 	is_crypto_asset(component)
+	asset_type(component) == "algorithm"
 }
 
 is_tls(component) if {
+	is_crypto_asset(component)
 	tls_version(component) != ""
 }
 
 is_tls(component) if {
+	is_crypto_asset(component)
 	contains(name(component), "tls")
 }
 
@@ -600,6 +610,26 @@ eccg_algorithm_status(component) := {
 	name(component) in {"hmac_drbg", "hash_drbg", "ctr_drbg"}
 }
 
+eccg_algorithm_assessment(component) := status if {
+	is_algorithm(component)
+	status := eccg_algorithm_status(component)
+} else := {
+	"status": "unknown",
+	"property": "name",
+	"value": name(component),
+	"ref": "The algorithm name is missing",
+} if {
+	is_algorithm(component)
+	name(component) == ""
+} else := {
+	"status": "not-agreed",
+	"property": "name",
+	"value": name(component),
+	"ref": "The algorithm or its parameters are not agreed by ECCG v2",
+} if {
+	is_algorithm(component)
+}
+
 ############################
 # TLS status
 ############################
@@ -622,6 +652,26 @@ eccg_tls_version_status(component) := {
 } if {
 	is_tls(component)
 	tls_version(component) == "tlsv1.2"
+}
+
+eccg_tls_version_assessment(component) := status if {
+	is_tls(component)
+	status := eccg_tls_version_status(component)
+} else := {
+	"status": "unknown",
+	"property": "protocolVersion",
+	"value": tls_version(component),
+	"ref": "The TLS protocol version is missing",
+} if {
+	is_tls(component)
+	tls_version(component) == ""
+} else := {
+	"status": "not-agreed",
+	"property": "protocolVersion",
+	"value": tls_version(component),
+	"ref": "The TLS protocol version is not agreed by ECCG v2",
+} if {
+	is_tls(component)
 }
 
 eccg_tls_cipher_status(component) := {
@@ -671,13 +721,52 @@ eccg_tls_cipher_status(component) := {
 	}
 }
 
+eccg_tls_cipher_assessment(component) := status if {
+	is_tls(component)
+	status := eccg_tls_cipher_status(component)
+} else := {
+	"status": "unknown",
+	"property": "cipherSuite",
+	"value": tls_cipher_suite(component),
+	"ref": "The TLS cipher suite is missing",
+} if {
+	is_tls(component)
+	tls_cipher_suite(component) == ""
+} else := {
+	"status": "not-agreed",
+	"property": "cipherSuite",
+	"value": tls_cipher_suite(component),
+	"ref": "The TLS cipher suite is not agreed by ECCG v2",
+} if {
+	is_tls(component)
+}
+
+eccg_applicability_assessment(component) := {
+	"status": "unknown",
+	"property": "cryptoProperties.assetType",
+	"value": asset_type(component),
+	"ref": "The cryptographic asset type is missing",
+} if {
+	is_crypto_asset(component)
+	asset_type(component) == ""
+} else := {
+	"status": "na",
+	"property": "cryptoProperties.assetType",
+	"value": asset_type(component),
+	"ref": "ECCG v2 algorithm and TLS checks are not applicable to this asset type",
+} if {
+	is_crypto_asset(component)
+	not is_algorithm(component)
+	not is_tls(component)
+}
+
 ############################
 # Findings
 ############################
 
 eccg_v2.findings contains finding if {
 	some component in input.components
-	s := eccg_algorithm_status(component)
+	s := eccg_algorithm_assessment(component)
 	finding := mk_finding(
 		component,
 		"eccg_v2_algorithm_status",
@@ -685,11 +774,12 @@ eccg_v2.findings contains finding if {
 		s.property,
 		s.value,
 	)
+	print_eccg_v2_assessment(component, finding)
 }
 
 eccg_v2.findings contains finding if {
 	some component in input.components
-	s := eccg_tls_version_status(component)
+	s := eccg_tls_version_assessment(component)
 	finding := mk_finding(
 		component,
 		"eccg_v2_tls_version_status",
@@ -697,11 +787,12 @@ eccg_v2.findings contains finding if {
 		s.property,
 		s.value,
 	)
+	print_eccg_v2_assessment(component, finding)
 }
 
 eccg_v2.findings contains finding if {
 	some component in input.components
-	s := eccg_tls_cipher_status(component)
+	s := eccg_tls_cipher_assessment(component)
 	finding := mk_finding(
 		component,
 		"eccg_v2_tls_cipher_suite_status",
@@ -709,4 +800,18 @@ eccg_v2.findings contains finding if {
 		s.property,
 		s.value,
 	)
+	print_eccg_v2_assessment(component, finding)
+}
+
+eccg_v2.findings contains finding if {
+	some component in input.components
+	s := eccg_applicability_assessment(component)
+	finding := mk_finding(
+		component,
+		"eccg_v2_applicability_status",
+		s.status,
+		s.property,
+		s.value,
+	)
+	print_eccg_v2_assessment(component, finding)
 }
