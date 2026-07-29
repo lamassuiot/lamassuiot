@@ -8,6 +8,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -77,7 +78,23 @@ func main() {
 		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
 	)
 
-	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, kmsSDK, caSDK, deviceSDK, models.APIServiceInfo{
+	// The VA client is optional: it is only used to serve CRLs over CMP general
+	// messages. Build it only when a VA endpoint is configured; otherwise CRL
+	// general messages report no CRL available.
+	var vaSDK services.VAService
+	if conf.VAClient.Hostname != "" {
+		lVAClient := helpers.SetupLogger(conf.VAClient.LogLevel, "DMS Manager", "LMS SDK - VA Client")
+		vaHttpCli, err := sdk.BuildHTTPClient(conf.VAClient.HTTPClient, lVAClient)
+		if err != nil {
+			log.Fatalf("could not build HTTP VA Client: %s", err)
+		}
+		vaSDK = sdk.NewHttpVAClient(
+			sdk.HttpClientWithSourceHeaderInjector(vaHttpCli, models.DMSManagerSource),
+			fmt.Sprintf("%s://%s:%d%s", conf.VAClient.Protocol, conf.VAClient.Hostname, conf.VAClient.Port, conf.VAClient.BasePath),
+		)
+	}
+
+	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, kmsSDK, caSDK, deviceSDK, vaSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

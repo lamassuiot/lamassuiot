@@ -454,10 +454,12 @@ func (svc DMSManagerServiceBackend) LWCValidateRASigner(ctx context.Context, aps
 }
 
 // LWCValidateCCRRequester implements
-// services.LightweightCMPCrossCertRequesterValidator: an empty
-// CCR.TrustedRequesterCAIDs means unrestricted (any CA satisfying
-// CCR.RequireCACertificate may request); a non-empty list requires the
-// requester's signer certificate to chain to one of the listed CAs.
+// services.LightweightCMPCrossCertRequesterValidator: CCR.RequesterMode=Any
+// (the default) is unrestricted — any CA satisfying CCR.RequireCACertificate
+// may request. CCR.RequesterMode=Restricted requires the requester's signer
+// certificate to chain to a CA on CCR.TrustedRequesterCAIDs; an empty list in
+// Restricted mode authorizes no one (a deliberate deny-all, not a fallback
+// to unrestricted).
 func (svc DMSManagerServiceBackend) LWCValidateCCRRequester(ctx context.Context, aps string, signer *x509.Certificate) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -467,11 +469,14 @@ func (svc DMSManagerServiceBackend) LWCValidateCCRRequester(ctx context.Context,
 		return errs.ErrDMSNotFound
 	}
 
-	trustedCAIDs := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.CCR.TrustedRequesterCAIDs
-	if len(trustedCAIDs) == 0 {
+	ccr := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.CCR
+	if ccr.RequesterMode != models.CMPCCRRequesterModeRestricted {
 		return nil
 	}
-	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, trustedCAIDs, false); err != nil {
+	if len(ccr.TrustedRequesterCAIDs) == 0 {
+		return fmt.Errorf("CCR.RequesterMode is restricted but CCR.TrustedRequesterCAIDs is empty: no CA is authorized to request cross-certification")
+	}
+	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, ccr.TrustedRequesterCAIDs, false); err != nil {
 		return fmt.Errorf("signer does not chain to a CA on CCR.TrustedRequesterCAIDs: %w", err)
 	}
 	return nil
@@ -1599,17 +1604,176 @@ func (svc DMSManagerServiceBackend) LWCGetEnrollmentOptions(ctx context.Context,
 	return &opts, nil
 }
 
+// LWCGetRootCACertUpdate answers a genm id-it-rootCaCert query (RFC 9483
+// §4.3.2) by resolving the DMS enrollment CA's root and reporting it as the
+// newWithNew certificate when it differs from the root the EE currently trusts.
+//
+// Lamassu reissues a root under the SAME key pair (CAServiceBackend.ReissueCA)
+// — there is no genuine "old key" distinct from the "new key" to cross-sign
+// with. newWithOld ::= the new certificate's public key certified by the OLD
+// private key (RFC 9483 §4.3.2); since old key == new key here, that
+// certification is identical to newWithNew itself, so the same certificate is
+// reused for both fields rather than fabricating a distinct one. This is also
+// why oldWithNew is left absent: it exists to let an EE that already trusts
+// the NEW root re-validate the OLD one during rollback, which only matters
+// when the two keys actually differ.
 func (svc DMSManagerServiceBackend) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {
-	// Root CA key rollover is not currently supported; signal no update available.
-	return nil, nil
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: input.APS})
+	if err != nil {
+		lFunc.Errorf("LWCGetRootCACertUpdate: could not get DMS '%s': %s", input.APS, err)
+		return nil, errs.ErrDMSNotFound
+	}
+
+	chain := svc.walkCAChain(ctx, dms.Settings.EnrollmentSettings.EnrollmentCA)
+	if len(chain) == 0 {
+		lFunc.Warnf("LWCGetRootCACertUpdate: could not resolve CA chain for DMS '%s'", input.APS)
+		return nil, nil
+	}
+	root := chain[len(chain)-1]
+
+	// When the EE tells us which root it currently trusts, only report an update
+	// when ours actually differs. Same subject = identity/key continuity (a
+	// reissued root); a different subject is an unrelated CA we have no linked
+	// update for.
+	if input.CurrentRootCert != nil {
+		if bytes.Equal(input.CurrentRootCert.Raw, root.Raw) {
+			return nil, nil
+		}
+		if !bytes.Equal(input.CurrentRootCert.RawSubject, root.RawSubject) {
+			lFunc.Debugf("LWCGetRootCACertUpdate: EE-trusted root (CN=%s) is unrelated to DMS root (CN=%s); no update offered",
+				input.CurrentRootCert.Subject.CommonName, root.Subject.CommonName)
+			return nil, nil
+		}
+	}
+
+	return &services.RootCACertUpdateOutput{NewWithNew: root, NewWithOld: root}, nil
 }
 
+// LWCGetCertReqTemplate answers a genm id-it-certReqTemplate query (RFC 9483
+// §4.3.3) describing what the DMS enrollment CA's issuance profile will produce.
+// A template is ALWAYS returned once a profile resolves, because there is always
+// at least one thing the CA controls unconditionally to advertise: the
+// certificate validity (there is no "honor requested validity" mode). On top of
+// that it surfaces every field the profile OVERRIDES rather than honoring from
+// the request — subject, keyUsage, extendedKeyUsage — plus the public-key
+// algorithms crypto-enforcement accepts. Only when no issuance profile can be
+// resolved at all is nil (no template available) returned.
 func (svc DMSManagerServiceBackend) LWCGetCertReqTemplate(ctx context.Context, input services.GetCertReqTemplateInput) (*services.CertReqTemplateOutput, error) {
-	// No CA-mandated template restrictions; clients may use any subject/key.
-	return nil, nil
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: input.APS})
+	if err != nil {
+		lFunc.Errorf("LWCGetCertReqTemplate: could not get DMS '%s': %s", input.APS, err)
+		return nil, errs.ErrDMSNotFound
+	}
+
+	profile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, dms.Settings.EnrollmentSettings.EnrollmentCA)
+	if err != nil {
+		lFunc.Warnf("LWCGetCertReqTemplate: could not resolve issuance profile for DMS '%s': %s; advertising no template", input.APS, err)
+		return nil, nil
+	}
+
+	out := &services.CertReqTemplateOutput{}
+
+	// Validity is always CA-controlled — advertise it so the EE learns the
+	// certificate lifetime up-front. For a duration profile the times are
+	// representative (measured from now); for a fixed-time profile NotAfter is
+	// exact. This is what guarantees a template is always available.
+	switch profile.Validity.Type {
+	case models.Duration:
+		out.NotBefore = time.Now()
+		out.NotAfter = out.NotBefore.Add(time.Duration(profile.Validity.Duration))
+	case models.Time:
+		out.NotBefore = time.Now()
+		out.NotAfter = profile.Validity.Time
+	}
+
+	// When the profile does NOT honor the requester's subject, the CA overrides
+	// it with the profile's own subject — surface that mandated subject so the EE
+	// fills it in instead of guessing and being silently overridden.
+	if !profile.HonorSubject {
+		name := chelpers.SubjectToPkixName(profile.Subject)
+		if len(name.ToRDNSequence()) > 0 {
+			out.Subject = x509.Certificate{Subject: name}
+		}
+	}
+
+	// Advertise the key algorithms crypto-enforcement accepts so the EE picks a
+	// compatible key type before enrolling. The accepted sizes travel alongside
+	// them because the keySpec controls encode the constraint as a size, not as a
+	// bare algorithm — an RSA modulus bit length or an EC named curve.
+	if profile.CryptoEnforcement.Enabled {
+		if profile.CryptoEnforcement.AllowRSAKeys {
+			out.AllowedKeyAlgorithms = append(out.AllowedKeyAlgorithms, x509.RSA)
+			out.AllowedRSAKeySizes = profile.CryptoEnforcement.AllowedRSAKeySizes
+		}
+		if profile.CryptoEnforcement.AllowECDSAKeys {
+			out.AllowedKeyAlgorithms = append(out.AllowedKeyAlgorithms, x509.ECDSA)
+			out.AllowedECDSAKeySizes = profile.CryptoEnforcement.AllowedECDSAKeySizes
+		}
+	}
+
+	// When the profile does NOT honor the requester's keyUsage/extendedKeyUsage,
+	// it assigns its own regardless of what's requested — the same
+	// override-not-honor pattern as Subject above, so surface it the same way.
+	if !profile.HonorKeyUsage && x509.KeyUsage(profile.KeyUsage) != 0 {
+		out.KeyUsage = x509.KeyUsage(profile.KeyUsage)
+	}
+	if !profile.HonorExtendedKeyUsages && len(profile.ExtendedKeyUsages) > 0 {
+		for _, eku := range profile.ExtendedKeyUsages {
+			out.ExtKeyUsage = append(out.ExtKeyUsage, x509.ExtKeyUsage(eku))
+		}
+	}
+
+	return out, nil
 }
 
+// LWCGetCRL answers a genm id-it-currentCRL / id-it-crlStatusList query
+// (RFC 9483 §4.3.4) by fetching the CRL for the relevant CA from the VA service.
+// The CA is taken from input.CAID when set, otherwise the DMS enrollment CA. The
+// VA client is optional: a DMS manager deployed without one simply reports no
+// CRL available (nil), matching the pre-wiring behaviour.
 func (svc DMSManagerServiceBackend) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
-	// CRL distribution is handled by the VA/CRL service, not the DMS manager.
-	return nil, nil
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	if svc.vaClient == nil {
+		lFunc.Warnf("LWCGetCRL: no VA client configured on DMS manager; cannot serve CRL over CMP")
+		return nil, nil
+	}
+
+	caID := input.CAID
+	if caID == "" {
+		dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: input.APS})
+		if err != nil {
+			lFunc.Errorf("LWCGetCRL: could not get DMS '%s': %s", input.APS, err)
+			return nil, errs.ErrDMSNotFound
+		}
+		caID = dms.Settings.EnrollmentSettings.EnrollmentCA
+	}
+
+	ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
+	if err != nil {
+		lFunc.Errorf("LWCGetCRL: could not get CA '%s': %s", caID, err)
+		return nil, err
+	}
+	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
+
+	crl, err := svc.vaClient.GetCRL(ctx, services.GetCRLResponseInput{
+		CASubjectKeyID: ca.Certificate.SubjectKeyID,
+		Issuer:         caCert,
+		VerifyResponse: false,
+	})
+	if err != nil {
+		lFunc.Errorf("LWCGetCRL: could not fetch CRL for CA '%s' (SKI %s): %s", caID, ca.Certificate.SubjectKeyID, err)
+		return nil, err
+	}
+
+	// Honour the "only if newer" contract: when the caller already holds a CRL
+	// at least as fresh as the one we found, report no update (nil).
+	if crl != nil && !input.CurrentThisUpdate.IsZero() && !crl.ThisUpdate.After(input.CurrentThisUpdate) {
+		return nil, nil
+	}
+	return crl, nil
 }

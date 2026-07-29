@@ -6,10 +6,13 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -37,11 +40,69 @@ var (
 	oidItRevPassphrase    = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 4, 12} // RFC 4210bis §5.3.19.9
 )
 
-// Algorithm OIDs advertised in signing/encryption key-pair-type and preferred
-// symmetric-algorithm responses.
+// The two certReqTemplate keySpec controls (RFC 4211 §6 arc
+// 1.3.6.1.5.5.7.5.1.*, semantics in RFC 9480 §2.15 / RFC 9483 §4.3.3). They are
+// NOT interchangeable and carry different value types:
+//
+//	id-regCtrl-algId     AlgIdCtrl ::= AlgorithmIdentifier
+//	                     MAY identify any algorithm OTHER than rsaEncryption;
+//	                     for id-ecPublicKey the parameters name the curve.
+//	id-regCtrl-rsaKeyLen RsaKeyLenCtrl ::= INTEGER (1..MAX)
+//	                     SHALL be used for rsaEncryption and carries the
+//	                     intended modulus bit length.
 var (
-	oidAES256CBC = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 42}
+	oidRegCtrlAlgId     = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 1, 11}
+	oidRegCtrlRsaKeyLen = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 1, 12}
 )
+
+// oidECPublicKey and the named-curve OIDs used as the ECParameters namedCurve of
+// an id-regCtrl-algId control (RFC 5480 §2.1.1.1), keyed by curve bit size. A
+// bare id-ecPublicKey AlgorithmIdentifier is not enough — the parameters field
+// is what tells the EE which curve to generate on.
+var ecCurveOIDByBits = map[int]asn1.ObjectIdentifier{
+	256: {1, 2, 840, 10045, 3, 1, 7}, // secp256r1 / prime256v1
+	384: {1, 3, 132, 0, 34},          // secp384r1
+	521: {1, 3, 132, 0, 35},          // secp521r1
+}
+
+// defaultAdvertisedRSAKeyLen is the modulus bit length advertised in an
+// id-regCtrl-rsaKeyLen control when the profile accepts RSA without naming any
+// specific sizes. 2048 is the smallest modulus still considered acceptable.
+const defaultAdvertisedRSAKeyLen = 2048
+
+// Algorithm OIDs advertised in signing/encryption key-pair-type and preferred
+// symmetric-algorithm responses. The AES variants live under the NIST arc
+// 2.16.840.1.101.3.4.1.* (RFC 3565 / RFC 5754).
+var (
+	oidAES128CBC = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 2}
+	oidAES192CBC = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 22}
+	oidAES256CBC = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 42}
+	oidAES128GCM = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 6}
+	oidAES192GCM = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 26}
+	oidAES256GCM = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 46}
+)
+
+// preferredSymmAlgOID maps the DMS-configured symmetric-algorithm choice to its
+// AlgorithmIdentifier OID for the id-it-preferredSymmAlg response. Unknown or
+// empty falls back to AES-256-CBC (the historical default).
+func preferredSymmAlgOID(alg models.CMPPreferredSymmetricAlgorithm) asn1.ObjectIdentifier {
+	switch alg {
+	case models.CMPPreferredSymmetricAlgorithmAES128CBC:
+		return oidAES128CBC
+	case models.CMPPreferredSymmetricAlgorithmAES192CBC:
+		return oidAES192CBC
+	case models.CMPPreferredSymmetricAlgorithmAES256CBC:
+		return oidAES256CBC
+	case models.CMPPreferredSymmetricAlgorithmAES128GCM:
+		return oidAES128GCM
+	case models.CMPPreferredSymmetricAlgorithmAES192GCM:
+		return oidAES192GCM
+	case models.CMPPreferredSymmetricAlgorithmAES256GCM:
+		return oidAES256GCM
+	default:
+		return oidAES256CBC
+	}
+}
 
 // cmpSupportedLangTags is the set of BCP 47 language tags the CA is willing to
 // negotiate for human-readable PKIFreeText (RFC 4210bis 5.3.19.13). English is
@@ -93,7 +154,10 @@ func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Ent
 	}
 
 	// RFC011 GENM.AccessPolicy: public_discovery answers unauthenticated genm;
-	// require_signed answers only signature-protected requests.
+	// require_signed answers only signature-protected requests. HandleCMP already
+	// derives its wire-level protection requirement from this same policy (not the
+	// enrollment auth_mode), so an unprotected require_signed genm is normally
+	// rejected before reaching here; this stays as defense-in-depth.
 	if enrollOpts.GENM.AccessPolicy == models.CMPGENMAccessPolicyRequireSigned && signerCert == nil {
 		lFunc.Warnf("genm rejected: DMS requires signed general messages (GENM.AccessPolicy=require_signed)")
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
@@ -113,7 +177,7 @@ func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Ent
 				dmsID, corecmp.PKIFailureInfoNotAuthorized)
 			return
 		}
-		entryDER, rej := r.buildGenpEntry(ctx.Request.Context(), lFunc, dmsID, itav)
+		entryDER, rej := r.buildGenpEntry(ctx.Request.Context(), lFunc, dmsID, itav, enrollOpts.GENM.PreferredSymmetricAlgorithm)
 		if rej != nil {
 			lFunc.Warnf("genm: rejecting %s: %s", itav.InfoType.String(), rej.reason)
 			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), rej.reason, dmsID, rej.failInfo)
@@ -147,7 +211,21 @@ func genmInfoTypeEnabled(it models.CMPGENMInformationTypes, oid asn1.ObjectIdent
 	case oidItCrlStatusList.String():
 		return it.CRLUpdate
 	case oidItCaProtEncCert.String():
+		// Lamassu does not provision a dedicated protocol-encryption certificate,
+		// so buildGenpEntry can only answer with an absent infoValue. That is
+		// still a valid answer — RFC 4210bis §5.3.19.1 makes the certificate
+		// itself optional, and an absent value means "not available". Refusing
+		// the whole genm instead (notAuthorized) is strictly worse: it turns a
+		// legitimate capability query into an error message. So honour the
+		// operator's toggle and let the absent-value response through.
 		return it.ProtocolEncryptionCertificate
+	case oidItRevPassphrase.String():
+		// Hard-disabled for the time being. The revocation-passphrase handler
+		// only accepts-and-acknowledges (RFC 4210bis §5.3.19.9) and is not wired
+		// into the revocation path, so it is kept out of service until it does
+		// something real. Without this explicit case it would fall through to
+		// the default and be answered.
+		return false
 	case oidItSignKeyPairTypes.String():
 		return it.SigningKeyTypes
 	case oidItEncKeyPairTypes.String():
@@ -165,7 +243,7 @@ func genmInfoTypeEnabled(it models.CMPGENMInformationTypes, oid asn1.ObjectIdent
 // entry. Returns the DER of the response InfoTypeAndValue, or a rejection when
 // the request violates the per-OID infoValue presence rule (RFC 9483 §4.3) or
 // the underlying service call fails.
-func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry, dmsID string, itav genITAV) ([]byte, *cmpEnvelopeRejection) {
+func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry, dmsID string, itav genITAV, preferredSymmAlg models.CMPPreferredSymmetricAlgorithm) ([]byte, *cmpEnvelopeRejection) {
 	hasValue := len(itav.InfoValue.FullBytes) > 0
 
 	var respOID asn1.ObjectIdentifier
@@ -188,7 +266,17 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 		respOID, respVal = oidItCaCerts, v
 
 	case oidItRootCaCert.String(): // §4.3.2 Get Root CA Certificate Update
-		out, err := r.svc.LWCGetRootCACertUpdate(ctx, services.GetRootCACertUpdateInput{APS: dmsID})
+		reqIn := services.GetRootCACertUpdateInput{APS: dmsID}
+		if hasValue {
+			// When present, the request infoValue is the EE's currently-trusted
+			// root CA certificate (CMPCertificate); decode it so the service can
+			// decide whether a newer root exists. A malformed value is ignored
+			// rather than rejected — it remains a valid "is there an update?" query.
+			if cur, perr := x509.ParseCertificate(itav.InfoValue.FullBytes); perr == nil {
+				reqIn.CurrentRootCert = cur
+			}
+		}
+		out, err := r.svc.LWCGetRootCACertUpdate(ctx, reqIn)
 		if err != nil {
 			return nil, rejSystemFailure("root CA update: " + err.Error())
 		}
@@ -277,7 +365,7 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 		if hasValue {
 			return nil, rejBadRequest("id-it-preferredSymmAlg request infoValue MUST be absent")
 		}
-		v, err := encodeAlgID(oidAES256CBC)
+		v, err := encodeAlgID(preferredSymmAlgOID(preferredSymmAlg))
 		if err != nil {
 			return nil, rejSystemFailure("cannot encode preferredSymmAlg")
 		}
@@ -546,23 +634,269 @@ func encodeRootCaKeyUpdateValue(out *services.RootCACertUpdateOutput) ([]byte, e
 //	    certTemplate CertTemplate,
 //	    keySpec      Controls OPTIONAL }
 //
-// Lamassu imposes no template constraints, so only an (empty) CertTemplate is
-// emitted; keySpec is omitted.
+// certTemplate advertises the CA-set validity (CertTemplate validity [4]) and,
+// when the profile mandates them, the subject ([5], an EXPLICITly tagged Name —
+// RFC 4211 §5) and keyUsage/extKeyUsage extensions ([9]); keySpec advertises
+// each accepted public-key algorithm as an id-regCtrl-algId control. Fields the
+// CA does not constrain are omitted; CertTemplate fields are emitted in
+// ascending tag order (validity [4] before subject [5] before extensions [9])
+// as DER requires.
 func encodeCertReqTemplateValue(out *services.CertReqTemplateOutput) ([]byte, error) {
-	// An empty CertTemplate is an empty SEQUENCE.
+	var certTemplateContent []byte
+	if out != nil {
+		// validity [4] is IMPLICIT over OptionalValidity ::= SEQUENCE {
+		//   notBefore [0] Time OPTIONAL, notAfter [1] Time OPTIONAL }.
+		// Time is a CHOICE (utcTime/generalTime), so [0]/[1] are EXPLICIT.
+		if !out.NotAfter.IsZero() {
+			validityField, err := encodeCertTemplateValidity(out.NotBefore, out.NotAfter)
+			if err != nil {
+				return nil, err
+			}
+			certTemplateContent = append(certTemplateContent, validityField...)
+		}
+
+		rawSubject := out.Subject.RawSubject
+		if len(rawSubject) == 0 && len(out.Subject.Subject.ToRDNSequence()) > 0 {
+			der, err := asn1.Marshal(out.Subject.Subject.ToRDNSequence())
+			if err != nil {
+				return nil, err
+			}
+			rawSubject = der
+		}
+		if len(rawSubject) > 0 {
+			// subject is [5] Name; Name is a CHOICE, so the context tag is
+			// constructed/explicit wrapping the RDNSequence DER.
+			subjectField, err := asn1.Marshal(asn1.RawValue{
+				Class:      asn1.ClassContextSpecific,
+				Tag:        5,
+				IsCompound: true,
+				Bytes:      rawSubject,
+			})
+			if err != nil {
+				return nil, err
+			}
+			certTemplateContent = append(certTemplateContent, subjectField...)
+		}
+
+		// extensions [9] is IMPLICIT over Extensions ::= SEQUENCE OF Extension
+		// (RFC 4211 §5) — matches parseCertTemplateExtensions on the request
+		// side: the context tag directly replaces the SEQUENCE tag, so the
+		// field content is the concatenation of individual Extension TLVs, not
+		// those TLVs wrapped in an extra inner SEQUENCE.
+		if out.KeyUsage != 0 || len(out.ExtKeyUsage) > 0 {
+			var extsContent []byte
+			if out.KeyUsage != 0 {
+				ext, err := chelpers.GenerateKeyUsagePKIExtension(out.KeyUsage)
+				if err != nil {
+					return nil, err
+				}
+				extDER, err := asn1.Marshal(ext)
+				if err != nil {
+					return nil, err
+				}
+				extsContent = append(extsContent, extDER...)
+			}
+			if len(out.ExtKeyUsage) > 0 {
+				ext, err := chelpers.GenerateExtendedKeyUsagePKIExtension(out.ExtKeyUsage)
+				if err != nil {
+					return nil, err
+				}
+				extDER, err := asn1.Marshal(ext)
+				if err != nil {
+					return nil, err
+				}
+				extsContent = append(extsContent, extDER...)
+			}
+			extensionsField, err := asn1.Marshal(asn1.RawValue{
+				Class:      asn1.ClassContextSpecific,
+				Tag:        9,
+				IsCompound: true,
+				Bytes:      extsContent,
+			})
+			if err != nil {
+				return nil, err
+			}
+			certTemplateContent = append(certTemplateContent, extensionsField...)
+		}
+	}
 	certTemplate, err := asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassUniversal,
 		Tag:        asn1.TagSequence,
 		IsCompound: true,
-		Bytes:      nil,
+		Bytes:      certTemplateContent,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	content := certTemplate
+
+	keySpec, err := encodeCertReqTemplateKeySpec(out)
+	if err != nil {
+		return nil, err
+	}
+	content = append(content, keySpec...)
+
 	return asn1.Marshal(asn1.RawValue{
 		Class:      asn1.ClassUniversal,
 		Tag:        asn1.TagSequence,
 		IsCompound: true,
-		Bytes:      certTemplate,
+		Bytes:      content,
 	})
+}
+
+// encodeCertReqTemplateKeySpec builds the certReqTemplate keySpec value:
+//
+//	keySpec Controls ::= SEQUENCE SIZE (1..MAX) OF AttributeTypeAndValue
+//
+// advertising the public-key constraint the CA enforces. RFC 9480 §2.15 splits
+// that constraint over two controls whose applicability is fixed by algorithm:
+// rsaEncryption SHALL use id-regCtrl-rsaKeyLen (an INTEGER modulus bit length)
+// and every other algorithm uses id-regCtrl-algId (an AlgorithmIdentifier, which
+// MUST NOT be rsaEncryption). Since the value type differs, a single algorithm
+// can never be expressed by both, and exactly ONE control is emitted here: when
+// a profile accepts RSA and ECDSA alike, the RSA constraint is advertised
+// because rsaKeyLen names a concrete minimum size, which is the more actionable
+// of the two for an EE about to generate a key.
+//
+// Returns nil (keySpec omitted — it is OPTIONAL) when the profile constrains
+// neither algorithm, which is the case whenever crypto enforcement is off.
+func encodeCertReqTemplateKeySpec(out *services.CertReqTemplateOutput) ([]byte, error) {
+	if out == nil {
+		return nil, nil
+	}
+
+	var control []byte
+	var err error
+	switch {
+	case slices.Contains(out.AllowedKeyAlgorithms, x509.RSA):
+		control, err = encodeRSAKeyLenControl(out.AllowedRSAKeySizes)
+	case slices.Contains(out.AllowedKeyAlgorithms, x509.ECDSA):
+		control, err = encodeECAlgIDControl(out.AllowedECDSAKeySizes)
+	default:
+		return nil, nil
+	}
+	if err != nil || len(control) == 0 {
+		return nil, err
+	}
+
+	return asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassUniversal,
+		Tag:        asn1.TagSequence,
+		IsCompound: true,
+		Bytes:      control,
+	})
+}
+
+// encodeRSAKeyLenControl builds the id-regCtrl-rsaKeyLen AttributeTypeAndValue
+// carrying the intended modulus bit length. The SMALLEST accepted size is
+// advertised: the control states the length the EE should generate, so naming
+// anything larger would reject keys the CA would in fact have accepted. An empty
+// list means the profile accepts RSA without constraining the size, in which
+// case the 2048-bit baseline is advertised rather than omitting the constraint
+// entirely.
+func encodeRSAKeyLenControl(allowedSizes []int) ([]byte, error) {
+	keyLen := defaultAdvertisedRSAKeyLen
+	if len(allowedSizes) > 0 {
+		keyLen = slices.Min(allowedSizes)
+	}
+	value, err := asn1.Marshal(keyLen)
+	if err != nil {
+		return nil, err
+	}
+	return marshalControl(oidRegCtrlRsaKeyLen, value)
+}
+
+// encodeECAlgIDControl builds the id-regCtrl-algId AttributeTypeAndValue for
+// ECDSA: an id-ecPublicKey AlgorithmIdentifier whose parameters are the
+// ECParameters namedCurve choice (RFC 5480 §2.1.1.1). The parameters are
+// mandatory in practice — without them the EE learns only "some EC key", not
+// which curve — so a size with no known curve OID yields no control at all
+// rather than a bare, unusable id-ecPublicKey. As with RSA the smallest accepted
+// curve is advertised.
+func encodeECAlgIDControl(allowedSizes []int) ([]byte, error) {
+	curveBits := 256 // P-256 when the profile does not constrain the curve
+	if len(allowedSizes) > 0 {
+		curveBits = slices.Min(allowedSizes)
+	}
+	curveOID, ok := ecCurveOIDByBits[curveBits]
+	if !ok {
+		return nil, nil
+	}
+	curveParams, err := asn1.Marshal(curveOID)
+	if err != nil {
+		return nil, err
+	}
+	value, err := asn1.Marshal(pkix.AlgorithmIdentifier{
+		Algorithm:  corecmp.OIDECPublicKey(),
+		Parameters: asn1.RawValue{FullBytes: curveParams},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return marshalControl(oidRegCtrlAlgId, value)
+}
+
+// marshalControl wraps a keySpec control value in its AttributeTypeAndValue.
+func marshalControl(oid asn1.ObjectIdentifier, valueDER []byte) ([]byte, error) {
+	return asn1.Marshal(struct {
+		Type  asn1.ObjectIdentifier
+		Value asn1.RawValue
+	}{oid, asn1.RawValue{FullBytes: valueDER}})
+}
+
+// encodeCertTemplateValidity encodes a CertTemplate validity [4] field:
+//
+//	validity [4] OptionalValidity
+//	OptionalValidity ::= SEQUENCE { notBefore [0] Time OPTIONAL, notAfter [1] Time OPTIONAL }
+//	Time ::= CHOICE { utcTime UTCTime, generalTime GeneralizedTime }
+//
+// [4] is IMPLICIT over the SEQUENCE (its tag replaces the SEQUENCE tag), while
+// notBefore [0] / notAfter [1] are EXPLICIT because Time is a CHOICE and a
+// CHOICE cannot be implicitly tagged. Each Time is a UTCTime for years
+// 1950–2049 and a GeneralizedTime otherwise (RFC 5280 §4.1.2.5).
+func encodeCertTemplateValidity(notBefore, notAfter time.Time) ([]byte, error) {
+	explicitTime := func(tag int, t time.Time) ([]byte, error) {
+		timeDER, err := encodeChoiceTime(t)
+		if err != nil {
+			return nil, err
+		}
+		return asn1.Marshal(asn1.RawValue{
+			Class:      asn1.ClassContextSpecific,
+			Tag:        tag,
+			IsCompound: true,
+			Bytes:      timeDER,
+		})
+	}
+
+	var content []byte
+	if !notBefore.IsZero() {
+		nb, err := explicitTime(0, notBefore)
+		if err != nil {
+			return nil, err
+		}
+		content = append(content, nb...)
+	}
+	na, err := explicitTime(1, notAfter)
+	if err != nil {
+		return nil, err
+	}
+	content = append(content, na...)
+
+	return asn1.Marshal(asn1.RawValue{
+		Class:      asn1.ClassContextSpecific,
+		Tag:        4,
+		IsCompound: true,
+		Bytes:      content,
+	})
+}
+
+// encodeChoiceTime encodes a single ASN.1 Time CHOICE value, selecting UTCTime
+// vs GeneralizedTime by RFC 5280's year boundary.
+func encodeChoiceTime(t time.Time) ([]byte, error) {
+	t = t.UTC()
+	if t.Year() >= 1950 && t.Year() < 2050 {
+		return asn1.MarshalWithParams(t, "utc")
+	}
+	return asn1.MarshalWithParams(t, "generalized")
 }

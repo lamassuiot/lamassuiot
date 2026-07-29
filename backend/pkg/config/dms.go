@@ -38,6 +38,13 @@ type DMSconfig struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"device_manager_client"`
 
+	// VAClient is optional: when configured, the DMS manager uses it to serve
+	// CRLs over CMP general messages (id-it-currentCRL / id-it-crlStatusList).
+	// When left unset, CRL general messages report no CRL available.
+	VAClient struct {
+		cconfig.HTTPClient `mapstructure:",squash"`
+	} `mapstructure:"va_client"`
+
 	AuthzClient               AuthzClient  `mapstructure:"authz_client"`
 	DownstreamCertificateFile string       `mapstructure:"downstream_cert_file"`
 	WFX                       DMSWFXConfig `mapstructure:"wfx"`

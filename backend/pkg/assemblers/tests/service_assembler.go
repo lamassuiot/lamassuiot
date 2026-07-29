@@ -500,6 +500,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		kmsTestServer.HttpKMSSDK,
 		caTestServer.HttpCASDK,
 		deviceManagerTestServer.Service,
+		nil, // VA client: CRL-over-CMP is not exercised by the DMS manager test suite
 		models.APIServiceInfo{
 			Version:   "test",
 			BuildSHA:  "-",

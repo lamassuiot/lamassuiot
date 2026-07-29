@@ -124,6 +124,9 @@ func TestResolveCMPSettings_FreshDefaults(t *testing.T) {
 	if opts.CCR.TrustedRequesterCAIDs == nil || opts.CCR.SubjectConstraints.AllowedDNPatterns == nil || opts.CCR.SubjectConstraints.AllowedDNSSuffixes == nil {
 		t.Error("CCR slices are nil, want non-nil empty slices")
 	}
+	if opts.CCR.RequesterMode != CMPCCRRequesterModeAny {
+		t.Errorf("CCR.RequesterMode = %q, want %q (must default to unrestricted for backward compatibility)", opts.CCR.RequesterMode, CMPCCRRequesterModeAny)
+	}
 
 	// genm LIVE info types on, STUB off.
 	it := opts.GENM.InformationTypes

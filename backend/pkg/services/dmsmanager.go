@@ -42,8 +42,12 @@ type DMSManagerServiceBackend struct {
 	deviceManagerCli services.DeviceManagerService
 	kmsClient        services.KMSService
 	caClient         services.CAService
-	logger           *logrus.Entry
-	downstreamCert   *x509.Certificate // included as system CA in EST CACerts responses
+	// vaClient serves CRLs for CMP genm id-it-currentCRL/crlStatusList queries.
+	// Optional: nil when the DMS manager is deployed without a VA endpoint, in
+	// which case CRL general messages report no CRL available.
+	vaClient       services.VAService
+	logger         *logrus.Entry
+	downstreamCert *x509.Certificate // included as system CA in EST CACerts responses
 }
 
 type DMSManagerBuilder struct {
@@ -51,6 +55,7 @@ type DMSManagerBuilder struct {
 	DevManagerCli         services.DeviceManagerService
 	CAClient              services.CAService
 	KMSClient             services.KMSService
+	VAClient              services.VAService
 	DMSStorage            storage.DMSRepo
 	CMPTransactionStorage storage.CMPTransactionRepo
 	CMPWFXReporter        cmpwfx.CMPReporter
@@ -63,6 +68,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		cmptxStorage:     builder.CMPTransactionStorage,
 		cmpWFXReporter:   builder.CMPWFXReporter,
 		caClient:         builder.CAClient,
+		vaClient:         builder.VAClient,
 		deviceManagerCli: builder.DevManagerCli,
 		logger:           builder.Logger,
 		downstreamCert:   builder.DownstreamCertificate,

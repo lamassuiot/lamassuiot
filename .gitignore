@@ -17,3 +17,4 @@ init.sql
 testdata
 .codexscripts/__pycache__/
 .claude/
+scripts/cmp-ccr-*

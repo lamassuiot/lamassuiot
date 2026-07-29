@@ -23,8 +23,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
-	service, err := AssembleDMSManagerService(conf, kmsService, caService, deviceService)
+func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService, vaService services.VAService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
+	service, err := AssembleDMSManagerService(conf, kmsService, caService, deviceService, vaService)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
@@ -50,7 +50,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, kmsService s
 	return service, port, nil
 }
 
-func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
+func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSService, caService services.CAService, deviceService services.DeviceManagerService, vaService services.VAService) (*services.DMSManagerService, error) {
 	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", conf.OtelConfig)
 
 	lSvc := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
@@ -99,6 +99,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, kmsService services.KMSSer
 		CMPWFXReporter:        cmpReporter,
 		KMSClient:             kmsService,
 		CAClient:              caService,
+		VAClient:              vaService,
 		DevManagerCli:         deviceService,
 		DownstreamCertificate: downCert,
 	})

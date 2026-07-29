@@ -274,6 +274,19 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	if body.Tag == corecmp.BodyTagRR {
 		requireProtection = true
 	}
+	// RFC 9483 §4.3 / RFC011 GENM.AccessPolicy: general messages are
+	// informational capability-discovery queries whose protection requirement
+	// is governed by the SEPARATE GENM.AccessPolicy, NOT the enrollment
+	// auth_mode. That separation is the whole point of the field — a DMS may
+	// require client-certificate protection for enrollment (ir/cr/kur) yet
+	// still answer discovery genm unauthenticated (public_discovery). Setting
+	// GENM.AccessPolicy=require_signed opts genm back into mandatory protection.
+	// This deliberately overrides the auth_mode-derived default above so that
+	// public_discovery is honoured on every deployment, not only on DMSes whose
+	// auth_mode happens not to require a client certificate.
+	if body.Tag == corecmp.BodyTagGenMsg {
+		requireProtection = enrollOpts.GENM.AccessPolicy == models.CMPGENMAccessPolicyRequireSigned
+	}
 	signerCert, err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlg, requireProtection)
 	if err != nil {
 		lFunc.Warnf("protection verification failed: %v", err)

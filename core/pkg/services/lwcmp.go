@@ -267,6 +267,38 @@ type CertReqTemplateOutput struct {
 	// AllowedKeyAlgorithms lists the public key algorithms the CA accepts.
 	// Empty means any algorithm is acceptable.
 	AllowedKeyAlgorithms []x509.PublicKeyAlgorithm
+
+	// AllowedRSAKeySizes / AllowedECDSAKeySizes list the key sizes in bits the CA
+	// accepts for the corresponding entry of AllowedKeyAlgorithms. These are what
+	// the keySpec controls actually advertise (RFC 9480 §2.15): an RSA constraint
+	// is expressed as a modulus bit length and an ECDSA one as a named curve, so
+	// the algorithm alone is not enough to encode either. Empty means the CA
+	// accepts that algorithm without constraining its size.
+	AllowedRSAKeySizes   []int
+	AllowedECDSAKeySizes []int
+
+	// KeyUsage is the mandated keyUsage extension value the CA will assign
+	// regardless of what the EE requests. Zero means the CA honors the
+	// request's own keyUsage (nothing to advertise).
+	KeyUsage x509.KeyUsage
+
+	// ExtKeyUsage is the mandated extendedKeyUsage extension value the CA will
+	// assign regardless of what the EE requests. Empty means the CA honors the
+	// request's own extendedKeyUsage (nothing to advertise).
+	ExtKeyUsage []x509.ExtKeyUsage
+
+	// NotBefore / NotAfter describe the validity period the CA will assign to
+	// the issued certificate. Validity is ALWAYS CA-controlled (there is no
+	// "honor requested validity" mode), so this is populated whenever a profile
+	// resolves — it is the one field the CA can always advertise, and is what
+	// lets certReqTemplate return a useful answer even for a profile that
+	// otherwise honors everything from the request. For a duration-based
+	// profile these are representative times measured from the query moment
+	// (the issued cert's actual window starts at its own issuance time); for a
+	// fixed-time profile NotAfter is exact. Both zero means no validity could be
+	// determined (encoder omits the validity field).
+	NotBefore time.Time
+	NotAfter  time.Time
 }
 
 // ---------------------------------------------------------------------------
