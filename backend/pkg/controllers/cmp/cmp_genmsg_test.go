@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/stretchr/testify/assert"
@@ -238,6 +239,363 @@ func TestHandleCMP_GenM_CRLStatusList(t *testing.T) {
 	assert.Equal(t, crl.Raw, parsedCRL.Raw)
 
 	svc.AssertExpectations(t)
+}
+
+// TestEncodeCertReqTemplateValue exercises the hand-rolled RFC 9483 §4.3.3
+// CertReqTemplateValue encoder directly (the controller-level tests only assert
+// non-emptiness): it must emit a CertTemplate carrying the mandated subject as
+// an EXPLICIT [5] Name, plus a keySpec Controls sequence. RSA is advertised as
+// id-regCtrl-rsaKeyLen (never as an id-regCtrl-algId, which RFC 9480 §2.15
+// forbids for rsaEncryption), and it wins over ECDSA when the profile accepts
+// both — so a single control is emitted even here.
+func TestEncodeCertReqTemplateValue(t *testing.T) {
+	out := &services.CertReqTemplateOutput{
+		Subject:              x509.Certificate{Subject: pkix.Name{CommonName: "mandated-cn", Organization: []string{"LAMASSU"}}},
+		AllowedKeyAlgorithms: []x509.PublicKeyAlgorithm{x509.RSA, x509.ECDSA},
+		AllowedRSAKeySizes:   []int{3072, 4096},
+		AllowedECDSAKeySizes: []int{256},
+	}
+	der, err := encodeCertReqTemplateValue(out)
+	require.NoError(t, err)
+
+	var outer asn1.RawValue
+	_, err = asn1.Unmarshal(der, &outer)
+	require.NoError(t, err)
+	require.Equal(t, asn1.TagSequence, outer.Tag)
+
+	// certTemplate (SEQUENCE) then keySpec (SEQUENCE).
+	var certTemplate asn1.RawValue
+	rest, err := asn1.Unmarshal(outer.Bytes, &certTemplate)
+	require.NoError(t, err)
+	require.Equal(t, asn1.TagSequence, certTemplate.Tag)
+
+	var keySpec asn1.RawValue
+	_, err = asn1.Unmarshal(rest, &keySpec)
+	require.NoError(t, err)
+	require.Equal(t, asn1.TagSequence, keySpec.Tag)
+
+	// certTemplate.subject is [5] wrapping an RDNSequence.
+	var subjectField asn1.RawValue
+	_, err = asn1.Unmarshal(certTemplate.Bytes, &subjectField)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.ClassContextSpecific, subjectField.Class)
+	assert.Equal(t, 5, subjectField.Tag)
+
+	var rdn pkix.RDNSequence
+	_, err = asn1.Unmarshal(subjectField.Bytes, &rdn)
+	require.NoError(t, err)
+	var name pkix.Name
+	name.FillFromRDNSequence(&rdn)
+	assert.Equal(t, "mandated-cn", name.CommonName)
+
+	// keySpec Controls: exactly one control, and for RSA it is the rsaKeyLen
+	// INTEGER carrying the SMALLEST accepted modulus size (advertising a larger
+	// one would turn keys the CA accepts into keys the EE never generates).
+	var atav struct {
+		Type  asn1.ObjectIdentifier
+		Value asn1.RawValue
+	}
+	r, err := asn1.Unmarshal(keySpec.Bytes, &atav)
+	require.NoError(t, err)
+	assert.Empty(t, r, "keySpec must carry exactly one control")
+	assert.True(t, atav.Type.Equal(oidRegCtrlRsaKeyLen), "RSA must be advertised as id-regCtrl-rsaKeyLen")
+
+	var keyLen int
+	_, err = asn1.Unmarshal(atav.Value.FullBytes, &keyLen)
+	require.NoError(t, err)
+	assert.Equal(t, 3072, keyLen)
+}
+
+// TestEncodeCertReqTemplateKeySpec_ECDSA covers the non-RSA branch: ECDSA is
+// advertised as an id-regCtrl-algId whose AlgorithmIdentifier MUST carry the
+// ECParameters namedCurve — a bare id-ecPublicKey would not tell the EE which
+// curve to generate on.
+func TestEncodeCertReqTemplateKeySpec_ECDSA(t *testing.T) {
+	der, err := encodeCertReqTemplateKeySpec(&services.CertReqTemplateOutput{
+		AllowedKeyAlgorithms: []x509.PublicKeyAlgorithm{x509.ECDSA},
+		AllowedECDSAKeySizes: []int{384, 521},
+	})
+	require.NoError(t, err)
+
+	var keySpec asn1.RawValue
+	_, err = asn1.Unmarshal(der, &keySpec)
+	require.NoError(t, err)
+
+	var atav struct {
+		Type  asn1.ObjectIdentifier
+		Value asn1.RawValue
+	}
+	rest, err := asn1.Unmarshal(keySpec.Bytes, &atav)
+	require.NoError(t, err)
+	assert.Empty(t, rest, "keySpec must carry exactly one control")
+	assert.True(t, atav.Type.Equal(oidRegCtrlAlgId))
+
+	var alg pkix.AlgorithmIdentifier
+	_, err = asn1.Unmarshal(atav.Value.FullBytes, &alg)
+	require.NoError(t, err)
+	assert.True(t, alg.Algorithm.Equal(corecmp.OIDECPublicKey()))
+
+	var namedCurve asn1.ObjectIdentifier
+	_, err = asn1.Unmarshal(alg.Parameters.FullBytes, &namedCurve)
+	require.NoError(t, err, "ecPublicKey parameters must decode as an ECParameters namedCurve")
+	assert.True(t, namedCurve.Equal(ecCurveOIDByBits[384]), "smallest accepted curve must be advertised")
+}
+
+// TestEncodeCertReqTemplateKeySpec_Unconstrained locks in that keySpec is OMITTED
+// when the profile constrains no algorithm (crypto enforcement off). keySpec is
+// OPTIONAL, so an absent one is the correct encoding — emitting an empty Controls
+// SEQUENCE would violate its SIZE (1..MAX) bound.
+func TestEncodeCertReqTemplateKeySpec_Unconstrained(t *testing.T) {
+	der, err := encodeCertReqTemplateKeySpec(&services.CertReqTemplateOutput{})
+	require.NoError(t, err)
+	assert.Nil(t, der)
+}
+
+// TestEncodeCertReqTemplateValue_Validity verifies the always-present validity
+// [4] field: IMPLICIT over OptionalValidity, with notBefore [0] / notAfter [1]
+// EXPLICITly tagged Times (Time is a CHOICE). This is what makes a certReqTemplate
+// available even for a profile that otherwise honors everything from the request.
+func TestEncodeCertReqTemplateValue_Validity(t *testing.T) {
+	nb := time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC)
+	na := time.Date(2036, 7, 28, 10, 0, 0, 0, time.UTC)
+	der, err := encodeCertReqTemplateValue(&services.CertReqTemplateOutput{NotBefore: nb, NotAfter: na})
+	require.NoError(t, err)
+
+	var outer asn1.RawValue
+	_, err = asn1.Unmarshal(der, &outer)
+	require.NoError(t, err)
+	var certTemplate asn1.RawValue
+	rest, err := asn1.Unmarshal(outer.Bytes, &certTemplate)
+	require.NoError(t, err)
+	assert.Empty(t, rest, "no keySpec expected")
+
+	// validity [4] is the only certTemplate field present.
+	var validityField asn1.RawValue
+	_, err = asn1.Unmarshal(certTemplate.Bytes, &validityField)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.ClassContextSpecific, validityField.Class)
+	assert.Equal(t, 4, validityField.Tag)
+
+	// notBefore [0] then notAfter [1], each EXPLICIT over a Time value.
+	var nbField asn1.RawValue
+	r, err := asn1.Unmarshal(validityField.Bytes, &nbField)
+	require.NoError(t, err)
+	assert.Equal(t, 0, nbField.Tag)
+	var naField asn1.RawValue
+	_, err = asn1.Unmarshal(r, &naField)
+	require.NoError(t, err)
+	assert.Equal(t, 1, naField.Tag)
+
+	var gotNB, gotNA time.Time
+	_, err = asn1.Unmarshal(nbField.Bytes, &gotNB)
+	require.NoError(t, err)
+	_, err = asn1.Unmarshal(naField.Bytes, &gotNA)
+	require.NoError(t, err)
+	assert.True(t, gotNB.Equal(nb), "notBefore round-trips")
+	assert.True(t, gotNA.Equal(na), "notAfter round-trips")
+}
+
+// TestEncodeCertReqTemplateValue_Empty verifies that an output with no
+// constraints still yields a well-formed (empty CertTemplate)-only value.
+func TestEncodeCertReqTemplateValue_Empty(t *testing.T) {
+	der, err := encodeCertReqTemplateValue(&services.CertReqTemplateOutput{})
+	require.NoError(t, err)
+
+	var outer asn1.RawValue
+	_, err = asn1.Unmarshal(der, &outer)
+	require.NoError(t, err)
+	require.Equal(t, asn1.TagSequence, outer.Tag)
+
+	var certTemplate asn1.RawValue
+	rest, err := asn1.Unmarshal(outer.Bytes, &certTemplate)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.TagSequence, certTemplate.Tag)
+	assert.Empty(t, certTemplate.Bytes, "empty output must yield an empty CertTemplate")
+	assert.Empty(t, rest, "no keySpec must be emitted when no algorithms are advertised")
+}
+
+// TestEncodeCertReqTemplateValue_KeyUsageExtensions verifies the certTemplate
+// carries a mandated keyUsage/extKeyUsage as an IMPLICITly-tagged extensions
+// [9] field (RFC 4211 §5) — decoded the exact same way the request-side
+// parser (parseCertTemplateExtensions in core/pkg/cmp/crmf.go) reads it: the
+// [9] tag substitutes for the SEQUENCE tag, so its content is the
+// concatenation of individual Extension TLVs, not those TLVs re-wrapped in an
+// extra inner SEQUENCE.
+func TestEncodeCertReqTemplateValue_KeyUsageExtensions(t *testing.T) {
+	out := &services.CertReqTemplateOutput{
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := encodeCertReqTemplateValue(out)
+	require.NoError(t, err)
+
+	var outer asn1.RawValue
+	_, err = asn1.Unmarshal(der, &outer)
+	require.NoError(t, err)
+	var certTemplate asn1.RawValue
+	_, err = asn1.Unmarshal(outer.Bytes, &certTemplate)
+	require.NoError(t, err)
+
+	// No subject was set, so extensions [9] is the only field present.
+	var extField asn1.RawValue
+	_, err = asn1.Unmarshal(certTemplate.Bytes, &extField)
+	require.NoError(t, err)
+	assert.Equal(t, asn1.ClassContextSpecific, extField.Class)
+	assert.Equal(t, 9, extField.Tag)
+
+	rest := extField.Bytes
+	var exts []pkix.Extension
+	for len(rest) > 0 {
+		var ext pkix.Extension
+		rest, err = asn1.Unmarshal(rest, &ext)
+		require.NoError(t, err)
+		exts = append(exts, ext)
+	}
+	require.Len(t, exts, 2, "keyUsage and extKeyUsage must each be a separate Extension TLV")
+	assert.True(t, exts[0].Id.Equal(chelpers.OidExtensionKeyUsage))
+	assert.True(t, exts[1].Id.Equal(chelpers.OidExtensionExtendedKeyUsage))
+}
+
+// TestPreferredSymmAlgOID verifies each configured AES variant maps to its OID,
+// and that an unknown/empty value falls back to AES-256-CBC.
+func TestPreferredSymmAlgOID(t *testing.T) {
+	cases := map[models.CMPPreferredSymmetricAlgorithm]asn1.ObjectIdentifier{
+		models.CMPPreferredSymmetricAlgorithmAES128CBC: oidAES128CBC,
+		models.CMPPreferredSymmetricAlgorithmAES192CBC: oidAES192CBC,
+		models.CMPPreferredSymmetricAlgorithmAES256CBC: oidAES256CBC,
+		models.CMPPreferredSymmetricAlgorithmAES128GCM: oidAES128GCM,
+		models.CMPPreferredSymmetricAlgorithmAES192GCM: oidAES192GCM,
+		models.CMPPreferredSymmetricAlgorithmAES256GCM: oidAES256GCM,
+	}
+	for alg, want := range cases {
+		assert.True(t, preferredSymmAlgOID(alg).Equal(want), "alg %s", alg)
+	}
+	assert.True(t, preferredSymmAlgOID("").Equal(oidAES256CBC), "empty must default to AES-256-CBC")
+	assert.True(t, preferredSymmAlgOID("bogus").Equal(oidAES256CBC), "unknown must default to AES-256-CBC")
+}
+
+// TestHandleCMP_GenM_PreferredSymmAlg checks the id-it-preferredSymmAlg response
+// carries the AES variant the DMS configured, not the hardcoded default.
+func TestHandleCMP_GenM_PreferredSymmAlg(t *testing.T) {
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{
+			InformationTypes:            models.CMPGENMInformationTypes{PreferredSymmetricAlgorithm: true},
+			PreferredSymmetricAlgorithm: models.CMPPreferredSymmetricAlgorithmAES128GCM,
+		},
+	})
+
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItPreferredSymmAlg, nil))
+	entry := genRepSingleEntry(t, router, "test-dms", msgDER)
+
+	assert.True(t, entry.InfoType.Equal(oidItPreferredSymmAlg))
+	require.NotEmpty(t, entry.InfoValue.FullBytes)
+
+	var alg pkix.AlgorithmIdentifier
+	_, err := asn1.Unmarshal(entry.InfoValue.FullBytes, &alg)
+	require.NoError(t, err)
+	assert.True(t, alg.Algorithm.Equal(oidAES128GCM), "must advertise the configured AES-128-GCM")
+}
+
+// TestHandleCMP_GenM_PublicDiscovery_UnprotectedUnderClientCertAuth locks in
+// that a public_discovery genm is answered UNPROTECTED even when the DMS's
+// enrollment auth_mode is CLIENT_CERTIFICATE. genm protection is governed by
+// GENM.AccessPolicy, not auth_mode — so capability discovery works regardless
+// of how the DMS authenticates enrollment.
+func TestHandleCMP_GenM_PublicDiscovery_UnprotectedUnderClientCertAuth(t *testing.T) {
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		AuthMode: models.CMPAuthModeClientCertificate,
+		GENM: models.CMPGENMSettings{
+			Enabled:          true,
+			AccessPolicy:     models.CMPGENMAccessPolicyPublicDiscovery,
+			InformationTypes: models.CMPGENMInformationTypes{CACertificates: true},
+		},
+	})
+	caCert, _ := buildSelfSignedCert(t, "test-ca")
+	svc.On("LWCCACerts", mock.Anything, "test-dms").Return([]*x509.Certificate{caCert}, nil)
+
+	// Unprotected genm (no extraCerts / no protection) — the compliance path a
+	// discovery client uses.
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCaCerts, nil))
+	entry := genRepSingleEntry(t, router, "test-dms", msgDER)
+
+	assert.True(t, entry.InfoType.Equal(oidItCaCerts), "public_discovery genm must be answered even under CLIENT_CERTIFICATE auth")
+	svc.AssertExpectations(t)
+}
+
+// TestHandleCMP_GenM_RequireSigned_RejectsUnprotected verifies the opposite
+// gate: with GENM.AccessPolicy=require_signed, an unprotected genm is rejected
+// at the wire layer (before any info-type handler runs).
+func TestHandleCMP_GenM_RequireSigned_RejectsUnprotected(t *testing.T) {
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		AuthMode: models.CMPAuthModeNoAuth,
+		GENM: models.CMPGENMSettings{
+			Enabled:          true,
+			AccessPolicy:     models.CMPGENMAccessPolicyRequireSigned,
+			InformationTypes: models.CMPGENMInformationTypes{CACertificates: true},
+		},
+	})
+
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCaCerts, nil))
+	resp := postCMP(t, router, "test-dms", msgDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"an unprotected genm under require_signed must be rejected with a CMP error body")
+}
+
+// TestHandleCMP_GenM_HardDisabledInfoTypes locks in that revPassphrase is kept
+// out of service: it has no config toggle, so without an explicit case in
+// genmInfoTypeEnabled it would fall through the default to being answered.
+func TestHandleCMP_GenM_HardDisabledInfoTypes(t *testing.T) {
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{
+			Enabled:      true,
+			AccessPolicy: models.CMPGENMAccessPolicyPublicDiscovery,
+		},
+	})
+
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItRevPassphrase, nil))
+	resp := postCMP(t, router, "test-dms", msgDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"id-it-revPassphrase must be rejected while hard-disabled")
+}
+
+// TestHandleCMP_GenM_CAProtEncCert covers the caProtEncCert answer: Lamassu never
+// provisions a dedicated protocol-encryption certificate, so the genp carries the
+// id-it-caProtEncCert infoType with an ABSENT infoValue. That is a real answer
+// ("not available") rather than a rejection — rejecting the whole genm would turn
+// a legitimate capability query into a CMP error.
+func TestHandleCMP_GenM_CAProtEncCert(t *testing.T) {
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{
+			Enabled:          true,
+			AccessPolicy:     models.CMPGENMAccessPolicyPublicDiscovery,
+			InformationTypes: models.CMPGENMInformationTypes{ProtocolEncryptionCertificate: true},
+		},
+	})
+
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCaProtEncCert, nil))
+	entry := genRepSingleEntry(t, router, "test-dms", msgDER)
+	assert.True(t, entry.InfoType.Equal(oidItCaProtEncCert))
+	assert.Empty(t, entry.InfoValue.FullBytes, "no protocol-encryption cert is provisioned, so the value must be absent")
+}
+
+// TestHandleCMP_GenM_CAProtEncCertDisabled proves the answer above is still gated
+// on the operator's toggle rather than being unconditional.
+func TestHandleCMP_GenM_CAProtEncCertDisabled(t *testing.T) {
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{
+			Enabled:          true,
+			AccessPolicy:     models.CMPGENMAccessPolicyPublicDiscovery,
+			InformationTypes: models.CMPGENMInformationTypes{ProtocolEncryptionCertificate: false},
+		},
+	})
+
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCaProtEncCert, nil))
+	resp := postCMP(t, router, "test-dms", msgDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"caProtEncCert must be rejected when the DMS has the info type disabled")
 }
 
 func TestHandleCMP_GenM_UnknownInfoType(t *testing.T) {

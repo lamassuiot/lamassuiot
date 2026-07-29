@@ -162,6 +162,22 @@ const (
 	CMPGENMAccessPolicyRequireSigned   CMPGENMAccessPolicy = "require_signed"
 )
 
+// CMPPreferredSymmetricAlgorithm selects which symmetric content-encryption
+// algorithm the CA advertises in the genm id-it-preferredSymmAlg response
+// (RFC 4210bis §5.3.19.4). It is the algorithm an EE should use when it must
+// encrypt content for the CA (e.g. the KGA private-key transport wrapper).
+// Only AES variants are offered for now.
+type CMPPreferredSymmetricAlgorithm string
+
+const (
+	CMPPreferredSymmetricAlgorithmAES128CBC CMPPreferredSymmetricAlgorithm = "aes128_cbc"
+	CMPPreferredSymmetricAlgorithmAES192CBC CMPPreferredSymmetricAlgorithm = "aes192_cbc"
+	CMPPreferredSymmetricAlgorithmAES256CBC CMPPreferredSymmetricAlgorithm = "aes256_cbc"
+	CMPPreferredSymmetricAlgorithmAES128GCM CMPPreferredSymmetricAlgorithm = "aes128_gcm"
+	CMPPreferredSymmetricAlgorithmAES192GCM CMPPreferredSymmetricAlgorithm = "aes192_gcm"
+	CMPPreferredSymmetricAlgorithmAES256GCM CMPPreferredSymmetricAlgorithm = "aes256_gcm"
+)
+
 // CMPCCRWorkflow selects the cross-certification (ccr) lifecycle: issue
 // directly, or hold for administrator approval.
 type CMPCCRWorkflow string
@@ -169,6 +185,20 @@ type CMPCCRWorkflow string
 const (
 	CMPCCRWorkflowDirect                CMPCCRWorkflow = "direct"
 	CMPCCRWorkflowAdministratorApproval CMPCCRWorkflow = "administrator_approval"
+)
+
+// CMPCCRRequesterMode makes CCR.TrustedRequesterCAIDs' effect explicit instead
+// of overloading "list is empty" to mean "unrestricted": that conflated two
+// distinct intents ("never configured" and "deliberately deny everyone") into
+// one representation, so an empty-but-not-yet-populated list silently failed
+// open. Any preserves today's behavior (RequireCACertificate is the only
+// gate); Restricted requires the signer to chain to a listed CA — and, with
+// an empty list, authorizes no one.
+type CMPCCRRequesterMode string
+
+const (
+	CMPCCRRequesterModeAny        CMPCCRRequesterMode = "any"
+	CMPCCRRequesterModeRestricted CMPCCRRequesterMode = "restricted"
 )
 
 // CMPInheritableWorkflow is a policy_overrides.workflow value: "inherit" (use
@@ -368,7 +398,7 @@ type CMPRRSettings struct {
 //	  CACertificates              → id-it-caCerts (LWCCACerts)
 //	  SigningKeyTypes             → id-it-signKeyPairTypes (RSA+EC, static)
 //	  EncryptionKeyTypes          → id-it-encKeyPairTypes (RSA, static)
-//	  PreferredSymmetricAlgorithm → id-it-preferredSymmAlg (AES-256-CBC, static)
+//	  PreferredSymmetricAlgorithm → id-it-preferredSymmAlg (AES variant per CMPGENMSettings.PreferredSymmetricAlgorithm, default AES-256-CBC)
 //	  SupportedLanguages          → id-it-supportedLangTags ("en", static)
 //
 //	STUB (default false — service returns nil / not provisioned):
@@ -402,6 +432,10 @@ type CMPGENMSettings struct {
 	Enabled          bool                    `json:"enabled"`
 	AccessPolicy     CMPGENMAccessPolicy     `json:"access_policy"`
 	InformationTypes CMPGENMInformationTypes `json:"information_types"`
+	// PreferredSymmetricAlgorithm is the AES variant advertised in the
+	// id-it-preferredSymmAlg response when InformationTypes.PreferredSymmetricAlgorithm
+	// is enabled. Empty defaults to AES-256-CBC (see resolveGENM).
+	PreferredSymmetricAlgorithm CMPPreferredSymmetricAlgorithm `json:"preferred_symmetric_algorithm"`
 }
 
 // CMPCCRSettings configures Cross-Certification Requests (ccr, RFC 4210bis
@@ -409,16 +443,18 @@ type CMPGENMSettings struct {
 //
 // LIVE (enforced in cmp_crosscert.go / dmsmanager_lwcmp.go's
 // LWCIssueCrossCertificate): Enabled (via operationEnabled in cmp.go),
-// RequireCACertificate (signer must carry cA=TRUE), TrustedRequesterCAIDs (an
-// empty list is unrestricted; non-empty requires the signer chain to one of
-// them), RequireProofOfPossession, MaximumValidity (caps the issued
-// cross-certificate's lifetime), SubjectConstraints (DN pattern / dNSName SAN
-// allow-list), Workflow (administrator_approval defers issuance the same way
-// ir/cr's phased workflow does).
+// RequireCACertificate (signer must carry cA=TRUE), RequesterMode +
+// TrustedRequesterCAIDs (Any is unrestricted regardless of the list;
+// Restricted requires the signer to chain to a listed CA, and authorizes no
+// one if the list is empty), RequireProofOfPossession, MaximumValidity (caps
+// the issued cross-certificate's lifetime), SubjectConstraints (DN pattern /
+// dNSName SAN allow-list), Workflow (administrator_approval defers issuance
+// the same way ir/cr's phased workflow does).
 //
 // NOT YET enforced: IssuanceProfileID.
 type CMPCCRSettings struct {
 	Enabled                  bool                  `json:"enabled"`
+	RequesterMode            CMPCCRRequesterMode   `json:"requester_mode"`
 	TrustedRequesterCAIDs    []string              `json:"trusted_requester_ca_ids"`
 	RequireCACertificate     bool                  `json:"require_ca_certificate"`
 	RequireProofOfPossession bool                  `json:"require_proof_of_possession"`

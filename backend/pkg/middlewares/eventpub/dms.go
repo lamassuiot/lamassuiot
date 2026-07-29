@@ -242,6 +242,14 @@ func (mw dmsEventPublisher) LWCIssueCrossCertificate(ctx context.Context, aps st
 	return crossCertifier.LWCIssueCrossCertificate(ctx, aps, csr, reqNotBefore, reqNotAfter)
 }
 
+func (mw dmsEventPublisher) LWCValidateCCRRequester(ctx context.Context, aps string, signer *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPCrossCertRequesterValidator)
+	if !ok {
+		return fmt.Errorf("cmp cross-certification requester validation not available")
+	}
+	return validator.LWCValidateCCRRequester(ctx, aps, signer)
+}
+
 // GetCMPTransactionRepo forwards the optional cmpTransactionStorer interface
 // through the middleware chain so the HTTP controller can reach the backend repo
 // regardless of how many middleware layers are stacked.

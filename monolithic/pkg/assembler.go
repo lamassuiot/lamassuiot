@@ -188,6 +188,13 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
 
+		vaConn := localConn(vaPort)
+		vaSDKBuilder := func(serviceID, src string) services.VAService {
+			cli := buildLocalClient(serviceID, src, "LMS SDK - VA Client", vaConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpVAClient(cli, baseURL(vaConn))
+		}
+
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs: cconfig.Logging{
@@ -251,7 +258,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 					},
 				},
 			},
-		}, kmsSDKBuilder("DMS Manager", models.DMSManagerSource), caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
+		}, kmsSDKBuilder("DMS Manager", models.DMSManagerSource), caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), vaSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}

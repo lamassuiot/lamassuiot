@@ -246,13 +246,23 @@ func resolveGENM(g CMPGENMSettings) CMPGENMSettings {
 	if fresh {
 		g.AccessPolicy = CMPGENMAccessPolicyPublicDiscovery
 		g.Enabled = true
-		// LIVE info types default on (they are always answered today); STUB
-		// types stay off (their service methods return nil).
+		// The always-answerable discovery types default on. RootCAUpdate,
+		// CertificateRequestTemplate, CurrentCRL and CRLUpdate are functional but
+		// left off by default so operators opt into them per DMS;
+		// ProtocolEncryptionCertificate stays off because Lamassu never provisions
+		// a dedicated protocol-encryption certificate (the response is always the
+		// RFC-compliant "absent" value).
 		g.InformationTypes.CACertificates = true
 		g.InformationTypes.SigningKeyTypes = true
 		g.InformationTypes.EncryptionKeyTypes = true
 		g.InformationTypes.PreferredSymmetricAlgorithm = true
 		g.InformationTypes.SupportedLanguages = true
+	}
+	// Concretize the advertised symmetric algorithm to the historical default
+	// (AES-256-CBC) whenever it is unset, regardless of freshness — so DMSes
+	// created before this field existed keep answering as before.
+	if g.PreferredSymmetricAlgorithm == "" {
+		g.PreferredSymmetricAlgorithm = CMPPreferredSymmetricAlgorithmAES256CBC
 	}
 	return g
 }
@@ -269,6 +279,14 @@ func resolveCCR(c CMPCCRSettings) CMPCCRSettings {
 	}
 	if c.TrustedRequesterCAIDs == nil {
 		c.TrustedRequesterCAIDs = []string{}
+	}
+	// RequesterMode is new — unlike the fresh-only defaults above, an absent
+	// value unambiguously means "never configured" (no prior data could have
+	// set it), so it always resolves to Any, preserving the pre-existing
+	// empty-list-is-unrestricted behavior for every DMS stored before this
+	// field existed.
+	if c.RequesterMode == "" {
+		c.RequesterMode = CMPCCRRequesterModeAny
 	}
 	c.SubjectConstraints = resolveSubjectConstraints(c.SubjectConstraints)
 	return c
