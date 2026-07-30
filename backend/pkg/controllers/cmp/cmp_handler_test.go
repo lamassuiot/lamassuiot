@@ -397,7 +397,12 @@ func TestHandleCMP_ConfirmModes(t *testing.T) {
 			if tc.op == "kur" {
 				router, store, svc = newReenrollRouter(t, opts, issuedCert)
 				wantTag = corecmp.BodyTagKUP
-				reqDER = buildTestKUR(t, reqOpts)
+				// kur is unconditionally signature-protected (RFC 9483 §4.1.3:
+				// the message protection IS the proof of possession) — sign
+				// with an arbitrary certificate; the mock's LWCReenroll
+				// expectation matches any signer.
+				signerCert, signerKey := buildSelfSignedCert(t, tc.cn+"-signer")
+				reqDER = signCMPMessage(t, buildTestKUR(t, reqOpts), signerCert, signerKey)
 			} else {
 				router, store, svc = newEnrollRouter(t, opts, issuedCert)
 				wantTag = corecmp.BodyTagIP
@@ -1018,8 +1023,15 @@ func TestHandleCMP_KUR_POPO(t *testing.T) {
 		{name: "EnforcePOPO_RejectsUnprotected", enforcePOPO: true, signed: false, cn: "device-kur-popo-reject", accepted: false},
 		// Cycle 19: EnforcePOPO=true + valid protection → accepted.
 		{name: "EnforcePOPO_AcceptsProtected", enforcePOPO: true, signed: true, cn: "device-kur-popo-ok", accepted: true},
-		// Cycle 20: EnforcePOPO=false + unprotected → accepted (mTLS proves possession).
-		{name: "NoPOPO_NotEnforced", enforcePOPO: false, signed: false, cn: "device-kur-nopopo", accepted: true},
+		// Security regression test: a kur's signature-based protection IS its
+		// proof of possession (RFC 9483 §4.1.3) and is a FIXED protocol
+		// invariant — unlike ir/cr/p10cr, it is never gated by EnforcePOPO or
+		// the DMS auth_mode (mirroring rr). Before this test, EnforcePOPO=false
+		// let an entirely unsigned kur reach LWCReenroll, which used the
+		// request's own CertTemplate CommonName to pick a target device with
+		// zero authentication — a full device-identity takeover via one
+		// unauthenticated request. See cmp.go's requireProtection override.
+		{name: "NoPOPO_StillRequiresProtection", enforcePOPO: false, signed: false, cn: "device-kur-nopopo", accepted: false},
 	}
 
 	for _, tc := range tests {
@@ -1057,9 +1069,9 @@ func TestHandleCMP_KUR_POPO(t *testing.T) {
 			}
 
 			assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
-				"unprotected KUR must be rejected when EnforcePOPO=true")
-			assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "proof of possession",
-				"error must reference POPO/protection requirement")
+				"unprotected KUR must be rejected")
+			assert.Contains(t, parseCMPErrorReason(t, resp.Body.Bytes()), "protection",
+				"error must reference the message-protection requirement")
 			svc.AssertNotCalled(t, "LWCReenroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
@@ -1378,4 +1390,20 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoBadRequest), "failInfo must set badRequest (2)")
 
 	svc.AssertExpectations(t)
+}
+
+// TestHandleCMP_RejectsOversizedBody is a DoS-hardening regression test: a
+// request body larger than cmpMaxRequestBodyBytes must be rejected without
+// the handler ever buffering the whole thing (http.MaxBytesReader aborts the
+// read once the limit is crossed).
+func TestHandleCMP_RejectsOversizedBody(t *testing.T) {
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+
+	oversized := make([]byte, cmpMaxRequestBodyBytes+1)
+	resp := postCMP(t, router, "test-dms", oversized)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"an oversized request body must be rejected")
+
+	svc.AssertNotCalled(t, "LWCGetEnrollmentOptions", mock.Anything, mock.Anything)
 }

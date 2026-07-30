@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -85,6 +86,15 @@ func (m *mockKGAService) LWCProtectionCredentials(ctx context.Context, aps strin
 	certs, _ := args.Get(0).([]*x509.Certificate)
 	signer, _ := args.Get(1).(crypto.Signer)
 	return certs, signer, args.Error(2)
+}
+
+// LWCValidateKGARecipient satisfies services.LightweightCMPKGARecipientValidator.
+// The existing tests in this file exercise KGA dispatch/crypto behavior, not
+// the recipient trust boundary, so this always accepts — mirroring how
+// LWCValidateCCRRequester's cross-cert equivalent is stubbed permissively in
+// other test files.
+func (m *mockKGAService) LWCValidateKGARecipient(ctx context.Context, aps string, recipient *x509.Certificate) error {
+	return nil
 }
 
 func (m *mockKGAService) LWCIssueKGAHelperCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, purpose services.KGAHelperPurpose) (*x509.Certificate, []*x509.Certificate, error) {
@@ -313,6 +323,64 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 	require.NoError(t, err, "decrypted KGA payload must be a well-formed CMS SignedData (RFC 9483 §4.1.6)")
 	assert.Equal(t, asn1.TagSequence, innerSignedData.Tag)
 	assert.NotEmpty(t, innerSignedData.Bytes)
+
+	svc.AssertExpectations(t)
+	wrapped.AssertExpectations(t)
+}
+
+// TestHandleCMP_KGA_CR_ThreadsOperationContext is a security regression test:
+// handleKGAEnrollment must tag its issuance context with the CMP operation
+// that drove the request (RFC011's LamassuContextKeyCMPOperation signal),
+// exactly like the non-KGA path (issueAndStore) already does. Before this
+// fix, a cr-tagged CKG request reached LWCEnroll with no such value set,
+// which cmpOperationFromContext defaults to "ir" — silently applying ir's
+// (less restrictive) per-operation policy instead of CR's
+// RequireExistingDevice / MaximumActiveCertificates / CertificateBehavior /
+// AllowedProfileIDs to a cr request.
+func TestHandleCMP_KGA_CR_ThreadsOperationContext(t *testing.T) {
+	svc := &cmpmock.MockLightweightCMPService{}
+	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
+
+	issuedCert, _ := buildSelfSignedCert(t, "kga-cr-device")
+	svc.On("LWCEnroll", mock.MatchedBy(func(ctx context.Context) bool {
+		return ctx.Value(core.LamassuContextKeyCMPOperation) == "cr"
+	}), mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issuedCert, nil)
+
+	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
+	wrapped.On("LWCIssueKGAHelperCertificate", mock.Anything, "test-dms",
+		mock.AnythingOfType("*x509.CertificateRequest"), services.KGAHelperSigner).
+		Return((*x509.Certificate)(nil), []*x509.Certificate{}, nil)
+	wrapped.On("LWCProtectionCredentials", mock.Anything, "test-dms").
+		Return([]*x509.Certificate(nil), crypto.Signer(nil), nil)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	routes, err := NewCMPHttpRoutes(logrus.NewEntry(logrus.New()), wrapped)
+	require.NoError(t, err)
+	router.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
+
+	recipientCert, recipientKey := buildKeyUsageCert(t, "kga-cr-recipient",
+		x509.KeyUsageDigitalSignature|x509.KeyUsageKeyEncipherment)
+
+	// A cr-tagged empty-pubkey (CKG) request — same shape as buildTestKGAIR
+	// but tagged cr (2) instead of ir (0).
+	txID := randomTxID(t)
+	senderNonce := randomNonce(t)
+	headerDER := buildTestPKIHeaderDER(t, txID, senderNonce, nil, false)
+	certRequestDER := buildCertRequestDER(t, "kga-cr-device", buildEmptyRSASPKIDER(t))
+	bodyDER := ctxDER(t, corecmp.BodyTagCR, wrapCertReqMsgs(t, certRequestDER))
+	msgDER, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true,
+		Bytes: concatBytes(headerDER, bodyDER),
+	})
+	require.NoError(t, err)
+	signedDER := signCMPMessage(t, msgDER, recipientCert, recipientKey)
+
+	resp := postCMP(t, router, "test-dms", signedDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagCP, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"cr-tagged CKG must be answered with cp")
 
 	svc.AssertExpectations(t)
 	wrapped.AssertExpectations(t)

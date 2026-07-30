@@ -105,18 +105,29 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 	if !ok || tx.DMSID != input.DMSID {
 		return nil, errs.ErrCMPTransactionNotFound
 	}
-	if tx.State != models.CMPTransactionStatePending {
-		lFunc.Warnf("ApproveCMPTransaction: tx %s is in state %s, not PENDING", tx.TransactionID, tx.State)
-		return nil, errs.ErrCMPTransactionNotPending
-	}
-	if !tx.ExpiresAt.IsZero() && tx.ExpiresAt.Before(time.Now()) {
-		lFunc.Warnf("ApproveCMPTransaction: tx %s expired at %s", tx.TransactionID, tx.ExpiresAt)
-		return nil, errs.ErrCMPTransactionNotPending
-	}
 	if tx.CSR == nil {
 		lFunc.Errorf("ApproveCMPTransaction: tx %s has no stored CSR", tx.TransactionID)
 		return nil, errs.ErrCMPTransactionNotPending
 	}
+
+	// Atomically claim the row (PENDING → APPROVING) before doing anything
+	// else. This is the sole guard against concurrent Approve/Reject calls
+	// (double-click, client retry, or a race between the two, or with the
+	// confirmation monitor's approval-timeout sweep) issuing the same CSR
+	// twice or clobbering each other's final state: only the caller that wins
+	// this atomic transition proceeds to call the CA. A caller that loses
+	// gets a clean "not pending" error instead of silently duplicating
+	// issuance (see storage.CMPTransactionRepo.ClaimPending).
+	claimedTx, claimed, err := svc.cmptxStorage.ClaimPending(ctx, input.TransactionID)
+	if err != nil {
+		lFunc.Errorf("ApproveCMPTransaction: claim tx %s: %s", input.TransactionID, err)
+		return nil, err
+	}
+	if !claimed {
+		lFunc.Warnf("ApproveCMPTransaction: tx %s is no longer PENDING (state=%s) or has expired; refusing to approve", tx.TransactionID, tx.State)
+		return nil, errs.ErrCMPTransactionNotPending
+	}
+	tx = claimedTx
 
 	csr := (*x509.CertificateRequest)(tx.CSR)
 	// Mark the context as pre-authenticated: the original IR/KUR was already
@@ -238,14 +249,21 @@ func (svc DMSManagerServiceBackend) RejectCMPTransaction(ctx context.Context, in
 	if !ok || tx.DMSID != input.DMSID {
 		return nil, errs.ErrCMPTransactionNotFound
 	}
-	if tx.State != models.CMPTransactionStatePending {
-		lFunc.Warnf("RejectCMPTransaction: tx %s is in state %s, not PENDING", tx.TransactionID, tx.State)
+
+	// Atomically claim the row (PENDING → APPROVING) — see the identical
+	// comment in ApproveCMPTransaction. This is what prevents a reject from
+	// racing (and clobbering) a concurrent approve that already issued a
+	// certificate for this transaction.
+	claimedTx, claimed, err := svc.cmptxStorage.ClaimPending(ctx, input.TransactionID)
+	if err != nil {
+		lFunc.Errorf("RejectCMPTransaction: claim tx %s: %s", input.TransactionID, err)
+		return nil, err
+	}
+	if !claimed {
+		lFunc.Warnf("RejectCMPTransaction: tx %s is no longer PENDING (state=%s) or has expired; refusing to reject", tx.TransactionID, tx.State)
 		return nil, errs.ErrCMPTransactionNotPending
 	}
-	if !tx.ExpiresAt.IsZero() && tx.ExpiresAt.Before(time.Now()) {
-		lFunc.Warnf("RejectCMPTransaction: tx %s expired at %s", tx.TransactionID, tx.ExpiresAt)
-		return nil, errs.ErrCMPTransactionNotPending
-	}
+	tx = claimedTx
 
 	reason := input.Reason
 	if reason == "" {
@@ -351,6 +369,69 @@ func (svc DMSManagerServiceBackend) walkCAChain(ctx context.Context, startCAID s
 		currentID = ca.Certificate.IssuerCAMetadata.ID
 	}
 	return chain
+}
+
+// dmsCAEntry is one CA a DMS is authoritative for, together with its chain.
+type dmsCAEntry struct {
+	ID    string
+	Cert  *x509.Certificate
+	Chain []*x509.Certificate // leaf-first, root last (walkCAChain output)
+}
+
+// Root returns the trust anchor at the end of the entry's chain, or nil when the
+// chain could not be walked.
+func (e dmsCAEntry) Root() *x509.Certificate {
+	if len(e.Chain) == 0 {
+		return nil
+	}
+	return e.Chain[len(e.Chain)-1]
+}
+
+// dmsKnownCAs returns every CA this DMS is authoritative for: the enrollment CA
+// plus every managed CA named in ca_distribution_settings, each with its walked
+// chain.
+//
+// This is the set the discovery support messages resolve an EE's question
+// against. Scoping them to the enrollment CA alone is too narrow: caCerts hands
+// out the managed CAs' certificates, so an EE can legitimately end up trusting
+// one of them and then ask for ITS root update or ITS CRL. The enrollment CA is
+// placed first so it wins any ambiguity, and duplicates (a managed CA that is
+// also the enrollment CA) are collapsed.
+func (svc DMSManagerServiceBackend) dmsKnownCAs(ctx context.Context, dms *models.DMS) []dmsCAEntry {
+	ids := make([]string, 0, 1+len(dms.Settings.CADistributionSettings.ManagedCAs))
+	if enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA; enrollCA != "" {
+		ids = append(ids, enrollCA)
+	}
+	ids = append(ids, dms.Settings.CADistributionSettings.ManagedCAs...)
+
+	entries := make([]dmsCAEntry, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if _, dup := seen[id]; dup || id == "" {
+			continue
+		}
+		seen[id] = struct{}{}
+
+		chain := svc.walkCAChain(ctx, id)
+		if len(chain) == 0 {
+			continue
+		}
+		entries = append(entries, dmsCAEntry{ID: id, Cert: chain[0], Chain: chain})
+	}
+	return entries
+}
+
+// findKnownCABySubject returns the DMS CA whose certificate subject matches
+// rawDN byte-for-byte. Comparison is on the raw DER of the RDNSequence rather
+// than a rendered DN string, so it is immune to the ordering, escaping and
+// string-type differences that make textual DN comparison unreliable.
+func findKnownCABySubject(entries []dmsCAEntry, rawDN []byte) *dmsCAEntry {
+	for i := range entries {
+		if bytes.Equal(entries[i].Cert.RawSubject, rawDN) {
+			return &entries[i]
+		}
+	}
+	return nil
 }
 
 // kgaHelperCertValidity is the lifetime of the ephemeral KGA helper
@@ -478,6 +559,40 @@ func (svc DMSManagerServiceBackend) LWCValidateCCRRequester(ctx context.Context,
 	}
 	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, ccr.TrustedRequesterCAIDs, false); err != nil {
 		return fmt.Errorf("signer does not chain to a CA on CCR.TrustedRequesterCAIDs: %w", err)
+	}
+	return nil
+}
+
+// LWCValidateKGARecipient implements LightweightCMPKGARecipientValidator: it
+// chain-validates the certificate a central-key-generation response would
+// encrypt the generated private key to. Unlike the general enrollment
+// signer check (authenticateEnrollment, gated by AuthMode and skipped
+// entirely under NO_AUTH), this validation is unconditional — CKG hands over
+// live key material, so an operator that left AuthMode permissive for
+// ordinary enrollment must not thereby also make the RA generate and encrypt
+// a private key to an arbitrary, unvalidated self-signed certificate.
+func (svc DMSManagerServiceBackend) LWCValidateKGARecipient(ctx context.Context, aps string, recipient *x509.Certificate) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: aps})
+	if err != nil {
+		lFunc.Errorf("could not get DMS '%s': %s", aps, err)
+		return errs.ErrDMSNotFound
+	}
+	if recipient == nil {
+		return fmt.Errorf("central key generation requires a recipient certificate")
+	}
+
+	cmpOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	candidateCAIDs := cmpOpts.CKGTrustedEncryptionCAs
+	if len(candidateCAIDs) == 0 {
+		// No explicit CKG trust boundary configured: fall back to the DMS's
+		// general CMP trust boundary rather than accepting any certificate
+		// unconditionally (see the field doc on CKGTrustedEncryptionCAs).
+		candidateCAIDs = trustedRACAIDs(dms)
+	}
+	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, recipient, candidateCAIDs, false); err != nil {
+		return fmt.Errorf("CKG recipient certificate does not chain to a trusted CA: %w", err)
 	}
 	return nil
 }
@@ -816,6 +931,12 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		return nil, fmt.Errorf("certification request requires a pre-existing device identity")
 	}
 
+	// supersededCertToRevoke, when non-empty, is the serial number of the
+	// device's current certificate to revoke once (and only once) the new
+	// certificate has actually been issued and bound — see the comment below
+	// on why this is not a defer.
+	var supersededCertToRevoke string
+
 	// Mirror the EST enrollment guards (see Enroll): a device already registered
 	// to another DMS is rejected, and re-enrolling an existing device requires
 	// EnableReplaceableEnrollment (the superseded cert is then revoked).
@@ -840,8 +961,9 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 			}
 		}
 
-		// Revoke the superseded active certificate once the new one is issued.
-		// General enrollments (ir/p10cr) opt in via
+		// Revoke the superseded active certificate once the new one is issued
+		// AND bound to the device — NOT merely once we decide to attempt
+		// enrollment. General enrollments (ir/p10cr) opt in via
 		// ReEnrollmentSettings.RevokeOnReEnrollment, mirroring the KUR path (see
 		// LWCReenroll) — without this gate the initial-enroll path revoked
 		// unconditionally, inconsistent with KUR and breaking flows that
@@ -852,23 +974,22 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		// identity slot per device, so "additional" cannot mint a second
 		// concurrently-active identity — it can only choose not to revoke the
 		// previous one).
+		//
+		// This is intentionally NOT a defer registered here: a defer fires on
+		// every return path, including the several enrollment-failure returns
+		// between this point and the end of the function (profile resolution,
+		// SignCertificate, BindIdentityToDevice) — which would revoke the
+		// device's still-valid, still-working certificate while reporting the
+		// enrollment itself as failed, leaving the device with no valid
+		// certificate at all. supersededCertToRevoke is only acted on after
+		// the new certificate is issued and bound, at the bottom of this
+		// function.
 		revokeSuperseded := dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment
 		if cmpOp == "cr" {
 			revokeSuperseded = cmpOpts.CR.CertificateBehavior == models.CMPCertificateBehaviorReplace
 		}
 		if existingDevice.IdentitySlot != nil && revokeSuperseded {
-			supersededSN := existingDevice.IdentitySlot.Secrets[existingDevice.IdentitySlot.ActiveVersion]
-			defer func() {
-				if _, revErr := svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
-					SerialNumber:     supersededSN,
-					NewStatus:        models.StatusRevoked,
-					RevocationReason: ocsp.Superseded,
-				}); revErr != nil {
-					lFunc.Warnf("could not revoke superseded certificate %s: %s", supersededSN, revErr)
-				} else {
-					lFunc.Infof("revoked superseded certificate %s", supersededSN)
-				}
-			}()
+			supersededCertToRevoke = existingDevice.IdentitySlot.Secrets[existingDevice.IdentitySlot.ActiveVersion]
 		}
 	}
 
@@ -898,11 +1019,41 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	}
 
 	lFunc.Infof("requesting certificate signature")
-	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:            enrollCA,
-		CertRequest:     (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: issuanceProfile,
-	})
+	// CR.MaximumActiveCertificates was checked above against a snapshot of
+	// the device fetched at the top of this call — enough to reject the
+	// common case fast, but not race-free: two concurrent cr requests for the
+	// same device could both read "under the cap" before either has issued.
+	// When the cap is actually configured, re-run the count against a FRESH
+	// device fetch immediately before SignCertificate, inside a per-device
+	// lock, so only one concurrent caller can observe "under the cap" and
+	// proceed — the other sees the freshly-issued certificate in its recount
+	// and is rejected. ir/p10cr and cr-without-a-cap skip the lock entirely.
+	needsMaxActiveCertsRecheck := cmpOp == "cr" && cmpOpts.CR.MaximumActiveCertificates > 0
+	var crt *models.Certificate
+	signCertificate := func(ctx context.Context) error {
+		if needsMaxActiveCertsRecheck {
+			fresh, ferr := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
+			if ferr != nil {
+				return ferr
+			}
+			active := svc.countActiveDeviceCertificates(ctx, lFunc, fresh.IdentitySlot)
+			if active >= cmpOpts.CR.MaximumActiveCertificates {
+				return fmt.Errorf("device has reached the maximum number of active certificates (%d) for this DMS", cmpOpts.CR.MaximumActiveCertificates)
+			}
+		}
+		var signErr error
+		crt, signErr = svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
+			CAID:            enrollCA,
+			CertRequest:     (*models.X509CertificateRequest)(csr),
+			IssuanceProfile: issuanceProfile,
+		})
+		return signErr
+	}
+	if needsMaxActiveCertsRecheck {
+		err = svc.cmptxStorage.WithDeviceLock(ctx, deviceID, signCertificate)
+	} else {
+		err = signCertificate(ctx)
+	}
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device: %s", err)
 		return nil, err
@@ -921,6 +1072,23 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	if err != nil {
 		lFunc.Errorf("could not assign certificate to device '%s': %s", deviceID, err)
 		return nil, err
+	}
+
+	// Only now — after the new certificate is issued AND bound as the
+	// device's active identity — revoke the superseded one. Doing this any
+	// earlier (e.g. via a defer registered before the failure-prone steps
+	// above) risks revoking the device's still-working certificate while the
+	// enrollment attempt that was supposed to replace it has itself failed.
+	if supersededCertToRevoke != "" {
+		if _, revErr := svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+			SerialNumber:     supersededCertToRevoke,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.Superseded,
+		}); revErr != nil {
+			lFunc.Warnf("could not revoke superseded certificate %s: %s", supersededCertToRevoke, revErr)
+		} else {
+			lFunc.Infof("revoked superseded certificate %s", supersededCertToRevoke)
+		}
 	}
 
 	return (*x509.Certificate)(crt.Certificate), nil
@@ -1002,14 +1170,23 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 	// reenroll). Finally we run the same OCSP/CRL/Lamassu-status revocation
 	// check EST does.
 	//
-	// When the request was unprotected the controller leaves no cert in
-	// context — we honour that as "skip validation" here. For the non-cert
-	// auth modes (NO_AUTH, EXTERNAL_WEBHOOK) the controller accepts unprotected
-	// messages; for the cert modes (CLIENT_CERTIFICATE, combined) the
-	// controller already rejected this request at the wire layer per auth_mode,
-	// so we never reach this branch without a signer.
+	// The wire layer (HandleCMP / handleNestedAddedProtection) now forces
+	// signature-based protection on every kur regardless of auth_mode — the
+	// signer cert IS the kur's proof of possession (RFC 9483 §4.1.3), so an
+	// unprotected kur must never reach here. The one legitimate exception is
+	// the phased (admin-approval) workflow: ApproveCMPTransaction calls
+	// LWCReenroll with signerCert=nil because the original kur was already
+	// authenticated at submission time, and marks the context accordingly.
+	// Any other nil-signer arrival is a defect upstream, not a request to
+	// honour — fail closed rather than silently skipping ValidationCAs.
 	reEnrollSettings := dms.Settings.ReEnrollmentSettings
-	if signerCert != nil {
+	if signerCert == nil {
+		if preAuth, _ := ctx.Value(core.LamassuContextKeyPreAuthenticated).(bool); !preAuth {
+			lFunc.Errorf("aborting reenrollment. kur reached the service layer without signature-based protection and without pre-authentication (RFC 9483 §4.1.3)")
+			return nil, errs.ErrDMSEnrollInvalidCert
+		}
+		lFunc.Infof("skipping KUR signer validation (pre-authenticated phased transaction)")
+	} else {
 		signerSN := helpers.SerialNumberToHexString(signerCert.SerialNumber)
 		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s",
 			signerCert.Subject.CommonName, signerSN, signerCert.Issuer.CommonName))
@@ -1059,8 +1236,6 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 			lFunc.Warnf("could not check revocation for signer cert; assuming not revoked")
 		}
 		lFunc.Infof("CMP signer cert authenticated for reenrollment")
-	} else {
-		lFunc.Warnf("CMP reenrollment received without signature-based protection: ValidationCAs not applied")
 	}
 
 	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollCA)
@@ -1515,6 +1690,30 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 		return err
 	}
 
+	// RFC 9483 §5.3.2 / RFC010 story 20: the certificate being revoked MUST
+	// belong to a device managed by the DMS the rr was addressed to. Without
+	// this, a trusted-RA-authorized signer for one DMS could revoke an
+	// arbitrary certificate belonging to a device under a completely
+	// unrelated DMS merely by naming its serial number — entirely bypassing
+	// that other DMS's own RR policy (authorization, AllowedReasons,
+	// AllowExpiredTarget, ...). Scoped by the certificate's owning device
+	// rather than by CA membership alone, because two DMSes can legitimately
+	// share the same EnrollmentCA (chain-validating the signer against this
+	// DMS's trusted CAs, as done above, does not prove the *target*
+	// certificate belongs to this DMS too).
+	if cert.Subject.CommonName != "" {
+		owningDevice, devErr := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: cert.Subject.CommonName})
+		if devErr != nil && devErr != errs.ErrDeviceNotFound {
+			lFunc.Errorf("could not check device ownership for certificate '%s': %s", input.SerialNumber, devErr)
+			return devErr
+		}
+		if devErr == nil && owningDevice.DMSOwner != dms.ID {
+			lFunc.Errorf("aborting revocation of '%s': certificate belongs to a device owned by DMS '%s', not '%s' (RFC 9483 §5.3.2)",
+				input.SerialNumber, owningDevice.DMSOwner, dms.ID)
+			return errs.ErrCMPDeviceOwnedByOtherDMS
+		}
+	}
+
 	// RFC 9483 §4.1.3: while the target certificate has a key-update awaiting
 	// certConf, its revocation state must not change — the open transaction has
 	// to complete (certConf) or time out first. Otherwise an rr racing an
@@ -1626,29 +1825,54 @@ func (svc DMSManagerServiceBackend) LWCGetRootCACertUpdate(ctx context.Context, 
 		return nil, errs.ErrDMSNotFound
 	}
 
-	chain := svc.walkCAChain(ctx, dms.Settings.EnrollmentSettings.EnrollmentCA)
-	if len(chain) == 0 {
-		lFunc.Warnf("LWCGetRootCACertUpdate: could not resolve CA chain for DMS '%s'", input.APS)
+	known := svc.dmsKnownCAs(ctx, dms)
+	if len(known) == 0 {
+		lFunc.Warnf("LWCGetRootCACertUpdate: could not resolve any CA chain for DMS '%s'", input.APS)
 		return nil, nil
 	}
-	root := chain[len(chain)-1]
 
-	// When the EE tells us which root it currently trusts, only report an update
-	// when ours actually differs. Same subject = identity/key continuity (a
-	// reissued root); a different subject is an unrelated CA we have no linked
-	// update for.
+	// With no hint from the EE there is nothing to compare against, so answer
+	// with the enrollment CA's root — dmsKnownCAs puts it first.
+	root := known[0].Root()
+
+	// When the EE tells us which root it currently trusts, look for the update
+	// among EVERY root this DMS is authoritative for, not just the enrollment
+	// CA's: caCerts hands out the managed CAs too, so the EE may well be asking
+	// about one of those. Same subject = identity/key continuity (a reissued
+	// root); a subject matching none of them is an unrelated CA we have no
+	// linked update for.
 	if input.CurrentRootCert != nil {
-		if bytes.Equal(input.CurrentRootCert.Raw, root.Raw) {
+		match := findKnownRootBySubject(known, input.CurrentRootCert.RawSubject)
+		if match == nil {
+			lFunc.Debugf("LWCGetRootCACertUpdate: EE-trusted root (CN=%s) is unrelated to any CA of DMS '%s'; no update offered",
+				input.CurrentRootCert.Subject.CommonName, input.APS)
 			return nil, nil
 		}
-		if !bytes.Equal(input.CurrentRootCert.RawSubject, root.RawSubject) {
-			lFunc.Debugf("LWCGetRootCACertUpdate: EE-trusted root (CN=%s) is unrelated to DMS root (CN=%s); no update offered",
-				input.CurrentRootCert.Subject.CommonName, root.Subject.CommonName)
-			return nil, nil
+		if bytes.Equal(input.CurrentRootCert.Raw, match.Raw) {
+			return nil, nil // already current
 		}
+		root = match
 	}
 
+	if root == nil {
+		return nil, nil
+	}
 	return &services.RootCACertUpdateOutput{NewWithNew: root, NewWithOld: root}, nil
+}
+
+// findKnownRootBySubject returns the root certificate, among the chains of the
+// DMS's known CAs, whose subject matches rawDN byte-for-byte. Roots are compared
+// (rather than the CA certificates themselves) because a rootCaCert request
+// carries the EE's trust ANCHOR, which for a DMS enrolling against an
+// intermediate is the top of that intermediate's chain, not the CA cert itself.
+func findKnownRootBySubject(entries []dmsCAEntry, rawDN []byte) *x509.Certificate {
+	for _, e := range entries {
+		root := e.Root()
+		if root != nil && bytes.Equal(root.RawSubject, rawDN) {
+			return root
+		}
+	}
+	return nil
 }
 
 // LWCGetCertReqTemplate answers a genm id-it-certReqTemplate query (RFC 9483
@@ -1732,9 +1956,17 @@ func (svc DMSManagerServiceBackend) LWCGetCertReqTemplate(ctx context.Context, i
 
 // LWCGetCRL answers a genm id-it-currentCRL / id-it-crlStatusList query
 // (RFC 9483 §4.3.4) by fetching the CRL for the relevant CA from the VA service.
-// The CA is taken from input.CAID when set, otherwise the DMS enrollment CA. The
-// VA client is optional: a DMS manager deployed without one simply reports no
-// CRL available (nil), matching the pre-wiring behaviour.
+//
+// The CA is resolved in precedence order: input.CAID when set, else
+// input.IssuerRawDN matched against the DMS's known CAs (enrollment + managed),
+// else the DMS enrollment CA. An IssuerRawDN naming a CA this DMS is not
+// authoritative for yields no CRL (nil, nil) rather than an error — per
+// RFC 9483 §4.3.4 the server provides only CRLs it actually has, and a DPN or
+// issuer it does not recognise is not a client error. Notably it is also NOT an
+// invitation to go fetch that CRL from an external location.
+//
+// The VA client is optional: a DMS manager deployed without one simply reports
+// no CRL available (nil).
 func (svc DMSManagerServiceBackend) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -1750,7 +1982,17 @@ func (svc DMSManagerServiceBackend) LWCGetCRL(ctx context.Context, input service
 			lFunc.Errorf("LWCGetCRL: could not get DMS '%s': %s", input.APS, err)
 			return nil, errs.ErrDMSNotFound
 		}
-		caID = dms.Settings.EnrollmentSettings.EnrollmentCA
+		if len(input.IssuerRawDN) > 0 {
+			match := findKnownCABySubject(svc.dmsKnownCAs(ctx, dms), input.IssuerRawDN)
+			if match == nil {
+				lFunc.Infof("LWCGetCRL: requested CRL source (%s) is not a CA this DMS '%s' is authoritative for; no CRL offered",
+					input.IssuerName, input.APS)
+				return nil, nil
+			}
+			caID = match.ID
+		} else {
+			caID = dms.Settings.EnrollmentSettings.EnrollmentCA
+		}
 	}
 
 	ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})

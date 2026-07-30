@@ -92,7 +92,38 @@ type EnrollmentOptionsLWCRFC9483 struct {
 	// requests are rejected with PKIFailureInfo notAuthorized instead of
 	// generating and delivering a server-side key — operators must opt in
 	// per DMS to allow devices to skip on-device key generation.
+	//
+	// Security tradeoff operators should weigh before enabling this: the
+	// generated private key is currently produced with an in-process
+	// software crypto engine (crypto/rsa, crypto/ecdsa), not the KMS/HSM
+	// engine that backs every other key in this platform (which only ever
+	// exposes keys as opaque signing handles and, for HSM-backed engines
+	// such as PKCS#11, cannot export a private key at all — that is the
+	// point of an HSM). CKG's design requires handing the raw key to the
+	// device (encrypted to its recipient certificate), which is fundamentally
+	// incompatible with a "keys never leave the engine" backend, so the
+	// generated key necessarily exists in this process's memory for the
+	// duration of one request, however briefly, regardless of which crypto
+	// engine backs everything else on this DMS. Prefer on-device key
+	// generation wherever the device is capable of it; reserve CKG for
+	// devices that genuinely cannot generate their own keys.
 	ServerKeyGenEnabled bool `json:"server_key_gen_enabled,omitempty"`
+
+	// CKGTrustedEncryptionCAs lists the CA IDs a central-key-generation
+	// recipient certificate (the certificate the freshly generated private
+	// key is encrypted to, RFC 9483 §4.1.6) must chain to. CKG is a more
+	// sensitive operation than plain issuance — the RA generates and hands
+	// over live key material to whoever it decides to trust as "recipient" —
+	// so this is a trust boundary independent of, and by default narrower
+	// than, the general AuthMode: even a DMS configured with AuthMode=NO_AUTH
+	// (which accepts unauthenticated ir/cr/kur) still requires the CKG
+	// recipient certificate to chain-validate. When empty (the default), the
+	// DMS's general CMP trust boundary (EnrollmentCA + AuthOptionsMTLS.
+	// ValidationCAs + ReEnrollmentSettings.AdditionalValidationCAs — the same
+	// set used to validate any other CMP request signer under this DMS) is
+	// used, so CKG is never less guarded than ordinary enrollment even before
+	// an operator configures this explicitly.
+	CKGTrustedEncryptionCAs []string `json:"ckg_trusted_encryption_cas,omitempty"`
 
 	// Workflow selects the CMP transaction lifecycle the DMS follows:
 	//   - CMPWorkflowDirect (default): the cert is issued and returned inline
@@ -106,11 +137,17 @@ type EnrollmentOptionsLWCRFC9483 struct {
 
 	// Nested per-operation CMP settings (RFC 9483). These live ALONGSIDE the
 	// flat fields above (the "general" level) and are populated with defaults by
-	// ResolveCMPSettings (see dms_cmp_settings.go). Except for the KUR
-	// re-enrollment reshape and the CKG toggle (both bridged to their existing
-	// live enforcement by resolution), these persist and round-trip but are
-	// not yet consulted by request handlers. See
-	// docs/rfcs/internal/RFC011-cmp-per-operation-settings.md.
+	// ResolveCMPSettings (see dms_cmp_settings.go).
+	//
+	// These ARE consulted by the request handlers — GENM's access policy and
+	// information types, RR's revocation policy, CCR's requester/subject/validity
+	// constraints, the per-operation workflow and confirmation overrides, and the
+	// CKG allow-lists are all enforced. Only a small, NAMED set of fields still
+	// persists without being read; that list lives at the top of
+	// dms_cmp_operations.go and is the authoritative one. Treat the "not yet
+	// enforced" callouts in
+	// docs/rfcs/internal/RFC011-cmp-per-operation-settings.md as design-time
+	// history, not current fact.
 	IR    CMPIRSettings    `json:"ir"`
 	CR    CMPCRSettings    `json:"cr"`
 	P10CR CMPP10CRSettings `json:"p10cr"`

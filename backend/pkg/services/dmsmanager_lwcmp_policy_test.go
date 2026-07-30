@@ -190,5 +190,42 @@ func TestLWCEnroll_PassesOwnershipAndProceeds(t *testing.T) {
 	caMock.AssertCalled(t, "GetCAByID", mock.Anything, mock.Anything)
 }
 
+// TestLWCEnroll_SupersededCertNotRevokedOnEnrollmentFailure is a security
+// regression test: the device's superseded (still-valid) certificate must
+// NOT be revoked when the enrollment attempt that was supposed to replace it
+// fails. Before this fix, the revocation was registered via a `defer` before
+// the failure-prone steps (issuance-profile resolution, SignCertificate,
+// BindIdentityToDevice) ran — since a Go defer fires on every return path,
+// any of those failing still revoked the old certificate while reporting the
+// enrollment itself as failed, leaving the device with no valid certificate
+// at all.
+func TestLWCEnroll_SupersededCertNotRevokedOnEnrollmentFailure(t *testing.T) {
+	dms := dmsWithEnrollAuth("dms-A", true)
+	dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = true
+	svc, devMock, caMock := newPolicyTestSubject(t, dms)
+	csr := makeTestCSR(t, "device-5")
+
+	devMock.On("GetDeviceByID", mock.Anything, services.GetDeviceByIDInput{ID: "device-5"}).
+		Return(&models.Device{
+			ID:       "device-5",
+			DMSOwner: "dms-A",
+			IdentitySlot: &models.Slot[string]{
+				ActiveVersion: 0,
+				Secrets:       map[int]string{0: "aabbcc"},
+			},
+		}, nil)
+
+	// Force a failure downstream of the supersession decision but before
+	// issuance completes, exactly like TestLWCEnroll_PassesOwnershipAndProceeds.
+	caMock.On("GetCAByID", mock.Anything, mock.Anything).
+		Return((*models.CACertificate)(nil), errs.ErrCANotFound)
+
+	ctx := context.WithValue(context.Background(), core.LamassuContextKeyPreAuthenticated, true)
+	_, err := svc.LWCEnroll(ctx, csr, "dms-A", nil)
+	require.Error(t, err)
+
+	caMock.AssertNotCalled(t, "UpdateCertificateStatus", mock.Anything, mock.Anything)
+}
+
 // Silence unused-import warning when chelpers is not used directly.
 var _ = chelpers.ConfigureLogger

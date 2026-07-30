@@ -524,3 +524,77 @@ func TestCMPTx_DeleteExpiredRemovesOnlyExpiredRows(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "expired transaction should have been deleted by DeleteExpired")
 }
+
+// TestCMPTx_WithDeviceLock_SerializesConcurrentCallers is a security
+// regression test for the CR.MaximumActiveCertificates TOCTOU race
+// (LWCEnroll): two concurrent callers locking the SAME deviceID must run
+// their critical sections one at a time, never overlapping — otherwise two
+// concurrent cr requests for one device could both observe "under the cap"
+// before either has issued, letting the device exceed the configured limit.
+// A third, concurrent caller locking a DIFFERENT deviceID must not be
+// blocked by the other two (locks are per-device, not global).
+func TestCMPTx_WithDeviceLock_SerializesConcurrentCallers(t *testing.T) {
+	repo, cleanup := setupCMPTxRepo(t)
+	defer cleanup()
+
+	const holdTime = 150 * time.Millisecond
+
+	var mu sync.Mutex
+	var active int
+	var maxObservedConcurrency int
+	enter := func() {
+		mu.Lock()
+		active++
+		if active > maxObservedConcurrency {
+			maxObservedConcurrency = active
+		}
+		mu.Unlock()
+	}
+	leave := func() {
+		mu.Lock()
+		active--
+		mu.Unlock()
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+	wg.Add(2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			defer wg.Done()
+			errCh <- repo.WithDeviceLock(context.Background(), "device-shared", func(ctx context.Context) error {
+				enter()
+				time.Sleep(holdTime)
+				leave()
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 1, maxObservedConcurrency,
+		"two WithDeviceLock calls for the SAME deviceID must never run their critical sections concurrently")
+
+	// A different deviceID must not be serialized against the first: run one
+	// lock holder for "device-shared" and, while it's held, confirm a lock on
+	// "device-other" completes well within the first's hold time.
+	unblocked := make(chan struct{})
+	go func() {
+		_ = repo.WithDeviceLock(context.Background(), "device-shared-2", func(ctx context.Context) error {
+			time.Sleep(holdTime)
+			return nil
+		})
+	}()
+	time.Sleep(20 * time.Millisecond) // let the goroutine above acquire its lock first
+	start := time.Now()
+	require.NoError(t, repo.WithDeviceLock(context.Background(), "device-other", func(ctx context.Context) error {
+		close(unblocked)
+		return nil
+	}))
+	assert.Less(t, time.Since(start), holdTime,
+		"a lock on a different deviceID must not wait for an unrelated deviceID's lock to release")
+	<-unblocked
+}

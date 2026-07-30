@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"net/http"
 	"testing"
@@ -116,6 +117,31 @@ func TestHandleCMP_NestedBatch_ProcessesAll(t *testing.T) {
 	svc.AssertNumberOfCalls(t, "LWCEnroll", 2)
 }
 
+// TestHandleCMP_NestedBatch_RejectsTooManyInnerMessages is a DoS-hardening
+// regression test: a nested body carrying more inner PKIMessages than
+// cmpMaxNestedMessages must be rejected before any of them are processed —
+// each batched message drives a full pipeline pass (CA/KMS calls included),
+// so an unbounded batch turns one HTTP request into unbounded downstream work.
+func TestHandleCMP_NestedBatch_RejectsTooManyInnerMessages(t *testing.T) {
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+
+	inners := make([][]byte, 0, cmpMaxNestedMessages+1)
+	for i := 0; i <= cmpMaxNestedMessages; i++ {
+		inner, _, _ := buildTestIR(t, testIROptions{CN: fmt.Sprintf("flood-device-%d", i)})
+		inners = append(inners, inner)
+	}
+
+	outerTx := randomTxID(t)
+	nested := buildNestedMessage(t, outerTx, randomNonce(t), inners...)
+
+	resp := postCMP(t, router, "test-dms", nested)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"a batch exceeding the inner-message cap must be rejected, not processed")
+
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
 // TestHandleCMP_NestedBatch_DuplicateInnerTxID verifies that a batch whose
 // inner messages share a transactionID is rejected atomically with
 // transactionIdInUse before any request is processed.
@@ -210,6 +236,32 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 	})
 }
 
+// TestHandleCMP_NestedAddedProtection_RespectsOperationEnabledGate is a
+// security regression test: RFC011's per-operation `enabled` gates (checked
+// at the top of HandleCMP before dispatch) MUST also apply to an operation
+// reached via an added-protection nested envelope. Before this test, wrapping
+// a p10cr in a one-element nested[20] envelope reached handleP10CR directly,
+// bypassing the disabled-by-default P10CR.Enabled gate entirely — an operator
+// who left p10cr disabled (the documented, security-relevant default) would
+// still have it processed. See handleNestedAddedProtection in cmp_nested.go.
+func TestHandleCMP_NestedAddedProtection_RespectsOperationEnabledGate(t *testing.T) {
+	// P10CR.Enabled defaults to false; no explicit override here.
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+
+	inner, innerTx := buildTestP10CR(t, testP10CROptions{CN: "nested-disabled-p10cr"})
+	innerNonce := headerOf(t, inner).SenderNonce
+
+	nested := buildNestedMessage(t, innerTx, innerNonce, inner)
+	resp := postCMP(t, router, "test-dms", nested)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"a disabled operation reached via added-protection nesting must still be rejected")
+	fi := parseFailInfoBitString(t, resp.Body.Bytes())
+	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoNotAuthorized), "failInfo must set notAuthorized (23)")
+
+	svc.AssertNotCalled(t, "LWCEnroll", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
 // TestHandleCMP_KUR_RAVerified_Rejected verifies RFC 9483 §5.2.3: raVerified
 // MUST NOT be used in a key update request — the POP for a kur is the message
 // protection with the certificate being updated, which no RA can assert.
@@ -237,6 +289,15 @@ func TestHandleCMP_KUR_RAVerified_Rejected(t *testing.T) {
 		Bytes: concatBytes(headerDER, kurBody),
 	})
 	require.NoError(t, err)
+
+	// kur is now unconditionally signature-protected at the wire layer
+	// (RFC 9483 §4.1.3 — the message protection IS the kur's proof of
+	// possession, so an unprotected kur is rejected before any CertReqMsg
+	// content, including this raVerified POPO, is even inspected). Sign with
+	// an arbitrary certificate so the request reaches the raVerified-specific
+	// rejection this test actually exercises.
+	signerCert, signerKey := buildSelfSignedCert(t, "kur-raverified-signer")
+	kurDER = signCMPMessage(t, kurDER, signerCert, signerKey)
 
 	resp := postCMP(t, router, "test-dms", kurDER)
 	require.Equal(t, http.StatusOK, resp.Code)

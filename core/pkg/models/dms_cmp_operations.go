@@ -17,9 +17,6 @@ package models
 // way earlier revisions of this comment implied. The confirmed, NAMED
 // exceptions — fields that genuinely persist and round-trip but are not yet
 // read by any handler — are:
-//   - CMPCentralKeyGeneration.AllowedRecipientMethods (the CMS wrap technique
-//     — KTRI vs KARI — is auto-selected from the recipient certificate's own
-//     key type, not from this allow-list)
 //   - CMPTrustedRA.ValidationCAIDs (an rr's trusted-RA boundary always uses the
 //     DMS-wide trustedRACAIDs; only sibling field RequireCMCRAEKU is live)
 //   - CMPCCRSettings.IssuanceProfileID (cross-certification issuance profile
@@ -240,9 +237,13 @@ type CMPProofOfPossession struct {
 
 // CMPCentralKeyGeneration configures RFC 9483 §4.1.6 CKG per operation. Enabled
 // is bridged to the DMS-general ServerKeyGenEnabled toggle by resolution (a
-// single shared gate today — see dms_cmp_normalize.go); AllowedRecipientMethods
-// persists but is not yet enforced (the wrap mechanism is chosen automatically
-// from the recipient certificate's key type).
+// single shared gate today — see dms_cmp_normalize.go).
+//
+// AllowedRecipientMethods is LIVE: the CMS wrap technique (KTRI vs KARI) is
+// auto-selected from the recipient certificate's key type, and
+// ckgRecipientMethodAllowed in cmp_enrollment.go then rejects the request when
+// the selected technique is absent from this allow-list. Note an EMPTY list
+// permits nothing rather than everything.
 type CMPCentralKeyGeneration struct {
 	Enabled                 bool                    `json:"enabled"`
 	AllowedRecipientMethods []CMPCKGRecipientMethod `json:"allowed_recipient_methods"`
@@ -267,7 +268,11 @@ type CMPPolicyOverrides struct {
 }
 
 // CMPSubjectConstraints optionally restricts the subject DN / dNSName SANs a
-// cross-certification (ccr) request may ask for. Persisted only; not enforced.
+// cross-certification (ccr) request may ask for. LIVE:
+// validateCCRSubjectConstraints in dmsmanager_lwcmp.go rejects a ccr whose
+// subject matches no AllowedDNPatterns entry, or whose dNSName SANs match no
+// AllowedDNSSuffixes entry. An empty list imposes no constraint on that
+// dimension (unlike CKG's allow-list, which is deny-all when empty).
 type CMPSubjectConstraints struct {
 	AllowedDNPatterns  []string `json:"allowed_dn_patterns"`
 	AllowedDNSSuffixes []string `json:"allowed_dns_suffixes"`
@@ -401,17 +406,23 @@ type CMPRRSettings struct {
 //	  PreferredSymmetricAlgorithm → id-it-preferredSymmAlg (AES variant per CMPGENMSettings.PreferredSymmetricAlgorithm, default AES-256-CBC)
 //	  SupportedLanguages          → id-it-supportedLangTags ("en", static)
 //
-//	STUB (default false — service returns nil / not provisioned):
-//	  RootCAUpdate                → id-it-rootCaCert  (LWCGetRootCACertUpdate → nil)
-//	  CertificateRequestTemplate  → id-it-certReqTemplate (LWCGetCertReqTemplate → nil)
-//	  CurrentCRL                  → id-it-currentCRL  (LWCGetCRL → nil)
-//	  CRLUpdate                   → id-it-crlStatusList (LWCGetCRL → nil)
-//	  ProtocolEncryptionCertificate → id-it-caProtEncCert (not provisioned)
+//	LIVE (default false — operators opt in per DMS, since each depends on how
+//	the DMS's CAs are set up rather than being a static capability):
+//	  RootCAUpdate                → id-it-rootCaCert  (LWCGetRootCACertUpdate, real chain walk)
+//	  CertificateRequestTemplate  → id-it-certReqTemplate (LWCGetCertReqTemplate, from the issuance profile)
+//	  CurrentCRL                  → id-it-currentCRL  (LWCGetCRL via the VA client)
+//	  CRLUpdate                   → id-it-crlStatusList (LWCGetCRL, honoring the request's CRLStatus)
+//
+//	ANSWERED BUT ALWAYS EMPTY:
+//	  ProtocolEncryptionCertificate → id-it-caProtEncCert. Lamassu provisions no
+//	  dedicated protocol-encryption certificate, so the genp carries the
+//	  infoType with an ABSENT infoValue ("not available"), which is a valid
+//	  answer — not a rejection.
 //
 // LIVE: genmInfoTypeEnabled in cmp_genmsg.go gates the handler on these
 // booleans — a genm asking for a DISABLED info type is refused outright
-// (notAuthorized). Flipping a STUB type to true does not grant new
-// capability: its data provider still returns nil, so buildGenpEntry answers
+// (notAuthorized). A type whose data provider legitimately has nothing to
+// return (no VA client wired, no newer root than the EE's) answers
 // with an RFC-compliant absent infoValue ("not available") instead of
 // rejecting the request.
 type CMPGENMInformationTypes struct {

@@ -635,10 +635,18 @@ func verifyPOPO(certReqDER []byte, popoRaw asn1.RawValue, pubKeyDER []byte, enfo
 		return checkPOPOSigningKey(certReqDER, popoRaw.Bytes, pubKeyDER)
 
 	default:
-		// keyEncipherment [2] / keyAgreement [3] are not used in the LWC profile.
-		if !enforce {
-			return nil
-		}
+		// keyEncipherment [2] / keyAgreement [3] reach here only when
+		// classifyPOPOIndirect could not resolve them to encrCert or
+		// challengeResp (agreeMAC, encryptedKey, malformed POPOPrivKey); any
+		// other tag is not a ProofOfPossession alternative at all.
+		//
+		// This rejects regardless of `enforce`. A POPO the server cannot
+		// interpret is not the same thing as no POPO: returning nil here (the
+		// previous behaviour when POPO was not required) accepted it unverified
+		// AND bypassed the per-operation allow-list, since that gate only
+		// recognises tags 0-3 and so matches nothing in this branch. `enforce`
+		// governs whether an ABSENT POPO is tolerated — handled above — not
+		// whether a present one may be ignored.
 		return fmt.Errorf("unsupported POPO type (class=%d tag=%d): only raVerified [0] and signature [1] are supported", popoRaw.Class, popoRaw.Tag)
 	}
 }

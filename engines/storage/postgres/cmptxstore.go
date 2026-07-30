@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
@@ -358,6 +359,94 @@ func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, tra
 	return rowToDomain(row), true, nil
 }
 
+// ClaimPending atomically transitions a transaction from PENDING to APPROVING,
+// conditioned on the row still being PENDING and not expired, mirroring
+// Confirm's conditional-update approach so admin approval/rejection gets the
+// same concurrency guarantee certConf already has: only one of several
+// concurrent callers observes RowsAffected > 0, so only one ever proceeds to
+// issue/reject.
+func (s *PostgresCMPTransactionStorage) ClaimPending(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	switch s.db.Dialector.Name() {
+	case "postgres", "mysql":
+		var row cmpTransactionRow
+		result := s.db.WithContext(ctx).
+			Raw(
+				`UPDATE cmp_transactions
+				    SET state = ?
+				  WHERE transaction_id = ? AND state = ? AND expires_at > `+nowExpr(s.db)+`
+			  RETURNING *`,
+				string(models.CMPTransactionStateApproving),
+				transactionID,
+				string(models.CMPTransactionStatePending),
+			).
+			Scan(&row)
+		if result.Error != nil {
+			s.logger.Errorf("cmp_transactions: claim-pending %s: %v", transactionID, result.Error)
+			return models.CMPTransaction{}, false, result.Error
+		}
+		if result.RowsAffected == 0 {
+			return models.CMPTransaction{}, false, nil
+		}
+		return rowToDomain(row), true, nil
+
+	default:
+		// SQLite serialises writes per-database file, so an explicit
+		// transaction wrapping the read+update is equally race-free (same
+		// rationale as Confirm's SQLite fallback).
+		var out models.CMPTransaction
+		var claimed bool
+		txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var current cmpTransactionRow
+			err := tx.Where("transaction_id = ? AND state = ? AND expires_at > "+nowExpr(s.db),
+				transactionID, string(models.CMPTransactionStatePending)).
+				First(&current).Error
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil // claimed stays false
+				}
+				return err
+			}
+			if err := tx.Model(&current).Update("state", string(models.CMPTransactionStateApproving)).Error; err != nil {
+				return err
+			}
+			current.State = string(models.CMPTransactionStateApproving)
+			out = rowToDomain(current)
+			claimed = true
+			return nil
+		})
+		if txErr != nil {
+			s.logger.Errorf("cmp_transactions: claim-pending %s: %v", transactionID, txErr)
+			return models.CMPTransaction{}, false, txErr
+		}
+		return out, claimed, nil
+	}
+}
+
+// WithDeviceLock runs fn while holding a Postgres transaction-scoped advisory
+// lock (pg_advisory_xact_lock) keyed by hashtext(deviceID). The lock is
+// acquired on whatever physical connection GORM's Transaction pins for the
+// closure and is released automatically by Postgres at COMMIT/ROLLBACK, so
+// there is no separate unlock call to forget. A second caller requesting the
+// same deviceID blocks (does not fail) until the first's transaction ends —
+// appropriate here because the callers of this method (see LWCEnroll) hold it
+// only across a single bounded CA call, not an unbounded amount of work.
+//
+// On dialects with no advisory-lock primitive (SQLite, used for tests/dev),
+// fn runs directly: a single writer already serializes access there, and
+// cross-replica contention isn't a concern for the single-process
+// deployments that use this dialect.
+func (s *PostgresCMPTransactionStorage) WithDeviceLock(ctx context.Context, deviceID string, fn func(ctx context.Context) error) error {
+	if s.db.Dialector.Name() != "postgres" {
+		return fn(ctx)
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtext(?))", deviceID).Error; err != nil {
+			return fmt.Errorf("cmp: acquire device lock for %q: %w", deviceID, err)
+		}
+		return fn(ctx)
+	})
+}
+
 // UpdateState transitions a transaction to a new state, atomically setting
 // the certificate (when issuance succeeded) or ErrorMessage (when it failed),
 // and re-bases ExpiresAt to the supplied deadline.
@@ -578,8 +667,16 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 // never acted on. Symmetric to SelectExpiredIssued: same SKIP LOCKED
 // behaviour on Postgres/MySQL so two replicas don't double-process.
 func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
+	// APPROVING rows are included alongside PENDING: APPROVING marks a row an
+	// administrator started resolving (ClaimPending) but never finished —
+	// normally a sub-second window, but a process crash between the claim
+	// and the final ISSUED/ISSUE_FAILED write would otherwise strand the row
+	// outside every sweep forever (its state is no longer PENDING). Folding
+	// it into this same query means a stuck claim is recovered exactly like
+	// an unresolved PENDING row once its ExpiresAt passes.
 	return s.selectLockedBatch(ctx, "select-expired-pending",
-		"state = ? AND expires_at <= "+nowExpr(s.db), string(models.CMPTransactionStatePending),
+		"state IN ? AND expires_at <= "+nowExpr(s.db),
+		[]string{string(models.CMPTransactionStatePending), string(models.CMPTransactionStateApproving)},
 		"expires_at ASC", limit, 100)
 }
 
@@ -595,9 +692,77 @@ func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context,
 	// rather than both racing to revoke the same certs at the CA
 	// (audit finding S4). SelectPending uses the same pattern; the omission
 	// here was the bug.
+	//
+	// REVOKING rows are included alongside ISSUED: REVOKING marks a row the
+	// monitor started revoking (ClaimIssuedForRevocation) but never
+	// finished — normally sub-second, but a process crash between the claim
+	// and the final CA call/state write would otherwise strand the row
+	// outside every sweep forever (its state is no longer ISSUED).
 	return s.selectLockedBatch(ctx, "select-expired-issued",
-		"state = ? AND expires_at <= "+nowExpr(s.db), string(models.CMPTransactionStateIssued),
+		"state IN ? AND expires_at <= "+nowExpr(s.db),
+		[]string{string(models.CMPTransactionStateIssued), string(models.CMPTransactionStateRevoking)},
 		"expires_at ASC", limit, 100)
+}
+
+// ClaimIssuedForRevocation atomically transitions a transaction from ISSUED
+// to REVOKING, conditioned on the row still being ISSUED, mirroring
+// ClaimPending's conditional-update approach. Only one of ClaimIssuedForRevocation
+// (this method) and Confirm (ISSUED → CONFIRMED) can ever observe
+// RowsAffected > 0 for a given row, since both require state=ISSUED under the
+// same row-level locking a plain UPDATE already provides — that is what
+// closes the confirmation-monitor-vs-certConf race (see the interface doc).
+func (s *PostgresCMPTransactionStorage) ClaimIssuedForRevocation(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	switch s.db.Dialector.Name() {
+	case "postgres", "mysql":
+		var row cmpTransactionRow
+		result := s.db.WithContext(ctx).
+			Raw(
+				`UPDATE cmp_transactions
+				    SET state = ?
+				  WHERE transaction_id = ? AND state = ?
+			  RETURNING *`,
+				string(models.CMPTransactionStateRevoking),
+				transactionID,
+				string(models.CMPTransactionStateIssued),
+			).
+			Scan(&row)
+		if result.Error != nil {
+			s.logger.Errorf("cmp_transactions: claim-issued-for-revocation %s: %v", transactionID, result.Error)
+			return models.CMPTransaction{}, false, result.Error
+		}
+		if result.RowsAffected == 0 {
+			return models.CMPTransaction{}, false, nil
+		}
+		return rowToDomain(row), true, nil
+
+	default:
+		var out models.CMPTransaction
+		var claimed bool
+		txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var current cmpTransactionRow
+			err := tx.Where("transaction_id = ? AND state = ?",
+				transactionID, string(models.CMPTransactionStateIssued)).
+				First(&current).Error
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil // claimed stays false
+				}
+				return err
+			}
+			if err := tx.Model(&current).Update("state", string(models.CMPTransactionStateRevoking)).Error; err != nil {
+				return err
+			}
+			current.State = string(models.CMPTransactionStateRevoking)
+			out = rowToDomain(current)
+			claimed = true
+			return nil
+		})
+		if txErr != nil {
+			s.logger.Errorf("cmp_transactions: claim-issued-for-revocation %s: %v", transactionID, txErr)
+			return models.CMPTransaction{}, false, txErr
+		}
+		return out, claimed, nil
+	}
 }
 
 // MarkRevokedByTransactionID transitions the row identified by transactionID

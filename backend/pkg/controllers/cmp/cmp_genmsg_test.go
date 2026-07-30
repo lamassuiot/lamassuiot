@@ -1,6 +1,7 @@
 package cmp
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -190,6 +191,54 @@ func TestHandleCMP_GenM_CertReqTemplate(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
+// buildTestCRLStatusList encodes an id-it-crlStatusList request value the way a
+// conforming client does (RFC 9480 §2.16):
+//
+//	SEQUENCE OF CRLStatus, CRLStatus ::= SEQUENCE { source CRLSource, thisUpdate Time OPTIONAL }
+//	CRLSource ::= CHOICE { dpn [0] DistributionPointName, issuer [1] GeneralNames }
+//
+// The source is the issuer [1] alternative holding a directoryName [4]
+// GeneralName. This builds the EXPLICIT form that OpenSSL actually emits, in
+// which [1] wraps the GeneralNames SEQUENCE so the GeneralName entries sit one
+// level below the context tag. The IMPLICIT alternative (GeneralName entries
+// directly inside [1]) is covered separately in
+// TestDecodeCRLStatusList_ImplicitGeneralNames, and the byte-exact OpenSSL
+// capture is pinned in TestDecodeCRLStatusList_RealOpenSSLRequest.
+func buildTestCRLStatusList(t *testing.T, issuerRawDN []byte, thisUpdate time.Time) []byte {
+	t.Helper()
+
+	directoryName, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassContextSpecific, Tag: 4, IsCompound: true, Bytes: issuerRawDN,
+	})
+	require.NoError(t, err)
+	generalNames, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true, Bytes: directoryName,
+	})
+	require.NoError(t, err)
+	issuerSource, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassContextSpecific, Tag: 1, IsCompound: true, Bytes: generalNames,
+	})
+	require.NoError(t, err)
+
+	statusContent := issuerSource
+	if !thisUpdate.IsZero() {
+		timeDER, err := asn1.MarshalWithParams(thisUpdate.UTC(), "utc")
+		require.NoError(t, err)
+		statusContent = append(statusContent, timeDER...)
+	}
+
+	status, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true, Bytes: statusContent,
+	})
+	require.NoError(t, err)
+
+	value, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true, Bytes: status,
+	})
+	require.NoError(t, err)
+	return value
+}
+
 func TestHandleCMP_GenM_CRLStatusList(t *testing.T) {
 	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
 		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CRLUpdate: true}},
@@ -220,11 +269,21 @@ func TestHandleCMP_GenM_CRLStatusList(t *testing.T) {
 	crl, err := x509.ParseRevocationList(crlDER)
 	require.NoError(t, err)
 
-	svc.On("LWCGetCRL", mock.Anything, services.GetCMPCRLInput{APS: "test-dms"}).Return(crl, nil)
+	// The request's CRLStatus must reach the service: the issuer names WHICH CRL
+	// is wanted and thisUpdate says how fresh the EE's copy already is. A handler
+	// that drops either turns this operation into a plain "give me the current
+	// CRL" — which is what id-it-currentCRL already is.
+	eeThisUpdate := crl.ThisUpdate.Add(-2 * time.Hour)
+	svc.On("LWCGetCRL", mock.Anything, mock.MatchedBy(func(in services.GetCMPCRLInput) bool {
+		return in.APS == "test-dms" &&
+			bytes.Equal(in.IssuerRawDN, caCert.RawSubject) &&
+			in.CurrentThisUpdate.Equal(eeThisUpdate.Truncate(time.Second))
+	})).Return(crl, nil)
 
 	// The request InfoType is id-it-crlStatusList; the response must carry the
 	// DIFFERENT id-it-crls OID (RFC 9483 §4.3.4).
-	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCrlStatusList, nil))
+	statusValue := buildTestCRLStatusList(t, caCert.RawSubject, eeThisUpdate)
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCrlStatusList, statusValue))
 	entry := genRepSingleEntry(t, router, "test-dms", msgDER)
 
 	assert.True(t, entry.InfoType.Equal(oidItCrls),
@@ -239,6 +298,52 @@ func TestHandleCMP_GenM_CRLStatusList(t *testing.T) {
 	assert.Equal(t, crl.Raw, parsedCRL.Raw)
 
 	svc.AssertExpectations(t)
+}
+
+// TestHandleCMP_GenM_CRLStatusList_MissingValue locks in that the request value
+// is MANDATORY for id-it-crlStatusList (RFC 9480 §2.16 gives it no absent
+// alternative), unlike every other support message whose value MUST be absent.
+func TestHandleCMP_GenM_CRLStatusList_MissingValue(t *testing.T) {
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CRLUpdate: true}},
+	})
+
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCrlStatusList, nil))
+	resp := postCMP(t, router, "test-dms", msgDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"a crlStatusList request with no CRLStatus must be rejected")
+	svc.AssertNotCalled(t, "LWCGetCRL", mock.Anything, mock.Anything)
+}
+
+// TestHandleCMP_GenM_CRLStatusList_UpToDate covers the answer that makes CRL
+// update retrieval different from a plain current-CRL fetch: when the EE already
+// holds a CRL at least as fresh as ours, the service reports no update and the
+// genp carries id-it-crls with an ABSENT value — "you are current" — rather than
+// re-sending a CRL the EE already has.
+func TestHandleCMP_GenM_CRLStatusList_UpToDate(t *testing.T) {
+	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CRLUpdate: true}},
+	})
+
+	svc.On("LWCGetCRL", mock.Anything, mock.Anything).Return(nil, nil)
+
+	statusValue := buildTestCRLStatusList(t, testRawSubject(t, "crl-ca"), time.Now())
+	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, oidItCrlStatusList, statusValue))
+	entry := genRepSingleEntry(t, router, "test-dms", msgDER)
+
+	assert.True(t, entry.InfoType.Equal(oidItCrls))
+	assert.Empty(t, entry.InfoValue.FullBytes,
+		"no CRL newer than the EE's copy means an absent infoValue, not a resent CRL")
+	svc.AssertExpectations(t)
+}
+
+// testRawSubject returns the DER RDNSequence for a CN-only subject.
+func testRawSubject(t *testing.T, cn string) []byte {
+	t.Helper()
+	der, err := asn1.Marshal(pkix.Name{CommonName: cn}.ToRDNSequence())
+	require.NoError(t, err)
+	return der
 }
 
 // TestEncodeCertReqTemplateValue exercises the hand-rolled RFC 9483 §4.3.3
@@ -610,4 +715,33 @@ func TestHandleCMP_GenM_UnknownInfoType(t *testing.T) {
 		"an unknown genm InfoType must be rejected with a CMP error body")
 
 	svc.AssertExpectations(t)
+}
+
+// TestHandleCMP_EEError covers an error (23) body sent BY the EE to abandon a
+// transaction (RFC 4210 §5.3.21). It is a legitimate message, so the server
+// acknowledges with pkiConf — before this it fell through the dispatch default
+// and was answered with "unsupported body tag 23", i.e. an error about an error.
+func TestHandleCMP_EEError(t *testing.T) {
+	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+
+	statusInfo := seqDER(t, mustMarshal(t, 2), mustMarshal(t, asn1.BitString{Bytes: []byte{0x04}, BitLength: 6}))
+	errBody := ctxDER(t, corecmp.BodyTagError, seqDER(t, statusInfo))
+	headerDER := buildTestPKIHeaderDER(t, randomTxID(t), randomNonce(t), nil, false)
+	msgDER, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true,
+		Bytes: concatBytes(headerDER, errBody),
+	})
+	require.NoError(t, err)
+
+	resp := postCMP(t, router, "test-dms", msgDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagPKIConf, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"an EE-sent error message must be acknowledged with pkiConf, not rejected")
+}
+
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	der, err := asn1.Marshal(v)
+	require.NoError(t, err)
+	return der
 }
