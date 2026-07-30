@@ -1,4 +1,5 @@
-FROM golang:1.26.2-bookworm
+ARG BUILDER=golang:1.26.2-bookworm
+FROM ${BUILDER} AS builder
 WORKDIR /app
 
 COPY core core
@@ -26,10 +27,10 @@ FROM ubuntu:26.04
 RUN groupadd --system lamassu && \
     useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
-COPY --from=0 /app/authz /
-COPY --from=0 /app/connectors/authz/cmd/preload /etc/lamassuiot/authz/preload
-COPY --from=0 /app/connectors/authz/authz.json /etc/lamassuiot/authz/schemas/authz.json
-COPY --from=0 /app/connectors/authz/pki.json /etc/lamassuiot/authz/schemas/pki.json
-COPY --from=0 /app/connectors/authz/wfx.json /etc/lamassuiot/authz/schemas/http-wfx.json
+COPY --from=builder /app/authz /
+COPY --from=builder /app/connectors/authz/cmd/preload /etc/lamassuiot/authz/preload
+COPY --from=builder /app/connectors/authz/authz.json /etc/lamassuiot/authz/schemas/authz.json
+COPY --from=builder /app/connectors/authz/pki.json /etc/lamassuiot/authz/schemas/pki.json
+COPY --from=builder /app/connectors/authz/wfx.json /etc/lamassuiot/authz/schemas/http-wfx.json
 USER lamassu
 CMD ["/authz"]

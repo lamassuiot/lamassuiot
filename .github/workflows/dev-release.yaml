@@ -7,7 +7,22 @@ on:
         description: "Docker image tag (leave blank to use 'dev'). Cannot be 'latest' or start with a number."
         required: false
         default: ""
-
+      go:
+        description: "Go version to use as builder."
+        required: true
+        type: choice
+        options:
+          - golang:1.26.2-bookworm
+          - ghcr.io/lamassuiot/golang-pqc:latest
+          - ghcr.io/lamassuiot/golang-pqc:go1.27
+          - ghcr.io/lamassuiot/golang-pqc:go1.26
+          - other
+        default: golang:1.26.2-bookworm
+      other:
+        description: "Only used when go = 'other'."
+        type: string
+        default: ""
+ 
 jobs:
   validate_tag:
     runs-on: ubuntu-latest
@@ -70,6 +85,16 @@ jobs:
           echo "TAG=$TAG" >> $GITHUB_ENV
           echo "SHA1VER=${TAG}-$(git rev-parse HEAD)" >> $GITHUB_ENV
 
+      - name: Resolve builder
+        run: |
+          GO_INPUT="${{ github.event.inputs.go }}"
+          if [[ "$GO_INPUT" == "other" ]]; then
+            BUILDER="${{ github.event.inputs.other }}"
+          else
+            BUILDER="$GO_INPUT"
+          fi
+          echo "BUILDER=$BUILDER" >> $GITHUB_ENV
+
       - name: Login to Github Registry
         uses: docker/login-action@v3
         with:
@@ -82,7 +107,7 @@ jobs:
           context: .
           file: ci/${{ matrix.service }}.dockerfile
           build-args: |
-            BASE_IMAGE=alpine:3.14
+            BUILDER=${{ env.BUILDER }}
             SHA1VER=${{ env.SHA1VER }}
             VERSION=${{ env.TAG }}
           tags: |
