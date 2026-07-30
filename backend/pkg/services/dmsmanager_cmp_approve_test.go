@@ -53,6 +53,16 @@ func (r *approvalCapturingCMPTxRepo) SelectIncludingExpired(ctx context.Context,
 	return models.CMPTransaction{}, false, nil
 }
 
+// ClaimPending mirrors the real PENDING → APPROVING atomic claim for this
+// fixture's single transaction row (see storage.CMPTransactionRepo.ClaimPending).
+func (r *approvalCapturingCMPTxRepo) ClaimPending(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	if transactionID != r.tx.TransactionID || r.tx.State != models.CMPTransactionStatePending {
+		return models.CMPTransaction{}, false, nil
+	}
+	r.tx.State = models.CMPTransactionStateApproving
+	return r.tx, true, nil
+}
+
 func (r *approvalCapturingCMPTxRepo) UpdateState(ctx context.Context, transactionID string, state models.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {
 	r.capturedExpiry = expiresAt
 	return true, nil

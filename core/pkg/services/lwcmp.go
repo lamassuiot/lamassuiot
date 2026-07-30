@@ -190,6 +190,22 @@ type LightweightCMPCrossCertRequesterValidator interface {
 	LWCValidateCCRRequester(ctx context.Context, aps string, signer *x509.Certificate) error
 }
 
+// LightweightCMPKGARecipientValidator restricts which certificates a central
+// key generation (CKG) response may encrypt the freshly generated private key
+// to, via EnrollmentOptionsLWCRFC9483.CKGTrustedEncryptionCAs. The CMP
+// controller uses this before generating any key material: CKG hands over
+// live key material to whoever it trusts as "recipient", so — unlike plain
+// issuance — this check is enforced regardless of the DMS's AuthMode
+// (including NO_AUTH).
+type LightweightCMPKGARecipientValidator interface {
+	// LWCValidateKGARecipient returns nil when recipient chain-validates
+	// against CKG.TrustedEncryptionCAs (or, when that list is empty, against
+	// the DMS's general CMP trust boundary — see
+	// EnrollmentOptionsLWCRFC9483.CKGTrustedEncryptionCAs for the fallback
+	// rationale).
+	LWCValidateKGARecipient(ctx context.Context, aps string, recipient *x509.Certificate) error
+}
+
 // LWCEnrollmentOptions is returned by LWCGetEnrollmentOptions and carries the
 // DMS-level CMP settings the controller needs to make dispatch decisions
 // (e.g. whether implicit confirmation is allowed).
@@ -310,11 +326,22 @@ type GetCMPCRLInput struct {
 	// APS is the DMS identifier.
 	APS string `validate:"required"`
 
-	// IssuerName identifies the CA whose CRL is requested.
-	// The EE must provide either IssuerName or CAID.
+	// IssuerName is the human-readable form of the requested CRL's issuer, used
+	// for logging only. Matching is done on IssuerRawDN.
 	IssuerName string
 
-	// CAID is the Lamassu internal CA identifier for the requested CRL.
+	// IssuerRawDN is the DER of the requested issuer's RDNSequence, taken from
+	// the request's CRLSource (issuer [1] GeneralNames → directoryName [4]).
+	// It is matched byte-for-byte against each of the DMS's known CA subjects,
+	// which avoids the ordering, escaping and string-type pitfalls of comparing
+	// rendered DN strings. When set and it matches no CA the DMS is
+	// authoritative for, no CRL is available (nil) rather than an error — the
+	// server simply has nothing to offer for that source.
+	IssuerRawDN []byte
+
+	// CAID is the Lamassu internal CA identifier for the requested CRL. Takes
+	// precedence over IssuerRawDN; used by internal callers that already know
+	// which CA they want.
 	CAID string
 
 	// CurrentThisUpdate is the thisUpdate time of the most recent CRL the

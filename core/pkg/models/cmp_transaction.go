@@ -17,6 +17,19 @@ const (
 	// but the cert has not yet been issued. A background worker is responsible
 	// for transitioning the row to ISSUED or ISSUE_FAILED.
 	CMPTransactionStatePending CMPTransactionState = "PENDING"
+	// CMPTransactionStateApproving is a transient claim marker: an
+	// administrator has started resolving a PENDING phased-workflow
+	// transaction (approve or reject) via CMPTransactionRepo.ClaimPending,
+	// which atomically moves the row PENDING → APPROVING. Only the caller
+	// that wins that atomic transition proceeds to call the CA/issue the
+	// certificate and persist the final ISSUED/ISSUE_FAILED state — this is
+	// what makes concurrent Approve/Reject calls (double-click, client
+	// retry, a race between the two, or a race with the confirmation
+	// monitor's approval-timeout sweep) safe instead of racing to issue the
+	// same CSR twice. A row that never leaves this state (e.g. the process
+	// crashed mid-approval) is picked up by the same expired-PENDING sweep
+	// once its ExpiresAt passes, exactly like an unresolved PENDING row.
+	CMPTransactionStateApproving CMPTransactionState = "APPROVING"
 	// CMPTransactionStateIssued means the cert has been issued and is held in
 	// the row's CertDER, awaiting either certConf (explicit confirmation)
 	// or expiry. Both pollReq and certConf operate on rows in this state.
@@ -34,6 +47,20 @@ const (
 	// this transaction has been subsequently revoked (via CMP rr or other
 	// channel). The row persists for audit visibility.
 	CMPTransactionStateRevoked CMPTransactionState = "REVOKED"
+	// CMPTransactionStateRevoking is a transient claim marker: the
+	// confirmation-timeout monitor has started revoking an expired,
+	// unconfirmed ISSUED transaction (CMPTransactionRepo.
+	// ClaimIssuedForRevocation, which atomically moves the row
+	// ISSUED → REVOKING). Only the caller that wins that atomic transition
+	// proceeds to revoke the certificate at the CA — this is what stops the
+	// monitor from revoking a certificate that a concurrent, legitimate
+	// certConf/pollReq(implicit) just confirmed: Confirm() and
+	// ClaimIssuedForRevocation both require the row to still be ISSUED, so
+	// only one of a racing pair can ever win. If the CA revocation call then
+	// fails, the row is rolled back to ISSUED (still expired) so the next
+	// tick retries; a row stuck here (e.g. the process crashed mid-revoke) is
+	// picked up by the same expired-ISSUED sweep as an unresolved ISSUED row.
+	CMPTransactionStateRevoking CMPTransactionState = "REVOKING"
 )
 
 // CMPTransaction holds the server-side state for one CMP enrollment

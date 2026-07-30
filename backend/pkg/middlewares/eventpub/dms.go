@@ -250,6 +250,14 @@ func (mw dmsEventPublisher) LWCValidateCCRRequester(ctx context.Context, aps str
 	return validator.LWCValidateCCRRequester(ctx, aps, signer)
 }
 
+func (mw dmsEventPublisher) LWCValidateKGARecipient(ctx context.Context, aps string, recipient *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPKGARecipientValidator)
+	if !ok {
+		return fmt.Errorf("cmp kga recipient validation not available")
+	}
+	return validator.LWCValidateKGARecipient(ctx, aps, recipient)
+}
+
 // GetCMPTransactionRepo forwards the optional cmpTransactionStorer interface
 // through the middleware chain so the HTTP controller can reach the backend repo
 // regardless of how many middleware layers are stacked.

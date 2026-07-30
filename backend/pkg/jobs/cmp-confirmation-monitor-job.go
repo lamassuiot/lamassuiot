@@ -94,7 +94,13 @@ func (m *CMPConfirmationMonitor) Run() {
 	lFunc.Infof("ended CMP confirmation-timeout check. Took %s", time.Since(start))
 }
 
-// revokeUnconfirmed handles a single ISSUED+expired transaction:
+// revokeUnconfirmed handles a single ISSUED(-or-REVOKING)+expired transaction:
+//   - atomically claims the row (ISSUED → REVOKING) so a legitimate certConf/
+//     implicit-confirm pollReq racing this same tick (both use Confirm,
+//     ISSUED → CONFIRMED) cannot lose to us — Confirm and
+//     ClaimIssuedForRevocation both require state=ISSUED, so at most one
+//     of them ever wins for a given row; if the EE just confirmed, the claim
+//     here fails and this transaction is left alone entirely (no CA call)
 //   - revokes the cert at the CA (cessationOfOperation per RFC 5280 §5.3.1 —
 //     the device never acknowledged the cert so it is effectively out of service)
 //   - flips the transaction row to REVOKED so the row persists for audit
@@ -107,6 +113,21 @@ func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *l
 		WithField("dms", tx.DMSID).
 		WithField("cert-sn", tx.CertSerialNumber).
 		WithField("device-cn", tx.SubjectCommonName)
+
+	claimed, ok, err := m.txStore.ClaimIssuedForRevocation(ctx, tx.TransactionID)
+	if err != nil {
+		lFunc.Warnf("could not claim transaction for revocation: %v", err)
+		return
+	}
+	if !ok {
+		// The row is no longer ISSUED — most likely a certConf (or an
+		// implicit-confirm pollReq) legitimately confirmed it, or it was
+		// already claimed/finalized by another replica's tick. Either way,
+		// this transaction is not ours to touch.
+		lFunc.Debugf("transaction is no longer ISSUED (already confirmed/claimed/finalized); skipping revocation")
+		return
+	}
+	tx = claimed
 
 	if tx.CertSerialNumber == "" {
 		// Defensive: an ISSUED row without a cert serial is malformed; we
@@ -121,16 +142,21 @@ func (m *CMPConfirmationMonitor) revokeUnconfirmed(ctx context.Context, lFunc *l
 		return
 	}
 
-	_, err := m.caService.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+	_, err = m.caService.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 		SerialNumber:     tx.CertSerialNumber,
 		NewStatus:        models.StatusRevoked,
 		RevocationReason: ocsp.CessationOfOperation,
 	})
 	if err != nil {
 		lFunc.Warnf("could not revoke unconfirmed cert: %v", err)
-		// Do NOT transition the transaction row in this case — leaving it as
-		// ISSUED+expired ensures the next tick retries the revocation rather
-		// than silently dropping the unconfirmed cert.
+		// Roll the claim back to ISSUED (still expired) so the next tick's
+		// SelectExpiredIssued/ClaimIssuedForRevocation retries the revocation
+		// rather than leaving the row stuck in REVOKING (which
+		// ClaimIssuedForRevocation would never again match, since it
+		// requires state=ISSUED) or silently dropping the unconfirmed cert.
+		if _, rollbackErr := m.txStore.UpdateState(ctx, tx.TransactionID, models.CMPTransactionStateIssued, tx.Certificate, tx.ErrorMessage, tx.ExpiresAt); rollbackErr != nil {
+			lFunc.Warnf("could not roll back failed revocation claim to ISSUED: %v", rollbackErr)
+		}
 		return
 	}
 

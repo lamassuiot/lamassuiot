@@ -170,3 +170,11 @@ func (mw DmsAuditEventPublisher) LWCValidateRASigner(ctx context.Context, aps st
 	}
 	return validator.LWCValidateRASigner(ctx, aps, signer)
 }
+
+func (mw DmsAuditEventPublisher) LWCValidateKGARecipient(ctx context.Context, aps string, recipient *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPKGARecipientValidator)
+	if !ok {
+		return fmt.Errorf("cmp kga recipient validation not available")
+	}
+	return validator.LWCValidateKGARecipient(ctx, aps, recipient)
+}

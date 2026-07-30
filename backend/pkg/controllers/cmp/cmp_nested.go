@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
@@ -121,6 +122,23 @@ func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *log
 		return
 	}
 
+	// The generic wire-level checks HandleCMP runs on the OUTER header before
+	// dispatch (pvno, transactionID/senderNonce length, messageTime freshness,
+	// generalInfo) never touch the INNER header — re-run them here so a stale
+	// captured inner message (e.g. recovered from CMP audit metadata) cannot be
+	// replayed indefinitely by simply re-wrapping it in a fresh outer envelope
+	// whose own messageTime and transactionID are entirely attacker-controlled.
+	if rej := validateRequestEnvelope(innerHeader, time.Now(), innerTag); rej != nil {
+		lFunc.Warnf("nested added-protection: inner envelope validation: %s", rej.reason)
+		r.rejectWithError(ctx, &innerHeader, corecmp.PKIStatus(corecmp.PKIStatusRejection), rej.reason, dmsID, rej.failInfo)
+		return
+	}
+	if rej := validateGeneralInfo(innerHeader.GeneralInfo); rej != nil {
+		lFunc.Warnf("nested added-protection: inner generalInfo validation: %s", rej.reason)
+		r.rejectWithError(ctx, &innerHeader, corecmp.PKIStatus(corecmp.PKIStatusRejection), rej.reason, dmsID, rej.failInfo)
+		return
+	}
+
 	// RFC 9483 §5.2.2.1: the wrapping entity MUST copy the transactionID and
 	// senderNonce of the original message into the nested header. A mismatch
 	// means the envelope does not belong to the request it carries — reject
@@ -148,11 +166,29 @@ func (r *cmpHttpRoutes) handleNestedAddedProtection(ctx *gin.Context, lFunc *log
 		return
 	}
 
+	// RFC011 per-operation enable gates apply to the INNER operation just as
+	// they do at the top-level dispatch (HandleCMP) — an added-protection
+	// wrapper is not a way to route around a disabled ir/cr/p10cr/kur. Without
+	// this, wrapping a request for a disabled operation in a one-element
+	// nested envelope would still reach the enrollment pipeline below.
+	if !operationEnabled(enrollOpts, innerTag) {
+		lFunc.Warnf("nested added-protection: inner CMP operation %s is disabled for DMS '%s'", cmpTagToString(innerTag), dmsID)
+		r.rejectRequest(ctx, lFunc, innerHeader, innerTag,
+			fmt.Sprintf("CMP operation %s is not enabled for this DMS", cmpTagToString(innerTag)),
+			corecmp.PKIFailureInfoNotAuthorized, dmsID)
+		return
+	}
+
 	// Verify the inner EE protection. The requirement mirrors the top-level
 	// dispatch: CLIENT_CERTIFICATE-based auth modes require a signature-protected
 	// inner message (and therefore a signer cert), while the other modes accept
-	// an unprotected inner request.
+	// an unprotected inner request — except kur, which (like rr at the top
+	// level) MUST be signature-protected regardless of auth_mode, since that
+	// signature is the kur's only proof of possession (RFC 9483 §4.1.3).
 	requireProtection := requireClientCertProtection(enrollOpts)
+	if innerTag == corecmp.BodyTagKUR {
+		requireProtection = true
+	}
 	signerCert, err := verifyRequestProtection(*inner, innerHeader.ProtectionAlg, requireProtection)
 	if err != nil {
 		lFunc.Warnf("nested added-protection: inner protection verification failed: %v", err)
@@ -194,6 +230,16 @@ type nestedInnerMessage struct {
 	der []byte
 }
 
+// cmpMaxNestedMessages caps how many inner PKIMessages a single nested (20)
+// body may carry. Each batched message (§5.2.2.2) drives a full, independent
+// pass through the enrollment/revocation/genm pipeline — including CA/KMS
+// calls — so without a cap, one HTTP request (already bounded to
+// cmpMaxRequestBodyBytes, but that still allows many small inner messages)
+// could fan out into an unbounded amount of downstream work. 100 is far
+// above any legitimate batching use case (RA-to-CA batching of a handful of
+// enrollments) while keeping worst-case fan-out per request bounded.
+const cmpMaxNestedMessages = 100
+
 // decodeNestedMessages extracts every inner PKIMessage from a nested body.
 // The nested body is `[20] EXPLICIT PKIMessages` (a SEQUENCE OF PKIMessage),
 // so nestedBytes is the PKIMessages SEQUENCE.
@@ -208,6 +254,9 @@ func decodeNestedMessages(nestedBytes []byte) ([]nestedInnerMessage, error) {
 	var out []nestedInnerMessage
 	remaining := msgs.Bytes
 	for len(remaining) > 0 {
+		if len(out) >= cmpMaxNestedMessages {
+			return nil, fmt.Errorf("nested body carries more than %d inner PKIMessages", cmpMaxNestedMessages)
+		}
 		var elem asn1.RawValue
 		var err error
 		remaining, err = asn1.Unmarshal(remaining, &elem)

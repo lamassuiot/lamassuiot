@@ -57,6 +57,15 @@ func (noopCMPTxRepo) SelectIncludingExpired(ctx context.Context, transactionID s
 func (noopCMPTxRepo) SelectAndDelete(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
 	return models.CMPTransaction{}, false, nil
 }
+func (noopCMPTxRepo) ClaimPending(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	return models.CMPTransaction{}, false, nil
+}
+func (noopCMPTxRepo) WithDeviceLock(ctx context.Context, deviceID string, fn func(ctx context.Context) error) error {
+	return fn(ctx)
+}
+func (noopCMPTxRepo) ClaimIssuedForRevocation(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
+	return models.CMPTransaction{}, false, nil
+}
 func (noopCMPTxRepo) Confirm(ctx context.Context, transactionID string) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
 	return models.CMPTransaction{}, "", false, nil
 }
@@ -249,4 +258,3 @@ func TestLWCRevokeCertificate_SelfRevocation_AllowsCAValidatedCert(t *testing.T)
 	require.NoError(t, err)
 	caMock.AssertCalled(t, "UpdateCertificateStatus", mock.Anything, mock.Anything)
 }
-

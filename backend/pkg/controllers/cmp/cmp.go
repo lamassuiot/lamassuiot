@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +33,16 @@ import (
 // cmpTxTTL is the fallback lifetime of a pending CMP transaction waiting for
 // certConf, used when the DMS does not configure ConfirmationTimeout.
 const cmpTxTTL = 5 * time.Minute
+
+// cmpMaxRequestBodyBytes caps how much of an inbound CMP request this handler
+// will buffer into memory. A legitimate PKIMessage (CertReqMessages plus a
+// handful of extraCerts) is a few KB to tens of KB at most; 1 MiB is
+// generous headroom for large certificate chains while still bounding the
+// memory an unauthenticated POST to this endpoint can force the server to
+// allocate. Enforced before any parsing via http.MaxBytesReader, so an
+// oversized request is rejected once the limit is crossed rather than after
+// the whole body has already been read into memory.
+const cmpMaxRequestBodyBytes = 1 << 20 // 1 MiB
 
 // cmpApprovalTTL is how long a phased-workflow transaction waits in PENDING for
 // an administrator to approve issuance before it is swept by DeleteExpired.
@@ -143,9 +154,22 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		return
 	}
 
-	// Read DER body
+	// Read DER body, capped to bound memory use from an unauthenticated POST.
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, cmpMaxRequestBodyBytes)
 	bodyBytes, err := io.ReadAll(ctx.Request.Body)
-	if err != nil || len(bodyBytes) == 0 {
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			lFunc.Warnf("request body exceeds %d bytes", cmpMaxRequestBodyBytes)
+			r.rejectWithError(ctx, nil, corecmp.PKIStatus(2),
+				fmt.Sprintf("request body exceeds the %d byte limit", cmpMaxRequestBodyBytes),
+				dmsID, corecmp.PKIFailureInfoBadDataFormat)
+			return
+		}
+		r.rejectWithError(ctx, nil, corecmp.PKIStatus(2), "cannot read request body", dmsID, corecmp.PKIFailureInfoBadDataFormat)
+		return
+	}
+	if len(bodyBytes) == 0 {
 		r.rejectWithError(ctx, nil, corecmp.PKIStatus(2), "cannot read request body", dmsID, corecmp.PKIFailureInfoBadDataFormat)
 		return
 	}
@@ -271,7 +295,17 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// signature-protected regardless of the DMS auth_mode — an unsigned rr is
 	// never accepted, even under NO_AUTH / EXTERNAL_WEBHOOK. This is a fixed
 	// protocol invariant, not a per-DMS toggle.
-	if body.Tag == corecmp.BodyTagRR {
+	//
+	// RFC 9483 §4.1.3 / RFC011 "Fixed, non-configurable invariants": a key
+	// update request MUST be signature-protected with the certificate being
+	// updated — that signature IS the kur's proof of possession, and it is
+	// the only thing that binds this request to the identity it claims to
+	// renew. Gating this on auth_mode/EnforcePOPO would let an unsigned kur
+	// naming an arbitrary device CommonName sail through on any DMS
+	// configured with NO_AUTH/EXTERNAL_WEBHOOK, minting a certificate for
+	// that identity with zero proof of possession. Like rr, this is a fixed
+	// protocol invariant, not a per-DMS toggle.
+	if body.Tag == corecmp.BodyTagRR || body.Tag == corecmp.BodyTagKUR {
 		requireProtection = true
 	}
 	// RFC 9483 §4.3 / RFC011 GENM.AccessPolicy: general messages are
@@ -382,6 +416,8 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 		r.handlePOPODecKeyResp(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
 	case corecmp.BodyTagGenMsg:
 		r.handleGeneralMessage(ctx, lFunc, reqHeader, body, dmsID, enrollOpts, signerCert)
+	case corecmp.BodyTagError:
+		r.handleEEError(ctx, lFunc, reqHeader, body, dmsID)
 	default:
 		lFunc.Warnf("unsupported CMP body tag %d", body.Tag)
 		r.rejectWithError(ctx, &reqHeader, corecmp.PKIStatus(2),
@@ -562,6 +598,11 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 			// validation CA (RFC 9483 §5.3.2): the claimed management entity is
 			// not trusted.
 			failBit = corecmp.PKIFailureInfoSignerNotTrusted
+		case errors.Is(err, errs.ErrCMPDeviceOwnedByOtherDMS):
+			// The target certificate belongs to a device managed by a different
+			// DMS (RFC 9483 §5.3.2 / RFC010 story 20): this DMS has no authority
+			// over it regardless of how the signer authenticated.
+			failBit = corecmp.PKIFailureInfoNotAuthorized
 		case errors.Is(err, errs.ErrCMPPendingUpdate):
 			// The device has a key-update awaiting certConf; its certificates'
 			// revocation state must not change until the open transaction
@@ -598,6 +639,63 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 
 // handleCertConf processes a certConf (24) body.
 // It verifies the SHA-256 certHash and responds with pkiConf (19).
+// freeTextString renders a PKIFreeText (SEQUENCE OF UTF8String) for logging.
+// Entries that do not decode as strings are skipped rather than failing the
+// caller — this is diagnostic output, not something to reject a message over.
+func freeTextString(ft corecmp.PKIFreeText) string {
+	parts := make([]string, 0, len(ft))
+	for _, raw := range ft {
+		var s string
+		if _, err := asn1.Unmarshal(raw.FullBytes, &s); err == nil {
+			parts = append(parts, s)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+// handleEEError processes an error (23) body sent BY the EE (RFC 4210 §5.3.21 /
+// RFC 9483 §3.6.4). An EE uses it to report a problem and abandon a transaction
+// it can no longer continue — a response it could not validate, a certificate it
+// cannot use. It is a legitimate request, not a malformed one: answering it with
+// another error (which is what falling through to the default dispatch case did)
+// tells the EE its abort was itself an error, and leaves it with nothing sensible
+// to do next.
+//
+// The message is acknowledged with pkiConf, the contentless terminal response.
+// RFC 4210 defines no specific answer to an error message, and pkiConf is the
+// only body that says "received, we are done" without asserting anything else.
+//
+// NOTE: the transaction is deliberately NOT force-transitioned here. There is no
+// ABORTED state in CMPTransactionState, and inventing one means a schema change;
+// an abandoned transaction is left to age out through its existing TTL exactly
+// like any other unconfirmed one. Recording the abort explicitly (for audit
+// visibility of *why* an enrollment stopped) is a follow-up, not a correctness
+// gap — the row does not survive beyond its normal expiry either way.
+func (r *cmpHttpRoutes) handleEEError(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string) {
+	txHex := hex.EncodeToString(header.TransactionID)
+	lFunc = lFunc.WithField("op", "error")
+
+	// Surface whatever the EE told us. A body we cannot parse changes nothing
+	// about the response — the EE is abandoning the transaction regardless — so
+	// decode failures are logged, not rejected.
+	var content corecmp.ErrorMsgContent
+	if _, err := asn1.Unmarshal(body.Bytes, &content); err != nil {
+		lFunc.Warnf("error message from EE for transaction %s (undecodable ErrorMsgContent: %v)", txHex, err)
+	} else {
+		lFunc.Warnf("error message from EE for transaction %s: status=%d failInfoBits=%x errorCode=%d detail=%q",
+			txHex, content.PKIStatusInfo.Status, content.PKIStatusInfo.FailInfo.Bytes,
+			content.ErrorCode, freeTextString(content.PKIStatusInfo.StatusString))
+	}
+
+	pkiConfDER, err := corecmp.MarshalPKIConfBody()
+	if err != nil {
+		lFunc.Errorf("error: build pkiConf: %v", err)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build pkiConf", dmsID, corecmp.PKIFailureInfoSystemFailure)
+		return
+	}
+	r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagPKIConf, pkiConfDER, dmsID)
+}
+
 func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, requestDER []byte, dmsID string, signerCert *x509.Certificate) {
 	// The PKIBody CHOICE uses EXPLICIT tagging (RFC 4210 Appendix F module),
 	// so certConf [24] EXPLICIT CertConfirmContent means body.Bytes already
@@ -910,6 +1008,25 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		lFunc.Warnf("pollReq: unknown transactionID %s", txHex)
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "unknown transactionID", dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
+	}
+
+	// RFC 9483 §3.1: a follow-up message's recipNonce echoes the server's previous
+	// senderNonce. handleCertConf enforces this; pollReq did not, so a captured
+	// pollReq replayed freely against a live transaction.
+	//
+	// The check is deliberately conditional on the EE having SENT a recipNonce,
+	// which is weaker than certConf's. pollReq's whole reason for existing on an
+	// ISSUED row is lost-response recovery (see the ResponseSenderNonce comment
+	// below): an EE whose ip/cp never arrived has no senderNonce to echo and
+	// cannot supply one. Demanding a recipNonce here would reject precisely the
+	// case this path was built to serve. A WRONG nonce is still a mismatched or
+	// replayed message and is rejected.
+	if len(header.RecipNonce) > 0 {
+		if sentNonce, _ := hex.DecodeString(tx.SentNonce); len(sentNonce) > 0 && !bytes.Equal(header.RecipNonce, sentNonce) {
+			lFunc.Errorf("pollReq: recipNonce mismatch: got %x want %x", header.RecipNonce, sentNonce)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "recipNonce mismatch", dmsID, corecmp.PKIFailureInfoBadRecipientNonce)
+			return
+		}
 	}
 
 	switch tx.State {

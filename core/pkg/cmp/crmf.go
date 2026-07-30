@@ -117,12 +117,40 @@ func DecodeFirstCertReq(bodyBytes []byte) (*CertRequest, error) {
 		return nil, fmt.Errorf("CertRequest: %w", err)
 	}
 
-	// Try to decode the optional ProofOfPossession CHOICE that follows CertRequest.
+	// Decode the optional ProofOfPossession CHOICE that follows CertRequest.
+	//
+	//	CertReqMsg ::= SEQUENCE {
+	//	    certReq CertRequest,
+	//	    popo    ProofOfPossession OPTIONAL,
+	//	    regInfo SEQUENCE SIZE(1..MAX) OF AttributeTypeAndValue OPTIONAL }
+	//
+	// Two distinctions matter here, because everything downstream keys its POPO
+	// policy decisions off the CLASS and TAG of this value:
+	//
+	//   - A field that will not parse is a MALFORMED message and is rejected.
+	//     Blanking popoRaw instead (the previous behaviour) made a corrupt POPO
+	//     byte-for-byte indistinguishable from "no POPO supplied", which silently
+	//     voided the per-operation POPO allow-list: the allow-list is matched on
+	//     the decoded tag, so an empty value matches no method and no gate runs.
+	//
+	//   - popo is OPTIONAL and regInfo follows it, so the first field here is not
+	//     necessarily the POPO. ProofOfPossession is a CHOICE whose every
+	//     alternative is context-tagged, while regInfo is a universal SEQUENCE —
+	//     so a universal first field means the POPO is absent and this is regInfo
+	//     (extracted separately by findRegInfoDER below). Treating it as a POPO
+	//     would report "unsupported POPO type" for a request that simply had none.
 	var popoRaw asn1.RawValue
 	if len(certReqMsgRest) > 0 {
-
-		if _, parseErr := asn1.Unmarshal(certReqMsgRest, &popoRaw); parseErr != nil {
-			popoRaw = asn1.RawValue{}
+		var field asn1.RawValue
+		if _, parseErr := asn1.Unmarshal(certReqMsgRest, &field); parseErr != nil {
+			return nil, &CertRequestRejection{
+				CertReqID:   0,
+				Reason:      fmt.Sprintf("malformed field after CertRequest in CertReqMsg: %v", parseErr),
+				FailInfoBit: PKIFailureInfoBadDataFormat,
+			}
+		}
+		if field.Class == asn1.ClassContextSpecific {
+			popoRaw = field
 		}
 	}
 

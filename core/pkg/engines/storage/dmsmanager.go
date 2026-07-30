@@ -83,6 +83,35 @@ type CMPTransactionRepo interface {
 	// Confirm in new code paths.
 	SelectAndDelete(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error)
 
+	// ClaimPending atomically transitions a transaction from PENDING to the
+	// transient APPROVING state, conditioned on the row still being PENDING
+	// and not yet expired, and returns the claimed row. This is the
+	// concurrency primitive behind admin approval/rejection of a
+	// phased-workflow transaction (see ApproveCMPTransaction /
+	// RejectCMPTransaction): only one of several concurrent callers (a
+	// double-clicked approve, a client retry, or a race between approve and
+	// reject) can win the claim, so exactly one certificate is ever issued
+	// for a given PENDING row. A caller that fails to claim (returns false)
+	// MUST treat the transaction as no longer actionable rather than
+	// retrying the underlying CA operation.
+	//
+	// Returns (row, true, nil) when the claim succeeded, (zero, false, nil)
+	// when the row does not exist, is not PENDING, or has expired, and
+	// (zero, false, err) on a DB error.
+	ClaimPending(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error)
+
+	// WithDeviceLock runs fn while holding a cross-replica mutual-exclusion
+	// lock scoped to deviceID (a Postgres advisory lock held for the
+	// transaction's lifetime; on dialects without one, e.g. SQLite, fn just
+	// runs directly — a single writer already serializes access there). It
+	// closes TOCTOU races on per-device policy checks that must remain valid
+	// across a call to an external service (e.g. re-checking
+	// CR.MaximumActiveCertificates against the CA immediately before
+	// SignCertificate, so two concurrent cr requests for the same device
+	// cannot both observe "under the cap" and both issue). Returns fn's
+	// error, or a lock-acquisition error.
+	WithDeviceLock(ctx context.Context, deviceID string, fn func(ctx context.Context) error) error
+
 	// Confirm atomically transitions a transaction from ISSUED to CONFIRMED,
 	// recording the confirmation timestamp. The returned priorState is the
 	// state the row was in BEFORE the update was attempted (or empty when no
@@ -132,13 +161,33 @@ type CMPTransactionRepo interface {
 	// Returns (zero, false, nil) when no transaction references the serial.
 	SelectByCertSerial(ctx context.Context, certSerialNumber string) (models.CMPTransaction, bool, error)
 
-	// SelectExpiredIssued returns up to `limit` transactions in ISSUED state
-	// whose ExpiresAt is in the past, oldest first. The CMP confirmation
-	// monitor uses this to find certificates that were issued but never
-	// confirmed by the EE within the window the DMS allows; those certs
-	// are revoked at the CA layer and the row is then transitioned via
-	// MarkRevokedByTransactionID for audit visibility.
+	// SelectExpiredIssued returns up to `limit` transactions in ISSUED or
+	// REVOKING state whose ExpiresAt is in the past, oldest first (REVOKING
+	// rows are included so a monitor crash between ClaimIssuedForRevocation
+	// and the final CA call/state write doesn't strand a row outside every
+	// sweep). The CMP confirmation monitor uses this to find certificates
+	// that were issued but never confirmed by the EE within the window the
+	// DMS allows; those certs are revoked at the CA layer (after first
+	// claiming the row via ClaimIssuedForRevocation) and the row is then
+	// transitioned via MarkRevokedByTransactionID for audit visibility.
 	SelectExpiredIssued(ctx context.Context, limit int) ([]models.CMPTransaction, error)
+
+	// ClaimIssuedForRevocation atomically transitions a transaction from
+	// ISSUED to the transient REVOKING state, conditioned on the row still
+	// being ISSUED, and returns the claimed row. This is the concurrency
+	// primitive behind the confirmation-timeout monitor's revocation of an
+	// expired, unconfirmed transaction: it closes the race where a
+	// legitimate certConf (or implicit-confirm pollReq, both of which use
+	// Confirm — ISSUED → CONFIRMED) arrives at the same moment the monitor
+	// decides the row timed out. Confirm and ClaimIssuedForRevocation both
+	// require state=ISSUED, so only one side of that race can ever win; the
+	// loser (here, the monitor) MUST skip revoking the certificate rather
+	// than proceeding — the row is no longer eligible.
+	//
+	// Returns (row, true, nil) when the claim succeeded, (zero, false, nil)
+	// when the row does not exist or is not ISSUED, and (zero, false, err)
+	// on a DB error.
+	ClaimIssuedForRevocation(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error)
 
 	// MarkRevokedByTransactionID transitions a transaction (in any state) to
 	// REVOKED, keyed by its hex transactionID. Used by the confirmation
@@ -151,12 +200,14 @@ type CMPTransactionRepo interface {
 	// it must process. Returns an empty slice when no work is queued.
 	SelectPending(ctx context.Context, limit int) ([]models.CMPTransaction, error)
 
-	// SelectExpiredPending returns up to `limit` PENDING transactions whose
-	// ExpiresAt has already elapsed, oldest first. The CMP confirmation
-	// monitor uses this to find phased-workflow requests an administrator
-	// never acted on; those rows are transitioned to ISSUE_FAILED with a
-	// reason via UpdateState so pollReq can surface the cause to the EE
-	// and the operator retains an audit trail.
+	// SelectExpiredPending returns up to `limit` PENDING or APPROVING
+	// transactions whose ExpiresAt has already elapsed, oldest first. The
+	// CMP confirmation monitor uses this to find phased-workflow requests an
+	// administrator never acted on (PENDING) or started acting on but never
+	// finished, e.g. a crash between ClaimPending and the final state write
+	// (APPROVING); those rows are transitioned to ISSUE_FAILED with a reason
+	// via UpdateState so pollReq can surface the cause to the EE and the
+	// operator retains an audit trail.
 	SelectExpiredPending(ctx context.Context, limit int) ([]models.CMPTransaction, error)
 
 	// DeleteExpired removes ISSUE_FAILED transactions whose ExpiresAt is in

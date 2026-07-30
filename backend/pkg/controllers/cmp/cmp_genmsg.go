@@ -320,13 +320,45 @@ func (r *cmpHttpRoutes) buildGenpEntry(ctx context.Context, lFunc *logrus.Entry,
 		}
 
 	case oidItCrlStatusList.String(): // §4.3.4 CRL Update Retrieval
-		crl, err := r.svc.LWCGetCRL(ctx, services.GetCMPCRLInput{APS: dmsID})
-		if err != nil {
-			return nil, rejSystemFailure("CRL update retrieval: " + err.Error())
+		// Unlike the other support messages the request value is MANDATORY:
+		// id-it-crlStatusList carries SEQUENCE SIZE (1..MAX) OF CRLStatus
+		// (RFC 9480 §2.16), naming which CRLs the EE wants and how fresh its
+		// copies already are. Without it there is no request to answer.
+		if !hasValue {
+			return nil, rejBadRequest("id-it-crlStatusList request requires a CRLStatus value")
 		}
+		statuses, err := decodeCRLStatusList(itav.InfoValue.FullBytes)
+		if err != nil {
+			return nil, rejBadRequest("malformed crlStatusList value: " + err.Error())
+		}
+		if len(statuses) == 0 {
+			return nil, rejBadRequest("crlStatusList must carry at least one CRLStatus")
+		}
+
+		// One CRL per requested source, and only when it is genuinely newer than
+		// what the EE already holds (RFC 9483 §4.3.4: "the server shall only
+		// provide those CRLs that are more recent"). A source with nothing newer
+		// contributes no entry; when that is true of every source the response
+		// value is absent, which is how the EE learns it is already up to date.
+		var crls []*x509.RevocationList
+		for _, st := range statuses {
+			crl, err := r.svc.LWCGetCRL(ctx, services.GetCMPCRLInput{
+				APS:               dmsID,
+				IssuerName:        st.IssuerName,
+				IssuerRawDN:       st.IssuerRawDN,
+				CurrentThisUpdate: st.ThisUpdate,
+			})
+			if err != nil {
+				return nil, rejSystemFailure("CRL update retrieval: " + err.Error())
+			}
+			if crl != nil {
+				crls = append(crls, crl)
+			}
+		}
+
 		respOID = oidItCrls
-		if crl != nil {
-			v, encErr := encodeCrlsValue([]*x509.RevocationList{crl})
+		if len(crls) > 0 {
+			v, encErr := encodeCrlsValue(crls)
 			if encErr != nil {
 				return nil, rejSystemFailure("cannot encode crls")
 			}
@@ -460,6 +492,154 @@ func decodeGenMsgContent(bodyBytes []byte) ([]genITAV, error) {
 		out = append(out, itav)
 	}
 	return out, nil
+}
+
+// crlStatusEntry is one decoded CRLStatus from a crlStatusList request.
+type crlStatusEntry struct {
+	// IssuerRawDN is the DER of the issuer's RDNSequence when the source is an
+	// issuer [1] GeneralNames carrying a directoryName. Nil for a dpn source or
+	// any GeneralNames without a directoryName, in which case the service falls
+	// back to the DMS enrollment CA.
+	IssuerRawDN []byte
+	// IssuerName renders IssuerRawDN for logging; empty when absent/unparseable.
+	IssuerName string
+	// ThisUpdate is the thisUpdate of the CRL the EE already holds. Zero when
+	// absent, meaning the EE holds no copy and any CRL is newer.
+	ThisUpdate time.Time
+}
+
+// decodeCRLStatusList parses the id-it-crlStatusList request value
+// (RFC 9480 §2.16):
+//
+//	SEQUENCE SIZE (1..MAX) OF CRLStatus
+//	CRLStatus ::= SEQUENCE { source CRLSource, thisUpdate Time OPTIONAL }
+//	CRLSource ::= CHOICE { dpn [0] DistributionPointName, issuer [1] GeneralNames }
+//
+// The CMP ASN.1 module uses EXPLICIT TAGS, so [0]/[1] wrap their content rather
+// than replacing its tag — an issuer source is [1] { SEQUENCE OF GeneralName }.
+//
+// A dpn source is deliberately NOT resolved: RFC 9483 §4.3.4 is explicit that a
+// DistributionPointName is an internal pointer to a CRL the server already has,
+// never an instruction to go fetch from that location. Such an entry decodes
+// with a nil IssuerRawDN and the service answers from the DMS default.
+func decodeCRLStatusList(valueDER []byte) ([]crlStatusEntry, error) {
+	var outer asn1.RawValue
+	if _, err := asn1.Unmarshal(valueDER, &outer); err != nil {
+		return nil, err
+	}
+	if outer.Class != asn1.ClassUniversal || outer.Tag != asn1.TagSequence {
+		return nil, fmt.Errorf("crlStatusList must be a SEQUENCE OF CRLStatus")
+	}
+
+	var out []crlStatusEntry
+	rest := outer.Bytes
+	for len(rest) > 0 {
+		var status asn1.RawValue
+		var err error
+		rest, err = asn1.Unmarshal(rest, &status)
+		if err != nil {
+			return nil, fmt.Errorf("CRLStatus: %w", err)
+		}
+		if status.Class != asn1.ClassUniversal || status.Tag != asn1.TagSequence {
+			return nil, fmt.Errorf("CRLStatus must be a SEQUENCE")
+		}
+
+		entry, err := decodeCRLStatus(status.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// decodeCRLStatus parses the content of a single CRLStatus SEQUENCE.
+func decodeCRLStatus(content []byte) (crlStatusEntry, error) {
+	var entry crlStatusEntry
+
+	var source asn1.RawValue
+	rest, err := asn1.Unmarshal(content, &source)
+	if err != nil {
+		return entry, fmt.Errorf("CRLSource: %w", err)
+	}
+	if source.Class != asn1.ClassContextSpecific || (source.Tag != 0 && source.Tag != 1) {
+		return entry, fmt.Errorf("CRLSource must be dpn [0] or issuer [1], got class=%d tag=%d", source.Class, source.Tag)
+	}
+	if source.Tag == 1 {
+		// issuer [1] GeneralNames ::= SEQUENCE OF GeneralName. Pick the
+		// directoryName [4] alternative, whose content is the RDNSequence DER we
+		// match subjects on.
+		if raw, name := directoryNameFromGeneralNames(generalNamesContent(source.Bytes)); raw != nil {
+			entry.IssuerRawDN, entry.IssuerName = raw, name
+		}
+	}
+
+	// thisUpdate Time OPTIONAL — a CHOICE of UTCTime / GeneralizedTime, so it
+	// appears with its own universal tag rather than a context tag.
+	if len(rest) > 0 {
+		var t asn1.RawValue
+		if _, err := asn1.Unmarshal(rest, &t); err != nil {
+			return entry, fmt.Errorf("CRLStatus thisUpdate: %w", err)
+		}
+		switch t.Tag {
+		case asn1.TagUTCTime, asn1.TagGeneralizedTime:
+			var parsed time.Time
+			if _, err := asn1.Unmarshal(t.FullBytes, &parsed); err != nil {
+				return entry, fmt.Errorf("CRLStatus thisUpdate: %w", err)
+			}
+			entry.ThisUpdate = parsed
+		default:
+			return entry, fmt.Errorf("CRLStatus thisUpdate must be UTCTime or GeneralizedTime, got tag %d", t.Tag)
+		}
+	}
+	return entry, nil
+}
+
+// generalNamesContent normalizes the content of a CRLSource issuer [1] field to
+// the bare concatenation of GeneralName TLVs.
+//
+// The CMP module uses EXPLICIT TAGS, so [1] WRAPS the GeneralNames SEQUENCE
+// rather than replacing its tag — which is what openssl emits, and means the
+// GeneralName entries sit one level deeper than the context tag. An
+// IMPLICIT-tagged encoder would instead put them directly in the [1] content.
+// Both are accepted here: this is exactly the kind of detail implementations
+// disagree on, and being strict buys nothing when the two are trivially
+// distinguishable by whether the content is a single universal SEQUENCE.
+func generalNamesContent(sourceBytes []byte) []byte {
+	var inner asn1.RawValue
+	rest, err := asn1.Unmarshal(sourceBytes, &inner)
+	if err == nil && len(rest) == 0 && inner.Class == asn1.ClassUniversal && inner.Tag == asn1.TagSequence {
+		return inner.Bytes // EXPLICIT: unwrap the GeneralNames SEQUENCE
+	}
+	return sourceBytes // IMPLICIT: already the GeneralName TLVs
+}
+
+// directoryNameFromGeneralNames scans a GeneralNames content block for the first
+// directoryName [4] entry and returns its RDNSequence DER plus a rendered form
+// for logging. Both are nil/empty when no directoryName is present — the other
+// GeneralName alternatives (dNSName, URI, ...) do not identify a CA subject and
+// so give us nothing to match against.
+func directoryNameFromGeneralNames(content []byte) ([]byte, string) {
+	rest := content
+	for len(rest) > 0 {
+		var gn asn1.RawValue
+		var err error
+		rest, err = asn1.Unmarshal(rest, &gn)
+		if err != nil {
+			return nil, ""
+		}
+		if gn.Class != asn1.ClassContextSpecific || gn.Tag != 4 {
+			continue
+		}
+		var rdn pkix.RDNSequence
+		if _, err := asn1.Unmarshal(gn.Bytes, &rdn); err != nil {
+			return nil, ""
+		}
+		var name pkix.Name
+		name.FillFromRDNSequence(&rdn)
+		return gn.Bytes, name.String()
+	}
+	return nil, ""
 }
 
 // decodeUTF8Sequence parses a SEQUENCE OF UTF8String value (used by the
