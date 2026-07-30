@@ -43,12 +43,17 @@ const (
 	FailureBadTime             FailureInfo = PKIFailureInfoBadTime
 	FailureBadCertID           FailureInfo = PKIFailureInfoBadCertID
 	FailureBadDataFormat       FailureInfo = PKIFailureInfoBadDataFormat
+	FailureWrongAuthority      FailureInfo = PKIFailureInfoWrongAuthority
 	FailureIncorrectData       FailureInfo = PKIFailureInfoIncorrectData
+	FailureMissingTimeStamp    FailureInfo = PKIFailureInfoMissingTimeStamp
 	FailureBadPOP              FailureInfo = PKIFailureInfoBadPOP
 	FailureCertRevoked         FailureInfo = PKIFailureInfoCertRevoked
 	FailureCertConfirmed       FailureInfo = PKIFailureInfoCertConfirmed
 	FailureWrongIntegrity      FailureInfo = PKIFailureInfoWrongIntegrity
 	FailureBadRecipientNonce   FailureInfo = PKIFailureInfoBadRecipientNonce
+	FailureTimeNotAvailable    FailureInfo = PKIFailureInfoTimeNotAvailable
+	FailureUnacceptedPolicy    FailureInfo = PKIFailureInfoUnacceptedPolicy
+	FailureUnacceptedExtension FailureInfo = PKIFailureInfoUnacceptedExtension
 	FailureAddInfoNotAvailable FailureInfo = PKIFailureInfoAddInfoNotAvailable
 	FailureBadSenderNonce      FailureInfo = PKIFailureInfoBadSenderNonce
 	FailureBadCertTemplate     FailureInfo = PKIFailureInfoBadCertTemplate
@@ -56,7 +61,9 @@ const (
 	FailureTransactionIDInUse  FailureInfo = PKIFailureInfoTransactionIDInUse
 	FailureUnsupportedVersion  FailureInfo = PKIFailureInfoUnsupportedVersion
 	FailureNotAuthorized       FailureInfo = PKIFailureInfoNotAuthorized
+	FailureSystemUnavail       FailureInfo = PKIFailureInfoSystemUnavail
 	FailureSystemFailure       FailureInfo = PKIFailureInfoSystemFailure
+	FailureDuplicateCertReq    FailureInfo = PKIFailureInfoDuplicateCertReq
 )
 
 const (

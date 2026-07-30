@@ -345,7 +345,22 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	}
 
 	// RFC 4211 §6.1: a regToken is one-time-use — reject a request presenting a
-	// value already carried by an earlier transaction under this DMS.
+	// value already used under this DMS.
+	//
+	// Two checks, in order, because they cover different things:
+	//
+	//  1. HasSeenRegToken scans transaction rows. It is the only thing that can
+	//     see tokens consumed before the claims table existed, so it stays as the
+	//     backward-compatible check for historical rows.
+	//  2. ClaimRegToken atomically claims the value. This is what actually
+	//     enforces one-time use: check (1) is a read, and the transaction row that
+	//     records the token is only written after issuance, so on its own it left a
+	//     window where two concurrent requests bearing the same token both
+	//     observed "unseen" and both enrolled.
+	//
+	// The claim happens before issuance, so a token is burned by the attempt even
+	// if issuance then fails. That is the correct direction for a single-use
+	// bootstrap credential: a retry needs a fresh token.
 	if req.RegToken != "" {
 		seen, err := r.store.HasSeenRegToken(ctx.Request.Context(), dmsID, req.RegToken)
 		if err != nil {
@@ -355,6 +370,22 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		}
 		if seen {
 			lFunc.Warnf("%s: regToken already used", variant.logPrefix)
+			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
+				CertReqID:   req.CertReqID,
+				Reason:      "the regToken control was already used (RFC 4211 §6.1)",
+				FailInfoBit: corecmp.PKIFailureInfoBadRequest,
+			})
+			return
+		}
+
+		claimed, claimErr := r.store.ClaimRegToken(ctx.Request.Context(), dmsID, req.RegToken)
+		if claimErr != nil {
+			lFunc.Errorf("%s: claim regToken: %v", variant.logPrefix, claimErr)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
+			return
+		}
+		if !claimed {
+			lFunc.Warnf("%s: regToken already claimed by a concurrent request", variant.logPrefix)
 			r.rejectCertRequest(ctx, lFunc, header, respTag, dmsID, &corecmp.CertRequestRejection{
 				CertReqID:   req.CertReqID,
 				Reason:      "the regToken control was already used (RFC 4211 §6.1)",
@@ -567,6 +598,52 @@ func (r *cmpHttpRoutes) issueAndStore(
 	if signer != nil && params.isReenrollment {
 		params.supersededCertSerial = hex.EncodeToString(signer.SerialNumber.Bytes())
 	}
+
+	// The unconfirmed-key-update check below, the issuance that follows it, and
+	// the ISSUED row that records it form one read-decide-write sequence. Checking
+	// without holding a lock is check-then-act: two concurrent kur messages
+	// protected by the same certificate could both observe "no update in
+	// progress", both issue, and both leave an unconfirmed pending update —
+	// exactly what RFC 9483 §4.1.3 forbids. LWCEnroll already uses this same lock
+	// to close the equivalent race on CR.MaximumActiveCertificates.
+	//
+	// Keyed on the superseded certificate serial, matching what the check itself
+	// is keyed on, so unrelated certificates never contend. Only taken when there
+	// is a superseded certificate to lock — an ir/cr with no prior identity has
+	// nothing to serialize against here.
+	if params.supersededCertSerial != "" {
+		lockKey := "cmp-kur:" + dmsID + ":" + params.supersededCertSerial
+		if lockErr := r.store.WithDeviceLock(ctx.Request.Context(), lockKey, func(context.Context) error {
+			r.issueAndStoreLocked(ctx, lFunc, header, req, dmsID, enrollOpts, params, signer, csr, op, txHex, implicitConfirm)
+			return nil
+		}); lockErr != nil {
+			lFunc.Errorf("acquire key-update lock for cert %s: %v", params.supersededCertSerial, lockErr)
+			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
+		}
+		return
+	}
+	r.issueAndStoreLocked(ctx, lFunc, header, req, dmsID, enrollOpts, params, signer, csr, op, txHex, implicitConfirm)
+}
+
+// issueAndStoreLocked is the second half of issueAndStore: the unconfirmed
+// key-update check, issuance, transaction persistence and response. It is split
+// out so the caller can run it while holding the per-certificate device lock for
+// a key update (see issueAndStore) without duplicating any of it for the
+// unlocked ir/cr path.
+func (r *cmpHttpRoutes) issueAndStoreLocked(
+	ctx *gin.Context,
+	lFunc *logrus.Entry,
+	header *corecmp.RequestPKIHeader,
+	req *corecmp.CertRequest,
+	dmsID string,
+	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
+	params issueParams,
+	signer *x509.Certificate,
+	csr *x509.CertificateRequest,
+	op string,
+	txHex string,
+	implicitConfirm bool,
+) {
 	if params.supersededCertSerial != "" {
 		inProgress, ipErr := r.store.HasUnconfirmedReenrollment(ctx.Request.Context(), dmsID, params.supersededCertSerial)
 		if ipErr != nil {
@@ -926,6 +1003,40 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		return
 	}
 
+	// Duplicate-transactionID check, mirroring issueAndStore. Done BEFORE any key
+	// generation or CA issuance: a replayed CKG request must not mint a second
+	// key pair and certificate, and the wasted work is entirely avoidable.
+	txHex := hex.EncodeToString(header.TransactionID)
+	if exists, exErr := r.store.Exists(ctx.Request.Context(), txHex); exErr != nil {
+		lFunc.Errorf("kga: check existing txID: %v", exErr)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
+		return
+	} else if exists {
+		lFunc.Warnf("kga: duplicate transactionID %s (pre-enroll check)", txHex)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
+		return
+	}
+
+	// Resolve the effective confirmation policy for this operation exactly as
+	// issueAndStore does, so a CKG enrollment negotiates implicit confirmation on
+	// the same terms as an ordinary one (RFC 9483 §4.1.1 / RFC 4210 §5.2.8).
+	op := cmpTagToString(requestTag)
+	implicitConfirm := corecmp.HasImplicitConfirmOID(header.GeneralInfo) &&
+		enrollOpts.EffectiveAcceptImplicit(op)
+	header.ResponseImplicitConfirm = implicitConfirm
+
+	// Pre-generate the response senderNonce so the value on the wire is the same
+	// one persisted as SentNonce; handleCertConf compares the EE's recipNonce
+	// against it (RFC 4210 §5.1.1). Without this the response carried a fresh
+	// random nonce that was never recorded, so no certConf could ever match.
+	senderNonce, nonceErr := corecmp.NewNonce()
+	if nonceErr != nil {
+		lFunc.Errorf("kga: nonce generation: %v", nonceErr)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error: nonce generation failed", dmsID, corecmp.PKIFailureInfoSystemFailure)
+		return
+	}
+	header.ResponseSenderNonce = senderNonce
+
 	issuanceCtx := context.WithoutCancel(ctx.Request.Context())
 	// RFC011: tag the context with which CMP body drove this issuance, exactly
 	// as issueAndStore does for the non-KGA path, so LWCEnroll (shared across
@@ -1069,9 +1180,91 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
+	// Persist the transaction so the rest of the protocol works for CKG exactly as
+	// it does for ordinary enrollment: certConf can be correlated and verified
+	// against the issued cert, the confirmation-timeout monitor can revoke an
+	// unconfirmed certificate, and a replayed transactionID is rejected. Written
+	// AFTER the response marshals successfully so a row is never left behind for
+	// an enrollment the EE was never told about.
+	//
+	// CentralKeyGeneration marks the row non-replayable: the generated private key
+	// is never stored, so handlePoll must refuse to "recover" this response rather
+	// than hand back a certificate without its key.
+	//
+	// ConfirmedAt == CreatedAt exactly (one clock read) is the marker
+	// handleCertConf uses to tell an implicitly-confirmed row from one confirmed
+	// by an earlier certConf — see issueAndStore.
+	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
+	now := time.Now()
+	initialState := models.CMPTransactionStateIssued
+	var confirmedAt time.Time
+	if implicitConfirm {
+		initialState = models.CMPTransactionStateConfirmed
+		confirmedAt = now
+	}
+	if storeErr := r.store.Insert(issuanceCtx, models.CMPTransaction{
+		TransactionID:        txHex,
+		DMSID:                dmsID,
+		State:                initialState,
+		CertSerialNumber:     certSerial,
+		Certificate:          (*models.X509Certificate)(cert),
+		CentralKeyGeneration: true,
+		RequestType:          op,
+		SubjectCommonName:    csr.Subject.CommonName,
+		SentNonce:            hex.EncodeToString(senderNonce),
+		ReceivedNonce:        hex.EncodeToString(header.SenderNonce),
+		RegToken:             req.RegToken,
+		ConfirmedAt:          confirmedAt,
+		ExpiresAt:            now.Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
+		CreatedAt:            now,
+	}); storeErr != nil {
+		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
+			lFunc.Warnf("kga: duplicate transactionID %s", txHex)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
+			return
+		}
+		// Match issueAndStore: the certificate and key are already minted and are
+		// about to be delivered inline, so a storage failure is logged rather than
+		// turned into a rejection the EE would act on by discarding a live cert.
+		lFunc.Errorf("kga: store transaction: %v", storeErr)
+		lFunc.Warnf("kga: failed to persist %s row (cert and key delivered inline): %v", initialState, storeErr)
+	}
+
 	lFunc.Infof("kga: issued cert SN=%s and delivered %s-wrapped generated key (CN=%s)",
-		hex.EncodeToString(cert.SerialNumber.Bytes()), technique, csr.Subject.CommonName)
+		certSerial, technique, csr.Subject.CommonName)
 	ctx.Data(http.StatusOK, "application/pkixcmp", respDER)
+
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       op,
+		SubjectCommonName: csr.Subject.CommonName,
+		CertSerialNumber:  certSerial,
+		State:             cmpwfx.CMPStateResponded,
+		Metadata: withCMPMessageB64(map[string]any{
+			"certReqId":            req.CertReqID,
+			"centralKeyGeneration": true,
+			"kgaTechnique":         technique.String(),
+			"responseType":         cmpTagToString(respTag),
+		}, cmpMetadataResponseB64, respDER),
+	})
+	finalState := cmpwfx.CMPStateAwaitingCertConf
+	if implicitConfirm {
+		finalState = cmpwfx.CMPStateLogicallyComplete
+	}
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       op,
+		SubjectCommonName: csr.Subject.CommonName,
+		CertSerialNumber:  certSerial,
+		State:             finalState,
+		Metadata: map[string]any{
+			"responseType":         cmpTagToString(respTag),
+			"implicitConfirm":      implicitConfirm,
+			"centralKeyGeneration": true,
+		},
+	})
 }
 
 // validateKGARecipientKeyUsage checks that the recipient (request protection)

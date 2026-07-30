@@ -6,6 +6,7 @@ import (
 	"encoding/asn1"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -154,6 +155,30 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 			lFunc.Warnf("ccr rejected: missing POPOSigningKey")
 			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 				"cross-certification requires a POPOSigningKey proof of possession (RFC 4210bis §5.3.11)",
+				dmsID, corecmp.PKIFailureInfoBadPOP)
+			return
+		}
+	}
+
+	// The tag check above establishes only that a POPOSigningKey is *present* —
+	// it says nothing about whether the signature inside it is valid. Verify it
+	// cryptographically against the CertTemplate's declared public key, exactly
+	// as the ir/cr path does (cmp_enrollment.go) — otherwise a requester could
+	// cross-certify a key it does not control by sending a POPOSigningKey with
+	// garbage signature bytes. BuildSyntheticCSR below fills the CSR signature
+	// with a dummy value, so no downstream check would catch it either.
+	//
+	// Deliberately NOT gated on RequireProofOfPossession: that setting governs
+	// whether an ABSENT POPO is tolerated, not whether a supplied one may be
+	// ignored (same rationale as verifyPOPO's default branch). A present-but-
+	// invalid signature is always badPOP. Passing enforce=false keeps the
+	// absent-POPO decision with the check above, whose error text and RFC
+	// citation are CCR-specific.
+	if req.POPORaw.Class == asn1.ClassContextSpecific && req.POPORaw.Tag == 1 {
+		if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, false); err != nil {
+			lFunc.Warnf("ccr rejected: POPO verification failed: %v", err)
+			r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
+				fmt.Sprintf("cross-certification proof of possession verification failed: %v", err),
 				dmsID, corecmp.PKIFailureInfoBadPOP)
 			return
 		}

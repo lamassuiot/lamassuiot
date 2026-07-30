@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 )
@@ -115,8 +116,16 @@ func TestResolveCMPSettings_FreshDefaults(t *testing.T) {
 	if opts.CR.AllowedProfileIDs == nil || opts.P10CR.AllowedProfileIDs == nil {
 		t.Error("CR/P10CR.AllowedProfileIDs is nil, want non-nil empty slice")
 	}
-	if opts.RR.AllowedReasons == nil || len(opts.RR.AllowedReasons) != 4 {
-		t.Errorf("RR.AllowedReasons = %v, want the 4 default reasons", opts.RR.AllowedReasons)
+	// Asserted by content rather than by count: a bare length check still passes
+	// when the composition changes, and the composition is what matters.
+	wantReasons := []CMPRevocationReason{
+		CMPRevocationReasonUnspecified,
+		CMPRevocationReasonKeyCompromise,
+		CMPRevocationReasonCessationOfOperation,
+		CMPRevocationReasonSuperseded,
+	}
+	if !slices.Equal(opts.RR.AllowedReasons, wantReasons) {
+		t.Errorf("RR.AllowedReasons = %v, want %v", opts.RR.AllowedReasons, wantReasons)
 	}
 	if opts.KUR.AdditionalValidationCAIDs == nil {
 		t.Error("KUR.AdditionalValidationCAIDs is nil, want non-nil empty slice")

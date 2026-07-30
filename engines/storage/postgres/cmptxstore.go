@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
@@ -31,6 +32,7 @@ type cmpTransactionRow struct {
 	ErrorMessage         string    `gorm:"column:error_message;not null;default:''"`
 	CSR                  string    `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
 	IsReenrollment       bool      `gorm:"column:is_reenrollment;not null;default:false"`
+	CentralKeyGeneration bool      `gorm:"column:central_key_generation;not null;default:false"` // RFC 9483 §4.1.6 CKG: response not replayable
 	RequestType          string    `gorm:"column:request_type;not null;default:''"`
 	SubjectCommonName    string    `gorm:"column:subject_common_name;not null;default:''"`
 	WFXJobID             string    `gorm:"column:wfx_job_id;not null;default:''"`
@@ -77,11 +79,26 @@ func stringToCSR(s string) *models.X509CertificateRequest {
 
 func (cmpTransactionRow) TableName() string { return "cmp_transactions" }
 
+// cmpRegTokenClaimRow records a claimed one-time-use regToken. It is a separate
+// table from cmp_transactions on purpose: the claim must be written BEFORE
+// issuance (so concurrent requests cannot both pass the one-time-use check),
+// whereas a transaction row is only written after issuance because it carries the
+// issued certificate. The composite primary key is what makes the claim atomic.
+type cmpRegTokenClaimRow struct {
+	DMSID     string    `gorm:"primaryKey;column:dms_id"`
+	RegToken  string    `gorm:"primaryKey;column:reg_token"`
+	ClaimedAt time.Time `gorm:"column:claimed_at;not null"`
+}
+
+func (cmpRegTokenClaimRow) TableName() string { return "cmp_reg_token_claims" }
+
 // PostgresCMPTransactionStorage implements storage.CMPTransactionRepo using Postgres.
 type PostgresCMPTransactionStorage struct {
 	db      *gorm.DB
 	logger  *logrus.Entry
 	querier *DBQuerier[cmpTransactionRow]
+	// deviceLocks backs WithDeviceLock on dialects without advisory locks.
+	deviceLocks deviceLockTable
 }
 
 // NewCMPTransactionRepository creates a PostgresCMPTransactionStorage backed by
@@ -197,6 +214,29 @@ func (s *PostgresCMPTransactionStorage) HasSeenRegToken(ctx context.Context, dms
 	return count > 0, nil
 }
 
+// ClaimRegToken implements storage.CMPTransactionRepo. The claim is an INSERT
+// into a dedicated table whose primary key is (dms_id, reg_token), so exactly
+// one concurrent caller can win: ON CONFLICT DO NOTHING makes the loser's
+// RowsAffected zero rather than raising.
+func (s *PostgresCMPTransactionStorage) ClaimRegToken(ctx context.Context, dmsID, regToken string) (bool, error) {
+	if regToken == "" {
+		return true, nil
+	}
+	claim := cmpRegTokenClaimRow{
+		DMSID:     dmsID,
+		RegToken:  regToken,
+		ClaimedAt: time.Now(),
+	}
+	result := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&claim)
+	if result.Error != nil {
+		s.logger.Errorf("cmp_reg_token_claims: claim dms=%s: %v", dmsID, result.Error)
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
 // SelectByCertSerial returns the transaction that issued the certificate with
 // the given hex serial number, regardless of state or expiry. Rows are keyed
 // by transaction_id, so at most one row references a given issued cert. See
@@ -261,6 +301,7 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx models.CM
 		ErrorMessage:         tx.ErrorMessage,
 		CSR:                  csrToString(tx.CSR),
 		IsReenrollment:       tx.IsReenrollment,
+		CentralKeyGeneration: tx.CentralKeyGeneration,
 		RequestType:          tx.RequestType,
 		SubjectCommonName:    tx.SubjectCommonName,
 		WFXJobID:             tx.WFXJobID,
@@ -431,12 +472,24 @@ func (s *PostgresCMPTransactionStorage) ClaimPending(ctx context.Context, transa
 // appropriate here because the callers of this method (see LWCEnroll) hold it
 // only across a single bounded CA call, not an unbounded amount of work.
 //
-// On dialects with no advisory-lock primitive (SQLite, used for tests/dev),
-// fn runs directly: a single writer already serializes access there, and
-// cross-replica contention isn't a concern for the single-process
-// deployments that use this dialect.
+// On dialects with no advisory-lock primitive (SQLite, used for tests/dev), a
+// process-local mutex keyed by deviceID is held instead. This used to run fn
+// directly, on the reasoning that "a single writer already serializes access
+// there" — but that is not what the callers need. SQLite serializes individual
+// WRITES; it does not hold anything across the closure, and the closure's whole
+// purpose is to make a read-decide-write sequence spanning a CA round trip
+// atomic (see LWCEnroll's MaximumActiveCertificates check). Two goroutines in
+// one process could therefore both read the count, both pass the check, and both
+// issue — exactly the race the lock exists to close, silently reopened on every
+// non-Postgres deployment.
+//
+// A process-local lock is sufficient there and nowhere else: these dialects are
+// used only for single-process deployments. Postgres, which serves multi-replica
+// deployments, keeps the cross-process advisory lock.
 func (s *PostgresCMPTransactionStorage) WithDeviceLock(ctx context.Context, deviceID string, fn func(ctx context.Context) error) error {
 	if s.db.Dialector.Name() != "postgres" {
+		release := s.deviceLocks.acquire(deviceID)
+		defer release()
 		return fn(ctx)
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -445,6 +498,51 @@ func (s *PostgresCMPTransactionStorage) WithDeviceLock(ctx context.Context, devi
 		}
 		return fn(ctx)
 	})
+}
+
+// deviceLockTable is a set of mutexes keyed by device ID, used as the
+// non-Postgres fallback for WithDeviceLock. Entries are reference-counted and
+// dropped once idle so the table does not grow with every device ever seen.
+//
+// The zero value is ready to use.
+type deviceLockTable struct {
+	mu    sync.Mutex
+	locks map[string]*deviceLockEntry
+}
+
+type deviceLockEntry struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// acquire blocks until the lock for key is held, and returns the function that
+// releases it.
+func (t *deviceLockTable) acquire(key string) func() {
+	t.mu.Lock()
+	if t.locks == nil {
+		t.locks = make(map[string]*deviceLockEntry)
+	}
+	entry, ok := t.locks[key]
+	if !ok {
+		entry = &deviceLockEntry{}
+		t.locks[key] = entry
+	}
+	// Counted while the table lock is held, so the entry cannot be evicted
+	// between here and the Lock below.
+	entry.refs++
+	t.mu.Unlock()
+
+	entry.mu.Lock()
+
+	return func() {
+		entry.mu.Unlock()
+		t.mu.Lock()
+		entry.refs--
+		if entry.refs == 0 {
+			delete(t.locks, key)
+		}
+		t.mu.Unlock()
+	}
 }
 
 // UpdateState transitions a transaction to a new state, atomically setting
@@ -836,6 +934,7 @@ func rowToDomain(row cmpTransactionRow) models.CMPTransaction {
 		ErrorMessage:         row.ErrorMessage,
 		CSR:                  stringToCSR(row.CSR),
 		IsReenrollment:       row.IsReenrollment,
+		CentralKeyGeneration: row.CentralKeyGeneration,
 		RequestType:          row.RequestType,
 		SubjectCommonName:    row.SubjectCommonName,
 		WFXJobID:             row.WFXJobID,

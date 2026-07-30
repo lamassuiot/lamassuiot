@@ -1276,6 +1276,51 @@ func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T
 	svc.AssertExpectations(t)
 }
 
+// TestHandleCMP_CertConf_WhilePendingIsRejected verifies that a certConf naming
+// a transaction that has no issued certificate yet is rejected with a CMP error
+// body rather than crashing the handler.
+//
+// Regression test: handleCertConf used to read tx.Certificate.Raw without
+// checking it, and tx.Certificate is nil while State == PENDING. Because the EE
+// chooses its own transactionID, an ir that parks a PENDING row (phased-approval
+// workflow here) followed by a certConf for the same transactionID reached that
+// dereference and panicked — every intervening check passes trivially, since a
+// PENDING row's SentNonce and CertSerialNumber are still empty.
+func TestHandleCMP_CertConf_WhilePendingIsRejected(t *testing.T) {
+	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{Workflow: models.CMPWorkflowPhased})
+	txID := randomTxID(t)
+
+	// Park a PENDING transaction via the phased IR path.
+	irDER, _, _ := buildTestIR(t, testIROptions{CN: "pending-certconf-device", TransactionID: txID})
+	require.Equal(t, http.StatusOK, postCMP(t, router, "test-dms", irDER).Code)
+	tx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok, "phased ir must park a transaction")
+	require.Equal(t, models.CMPTransactionStatePending, tx.State)
+	require.Nil(t, tx.Certificate, "a PENDING transaction must not carry a certificate")
+
+	// certConf for that PENDING transaction. The cert bytes are arbitrary: the
+	// point is that the server has nothing to compare them against yet. An empty
+	// recipNonce is what a real client would send here, since no ip/cp with a
+	// senderNonce was ever returned.
+	confCert, _ := buildSelfSignedCert(t, "pending-certconf-device")
+	confDER := buildTestCertConf(t, txID, confCert.Raw, nil)
+
+	resp := postCMP(t, router, "test-dms", confDER)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, resp.Body.Bytes()),
+		"certConf on a transaction with no issued certificate must be answered with an error body")
+	bs := parseFailInfoBitString(t, resp.Body.Bytes())
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoBadRequest),
+		"failInfo must set badRequest (2)")
+
+	// The transaction must be left untouched for the pending approval to complete.
+	after, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok)
+	assert.Equal(t, models.CMPTransactionStatePending, after.State,
+		"a rejected certConf must not advance the transaction state")
+}
+
 // TestHandleCMP_CertConf_Duplicate_CertConfirmed verifies that a certConf for
 // an already-confirmed transaction is answered with an error body carrying
 // failInfo certConfirmed (11) rather than a second pkiConf (RFC 9483 §4.1.1 /

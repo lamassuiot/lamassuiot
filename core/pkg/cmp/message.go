@@ -23,7 +23,20 @@ type InfoTypeAndValue struct {
 	InfoValue asn1.RawValue `asn1:"optional"`
 }
 
-// Header is the wire representation of a CMP PKIHeader.
+// Header is the wire representation of a CMP PKIHeader (RFC 4210 §5.1.1).
+//
+// Every OPTIONAL field of the ASN.1 SEQUENCE must be declared here, in tag
+// order, even when this codebase never populates it. Go's struct-based ASN.1
+// decoder matches SEQUENCE elements POSITIONALLY: the first unmatched
+// context-specific tag stops the walk, and every later OPTIONAL field then
+// silently decodes as its zero value with no error returned. So omitting
+// recipKID [3] or freeText [7] did not merely discard those two fields — a peer
+// that sent either one had its transactionID, senderNonce, recipNonce and
+// generalInfo all silently zeroed, and ParseMessage still returned nil error.
+//
+// RecipKID and FreeText are therefore load-bearing for correct decoding of the
+// fields around them, not just for their own sake. Do not remove them because
+// they look unused.
 type Header struct {
 	PVNO          int `asn1:"default:2"`
 	Sender        GeneralName
@@ -31,9 +44,11 @@ type Header struct {
 	MessageTime   time.Time                `asn1:"generalized,explicit,optional,tag:0,omitempty"`
 	ProtectionAlg pkix.AlgorithmIdentifier `asn1:"explicit,optional,tag:1,omitempty"`
 	SenderKID     []byte                   `asn1:"optional,explicit,tag:2,omitempty"`
+	RecipKID      []byte                   `asn1:"optional,explicit,tag:3,omitempty"`
 	TransactionID []byte                   `asn1:"optional,explicit,tag:4,omitempty"`
 	SenderNonce   []byte                   `asn1:"optional,explicit,tag:5,omitempty"`
 	RecipNonce    []byte                   `asn1:"optional,explicit,tag:6,omitempty"`
+	FreeText      PKIFreeText              `asn1:"optional,explicit,tag:7,omitempty"`
 	GeneralInfo   []InfoTypeAndValue       `asn1:"optional,explicit,tag:8,omitempty"`
 }
 

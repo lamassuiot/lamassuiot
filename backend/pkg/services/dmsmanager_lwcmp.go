@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -501,7 +502,14 @@ func trustedRACAIDs(dms *models.DMS) []string {
 // CertHasExtKeyUsageOID alone (as the RA-initiated revocation case and the
 // raVerified POPO shortcut once did) lets an attacker mint a throwaway
 // self-signed certificate carrying the EKU and have it trusted outright.
-func (svc DMSManagerServiceBackend) validateTrustedRASigner(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, signer *x509.Certificate, requireCMCRAEKU bool) error {
+//
+// validationCAIDs narrows the chain-validation scope (RFC011
+// RR.TrustedRA.ValidationCAIDs): when non-empty the signer must chain to one of
+// exactly those CAs, which is how an operator restricts revocation-capable RAs
+// to a subset of the DMS's trust. Empty means "no narrowing" and falls back to
+// the DMS-wide trustedRACAIDs boundary. Callers with no per-operation scope to
+// apply (e.g. the raVerified enrollment shortcut) pass nil.
+func (svc DMSManagerServiceBackend) validateTrustedRASigner(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, signer *x509.Certificate, requireCMCRAEKU bool, validationCAIDs []string) error {
 	// The id-kp-cmcRA EKU is a self-issued claim on its own; the load-bearing
 	// check is always the chain to a DMS-trusted CA below. Whether the EKU is
 	// additionally mandatory is caller-controlled (RFC011 RR.TrustedRA.
@@ -510,8 +518,14 @@ func (svc DMSManagerServiceBackend) validateTrustedRASigner(ctx context.Context,
 	if requireCMCRAEKU && !chelpers.CertHasExtKeyUsageOID(signer, chelpers.OidExtKeyUsageCMCRA) {
 		return fmt.Errorf("signer does not carry id-kp-cmcRA")
 	}
-	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, trustedRACAIDs(dms), false); err != nil {
-		return fmt.Errorf("signer does not chain to a DMS-trusted CA: %w", err)
+	candidateCAIDs := validationCAIDs
+	scope := "RR.TrustedRA.ValidationCAIDs"
+	if len(candidateCAIDs) == 0 {
+		candidateCAIDs = trustedRACAIDs(dms)
+		scope = "DMS-wide trust boundary"
+	}
+	if _, err := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, false); err != nil {
+		return fmt.Errorf("signer does not chain to a trusted CA (%s): %w", scope, err)
 	}
 	return nil
 }
@@ -531,7 +545,9 @@ func (svc DMSManagerServiceBackend) LWCValidateRASigner(ctx context.Context, aps
 		return errs.ErrDMSNotFound
 	}
 
-	return svc.validateTrustedRASigner(ctx, lFunc, dms, signer, true)
+	// nil scope: the raVerified enrollment shortcut has no per-operation CA
+	// allow-list of its own, so the DMS-wide trust boundary applies.
+	return svc.validateTrustedRASigner(ctx, lFunc, dms, signer, true, nil)
 }
 
 // LWCValidateCCRRequester implements
@@ -837,6 +853,29 @@ func (svc DMSManagerServiceBackend) resolveCMPIssuanceProfile(ctx context.Contex
 	return profile, nil
 }
 
+// enrollmentReusesCertificateKey reports whether csr carries the same public key
+// as the certificate with the given serial number. Used to apply the
+// require_new_key policy to enrollments that replace an existing identity.
+//
+// A certificate that cannot be loaded or parsed yields an error rather than
+// "false": silently treating an unreadable certificate as "different key" would
+// turn a lookup failure into a policy bypass.
+func (svc DMSManagerServiceBackend) enrollmentReusesCertificateKey(ctx context.Context, lFunc *logrus.Entry, csr *x509.CertificateRequest, certSerial string) (bool, error) {
+	current, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+		SerialNumber: certSerial,
+	})
+	if err != nil {
+		lFunc.Errorf("could not load active certificate '%s' to apply KUR.KeyPolicy: %s", certSerial, err)
+		return false, err
+	}
+	if current.Certificate == nil {
+		lFunc.Errorf("active certificate '%s' carries no parsed certificate; cannot apply KUR.KeyPolicy", certSerial)
+		return false, fmt.Errorf("could not read active certificate to apply the key-update policy")
+	}
+	currentX509 := (*x509.Certificate)(current.Certificate)
+	return bytes.Equal(csr.RawSubjectPublicKeyInfo, currentX509.RawSubjectPublicKeyInfo), nil
+}
+
 func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -990,6 +1029,25 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		}
 		if existingDevice.IdentitySlot != nil && revokeSuperseded {
 			supersededCertToRevoke = existingDevice.IdentitySlot.Secrets[existingDevice.IdentitySlot.ActiveVersion]
+		}
+
+		// RFC011 KUR.KeyPolicy=require_new_key was enforced only in LWCReenroll
+		// (kur), leaving a bypass: an ir/cr/p10cr that REPLACES the device's active
+		// certificate is functionally a key update, so a device could renew on the
+		// same key simply by choosing cr-with-replace over kur and the policy would
+		// never be consulted. Applied here only when this enrollment actually
+		// supersedes the previous identity — an "additional" certificate updates
+		// nothing, so the key-update policy has no say over it.
+		if supersededCertToRevoke != "" &&
+			cmpOpts.KUR.KeyPolicy == models.CMPKeyPolicyRequireNew {
+			reused, keyErr := svc.enrollmentReusesCertificateKey(ctx, lFunc, csr, supersededCertToRevoke)
+			if keyErr != nil {
+				return nil, keyErr
+			}
+			if reused {
+				lFunc.Errorf("aborting %s enrollment for device '%s': KUR.KeyPolicy=require_new_key but the request replaces the active certificate with the same public key", cmpOp, deviceID)
+				return nil, fmt.Errorf("key update must present a new key")
+			}
 		}
 	}
 
@@ -1581,9 +1639,29 @@ func sanSignatureCert(c *x509.Certificate) string {
 }
 
 // cmpRevocationReasonName maps an RFC 5280 CRLReason code to its CMP settings
-// allow-list name (RFC011). ok is false for reason codes with no CMP allow-list
-// representation (certificateHold, removeFromCRL, privilegeWithdrawn,
-// aaCompromise), which are governed elsewhere rather than by RR.AllowedReasons.
+// allow-list name (RFC011). A code with no mapping is NOT gated by
+// RR.AllowedReasons, because the caller's check reads
+// `if name, ok := ...; ok && !allowed(name)`.
+//
+// Two codes are deliberately left unmapped, and both belong to the
+// suspend/resume lifecycle rather than to permanent revocation:
+//
+//   - certificateHold (6) suspends a certificate. It is the only revocation
+//     reason that can be reversed, and RR.AllowRevival's hold-release path is
+//     reachable only for certificates placed on hold — so hold and its release
+//     are one feature, gated by AllowRevival, not two entries in a list of
+//     permanent revocation reasons. RFC 9483 conformance also requires a CA to
+//     accept it: the suite's revive tests place a certificate on hold first, so
+//     gating it here breaks the entire revive flow. Gating it would additionally
+//     be unfixable by changing defaults — resolveRR only fills a "fresh" RR
+//     block, so every DMS whose allowed_reasons was ever configured would need a
+//     manual config migration to keep working.
+//   - removeFromCRL (8) is the hold *release* itself, governed by AllowRevival.
+//
+// Every OTHER reason an EE can put on the wire must map to a name here, or the
+// operator's allow-list is silently bypassed. privilegeWithdrawn (9) and
+// aaCompromise (10) are permanent revocation reasons with no other gate and used
+// to fall in exactly that hole.
 func cmpRevocationReasonName(r models.RevocationReason) (models.CMPRevocationReason, bool) {
 	switch int(r) {
 	case 0:
@@ -1598,6 +1676,10 @@ func cmpRevocationReasonName(r models.RevocationReason) (models.CMPRevocationRea
 		return models.CMPRevocationReasonSuperseded, true
 	case 5:
 		return models.CMPRevocationReasonCessationOfOperation, true
+	case 9:
+		return models.CMPRevocationReasonPrivilegeWithdrawn, true
+	case 10:
+		return models.CMPRevocationReasonAACompromise, true
 	default:
 		return "", false
 	}
@@ -1610,6 +1692,49 @@ func cmpReasonAllowed(name models.CMPRevocationReason, allowed []models.CMPRevoc
 		}
 	}
 	return false
+}
+
+// cmpCertificateOwnerDMS resolves which DMS owns the certificate being revoked,
+// from whichever record can establish it:
+//
+//  1. The device registry, keyed by the certificate's subject CommonName (the
+//     device ID). This covers anything enrolled through a DMS, over CMP or EST.
+//  2. The CMP transaction store, keyed by the certificate's serial number. This
+//     covers certificates whose subject is not a device ID — a p10cr with an
+//     arbitrary subject, or a ccr cross-certificate naming a CA — which the
+//     device registry can never resolve.
+//
+// ownerKnown is false when neither record identifies an owner; callers must treat
+// that as "authority not established", never as "owned by us". A transport or
+// lookup failure (as opposed to a clean not-found) is returned as an error rather
+// than collapsed into ownerKnown=false, so an unavailable device manager cannot
+// silently widen who may revoke what.
+func (svc DMSManagerServiceBackend) cmpCertificateOwnerDMS(ctx context.Context, lFunc *logrus.Entry, cert *models.Certificate, serialNumber string) (owner string, ownerKnown bool, err error) {
+	if cert.Subject.CommonName != "" && svc.deviceManagerCli != nil {
+		device, devErr := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: cert.Subject.CommonName})
+		switch {
+		case devErr == nil:
+			return device.DMSOwner, true, nil
+		case !errors.Is(devErr, errs.ErrDeviceNotFound):
+			lFunc.Errorf("could not check device ownership for certificate '%s': %s", serialNumber, devErr)
+			return "", false, devErr
+		}
+		// ErrDeviceNotFound: the CN is not a registered device. Fall through to
+		// the transaction store rather than concluding anything from its absence.
+	}
+
+	if svc.cmptxStorage != nil {
+		tx, found, txErr := svc.cmptxStorage.SelectByCertSerial(ctx, serialNumber)
+		if txErr != nil {
+			lFunc.Errorf("could not check CMP transaction ownership for certificate '%s': %s", serialNumber, txErr)
+			return "", false, txErr
+		}
+		if found && tx.DMSID != "" {
+			return tx.DMSID, true, nil
+		}
+	}
+
+	return "", false, nil
 }
 
 func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
@@ -1642,9 +1767,14 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// handshake) could revoke it.
 	rr := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR
 
+	// Hoisted out of the signer block below so the device-ownership check further
+	// down can distinguish "the requester is revoking its own certificate" from
+	// "a third party is revoking someone else's".
+	selfRevocation := false
+
 	if signer := signerCert; signer != nil {
 		signerSN := helpers.SerialNumberToHexString(signer.SerialNumber)
-		selfRevocation := signerSN == input.SerialNumber
+		selfRevocation = signerSN == input.SerialNumber
 
 		if !selfRevocation {
 			// RFC011: RR.Authorization=self_only forbids a third party (even a
@@ -1653,7 +1783,7 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 				lFunc.Errorf("aborting revocation of '%s': DMS permits self-revocation only (RR.Authorization=self_only)", input.SerialNumber)
 				return errs.ErrDMSEnrollInvalidCert
 			}
-			if vErr := svc.validateTrustedRASigner(ctx, lFunc, dms, signer, rr.TrustedRA.RequireCMCRAEKU); vErr != nil {
+			if vErr := svc.validateTrustedRASigner(ctx, lFunc, dms, signer, rr.TrustedRA.RequireCMCRAEKU, rr.TrustedRA.ValidationCAIDs); vErr != nil {
 				lFunc.Errorf("aborting revocation of '%s': signer SN=%s is not a trusted PKI management entity: %s",
 					input.SerialNumber, signerSN, vErr)
 				return errs.ErrDMSEnrollInvalidCert
@@ -1701,17 +1831,40 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// share the same EnrollmentCA (chain-validating the signer against this
 	// DMS's trusted CAs, as done above, does not prove the *target*
 	// certificate belongs to this DMS too).
-	if cert.Subject.CommonName != "" {
-		owningDevice, devErr := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: cert.Subject.CommonName})
-		if devErr != nil && devErr != errs.ErrDeviceNotFound {
-			lFunc.Errorf("could not check device ownership for certificate '%s': %s", input.SerialNumber, devErr)
-			return devErr
-		}
-		if devErr == nil && owningDevice.DMSOwner != dms.ID {
-			lFunc.Errorf("aborting revocation of '%s': certificate belongs to a device owned by DMS '%s', not '%s' (RFC 9483 §5.3.2)",
-				input.SerialNumber, owningDevice.DMSOwner, dms.ID)
-			return errs.ErrCMPDeviceOwnedByOtherDMS
-		}
+	// This check used to fail OPEN in two ways: it was skipped entirely for a
+	// certificate with an empty subject CommonName, and — even when the CN was
+	// present — it only rejected when the CN actually resolved to a device record,
+	// so a CN naming no registered device (a p10cr/ccr subject that is not a
+	// device ID, or a legacy certificate) also sailed through unchecked. Both
+	// holes let a trusted-RA signer authorized under this DMS revoke a
+	// certificate this DMS has no authority over, which is precisely what the
+	// check exists to prevent.
+	//
+	// Ownership is now established from either of two independent records, then
+	// enforced; when neither can establish it, the request must prove authority a
+	// different way (see below).
+	owner, ownerKnown, ownErr := svc.cmpCertificateOwnerDMS(ctx, lFunc, cert, input.SerialNumber)
+	if ownErr != nil {
+		return ownErr
+	}
+	switch {
+	case ownerKnown && owner != dms.ID:
+		lFunc.Errorf("aborting revocation of '%s': certificate is owned by DMS '%s', not '%s' (RFC 9483 §5.3.2)",
+			input.SerialNumber, owner, dms.ID)
+		return errs.ErrCMPDeviceOwnedByOtherDMS
+	case !ownerKnown && !selfRevocation:
+		// No ownership record exists for this certificate, so this DMS cannot
+		// establish that it has authority over it. Self-revocation is still
+		// allowed — the signer IS the target certificate and has already been
+		// chain-validated against this DMS's trusted CAs above, which is authority
+		// enough to revoke oneself, and it keeps legacy certificates and
+		// non-device subjects (p10cr, ccr cross-certificates) revocable by their
+		// holder. A THIRD PARTY, including a trusted RA, is refused: that is the
+		// cross-DMS escalation path, and "we could not determine the owner" must
+		// not read as "the owner is us".
+		lFunc.Errorf("aborting revocation of '%s': no ownership record ties this certificate to DMS '%s', and the requester is not the certificate itself (RFC 9483 §5.3.2)",
+			input.SerialNumber, dms.ID)
+		return errs.ErrCMPDeviceOwnedByOtherDMS
 	}
 
 	// RFC 9483 §4.1.3: while the target certificate has a key-update awaiting
@@ -1772,8 +1925,8 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	}
 
 	// RFC011: RR.AllowedReasons restricts which CRLReason codes the DMS accepts.
-	// Only reasons representable in the CMP allow-list are gated; reasons outside
-	// that set (e.g. certificateHold) are left to the controller's own validation.
+	// Every reason an EE can request is gated here except removeFromCRL, which is
+	// a hold release governed by RR.AllowRevival's check earlier in this method.
 	if name, ok := cmpRevocationReasonName(input.Reason); ok && !cmpReasonAllowed(name, rr.AllowedReasons) {
 		lFunc.Warnf("revocation rejected: reason %q is not permitted by RR.AllowedReasons for DMS '%s'", name, input.APS)
 		return errs.ErrCertificateStatusTransitionNotAllowed
