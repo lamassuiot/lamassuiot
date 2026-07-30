@@ -290,37 +290,11 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// (NO_AUTH, EXTERNAL_WEBHOOK) accept unsigned messages. auth_mode is the
 	// single source of truth for the protection requirement — there is no
 	// separate enforce_request_protection knob.
-	requireProtection := requireClientCertProtection(enrollOpts)
-	// RFC 9483 §5.3.2 / RFC011: a revocation request (rr) MUST be
-	// signature-protected regardless of the DMS auth_mode — an unsigned rr is
-	// never accepted, even under NO_AUTH / EXTERNAL_WEBHOOK. This is a fixed
-	// protocol invariant, not a per-DMS toggle.
 	//
-	// RFC 9483 §4.1.3 / RFC011 "Fixed, non-configurable invariants": a key
-	// update request MUST be signature-protected with the certificate being
-	// updated — that signature IS the kur's proof of possession, and it is
-	// the only thing that binds this request to the identity it claims to
-	// renew. Gating this on auth_mode/EnforcePOPO would let an unsigned kur
-	// naming an arbitrary device CommonName sail through on any DMS
-	// configured with NO_AUTH/EXTERNAL_WEBHOOK, minting a certificate for
-	// that identity with zero proof of possession. Like rr, this is a fixed
-	// protocol invariant, not a per-DMS toggle.
-	if body.Tag == corecmp.BodyTagRR || body.Tag == corecmp.BodyTagKUR {
-		requireProtection = true
-	}
-	// RFC 9483 §4.3 / RFC011 GENM.AccessPolicy: general messages are
-	// informational capability-discovery queries whose protection requirement
-	// is governed by the SEPARATE GENM.AccessPolicy, NOT the enrollment
-	// auth_mode. That separation is the whole point of the field — a DMS may
-	// require client-certificate protection for enrollment (ir/cr/kur) yet
-	// still answer discovery genm unauthenticated (public_discovery). Setting
-	// GENM.AccessPolicy=require_signed opts genm back into mandatory protection.
-	// This deliberately overrides the auth_mode-derived default above so that
-	// public_discovery is honoured on every deployment, not only on DMSes whose
-	// auth_mode happens not to require a client certificate.
-	if body.Tag == corecmp.BodyTagGenMsg {
-		requireProtection = enrollOpts.GENM.AccessPolicy == models.CMPGENMAccessPolicyRequireSigned
-	}
+	// The rr/kur always-protected invariants and genm's separate
+	// GENM.AccessPolicy override live in requireProtectionForBody, shared with
+	// the nested-batch pre-check so the two cannot drift.
+	requireProtection := requireProtectionForBody(body.Tag, enrollOpts)
 	signerCert, err := verifyRequestProtection(fullMsg, reqHeader.ProtectionAlg, requireProtection)
 	if err != nil {
 		lFunc.Warnf("protection verification failed: %v", err)
@@ -575,6 +549,29 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	lFunc = lFunc.WithField("serial", serialHex)
 	lFunc.Infof("revocation request serial=%s reason=%d revive=%t", serialHex, reason, revive)
 
+	// Replay protection. Every other request-initiating operation records its
+	// transactionID (enrollment via Exists/Insert, ccr via Insert); rr did not, so
+	// a captured, legitimately-signed rr could be replayed verbatim. A repeated
+	// plain revoke fails harmlessly at the status-transition check, but a replayed
+	// *revive* (removeFromCRL under RR.AllowRevival) succeeds again any time the
+	// target is back in the revoked state — including after it was deliberately
+	// re-revoked for a graver reason such as keyCompromise.
+	//
+	// Deliberately Select, not Exists: Exists reports only active non-terminal
+	// rows so a transactionID can be reused after a transaction completes, which
+	// is exactly the window a replay lives in. Select also returns terminal rows,
+	// and terminal rows are retained (never TTL-deleted), so this is durable.
+	txHex := hex.EncodeToString(header.TransactionID)
+	if _, seen, selErr := r.store.Select(ctx.Request.Context(), txHex); selErr != nil {
+		lFunc.Errorf("rr: lookup transaction: %v", selErr)
+		r.rejectRevocation(ctx, lFunc, header, "internal error", corecmp.PKIFailureInfoSystemFailure, dmsID)
+		return
+	} else if seen {
+		lFunc.Warnf("rr: transactionID %s already used; refusing replay", txHex)
+		r.rejectRevocation(ctx, lFunc, header, "transactionID already in use", corecmp.PKIFailureInfoTransactionIDInUse, dmsID)
+		return
+	}
+
 	if err := r.svc.LWCRevokeCertificate(ctx.Request.Context(), services.RevokeCertificateInput{
 		APS:          dmsID,
 		SerialNumber: serialHex,
@@ -622,6 +619,33 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 	// Transition the CMP transaction to REVOKED for audit visibility.
 	if markErr := r.store.MarkRevokedByCertSerial(ctx.Request.Context(), serialHex); markErr != nil {
 		lFunc.Warnf("rr: failed to mark transaction as revoked: %v", markErr)
+	}
+
+	// Record THIS rr's transactionID so the pre-check above rejects a replay of
+	// it. Terminal state, so the row is retained rather than TTL-deleted.
+	//
+	// CertSerialNumber is deliberately left EMPTY even though we know the target
+	// serial: SelectByCertSerial does First() on cert_serial_number and documents
+	// the invariant that at most one row references a given issued certificate —
+	// it is how the service layer classifies superseded certs. Recording the
+	// target serial here would put a second row on that serial and could make
+	// that lookup return this rr row instead of the enrollment that issued the
+	// cert. The revocation itself is already recorded on the enrollment row by
+	// MarkRevokedByCertSerial above, and in the CA's own status.
+	now := time.Now()
+	if insErr := r.store.Insert(ctx.Request.Context(), models.CMPTransaction{
+		TransactionID: txHex,
+		DMSID:         dmsID,
+		State:         models.CMPTransactionStateRevoked,
+		RequestType:   cmpTagToString(corecmp.BodyTagRR),
+		ReceivedNonce: hex.EncodeToString(header.SenderNonce),
+		ExpiresAt:     now,
+		CreatedAt:     now,
+	}); insErr != nil {
+		// The revocation already succeeded and is not being undone over a
+		// bookkeeping failure; log loudly, since replay protection for this
+		// transactionID is what was lost.
+		lFunc.Errorf("rr: failed to record transaction %s for replay protection: %v", txHex, insErr)
 	}
 
 	statusText := "Certificate revoked"
@@ -781,6 +805,29 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		}
 		lFunc.Warnf("certConf: unknown transactionID %s", txHex)
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "unknown transactionID", dmsID, corecmp.PKIFailureInfoBadRequest)
+		return
+	}
+
+	// There is nothing to confirm until a certificate actually exists.
+	// tx.Certificate is nil while State == PENDING (see models.CMPTransaction),
+	// and PENDING rows are reachable today: deferForApproval parks one for the
+	// phased-approval window and handlePOPOChallenge parks one awaiting popdecr.
+	// Because the EE chooses its own transactionID, an ir/cr that parks a PENDING
+	// row followed by a certConf for the same ID would otherwise dereference a nil
+	// Certificate below — every check in between passes trivially, since a PENDING
+	// row's SentNonce and CertSerialNumber are still empty. Reject explicitly
+	// instead; the EE's correct next message for a PENDING transaction is pollReq.
+	//
+	// Keyed on Certificate == nil rather than on a State allow-list on purpose:
+	// that is exactly the dereference precondition, and it leaves every state that
+	// does carry a certificate (ISSUED, CONFIRMED, REVOKED) to the existing
+	// Confirm() handling below, which distinguishes duplicate-certConf and
+	// revoked-before-confirmation with their own specific failInfo bits.
+	if tx.Certificate == nil {
+		lFunc.Warnf("certConf: transaction %s is in state %s with no issued certificate; nothing to confirm", txHex, tx.State)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+			fmt.Sprintf("transaction has no issued certificate to confirm (state=%s); use pollReq to retrieve the certificate first", tx.State),
+			dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
 	}
 
@@ -980,10 +1027,13 @@ const (
 // certReqId — certReqId is just echoed back) and chooses a response based on
 // the row's state:
 //
-//   - PENDING       → pollRep(checkAfter)         (dead path in sync-only mode)
+//   - PENDING       → pollRep(checkAfter)         (phased approval / popo challenge)
 //   - ISSUED        → ip/cp(cert)                 (deliver the cert; non-destructive)
-//   - ISSUE_FAILED  → error PKIMessage(reason)    (dead path in sync-only mode)
+//   - ISSUE_FAILED  → error PKIMessage(reason)
 //   - not found     → error PKIMessage("unknown transactionID")
+//
+// PENDING is a live state, not a dead path: deferForApproval parks a row for the
+// phased-approval window and handlePOPOChallenge parks one awaiting popdecr.
 //
 // In the current sync-only mode, an ISSUED row is always present after the
 // initial ip(cert), letting an EE recover when the original response was lost
@@ -1027,6 +1077,24 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "recipNonce mismatch", dmsID, corecmp.PKIFailureInfoBadRecipientNonce)
 			return
 		}
+	}
+
+	// A central-key-generation response cannot be rebuilt. The server-generated
+	// private key is deliberately never persisted — it lives only long enough to
+	// be wrapped into the original response's EnvelopedData (RFC 9483 §4.1.6) —
+	// so re-deriving this transaction's response would yield a bare certificate
+	// the EE holds no private key for. Answering with that would be worse than an
+	// error: the EE would install an unusable identity. Tell it to re-enroll with
+	// a fresh transactionID instead.
+	//
+	// certConf on a CKG row is still fine and still handled: confirming only needs
+	// the stored certificate.
+	if tx.CentralKeyGeneration {
+		lFunc.Warnf("pollReq: tx %s is a central-key-generation transaction; its response is not replayable", txHex)
+		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
+			"the response for a central key generation transaction cannot be re-delivered because the generated private key is not retained; start a new enrollment (RFC 9483 §4.1.6)",
+			dmsID, corecmp.PKIFailureInfoBadRequest)
+		return
 	}
 
 	switch tx.State {

@@ -17,8 +17,6 @@ package models
 // way earlier revisions of this comment implied. The confirmed, NAMED
 // exceptions — fields that genuinely persist and round-trip but are not yet
 // read by any handler — are:
-//   - CMPTrustedRA.ValidationCAIDs (an rr's trusted-RA boundary always uses the
-//     DMS-wide trustedRACAIDs; only sibling field RequireCMCRAEKU is live)
 //   - CMPCCRSettings.IssuanceProfileID (cross-certification issuance profile
 //     selection does not yet consult this)
 //   - CMPIRSettings.IdentitySource (subject_only vs subject_or_san selection is
@@ -147,7 +145,17 @@ const (
 	CMPRevocationReasonAffiliationChanged   CMPRevocationReason = "affiliation_changed"
 	CMPRevocationReasonSuperseded           CMPRevocationReason = "superseded"
 	CMPRevocationReasonCessationOfOperation CMPRevocationReason = "cessation_of_operation"
+	// CMPRevocationReasonPrivilegeWithdrawn is CRLReason 9.
+	CMPRevocationReasonPrivilegeWithdrawn CMPRevocationReason = "privilege_withdrawn"
+	// CMPRevocationReasonAACompromise is CRLReason 10.
+	CMPRevocationReasonAACompromise CMPRevocationReason = "aa_compromise"
 )
+
+// Note: there is deliberately NO name for certificateHold (6) or removeFromCRL
+// (8). Both belong to the suspend/resume lifecycle governed by RR.AllowRevival
+// rather than to this list of permanent revocation reasons — see
+// cmpRevocationReasonName in dmsmanager_lwcmp.go for the full rationale. Adding
+// one here would silently start gating it.
 
 // CMPGENMAccessPolicy selects whether genm support messages may be answered
 // for unauthenticated callers (discovery) or only for signature-protected
@@ -279,10 +287,11 @@ type CMPSubjectConstraints struct {
 }
 
 // CMPTrustedRA scopes which RA certificates a self_and_trusted_ra rr trusts.
-// RequireCMCRAEKU is LIVE (validateTrustedRASigner in dmsmanager_lwcmp.go
-// requires the id-kp-cmcRA EKU on the signer when set). ValidationCAIDs is
-// NOT YET enforced — the rr trust boundary always uses the DMS-wide
-// trustedRACAIDs regardless of this field's value.
+// Both fields are LIVE in validateTrustedRASigner (dmsmanager_lwcmp.go):
+// RequireCMCRAEKU demands the id-kp-cmcRA EKU on the signer when set, and a
+// non-empty ValidationCAIDs narrows chain validation to exactly those CAs.
+// An empty ValidationCAIDs imposes no narrowing and falls back to the DMS-wide
+// trustedRACAIDs boundary.
 type CMPTrustedRA struct {
 	ValidationCAIDs []string `json:"validation_ca_ids"`
 	RequireCMCRAEKU bool     `json:"require_cmc_ra_eku"`

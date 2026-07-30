@@ -308,6 +308,8 @@ func peekSentNonce(t *testing.T, store *inMemoryCMPStore, txID []byte) []byte {
 type inMemoryCMPStore struct {
 	mu  sync.Mutex
 	txs map[string]models.CMPTransaction
+	// regTokenClaims stands in for the cmp_reg_token_claims table.
+	regTokenClaims map[string]struct{}
 }
 
 func newInMemoryCMPStore() *inMemoryCMPStore {
@@ -456,6 +458,27 @@ func (s *inMemoryCMPStore) HasSeenRegToken(_ context.Context, dmsID, regToken st
 		}
 	}
 	return false, nil
+}
+
+// ClaimRegToken mirrors the Postgres semantics: the claim is the atomic act, and
+// a token already claimed loses. Held under the same mutex as everything else in
+// this store, so concurrent callers serialize as they would on the composite
+// primary key.
+func (s *inMemoryCMPStore) ClaimRegToken(_ context.Context, dmsID, regToken string) (bool, error) {
+	if regToken == "" {
+		return true, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.regTokenClaims == nil {
+		s.regTokenClaims = make(map[string]struct{})
+	}
+	key := dmsID + "\x00" + regToken
+	if _, exists := s.regTokenClaims[key]; exists {
+		return false, nil
+	}
+	s.regTokenClaims[key] = struct{}{}
+	return true, nil
 }
 
 func (s *inMemoryCMPStore) SelectByCertSerial(_ context.Context, certSerialNumber string) (models.CMPTransaction, bool, error) {

@@ -136,6 +136,17 @@ type CMPTransaction struct {
 	// RequestType is the finer-grained record used by the UI to surface
 	// whether a first-time enrollment was an ir or cr.
 	RequestType string
+	// CentralKeyGeneration is true when this transaction delivered an
+	// RFC 9483 §4.1.6 server-generated private key alongside the certificate.
+	//
+	// The generated key is deliberately never persisted (it exists only long
+	// enough to be wrapped into the response's EnvelopedData), so — unlike an
+	// ordinary enrollment — this transaction's response can NOT be rebuilt. A
+	// pollReq for such a row must therefore be refused rather than answered with
+	// a bare certificate the EE holds no key for; see handlePoll. certConf and
+	// the confirmation-timeout monitor work normally, since both need only the
+	// certificate.
+	CentralKeyGeneration bool
 	// SubjectCommonName is the CommonName from the enrollment request's
 	// CertTemplate (i.e. the device ID). Stored at insertion time so the
 	// management UI can render device-keyed transaction listings without

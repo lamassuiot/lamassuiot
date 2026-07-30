@@ -99,12 +99,17 @@ const (
 	PKIFailureInfoBadTime             = 3  // messageTime not sufficiently close to system time
 	PKIFailureInfoBadCertID           = 4  // no certificate could be found matching the request
 	PKIFailureInfoBadDataFormat       = 5  // the data submitted has the wrong format
+	PKIFailureInfoWrongAuthority      = 6  // the authority named in the request differs from the one creating the response
 	PKIFailureInfoIncorrectData       = 7  // requester's data is incorrect (notary services)
+	PKIFailureInfoMissingTimeStamp    = 8  // a required timestamp was missing from the message
 	PKIFailureInfoBadPOP              = 9  // proof-of-possession failed
 	PKIFailureInfoCertRevoked         = 10 // referenced/protection certificate is revoked
 	PKIFailureInfoCertConfirmed       = 11 // certificate was already confirmed (duplicate certConf, RFC 9483 §4.1.1)
 	PKIFailureInfoWrongIntegrity      = 12 // wrong integrity type: MAC-based protection where a signature was required (RFC 9483 §3.5)
 	PKIFailureInfoBadRecipientNonce   = 13 // recipNonce did not match the expected senderNonce
+	PKIFailureInfoTimeNotAvailable    = 14 // the TSA's time source is not available
+	PKIFailureInfoUnacceptedPolicy    = 15 // the requested policy is not supported by the CA
+	PKIFailureInfoUnacceptedExtension = 16 // the requested extension is not supported by the CA
 	PKIFailureInfoAddInfoNotAvailable = 17 // request needs information the server cannot supply (RFC 9810 §5.1.3)
 	PKIFailureInfoBadSenderNonce      = 18 // sender nonce missing or too short (RFC 9483 §3.5)
 	PKIFailureInfoBadCertTemplate     = 19 // submitted CertTemplate is incomplete or invalid
@@ -112,7 +117,9 @@ const (
 	PKIFailureInfoTransactionIDInUse  = 21 // transactionID collides with an in-flight one (RFC 9810 §3.1)
 	PKIFailureInfoUnsupportedVersion  = 22 // pvno not understood (RFC 9810 §7 / RFC 9483 §3.5)
 	PKIFailureInfoNotAuthorized       = 23 // sender not authorized for the request (RFC 9810 §3.1)
+	PKIFailureInfoSystemUnavail       = 24 // the request cannot be handled due to system unavailability
 	PKIFailureInfoSystemFailure       = 25
+	PKIFailureInfoDuplicateCertReq    = 26 // the certificate request duplicates an already-issued certificate
 	// pkiStatusWaiting is RFC 4210 §5.2.3 PKIStatus value 3, sent on the initial
 	// ip/cp/kup response in async-issuance mode to tell the EE that the
 	// certificate is not yet available and it should poll for it later.

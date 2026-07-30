@@ -59,6 +59,20 @@ type CMPTransactionRepo interface {
 	// false when regToken is empty.
 	HasSeenRegToken(ctx context.Context, dmsID, regToken string) (bool, error)
 
+	// ClaimRegToken atomically claims a one-time-use RFC 4211 §6.1
+	// id-regCtrl-regToken value for the DMS, returning true when this caller won
+	// the claim and false when the value was already claimed.
+	//
+	// HasSeenRegToken alone cannot enforce one-time use: it is a read, and the
+	// transaction row recording the token is only written after issuance, so two
+	// concurrent requests presenting the same token both observe "unseen" and both
+	// enrol. This method closes that window by making the claim the atomic act,
+	// and MUST be called before issuance — a token is burned by the attempt, which
+	// is the safe direction for a single-use credential.
+	//
+	// Returns (true, nil) when regToken is empty, since there is nothing to claim.
+	ClaimRegToken(ctx context.Context, dmsID, regToken string) (bool, error)
+
 	// Insert persists a new transaction.
 	// Returns ErrCMPTransactionAlreadyExists when a live transaction with the
 	// same transactionID already exists, enabling replay-attack prevention

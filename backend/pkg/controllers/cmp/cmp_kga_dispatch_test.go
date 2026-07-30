@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
 	"math/big"
 	"net/http"
 	"testing"
@@ -539,4 +540,171 @@ func TestHandleCMP_KGA_KTRI_ProtectedWithDMSCredentials(t *testing.T) {
 
 	svc.AssertExpectations(t)
 	wrapped.AssertExpectations(t)
+}
+
+// ---------------------------------------------------------------------------
+// CKG transaction-store integration
+//
+// Regression tests: handleKGAEnrollment used to issue a certificate and deliver
+// a generated key WITHOUT ever inserting a CMPTransaction row. That silently
+// broke the rest of the protocol for every CKG enrollment — a legitimate
+// certConf was rejected as "unknown transactionID", the confirmation-timeout
+// monitor could never revoke an unconfirmed CKG certificate (it stayed active
+// forever), and a replayed transactionID minted a second key pair and cert.
+// ---------------------------------------------------------------------------
+
+// newKGATestRouter builds a CKG-enabled router over an in-memory store, plus a
+// recipient certificate valid for the RSA/KTRI technique.
+func newKGATestRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issuedCert *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *x509.Certificate, *rsa.PrivateKey) {
+	t.Helper()
+
+	opts.ServerKeyGenEnabled = true
+	resolved := resolveTestCMPOpts(opts)
+
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&resolved, nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).Return(issuedCert, nil)
+
+	store := newInMemoryCMPStore()
+	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: store}
+	wrapped.On("LWCIssueKGAHelperCertificate", mock.Anything, "test-dms",
+		mock.AnythingOfType("*x509.CertificateRequest"), services.KGAHelperSigner).
+		Return((*x509.Certificate)(nil), []*x509.Certificate{}, nil)
+	wrapped.On("LWCProtectionCredentials", mock.Anything, "test-dms").
+		Return([]*x509.Certificate(nil), crypto.Signer(nil), nil)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	routes, err := NewCMPHttpRoutes(logrus.NewEntry(logrus.New()), wrapped)
+	require.NoError(t, err)
+	router.POST("/.well-known/cmp/p/:id", routes.HandleCMP)
+
+	recipientCert, recipientKey := buildKeyUsageCert(t, "kga-recipient",
+		x509.KeyUsageDigitalSignature|x509.KeyUsageKeyEncipherment)
+	return router, store, recipientCert, recipientKey
+}
+
+// TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf is the primary
+// regression test: a CKG enrollment must persist an ISSUED row flagged as
+// central key generation, and the EE's follow-up certConf must then be accepted
+// with pkiConf instead of rejected as an unknown transactionID.
+func TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
+	router, store, recipientCert, recipientKey := newKGATestRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+
+	txID := randomTxID(t)
+	signedDER := signCMPMessage(t, buildTestKGAIR(t, txID, "kga-device"), recipientCert, recipientKey)
+	resp := postCMP(t, router, "test-dms", signedDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()))
+
+	// The certificate the EE actually received. LWCEnroll mints a fresh cert bound
+	// to the server-generated key (using issuedCert only as a template), so this —
+	// not issuedCert — is what certConf must hash.
+	deliveredCertDER, _ := extractKGAEnvelopedDataDER(t, resp.Body.Bytes())
+
+	txHex := hex.EncodeToString(txID)
+	tx, ok := store.Peek(txHex)
+	require.True(t, ok, "a CKG enrollment must persist a transaction row")
+	assert.Equal(t, models.CMPTransactionStateIssued, tx.State,
+		"explicit-confirm CKG must park the row as ISSUED awaiting certConf")
+	assert.True(t, tx.CentralKeyGeneration, "the row must be flagged as central key generation")
+	require.NotNil(t, tx.Certificate, "the issued certificate must be stored so certConf can verify certHash")
+	assert.Equal(t, deliveredCertDER, tx.Certificate.Raw,
+		"the stored certificate must be byte-identical to the one delivered, else certHash can never match")
+	require.NotEmpty(t, tx.SentNonce,
+		"the response senderNonce must be persisted, else no certConf can ever match it")
+
+	// The nonce on the wire must equal the persisted one, otherwise certConf's
+	// recipNonce check can never pass.
+	sentNonce := peekSentNonce(t, store, txID)
+	confDER := buildTestCertConf(t, txID, deliveredCertDER, sentNonce)
+	confResp := postCMP(t, router, "test-dms", confDER)
+	require.Equal(t, http.StatusOK, confResp.Code)
+	assert.Equal(t, corecmp.BodyTagPKIConf, parseCMPResponseTag(t, confResp.Body.Bytes()),
+		"certConf for a CKG transaction must be answered with pkiConf")
+
+	after, ok := store.Peek(txHex)
+	require.True(t, ok)
+	assert.Equal(t, models.CMPTransactionStateConfirmed, after.State,
+		"a verified certConf must transition the CKG row to CONFIRMED")
+}
+
+// TestHandleCMP_KGA_DuplicateTransactionIDRejected verifies a replayed CKG
+// request does not mint a second key pair and certificate.
+func TestHandleCMP_KGA_DuplicateTransactionIDRejected(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
+	router, _, recipientCert, recipientKey := newKGATestRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+
+	txID := randomTxID(t)
+	signedDER := signCMPMessage(t, buildTestKGAIR(t, txID, "kga-device"), recipientCert, recipientKey)
+
+	first := postCMP(t, router, "test-dms", signedDER)
+	require.Equal(t, http.StatusOK, first.Code)
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, first.Body.Bytes()))
+
+	// Byte-identical replay of the same transactionID.
+	second := postCMP(t, router, "test-dms", signedDER)
+	require.Equal(t, http.StatusOK, second.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, second.Body.Bytes()),
+		"a replayed CKG transactionID must be rejected, not issued a second key pair")
+	bs := parseFailInfoBitString(t, second.Body.Bytes())
+	assert.True(t, bitSet(bs, corecmp.PKIFailureInfoTransactionIDInUse),
+		"failInfo must set transactionIdInUse (21)")
+}
+
+// TestHandleCMP_KGA_PollReqRefused verifies that the CKG response is not
+// "recovered" via pollReq. The generated private key is never persisted, so
+// re-deriving the response would hand the EE a certificate it holds no key for —
+// worse than an error, since the EE would install an unusable identity.
+func TestHandleCMP_KGA_PollReqRefused(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
+	router, store, recipientCert, recipientKey := newKGATestRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+
+	txID := randomTxID(t)
+	signedDER := signCMPMessage(t, buildTestKGAIR(t, txID, "kga-device"), recipientCert, recipientKey)
+	require.Equal(t, http.StatusOK, postCMP(t, router, "test-dms", signedDER).Code)
+
+	tx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok)
+	require.Equal(t, models.CMPTransactionStateIssued, tx.State)
+
+	pollResp := postCMP(t, router, "test-dms", buildTestPollReq(t, txID, 0))
+	require.Equal(t, http.StatusOK, pollResp.Code)
+	assert.Equal(t, corecmp.BodyTagError, parseCMPResponseTag(t, pollResp.Body.Bytes()),
+		"pollReq on a CKG transaction must be refused, not answered with a keyless certificate")
+}
+
+// TestHandleCMP_KGA_ImplicitConfirmPersistsConfirmed verifies that when the EE
+// requests implicit confirmation and the DMS grants it, the CKG row is stored
+// directly as CONFIRMED — so the confirmation-timeout monitor does not later
+// revoke a certificate that RFC 4210 §5.2.8 already considers complete.
+func TestHandleCMP_KGA_ImplicitConfirmPersistsConfirmed(t *testing.T) {
+	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
+	router, store, recipientCert, recipientKey := newKGATestRouter(t,
+		models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
+
+	txID := randomTxID(t)
+	// Same KGA ir, but with id-it-implicitConfirm in the header generalInfo.
+	senderNonce := randomNonce(t)
+	headerDER := buildTestPKIHeaderDER(t, txID, senderNonce, nil, true)
+	certRequestDER := buildCertRequestDER(t, "kga-device", buildEmptyRSASPKIDER(t))
+	bodyDER := ctxDER(t, corecmp.BodyTagIR, wrapCertReqMsgs(t, certRequestDER))
+	msgDER, err := asn1.Marshal(asn1.RawValue{
+		Class: asn1.ClassUniversal, Tag: asn1.TagSequence, IsCompound: true,
+		Bytes: concatBytes(headerDER, bodyDER),
+	})
+	require.NoError(t, err)
+
+	resp := postCMP(t, router, "test-dms", signCMPMessage(t, msgDER, recipientCert, recipientKey))
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, resp.Body.Bytes()))
+
+	tx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok, "an implicit-confirm CKG enrollment must still persist a row")
+	assert.Equal(t, models.CMPTransactionStateConfirmed, tx.State,
+		"implicit confirmation completes the transaction at delivery (RFC 4210 §5.2.8)")
+	assert.True(t, tx.CentralKeyGeneration)
+	assert.Equal(t, tx.CreatedAt, tx.ConfirmedAt,
+		"ConfirmedAt must equal CreatedAt exactly, the marker handleCertConf uses for implicit confirmation")
 }

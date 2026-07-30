@@ -300,8 +300,6 @@ func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry,
 			"could not load DMS configuration", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
-	requireProtection := requireClientCertProtection(enrollOpts)
-
 	seenTxIDs := map[string]bool{hex.EncodeToString(header.TransactionID): true}
 	seenNonces := map[string]bool{hex.EncodeToString(header.SenderNonce): true}
 	innerHeaders := make([]corecmp.RequestPKIHeader, len(inners))
@@ -340,7 +338,18 @@ func (r *cmpHttpRoutes) handleNestedBatch(ctx *gin.Context, lFunc *logrus.Entry,
 	// requests, so every inner message must verify on its own. Checked for the
 	// WHOLE batch before any message is processed — a batch with one forged
 	// member is rejected atomically rather than partially executed.
+	//
+	// The protection requirement is resolved PER INNER MESSAGE from its own body
+	// tag, not once for the batch from auth_mode alone. Each inner message is
+	// dispatched independently below, so its protection requirement has to match
+	// what it would face standalone: rr/kur are always protected, and genm follows
+	// GENM.AccessPolicy. Applying the auth_mode default uniformly meant a DMS with
+	// auth_mode=CLIENT_CERTIFICATE and GENM.AccessPolicy=public_discovery — a
+	// combination the separate policy exists to express — failed the whole batch
+	// over an unsigned genm that succeeds on its own, taking any valid signed
+	// enrollment bundled with it down too.
 	for i := range inners {
+		requireProtection := requireProtectionForBody(inners[i].msg.Body.Tag, enrollOpts)
 		if _, err := verifyRequestProtection(inners[i].msg, innerHeaders[i].ProtectionAlg, requireProtection); err != nil {
 			lFunc.Warnf("nested batch: protection verification of inner message %d failed: %v", i, err)
 			failBit := protectionRejectFailInfo(err)
