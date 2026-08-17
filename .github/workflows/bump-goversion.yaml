@@ -17,7 +17,7 @@ jobs:
     name: Bump Go version and open PR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Create commits
         run: |
           git config user.name 'Lamassu GH Action'
@@ -38,7 +38,7 @@ jobs:
           git commit -s -am "bump go version to ${{ github.event.inputs.go_version }}" 
           
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
         with:
           title: "Bumping go version to ${{ github.event.inputs.go_version }}"
           branch: "bump-go-version-${{ github.event.inputs.go_version }}"
