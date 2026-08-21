@@ -24,4 +24,5 @@ use (
 	./shared/aws
 	./shared/http
 	./shared/subsystems
+	../go-rds-driver
 )

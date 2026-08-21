@@ -17,9 +17,9 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
+	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/transport"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
@@ -47,22 +47,15 @@ func RegisterGORMPlugin(p gorm.Plugin) {
 	registeredPlugins = append(registeredPlugins, p)
 }
 
-func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, schema string) (*gorm.DB, error) {
+func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, schemaName string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
 		logger: logger,
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, cfg.Port, schema)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: dbLogger,
-	})
-
+	db, err := transport.Open(context.Background(), cfg, schemaName, dbLogger)
 	if err != nil {
 		return nil, err
 	}
-
-	// Set search_path for this connection
-	db.Exec(fmt.Sprintf("SET search_path TO %s", schema))
 
 	// Add OTel Tracing
 	if err = db.Use(tracing.NewPlugin()); err != nil {
@@ -80,7 +73,7 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*DBQuerier[E], error) {
 	schema.RegisterSerializer("text", TextSerializer{})
-	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
+	querier := newPostgresDBQuerier[E](db, transport.QualifiedTable(db, tableName), primaryKeyColumn)
 	return &querier, nil
 }
 
@@ -206,6 +199,10 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 	}
 }
 
+func (db *DBQuerier[E]) query() *gorm.DB {
+	return db.Session(&gorm.Session{NewDB: true}).Table(db.tableName)
+}
+
 type GormExtraOps struct {
 	Query           interface{}
 	AdditionalWhere []interface{}
@@ -228,7 +225,7 @@ func applyExtraOpts(tx *gorm.DB, extraOpts []GormExtraOps) *gorm.DB {
 
 func (db *DBQuerier[E]) Count(ctx context.Context, extraOpts []GormExtraOps) (int, error) {
 	var count int64
-	tx := db.Table(db.tableName).WithContext(ctx)
+	tx := db.query().WithContext(ctx)
 
 	tx = applyExtraOpts(tx, extraOpts)
 
@@ -242,7 +239,7 @@ func (db *DBQuerier[E]) Count(ctx context.Context, extraOpts []GormExtraOps) (in
 
 func (db *DBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.FilterOption, extraOpts []GormExtraOps) (int, error) {
 	var count int64
-	tx := db.Table(db.tableName).WithContext(ctx)
+	tx := db.query().WithContext(ctx)
 
 	for _, filter := range filters {
 		tx = FilterOperandToWhereClause(filter, tx)
@@ -260,7 +257,7 @@ func (db *DBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.F
 
 func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []GormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
-	tx := db.Table(db.tableName)
+	tx := db.query()
 
 	offset := 0
 	limit := 15
@@ -473,7 +470,7 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 	}
 
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	tx := db.query().WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -486,7 +483,7 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 }
 
 func (db *DBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
+	tx := db.query().WithContext(ctx).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -495,7 +492,7 @@ func (db *DBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E,
 }
 
 func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
+	tx := db.query().Session(&gorm.Session{FullSaveAssociations: true}).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -508,7 +505,7 @@ func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E,
 }
 
 func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
-	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
+	tx := db.query().WithContext(ctx).Delete(nil, fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID)
 	if err := tx.Error; err != nil {
 		return err
 	}

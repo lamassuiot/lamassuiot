@@ -19,6 +19,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	postgresstorage "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
+	postgresconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
@@ -108,6 +110,10 @@ func main() {
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
 	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
+	useRDSDataAPI := flag.Bool("rds-data-api", false, "use Aurora RDS Data API storage instead of Docker Postgres (availability testing)")
+	rdsResourceARN := flag.String("rds-resource-arn", "", "Aurora cluster ARN for RDS Data API")
+	rdsSecretARN := flag.String("rds-secret-arn", "", "Secrets Manager ARN containing RDS Data API database credentials")
+	rdsRegion := flag.String("rds-region", "", "AWS region for RDS Data API")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
 	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
 	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json", "path to PKI schema JSON file for authz service")
@@ -242,6 +248,14 @@ func main() {
 	var storageConfig cconfig.PluggableStorageEngine
 	var err error
 
+	if *useSqlite && *useRDSDataAPI {
+		log.Fatal("-sqlite and -rds-data-api cannot be used together")
+	}
+
+	if *useRDSDataAPI && (*rdsResourceARN == "" || *rdsSecretARN == "" || *rdsRegion == "") {
+		log.Fatal("-rds-data-api requires -rds-resource-arn, -rds-secret-arn, and -rds-region")
+	}
+
 	if *useSqlite {
 		fmt.Println(">> using SQLite ...")
 		sqlite.Register()
@@ -252,6 +266,35 @@ func main() {
 				"path": "file::memory:?cache=shared",
 			},
 		}
+	} else if *useRDSDataAPI {
+		fmt.Println(">> using Aurora RDS Data API (availability testing) ...")
+		storageConfig = cconfig.PluggableStorageEngine{
+			LogLevel: cconfig.Trace,
+			Provider: cconfig.Postgres,
+			Config: map[string]interface{}{
+				"transport":        "data_api",
+				"rds_resource_arn": *rdsResourceARN,
+				"rds_secret_arn":   *rdsSecretARN,
+				"aws_region":       *rdsRegion,
+			},
+		}
+
+		rdsConfig := postgresconfig.PostgresPSEConfig{
+			Transport:      postgresconfig.RDSDataAPI,
+			RDSResourceARN: *rdsResourceARN,
+			RDSSecretARN:   *rdsSecretARN,
+			AWSRegion:      *rdsRegion,
+		}
+		dbLogger := chelpers.SetupLogger(cconfig.Info, "Monolithic", "RDS Data API")
+		rdsDB, err := postgresstorage.CreatePostgresDBConnection(dbLogger, rdsConfig, "public")
+		if err != nil {
+			log.Fatalf("could not initialize RDS Data API connection: %s", err)
+		}
+		var availabilityCheck int
+		if err := rdsDB.Raw("SELECT 1").Scan(&availabilityCheck).Error; err != nil || availabilityCheck != 1 {
+			log.Fatalf("RDS Data API availability check failed: %v", err)
+		}
+		fmt.Println(" \t-- RDS Data API availability check: passed")
 	} else {
 		fmt.Println(">> launching docker: Postgres ...")
 		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
@@ -387,7 +430,7 @@ func main() {
 	if !*disableUI {
 		containerCleanup, container, _, err := dockerrunner.RunDocker(
 			"ghcr.io/lamassuiot/lamassu-ui",
-			dockertest.WithTag("latest"),
+			dockertest.WithTag("dev-v4-72920aeff4ae6dd5e3163fa27d09c42619e7ce32"),
 			dockertest.WithEnv([]string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors}),
 			dockertest.WithLabels(map[string]string{
 				"group": "lamassuiot-monolithic",
@@ -406,6 +449,9 @@ func main() {
 	}
 
 	if !*disableWFX {
+		if *useRDSDataAPI {
+			log.Fatal("WFX is not supported with -rds-data-api; rerun with -disable-wfx")
+		}
 		if storageConfig.Provider != cconfig.Postgres {
 			log.Fatalf("wfx requires Postgres storage; rerun without -sqlite or with -disable-wfx")
 		}

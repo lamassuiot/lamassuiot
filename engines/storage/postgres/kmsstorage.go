@@ -70,7 +70,7 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
 	var elem models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).Limit(1).Find(&elem)
+	tx := db.querier.query().WithContext(ctx).Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}

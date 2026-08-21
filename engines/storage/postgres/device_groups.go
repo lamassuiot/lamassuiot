@@ -6,6 +6,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/transport"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -47,26 +48,27 @@ func (db *PostgresDeviceGroupsStore) SelectByID(ctx context.Context, id string) 
 // using a recursive CTE to traverse the hierarchy from the given group up to the root
 func (db *PostgresDeviceGroupsStore) SelectAncestors(ctx context.Context, id string) ([]*models.DeviceGroup, error) {
 	var ancestors []*models.DeviceGroup
+	deviceGroupsTable := transport.QualifiedTable(db.db, deviceGroupsDBName)
 
 	// Recursive CTE query to get all ancestors
-	query := `
+	query := fmt.Sprintf(`
 		WITH RECURSIVE ancestor_chain AS (
 			-- Base case: start with the given group
 			SELECT id, name, description, parent_id, criteria, created_at, updated_at
-			FROM device_groups
+			FROM %s
 			WHERE id = ?
 			
 			UNION ALL
 			
 			-- Recursive case: get parent of current group
 			SELECT dg.id, dg.name, dg.description, dg.parent_id, dg.criteria, dg.created_at, dg.updated_at
-			FROM device_groups dg
+			FROM %s dg
 			INNER JOIN ancestor_chain ac ON dg.id = ac.parent_id
 		)
 		SELECT id, name, description, parent_id, criteria, created_at, updated_at
 		FROM ancestor_chain
 		ORDER BY created_at ASC
-	`
+	`, deviceGroupsTable, deviceGroupsTable)
 
 	result := db.db.WithContext(ctx).Raw(query, id).Scan(&ancestors)
 	if result.Error != nil {
@@ -115,22 +117,23 @@ func (db *PostgresDeviceGroupsStore) validateNoCircularReference(ctx context.Con
 	// Check if the proposed parent is actually a descendant of this group
 	// Use a recursive query to find all descendants of groupID
 	var count int64
-	query := `
+	deviceGroupsTable := transport.QualifiedTable(db.db, deviceGroupsDBName)
+	query := fmt.Sprintf(`
 		WITH RECURSIVE descendant_chain AS (
 			-- Base case: start with the current group
 			SELECT id, parent_id
-			FROM device_groups
+			FROM %s
 			WHERE id = ?
 			
 			UNION ALL
 			
 			-- Recursive case: get all children
 			SELECT dg.id, dg.parent_id
-			FROM device_groups dg
+			FROM %s dg
 			INNER JOIN descendant_chain dc ON dg.parent_id = dc.id
 		)
 		SELECT COUNT(*) FROM descendant_chain WHERE id = ?
-	`
+	`, deviceGroupsTable, deviceGroupsTable)
 
 	result := db.db.WithContext(ctx).Raw(query, groupID, parentID).Scan(&count)
 	if result.Error != nil {
