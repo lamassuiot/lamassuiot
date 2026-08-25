@@ -1,8 +1,6 @@
 name: Bump Go Version
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 on:
   workflow_dispatch:
@@ -16,6 +14,9 @@ jobs:
   bumper:
     name: Bump Go version and open PR
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Create commits

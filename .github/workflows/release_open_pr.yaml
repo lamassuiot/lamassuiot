@@ -1,8 +1,6 @@
 name: "Release Workflow - Open Pull Request with release notes"
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 on:
   workflow_dispatch:
@@ -19,6 +17,9 @@ jobs:
     name: "Open PR with release notes and changelog"
     runs-on: ubuntu-latest
     container: quay.io/git-chglog/git-chglog:0.15.0
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
