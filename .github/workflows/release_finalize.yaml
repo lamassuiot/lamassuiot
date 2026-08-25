@@ -192,6 +192,7 @@ jobs:
     needs: [create_module_release, finalize]
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
       - name: Checkout code to tag
@@ -223,6 +224,13 @@ jobs:
         run: |
           go work vendor
           zip -r vendor.zip vendor
+
+      - name: Generate and publish source SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: lamassuiot-${{ needs.finalize.outputs.release_version_with_v }}.source.sbom.spdx.json
 
       - name: Upload vendor dependencies
         uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
