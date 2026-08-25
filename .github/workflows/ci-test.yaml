@@ -69,7 +69,15 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.module.tag }}
+          path: ${{ matrix.module.path }}/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -108,7 +116,15 @@ jobs:
         env:
           PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-crypto-pkcs11
+          path: engines/crypto/pkcs11/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -166,7 +182,18 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Uses the human-readable family name (CA, DMS Manager, ...) rather
+          # than the tag, so the report job's row label is already readable
+          # without needing a separate name-mapping step.
+          name: test-results-${{ matrix.module.name }}
+          path: ${{ matrix.module.path }}/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -187,13 +214,13 @@ jobs:
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ github.head_ref }}
- 
+
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '^1.26.2'
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         working-directory: backend
         run: go work sync
@@ -202,7 +229,15 @@ jobs:
         id: run
         working-directory: backend
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions --junitfile junit.xml -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-backend-rest
+          path: backend/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -212,3 +247,211 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: backend-rest
+
+  e2e-cmp:
+    name: CMP E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+
+      # The CMP compliance suite lives in the Lamassu fork of
+      # siemens/cmp-test-suite, which carries the compatibility changes and
+      # config/lamassu.robot committed — no patching step. It MUST be checked
+      # out before any `working-directory: cmp-test-suite` step can run.
+      - name: Checkout CMP test suite
+        uses: actions/checkout@v5
+        with:
+          repository: lamassuiot/cmp-test-suite
+          ref: main
+          path: cmp-test-suite
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.26.2'
+          cache-dependency-path: "**/*.sum"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install monolithic Go dependencies
+        working-directory: monolithic
+        run: go work sync
+
+      # run-cmp-test-suite.sh handles the full flow against a clean full stack
+      # (Postgres + RabbitMQ + WFX via Docker): creates the venv, waits for
+      # sample-cmp-dms to exist, runs the CMP bootstrap, then executes the
+      # suite. --fresh-full
+      # starts and tears down the dev server itself, so no separate start/wait
+      # steps are needed. continue-on-error: the suite has known unsupported
+      # cases; the uploaded report is the source of truth, not a green check.
+      - name: Run CMP E2E test suite
+        id: cmp
+        continue-on-error: true
+        env:
+          SUITE_DIR: ${{ github.workspace }}/cmp-test-suite
+        run: |
+          bash scripts/run-cmp-test-suite.sh --fresh-full
+
+      # If reports/junit/*.xml is missing, the suite died before (or at) the
+      # Robot run, which is why CMP rows silently vanish from the Test Report.
+      # Surface the evidence in the job log so the failure is diagnosable
+      # instead of just a "no files found" warning on the upload step.
+      - name: Diagnose missing CMP results
+        if: always()
+        run: |
+          if ls cmp-test-suite/reports/junit/*.xml >/dev/null 2>&1; then
+            echo "CMP junit results present:"; ls -la cmp-test-suite/reports/junit/
+          else
+            echo "::error::CMP junit results were NOT generated — the suite died before Robot finished."
+            echo "--- cmp-test-suite/reports ---"
+            ls -laR cmp-test-suite/reports 2>/dev/null || echo "(no reports dir at all — Robot never ran)"
+            echo "--- last 200 lines of dev server log ---"
+            tail -200 /tmp/lamassu-cmp-test.log 2>/dev/null || echo "(no server log — server never started)"
+          fi
+
+      - name: Upload Robot Framework report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmp-e2e-report
+          path: cmp-test-suite/reports/
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-cmp-e2e
+          # One JUnit/xUnit file per Robot suite (Basic, Cert Conf Tests, ...).
+          # The report job below globs '*.xml', so this renders as one row
+          # per suite in the summary instead of a single flattened report.
+          path: cmp-test-suite/reports/junit/*.xml
+          if-no-files-found: warn
+
+  report:
+    name: Test Report
+    runs-on: ubuntu-latest
+    # Runs after every test job regardless of pass/fail, so the summary table
+    # always reflects the full run (including which suites/modules failed).
+    needs: [test, test-pkcs11, test-backend-assemblers, test-backend-rest, e2e-cmp]
+    if: always()
+    permissions:
+      contents: read
+      actions: write  # fetch this run's test-results-* artifacts + delete them after publishing
+      checks: write   # required to publish the check run with the results table
+    steps:
+      # dorny/test-reporter runs `git ls-files` to resolve annotation paths,
+      # so a checkout must exist even though this job doesn't build anything.
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      # Download every test-results-<something> artifact uploaded by the jobs
+      # above into its own subfolder (test-results/<artifact-name>/*.xml), so
+      # same-named files (e.g. every Go module's junit.xml) don't collide.
+      - name: Download all test-result artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          path: test-results
+
+      # Flatten to <family>.xml at the workspace root so each row in the
+      # summary table is labeled just by its family name (core.xml, CA.xml,
+      # DMS Manager.xml, ...) — no nested artifact path. Safe: the repo tracks
+      # no *.xml at its root, so the glob below only ever matches these copies.
+      # The CMP artifact holds one file per Robot suite (Basic.xml, Cert Conf
+      # Tests.xml, ...); those are MERGED into a single CMP.xml so the whole
+      # e2e suite shows as ONE grouped "CMP" row (aggregate pass/fail/skip)
+      # instead of 11 separate rows. The per-suite files stay in the uploaded
+      # artifact for anyone who wants the granular breakdown.
+      - name: Flatten test-result files for a readable summary
+        run: |
+          for dir in test-results/test-results-*/; do
+            [ -d "${dir}" ] || continue
+            family="$(basename "${dir%/}")"
+            family="${family#test-results-}"
+            if [ "${family}" = "cmp-e2e" ]; then
+              # Merge every per-suite file into one CMP.xml so dorny renders a
+              # single grouped "CMP" row (aggregate pass/fail/skip) instead of
+              # 11. Each file is <?xml ...?><testsuites time="t"><testsuite
+              # time="t">...</testsuite></testsuites> (written by
+              # run-cmp-test-suite.sh); sum each file's root time="..." for the
+              # merged total (dorny reads ONLY the root's time attribute for
+              # the row's Time column — without this it shows "NaNms"), then
+              # strip the xml declaration and outer <testsuites> wrapper from
+              # each and re-wrap once around all of them.
+              cmp_files=("${dir}"*.xml)
+              if [ -e "${cmp_files[0]}" ]; then
+                total=0
+                for f in "${cmp_files[@]}"; do
+                  t="$(grep -oE 'time="[0-9.]+"' "${f}" | head -1 | grep -oE '[0-9.]+')"
+                  total=$(awk -v a="${total}" -v b="${t:-0}" 'BEGIN{printf "%.3f", a+b}')
+                done
+                {
+                  echo "<testsuites time=\"${total}\">"
+                  for f in "${cmp_files[@]}"; do
+                    tail -n +2 "${f}" | sed -E '1s/^<testsuites[^>]*>//; $s#</testsuites>$##'
+                  done
+                  echo '</testsuites>'
+                } > CMP.xml
+              fi
+            elif [ -f "${dir}junit.xml" ]; then
+              cp "${dir}junit.xml" "./${family}.xml"
+            fi
+          done
+          ls -la ./*.xml || echo "::warning::no test-result files found to report"
+
+      # dorny/test-reporter always sorts rows alphabetically (ascending) by
+      # file name — it has no sort-by-time option, and the sort key IS the
+      # displayed name. To get rows ordered from longest- to shortest-running
+      # (top to bottom), rename each file with a prefix of (9999 - duration):
+      # the slowest suite gets the smallest prefix, so it sorts first. The
+      # real duration is kept right after it ("9509 - 490s - CA.xml") so the
+      # label still shows how long the suite actually took.
+      - name: Order report rows by execution time
+        run: |
+          for f in ./*.xml; do
+            [ -e "${f}" ] || continue
+            secs="$(grep -oE 'time="[0-9.]+"' "${f}" | head -1 | grep -oE '[0-9.]+')"
+            secs="${secs:-0}"
+            rank="$(awk -v s="${secs}" 'BEGIN{printf "%04.0f", 9999-s}')"
+            mv "${f}" "${rank} - $(printf '%.0f' "${secs}")s - $(basename "${f}")"
+          done
+          ls -la ./*.xml
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v2
+        with:
+          name: Test Results
+          path: '*.xml'
+          # gotestsum --junitfile and Robot --xunit both emit JUnit XML.
+          reporter: java-junit
+          # Don't fail this workflow when tests failed in CI — the table itself
+          # is the signal; the individual test jobs already reflect pass/fail.
+          fail-on-error: false
+          # Compact table only (one row per result file with pass/fail/skip
+          # counts) — no per-test listing. Keeps the CMP e2e report readable
+          # (11 suite files) instead of dumping all ~250 individual tests.
+          only-summary: true
+          # Write the same table to this run's own Actions "Summary" page.
+          use-actions-summary: true
+
+      # The test-results-* artifacts exist only to ferry junit files from the
+      # test jobs into this job; the report is now published, so delete them.
+      # This restores the pre-CMP Artifacts panel: the only artifact left on
+      # the run is cmp-e2e-report (the downloadable Robot HTML report).
+      - name: Delete intermediate test-result artifacts
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name | startswith("test-results-")) | .id' \
+          | while read -r id; do
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" \
+                || echo "::warning::could not delete artifact ${id}"
+            done

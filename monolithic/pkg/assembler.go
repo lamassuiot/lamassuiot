@@ -122,8 +122,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			Logs:    svcLogs,
+			Server:  svcServer,
 			CryptoEngineConfig: config.CryptoEngines{
 				LogLevel:      cconfig.Info,
 				DefaultEngine: conf.CryptoEngines[0].ID,
@@ -145,9 +145,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			OpenAPI:                  cconfig.OpenAPIConfig{Enabled: true},
+			Logs:                     svcLogs,
+			Server:                   svcServer,
 			PublisherEventBus:        conf.PublisherEventBus,
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
@@ -167,8 +167,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			Logs:    svcLogs,
+			Server:  svcServer,
 			FilesystemStorage: cconfig.FSStorageConfig{
 				ID:   "fs",
 				Type: cconfig.LocalFilesystem,
@@ -186,6 +186,13 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}, caSDKBuilder("VA", models.VASource), kmsSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
+		}
+
+		vaConn := localConn(vaPort)
+		vaSDKBuilder := func(serviceID, src string) services.VAService {
+			cli := buildLocalClient(serviceID, src, "LMS SDK - VA Client", vaConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			return sdk.NewHttpVAClient(cli, baseURL(vaConn))
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
@@ -219,22 +226,39 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
+			OpenAPI:                   cconfig.OpenAPIConfig{Enabled: true},
+			Logs:                      svcLogs,
+			Server:                    svcServer,
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
 			AuthzClient:               authzClientConf,
-		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
+			// The CMP confirmation monitor rolls back unconfirmed key-updates by
+			// revoking the issued-but-unconfirmed certificate. It runs on a much
+			// shorter cadence than the CA/CRL monitors (conf.Monitoring, typically
+			// minutes) because the certConf window is per-device and short
+			// (seconds); a slow monitor would leave unconfirmed KURs in limbo well
+			// past their ConfirmationTimeout.
+			CMPConfirmationMonitoringJob: cconfig.MonitoringJob{
+				Enabled:   conf.Monitoring.Enabled,
+				Frequency: "5s",
+			},
+			WFX: config.DMSWFXConfig{
+				// CMP confirmation reporter talks to the WFX management API (NBI).
+				Enabled: conf.WfxNorthPort > 0,
+				HTTPClient: cconfig.HTTPClient{
+					LogLevel: cconfig.Info,
+					AuthMode: cconfig.NoAuth,
+					HTTPConnection: cconfig.HTTPConnection{
+						Protocol: cconfig.HTTP,
+						BasicConnection: cconfig.BasicConnection{
+							Hostname: "127.0.0.1",
+							Port:     conf.WfxNorthPort,
+						},
+					},
+				},
+			},
+		}, kmsSDKBuilder("DMS Manager", models.DMSManagerSource), caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), vaSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
@@ -418,6 +442,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+		// EST/CMP serve at /.well-known/* on the DMS upstream directly, so the
+		// full path is forwarded unchanged (targetPath == sourcePath).
+		registerRoute("DMS Manager - EST", "/.well-known/est", dmsPort, "/.well-known/est")
+		registerRoute("DMS Manager - CMP", "/.well-known/cmp", dmsPort, "/.well-known/cmp")
 
 		if conf.WfxNorthPort > 0 {
 			registerRoute("wfx NBI", "/api/wfx/nbi/", conf.WfxNorthPort, "/api/wfx/")
@@ -435,6 +463,18 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				var realProxy func(c *gin.Context)
 				foundPath := false
 				path := c.Param("proxyPath")
+
+				if c.Request.Method == http.MethodOptions {
+					realProxy = func(c *gin.Context) {
+						c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+						c.Writer.Header().Set("Access-Control-Allow-Methods", "*")
+						c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+						c.Writer.WriteHeader(http.StatusOK)
+					}
+					realProxy(c)
+					return
+				}
+
 				for _, route := range routeList {
 					if strings.HasPrefix(path, route) {
 						realProxy = routeMaps[route]
@@ -477,7 +517,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ReadHeaderTimeout: time.Second * 10,
 			}
 
-			log.Fatal(serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"))
+			if err := serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"); err != nil {
+				log.Printf("HTTPS gateway stopped: %v", err)
+			}
 		}()
 
 		go func() {
@@ -487,7 +529,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ReadHeaderTimeout: time.Second * 10,
 			}
 
-			log.Fatal(serverHttp.Serve(listenerHttp))
+			if err := serverHttp.Serve(listenerHttp); err != nil {
+				log.Printf("HTTP gateway stopped: %v", err)
+			}
 		}()
 
 		return usedHttpPort, usedHttpsPort, nil

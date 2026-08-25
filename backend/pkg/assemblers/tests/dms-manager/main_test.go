@@ -45,6 +45,11 @@ func TestCreateDMS(t *testing.T) {
 	dmsSample := services.CreateDMSInput{
 		ID:   dmsID,
 		Name: "MyIotFleet",
+		Settings: models.DMSSettings{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: models.EST,
+			},
+		},
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
 	if err != nil {
@@ -73,6 +78,11 @@ func TestUpdateDMS(t *testing.T) {
 	dmsSample := services.CreateDMSInput{
 		ID:   dmsID,
 		Name: "MyIotFleet",
+		Settings: models.DMSSettings{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: models.EST,
+			},
+		},
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
 	if err != nil {
@@ -110,6 +120,11 @@ func TestUpdateDMSMetadata(t *testing.T) {
 		ID:       dmsID,
 		Name:     "MyIotFleet",
 		Metadata: map[string]any{"test": "test"},
+		Settings: models.DMSSettings{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: models.EST,
+			},
+		},
 	}
 
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -168,6 +183,11 @@ func TestDeleteDMS(t *testing.T) {
 				dmsSample := services.CreateDMSInput{
 					ID:   dmsID,
 					Name: "MyIotFleet",
+					Settings: models.DMSSettings{
+						EnrollmentSettings: models.EnrollmentSettings{
+							EnrollmentProtocol: models.EST,
+						},
+					},
 				}
 				dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
 				if err != nil {
@@ -4417,21 +4437,14 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
-				})
-				if err != nil {
-					t.Fatalf("could not clear reenroll auth settings: %s", err)
-				}
-
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
+				// CLIENT_CERTIFICATE auth is configured but no cert is presented — must be rejected
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
 					AdditionalPathSegment: dms.ID,
-					Certificates:          []*x509.Certificate{deviceCrt},
-					PrivateKey:            deviceKey,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
 					InsecureSkipVerify:    true,
 				}
 

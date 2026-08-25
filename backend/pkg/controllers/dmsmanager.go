@@ -1,6 +1,10 @@
 package controllers
 
 import (
+	"encoding/hex"
+	"errors"
+	"math/big"
+
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -89,6 +93,166 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, dms)
+}
+
+// GetCMPTransactionsByDMS lists the CMP transactions associated with a DMS.
+// The endpoint follows the standard list contract (page_size, bookmark,
+// sort_by, filter) and projects the storage-layer row into a slim wire DTO
+// that omits the raw cert/CSR DER blobs — clients fetch the certificate
+// separately via /api/ca/v1/certificates/:sn when they need the body.
+func (r *dmsManagerHttpRoutes) GetCMPTransactionsByDMS(ctx *gin.Context) {
+	var params uriDMSIDParam
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	queryParams, err := FilterQuery(ctx.Request, resources.CMPTransactionFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	out := []resources.CMPTransactionResponse{}
+	nextBookmark, err := r.svc.GetCMPTransactionsByDMS(ctx.Request.Context(), services.GetCMPTransactionsByDMSInput{
+		DMSID: params.ID,
+		ListInput: resources.ListInput[models.CMPTransaction]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(tx models.CMPTransaction) {
+				out = append(out, cmpTransactionToResponse(tx))
+			},
+		},
+	})
+	if err != nil {
+		if err == errs.ErrDMSNotFound {
+			ctx.JSON(404, gin.H{"err": err.Error()})
+			return
+		}
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	ctx.JSON(200, resources.GetCMPTransactionsResponse{
+		IterableList: resources.IterableList[resources.CMPTransactionResponse]{
+			NextBookmark: nextBookmark,
+			List:         out,
+		},
+	})
+}
+
+// cmpTransactionToResponse adapts the storage row to the wire DTO. It parses
+// the cert serial out of CertDER when available so the UI can render a link
+// to the cert detail page without having to ship the whole DER blob.
+func cmpTransactionToResponse(tx models.CMPTransaction) resources.CMPTransactionResponse {
+	resp := resources.CMPTransactionResponse{
+		TransactionID:     tx.TransactionID,
+		DMSID:             tx.DMSID,
+		State:             string(tx.State),
+		IsReenrollment:    tx.IsReenrollment,
+		RequestType:       tx.RequestType,
+		SubjectCommonName: tx.SubjectCommonName,
+		WFXJobID:          tx.WFXJobID,
+		CreatedAt:         tx.CreatedAt,
+		ExpiresAt:         tx.ExpiresAt,
+		ErrorMessage:      tx.ErrorMessage,
+		HasCertificate:    tx.Certificate != nil,
+	}
+	if !tx.ConfirmedAt.IsZero() {
+		t := tx.ConfirmedAt
+		resp.ConfirmedAt = &t
+	}
+	if tx.CertSerialNumber != "" {
+		resp.CertSerialNumber = tx.CertSerialNumber
+	} else if tx.Certificate != nil {
+		resp.CertSerialNumber = serialNumberToHexLower(tx.Certificate.SerialNumber)
+	}
+	return resp
+}
+
+// serialNumberToHexLower mirrors helpers.SerialNumberToHexString without
+// dragging the backend helpers package into this file. The output matches the
+// canonical lowercase-hex form Lamassu uses to key its certificate store.
+func serialNumberToHexLower(sn *big.Int) string {
+	if sn == nil {
+		return ""
+	}
+	return hex.EncodeToString(sn.Bytes())
+}
+
+type uriCMPTransactionParam struct {
+	ID            string `uri:"id" binding:"required"`
+	TransactionID string `uri:"txid" binding:"required"`
+}
+
+// ApproveCMPTransaction approves a PENDING phased-workflow CMP transaction,
+// issuing the certificate so the EE can retrieve it via pollReq.
+func (r *dmsManagerHttpRoutes) ApproveCMPTransaction(ctx *gin.Context) {
+	var params uriCMPTransactionParam
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	tx, err := r.svc.ApproveCMPTransaction(ctx.Request.Context(), services.ApproveCMPTransactionInput{
+		DMSID:         params.ID,
+		TransactionID: params.TransactionID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, errs.ErrDMSNotFound), errors.Is(err, errs.ErrCMPTransactionNotFound):
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errors.Is(err, errs.ErrCMPTransactionNotPending):
+			ctx.JSON(409, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, cmpTransactionToResponse(*tx))
+}
+
+// RejectCMPTransaction denies a PENDING phased-workflow CMP transaction. Body
+// is OPTIONAL — when present it must be JSON of the form {"reason": "..."}.
+// The transaction transitions to ISSUE_FAILED carrying the reason; the EE
+// learns of it on the next pollReq.
+func (r *dmsManagerHttpRoutes) RejectCMPTransaction(ctx *gin.Context) {
+	var params uriCMPTransactionParam
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	// An empty/missing body is fine — the service substitutes a default reason.
+	if ctx.Request.ContentLength > 0 {
+		if err := ctx.ShouldBindJSON(&body); err != nil {
+			ctx.JSON(400, gin.H{"err": err.Error()})
+			return
+		}
+	}
+
+	tx, err := r.svc.RejectCMPTransaction(ctx.Request.Context(), services.RejectCMPTransactionInput{
+		DMSID:         params.ID,
+		TransactionID: params.TransactionID,
+		Reason:        body.Reason,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, errs.ErrDMSNotFound), errors.Is(err, errs.ErrCMPTransactionNotFound):
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errors.Is(err, errs.ErrCMPTransactionNotPending):
+			ctx.JSON(409, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, cmpTransactionToResponse(*tx))
 }
 
 func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {

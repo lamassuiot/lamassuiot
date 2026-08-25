@@ -1,0 +1,534 @@
+#!/bin/bash
+################################################################################
+# Run the Siemens CMP Test Suite against a Lamassu instance.
+#
+# Orchestrates the full flow so you don't have to remember the steps:
+#   1. (optional) start a clean SQLite-backed dev server for a pristine DB
+#   2. clone the Lamassu fork of the suite if not present (the fork carries
+#      the compatibility changes and config/lamassu.robot pre-applied)
+#   3. ensure the cmp-test-suite Python venv exists with deps installed
+#   4. run the CMP bootstrap (signer cert + trust CAs + replaceable enrollment)
+#   5. run Robot Framework and print a pass/fail summary
+#
+# Usage:
+#   scripts/run-cmp-test-suite.sh [options]
+#
+# Options:
+#   --suite <path>     Run a single suite file (e.g. tests/basic.robot).
+#                      Default: tests/  (the whole suite)
+#   --include <tag>    Only run tests with this Robot tag (e.g. kur).
+#   --test <name>      Run a single test by its exact name.
+#   --fresh            Start a clean SQLite + in-memory-eventbus dev server first.
+#                      Fast, fully isolated, deterministic — but WFX/event-driven
+#                      CMP tests (certConf, phased workflow) are disabled, so the
+#                      score is lower (~39). Good for a quick smoke check.
+#   --fresh-full       Start a clean FULL-STACK dev server (Postgres + RabbitMQ +
+#                      WFX in Docker). High fidelity — all CMP features work
+#                      (~54) — and deterministic (fresh containers each run).
+#                      Removes leftover dev containers (label
+#                      group=lamassuiot-monolithic) only; never your own.
+#                      Slower to start (Docker). Recommended for a real number.
+#                      Without --fresh/--fresh-full, uses the server at $SERVER.
+#   --per-suite-isolated
+#                      Run each suite file against its own clean full stack and
+#                      merge the reports (rebot). Removes cross-suite state
+#                      pollution so tests that are passable in isolation actually
+#                      pass (e.g. Cert Conf 0 -> 8). Slowest, but the honest
+#                      "passable" count. Implies --fresh-full per suite.
+#   --no-bootstrap     Skip the CMP bootstrap step (assume already provisioned).
+#   -h | --help        Show this help.
+#
+# Environment overrides:
+#   SERVER         Lamassu base URL              (default: http://localhost:8080)
+#   DMS_ID         CMP DMS id                    (default: sample-cmp-dms)
+#   SUITE_DIR      Path to the cmp-test-suite    (default: ~/cmp-test-suite;
+#                  cloned from SUITE_REPO if missing)
+#   SUITE_REPO     Suite git URL                 (default: lamassuiot/cmp-test-suite fork)
+#   WORKDIR        Bootstrap working dir         (default: /tmp/cmp-bootstrap)
+#   LAMASSU_DIR    Path to the lamassuiot repo   (default: derived from this script)
+#
+# Examples:
+#   scripts/run-cmp-test-suite.sh                       # full suite, existing server
+#   scripts/run-cmp-test-suite.sh --fresh               # clean DB, full suite
+#   scripts/run-cmp-test-suite.sh --suite tests/basic.robot
+#   scripts/run-cmp-test-suite.sh --include kur
+################################################################################
+set -uo pipefail
+
+# --- defaults -----------------------------------------------------------------
+SERVER="${SERVER:-http://localhost:8080}"
+DMS_ID="${DMS_ID:-sample-cmp-dms}"
+SUITE_DIR="${SUITE_DIR:-$HOME/cmp-test-suite}"
+WORKDIR="${WORKDIR:-/tmp/cmp-bootstrap}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAMASSU_DIR="${LAMASSU_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+# Lamassu fork of siemens/cmp-test-suite with the compatibility changes and
+# config/lamassu.robot committed — no patching step needed.
+SUITE_REPO="${SUITE_REPO:-https://github.com/lamassuiot/cmp-test-suite}"
+
+TARGET="tests/"
+INCLUDE=""
+TESTNAME=""
+FRESH=0
+FULL_STACK=0
+DO_BOOTSTRAP=1
+PER_SUITE=0
+
+# --- args ---------------------------------------------------------------------
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --suite)              TARGET="$2"; shift 2 ;;
+        --include)            INCLUDE="$2"; shift 2 ;;
+        --test)               TESTNAME="$2"; shift 2 ;;
+        --fresh)              FRESH=1; shift ;;
+        --fresh-full)         FRESH=1; FULL_STACK=1; shift ;;
+        --per-suite-isolated) PER_SUITE=1; FRESH=1; FULL_STACK=1; shift ;;
+        --no-bootstrap)       DO_BOOTSTRAP=0; shift ;;
+        -h|--help)            sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)                    echo "unknown option: $1" >&2; exit 2 ;;
+    esac
+done
+
+log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
+die()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; exit 1; }
+
+if [ ! -d "${SUITE_DIR}" ]; then
+    log "cmp-test-suite not found at ${SUITE_DIR}; cloning ${SUITE_REPO}"
+    git clone --depth 1 "${SUITE_REPO}" "${SUITE_DIR}" || die "could not clone ${SUITE_REPO}"
+fi
+
+# --- per-suite isolation ------------------------------------------------------
+# Run every suite file against its OWN clean full stack, then merge the reports
+# with rebot. This removes cross-suite state pollution (one suite revoking the
+# shared protection cert poisons later suites), recovering tests that are
+# passable in isolation (e.g. Cert Conf 0 -> 8). Slower (one stack boot per
+# suite), but it yields the honest "passable" count deterministically.
+if [ "${PER_SUITE}" = "1" ]; then
+    log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+    die()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; exit 1; }
+    PARTS_DIR="${SUITE_DIR}/reports/per-suite"
+    rm -rf "${PARTS_DIR}"; mkdir -p "${PARTS_DIR}"
+    suites=$(ls "${SUITE_DIR}"/tests/*.robot 2>/dev/null)
+    [ -n "${suites}" ] || die "no suite files found in ${SUITE_DIR}/tests/"
+    for suite in ${suites}; do
+        name="$(basename "${suite}" .robot)"
+        log "===== isolated suite: ${name} ====="
+        # Re-invoke ourselves for a single suite against a fresh full stack.
+        "${BASH_SOURCE[0]}" --fresh-full --suite "tests/${name}.robot" || true
+        if [ -f "${SUITE_DIR}/reports/output.xml" ]; then
+            cp "${SUITE_DIR}/reports/output.xml" "${PARTS_DIR}/${name}.xml"
+        else
+            warn "no output.xml for suite ${name}"
+        fi
+    done
+    log "Merging ${PARTS_DIR}/*.xml into a combined report"
+    # shellcheck disable=SC1091
+    source "${SUITE_DIR}/venv-cmp-tests/bin/activate" 2>/dev/null || true
+    rebot --outputdir "${SUITE_DIR}/reports" --output combined.xml \
+          --report combined-report.html --log combined-log.html \
+          --xunit xunit.xml \
+          "${PARTS_DIR}"/*.xml || true
+    python3 - "${SUITE_DIR}/reports/combined.xml" <<'PY'
+import sys, xml.etree.ElementTree as ET
+r = ET.parse(sys.argv[1]).getroot()
+t = r.find('.//statistics/total/stat')
+print("\n========= PER-SUITE-ISOLATED COMBINED RESULT =========")
+print(f"  PASS={t.get('pass')}  FAIL={t.get('fail')}  SKIP={t.get('skip')}")
+for s in r.findall('.//statistics/suite/stat'):
+    n = s.text or ''
+    if n.count('.') == 1:
+        print(f"    {n[6:]:24} pass={s.get('pass'):>3} fail={s.get('fail'):>3} skip={s.get('skip'):>3}")
+print("=====================================================")
+PY
+    exit 0
+fi
+
+PORT="${SERVER##*:}"; PORT="${PORT%%/*}"   # e.g. 8080
+
+# Reliably stop any dev server bound to $PORT. `go run` execs a *separate*
+# compiled binary (…/exe/main), so matching only 'cmd/development' leaves the
+# real server orphaned on the port — which a later --fresh run then talks to,
+# producing wildly different results. Kill by listener PID, then by name.
+port_pid() { { ss -ltnp 2>/dev/null || true; } | grep -E "[:.]${PORT}[[:space:]]" \
+             | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2; }
+
+stop_dev_server() {
+    local sig pid
+    for sig in TERM TERM KILL; do
+        pid="$(port_pid)"
+        [ -z "${pid:-}" ] && break
+        kill "-${sig}" "${pid}" 2>/dev/null || true
+        pkill -"${sig}" -f "exe/main .*--sample-data" 2>/dev/null || true
+        pkill -"${sig}" -f 'cmd/development/main.go' 2>/dev/null || true
+        # give it a few seconds to release the port before escalating
+        for _ in $(seq 1 5); do
+            curl -sf "${SERVER}/api/ca/v1/cas" >/dev/null 2>&1 || return 0
+            sleep 1
+        done
+    done
+    # final check
+    curl -sf "${SERVER}/api/ca/v1/cas" >/dev/null 2>&1 && return 1 || return 0
+}
+
+# Remove dev-launched Docker containers (Postgres, RabbitMQ, WFX, UI) left over
+# from previous dev-server runs. They are tagged group=lamassuiot-monolithic, so
+# we only ever touch dev infra — never the user's own containers. This frees the
+# fixed ports WFX (9080/9081) and RabbitMQ (5672) need.
+clean_dev_containers() {
+    command -v docker >/dev/null 2>&1 || return 0
+    local ids
+    ids="$(docker ps -aq --filter 'label=group=lamassuiot-monolithic' 2>/dev/null)"
+    [ -n "${ids}" ] && docker rm -f ${ids} >/dev/null 2>&1 || true
+}
+
+if [ "${FRESH}" = "1" ]; then
+    log "Stopping any existing dev server on :${PORT}"
+    stop_dev_server
+    curl -sf "${SERVER}/api/ca/v1/cas" >/dev/null 2>&1 \
+        && die "Port ${PORT} still serving after stop attempt; kill it manually and retry."
+
+    if [ "${FULL_STACK}" = "1" ]; then
+        log "Removing leftover dev containers (Postgres/RabbitMQ/WFX/UI)"
+        clean_dev_containers
+        log "Starting a clean FULL-STACK dev server (Postgres + RabbitMQ + WFX)"
+        # Real infra so the WFX-/event-driven CMP tests (certConf, phased
+        # workflow) work — this is the high-fidelity ~54 path. --disable-ui
+        # skips the UI container (not needed for tests). Fresh containers each
+        # run => deterministic.
+        SERVER_FLAGS="--sample-data --disable-ui"
+        READY_TRIES=150          # Docker pulls/boots are slow (~1-3 min)
+    else
+        log "Starting a clean SQLite-backed dev server (in-memory, fast)"
+        # --sqlite -> in-memory DB; --inmemory-eventbus -> no RabbitMQ container.
+        # No Docker, fully isolated, but WFX/event-driven CMP tests are disabled
+        # (lower fidelity ~39). Good for a quick deterministic smoke.
+        SERVER_FLAGS="--sample-data --sqlite --inmemory-eventbus"
+        READY_TRIES=90
+    fi
+
+    ( cd "${LAMASSU_DIR}/monolithic" && \
+      exec go run ./cmd/development/main.go ${SERVER_FLAGS} \
+           >/tmp/lamassu-cmp-test.log 2>&1 & )
+    log "Waiting for Lamassu API to be ready at ${SERVER} ..."
+    for i in $(seq 1 ${READY_TRIES}); do
+        curl -sf "${SERVER}/api/ca/v1/cas" >/dev/null 2>&1 && break
+        [ "$i" = "${READY_TRIES}" ] && die "Lamassu did not become ready (see /tmp/lamassu-cmp-test.log)"
+        sleep 2
+    done
+    log "Lamassu API is up."
+else
+    curl -sf "${SERVER}/api/ca/v1/cas" >/dev/null 2>&1 \
+        || die "No Lamassu server at ${SERVER}. Start one, or pass --fresh / --fresh-full."
+fi
+
+# --- 2. venv + deps -----------------------------------------------------------
+# The suite is a flat-layout project with no [build-system] in pyproject.toml,
+# so it CANNOT be installed as a package: any installer that tries to build it
+# (pip/uv `install .` or `-e .`, and even `uv pip install -r pyproject.toml`,
+# which resolves the project itself) aborts with "Multiple top-level packages
+# discovered in a flat-layout". It doesn't need to be built — Robot runs it in
+# place via `robot --pythonpath=./`, so we only need its runtime dependencies
+# (which include robotframework). We therefore extract [project.dependencies]
+# into a plain requirements list and install just that: a flat pinned list can
+# never trigger a project build, regardless of installer or its version.
+cd "${SUITE_DIR}"
+if [ ! -x "venv-cmp-tests/bin/robot" ]; then
+    log "Creating Python venv and installing dependencies (first run only)"
+    python3 -m venv venv-cmp-tests
+    # shellcheck disable=SC1091
+    source venv-cmp-tests/bin/activate
+
+    REQS_FILE="$(mktemp)"
+    python3 -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml","rb"))["project"]["dependencies"]))' \
+        > "${REQS_FILE}" \
+        || die "Could not extract dependencies from pyproject.toml"
+    # Note: liboqs (post-quantum) is deliberately NOT installed. The suite's
+    # global setup loads stateful PQ keys, which would require the liboqs binding
+    # (and trigger a full liboqs source build on first import). The fork
+    # makes that load best-effort so the classical suite runs PQ-free; PQ tests
+    # are excluded at runtime via --exclude pqc.
+    log "Installing $(grep -c . "${REQS_FILE}") runtime dependencies (no project build, no PQ)"
+    # Prefer uv for speed; fall back to plain pip. Both are given a plain
+    # requirements file, so neither attempts to build cmp-test-suite.
+    if pip install --quiet uv && uv pip install -r "${REQS_FILE}"; then
+        :
+    else
+        warn "uv install failed; falling back to pip"
+        pip install --quiet -r "${REQS_FILE}" \
+            || die "Failed to install cmp-test-suite dependencies"
+    fi
+    rm -f "${REQS_FILE}"
+else
+    # shellcheck disable=SC1091
+    source venv-cmp-tests/bin/activate
+fi
+command -v robot >/dev/null 2>&1 || die "robot not found after dependency install (see output above)"
+
+# --- 3. sanity-check the suite is the Lamassu fork ----------------------------
+# config/lamassu.robot (required by --variable environment:lamassu) is committed
+# in the fork; its absence means SUITE_DIR points at vanilla upstream.
+[ -f "config/lamassu.robot" ] || die \
+    "config/lamassu.robot missing — ${SUITE_DIR} is not the Lamassu fork.
+     Remove it (or set SUITE_DIR) so this script clones ${SUITE_REPO}."
+
+# --- 3b. cross-certification trusted CA --------------------------------------
+# The cross-certification (ccr/ccp) tests protect the request with a CA whose
+# private key the suite must hold. Lamassu authorizes a ccr by the requester
+# being a CA (cA=TRUE in basicConstraints) — it does not require the CA to be
+# pre-registered — so a standalone self-signed CA is sufficient. Generate it at
+# the fixed path config/lamassu.robot points at (TRUSTED_CA_CERT/KEY/DIR).
+CROSSCERT_DIR="/tmp/cmp-crosscert"
+# TRUSTED_CA_DIR is scanned file-by-file as a certificate chain by the suite, so
+# the certificate lives in its own subdir (certs/) with NO key alongside it.
+CROSSCERT_CERTS="${CROSSCERT_DIR}/certs"
+if command -v openssl >/dev/null 2>&1; then
+    log "Generating self-signed trusted CA for cross-certification tests (${CROSSCERT_DIR})"
+    mkdir -p "${CROSSCERT_CERTS}"
+    if [ ! -f "${CROSSCERT_DIR}/trusted-ca.key" ] || [ ! -f "${CROSSCERT_CERTS}/trusted-ca.crt" ]; then
+        openssl ecparam -name prime256v1 -genkey -noout -out "${CROSSCERT_DIR}/trusted-ca.key" 2>/dev/null
+        # Single-RDN subject (CN only): the CMP sender/subject match compares the
+        # RDNSequence order-sensitively, and the suite rebuilds the sender from
+        # the cert subject; a single RDN avoids any attribute-ordering mismatch.
+        openssl req -new -x509 -key "${CROSSCERT_DIR}/trusted-ca.key" \
+            -out "${CROSSCERT_CERTS}/trusted-ca.crt" -days 3650 \
+            -subj "/CN=Cross-Cert Trusted CA" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign,digitalSignature" 2>/dev/null \
+            || warn "could not generate cross-cert trusted CA (ccr tests will be skipped/fail)"
+    fi
+else
+    warn "openssl not found; skipping cross-cert trusted CA generation"
+fi
+
+# --- 3b-2. foreign-PKI device credential -------------------------------------
+# `CA MUST Reject CR With Other PKI Management Entity Request` signs a cr with a
+# device certificate from a DIFFERENT PKI. Lamassu must reject it because the
+# signer does not chain to the DMS ValidationCAs. Generate a self-signed foreign
+# CA (never trusted by Lamassu) and a device cert under it; DEVICE_CERT_CHAIN is
+# the device cert + foreign CA in one PEM.
+FOREIGN_DIR="/tmp/cmp-foreign"
+if command -v openssl >/dev/null 2>&1; then
+    mkdir -p "${FOREIGN_DIR}"
+    if [ ! -f "${FOREIGN_DIR}/chain.pem" ]; then
+        openssl ecparam -name prime256v1 -genkey -noout -out "${FOREIGN_DIR}/foreign-ca.key" 2>/dev/null
+        openssl req -new -x509 -key "${FOREIGN_DIR}/foreign-ca.key" -out "${FOREIGN_DIR}/foreign-ca.crt" \
+            -days 3650 -subj "/CN=Foreign PKI Root" -addext "basicConstraints=critical,CA:TRUE" 2>/dev/null
+        openssl ecparam -name prime256v1 -genkey -noout -out "${FOREIGN_DIR}/device.key" 2>/dev/null
+        openssl req -new -key "${FOREIGN_DIR}/device.key" -out "${FOREIGN_DIR}/device.csr" \
+            -subj "/CN=foreign-device" 2>/dev/null
+        openssl x509 -req -in "${FOREIGN_DIR}/device.csr" -CA "${FOREIGN_DIR}/foreign-ca.crt" \
+            -CAkey "${FOREIGN_DIR}/foreign-ca.key" -CAcreateserial -out "${FOREIGN_DIR}/device.crt" \
+            -days 3650 2>/dev/null \
+            && cat "${FOREIGN_DIR}/device.crt" "${FOREIGN_DIR}/foreign-ca.crt" > "${FOREIGN_DIR}/chain.pem" \
+            || warn "could not generate foreign-PKI device cert (other-PKI test will skip)"
+    fi
+fi
+
+# --- 3b-3. CA encryption certs for agreeMAC / encryptedKey POPO tests --------
+# extra_issuing.robot's agreeMAC and encryptedKey POPO tests (RFC 4210bis
+# §5.2.8.3) need a "CA encryption certificate" per algorithm to build a
+# request against — the client only ever uses its PUBLIC key (ECDH partner /
+# KTRI-KARI recipient), so a throwaway self-issued cert is sufficient; nothing
+# needs to chain to Lamassu or ever use the matching private key. Note: Lamassu
+# does not implement agreeMAC or the real encryptedKey POP method (only the
+# subsequentMessage encrCert/challengeResp indirect methods — see
+# popoIndirectUnsupported in backend/pkg/controllers/cmp/cmp.go), so setting
+# these turns the SKIPs into an honest PASS/FAIL split: the "MUST Reject
+# Invalid ..." tests pass (Lamassu already rejects with badPOP), the "MUST
+# Accept Valid ..." tests fail (that POP method isn't implemented).
+ENCR_CERTS_DIR="/tmp/cmp-encr-certs"
+if command -v openssl >/dev/null 2>&1; then
+    mkdir -p "${ENCR_CERTS_DIR}"
+    if [ ! -f "${ENCR_CERTS_DIR}/rsa-encr.crt" ]; then
+        log "Generating CA encryption certs (RSA/ECC/X25519/X448) for agreeMAC/encryptedKey POPO tests"
+        # A throwaway signing CA — its key is discarded after this block; these
+        # leaf certs are never chain-validated by the suite or Lamassu.
+        openssl ecparam -name prime256v1 -genkey -noout -out "${ENCR_CERTS_DIR}/signing-ca.key" 2>/dev/null
+        openssl req -new -x509 -key "${ENCR_CERTS_DIR}/signing-ca.key" -out "${ENCR_CERTS_DIR}/signing-ca.crt" \
+            -days 3650 -subj "/CN=Test Encryption CA" \
+            -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
+
+        # RSA (keyEncipherment): a normal CSR works — RSA can sign its own request.
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "${ENCR_CERTS_DIR}/rsa-encr.key" 2>/dev/null
+        openssl req -new -key "${ENCR_CERTS_DIR}/rsa-encr.key" -subj "/CN=rsa-encr" \
+            -out "${ENCR_CERTS_DIR}/rsa-encr.csr" 2>/dev/null
+        openssl x509 -req -in "${ENCR_CERTS_DIR}/rsa-encr.csr" -CA "${ENCR_CERTS_DIR}/signing-ca.crt" \
+            -CAkey "${ENCR_CERTS_DIR}/signing-ca.key" -CAcreateserial -days 365 \
+            -out "${ENCR_CERTS_DIR}/rsa-encr.crt" \
+            -extfile <(echo "keyUsage=keyEncipherment") 2>/dev/null
+
+        # ECC (keyAgreement): a normal CSR works — ECDSA can sign its own request.
+        openssl ecparam -name prime256v1 -genkey -noout -out "${ENCR_CERTS_DIR}/ecc-encr.key" 2>/dev/null
+        openssl req -new -key "${ENCR_CERTS_DIR}/ecc-encr.key" -subj "/CN=ecc-encr" \
+            -out "${ENCR_CERTS_DIR}/ecc-encr.csr" 2>/dev/null
+        openssl x509 -req -in "${ENCR_CERTS_DIR}/ecc-encr.csr" -CA "${ENCR_CERTS_DIR}/signing-ca.crt" \
+            -CAkey "${ENCR_CERTS_DIR}/signing-ca.key" -CAcreateserial -days 365 \
+            -out "${ENCR_CERTS_DIR}/ecc-encr.crt" \
+            -extfile <(echo "keyUsage=keyAgreement") 2>/dev/null
+
+        # X25519 / X448 (keyAgreement): neither key type can sign a CSR, so build
+        # a template CSR with a throwaway RSA key (subject fields only) and swap
+        # in the real X25519/X448 public key with -force_pubkey.
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "${ENCR_CERTS_DIR}/template.key" 2>/dev/null
+        for alg in X25519 X448; do
+            name="$(echo "${alg}" | tr 'A-Z' 'a-z')"
+            openssl genpkey -algorithm "${alg}" -out "${ENCR_CERTS_DIR}/${name}-encr.key" 2>/dev/null
+            openssl pkey -in "${ENCR_CERTS_DIR}/${name}-encr.key" -pubout -out "${ENCR_CERTS_DIR}/${name}-encr.pub" 2>/dev/null
+            openssl req -new -key "${ENCR_CERTS_DIR}/template.key" -subj "/CN=${name}-encr" \
+                -out "${ENCR_CERTS_DIR}/${name}-encr.csr" 2>/dev/null
+            openssl x509 -req -in "${ENCR_CERTS_DIR}/${name}-encr.csr" -force_pubkey "${ENCR_CERTS_DIR}/${name}-encr.pub" \
+                -CA "${ENCR_CERTS_DIR}/signing-ca.crt" -CAkey "${ENCR_CERTS_DIR}/signing-ca.key" -CAcreateserial \
+                -days 365 -out "${ENCR_CERTS_DIR}/${name}-encr.crt" \
+                -extfile <(echo "keyUsage=keyAgreement") 2>/dev/null
+        done
+
+        for f in rsa-encr.crt ecc-encr.crt x25519-encr.crt x448-encr.crt; do
+            [ -s "${ENCR_CERTS_DIR}/${f}" ] || warn "could not generate ${ENCR_CERTS_DIR}/${f} (agreeMAC/encryptedKey tests for it will skip)"
+        done
+    fi
+else
+    warn "openssl not found; skipping CA encryption cert generation (agreeMAC/encryptedKey POPO tests will skip)"
+fi
+
+# --- 3c. resolvable VA hostname ----------------------------------------------
+# Issued certs carry AIA/CRL URLs for the VA at http://dev.lamassu.test:8080
+# (monolithic dev `Domains` — an FQDN, so pkilint accepts the URI syntax). The
+# revocation tests do a live OCSP request against that URL, but dev.lamassu.test
+# does not resolve in a clean environment. Rather than require an /etc/hosts
+# entry (root), teach the SUITE's Python to resolve it to loopback via a .pth
+# file in its venv — executed at interpreter startup, so requests/OCSP reach the
+# local server. Non-root and environment-independent.
+if [ -x "venv-cmp-tests/bin/python" ]; then
+    VENV_SITE=$(venv-cmp-tests/bin/python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
+    if [ -n "${VENV_SITE}" ] && [ -d "${VENV_SITE}" ]; then
+        printf '%s\n' "import socket; socket.getaddrinfo=(lambda _o: (lambda h,*a,**k: _o('127.0.0.1' if h=='dev.lamassu.test' else h, *a, **k)))(socket.getaddrinfo)" \
+            > "${VENV_SITE}/zz_va_host_alias.pth"
+        log "Installed venv resolver alias dev.lamassu.test -> 127.0.0.1 (${VENV_SITE}/zz_va_host_alias.pth)"
+    else
+        warn "could not locate venv site-packages; OCSP-based revocation tests may fail to resolve dev.lamassu.test"
+    fi
+fi
+
+# --- 4. CMP bootstrap ---------------------------------------------------------
+# The CA API comes up before sample-data finishes creating the CMP DMS, so wait
+# for the DMS itself (the gate the bootstrap actually needs) to avoid a race that
+# otherwise makes --fresh runs intermittently fail at bootstrap.
+log "Waiting for DMS '${DMS_ID}' to be created by sample-data ..."
+for i in $(seq 1 60); do
+    curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}" >/dev/null 2>&1 && break
+    [ "$i" = "60" ] && die "DMS '${DMS_ID}' never appeared (sample-data not run? see /tmp/lamassu-cmp-test.log)"
+    sleep 2
+done
+log "DMS '${DMS_ID}' is present."
+
+if [ "${DO_BOOTSTRAP}" = "1" ]; then
+    log "Running CMP bootstrap (signer cert, trust CAs, replaceable enrollment)"
+    mkdir -p "${WORKDIR}"
+    bash "${LAMASSU_DIR}/scripts/cmp-bootstrap-setup.sh" "${SERVER}" "${DMS_ID}" "${WORKDIR}" \
+        || die "CMP bootstrap failed"
+fi
+
+# --- 5. run Robot Framework ---------------------------------------------------
+# Exclude post-quantum tests: `pqc` (hybrid/PQ suites), `pq` (the ML-DSA /
+# ML-KEM central-keygen cases in kga/extra_issuing) and `kem` (the ML-KEM /
+# hybrid-KEM encrypted-key cases in extra_issuing, which are tagged `kem` /
+# `hybrid-kem` without a bare `pq`). Lamassu runs PQ-free, so these are out of
+# scope; excluding `pq` also drops the liboqs-dependent paths. No classical test
+# is tagged `kem`, so this over-excludes nothing.
+# `mac` excludes PKIMessage-level MAC protection (PasswordBasedMac/PBMAC1) —
+# Lamassu is CLIENT_CERTIFICATE-only (ALLOW_MAC_PROTECTION=${False} in
+# config/lamassu.robot). `agreeMAC` excludes the *POPO-level* keyAgreement MAC
+# method (RFC 4210bis §5.2.8.3, PKMACValue derived from an ECDH shared
+# secret) — same "no MAC anywhere" policy, different RFC layer; Lamassu never
+# implements/verifies it (popoIndirectUnsupported in
+# backend/pkg/controllers/cmp/cmp.go), so these would otherwise be permanent,
+# by-design failures rather than a gap worth tracking. `encryptedKey` excludes
+# the third POPO variant with the same fate — the client sends its actual new
+# private key wrapped in a CMS EnvelopedData (KTRI/KARI/PWRI) for the CA to
+# decrypt. RFC 4210bis offers two other mechanisms for the same "non-signing
+# key" problem — encrCert and challengeResp — which Lamassu already
+# implements and which don't require the CA to hold a persistent decryption
+# key; encryptedKey would be redundant exposure for no capability gain.
+ROBOT_ARGS=( --pythonpath=./ --exclude verbose-tests --exclude pqc --exclude pq --exclude kem --exclude mac --exclude agreeMAC --exclude encryptedKey
+             --outputdir=reports --xunit xunit.xml --variable "environment:lamassu" )
+# `resource-intensive` excludes the single lwcmp.robot test that loads an
+# 8192-bit RSA key (LARGE_KEY_SIZE in config/lamassu.robot): ~50s of real
+# crypto/ASN.1 work, ~75% of that suite file's runtime, for one test. Skipped
+# by default for a fast day-to-day/CI run; pass `--include resource-intensive`
+# to run it (Robot excludes take priority over includes, so it's only added
+# here when not explicitly requested).
+[ "${INCLUDE}" != "resource-intensive" ] && ROBOT_ARGS+=( --exclude resource-intensive )
+[ -n "${INCLUDE}" ]  && ROBOT_ARGS+=( --include "${INCLUDE}" )
+[ -n "${TESTNAME}" ] && ROBOT_ARGS+=( --test "${TESTNAME}" )
+
+log "Running: robot ${ROBOT_ARGS[*]} ${TARGET}"
+robot "${ROBOT_ARGS[@]}" "${TARGET}"
+ROBOT_RC=$?
+
+# --- 6. summary ---------------------------------------------------------------
+if [ -f reports/output.xml ]; then
+    python3 - <<'PY'
+import xml.etree.ElementTree as ET
+r = ET.parse('reports/output.xml').getroot()
+t = r.find('.//statistics/total/stat')
+print("\n================ CMP TEST SUITE RESULT ================")
+print(f"  PASS={t.get('pass')}  FAIL={t.get('fail')}  SKIP={t.get('skip')}")
+print("  per suite:")
+for s in r.findall('.//statistics/suite/stat'):
+    name = s.text or ''
+    if name.count('.') == 1:
+        short = name[6:]
+        print(f"    {short:24} pass={s.get('pass'):>3} fail={s.get('fail'):>3} skip={s.get('skip'):>3}")
+print("=======================================================")
+print(f"  report: {__import__('os').getcwd()}/reports/report.html")
+PY
+
+    # Emit one standalone JUnit file per top-level Robot suite
+    # (reports/junit/<suite>.xml) for CI to upload and dorny/test-reporter to
+    # render as one row per suite (Basic, Cert Conf Tests, ...).
+    #
+    # We must NOT use `rebot --xunit` here: Robot's xUnit output is a <testsuite>
+    # root with NESTED <testsuite> children, and every <testcase> lives in the
+    # leaves. dorny's java-junit parser only reads a suite's DIRECT <testcase>
+    # children and never recurses, so it counts the whole file as 0 tests and
+    # the CMP suite silently vanishes from the report. Instead we FLATTEN into
+    # dorny's expected shape: a <testsuites> root wrapping one flat <testsuite>
+    # per top-level suite, with all descendant <testcase>s as direct children.
+    rm -rf reports/junit; mkdir -p reports/junit
+    python3 - reports/xunit.xml reports/junit <<'PY'
+import os, sys, xml.etree.ElementTree as ET
+src, outdir = sys.argv[1], sys.argv[2]
+root = ET.parse(src).getroot()                 # outer <testsuite name="Tests">
+top = root.findall('testsuite') or [root]      # top-level Robot suites
+written = 0
+for suite in top:
+    name = suite.get('name') or 'Suite'
+    cases = suite.findall('.//testcase')       # all descendants, any depth
+    if not cases:
+        continue
+    fails = sum(1 for c in cases if c.find('failure') is not None or c.find('error') is not None)
+    skips = sum(1 for c in cases if c.find('skipped') is not None)
+    total = 0.0
+    for c in cases:
+        try: total += float(c.get('time') or 0)
+        except ValueError: pass
+    testsuites = ET.Element('testsuites', {'time': f'{total:.3f}'})
+    ts = ET.SubElement(testsuites, 'testsuite', {
+        'name': name, 'tests': str(len(cases)), 'failures': str(fails),
+        'errors': '0', 'skipped': str(skips), 'time': f'{total:.3f}'})
+    for c in cases:
+        ts.append(c)                           # direct child -> dorny reads it
+    # Keep the human-readable suite name as the filename (spaces and all) — CI's
+    # report labels each row by filename ("Basic", "Cert Conf Tests", ...).
+    ET.ElementTree(testsuites).write(os.path.join(outdir, f'{name}.xml'),
+                                     encoding='UTF-8', xml_declaration=True)
+    written += 1
+if not written:
+    print('[warn] no testcases found to flatten into reports/junit', file=sys.stderr)
+    sys.exit(1)
+PY
+fi
+
+# Robot exits non-zero when any test fails; surface that but after the summary.
+exit ${ROBOT_RC}

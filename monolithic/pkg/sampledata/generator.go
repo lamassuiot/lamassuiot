@@ -186,8 +186,9 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 				},
 				EnrollmentCA: importedCAID,
 				DeviceProvisionProfile: models.DeviceProvisionProfile{
-					Icon:      "Laptop",
-					IconColor: "#0066CC",
+					Icon: "Laptop",
+					// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
+					IconColor: "#0066CC-#F0F8FF",
 					Metadata: map[string]interface{}{
 						"sample": true,
 					},
@@ -916,6 +917,293 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 		err = enrollSampleDevices(ctx, logger, caService, dmsService, importedCAID, deviceProfile.ID, sampleDevices[:10])
 		if err != nil {
 			logger.Warnf("Could not enroll sample devices: %v", err)
+		}
+	}
+
+	// Step 7: Create a CMP-based DMS with a KMS-backed protection certificate.
+	// The protection certificate is an end-entity cert with DigitalSignature
+	// key usage whose private key lives in the KMS; the RA signs all CMP
+	// response messages with it (RFC 9483 §3.2).
+	if generatedCAID != "" {
+		logger.Info("Creating CMP protection certificate and DMS...")
+
+		protectionCert, protErr := caService.CreateCertificate(ctx, services.CreateCertificateInput{
+			CAID:    generatedCAID,
+			KeySpec: services.CertificateKeySpec{Type: models.KeyType(x509.ECDSA), Bits: 256},
+			Subject: models.Subject{CommonName: "cmp-ra-protection"},
+			IssuanceProfile: &models.IssuanceProfile{
+				Name:     "CMP RA Protection",
+				Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(3650 * 24 * time.Hour)},
+				KeyUsage: models.X509KeyUsage(x509.KeyUsageDigitalSignature),
+			},
+			Metadata: map[string]any{"sample": true, "purpose": "cmp-protection"},
+		})
+		if protErr != nil {
+			logger.Warnf("Could not create CMP protection certificate: %v", protErr)
+		} else {
+			logger.Infof("Created CMP protection certificate: serial=%s", protectionCert.SerialNumber)
+
+			// Device-enrollment profile for the CMP DMS. Unlike the enrollment
+			// CA's own (CA-shaped) profile, this honors the KeyUsage, Extended
+			// KeyUsage and extensions (e.g. SubjectAltName) requested in the CMP
+			// CertTemplate, so an EE that asks for keyAgreement/keyEncipherment or
+			// a NULL-DN + SAN certificate gets exactly that (RFC 9483 §4.1 / §5).
+			// HonorSubject stays true so the requested subject (incl. NULL-DN) is
+			// preserved. SignAsCA stays false: EE certs are never CA certs, which
+			// is also why an is_ca=true request is issued as a leaf, not a CA.
+			cmpEnrollProfile, cmpProfErr := caService.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+				Profile: models.IssuanceProfile{
+					Name:                   "CMP Device Enrollment",
+					Description:            "Honors CMP CertTemplate KeyUsage/EKU/extensions for device enrollment",
+					Validity:               models.Validity{Type: models.Duration, Duration: models.TimeDuration(365 * 24 * time.Hour)},
+					SignAsCA:               false,
+					HonorKeyUsage:          true,
+					HonorExtendedKeyUsages: true,
+					HonorExtensions:        true,
+					HonorSubject:           true,
+					Subject:                models.Subject{},
+				},
+			})
+			cmpEnrollProfileID := ""
+			if cmpProfErr != nil {
+				logger.Warnf("Could not create CMP device enrollment profile (DMS will fall back to CA default): %v", cmpProfErr)
+			} else {
+				cmpEnrollProfileID = cmpEnrollProfile.ID
+				logger.Infof("Created CMP device enrollment profile: %s", cmpEnrollProfileID)
+			}
+
+			cmpDMSInput := services.CreateDMSInput{
+				ID:   "sample-cmp-dms",
+				Name: "Sample CMP DMS",
+				Metadata: map[string]interface{}{
+					"description": "Sample CMP DMS for RFC 4210/9483 testing",
+					"sample":      true,
+				},
+				Settings: models.DMSSettings{
+					EnrollmentSettings: models.EnrollmentSettings{
+						EnrollmentProtocol: models.CMP,
+						EnrollmentCA:       generatedCAID,
+						DeviceProvisionProfile: models.DeviceProvisionProfile{
+							Icon: "ShieldCheck",
+							// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
+							IconColor: "#004466-#E0F2FE",
+							Metadata:  map[string]interface{}{"sample": true},
+							Tags:      []string{"sample", "cmp"},
+						},
+						RegistrationMode: models.JITP,
+						EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+							AuthMode:                          models.CMPAuthModeClientCertificate,
+							ProtectionCertificateSerialNumber: protectionCert.SerialNumber,
+							EnforcePOPO:                       true,
+							// Accept implicit confirmation (RFC 9483 §4.1.1): when the EE
+							// includes id-it-implicitConfirm, the CA skips the certConf
+							// round-trip and echoes the OID in the response generalInfo.
+							AcceptImplicit: true,
+							// Short explicit-confirmation window (RFC 4210 §5.2.8). A KUR
+							// issued without implicit confirmation must be confirmed via
+							// certConf within this window; otherwise the confirmation
+							// monitor revokes the unconfirmed cert and the device keeps
+							// its previous identity. Kept short so the CMP compliance
+							// suite's "no update without confirmation" test observes the
+							// rollback quickly.
+							ConfirmationTimeout: models.TimeDuration(10 * time.Second),
+							// RFC 4211 §6.2 id-regCtrl-authenticator: the pre-shared
+							// security-question answer the CMP compliance suite's
+							// Authenticator-control tests expect ("MaidenName" for the
+							// positive case, a mismatched value for the negative one).
+							ExpectedAuthenticator: "MaidenName",
+							// RFC 9483 §4.1.6 central key generation (CKG) defaults to
+							// disabled per DMS; the compliance suite's Kga tests (Key
+							// Transport / Key Agreement, via ir and kur) require it.
+							ServerKeyGenEnabled: true,
+							// Nested per-operation CMP schema (RFC011). These blocks
+							// persist and round-trip through create/get; only the two
+							// LIVE bridges are enforced today (settings resolution
+							// fills them in — see models.ResolveCMPSettings):
+							//   - CKG: ir/cr.central_key_generation.enabled is unified
+							//     with the flat ServerKeyGenEnabled above (logical OR),
+							//     so mirroring it here keeps the effective toggle on.
+							//   - KUR: renewal_window/allow_expired/additional_ca_ids/
+							//     revoke_superseded reshape onto ReEnrollmentSettings.
+							//     Left at their zero values so they inherit the
+							//     ReEnrollmentSettings below (no behaviour change).
+							// Every other nested field now HAS a live enforcement path
+							// (RFC011 — see docs/rfcs/internal/RFC011-cmp-per-operation-
+							// settings.md). This sample DMS predates that enforcement and
+							// was tuned to the CMP compliance suite's expectations back
+							// when every one of these fields was persisted-only; the
+							// blocks below make the resolved (post-enforcement) behavior
+							// match what the suite has always exercised, rather than
+							// falling back to RFC011's secure-by-default resolution
+							// (which is deliberately stricter than "everything open").
+							//
+							// NOTE on "fresh" defaulting (models.ResolveCMPSettings): each
+							// operation's resolver only fills its safe defaults when a
+							// designated trigger field is empty ("fresh"). Overriding any
+							// OTHER field in that same fresh block requires also setting
+							// the trigger field, or the resolver silently stomps the
+							// override back to its default. CR (trigger:
+							// CertificateBehavior) and CCR/RR (trigger: Workflow /
+							// Authorization) are set explicitly below for exactly this
+							// reason — see resolveCR/resolveCCR/resolveRR.
+							IR: models.CMPIRSettings{
+								Enabled: true,
+								ProofOfPossession: models.CMPProofOfPossession{
+									Required: true,
+									// The suite's Kga tests (Key Transport / Key Agreement,
+									// via ir with an empty public key) rely on the indirect
+									// encrCert/challengeResp POPO methods, not just signature.
+									AllowedMethods: []models.CMPPOPOMethod{
+										models.CMPPOPOMethodSignature,
+										models.CMPPOPOMethodTrustedRA,
+										models.CMPPOPOMethodChallengeResponse,
+										models.CMPPOPOMethodEncryptedCertificate,
+									},
+								},
+								// The suite's Authenticator-control and RegToken tests send
+								// these controls; `optional` validates them when present
+								// (id-regCtrl-authenticator against ExpectedAuthenticator
+								// below, regToken for one-time-use) without requiring every
+								// other IR test to also carry one.
+								RegistrationToken:    models.CMPControl{Mode: models.CMPControlModeOptional},
+								AuthenticatorControl: models.CMPControl{Mode: models.CMPControlModeOptional},
+								CentralKeyGeneration: models.CMPCentralKeyGeneration{Enabled: true},
+							},
+							CR: models.CMPCRSettings{
+								Enabled: true,
+								// Setting CertificateBehavior (CR's "fresh" trigger field)
+								// makes RequireExistingDevice below actually stick — see the
+								// NOTE above. Lamassu has always routed cr through the same
+								// enrollment path as ir with no pre-existing-device
+								// requirement, so keep that: RFC011's own fresh default
+								// (RequireExistingDevice=true) would otherwise reject every
+								// cr test that doesn't pre-register the device first.
+								CertificateBehavior:   models.CMPCertificateBehaviorAdditional,
+								RequireExistingDevice: false,
+								ProofOfPossession: models.CMPProofOfPossession{
+									Required: true,
+									AllowedMethods: []models.CMPPOPOMethod{
+										models.CMPPOPOMethodSignature,
+										models.CMPPOPOMethodTrustedRA,
+										models.CMPPOPOMethodChallengeResponse,
+										models.CMPPOPOMethodEncryptedCertificate,
+									},
+								},
+								CentralKeyGeneration: models.CMPCentralKeyGeneration{Enabled: true},
+							},
+							KUR: models.CMPKURSettings{
+								Enabled: true,
+								// Mirror ReEnrollmentSettings.RevokeOnReEnrollment=false
+								// so the shared bridge keeps the superseded cert usable.
+								RevokeSupersededCertificate: false,
+								// The CMP compliance suite's "CA MUST Either Reject Or
+								// Accept Valid KUR With Same Key" test expects acceptance
+								// (ALLOW_KUR_SAME_KEY=True in config/lamassu.robot).
+								KeyPolicy: models.CMPKeyPolicyPermitReuse,
+								// The suite's re-enrollment tests exercise subject/SAN
+								// changes across kur requests; RFC011's own fresh default
+								// (forbid) would reject those, so allow both.
+								IdentityChangePolicy: models.CMPIdentityChangePolicySubjectAndSAN,
+							},
+							RR: models.CMPRRSettings{
+								Enabled: true,
+								// Setting Authorization (RR's "fresh" trigger field) so the
+								// suite's RA-initiated revocation tests (using the same
+								// id-kp-cmcRA credential the raVerified POPO tests use) are
+								// authorized alongside plain self-revocation.
+								Authorization:      models.CMPRevocationAuthorizationSelfTrustedRA,
+								AllowRevival:       true,
+								AllowExpiredTarget: true,
+								// All six RFC 5280 CRLReasons the suite's revocation-reason
+								// tests cycle through — RFC011's own fresh default only
+								// allows four (missing ca_compromise/affiliation_changed).
+								AllowedReasons: []models.CMPRevocationReason{
+									models.CMPRevocationReasonUnspecified,
+									models.CMPRevocationReasonKeyCompromise,
+									models.CMPRevocationReasonCACompromise,
+									models.CMPRevocationReasonAffiliationChanged,
+									models.CMPRevocationReasonSuperseded,
+									models.CMPRevocationReasonCessationOfOperation,
+								},
+								TrustedRA: models.CMPTrustedRA{RequireCMCRAEKU: true},
+							},
+							// p10cr (a plain PKCS#10 CSR) is a privileged-CA-op-style
+							// RFC011 gate too, off by default — the suite's P10cr tests
+							// need it on. No pre-existing-device requirement, matching cr.
+							P10CR: models.CMPP10CRSettings{
+								Enabled:              true,
+								ExistingDevicePolicy: models.CMPExistingDevicePolicyReplace,
+							},
+							// The suite's genm tests exercise all id-it information types,
+							// including the ones with only a stub data provider
+							// (root CA update, cert request template, current CRL, CRL
+							// update, protocol encryption cert) — RFC011's fresh default
+							// leaves those off. Enabling the gate here just lets the
+							// request reach the (still-stub) provider, same as before this
+							// gate existed.
+							GENM: models.CMPGENMSettings{
+								InformationTypes: models.CMPGENMInformationTypes{
+									CACertificates:                true,
+									SigningKeyTypes:               true,
+									EncryptionKeyTypes:            true,
+									PreferredSymmetricAlgorithm:   true,
+									SupportedLanguages:            true,
+									RootCAUpdate:                  true,
+									CertificateRequestTemplate:    true,
+									CurrentCRL:                    true,
+									CRLUpdate:                     true,
+									ProtocolEncryptionCertificate: true,
+								},
+							},
+							// Cross-certification (ccr/ccp): the suite's cross-cert tests
+							// expect synchronous issuance (a ccp back immediately), not
+							// RFC011's fresh default of administrator_approval — which
+							// would park every ccr as PENDING with no admin to approve it
+							// in the test flow. Setting Workflow (CCR's "fresh" trigger)
+							// to `direct` means RequireCACertificate/RequireProofOfPossession
+							// /MaximumValidity must also be set explicitly (see the NOTE
+							// above) — same values RFC011's own fresh default would have
+							// used, so behavior is otherwise unchanged from a fresh DMS.
+							CCR: models.CMPCCRSettings{
+								Enabled:                  true,
+								Workflow:                 models.CMPCCRWorkflowDirect,
+								RequireCACertificate:     true,
+								RequireProofOfPossession: true,
+								MaximumValidity:          models.TimeDuration(8760 * time.Hour),
+							},
+						},
+					},
+					ReEnrollmentSettings: models.ReEnrollmentSettings{
+						AdditionalValidationCAs:     []string{},
+						PreventiveReEnrollmentDelta: models.TimeDuration(7 * 24 * time.Hour),
+						CriticalReEnrollmentDelta:   models.TimeDuration(24 * time.Hour),
+						// Keep the superseded certificate valid across replaceable
+						// enrollments. The CMP compliance suite reuses a single
+						// message-protection certificate (same subject CN) for the
+						// whole run; revoking it on the first re-enrollment would
+						// make every later signature-protected request fail with
+						// certRevoked. This matches the KUR path, which only revokes
+						// when RevokeOnReEnrollment is set.
+						RevokeOnReEnrollment: false,
+					},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeEnrollmentCA:    true,
+						IncludeLamassuSystemCA: true,
+					},
+					// Enroll against the device profile so the CertTemplate's
+					// requested KeyUsage/EKU/extensions are honored. Empty when
+					// the profile couldn't be created; the DMS then falls back to
+					// the enrollment CA's default profile.
+					IssuanceProfileID: cmpEnrollProfileID,
+				},
+			}
+
+			cmpDMS, cmpErr := dmsService.CreateDMS(ctx, cmpDMSInput)
+			if cmpErr != nil {
+				logger.Warnf("Could not create CMP DMS (may already exist): %v", cmpErr)
+			} else {
+				logger.Infof("Created sample CMP DMS: %s", cmpDMS.ID)
+			}
 		}
 	}
 

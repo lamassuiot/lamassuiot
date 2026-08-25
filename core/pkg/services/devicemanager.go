@@ -45,8 +45,8 @@ type CreateDeviceInput struct {
 	Tags      []string
 	Metadata  map[string]any
 	DMSID     string `validate:"required"`
-	Icon      string `validate:"required"`
-	IconColor string `validate:"required"`
+	Icon      string
+	IconColor string
 }
 
 type ProvisionDeviceSlotInput struct {
