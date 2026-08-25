@@ -1,7 +1,6 @@
 name: GO Unit Testing
 
-permissions:
-  contents: read
+permissions: {}
 
 on:
   pull_request:
@@ -48,6 +47,8 @@ jobs:
           
     name: ${{ matrix.module.path }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -81,6 +82,8 @@ jobs:
   test-pkcs11:
     name: engines/crypto/pkcs11
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -141,6 +144,8 @@ jobs:
             name: Alerts
     name: ${{ matrix.module.name }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -175,6 +180,8 @@ jobs:
   test-backend-rest:
     name: backend (excluding assemblers/tests)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1

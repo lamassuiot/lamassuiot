@@ -1,8 +1,7 @@
 # .github/workflows/release_finalize.yml
 name: Finalize Release
 
-permissions:
-  contents: read
+permissions: {}
 
 on:
   push:
@@ -18,6 +17,8 @@ jobs:
   extract_version:
     name: Extract Version from Commit Message
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       release_version: ${{ steps.extract.outputs.release_version }}
       major_version: ${{ steps.extract.outputs.major_version }}
@@ -89,6 +90,8 @@ jobs:
     name: Setup Release Variables
     needs: [extract_version, bump_versions]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:

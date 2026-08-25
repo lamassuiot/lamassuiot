@@ -26,9 +26,7 @@ on:
 jobs:
   validate_tag:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
+    permissions: {}
     steps:
       - name: Validate tag input
         run: |
