@@ -1,6 +1,9 @@
 ARG BUILDER=golang:1.26.2-bookworm
 FROM ${BUILDER} AS builder
 WORKDIR /app
+# Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
+# this intermediate stage (in addition to the default final-stage scan).
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
 COPY core core
 COPY shared shared
