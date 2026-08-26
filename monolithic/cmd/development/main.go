@@ -81,11 +81,12 @@ const lamassuLogo = `
 type CryptoEngineOption string
 
 const (
-	AwsSecretsManager CryptoEngineOption = "aws-secrets"
-	AwsKms            CryptoEngineOption = "aws-kms"
-	Vault             CryptoEngineOption = "vault"
-	Pkcs11            CryptoEngineOption = "pkcs11"
-	Filesystem        CryptoEngineOption = "filesystem"
+	AwsSecretsManager    CryptoEngineOption = "aws-secrets"
+	AwsKms               CryptoEngineOption = "aws-kms"
+	Vault                CryptoEngineOption = "vault"
+	Pkcs11               CryptoEngineOption = "pkcs11"
+	Filesystem           CryptoEngineOption = "filesystem"
+	AzureKeyVaultSecrets CryptoEngineOption = "azure-keyvault-secrets"
 )
 
 func main() {
@@ -99,7 +100,7 @@ func main() {
 	awsIoTManagerST := flag.String("awsiot-sessiontoken", "", "AWS IoT Manager SessionToken")
 	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
-	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem']")
+	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem', 'azure-keyvault-secrets']")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	disableSSE := flag.Bool("disable-sse", false, "disable SSE streaming on device events endpoint")
@@ -137,11 +138,12 @@ func main() {
 
 	// By default, all crypto engines are enabled
 	cryptoengineOptionsMap := map[CryptoEngineOption]struct{}{
-		AwsSecretsManager: {},
-		AwsKms:            {},
-		Vault:             {},
-		Pkcs11:            {},
-		Filesystem:        {},
+		AwsSecretsManager:    {},
+		AwsKms:               {},
+		Vault:                {},
+		Pkcs11:               {},
+		Filesystem:           {},
+		AzureKeyVaultSecrets: {},
 	}
 
 	if (*cryptoengineOptions) != "" {
@@ -315,6 +317,17 @@ func main() {
 
 		pkcs11Cfg = pkcs11Subsystem.Config.(cconfig.CryptoEngineConfig)
 
+	}
+
+	var azureBaseCryptoEngine cconfig.CryptoEngineConfig
+	if _, ok := cryptoengineOptionsMap[AzureKeyVaultSecrets]; ok {
+		fmt.Println(">> launching docker: Azure (Key Vault) ...")
+		azureSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Azure).Run(*standardDockerPorts)
+		if err != nil {
+			log.Fatalf("could not launch Azure Key Vault: %s", err)
+		}
+
+		azureBaseCryptoEngine = azureSubsystem.Config.(cconfig.CryptoEngineConfig)
 	}
 
 	fmt.Println("Async Messaging Engine")
@@ -512,6 +525,17 @@ func main() {
 		cryptoEngines = append(cryptoEngines, pkcs11Cfg)
 	}
 
+	if _, ok := cryptoengineOptionsMap[AzureKeyVaultSecrets]; ok {
+		azureSecretsEngine := cconfig.CryptoEngineConfig{
+			ID:       "azure-keyvault-secrets-1",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AzureKeyVaultSecretsProvider,
+			Config:   azureBaseCryptoEngine.Config,
+		}
+		cryptoEnginesConfig.DefaultEngine = azureSecretsEngine.ID
+		cryptoEngines = append(cryptoEngines, azureSecretsEngine)
+	}
+
 	cryptoEnginesConfig.CryptoEngines = cryptoEngines
 
 	pluglableStorageConfig := &storageConfig
@@ -605,7 +629,7 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	opts := make(map[CryptoEngineOption]struct{})
 	for _, opt := range strings.Split(options, ",") {
 		switch CryptoEngineOption(opt) {
-		case AwsSecretsManager, AwsKms, Vault, Pkcs11, Filesystem:
+		case AwsSecretsManager, AwsKms, Vault, Pkcs11, Filesystem, AzureKeyVaultSecrets:
 			opts[CryptoEngineOption(opt)] = struct{}{}
 		default:
 			return nil, fmt.Errorf("invalid crypto engine option: %s", opt)

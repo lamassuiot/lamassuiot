@@ -48,6 +48,8 @@ const (
 	HashicorpVaultProvider    CryptoEngineProvider = "hashicorp_vault"
 	AWSKMSProvider            CryptoEngineProvider = "aws_kms"
 	AWSSecretsManagerProvider CryptoEngineProvider = "aws_secrets_manager"
-	FilesystemProvider        CryptoEngineProvider = "filesystem"
+	AzureKeyVaultProvider        CryptoEngineProvider = "azure_keyvault"
+	AzureKeyVaultSecretsProvider CryptoEngineProvider = "azure_keyvault_secrets"
+	FilesystemProvider           CryptoEngineProvider = "filesystem"
 	PKCS11Provider            CryptoEngineProvider = "pkcs11"
 )

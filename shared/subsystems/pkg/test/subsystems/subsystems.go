@@ -30,6 +30,7 @@ const (
 	Vault    SubsystemProvider = "vault"
 	Pkcs11   SubsystemProvider = "pkcs11"
 	Aws      SubsystemProvider = "aws"
+	Azure    SubsystemProvider = "azure"
 )
 
 var subsystemsMap map[SubsystemProvider]Subsystem = make(map[SubsystemProvider]Subsystem)
