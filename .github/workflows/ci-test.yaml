@@ -99,7 +99,7 @@ jobs:
       - name: Install PKCS11 Proxy Dependencies
         run: |
           wget https://github.com/Nitrokey/nethsm-pkcs11/releases/download/v2.2.0/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
-
+          printf '%s  %s\n' '0d32cce121e9ff6d7616f4c95d58355b0a821d7d4af20451cea8efec96e77bd1' 'nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so' | sha256sum --check --strict -
       - name: Install Dependencies
         working-directory: engines/crypto/pkcs11
         run: go work sync
