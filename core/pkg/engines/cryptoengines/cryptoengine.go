@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -28,7 +29,7 @@ type CryptoEngine interface {
 
 	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
 	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
-	ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
+	ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error)
 	ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
 	ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
 	ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error)

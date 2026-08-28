@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -193,7 +194,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(ctx context.C
 }
 
 // TODO -> Add implementation (if posible)
-func (engine *AWSSecretsManagerCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
 }
 

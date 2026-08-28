@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/shared/http/v3
 
-go 1.26.2
+go 1.27
 
 require (
 	github.com/gin-gonic/gin v1.12.0

@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3
 
-go 1.26.2
+go 1.27
 
 require github.com/sirupsen/logrus v1.9.4
 
