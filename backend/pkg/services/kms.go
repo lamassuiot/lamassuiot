@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -18,7 +19,6 @@ import (
 
 	circlSign "cloudflare/circl/sign"
 	"cloudflare/circl/sign/slhdsa"
-	"crypto/mldsa"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
@@ -637,9 +637,8 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		size = 256
 		algorithm = "Ed25519"
 		keyID, signer, err = engineInstance.ImportEd25519PrivateKey(k)
-	case circlSign.PrivateKey:
-		schemeName := k.Scheme().Name()
-		switch schemeName {
+	case *mldsa.PrivateKey:
+		switch k.PublicKey().Parameters().String() {
 		case "ML-DSA-44":
 			size = 44
 		case "ML-DSA-65":
@@ -648,15 +647,17 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 			size = 87
 		}
 
-		if size != 0 {
-			algorithm = "ML-DSA"
-			err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
-			if err != nil {
-				lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
-				return nil, err
-			}
-			keyID, signer, err = engineInstance.ImportMLDSAPrivateKey(k)
-		} else if strings.HasPrefix(schemeName, "SLH-DSA-") {
+		algorithm = "ML-DSA"
+		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.ImportMLDSAPrivateKey(k)
+	case circlSign.PrivateKey:
+		schemeName := k.Scheme().Name()
+
+		if strings.HasPrefix(schemeName, "SLH-DSA-") {
 			algorithm = "SLH-DSA"
 			id, idErr := slhdsa.IDByName(schemeName)
 			if idErr != nil {
