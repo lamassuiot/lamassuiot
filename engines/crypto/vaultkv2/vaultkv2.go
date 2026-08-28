@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"encoding/base64"
 	"errors"
@@ -250,7 +251,7 @@ func (engine *VaultKV2Engine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (stri
 }
 
 // TODO -> Add implementation (if posible)
-func (engine *VaultKV2Engine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+func (engine *VaultKV2Engine) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
 }
 

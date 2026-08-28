@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
@@ -66,7 +67,7 @@ func (m *mockCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string,
 	return "", key, nil
 }
 
-func (m *mockCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", key, nil
 }
 

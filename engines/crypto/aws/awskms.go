@@ -8,6 +8,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -73,7 +74,6 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 				{
 					Type: models.KeyType(x509.ECDSA),
 					Sizes: []int{
-						224,
 						256,
 						384,
 						521,
@@ -352,7 +352,7 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (strin
 }
 
 // TODO -> Add implementation (if posible)
-func (p *AWSKMSCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
 }
 

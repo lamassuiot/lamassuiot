@@ -3,12 +3,12 @@ package cryptoengines
 import (
 	"context"
 
-	"cloudflare/circl/sign/mldsa/mldsa65"
 	"cloudflare/circl/sign/slhdsa"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -263,16 +263,16 @@ func SharedTestImportECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestImportMLDSAPrivateKey(t *testing.T, engine CryptoEngine) {
-	_, key, err := mldsa65.GenerateKey(rand.Reader)
+	key, err := mldsa.GenerateKey(mldsa.MLDSA65())
 	assert.NoError(t, err)
 
-	pubKey := key.Public().(*mldsa65.PublicKey)
+	pubKey := key.Public().(*mldsa.PublicKey)
 
 	_, importedSigner, err := engine.ImportMLDSAPrivateKey(key)
 	assert.NoError(t, err)
 
-	importedPubKey := importedSigner.Public().(*mldsa65.PublicKey)
-	assert.Equal(t, pubKey.A, importedPubKey.A)
+	importedPubKey := importedSigner.Public().(*mldsa.PublicKey)
+	assert.Equal(t, pubKey.Bytes(), importedPubKey.Bytes())
 }
 
 func SharedTestImportSLHDSAPrivateKey(t *testing.T, engine CryptoEngine) {

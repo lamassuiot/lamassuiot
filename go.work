@@ -1,6 +1,6 @@
-go 1.26.2
+go 1.27
 
-toolchain go1.26.2
+toolchain go1.27rc2
 
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 

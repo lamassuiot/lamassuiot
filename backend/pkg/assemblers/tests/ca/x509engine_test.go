@@ -222,7 +222,10 @@ func TestCreateRootCA(t *testing.T) {
 			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
-			}, models.IssuanceProfile{})
+			}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+				Type: models.Time,
+				Time: tc.expirationTime,
+			}))
 			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)

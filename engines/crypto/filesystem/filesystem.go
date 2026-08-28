@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"encoding/base64"
 	"os"
@@ -140,7 +141,7 @@ func (engine *FilesystemCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context,
 		return "", nil, err
 	}
 
-	engine.logger.Debugf("ML-DSA-%q key successfully generated", dimensions)
+	engine.logger.Debugf("ML-DSA-%v key successfully generated", dimensions)
 	return engine.importKey(key)
 }
 
@@ -187,7 +188,7 @@ func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKe
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing MLDSA private key")
 
 	keyID, signer, err := engine.importKey(key)
