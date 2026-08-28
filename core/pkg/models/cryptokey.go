@@ -83,6 +83,12 @@ func ParseKeyType(s string) (*KeyType, error) {
 		nkt = KeyType(x509.ECDSA)
 	case "Ed25519":
 		nkt = KeyType(x509.Ed25519)
+	case "ML-DSA":
+		nkt = KeyType(x509.MLDSA)
+	case "SLH-DSA":
+		nkt = KeyType(x509.SLHDSA)
+	case "Composite-ML-DSA-RSA":
+		nkt = KeyType(x509.CompositeMLDSARSA)
 	default:
 		nkt = KeyType(x509.UnknownPublicKeyAlgorithm)
 	}

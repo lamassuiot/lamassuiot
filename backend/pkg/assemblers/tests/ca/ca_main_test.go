@@ -104,6 +104,48 @@ func TestCreateCA(t *testing.T) {
 			},
 		},
 		{
+			name:   "OK/KeyType-MLDSA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-Ed25519",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519), Bits: 256},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
 			name:   "OK/Expiration-Duration",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
@@ -3879,6 +3921,20 @@ func TestImportCA(t *testing.T) {
 			}
 			key = eccKey
 			pubKey = &eccKey.PublicKey
+		case x509.MLDSA:
+			mldsaKey, err := chelpers.GenerateMLDSAKey(65)
+			if err != nil {
+				return nil, nil, err
+			}
+			key = mldsaKey
+			pubKey = mldsaKey.Public()
+		case x509.Ed25519:
+			ed25519Key, err := chelpers.GenerateEd25519Key()
+			if err != nil {
+				return nil, nil, err
+			}
+			key = ed25519Key
+			pubKey = ed25519Key.Public()
 		}
 
 		sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
@@ -4024,6 +4080,74 @@ func TestImportCA(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, key, err := generateSelfSignedCA(x509.ECDSA)
+				var duration time.Duration = 100
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					ProfileID:     profile.ID,
+					CACertificate: (*models.X509Certificate)(ca),
+					Key:           key,
+				})
+				return importedCA, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingCAWithMLDSAKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.MLDSA)
+				var duration time.Duration = 100
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					ProfileID:     profile.ID,
+					CACertificate: (*models.X509Certificate)(ca),
+					Key:           key,
+				})
+				return importedCA, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingCAWithEd25519Key",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.Ed25519)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)

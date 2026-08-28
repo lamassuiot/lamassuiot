@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -86,6 +87,8 @@ const (
 )
 
 func main() {
+	fmt.Printf("Go version: %s\n", runtime.Version())
+
 	standardDockerPorts := flag.Bool("standard-docker-ports", true, "use standard docker ports for services (RabbitMQ, Postgres, Vault, etc.)")
 
 	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")

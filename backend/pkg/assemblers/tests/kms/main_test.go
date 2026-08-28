@@ -3,6 +3,7 @@ package kms
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -356,6 +357,24 @@ func TestCreateKey(t *testing.T) {
 			},
 		},
 		{
+			name:   "Error/InvalidMLDSAKeySize",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Invalid MLDSA key size",
+					Algorithm: "ML-DSA",
+					Size:      33,
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for invalid MLDSA key size, got nil")
+				}
+				return nil
+			},
+		},
+		{
 			name:   "Error/UnsupportedAlgorithm",
 			before: func(svc services.KMSService) error { return nil },
 			run: func(kmsSDK services.KMSService) (*models.Key, error) {
@@ -369,6 +388,230 @@ func TestCreateKey(t *testing.T) {
 			resultCheck: func(createdKey *models.Key, err error) error {
 				if err == nil {
 					return fmt.Errorf("expected error for unsupported algorithm, got nil")
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-MLDSA-44",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test MLDSA 44 Key",
+					Algorithm: "ML-DSA",
+					Size:      44,
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created MLDSA 44 key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "ML-DSA" || createdKey.Size != 44 {
+					return fmt.Errorf("unexpected key result for MLDSA 44: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-MLDSA-65",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test MLDSA 65 Key",
+					Algorithm: "ML-DSA",
+					Size:      65,
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created MLDSA 65 key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "ML-DSA" || createdKey.Size != 65 {
+					return fmt.Errorf("unexpected key result for MLDSA 65: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-MLDSA-87",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test MLDSA 87 Key",
+					Algorithm: "ML-DSA",
+					Size:      87,
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created MLDSA 87 key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "ML-DSA" || createdKey.Size != 87 {
+					return fmt.Errorf("unexpected key result for MLDSA 87: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-Ed25519",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test Ed25519 Key",
+					Algorithm: "Ed25519",
+					Size:      256,
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created Ed25519 key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "Ed25519" {
+					return fmt.Errorf("unexpected key result for Ed25519: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		// SLH-DSA test cases
+		{
+			name:   "OK/KeyType-SLHDSA-1",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test SLH-DSA ParamSet-1 Key",
+					Algorithm: "SLH-DSA",
+					Size:      1, // SHA2-128s
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created SLH-DSA (paramSet 1) key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "SLH-DSA" || createdKey.Size != 1 {
+					return fmt.Errorf("unexpected key result for SLH-DSA paramSet 1: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-SLHDSA-5",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test SLH-DSA ParamSet-5 Key",
+					Algorithm: "SLH-DSA",
+					Size:      5, // SHA2-256s
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created SLH-DSA (paramSet 5) key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "SLH-DSA" || createdKey.Size != 5 {
+					return fmt.Errorf("unexpected key result for SLH-DSA paramSet 5: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Error/InvalidSLHDSAParamSet-0",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Bad SLH-DSA ParamSet",
+					Algorithm: "SLH-DSA",
+					Size:      0, // invalid
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for invalid SLH-DSA paramSet 0, got nil")
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Error/InvalidSLHDSAParamSet-13",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Bad SLH-DSA ParamSet 13",
+					Algorithm: "SLH-DSA",
+					Size:      13, // invalid: valid range is 1-12
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for invalid SLH-DSA paramSet 13, got nil")
+				}
+				return nil
+			},
+		},
+		// Composite ML-DSA-RSA test cases
+		{
+			name:   "OK/KeyType-Composite-MLDSA-RSA-1",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test Composite-ML-DSA-RSA Variant-1 Key",
+					Algorithm: "Composite-ML-DSA-RSA",
+					Size:      1, // MLDSA44-RSA2048-PSS-SHA256
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created Composite-ML-DSA-RSA (variant 1) key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "Composite-ML-DSA-RSA" || createdKey.Size != 1 {
+					return fmt.Errorf("unexpected key result for Composite-ML-DSA-RSA variant 1: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-Composite-MLDSA-RSA-3",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test Composite-ML-DSA-RSA Variant-3 Key",
+					Algorithm: "Composite-ML-DSA-RSA",
+					Size:      3, // MLDSA65-RSA3072-PSS-SHA512
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created Composite-ML-DSA-RSA (variant 3) key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "Composite-ML-DSA-RSA" || createdKey.Size != 3 {
+					return fmt.Errorf("unexpected key result for Composite-ML-DSA-RSA variant 3: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Error/InvalidCompositeMLDSARSAVariant-0",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Bad Composite Variant",
+					Algorithm: "Composite-ML-DSA-RSA",
+					Size:      0, // invalid
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for invalid Composite-ML-DSA-RSA variant 0, got nil")
 				}
 				return nil
 			},
@@ -388,7 +631,7 @@ func TestCreateKey(t *testing.T) {
 	}
 }
 
-func TestImportKey(t *testing.T) {
+func TmestImportKey(t *testing.T) {
 	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -405,12 +648,37 @@ func TestImportKey(t *testing.T) {
 		return priv
 	}
 
+	generateEd25519 := func() any {
+		_, key, _ := ed25519.GenerateKey(rand.Reader)
+		return key
+	}
+
 	testcases := []struct {
 		name        string
 		before      func()
 		run         func() (*models.Key, error)
 		resultCheck func(key *models.Key, err error) error
 	}{
+		{
+			name:   "OK/Import-Ed25519",
+			before: func() {},
+			run: func() (*models.Key, error) {
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "Ed25519 Key",
+					PrivateKey: generateEd25519(),
+					EngineID:   "filesystem-1",
+				})
+			},
+			resultCheck: func(key *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've imported Ed25519 key without error, but got: %s", err)
+				}
+				if key == nil || key.Algorithm != "Ed25519" {
+					return fmt.Errorf("unexpected key result for Ed25519 import: %+v", key)
+				}
+				return nil
+			},
+		},
 		{
 			name:   "OK/Import-RSA",
 			before: func() {},
@@ -1029,6 +1297,38 @@ func TestSignMessage(t *testing.T) {
 		resultCheck func(sig *models.MessageSignature, err error) error
 	}{
 		{
+			name: "OK/SignMessage-Ed25519",
+			before: func() {
+				_, priv, _ := ed25519.GenerateKey(rand.Reader)
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "SignEd25519",
+					PrivateKey: priv,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import Ed25519 key: %s", err))
+				}
+				validKeyID = key.PKCS11URI
+			},
+			run: func() (*models.MessageSignature, error) {
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "Ed25519_PURE",
+					MessageType: models.Raw,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error on SignMessage Ed25519: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected signature, got nil or empty")
+				}
+				return nil
+			},
+		},
+		{
 			name: "OK/SignMessage-Valid",
 			before: func() {
 				validKeyID, validAlgorithm = importKey("SignKey", 2048)
@@ -1462,6 +1762,51 @@ func TestVerifySignature(t *testing.T) {
 		resultCheck func(ok *models.MessageValidation, err error) error
 	}{
 		{
+			name: "OK/VerifySignature-Ed25519",
+			before: func() {
+				_, priv, _ := ed25519.GenerateKey(rand.Reader)
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "VerifyEd25519",
+					PrivateKey: priv,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import Ed25519 key: %s", err))
+				}
+				validKeyID = key.PKCS11URI
+				validAlgorithm = "Ed25519_PURE"
+				validMessage = []byte("verify ed25519")
+				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     validMessage,
+					Algorithm:   validAlgorithm,
+					MessageType: models.Raw,
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to sign with Ed25519: %s", err))
+				}
+				validSignature = sig.Signature
+			},
+			run: func() (*models.MessageValidation, error) {
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
+					Message:     validMessage,
+					Algorithm:   validAlgorithm,
+					MessageType: models.Raw,
+					Signature:   validSignature,
+				})
+			},
+			resultCheck: func(ok *models.MessageValidation, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error on VerifySignature Ed25519: %s", err)
+				}
+				if !ok.Valid {
+					return fmt.Errorf("expected signature to verify for Ed25519, got false")
+				}
+				return nil
+			},
+		},
+		{
 			name: "OK/VerifySignature-Valid",
 			before: func() {
 				validMessage = []byte("verify me!")
@@ -1883,4 +2228,279 @@ func parsePKCS11URI(uri string) (map[string]string, error) {
 	}
 
 	return result, nil
+}
+
+// TestSignMessageWithSLHDSA verifies that SLH-DSA keys can be created via the
+// KMS service and used to sign arbitrary messages with the SLHDSA_PURE algorithm.
+func TestSignMessageWithSLHDSA(t *testing.T) {
+	kmsTest, err := StartKMSServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create KMS test server: %s", err)
+	}
+
+	var validKeyID string
+	var message = []byte("slh-dsa test message")
+
+	testcases := []struct {
+		name        string
+		before      func()
+		run         func() (*models.MessageSignature, error)
+		resultCheck func(sig *models.MessageSignature, err error) error
+	}{
+		{
+			name: "OK/SignMessage-SLHDSA-ParamSet1",
+			before: func() {
+				key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "SLH-DSA-Sign-1",
+					Algorithm: "SLH-DSA",
+					Size:      1, // SHA2-128s
+					EngineID:  "filesystem-1",
+				})
+				if err != nil {
+					t.Fatalf("failed to create SLH-DSA key: %s", err)
+				}
+				validKeyID = key.PKCS11URI
+			},
+			run: func() (*models.MessageSignature, error) {
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "SLHDSA_PURE",
+					MessageType: models.Raw,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error on SLH-DSA sign: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected non-empty SLH-DSA signature")
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignMessage-SLHDSA-ParamSet5",
+			before: func() {
+				key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "SLH-DSA-Sign-5",
+					Algorithm: "SLH-DSA",
+					Size:      5, // SHA2-256s
+					EngineID:  "filesystem-1",
+				})
+				if err != nil {
+					t.Fatalf("failed to create SLH-DSA key: %s", err)
+				}
+				validKeyID = key.PKCS11URI
+			},
+			run: func() (*models.MessageSignature, error) {
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "SLHDSA_PURE",
+					MessageType: models.Raw,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error on SLH-DSA (paramSet 5) sign: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected non-empty SLH-DSA signature")
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignAndVerify-SLHDSA",
+			before: func() {
+				key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "SLH-DSA-Sign-Verify",
+					Algorithm: "SLH-DSA",
+					Size:      1,
+					EngineID:  "filesystem-1",
+				})
+				if err != nil {
+					t.Fatalf("failed to create SLH-DSA key: %s", err)
+				}
+				validKeyID = key.PKCS11URI
+			},
+			run: func() (*models.MessageSignature, error) {
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "SLHDSA_PURE",
+					MessageType: models.Raw,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("sign step failed: %s", err)
+				}
+				// Verify the signature
+				result, err := kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "SLHDSA_PURE",
+					MessageType: models.Raw,
+					Signature:   sig.Signature,
+				})
+				if err != nil {
+					return fmt.Errorf("verify step failed: %s", err)
+				}
+				if !result.Valid {
+					return fmt.Errorf("expected SLH-DSA signature to be valid")
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.before()
+			sig, err := tc.run()
+			if err2 := tc.resultCheck(sig, err); err2 != nil {
+				t.Fatalf("unexpected result in test case: %s", err2)
+			}
+		})
+	}
+}
+
+// TestSignMessageWithCompositeMLDSARSA verifies that Composite ML-DSA-RSA keys
+// can be created via the KMS service and used to sign messages with the
+// COMPOSITE_MLDSA_RSA_PURE algorithm.
+func TestSignMessageWithCompositeMLDSARSA(t *testing.T) {
+	kmsTest, err := StartKMSServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create KMS test server: %s", err)
+	}
+
+	var validKeyID string
+	var message = []byte("composite ml-dsa-rsa test message")
+
+	testcases := []struct {
+		name        string
+		before      func()
+		run         func() (*models.MessageSignature, error)
+		resultCheck func(sig *models.MessageSignature, err error) error
+	}{
+		{
+			name: "OK/SignMessage-Composite-Variant1",
+			before: func() {
+				key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Composite-Sign-Variant1",
+					Algorithm: "Composite-ML-DSA-RSA",
+					Size:      1, // MLDSA44-RSA2048-PSS-SHA256
+					EngineID:  "filesystem-1",
+				})
+				if err != nil {
+					t.Fatalf("failed to create Composite-ML-DSA-RSA key: %s", err)
+				}
+				validKeyID = key.PKCS11URI
+			},
+			run: func() (*models.MessageSignature, error) {
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "COMPOSITE_MLDSA_RSA_PURE",
+					MessageType: models.Raw,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error on Composite-ML-DSA-RSA sign: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected non-empty Composite signature")
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignMessage-Composite-Variant3",
+			before: func() {
+				key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Composite-Sign-Variant3",
+					Algorithm: "Composite-ML-DSA-RSA",
+					Size:      3, // MLDSA65-RSA3072-PSS-SHA512
+					EngineID:  "filesystem-1",
+				})
+				if err != nil {
+					t.Fatalf("failed to create Composite-ML-DSA-RSA key: %s", err)
+				}
+				validKeyID = key.PKCS11URI
+			},
+			run: func() (*models.MessageSignature, error) {
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "COMPOSITE_MLDSA_RSA_PURE",
+					MessageType: models.Raw,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error on Composite-ML-DSA-RSA (variant 3) sign: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected non-empty Composite signature")
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignAndVerify-Composite-Variant1",
+			before: func() {
+				key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Composite-Sign-Verify",
+					Algorithm: "Composite-ML-DSA-RSA",
+					Size:      1,
+					EngineID:  "filesystem-1",
+				})
+				if err != nil {
+					t.Fatalf("failed to create Composite-ML-DSA-RSA key: %s", err)
+				}
+				validKeyID = key.PKCS11URI
+			},
+			run: func() (*models.MessageSignature, error) {
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "COMPOSITE_MLDSA_RSA_PURE",
+					MessageType: models.Raw,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("sign step failed: %s", err)
+				}
+				// Verify the signature
+				result, err := kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
+					Message:     message,
+					Algorithm:   "COMPOSITE_MLDSA_RSA_PURE",
+					MessageType: models.Raw,
+					Signature:   sig.Signature,
+				})
+				if err != nil {
+					return fmt.Errorf("verify step failed: %s", err)
+				}
+				if !result.Valid {
+					return fmt.Errorf("expected Composite-ML-DSA-RSA signature to be valid")
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.before()
+			sig, err := tc.run()
+			if err2 := tc.resultCheck(sig, err); err2 != nil {
+				t.Fatalf("unexpected result in test case: %s", err2)
+			}
+		})
+	}
 }

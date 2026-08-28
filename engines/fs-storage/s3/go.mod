@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3
 
-go 1.26.2
+go 1.27
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0
