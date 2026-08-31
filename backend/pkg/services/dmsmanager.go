@@ -88,7 +88,7 @@ func (svc *DMSManagerServiceBackend) SetService(service services.DMSManagerServi
 // If device is nil and the DMS is configured with JITP, the device is created.
 // If device is nil and JITP is disabled, an error is returned.
 // Returns the (possibly newly created) device.
-func (svc DMSManagerServiceBackend) ensureDeviceRegistered(ctx context.Context, lFunc *logrus.Entry, enrollSettings models.EnrollmentSettings, dmsID string, deviceID string, device *models.Device) (*models.Device, error) {
+func (svc DMSManagerServiceBackend) ensureDeviceRegistered(ctx context.Context, lFunc *logrus.Entry, enrollSettings models.CommonEnrollmentSettings, dmsID string, deviceID string, device *models.Device) (*models.Device, error) {
 	if enrollSettings.RegistrationMode == models.JITP {
 		if device == nil {
 			lFunc.Debugf("DMS is configured with JustInTime registration. will create device with ID %s", deviceID)
@@ -208,21 +208,29 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 }
 
 // normalizeProtocolSettings enforces that a DMS uses exactly one enrollment
-// protocol (EST or CMP) and zeroes out the settings struct of the protocol
-// that is NOT selected. This is intentional: persisting stale config for an
-// unused protocol is misleading in the UI and ambiguous to operators. The
-// top-level EnrollmentSettings.EnrollmentCA is the single source of truth for
-// the issuing CA — there are no protocol-specific overrides.
+// protocol (EST or CMP): it allocates the container for the selected protocol
+// if the caller omitted it, and drops the other one entirely. Persisting stale
+// config for an unused protocol is misleading in the UI and ambiguous to
+// operators.
+//
+// Every DMS create/update funnels through here, so the rest of the service can
+// rely on the invariant it establishes: Protocol is EST or CMP, the matching
+// container is non-nil, and the other is nil.
 func normalizeProtocolSettings(settings *models.DMSSettings) error {
-	switch settings.EnrollmentSettings.EnrollmentProtocol {
+	switch settings.Protocol {
 	case models.EST:
-		settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483 = models.EnrollmentOptionsLWCRFC9483{}
+		if settings.EST == nil {
+			settings.EST = &models.ESTSettings{}
+		}
+		settings.CMP = nil
 	case models.CMP:
-		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
-		// Fill the nested per-operation CMP schema defaults and resolve the two
-		// LIVE bridges (CKG toggle, KUR ↔ ReEnrollmentSettings reshape) so what
-		// gets persisted is already fully-populated and self-consistent. See
-		// models.ResolveCMPSettings / RFC011.
+		if settings.CMP == nil {
+			settings.CMP = &models.CMPSettings{}
+		}
+		settings.EST = nil
+		// Fill the nested per-operation CMP schema defaults and resolve the CKG
+		// toggle so what gets persisted is already fully-populated and
+		// self-consistent. See models.ResolveCMPSettings / RFC011.
 		*settings = models.ResolveCMPSettings(*settings)
 	default:
 		return errs.ErrDMSInvalidProtocol
@@ -358,7 +366,29 @@ func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]
 		return nil, errs.ErrDMSNotFound
 	}
 
-	caDistribSettings := dms.Settings.CADistributionSettings
+	// CA distribution is protocol-agnostic (LWCCACerts delegates straight here),
+	// so read both settings out of whichever container this DMS actually has.
+	var caDistribSettings models.CADistributionSettings
+	var enrollmentCA string
+	switch dms.Settings.Protocol {
+	case models.CMP:
+		if dms.Settings.CMP == nil {
+			lFunc.Errorf("DMS '%s' declares CMP but carries no CMP settings", aps)
+			return nil, errs.ErrDMSInvalidProtocol
+		}
+		caDistribSettings = dms.Settings.CMP.CADistributionSettings
+		enrollmentCA = dms.Settings.CMP.EnrollmentSettings.EnrollmentCA
+	case models.EST:
+		if dms.Settings.EST == nil {
+			lFunc.Errorf("DMS '%s' declares EST but carries no EST settings", aps)
+			return nil, errs.ErrDMSInvalidProtocol
+		}
+		caDistribSettings = dms.Settings.EST.CADistributionSettings
+		enrollmentCA = dms.Settings.EST.EnrollmentSettings.EnrollmentCA
+	default:
+		lFunc.Errorf("DMS '%s' has an unknown enrollment protocol '%s'", aps, dms.Settings.Protocol)
+		return nil, errs.ErrDMSInvalidProtocol
+	}
 
 	if caDistribSettings.IncludeLamassuSystemCA {
 		if svc.downstreamCert == nil {
@@ -369,10 +399,10 @@ func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]
 	}
 
 	reqCAs := []string{}
-	reqCAs = append(reqCAs, dms.Settings.CADistributionSettings.ManagedCAs...)
+	reqCAs = append(reqCAs, caDistribSettings.ManagedCAs...)
 
 	if caDistribSettings.IncludeEnrollmentCA {
-		reqCAs = append(reqCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
+		reqCAs = append(reqCAs, enrollmentCA)
 	}
 
 	for _, ca := range reqCAs {
@@ -636,14 +666,15 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	}
 
 	lFunc = lFunc.WithField("dms", dms.ID)
-	enrollSettings := dms.Settings.EnrollmentSettings
 
-	if enrollSettings.EnrollmentProtocol != models.EST && enrollSettings.EnrollmentProtocol != models.CMP {
-		lFunc.Errorf("aborting enrollment. DMS enrollment protocol not supported (got %s)", enrollSettings.EnrollmentProtocol)
+	// This is the EST enrollment entry point (reached only from the EST
+	// controller). CMP enrollment has its own path in dmsmanager_lwcmp.go.
+	if dms.Settings.Protocol != models.EST || dms.Settings.EST == nil {
+		lFunc.Errorf("aborting enrollment. DMS enrollment protocol not supported (got %s)", dms.Settings.Protocol)
 		return nil, errs.ErrDMSOnlyEST
 	}
 
-	estAuthOptions := enrollSettings.EnrollmentOptionsESTRFC7030
+	enrollSettings := dms.Settings.EST.EnrollmentSettings
 
 	lFunc = lFunc.WithField("step", "Authenticating")
 	lFunc.Infof("starting authentication process")
@@ -652,7 +683,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	// All four modes (NO_AUTH, CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, and both)
 	// are handled by the shared authenticator.
 	clientCerts, _ := ctx.Value(core.LamassuContextKeyAuthCredentialStruct).([]*x509.Certificate)
-	if err := svc.authenticateEnrollment(ctx, lFunc, estAuthOptions.AuthSettings(), clientCerts, csr, aps, "enrollment"); err != nil {
+	if err := svc.authenticateEnrollment(ctx, lFunc, enrollSettings.AuthSettings(), clientCerts, csr, aps, "enrollment"); err != nil {
 		return nil, err
 	}
 
@@ -717,7 +748,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 	}
 
-	device, err = svc.ensureDeviceRegistered(ctx, lFunc, enrollSettings, dms.ID, csr.Subject.CommonName, device)
+	device, err = svc.ensureDeviceRegistered(ctx, lFunc, enrollSettings.CommonEnrollmentSettings, dms.ID, csr.Subject.CommonName, device)
 	if err != nil {
 		return nil, err
 	}
@@ -796,11 +827,15 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	lFunc = lFunc.WithField("dms", dms.ID)
-	enrollSettings := dms.Settings.EnrollmentSettings
-	if enrollSettings.EnrollmentProtocol != models.EST && enrollSettings.EnrollmentProtocol != models.CMP {
-		lFunc.Errorf("aborting reenrollment. DMS enrollment protocol not supported (got %s)", enrollSettings.EnrollmentProtocol)
+
+	// EST re-enrollment entry point (reached only from the EST controller);
+	// CMP re-enrollment (kur) is handled by LWCReenroll in dmsmanager_lwcmp.go.
+	if dms.Settings.Protocol != models.EST || dms.Settings.EST == nil {
+		lFunc.Errorf("aborting reenrollment. DMS enrollment protocol not supported (got %s)", dms.Settings.Protocol)
 		return nil, errs.ErrDMSOnlyEST
 	}
+
+	enrollSettings := dms.Settings.EST.EnrollmentSettings
 
 	enrollCAID := enrollSettings.EnrollmentCA
 	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
@@ -811,8 +846,8 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		return nil, err
 	}
 
-	reEnrollSettings := dms.Settings.ReEnrollmentSettings
-	estAuthOpts := reEnrollSettings.ReEnrollmentOptionsESTRFC7030
+	reEnrollSettings := dms.Settings.EST.ReEnrollmentSettings
+	estAuthOpts := reEnrollSettings
 
 	switch estAuthOpts.AuthMode {
 	case models.ESTAuthModeClientCertificate, models.ESTAuthModeClientCertificateAndWebhook:
@@ -1038,7 +1073,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	now := time.Now()
 	lFunc.Debugf("checking if DMS allows enrollment at current delta for device %s", device.ID)
 
-	comparisonTimeThreshold := currentDeviceCert.Certificate.NotAfter.Add(-time.Duration(dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta))
+	comparisonTimeThreshold := currentDeviceCert.Certificate.NotAfter.Add(-time.Duration(reEnrollSettings.ReEnrollmentDelta))
 	lFunc.Debugf(
 		"current device certificate expires at %s (%s duration). DMS allows reenrolling %s. Reenroll window opens %s. (delta=%s)",
 		currentDeviceCert.Certificate.NotAfter.UTC().Format("2006-01-02T15:04:05Z07:00"),
@@ -1154,13 +1189,22 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 		return nil, nil, err
 	}
 
-	if !dms.Settings.ServerKeyGen.Enabled {
+	// Server-side key generation over EST. CMP's equivalent (RFC 9483 §4.1.6
+	// central key generation) is gated separately and derives the key algorithm
+	// from the request, so it never reaches here.
+	if dms.Settings.Protocol != models.EST || dms.Settings.EST == nil {
+		lFunc.Errorf("server key generation requested on a non-EST DMS: %s", aps)
+		return nil, nil, errs.ErrDMSOnlyEST
+	}
+
+	serverKeyGen := dms.Settings.EST.ServerKeyGen
+	if !serverKeyGen.Enabled {
 		lFunc.Errorf("server key generation not enabled for DMS: %s", aps)
 		return nil, nil, fmt.Errorf("server key generation not enabled")
 	}
 
-	keyType := dms.Settings.ServerKeyGen.Key.Type
-	keySize := dms.Settings.ServerKeyGen.Key.Bits
+	keyType := serverKeyGen.Key.Type
+	keySize := serverKeyGen.Key.Bits
 
 	//remove signature algorithm from csr
 	csr.SignatureAlgorithm = x509.UnknownSignatureAlgorithm
@@ -1326,14 +1370,30 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
+	// Identity binding happens for EST and CMP devices alike, so pull the
+	// monitoring deltas from whichever container this DMS has. A missing
+	// container leaves both deltas zero, which the expiry monitor reads as
+	// "never trigger" — the same behaviour as an unconfigured DMS.
+	var reEnrollment models.CommonReEnrollmentSettings
+	switch dms.Settings.Protocol {
+	case models.CMP:
+		if dms.Settings.CMP != nil {
+			reEnrollment = dms.Settings.CMP.ReEnrollmentSettings.CommonReEnrollmentSettings
+		}
+	case models.EST:
+		if dms.Settings.EST != nil {
+			reEnrollment = dms.Settings.EST.ReEnrollmentSettings.CommonReEnrollmentSettings
+		}
+	}
+
 	expirationDeltas := models.CAMetadataMonitoringExpirationDeltas{
 		{
-			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
+			Delta:     reEnrollment.PreventiveReEnrollmentDelta,
 			Name:      "Preventive",
 			Triggered: false,
 		},
 		{
-			Delta:     dms.Settings.ReEnrollmentSettings.CriticalReEnrollmentDelta,
+			Delta:     reEnrollment.CriticalReEnrollmentDelta,
 			Name:      "Critical",
 			Triggered: false,
 		},
@@ -1408,13 +1468,29 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 }
 
 func (svc DMSManagerServiceBackend) resolveIssuanceProfile(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, enrollmentCA string) (*models.IssuanceProfile, error) {
-	issuanceProfile := dms.Settings.IssuanceProfile
-	if dms.Settings.IssuanceProfileID != "" {
+	// Shared by both protocols' issuance paths (CMP layers its per-operation
+	// overrides on top before falling back here).
+	var issuanceProfile *models.IssuanceProfile
+	var issuanceProfileID string
+	switch dms.Settings.Protocol {
+	case models.CMP:
+		if dms.Settings.CMP != nil {
+			issuanceProfile = dms.Settings.CMP.IssuanceProfile
+			issuanceProfileID = dms.Settings.CMP.IssuanceProfileID
+		}
+	case models.EST:
+		if dms.Settings.EST != nil {
+			issuanceProfile = dms.Settings.EST.IssuanceProfile
+			issuanceProfileID = dms.Settings.EST.IssuanceProfileID
+		}
+	}
+
+	if issuanceProfileID != "" {
 		profile, err := svc.caClient.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: dms.Settings.IssuanceProfileID,
+			ProfileID: issuanceProfileID,
 		})
 		if err != nil {
-			lFunc.Errorf("could not get issuance profile with ID=%s: %s", dms.Settings.IssuanceProfileID, err)
+			lFunc.Errorf("could not get issuance profile with ID=%s: %s", issuanceProfileID, err)
 			return nil, err
 		}
 		issuanceProfile = profile

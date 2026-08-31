@@ -7,7 +7,8 @@ require (
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
 	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
-	github.com/ory/dockertest/v3 v3.12.0
+	github.com/moby/moby/api v1.54.2
+	github.com/ory/dockertest/v4 v4.0.0
 	github.com/sirupsen/logrus v1.9.4
 )
 
@@ -45,7 +46,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
@@ -55,6 +55,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runc v1.2.8 // indirect
+	github.com/ory/dockertest/v3 v3.12.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rabbitmq/amqp091-go v1.11.0 // indirect

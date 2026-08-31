@@ -266,7 +266,7 @@ paths:
       description: |
         Approves a PENDING phased-workflow CMP transaction, issuing the certificate
         so the end entity can retrieve it via a subsequent pollReq. Only meaningful
-        for DMSs whose lwc_rfc9483_settings.workflow is "phased".
+        for DMSs whose cmp_settings.enrollment_settings.workflow is "phased".
       operationId: approveCmpTransaction
       x-authz:
         entity_type: dms
@@ -711,13 +711,60 @@ components:
 
     DMSSettings:
       type: object
+      description: |
+        Protocol-scoped DMS configuration. `protocol` selects the enrollment
+        protocol and exactly one of `est_settings` / `cmp_settings` carries every
+        setting for it; the other is absent. The server allocates the selected
+        container and drops the other one on every create/update, so a DMS read
+        back always has precisely one.
+
+        Settings both protocols happen to need (CA distribution, the enrollment
+        CA, the issuance profile, the re-enrollment monitoring deltas) are
+        duplicated into each container rather than hoisted to a shared block: a
+        DMS only ever speaks one protocol, so there is no configuration to share.
+      properties:
+        protocol:
+          type: string
+          enum: [EST_RFC7030, CMP_RFC9483]
+        est_settings:
+          $ref: '#/components/schemas/ESTSettings'
+          nullable: true
+        cmp_settings:
+          $ref: '#/components/schemas/CMPSettings'
+          nullable: true
+
+    ESTSettings:
+      type: object
+      description: Complete configuration of a DMS that enrolls over EST (RFC 7030).
       properties:
         server_keygen_settings:
           $ref: '#/components/schemas/ServerKeyGenSettings'
         enrollment_settings:
-          $ref: '#/components/schemas/EnrollmentSettings'
+          $ref: '#/components/schemas/ESTEnrollmentSettings'
         reenrollment_settings:
-          $ref: '#/components/schemas/ReEnrollmentSettings'
+          $ref: '#/components/schemas/ESTReEnrollmentSettings'
+        ca_distribution_settings:
+          $ref: '#/components/schemas/CADistributionSettings'
+        issuance_profile_id:
+          type: string
+        issuance_profile:
+          $ref: '#/components/schemas/IssuanceProfile'
+
+    CMPSettings:
+      type: object
+      description: |
+        Complete configuration of a DMS that enrolls over CMP (RFC 9483
+        Lightweight CMP Profile / RFC 4210).
+
+        There is deliberately no `server_keygen_settings` here: CMP central key
+        generation is gated by `enrollment_settings.server_key_gen_enabled` and
+        takes its key algorithm from the request itself (RFC 9483 §4.1.6), never
+        from a DMS-configured key type/size the way EST's does.
+      properties:
+        enrollment_settings:
+          $ref: '#/components/schemas/CMPEnrollmentSettings'
+        reenrollment_settings:
+          $ref: '#/components/schemas/CMPReEnrollmentSettings'
         ca_distribution_settings:
           $ref: '#/components/schemas/CADistributionSettings'
         issuance_profile_id:
@@ -741,16 +788,10 @@ components:
         bits:
           type: integer
 
-    EnrollmentSettings:
+    CommonEnrollmentSettings:
       type: object
+      description: Enrollment knobs shared verbatim by both protocols.
       properties:
-        protocol:
-          type: string
-          enum: [EST_RFC7030, CMP_RFC9483]
-        est_rfc7030_settings:
-          $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
-        lwc_rfc9483_settings:
-          $ref: '#/components/schemas/EnrollmentOptionsLWCRFC9483'
         device_provisioning_profile:
           $ref: '#/components/schemas/DeviceProvisionProfile'
         enrollment_ca:
@@ -763,99 +804,156 @@ components:
         verify_csr_signature:
           type: boolean
 
-    EnrollmentOptionsESTRFC7030:
-      type: object
-      properties:
-        auth_mode:
-          type: string
-          enum: [CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK, NO_AUTH]
-        client_certificate_settings:
-          $ref: '#/components/schemas/AuthOptionsClientCertificate'
-        external_webhook_settings:
-          type: object
-          additionalProperties: true
-
-    EnrollmentOptionsLWCRFC9483:
+    CommonReEnrollmentSettings:
       type: object
       description: |
-        CMP-specific enrollment settings (RFC 9483 Lightweight CMP Profile / RFC 4210).
-        These are the settings read by the current handlers. There are no implemented
-        per-operation `enabled` flags: supported PKIBody tags are dispatched whenever
-        the DMS enrollment protocol is CMP_RFC9483. CRMF regToken is a per-request
-        control with automatic one-time-use enforcement, not a DMS setting.
+        Re-enrollment knobs shared verbatim by both protocols, including the two
+        monitoring deltas materialized onto CA metadata at identity-bind time.
       properties:
-        auth_mode:
-          type: string
-          description: |
-            For CMP, CLIENT_CERTIFICATE means the signature-based message-protection
-            signer certificate (extraCerts[0], RFC 9483 §3.2) rather than a transport
-            mTLS certificate. CLIENT_CERTIFICATE and the combined mode require a
-            protected PKIMessage. EXTERNAL_WEBHOOK and NO_AUTH permit an unprotected
-            message, although any signature that is supplied is still verified.
-            NONE is accepted as the dashboard's legacy alias for NO_AUTH.
-          enum: [CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK, NO_AUTH, NONE]
-        client_certificate_settings:
-          $ref: '#/components/schemas/AuthOptionsClientCertificate'
-        external_webhook_settings:
-          type: object
-          additionalProperties: true
-        accept_implicit:
+        additional_validation_cas:
+          type: array
+          items:
+            type: string
+        revoke_on_reenrollment:
           type: boolean
-          default: false
-          description: |
-            Whether the server may skip the certConf round-trip when an ir, cr, kur,
-            p10cr, or certificate-delivering pollReq asks for implicit confirmation
-            (id-it-implicitConfirm, RFC 4210 §5.2.8). This setting alone does not
-            enable implicit confirmation; the request must also carry the OID.
-        confirmation_timeout:
+        reenrollment_delta:
           type: string
-          example: 5m
-          description: |
-            Positive Lamassu duration for the explicit certConf/delivery window
-            (for example 30s, 5m, or 1h). Zero or a negative value uses the runtime
-            default of 5m.
-        approval_timeout:
-          type: string
-          example: 1w
-          description: |
-            Positive Lamassu duration for a phased-workflow transaction to remain
-            PENDING for administrator approval. Zero or a negative value uses the
-            runtime default of 1w. Only meaningful when workflow is phased.
-        protection_certificate:
-          type: string
-          description: Serial number of the certificate whose KMS-backed key signs CMP response messages.
-        enforce_popo:
+        enable_expired_renewal:
           type: boolean
-          default: false
-          description: |
-            Whether IR/CR must carry an acceptable CRMF proof of possession and
-            whether KUR must be message-protected. A supplied POPOSigningKey is
-            verified even when this setting is false; trusted-RA raVerified and
-            supported indirect POP methods follow their own validation paths.
-            P10CR CSR signatures are always verified independently of this setting.
-        expected_authenticator:
+        preventive_delta:
           type: string
-          description: |
-            Pre-shared answer matched against the RFC 4211 §6.2
-            id-regCtrl-authenticator control. When empty, a supplied authenticator
-            control is accepted without comparing its value.
-        server_key_gen_enabled:
-          type: boolean
-          default: false
-          description: |
-            Whether this DMS permits RFC 9483 §4.1.6 central key generation for
-            IR/CR with an absent public key. The request must still be signed by a
-            certificate usable as the CMS key-transport or key-agreement recipient.
-        workflow:
+        critical_delta:
           type: string
-          default: direct
-          description: |
-            direct: IR/CR/KUR/P10CR issuance is performed inline.
-            phased: issuance is deferred until an administrator approves the
-            transaction and the client retrieves the result with pollReq.
-            Central key generation and cross-certification currently bypass this
-            workflow selector.
-          enum: [direct, phased]
+
+    ESTEnrollmentSettings:
+      type: object
+      description: |
+        EST authentication policy plus the shared enrollment knobs, flattened
+        together — the enclosing `est_settings` already identifies the protocol,
+        so there is no nested `est_rfc7030_settings` wrapper.
+      allOf:
+        - $ref: '#/components/schemas/CommonEnrollmentSettings'
+        - type: object
+          properties:
+            auth_mode:
+              type: string
+              enum: [CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK, NO_AUTH]
+            client_certificate_settings:
+              $ref: '#/components/schemas/AuthOptionsClientCertificate'
+            external_webhook_settings:
+              type: object
+              additionalProperties: true
+
+    ESTReEnrollmentSettings:
+      type: object
+      description: |
+        EST re-enrollment authenticates independently of enrollment (typically
+        against the current device certificate), so it carries its own auth
+        policy alongside the shared renewal knobs.
+      allOf:
+        - $ref: '#/components/schemas/CommonReEnrollmentSettings'
+        - type: object
+          properties:
+            auth_mode:
+              type: string
+              enum: [CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK, NO_AUTH]
+            client_certificate_settings:
+              $ref: '#/components/schemas/AuthOptionsClientCertificate'
+            external_webhook_settings:
+              type: object
+              additionalProperties: true
+
+    CMPReEnrollmentSettings:
+      type: object
+      description: |
+        CMP re-enrollment (kur, RFC 9483 §4.1.3) renewal policy. The kur block
+        under `enrollment_settings` keeps only the per-operation concerns (key
+        policy, identity-change policy, workflow overrides); the renewal policy
+        proper lives here, symmetric with the EST side.
+      allOf:
+        - $ref: '#/components/schemas/CommonReEnrollmentSettings'
+
+    CMPEnrollmentSettings:
+      type: object
+      description: |
+        CMP-specific enrollment settings (RFC 9483 Lightweight CMP Profile / RFC 4210),
+        flattened together with the shared enrollment knobs.
+      allOf:
+        - $ref: '#/components/schemas/CommonEnrollmentSettings'
+        - type: object
+          properties:
+            auth_mode:
+              type: string
+              description: |
+                For CMP, CLIENT_CERTIFICATE means the signature-based message-protection
+                signer certificate (extraCerts[0], RFC 9483 §3.2) rather than a transport
+                mTLS certificate. CLIENT_CERTIFICATE and the combined mode require a
+                protected PKIMessage. EXTERNAL_WEBHOOK and NO_AUTH permit an unprotected
+                message, although any signature that is supplied is still verified.
+                NONE is accepted as the dashboard's legacy alias for NO_AUTH.
+              enum: [CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK, NO_AUTH, NONE]
+            client_certificate_settings:
+              $ref: '#/components/schemas/AuthOptionsClientCertificate'
+            external_webhook_settings:
+              type: object
+              additionalProperties: true
+            accept_implicit:
+              type: boolean
+              default: false
+              description: |
+                Whether the server may skip the certConf round-trip when an ir, cr, kur,
+                p10cr, or certificate-delivering pollReq asks for implicit confirmation
+                (id-it-implicitConfirm, RFC 4210 §5.2.8). This setting alone does not
+                enable implicit confirmation; the request must also carry the OID.
+            confirmation_timeout:
+              type: string
+              example: 5m
+              description: |
+                Positive Lamassu duration for the explicit certConf/delivery window
+                (for example 30s, 5m, or 1h). Zero or a negative value uses the runtime
+                default of 5m.
+            approval_timeout:
+              type: string
+              example: 1w
+              description: |
+                Positive Lamassu duration for a phased-workflow transaction to remain
+                PENDING for administrator approval. Zero or a negative value uses the
+                runtime default of 1w. Only meaningful when workflow is phased.
+            protection_certificate:
+              type: string
+              description: Serial number of the certificate whose KMS-backed key signs CMP response messages.
+            enforce_popo:
+              type: boolean
+              default: false
+              description: |
+                Whether IR/CR must carry an acceptable CRMF proof of possession and
+                whether KUR must be message-protected. A supplied POPOSigningKey is
+                verified even when this setting is false; trusted-RA raVerified and
+                supported indirect POP methods follow their own validation paths.
+                P10CR CSR signatures are always verified independently of this setting.
+            expected_authenticator:
+              type: string
+              description: |
+                Pre-shared answer matched against the RFC 4211 §6.2
+                id-regCtrl-authenticator control. When empty, a supplied authenticator
+                control is accepted without comparing its value.
+            server_key_gen_enabled:
+              type: boolean
+              default: false
+              description: |
+                Whether this DMS permits RFC 9483 §4.1.6 central key generation for
+                IR/CR with an absent public key. The request must still be signed by a
+                certificate usable as the CMS key-transport or key-agreement recipient.
+            workflow:
+              type: string
+              default: direct
+              description: |
+                direct: IR/CR/KUR/P10CR issuance is performed inline.
+                phased: issuance is deferred until an administrator approves the
+                transaction and the client retrieves the result with pollReq.
+                Central key generation and cross-certification currently bypass this
+                workflow selector.
+              enum: [direct, phased]
 
     AuthOptionsClientCertificate:
       type: object
@@ -883,26 +981,6 @@ components:
           type: array
           items:
             type: string
-
-    ReEnrollmentSettings:
-      type: object
-      properties:
-        est_rfc7030_settings:
-          $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
-        additional_validation_cas:
-          type: array
-          items:
-            type: string
-        revoke_on_reenrollment:
-          type: boolean
-        reenrollment_delta:
-          type: string
-        enable_expired_renewal:
-          type: boolean
-        preventive_delta:
-          type: string
-        critical_delta:
-          type: string
 
     CADistributionSettings:
       type: object

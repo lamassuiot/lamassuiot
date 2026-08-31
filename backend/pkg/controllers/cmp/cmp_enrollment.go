@@ -44,7 +44,7 @@ import (
 // cmpProofOfPossessionFor selects the ir or cr ProofOfPossession policy
 // (RFC011) by body tag. Only meaningful when called from the ir/cr inner-POPO
 // path (verifyInnerPOPO); kur never reaches it.
-func cmpProofOfPossessionFor(o *models.EnrollmentOptionsLWCRFC9483, tag int) models.CMPProofOfPossession {
+func cmpProofOfPossessionFor(o *models.CMPEnrollmentSettings, tag int) models.CMPProofOfPossession {
 	if tag == corecmp.BodyTagCR {
 		return o.CR.ProofOfPossession
 	}
@@ -60,7 +60,7 @@ func popoMethodAllowed(p models.CMPProofOfPossession, method models.CMPPOPOMetho
 	return false
 }
 
-func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, variant enrollmentVariant, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings, variant enrollmentVariant, signerCert *x509.Certificate) {
 	// kur's proof of possession IS its message-level protection (RFC 9483
 	// §4.1.3), which the wire layer (cmp.go / handleNestedAddedProtection)
 	// now unconditionally requires before a kur ever reaches here — it is a
@@ -287,7 +287,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	}
 
 	// id-regCtrl-authenticator (§6.2) is validated against the DMS's
-	// EnrollmentOptionsLWCRFC9483.ExpectedAuthenticator when configured — a
+	// CMPEnrollmentSettings.ExpectedAuthenticator when configured — a
 	// pre-shared, non-cryptographic answer (e.g. a security-question response)
 	// distinct from regToken's one-time-use semantics. When the DMS has not
 	// configured an expected answer, the control is accepted unvalidated.
@@ -546,7 +546,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	header *corecmp.RequestPKIHeader,
 	req *corecmp.CertRequest,
 	dmsID string,
-	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
+	enrollOpts *models.CMPEnrollmentSettings,
 	params issueParams,
 	signerCert *x509.Certificate,
 ) {
@@ -636,7 +636,7 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 	header *corecmp.RequestPKIHeader,
 	req *corecmp.CertRequest,
 	dmsID string,
-	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
+	enrollOpts *models.CMPEnrollmentSettings,
 	params issueParams,
 	signer *x509.Certificate,
 	csr *x509.CertificateRequest,
@@ -866,7 +866,7 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 // hand the raw key to the device — a requirement fundamentally incompatible
 // with an engine (e.g. PKCS#11) that cannot export keys by design. This is a
 // deliberate, documented tradeoff of enabling CKG at all (see
-// EnrollmentOptionsLWCRFC9483.ServerKeyGenEnabled), not an oversight.
+// CMPEnrollmentSettings.ServerKeyGenEnabled), not an oversight.
 //
 // The CMS recipient is the request's protection (signer) certificate: for KTRI
 // the CEK is RSA-encrypted to its key; for KARI a fresh EC originator is used
@@ -878,7 +878,7 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 // selected for this request (derived from the recipient key type) is permitted
 // by the operation's CentralKeyGeneration.AllowedRecipientMethods (RFC011).
 // requestTag selects the IR or CR block; an empty allow-list permits nothing.
-func ckgRecipientMethodAllowed(o *models.EnrollmentOptionsLWCRFC9483, requestTag int, t kgaTechnique) bool {
+func ckgRecipientMethodAllowed(o *models.CMPEnrollmentSettings, requestTag int, t kgaTechnique) bool {
 	var allowed []models.CMPCKGRecipientMethod
 	if requestTag == corecmp.BodyTagCR {
 		allowed = o.CR.CentralKeyGeneration.AllowedRecipientMethods
@@ -909,7 +909,7 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	req *corecmp.CertRequest,
 	dmsID string,
 	respTag, requestTag int,
-	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
+	enrollOpts *models.CMPEnrollmentSettings,
 	enroll func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error),
 	signerCert *x509.Certificate,
 ) {
@@ -1332,7 +1332,7 @@ func (r *cmpHttpRoutes) deferForApproval(
 	req *corecmp.CertRequest,
 	csr *x509.CertificateRequest,
 	dmsID string,
-	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
+	enrollOpts *models.CMPEnrollmentSettings,
 	params issueParams,
 	txHex string,
 ) {
@@ -1360,7 +1360,7 @@ func (r *cmpHttpRoutes) deferForApproval(
 		// Approval is a human action: give it a generous window so the request
 		// isn't swept before an operator can act on it (RFC 4210 §5.3.22 leaves
 		// the polling/approval window to server policy). Per-DMS via
-		// EnrollmentOptionsLWCRFC9483.ApprovalTimeout; cmpApprovalTTL is the
+		// CMPEnrollmentSettings.ApprovalTimeout; cmpApprovalTTL is the
 		// fallback when the DMS leaves it at zero.
 		ExpiresAt: time.Now().Add(approvalTimeoutOrDefault(enrollOpts.ApprovalTimeout)),
 		CreatedAt: time.Now(),

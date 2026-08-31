@@ -127,36 +127,45 @@ func cmpIssueSigner(t *testing.T, ctx context.Context, ts *tests.TestServer, dir
 	return keyPath, certPath, bootstrapCA.ID
 }
 
-func cmpCreateDMS(t *testing.T, ctx context.Context, dmsMgr *tests.DMSManagerTestServer, id, enrollCAID string, lwcOpts models.EnrollmentOptionsLWCRFC9483) *models.DMS {
+func cmpCreateDMS(t *testing.T, ctx context.Context, dmsMgr *tests.DMSManagerTestServer, id, enrollCAID string, lwcOpts models.CMPEnrollmentSettings) *models.DMS {
 	t.Helper()
+
+	// Start from the caller's CMP-specific options and layer the common
+	// enrollment knobs on top, so callers keep control of auth mode, protection
+	// certificate, POPO enforcement and the per-operation blocks.
+	enrollSettings := lwcOpts
+	enrollSettings.CommonEnrollmentSettings = models.CommonEnrollmentSettings{
+		EnrollmentCA: enrollCAID,
+		DeviceProvisionProfile: models.DeviceProvisionProfile{
+			Icon:      "cmp",
+			IconColor: "#004466",
+			Metadata:  map[string]any{},
+			Tags:      []string{"cmp", "e2e"},
+		},
+		RegistrationMode:            models.PreRegistration,
+		EnableReplaceableEnrollment: true,
+	}
 
 	dms, err := dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{
 		ID:   id,
 		Name: "CMP E2E " + id,
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.CMP,
-				EnrollmentCA:       enrollCAID,
-				DeviceProvisionProfile: models.DeviceProvisionProfile{
-					Icon:      "cmp",
-					IconColor: "#004466",
-					Metadata:  map[string]any{},
-					Tags:      []string{"cmp", "e2e"},
+			Protocol: models.CMP,
+			CMP: &models.CMPSettings{
+				EnrollmentSettings: enrollSettings,
+				ReEnrollmentSettings: models.CMPReEnrollmentSettings{
+					CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+						AdditionalValidationCAs:     []string{},
+						ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+						EnableExpiredRenewal:        true,
+						PreventiveReEnrollmentDelta: models.TimeDuration(3 * time.Minute),
+						CriticalReEnrollmentDelta:   models.TimeDuration(2 * time.Minute),
+					},
 				},
-				RegistrationMode:            models.PreRegistration,
-				EnableReplaceableEnrollment: true,
-				EnrollmentOptionsLWCRFC9483: lwcOpts,
-			},
-			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				AdditionalValidationCAs:     []string{},
-				ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-				EnableExpiredRenewal:        true,
-				PreventiveReEnrollmentDelta: models.TimeDuration(3 * time.Minute),
-				CriticalReEnrollmentDelta:   models.TimeDuration(2 * time.Minute),
-			},
-			CADistributionSettings: models.CADistributionSettings{
-				IncludeLamassuSystemCA: true,
-				IncludeEnrollmentCA:    true,
+				CADistributionSettings: models.CADistributionSettings{
+					IncludeLamassuSystemCA: true,
+					IncludeEnrollmentCA:    true,
+				},
 			},
 		},
 	})
@@ -399,7 +408,7 @@ func TestCMPE2EOpenSSLClient(t *testing.T) {
 			dms := cmpCreateDMS(t, f.ctx, f.dmsMgr,
 				fmt.Sprintf("cmp-dms-%s", tc.name),
 				f.enrollCA.ID,
-				models.EnrollmentOptionsLWCRFC9483{
+				models.CMPEnrollmentSettings{
 					AuthMode:                          models.CMPAuthModeClientCertificate,
 					ProtectionCertificateSerialNumber: serial,
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
@@ -459,7 +468,7 @@ func TestCMPE2ERevokedDeviceCert(t *testing.T) {
 	// Build DMS with a KMS-backed protection cert so the server signs responses.
 	protCert := cmpCreateProtectionCert(t, f.ctx, f.testServers)
 	dms := cmpCreateDMS(t, f.ctx, f.dmsMgr, "cmp-dms-revoked-client", f.enrollCA.ID,
-		models.EnrollmentOptionsLWCRFC9483{
+		models.CMPEnrollmentSettings{
 			AuthMode:                          models.CMPAuthModeClientCertificate,
 			ProtectionCertificateSerialNumber: protCert.SerialNumber,
 			AuthOptionsMTLS: models.AuthOptionsClientCertificate{

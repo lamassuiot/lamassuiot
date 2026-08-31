@@ -671,7 +671,7 @@ func parseRegTokenControl(controlsDER []byte) string {
 var oidRegCtrlAuthenticator = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 5, 1, 2}
 
 // validateAuthenticatorControl enforces RFC 4211 §6.2 id-regCtrl-authenticator
-// against the DMS's configured EnrollmentOptionsLWCRFC9483.ExpectedAuthenticator.
+// against the DMS's configured CMPEnrollmentSettings.ExpectedAuthenticator.
 //
 // When expected is "" (the DMS has not configured an expected answer — the
 // default), the control is accepted unvalidated regardless of its value or

@@ -46,7 +46,7 @@ type crossCertTemplateInfo struct {
 }
 
 // handleCrossCertification processes a ccr (13) body and answers with a ccp (14).
-func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings, signerCert *x509.Certificate) {
 	lFunc = lFunc.WithField("op", "ccr")
 	const respTag = corecmp.BodyTagCCP
 
@@ -206,7 +206,7 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 	// one CA vouching for another — as a privileged operation requiring a human
 	// in the loop, mirroring ir/cr's phased workflow (deferForApproval) but
 	// keyed on this operation's own setting rather than the general
-	// EnrollmentOptionsLWCRFC9483.Workflow.
+	// CMPEnrollmentSettings.Workflow.
 	if enrollOpts.CCR.Workflow == models.CMPCCRWorkflowAdministratorApproval {
 		r.deferCCRForApproval(ctx, lFunc, &header, req, csr, dmsID, enrollOpts, respTag)
 		return
@@ -254,7 +254,7 @@ func (r *cmpHttpRoutes) deferCCRForApproval(
 	req *corecmp.CertRequest,
 	csr *x509.CertificateRequest,
 	dmsID string,
-	enrollOpts *models.EnrollmentOptionsLWCRFC9483,
+	enrollOpts *models.CMPEnrollmentSettings,
 	respTag int,
 ) {
 	header.ResponseImplicitConfirm = false

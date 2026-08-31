@@ -262,7 +262,7 @@ func (r *cmpHttpRoutes) buildPOPOChallengeEntry(ctx context.Context, lFunc *logr
 // popdecr. Called from handleEnrollment after every issuance-independent
 // validation (regToken, CertTemplate policy, alt CertReq, ...) has already
 // passed — the same point issueAndStore would otherwise be invoked from.
-func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entry, header *corecmp.RequestPKIHeader, req *corecmp.CertRequest, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, params issueParams) {
+func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entry, header *corecmp.RequestPKIHeader, req *corecmp.CertRequest, dmsID string, enrollOpts *models.CMPEnrollmentSettings, params issueParams) {
 	txHex := hex.EncodeToString(header.TransactionID)
 	if exists, err := r.store.Exists(ctx.Request.Context(), txHex); err != nil {
 		lFunc.Errorf("challengeResp: check existing txID: %v", err)
@@ -365,7 +365,7 @@ func decodePOPODecKeyRespContent(bodyBytes []byte) (*big.Int, error) {
 // from the synthesized CSR stored at challenge time — exactly as
 // ApproveCMPTransaction resumes a phased-workflow PENDING row, just triggered
 // by a proof-of-possession round trip instead of an administrator.
-func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings, signerCert *x509.Certificate) {
 	submitted, err := decodePOPODecKeyRespContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("popdecr: decode: %v", err)

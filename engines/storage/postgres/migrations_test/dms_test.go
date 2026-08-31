@@ -167,6 +167,13 @@ func TestDMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260604110000_reenroll_auth_settings")
 	}
+
+	CleanAllTables(t, logger, con)
+
+	migrationTest_DMS_20260801120000_protocol_scoped_settings(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20260801120000_protocol_scoped_settings")
+	}
 }
 
 func migrationTest_DMS_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -295,4 +302,85 @@ func migrationTest_DMS_20260604110000_reenroll_auth_settings(t *testing.T, logge
 		t.Fatalf("failed to query existing reenroll auth mode: %v", tx.Error)
 	}
 	assert.Equal(t, "CLIENT_CERTIFICATE", existingAuth)
+}
+
+func migrationTest_DMS_20260801120000_protocol_scoped_settings(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// A fully-populated pre-refactor EST DMS.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-est-flat', 'DMS EST Flat', '{}', '2024-11-25 10:46:28.914', '{"server_keygen_settings":{"enabled":true,"key":{"type":"RSA","bits":4096}},"enrollment_settings":{"protocol":"EST_RFC7030","est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["ca-1"],"chain_level_validation":-1,"allow_expired":false}},"device_provisioning_profile":{"icon":"CgBatteryFull","icon_color":"#37d67a-#333333","metadata":{},"tags":["iot"]},"enrollment_ca":"enroll-ca","enable_replaceable_enrollment":false,"registration_mode":"JITP","verify_csr_signature":true},"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK"},"additional_validation_cas":[],"reenrollment_delta":"14w2d","enable_expired_renewal":false,"preventive_delta":"4w3d","critical_delta":"1w"},"ca_distribution_settings":{"include_system_ca":true,"include_enrollment_ca":false,"managed_cas":[]},"issuance_profile_id":"profile-1"}');
+	`)
+
+	// A row already in the new shape must be left exactly as-is (idempotency).
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-already-scoped', 'DMS Already Scoped', '{}', '2024-11-25 10:46:28.914', '{"protocol":"CMP_RFC9483","cmp_settings":{"enrollment_settings":{"auth_mode":"NO_AUTH","enrollment_ca":"cmp-ca"}}}');
+	`)
+
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	var protocol string
+	tx := con.Raw("SELECT settings->>'protocol' FROM dms WHERE id = 'dms-est-flat'").Scan(&protocol)
+	if tx.Error != nil {
+		t.Fatalf("failed to query hoisted protocol: %v", tx.Error)
+	}
+	assert.Equal(t, "EST_RFC7030", protocol, "protocol must be hoisted to the top level")
+
+	// The old top-level blocks must be gone, folded into est_settings.
+	// jsonb_exists is the function form of the `?` operator, which would
+	// otherwise collide with gorm's bind placeholder.
+	for _, key := range []string{"enrollment_settings", "reenrollment_settings", "ca_distribution_settings", "server_keygen_settings", "issuance_profile_id"} {
+		var present bool
+		tx = con.Raw("SELECT jsonb_exists(settings, ?) FROM dms WHERE id = 'dms-est-flat'", key).Scan(&present)
+		if tx.Error != nil {
+			t.Fatalf("failed to probe top-level key %s: %v", key, tx.Error)
+		}
+		assert.False(t, present, "top-level %s must move inside est_settings", key)
+	}
+
+	// est_rfc7030_settings is spliced up into enrollment_settings itself.
+	var enrollAuth, reenrollAuth string
+	tx = con.Raw("SELECT settings->'est_settings'->'enrollment_settings'->>'auth_mode' FROM dms WHERE id = 'dms-est-flat'").Scan(&enrollAuth)
+	if tx.Error != nil {
+		t.Fatalf("failed to query enrollment auth mode: %v", tx.Error)
+	}
+	assert.Equal(t, "CLIENT_CERTIFICATE", enrollAuth)
+
+	tx = con.Raw("SELECT settings->'est_settings'->'reenrollment_settings'->>'auth_mode' FROM dms WHERE id = 'dms-est-flat'").Scan(&reenrollAuth)
+	if tx.Error != nil {
+		t.Fatalf("failed to query reenrollment auth mode: %v", tx.Error)
+	}
+	assert.Equal(t, "EXTERNAL_WEBHOOK", reenrollAuth)
+
+	// The wrapper itself must be gone from both blocks.
+	for _, block := range []string{"enrollment_settings", "reenrollment_settings"} {
+		var present bool
+		tx = con.Raw("SELECT jsonb_exists(settings->'est_settings'->?, 'est_rfc7030_settings') FROM dms WHERE id = 'dms-est-flat'", block).Scan(&present)
+		if tx.Error != nil {
+			t.Fatalf("failed to probe est_rfc7030_settings in %s: %v", block, tx.Error)
+		}
+		assert.False(t, present, "est_rfc7030_settings wrapper must be spliced away in %s", block)
+	}
+
+	// Non-auth siblings ride along into their new home.
+	var enrollCA, delta, profileID string
+	con.Raw("SELECT settings->'est_settings'->'enrollment_settings'->>'enrollment_ca' FROM dms WHERE id = 'dms-est-flat'").Scan(&enrollCA)
+	assert.Equal(t, "enroll-ca", enrollCA)
+	con.Raw("SELECT settings->'est_settings'->'reenrollment_settings'->>'reenrollment_delta' FROM dms WHERE id = 'dms-est-flat'").Scan(&delta)
+	assert.Equal(t, "14w2d", delta)
+	con.Raw("SELECT settings->'est_settings'->>'issuance_profile_id' FROM dms WHERE id = 'dms-est-flat'").Scan(&profileID)
+	assert.Equal(t, "profile-1", profileID)
+
+	var keygenEnabled bool
+	con.Raw("SELECT (settings->'est_settings'->'server_keygen_settings'->>'enabled')::bool FROM dms WHERE id = 'dms-est-flat'").Scan(&keygenEnabled)
+	assert.True(t, keygenEnabled, "server_keygen_settings must move under est_settings intact")
+
+	// The already-scoped row is untouched: still CMP, still no est_settings.
+	var scopedProtocol string
+	con.Raw("SELECT settings->>'protocol' FROM dms WHERE id = 'dms-already-scoped'").Scan(&scopedProtocol)
+	assert.Equal(t, "CMP_RFC9483", scopedProtocol)
+
+	var hasEST bool
+	con.Raw("SELECT jsonb_exists(settings, 'est_settings') FROM dms WHERE id = 'dms-already-scoped'").Scan(&hasEST)
+	assert.False(t, hasEST, "an already-scoped row must not be reshaped again")
 }

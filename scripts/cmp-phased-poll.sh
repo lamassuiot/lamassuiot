@@ -26,7 +26,7 @@
 #
 # Prerequisites:
 #   - Lamassu monolithic dev server on localhost:8080
-#   - A DMS configured with lwc_rfc9483_settings.workflow = "phased"
+#   - A DMS configured with cmp_settings.enrollment_settings.workflow = "phased"
 #     (the bundled sample-cmp-dms is configured this way)
 #   - python3 (stdlib only), openssl 3.x, curl, jq
 #
@@ -77,9 +77,9 @@ echo ""
 echo "[1/6] Reading DMS configuration..."
 DMS_JSON=$(curl -sf "${MGMT_BASE}") || fail "cannot fetch DMS ${DMS_ID} at ${SERVER}"
 
-AUTH_MODE=$(echo "${DMS_JSON}"       | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.auth_mode // "NO_AUTH"')
-ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
-WORKFLOW=$(echo "${DMS_JSON}"        | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.workflow // "direct"')
+AUTH_MODE=$(echo "${DMS_JSON}"       | jq -r '.settings.cmp_settings.enrollment_settings.auth_mode // "NO_AUTH"')
+ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.accept_implicit // false')
+WORKFLOW=$(echo "${DMS_JSON}"        | jq -r '.settings.cmp_settings.enrollment_settings.workflow // "direct"')
 # Protection is required when auth_mode demands a client certificate (signature-
 # based protection). This mirrors the server logic in cmp.go: requireProtection
 # is true for CLIENT_CERTIFICATE and CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK.

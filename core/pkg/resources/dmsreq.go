@@ -9,7 +9,7 @@ type CreateDMSBody struct {
 	Name     string         `json:"name"`
 	Metadata map[string]any `json:"metadata"`
 	// Settings carries the whole models.DMSSettings, so the nested per-operation
-	// CMP schema (EnrollmentOptionsLWCRFC9483.IR/CR/P10CR/KUR/RR/GENM/CCR)
+	// CMP schema (CMPEnrollmentSettings.IR/CR/P10CR/KUR/RR/GENM/CCR)
 	// round-trips through create/update with no extra DTO wiring. See RFC011.
 	Settings models.DMSSettings `json:"settings"`
 }

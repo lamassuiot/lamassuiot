@@ -179,7 +179,7 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 	// cert is confirmed the moment the device fetches it via pollReq — so this
 	// window simply bounds how long the (actively polling) device has to pick
 	// the certificate up.
-	confTimeout := time.Duration(dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ConfirmationTimeout)
+	confTimeout := time.Duration(dms.Settings.CMP.EnrollmentSettings.ConfirmationTimeout)
 	if confTimeout <= 0 {
 		confTimeout = cmpCertConfDefaultTTL
 	}
@@ -321,7 +321,7 @@ func (svc DMSManagerServiceBackend) LWCProtectionCredentials(ctx context.Context
 		return nil, nil, fmt.Errorf("DMS '%s' not found", aps)
 	}
 
-	protectionCertSN := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ProtectionCertificateSerialNumber
+	protectionCertSN := dms.Settings.CMP.EnrollmentSettings.ProtectionCertificateSerialNumber
 	if protectionCertSN == "" {
 		// No protection cert configured: the DMS opts out of response signing.
 		// (nil chain, nil signer, nil error) signals "send unprotected response"
@@ -399,11 +399,11 @@ func (e dmsCAEntry) Root() *x509.Certificate {
 // placed first so it wins any ambiguity, and duplicates (a managed CA that is
 // also the enrollment CA) are collapsed.
 func (svc DMSManagerServiceBackend) dmsKnownCAs(ctx context.Context, dms *models.DMS) []dmsCAEntry {
-	ids := make([]string, 0, 1+len(dms.Settings.CADistributionSettings.ManagedCAs))
-	if enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA; enrollCA != "" {
+	ids := make([]string, 0, 1+len(dms.Settings.CMP.CADistributionSettings.ManagedCAs))
+	if enrollCA := dms.Settings.CMP.EnrollmentSettings.EnrollmentCA; enrollCA != "" {
 		ids = append(ids, enrollCA)
 	}
-	ids = append(ids, dms.Settings.CADistributionSettings.ManagedCAs...)
+	ids = append(ids, dms.Settings.CMP.CADistributionSettings.ManagedCAs...)
 
 	entries := make([]dmsCAEntry, 0, len(ids))
 	seen := make(map[string]struct{}, len(ids))
@@ -487,9 +487,9 @@ func (svc DMSManagerServiceBackend) validateCMPSignerAgainstCAs(
 // apply one consistent trust boundary.
 func trustedRACAIDs(dms *models.DMS) []string {
 	candidateCAIDs := append(
-		[]string{dms.Settings.EnrollmentSettings.EnrollmentCA},
-		dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.AuthOptionsMTLS.ValidationCAs...)
-	return append(candidateCAIDs, dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs...)
+		[]string{dms.Settings.CMP.EnrollmentSettings.EnrollmentCA},
+		dms.Settings.CMP.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs...)
+	return append(candidateCAIDs, dms.Settings.CMP.ReEnrollmentSettings.AdditionalValidationCAs...)
 }
 
 // validateTrustedRASigner returns nil only when signer both (a) carries the
@@ -566,7 +566,7 @@ func (svc DMSManagerServiceBackend) LWCValidateCCRRequester(ctx context.Context,
 		return errs.ErrDMSNotFound
 	}
 
-	ccr := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.CCR
+	ccr := dms.Settings.CMP.EnrollmentSettings.CCR
 	if ccr.RequesterMode != models.CMPCCRRequesterModeRestricted {
 		return nil
 	}
@@ -599,7 +599,7 @@ func (svc DMSManagerServiceBackend) LWCValidateKGARecipient(ctx context.Context,
 		return fmt.Errorf("central key generation requires a recipient certificate")
 	}
 
-	cmpOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	cmpOpts := dms.Settings.CMP.EnrollmentSettings
 	candidateCAIDs := cmpOpts.CKGTrustedEncryptionCAs
 	if len(candidateCAIDs) == 0 {
 		// No explicit CKG trust boundary configured: fall back to the DMS's
@@ -779,7 +779,7 @@ func cmpOperationFromContext(ctx context.Context) string {
 // existing_device_policy, when configured (non-"inherit"/non-empty). CR has no
 // such fields (a cr always targets an already-registered device per its own
 // RequireExistingDevice), so callers only invoke this for ir and p10cr.
-func applyCMPOpRegistrationOverride(enrollSettings models.EnrollmentSettings, mode models.CMPOpRegistrationMode, policy models.CMPExistingDevicePolicy) models.EnrollmentSettings {
+func applyCMPOpRegistrationOverride(enrollSettings models.CommonEnrollmentSettings, mode models.CMPOpRegistrationMode, policy models.CMPExistingDevicePolicy) models.CommonEnrollmentSettings {
 	switch mode {
 	case models.CMPOpRegistrationModeJITP:
 		enrollSettings.RegistrationMode = models.JITP
@@ -888,7 +888,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		return nil, errs.ErrDMSNotFound
 	}
 
-	enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA
+	enrollCA := dms.Settings.CMP.EnrollmentSettings.EnrollmentCA
 	lFunc = lFunc.WithField("dms", dms.ID)
 
 	// CMP presents the client identity as the signature-based message-protection
@@ -898,7 +898,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	// CLIENT_CERTIFICATE or the combined mode requires a signer cert, and the
 	// controller also derives its wire-level protection requirement from
 	// auth_mode (no separate enforce_request_protection knob exists).
-	cmpOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	cmpOpts := dms.Settings.CMP.EnrollmentSettings
 	// RFC011: which CMP body (ir/cr/p10cr) drove this call — see
 	// cmpOperationFromContext for why "ir" is the safe default.
 	cmpOp := cmpOperationFromContext(ctx)
@@ -950,7 +950,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		return nil, err
 	}
 
-	enrollSettings := dms.Settings.EnrollmentSettings
+	enrollSettings := dms.Settings.CMP.EnrollmentSettings.CommonEnrollmentSettings
 
 	// RFC011: ir/p10cr may override the DMS-general registration_mode /
 	// existing_device_policy; cr has no such fields (see RequireExistingDevice
@@ -1023,7 +1023,7 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 		// certificate at all. supersededCertToRevoke is only acted on after
 		// the new certificate is issued and bound, at the bottom of this
 		// function.
-		revokeSuperseded := dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment
+		revokeSuperseded := dms.Settings.CMP.ReEnrollmentSettings.RevokeOnReEnrollment
 		if cmpOp == "cr" {
 			revokeSuperseded = cmpOpts.CR.CertificateBehavior == models.CMPCertificateBehaviorReplace
 		}
@@ -1164,7 +1164,7 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 		return nil, errs.ErrDMSNotFound
 	}
 
-	enrollSettings := dms.Settings.EnrollmentSettings
+	enrollSettings := dms.Settings.CMP.EnrollmentSettings
 	enrollCA := enrollSettings.EnrollmentCA
 
 	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
@@ -1196,7 +1196,7 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 
 	// RFC011 KUR key & identity policy: constrain how much the requested
 	// certificate may differ from the one being updated.
-	kur := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.KUR
+	kur := dms.Settings.CMP.EnrollmentSettings.KUR
 	oldX509 := (*x509.Certificate)(currentDeviceCert.Certificate)
 	if kur.KeyPolicy == models.CMPKeyPolicyRequireNew &&
 		bytes.Equal(csr.RawSubjectPublicKeyInfo, oldX509.RawSubjectPublicKeyInfo) {
@@ -1237,7 +1237,7 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 	// authenticated at submission time, and marks the context accordingly.
 	// Any other nil-signer arrival is a defect upstream, not a request to
 	// honour — fail closed rather than silently skipping ValidationCAs.
-	reEnrollSettings := dms.Settings.ReEnrollmentSettings
+	reEnrollSettings := dms.Settings.CMP.ReEnrollmentSettings
 	if signerCert == nil {
 		if preAuth, _ := ctx.Value(core.LamassuContextKeyPreAuthenticated).(bool); !preAuth {
 			lFunc.Errorf("aborting reenrollment. kur reached the service layer without signature-based protection and without pre-authentication (RFC 9483 §4.1.3)")
@@ -1339,7 +1339,7 @@ func (svc DMSManagerServiceBackend) LWCConfirmReenrollment(ctx context.Context, 
 		lFunc.Errorf("aborting reenrollment confirmation. Could not get DMS '%s': %s", aps, err)
 		return errs.ErrDMSNotFound
 	}
-	reEnrollSettings := dms.Settings.ReEnrollmentSettings
+	reEnrollSettings := dms.Settings.CMP.ReEnrollmentSettings
 
 	// Resolve the newly issued (now-confirmed) certificate and the device it
 	// belongs to. The device's active identity is still the previous cert
@@ -1431,7 +1431,7 @@ func (svc DMSManagerServiceBackend) LWCIssueKGAHelperCertificate(ctx context.Con
 		lFunc.Errorf("aborting KGA helper issuance. Could not get DMS '%s': %s", aps, err)
 		return nil, nil, errs.ErrDMSNotFound
 	}
-	enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA
+	enrollCA := dms.Settings.CMP.EnrollmentSettings.EnrollmentCA
 
 	// Helper certs are ephemeral: a short validity keeps them from lingering as
 	// usable credentials. The subject comes from the CSR (HonorSubject).
@@ -1493,14 +1493,14 @@ func (svc DMSManagerServiceBackend) LWCIssueCrossCertificate(ctx context.Context
 		lFunc.Errorf("aborting cross certification. Could not get DMS '%s': %s", aps, err)
 		return nil, nil, errs.ErrDMSNotFound
 	}
-	enrollCA := dms.Settings.EnrollmentSettings.EnrollmentCA
+	enrollCA := dms.Settings.CMP.EnrollmentSettings.EnrollmentCA
 
 	// Resolve the validity window. notBefore defaults to now; the requested
 	// notBefore (which may be in the past, e.g. now-1day) is honoured as-is.
 	// notAfter defaults to the profile maximum (now + crossCertValidity); the
 	// requested notAfter is honoured only up to that cap — a request for a longer
 	// lifetime is clamped to the maximum rather than rejected.
-	ccr := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.CCR
+	ccr := dms.Settings.CMP.EnrollmentSettings.CCR
 
 	// RFC011: subject/SAN constraints on the requested cross-certificate. An
 	// empty allow-list on either dimension means "no constraint" for that
@@ -1765,7 +1765,7 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// than a forgery. Without this, any party who has merely observed a
 	// target certificate's serial/issuer (e.g. via CT logs or a TLS
 	// handshake) could revoke it.
-	rr := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR
+	rr := dms.Settings.CMP.EnrollmentSettings.RR
 
 	// Hoisted out of the signer block below so the device-ownership check further
 	// down can distinguish "the requester is revoking its own certificate" from
@@ -1886,7 +1886,7 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 		// RFC011: revival (removeFromCRL / un-revoke) is only permitted when the
 		// DMS opts in via RR.AllowRevival (default off). Otherwise the request is
 		// refused as an unauthorized state transition.
-		if !dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR.AllowRevival {
+		if !dms.Settings.CMP.EnrollmentSettings.RR.AllowRevival {
 			lFunc.Warnf("revive rejected: RR.AllowRevival is disabled for DMS '%s'", input.APS)
 			return errs.ErrCertificateStatusTransitionNotAllowed
 		}
@@ -1952,7 +1952,7 @@ func (svc DMSManagerServiceBackend) LWCGetEnrollmentOptions(ctx context.Context,
 		lFunc.Errorf("LWCGetEnrollmentOptions: could not get DMS '%s': %s", aps, err)
 		return nil, err
 	}
-	opts := dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	opts := dms.Settings.CMP.EnrollmentSettings
 	return &opts, nil
 }
 
@@ -2046,7 +2046,7 @@ func (svc DMSManagerServiceBackend) LWCGetCertReqTemplate(ctx context.Context, i
 		return nil, errs.ErrDMSNotFound
 	}
 
-	profile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, dms.Settings.EnrollmentSettings.EnrollmentCA)
+	profile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, dms.Settings.CMP.EnrollmentSettings.EnrollmentCA)
 	if err != nil {
 		lFunc.Warnf("LWCGetCertReqTemplate: could not resolve issuance profile for DMS '%s': %s; advertising no template", input.APS, err)
 		return nil, nil
@@ -2144,7 +2144,7 @@ func (svc DMSManagerServiceBackend) LWCGetCRL(ctx context.Context, input service
 			}
 			caID = match.ID
 		} else {
-			caID = dms.Settings.EnrollmentSettings.EnrollmentCA
+			caID = dms.Settings.CMP.EnrollmentSettings.EnrollmentCA
 		}
 	}
 

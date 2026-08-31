@@ -157,8 +157,8 @@ func buildTestCCR(t *testing.T, cn string, popoMode string, signerCert *x509.Cer
 
 // ccrTestOptions enables ccr with POPO required. CCR defaults OFF (RFC011
 // treats cross-certification as privileged), so it must be turned on explicitly.
-func ccrTestOptions() models.EnrollmentOptionsLWCRFC9483 {
-	opts := models.EnrollmentOptionsLWCRFC9483{}
+func ccrTestOptions() models.CMPEnrollmentSettings {
+	opts := models.CMPEnrollmentSettings{}
 	opts.CCR.Enabled = true
 	opts.CCR.RequireCACertificate = true
 	opts.CCR.RequireProofOfPossession = true

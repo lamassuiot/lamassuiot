@@ -150,9 +150,8 @@ func setupTestData(t *testing.T, ctx context.Context, dmsMgr *tests.DMSManagerTe
 			Name:     testDMS.name,
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-				},
+				Protocol: models.EST,
+				EST:      &models.ESTSettings{},
 			},
 		})
 		if err != nil {

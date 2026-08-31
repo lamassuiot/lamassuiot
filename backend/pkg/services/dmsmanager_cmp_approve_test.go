@@ -73,9 +73,12 @@ func newApproveTestSubject(t *testing.T, confirmationTimeout time.Duration) (*DM
 	dms := &models.DMS{
 		ID: "dms-A",
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentCA: "test-ca",
-				EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+			Protocol: models.CMP,
+			CMP: &models.CMPSettings{
+				EnrollmentSettings: models.CMPEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnrollmentCA: "test-ca",
+					},
 					Workflow:            models.CMPWorkflowPhased,
 					ConfirmationTimeout: models.TimeDuration(confirmationTimeout),
 				},

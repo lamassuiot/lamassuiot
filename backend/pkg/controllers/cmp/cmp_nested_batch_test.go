@@ -94,7 +94,7 @@ func nestedResponses(t *testing.T, responseDER []byte) [][]byte {
 func TestHandleCMP_NestedBatch_ProcessesAll(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "batch-device")
 
-	router, _, svc := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
+	router, _, svc := newEnrollRouter(t, models.CMPEnrollmentSettings{AcceptImplicit: true}, issuedCert)
 
 	inner1, tx1, _ := buildTestIR(t, testIROptions{CN: "batch-device-1", WithImplicitConfirm: true})
 	inner2, tx2, _ := buildTestIR(t, testIROptions{CN: "batch-device-2", WithImplicitConfirm: true})
@@ -123,7 +123,7 @@ func TestHandleCMP_NestedBatch_ProcessesAll(t *testing.T) {
 // each batched message drives a full pipeline pass (CA/KMS calls included),
 // so an unbounded batch turns one HTTP request into unbounded downstream work.
 func TestHandleCMP_NestedBatch_RejectsTooManyInnerMessages(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	inners := make([][]byte, 0, cmpMaxNestedMessages+1)
 	for i := 0; i <= cmpMaxNestedMessages; i++ {
@@ -146,7 +146,7 @@ func TestHandleCMP_NestedBatch_RejectsTooManyInnerMessages(t *testing.T) {
 // inner messages share a transactionID is rejected atomically with
 // transactionIdInUse before any request is processed.
 func TestHandleCMP_NestedBatch_DuplicateInnerTxID(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	sharedTx := randomTxID(t)
 	inner1, _, _ := buildTestIR(t, testIROptions{CN: "dup-1", TransactionID: sharedTx})
@@ -168,7 +168,7 @@ func TestHandleCMP_NestedBatch_DuplicateInnerTxID(t *testing.T) {
 // senderNonce reusing one of the inner nonces is rejected with badSenderNonce
 // (RFC 9483 §5.2.2.2 requires the wrapping entity to use FRESH values).
 func TestHandleCMP_NestedBatch_OuterNonceNotFresh(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	inner1, _, _ := buildTestIR(t, testIROptions{CN: "nonce-1"})
 	inner2, _, _ := buildTestIR(t, testIROptions{CN: "nonce-2"})
@@ -196,7 +196,7 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 	newSvc := func() *cmpmock.MockLightweightCMPService {
 		svc := &cmpmock.MockLightweightCMPService{}
 		svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-			Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}), nil)
+			Return(resolvedOpts(models.CMPEnrollmentSettings{AcceptImplicit: true}), nil)
 		svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 			Return(issuedCert, nil)
 		return svc
@@ -246,7 +246,7 @@ func TestHandleCMP_NestedAddedProtection_CopyRules(t *testing.T) {
 // still have it processed. See handleNestedAddedProtection in cmp_nested.go.
 func TestHandleCMP_NestedAddedProtection_RespectsOperationEnabledGate(t *testing.T) {
 	// P10CR.Enabled defaults to false; no explicit override here.
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	inner, innerTx := buildTestP10CR(t, testP10CROptions{CN: "nested-disabled-p10cr"})
 	innerNonce := headerOf(t, inner).SenderNonce
@@ -266,7 +266,7 @@ func TestHandleCMP_NestedAddedProtection_RespectsOperationEnabledGate(t *testing
 // MUST NOT be used in a key update request — the POP for a kur is the message
 // protection with the certificate being updated, which no RA can assert.
 func TestHandleCMP_KUR_RAVerified_Rejected(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	// buildTestKUR carries no POPO; assemble a kur whose CertReqMsg has the
 	// raVerified [0] POPO by re-tagging an IR body built with that POPO mode.
@@ -390,7 +390,7 @@ func TestHandleCMP_RR_TrustedRA_RevokesOtherCert(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
+		Return(resolvedOpts(models.CMPEnrollmentSettings{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(in services.RevokeCertificateInput) bool {
 		return in.SerialNumber == hex.EncodeToString(targetSerial.Bytes())
 	}), mock.Anything).Return(nil)
@@ -413,7 +413,7 @@ func TestHandleCMP_RR_TrustedRA_RevokesOtherCert(t *testing.T) {
 func TestHandleCMP_RR_NonRASigner_StillMatched(t *testing.T) {
 	eeCert, eeKey := buildSelfSignedCert(t, "plain-ee")
 
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 	rrDER := buildTestRRWithIssuer(t, pkix.Name{CommonName: "Some Issuing CA"}, big.NewInt(0x99))
 	signedRR := signCMPMessage(t, rrDER, eeCert, eeKey)
 

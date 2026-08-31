@@ -403,7 +403,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 // the body tag (RFC011 per-operation enable gates). Follow-up/transport
 // messages that are not directly configurable operations return true — they
 // continue a transaction that was already authorized at its initiating request.
-func operationEnabled(o *models.EnrollmentOptionsLWCRFC9483, tag int) bool {
+func operationEnabled(o *models.CMPEnrollmentSettings, tag int) bool {
 	switch tag {
 	case corecmp.BodyTagIR:
 		return o.IR.Enabled
@@ -437,7 +437,7 @@ func operationEnabled(o *models.EnrollmentOptionsLWCRFC9483, tag int) bool {
 // CRLReason rules, then calls LWCRevokeCertificate. A single removeFromCRL (8)
 // CRLReason is treated as a revive request. Every failure is reported via an rp
 // body's PKIStatusInfo (RFC 9483 §4.2), never a generic error body.
-func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings, signerCert *x509.Certificate) {
 	rd, err := corecmp.DecodeRevDetails(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("rr: decode RevDetails: %v", err)
@@ -1038,7 +1038,7 @@ const (
 // In the current sync-only mode, an ISSUED row is always present after the
 // initial ip(cert), letting an EE recover when the original response was lost
 // in transit (per RFC 4210 §5.3.22).
-func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483) {
+func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings) {
 	certReqID, err := corecmp.DecodePollReqContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("pollReq: decode: %v", err)

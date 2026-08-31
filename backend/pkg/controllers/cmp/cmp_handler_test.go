@@ -384,7 +384,7 @@ func TestHandleCMP_ConfirmModes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			issuedCert, _ := buildSelfSignedCert(t, tc.cn)
-			opts := models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: tc.implicit}
+			opts := models.CMPEnrollmentSettings{AcceptImplicit: tc.implicit}
 
 			var router *gin.Engine
 			var store *inMemoryCMPStore
@@ -443,7 +443,7 @@ func TestHandleCMP_WFXStoresCMPPayloads(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}), nil)
+		Return(resolvedOpts(models.CMPEnrollmentSettings{AcceptImplicit: false}), nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 
@@ -498,7 +498,7 @@ func TestHandleCMP_Protection(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			opts := models.EnrollmentOptionsLWCRFC9483{AuthMode: tc.authMode}
+			opts := models.CMPEnrollmentSettings{AuthMode: tc.authMode}
 
 			var router *gin.Engine
 			var svc *cmpmock.MockLightweightCMPService
@@ -564,7 +564,7 @@ func TestHandleCMP_Response_ExtraCertsContainsChain(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPServiceWithProtection{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
+		Return(resolvedOpts(models.CMPEnrollmentSettings{}), nil)
 	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
 		Return(issuedCert, nil)
 	// Protection provider returns a 2-cert chain: [leaf, issuer].
@@ -641,7 +641,7 @@ func buildTestIRBodyContent(t *testing.T, cn string, pubKeyDER []byte) []byte {
 func TestHandleCMP_DuplicateTransactionID(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-dup-tx")
 
-	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
+	router, _, _ := newEnrollRouter(t, models.CMPEnrollmentSettings{AcceptImplicit: false}, issuedCert)
 	txID := randomTxID(t)
 
 	// First IR succeeds.
@@ -668,7 +668,7 @@ func TestHandleCMP_CertConf_WrongHash(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-wrong-hash")
 	wrongCert, _ := buildSelfSignedCert(t, "wrong-cert")
 
-	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
+	router, store, _ := newEnrollRouter(t, models.CMPEnrollmentSettings{AcceptImplicit: false}, issuedCert)
 	txID := randomTxID(t)
 
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-wrong-hash", TransactionID: txID})
@@ -695,7 +695,7 @@ func TestHandleCMP_CertConf_WrongHash(t *testing.T) {
 // forward-compatibility: new RFC body types are safely rejected until
 // explicitly implemented.
 func TestHandleCMP_UnsupportedBodyTag(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	// Build a message with body tag 99 (completely unsupported).
 	txID := randomTxID(t)
@@ -732,7 +732,7 @@ func TestHandleCMP_UnsupportedBodyTag(t *testing.T) {
 func TestHandleCMP_CertConf_RecipNonceMismatch(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "device-nonce-mismatch")
 
-	router, _, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false}, issuedCert)
+	router, _, _ := newEnrollRouter(t, models.CMPEnrollmentSettings{AcceptImplicit: false}, issuedCert)
 	txID := randomTxID(t)
 
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-nonce-mismatch", TransactionID: txID})
@@ -757,7 +757,7 @@ func TestHandleCMP_CertConf_RecipNonceMismatch(t *testing.T) {
 func TestHandleCMP_RR_Success(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
+		Return(resolvedOpts(models.CMPEnrollmentSettings{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(input services.RevokeCertificateInput) bool {
 		return input.APS == "test-dms" && input.Reason == models.RevocationReason(1) // KeyCompromise
 	}), mock.Anything).Return(nil)
@@ -783,7 +783,7 @@ func TestHandleCMP_RR_Success(t *testing.T) {
 func TestHandleCMP_RR_ServiceError(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
+		Return(resolvedOpts(models.CMPEnrollmentSettings{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.Anything, mock.Anything).
 		Return(fmt.Errorf("certificate not found"))
 
@@ -813,7 +813,7 @@ func TestHandleCMP_RR_ServiceError(t *testing.T) {
 func TestHandleCMP_RR_DefaultReason(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{}), nil)
+		Return(resolvedOpts(models.CMPEnrollmentSettings{}), nil)
 	svc.On("LWCRevokeCertificate", mock.Anything, mock.MatchedBy(func(input services.RevokeCertificateInput) bool {
 		return input.Reason == models.RevocationReason(0) // Unspecified
 	}), mock.Anything).Return(nil)
@@ -969,7 +969,7 @@ func TestHandleCMP_POPO(t *testing.T) {
 			// POPO enforcement now (EnforcePOPO is the pre-RFC011 legacy flag,
 			// kept here for documentation/back-compat but no longer consulted
 			// for ir/cr).
-			opts := models.EnrollmentOptionsLWCRFC9483{
+			opts := models.CMPEnrollmentSettings{
 				EnforcePOPO:    tc.enforcePOPO,
 				AcceptImplicit: true,
 				IR:             models.CMPIRSettings{ProofOfPossession: models.CMPProofOfPossession{Required: tc.enforcePOPO}},
@@ -1036,7 +1036,7 @@ func TestHandleCMP_KUR_POPO(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			opts := models.EnrollmentOptionsLWCRFC9483{EnforcePOPO: tc.enforcePOPO, AcceptImplicit: true}
+			opts := models.CMPEnrollmentSettings{EnforcePOPO: tc.enforcePOPO, AcceptImplicit: true}
 
 			var router *gin.Engine
 			var svc *cmpmock.MockLightweightCMPService
@@ -1118,7 +1118,7 @@ func buildCRLReasonExtension(t *testing.T, reason int) []byte {
 func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "recovery-device-001")
 
-	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, store, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	txID := randomTxID(t)
 	require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
@@ -1150,7 +1150,7 @@ func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 // referring to no known transaction is rejected with an error PKIMessage
 // rather than a stalled response or a 500.
 func TestHandleCMP_PollReq_UnknownTxID_ReturnsError(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	unknownTxID := randomTxID(t)
 
@@ -1166,7 +1166,7 @@ func TestHandleCMP_PollReq_UnknownTxID_ReturnsError(t *testing.T) {
 // ISSUE_FAILED row (kept for forward-compatibility with future async
 // reintroduction) surfaces the failure reason in an error PKIMessage.
 func TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason(t *testing.T) {
-	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, store, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	txID := randomTxID(t)
 	require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
@@ -1195,7 +1195,7 @@ func TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason(t *testing.T) {
 func TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked(t *testing.T) {
 	revokedCert, _ := buildSelfSignedCert(t, "revoked-device-001")
 
-	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, store, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	txID := randomTxID(t)
 	require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
@@ -1226,7 +1226,7 @@ func TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked(t *testing.T) {
 func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{
+		Return(resolvedOpts(models.CMPEnrollmentSettings{
 			Workflow: models.CMPWorkflowPhased,
 		}), nil)
 	// NOTE: LWCEnroll is intentionally NOT registered — if the phased path
@@ -1256,7 +1256,7 @@ func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
 // while a phased transaction is awaiting approval, a pollReq receives a
 // pollRep(checkAfter) telling the EE to retry — the standard polling loop.
 func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T) {
-	router, store, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{Workflow: models.CMPWorkflowPhased})
+	router, store, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{Workflow: models.CMPWorkflowPhased})
 	txID := randomTxID(t)
 
 	// Park a PENDING transaction via the phased IR path.
@@ -1287,7 +1287,7 @@ func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T
 // dereference and panicked — every intervening check passes trivially, since a
 // PENDING row's SentNonce and CertSerialNumber are still empty.
 func TestHandleCMP_CertConf_WhilePendingIsRejected(t *testing.T) {
-	router, store, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{Workflow: models.CMPWorkflowPhased})
+	router, store, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{Workflow: models.CMPWorkflowPhased})
 	txID := randomTxID(t)
 
 	// Park a PENDING transaction via the phased IR path.
@@ -1329,7 +1329,7 @@ func TestHandleCMP_CertConf_WhilePendingIsRejected(t *testing.T) {
 func TestHandleCMP_CertConf_Duplicate_CertConfirmed(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "dup-certconf-device")
 
-	router, store, _ := newEnrollRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+	router, store, _ := newEnrollRouter(t, models.CMPEnrollmentSettings{}, issuedCert)
 	irDER, txID, _ := buildTestIR(t, testIROptions{CN: "dup-certconf-device"})
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -1407,7 +1407,7 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 
 	svc := &cmpmock.MockLightweightCMPService{}
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
-		Return(resolvedOpts(models.EnrollmentOptionsLWCRFC9483{
+		Return(resolvedOpts(models.CMPEnrollmentSettings{
 			AcceptImplicit: true,
 			IR:             models.CMPIRSettings{RegistrationToken: models.CMPControl{Mode: models.CMPControlModeOptional}},
 		}), nil)
@@ -1442,7 +1442,7 @@ func TestHandleCMP_RegToken_OneTimeUse(t *testing.T) {
 // the handler ever buffering the whole thing (http.MaxBytesReader aborts the
 // read once the limit is crossed).
 func TestHandleCMP_RejectsOversizedBody(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	oversized := make([]byte, cmpMaxRequestBodyBytes+1)
 	resp := postCMP(t, router, "test-dms", oversized)

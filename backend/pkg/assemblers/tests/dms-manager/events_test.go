@@ -54,39 +54,41 @@ func TestBindIDEvent(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
-					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}
@@ -160,8 +162,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -217,8 +219,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -311,8 +313,8 @@ func TestBindIDEvent(t *testing.T) {
 				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(context.Background(), services.CreateDeviceInput{
 					ID:        deviceCert.Subject.CommonName,
 					Alias:     "",
-					Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,
-					Metadata:  dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Metadata,
+					Tags:      dms.Settings.EST.EnrollmentSettings.DeviceProvisionProfile.Tags,
+					Metadata:  dms.Settings.EST.EnrollmentSettings.DeviceProvisionProfile.Metadata,
 					DMSID:     dms.ID,
 					Icon:      "my-icon",
 					IconColor: "#25ee32",
@@ -354,8 +356,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -428,8 +430,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})

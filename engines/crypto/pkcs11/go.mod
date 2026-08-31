@@ -11,7 +11,8 @@ require (
 	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.8.0
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
 	github.com/miekg/pkcs11 v1.1.2
-	github.com/ory/dockertest/v3 v3.12.0
+	github.com/moby/moby/api v1.54.2
+	github.com/ory/dockertest/v4 v4.0.0
 )
 
 require (
@@ -65,7 +66,6 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
@@ -74,6 +74,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runc v1.2.8 // indirect
+	github.com/ory/dockertest/v3 v3.12.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

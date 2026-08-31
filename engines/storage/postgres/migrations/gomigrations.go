@@ -21,5 +21,6 @@ func RegisterGoMigrations(dbname string) {
 		dmsmanager.Register20241230124809ServerkeygenRevokereenroll()
 		dmsmanager.Register20250612100530ESTVerifyCSRSignature()
 		dmsmanager.Register20260604110000ReenrollAuthSettings()
+		dmsmanager.Register20260801120000ProtocolScopedSettings()
 	}
 }

@@ -23,9 +23,8 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 		Name:     "Production Fleet",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-			},
+			Protocol: models.EST,
+			EST:      &models.ESTSettings{},
 		},
 	})
 	if err != nil {
@@ -37,9 +36,8 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 		Name:     "Development Fleet",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-			},
+			Protocol: models.EST,
+			EST:      &models.ESTSettings{},
 		},
 	})
 	if err != nil {
@@ -51,9 +49,8 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 		Name:     "Staging Fleet",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-			},
+			Protocol: models.EST,
+			EST:      &models.ESTSettings{},
 		},
 	})
 	if err != nil {
@@ -303,17 +300,21 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Name:     "Auto Enrollment Fleet",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol:          models.EST,
-				EnableReplaceableEnrollment: true,
-				RegistrationMode:            models.JITP,
-				VerifyCSRSignature:          true,
-			},
-			ServerKeyGen: models.ServerKeyGenSettings{
-				Enabled: true,
-				Key: models.ServerKeyGenKey{
-					Type: models.KeyType(1),
-					Bits: 2048,
+			Protocol: models.EST,
+			EST: &models.ESTSettings{
+				EnrollmentSettings: models.ESTEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnableReplaceableEnrollment: true,
+						RegistrationMode:            models.JITP,
+						VerifyCSRSignature:          true,
+					},
+				},
+				ServerKeyGen: models.ServerKeyGenSettings{
+					Enabled: true,
+					Key: models.ServerKeyGenKey{
+						Type: models.KeyType(1),
+						Bits: 2048,
+					},
 				},
 			},
 		},
@@ -327,14 +328,18 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Name:     "Manual Enrollment Fleet",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol:          models.EST,
-				EnableReplaceableEnrollment: false,
-				RegistrationMode:            models.PreRegistration,
-				VerifyCSRSignature:          false,
-			},
-			ServerKeyGen: models.ServerKeyGenSettings{
-				Enabled: false,
+			Protocol: models.EST,
+			EST: &models.ESTSettings{
+				EnrollmentSettings: models.ESTEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnableReplaceableEnrollment: false,
+						RegistrationMode:            models.PreRegistration,
+						VerifyCSRSignature:          false,
+					},
+				},
+				ServerKeyGen: models.ServerKeyGenSettings{
+					Enabled: false,
+				},
 			},
 		},
 	})
@@ -347,17 +352,21 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Name:     "High Security Fleet",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol:          models.EST,
-				EnableReplaceableEnrollment: false,
-				RegistrationMode:            models.JITP,
-				VerifyCSRSignature:          true,
-			},
-			ServerKeyGen: models.ServerKeyGenSettings{
-				Enabled: true,
-				Key: models.ServerKeyGenKey{
-					Type: models.KeyType(3),
-					Bits: 256,
+			Protocol: models.EST,
+			EST: &models.ESTSettings{
+				EnrollmentSettings: models.ESTEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnableReplaceableEnrollment: false,
+						RegistrationMode:            models.JITP,
+						VerifyCSRSignature:          true,
+					},
+				},
+				ServerKeyGen: models.ServerKeyGenSettings{
+					Enabled: true,
+					Key: models.ServerKeyGenKey{
+						Type: models.KeyType(3),
+						Bits: 256,
+					},
 				},
 			},
 		},
@@ -373,7 +382,7 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Filters: []resources.FilterOption{
 			{
 				Field:           "settings",
-				Value:           `$.server_keygen_settings.enabled == true`,
+				Value:           `$.est_settings.server_keygen_settings.enabled == true`,
 				FilterOperation: resources.JsonPathExpression,
 			},
 		},
@@ -403,7 +412,7 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Filters: []resources.FilterOption{
 			{
 				Field:           "settings",
-				Value:           `$.enrollment_settings.registration_mode == "JITP"`,
+				Value:           `$.est_settings.enrollment_settings.registration_mode == "JITP"`,
 				FilterOperation: resources.JsonPathExpression,
 			},
 		},
@@ -433,7 +442,7 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Filters: []resources.FilterOption{
 			{
 				Field:           "settings",
-				Value:           `$.enrollment_settings.verify_csr_signature == true`,
+				Value:           `$.est_settings.enrollment_settings.verify_csr_signature == true`,
 				FilterOperation: resources.JsonPathExpression,
 			},
 		},
@@ -463,7 +472,7 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Filters: []resources.FilterOption{
 			{
 				Field:           "settings",
-				Value:           `$.server_keygen_settings.enabled == true && $.enrollment_settings.verify_csr_signature == true`,
+				Value:           `$.est_settings.server_keygen_settings.enabled == true && $.est_settings.enrollment_settings.verify_csr_signature == true`,
 				FilterOperation: resources.JsonPathExpression,
 			},
 		},
@@ -493,7 +502,7 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Filters: []resources.FilterOption{
 			{
 				Field:           "settings",
-				Value:           `$.server_keygen_settings.key.type == "RSA"`,
+				Value:           `$.est_settings.server_keygen_settings.key.type == "RSA"`,
 				FilterOperation: resources.JsonPathExpression,
 			},
 		},
@@ -526,7 +535,7 @@ func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
 		Filters: []resources.FilterOption{
 			{
 				Field:           "settings",
-				Value:           `$.server_keygen_settings.key.bits >= 2048`,
+				Value:           `$.est_settings.server_keygen_settings.key.bits >= 2048`,
 				FilterOperation: resources.JsonPathExpression,
 			},
 		},

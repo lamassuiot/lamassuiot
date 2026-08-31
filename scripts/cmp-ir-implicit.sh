@@ -52,7 +52,7 @@ echo "=== CMP IR (implicit confirm) → DMS ${DMS_ID} @ ${SERVER} ==="
 # anything. accept_implicit=false makes the server demand a certConf.
 DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
     || fail "cannot fetch DMS ${DMS_ID}"
-ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
+ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.accept_implicit // false')
 [ "${ACCEPT_IMPLICIT}" = "true" ] \
     || fail "DMS has accept_implicit=false — server would expect certConf. PATCH the DMS to accept_implicit=true and retry."
 

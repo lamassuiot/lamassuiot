@@ -174,44 +174,46 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 			"sample":      true,
 		},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+			Protocol: models.EST,
+			EST: &models.ESTSettings{
+				EnrollmentSettings: models.ESTEnrollmentSettings{
 					AuthMode: "CLIENT_CERTIFICATE",
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{},
 						ChainLevelValidation: -1,
 						AllowExpired:         false,
 					},
-				},
-				EnrollmentCA: importedCAID,
-				DeviceProvisionProfile: models.DeviceProvisionProfile{
-					Icon: "Laptop",
-					// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
-					IconColor: "#0066CC-#F0F8FF",
-					Metadata: map[string]interface{}{
-						"sample": true,
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnrollmentCA: importedCAID,
+						DeviceProvisionProfile: models.DeviceProvisionProfile{
+							Icon: "Laptop",
+							// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
+							IconColor: "#0066CC-#F0F8FF",
+							Metadata: map[string]interface{}{
+								"sample": true,
+							},
+							Tags: []string{"sample", "test"},
+						},
+						RegistrationMode: models.JITP,
 					},
-					Tags: []string{"sample", "test"},
 				},
-				RegistrationMode: models.JITP,
-			},
-			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				RevokeOnReEnrollment:    false,
-				AdditionalValidationCAs: []string{},
-				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				ReEnrollmentSettings: models.ESTReEnrollmentSettings{
 					AuthMode: "CLIENT_CERTIFICATE",
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{},
 						ChainLevelValidation: -1,
 						AllowExpired:         false,
 					},
+					CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+						RevokeOnReEnrollment:    false,
+						AdditionalValidationCAs: []string{},
+					},
 				},
-			},
-			CADistributionSettings: models.CADistributionSettings{
-				IncludeEnrollmentCA:    true,
-				IncludeLamassuSystemCA: true,
-				ManagedCAs:             []string{},
+				CADistributionSettings: models.CADistributionSettings{
+					IncludeEnrollmentCA:    true,
+					IncludeLamassuSystemCA: true,
+					ManagedCAs:             []string{},
+				},
 			},
 		},
 	}
@@ -980,18 +982,20 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 					"sample":      true,
 				},
 				Settings: models.DMSSettings{
-					EnrollmentSettings: models.EnrollmentSettings{
-						EnrollmentProtocol: models.CMP,
-						EnrollmentCA:       generatedCAID,
-						DeviceProvisionProfile: models.DeviceProvisionProfile{
-							Icon: "ShieldCheck",
-							// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
-							IconColor: "#004466-#E0F2FE",
-							Metadata:  map[string]interface{}{"sample": true},
-							Tags:      []string{"sample", "cmp"},
-						},
-						RegistrationMode: models.JITP,
-						EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+					Protocol: models.CMP,
+					CMP: &models.CMPSettings{
+						EnrollmentSettings: models.CMPEnrollmentSettings{
+							CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+								EnrollmentCA: generatedCAID,
+								DeviceProvisionProfile: models.DeviceProvisionProfile{
+									Icon: "ShieldCheck",
+									// "<fg>-<bg>" pair — the dashboard's RA form splits on '-'.
+									IconColor: "#004466-#E0F2FE",
+									Metadata:  map[string]interface{}{"sample": true},
+									Tags:      []string{"sample", "cmp"},
+								},
+								RegistrationMode: models.JITP,
+							},
 							AuthMode:                          models.CMPAuthModeClientCertificate,
 							ProtectionCertificateSerialNumber: protectionCert.SerialNumber,
 							EnforcePOPO:                       true,
@@ -1017,16 +1021,14 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 							// Transport / Key Agreement, via ir and kur) require it.
 							ServerKeyGenEnabled: true,
 							// Nested per-operation CMP schema (RFC011). These blocks
-							// persist and round-trip through create/get; only the two
-							// LIVE bridges are enforced today (settings resolution
-							// fills them in — see models.ResolveCMPSettings):
-							//   - CKG: ir/cr.central_key_generation.enabled is unified
-							//     with the flat ServerKeyGenEnabled above (logical OR),
-							//     so mirroring it here keeps the effective toggle on.
-							//   - KUR: renewal_window/allow_expired/additional_ca_ids/
-							//     revoke_superseded reshape onto ReEnrollmentSettings.
-							//     Left at their zero values so they inherit the
-							//     ReEnrollmentSettings below (no behaviour change).
+							// persist and round-trip through create/get. One bridge is
+							// resolved at settings-resolution time (see
+							// models.ResolveCMPSettings): CKG —
+							// ir/cr.central_key_generation.enabled is unified with the
+							// flat ServerKeyGenEnabled above (logical OR), so mirroring
+							// it here keeps the effective toggle on. The kur renewal
+							// policy is NOT part of this nested schema; it lives on
+							// CMPSettings.ReEnrollmentSettings below.
 							// Every other nested field now HAS a live enforcement path
 							// (RFC011 — see docs/rfcs/internal/RFC011-cmp-per-operation-
 							// settings.md). This sample DMS predates that enforcement and
@@ -1093,9 +1095,6 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 							},
 							KUR: models.CMPKURSettings{
 								Enabled: true,
-								// Mirror ReEnrollmentSettings.RevokeOnReEnrollment=false
-								// so the shared bridge keeps the superseded cert usable.
-								RevokeSupersededCertificate: false,
 								// The CMP compliance suite's "CA MUST Either Reject Or
 								// Accept Valid KUR With Same Key" test expects acceptance
 								// (ALLOW_KUR_SAME_KEY=True in config/lamassu.robot).
@@ -1172,29 +1171,30 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 								MaximumValidity:          models.TimeDuration(8760 * time.Hour),
 							},
 						},
+						ReEnrollmentSettings: models.CMPReEnrollmentSettings{
+							CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+								AdditionalValidationCAs:     []string{},
+								PreventiveReEnrollmentDelta: models.TimeDuration(7 * 24 * time.Hour),
+								CriticalReEnrollmentDelta:   models.TimeDuration(24 * time.Hour),
+								// Keep the superseded certificate valid across replaceable
+								// enrollments. The CMP compliance suite reuses a single
+								// message-protection certificate (same subject CN) for the
+								// whole run; revoking it on the first re-enrollment would
+								// make every later signature-protected request fail with
+								// certRevoked.
+								RevokeOnReEnrollment: false,
+							},
+						},
+						CADistributionSettings: models.CADistributionSettings{
+							IncludeEnrollmentCA:    true,
+							IncludeLamassuSystemCA: true,
+						},
+						// Enroll against the device profile so the CertTemplate's
+						// requested KeyUsage/EKU/extensions are honored. Empty when
+						// the profile couldn't be created; the DMS then falls back to
+						// the enrollment CA's default profile.
+						IssuanceProfileID: cmpEnrollProfileID,
 					},
-					ReEnrollmentSettings: models.ReEnrollmentSettings{
-						AdditionalValidationCAs:     []string{},
-						PreventiveReEnrollmentDelta: models.TimeDuration(7 * 24 * time.Hour),
-						CriticalReEnrollmentDelta:   models.TimeDuration(24 * time.Hour),
-						// Keep the superseded certificate valid across replaceable
-						// enrollments. The CMP compliance suite reuses a single
-						// message-protection certificate (same subject CN) for the
-						// whole run; revoking it on the first re-enrollment would
-						// make every later signature-protected request fail with
-						// certRevoked. This matches the KUR path, which only revokes
-						// when RevokeOnReEnrollment is set.
-						RevokeOnReEnrollment: false,
-					},
-					CADistributionSettings: models.CADistributionSettings{
-						IncludeEnrollmentCA:    true,
-						IncludeLamassuSystemCA: true,
-					},
-					// Enroll against the device profile so the CertTemplate's
-					// requested KeyUsage/EKU/extensions are honored. Empty when
-					// the profile couldn't be created; the DMS then falls back to
-					// the enrollment CA's default profile.
-					IssuanceProfileID: cmpEnrollProfileID,
 				},
 			}
 
