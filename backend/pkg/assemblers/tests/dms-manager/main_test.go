@@ -46,9 +46,8 @@ func TestCreateDMS(t *testing.T) {
 		ID:   dmsID,
 		Name: "MyIotFleet",
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-			},
+			Protocol: models.EST,
+			EST:      &models.ESTSettings{},
 		},
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -79,9 +78,8 @@ func TestUpdateDMS(t *testing.T) {
 		ID:   dmsID,
 		Name: "MyIotFleet",
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-			},
+			Protocol: models.EST,
+			EST:      &models.ESTSettings{},
 		},
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -121,9 +119,8 @@ func TestUpdateDMSMetadata(t *testing.T) {
 		Name:     "MyIotFleet",
 		Metadata: map[string]any{"test": "test"},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-			},
+			Protocol: models.EST,
+			EST:      &models.ESTSettings{},
 		},
 	}
 
@@ -184,9 +181,8 @@ func TestDeleteDMS(t *testing.T) {
 					ID:   dmsID,
 					Name: "MyIotFleet",
 					Settings: models.DMSSettings{
-						EnrollmentSettings: models.EnrollmentSettings{
-							EnrollmentProtocol: models.EST,
-						},
+						Protocol: models.EST,
+						EST:      &models.ESTSettings{},
 					},
 				}
 				dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -308,36 +304,40 @@ func TestESTEnroll(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}
@@ -366,8 +366,8 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -443,8 +443,8 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -520,9 +520,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.RegistrationMode = models.PreRegistration
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.RegistrationMode = models.PreRegistration
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -611,9 +611,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.RegistrationMode = models.JITP // It is not MANDATORY to register the device before enrolling. Test that it works if manual registration is performed
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.RegistrationMode = models.JITP // It is not MANDATORY to register the device before enrolling. Test that it works if manual registration is performed
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -702,9 +702,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.RegistrationMode = models.PreRegistration
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.RegistrationMode = models.PreRegistration
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -763,8 +763,8 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -814,8 +814,8 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -877,9 +877,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired = true
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.AllowExpired = true
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -959,8 +959,8 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -1028,9 +1028,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired = true
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.AllowExpired = true
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -1101,9 +1101,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnableReplaceableEnrollment = false
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.EnableReplaceableEnrollment = false
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -1167,9 +1167,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnableReplaceableEnrollment = true
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.EnableReplaceableEnrollment = true
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -1178,9 +1178,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms2, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnableReplaceableEnrollment = true
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.EnableReplaceableEnrollment = true
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -1293,9 +1293,9 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -1354,9 +1354,9 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -1421,9 +1421,9 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -1457,8 +1457,8 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("error should contain 'status code: 401'. Got error %s", err.Error())
 				}
 
-				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook.Config.AuthMode = config.ApiKey
-				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook.Config.ApiKey = models.WebhookCallHttpClientApiKey{
+				dms.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook.Config.AuthMode = config.ApiKey
+				dms.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook.Config.ApiKey = models.WebhookCallHttpClientApiKey{
 					Header: "X-API-Key",
 					Key:    "mySecret",
 				}
@@ -1509,9 +1509,9 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -1593,8 +1593,8 @@ func TestESTEnroll(t *testing.T) {
 		// 		}
 
 		// 		dms, err := createDMS(func(in *services.CreateDMSInput) {
-		// 			in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-		// 			in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+		// 			in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+		// 			in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 		// 				importedBootstrapCA.ID,
 		// 			}
 		// 		})
@@ -1667,8 +1667,8 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -1742,11 +1742,11 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
-					in.Settings.EnrollmentSettings.VerifyCSRSignature = false
+					in.Settings.EST.EnrollmentSettings.VerifyCSRSignature = false
 				})
 				if err != nil {
 					t.Fatalf("could not create DMS: %s", err)
@@ -1825,8 +1825,8 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -1890,11 +1890,11 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
-					in.Settings.IssuanceProfile = &models.IssuanceProfile{
+					in.Settings.EST.IssuanceProfile = &models.IssuanceProfile{
 						Validity: models.Validity{
 							Type:     models.Duration,
 							Duration: models.TimeDuration(time.Hour * 24 * 30), // 30 days
@@ -1981,9 +1981,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 0
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ChainLevelValidation = 0
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -2068,9 +2068,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 1
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ChainLevelValidation = 1
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -2151,9 +2151,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 1
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ChainLevelValidation = 1
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -2245,10 +2245,10 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 1
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ChainLevelValidation = 1
 					// Only bootstrapCA is trusted — intermediateCA is NOT in ValidationCAs.
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -2323,9 +2323,9 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ChainLevelValidation = 2
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ChainLevelValidation = 2
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -2417,13 +2417,13 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
 					}
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -2500,13 +2500,13 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
 					}
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -2587,14 +2587,14 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						// only bootstrapCA trusted, but cert will be signed by differentCA
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
 					}
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -2670,13 +2670,13 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS = models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{bootstrapCA.ID},
 						ChainLevelValidation: -1,
 					}
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+					in.Settings.EST.EnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
 						Config: models.WebhookCallHttpClient{
@@ -2765,37 +2765,41 @@ func TestESTGetCACerts(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentCA:       "",
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							EnrollmentCA: "",
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}
@@ -2837,8 +2841,8 @@ func TestESTGetCACerts(t *testing.T) {
 			run: func() (caCert []*x509.Certificate, err error) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.CADistributionSettings.IncludeEnrollmentCA = false
-					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = true
+					in.Settings.EST.CADistributionSettings.IncludeEnrollmentCA = false
+					in.Settings.EST.CADistributionSettings.IncludeLamassuSystemCA = true
 				})
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
@@ -2867,9 +2871,9 @@ func TestESTGetCACerts(t *testing.T) {
 			name: "OK/IncludeEnrollmentCA",
 			run: func() (caCert []*x509.Certificate, err error) {
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.CADistributionSettings.IncludeEnrollmentCA = true
-					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = false
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.CADistributionSettings.IncludeEnrollmentCA = true
+					in.Settings.EST.CADistributionSettings.IncludeLamassuSystemCA = false
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 				})
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
@@ -2906,8 +2910,8 @@ func TestESTGetCACerts(t *testing.T) {
 			run: func() (caCert []*x509.Certificate, err error) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.CADistributionSettings.ManagedCAs = []string{caMm.ID}
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.CADistributionSettings.ManagedCAs = []string{caMm.ID}
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 				})
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
@@ -2992,43 +2996,47 @@ func TestESTServerKeyGen(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				ServerKeyGen: models.ServerKeyGenSettings{
-					Enabled: true,
-					Key: models.ServerKeyGenKey{
-						Type: models.KeyType(x509.RSA),
-						Bits: 2048,
-					},
-				},
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					ServerKeyGen: models.ServerKeyGenSettings{
+						Enabled: true,
+						Key: models.ServerKeyGenKey{
+							Type: models.KeyType(x509.RSA),
+							Bits: 2048,
+						},
+					},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}
@@ -3057,12 +3065,12 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.ServerKeyGen.Key = models.ServerKeyGenKey{
+					in.Settings.EST.ServerKeyGen.Key = models.ServerKeyGenKey{
 						Type: models.KeyType(x509.ECDSA),
 						Bits: 256,
 					}
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -3155,13 +3163,13 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.ServerKeyGen.Key = models.ServerKeyGenKey{
+					in.Settings.EST.ServerKeyGen.Key = models.ServerKeyGenKey{
 						Type: models.KeyType(x509.RSA),
 						Bits: 3072,
 					}
 
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -3251,9 +3259,9 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.ServerKeyGen = models.ServerKeyGenSettings{}
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.ServerKeyGen = models.ServerKeyGenSettings{}
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -3311,10 +3319,10 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.ServerKeyGen.Enabled = false
+					in.Settings.EST.ServerKeyGen.Enabled = false
 
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
 				})
@@ -3403,40 +3411,42 @@ func TestESTReEnroll(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
-					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							RevokeOnReEnrollment:        true,
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					RevokeOnReEnrollment:        true,
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}
@@ -3458,8 +3468,8 @@ func TestESTReEnroll(t *testing.T) {
 		}
 
 		dms, err = createDMS(func(in *services.CreateDMSInput) {
-			in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-			in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+			in.Settings.EST.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+			in.Settings.EST.EnrollmentSettings.AuthOptionsMTLS.ValidationCAs = []string{
 				bootstrapCA.ID,
 			}
 			dmsModifier(in)
@@ -3533,7 +3543,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -3567,7 +3577,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -3605,7 +3615,7 @@ func TestESTReEnroll(t *testing.T) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
 						dur, _ := models.ParseDuration("3s")
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(dur)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(dur)
 					},
 					"1m",
 				)
@@ -3639,8 +3649,8 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
-						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = true
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.EnableExpiredRenewal = true
 					},
 					"2s",
 				)
@@ -3676,8 +3686,8 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
-						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.EnableExpiredRenewal = false
 					},
 					"2s",
 				)
@@ -3713,8 +3723,8 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
-						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.EnableExpiredRenewal = false
 					},
 					"2s",
 				)
@@ -3757,8 +3767,8 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
-						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.EnableExpiredRenewal = false
 					},
 					"5m",
 				)
@@ -3768,8 +3778,8 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("could not create Rotational CA: %s", err)
 				}
 
-				dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
-				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms.Settings.EST.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.EST.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EST.EnrollmentSettings.EnrollmentCA)
+				dms.Settings.EST.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
@@ -3806,7 +3816,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -3840,7 +3850,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -3873,7 +3883,7 @@ func TestESTReEnroll(t *testing.T) {
 				// First Create a DMS with RevokeOnReEnroll set to true. Old certificate should be revoked
 				dms1, _, deviceCrt1, deviceKey1 := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = true
+						in.Settings.EST.ReEnrollmentSettings.RevokeOnReEnrollment = true
 					},
 					"1m",
 				)
@@ -3909,7 +3919,7 @@ func TestESTReEnroll(t *testing.T) {
 				// Second Create a DMS with RevokeOnReEnroll set to false. Old certificate should not be revoked
 				dms2, _, deviceCrt2, deviceKey2 := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = false
+						in.Settings.EST.ReEnrollmentSettings.RevokeOnReEnrollment = false
 					},
 					"1m",
 				)
@@ -3951,8 +3961,8 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
-						in.Settings.EnrollmentSettings.VerifyCSRSignature = false
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.EnrollmentSettings.VerifyCSRSignature = false
 					},
 					"1m",
 				)
@@ -3990,7 +4000,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4028,7 +4038,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4043,8 +4053,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeExternalWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EST.ReEnrollmentSettings.AuthMode = models.ESTAuthModeExternalWebhook
+				dms.Settings.EST.ReEnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4090,7 +4100,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4105,8 +4115,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": false})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeExternalWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EST.ReEnrollmentSettings.AuthMode = models.ESTAuthModeExternalWebhook
+				dms.Settings.EST.ReEnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4149,7 +4159,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4164,8 +4174,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EST.ReEnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+				dms.Settings.EST.ReEnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4210,7 +4220,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4225,8 +4235,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": false})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EST.ReEnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+				dms.Settings.EST.ReEnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4269,7 +4279,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4287,8 +4297,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EST.ReEnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+				dms.Settings.EST.ReEnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4335,7 +4345,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4352,8 +4362,8 @@ func TestESTReEnroll(t *testing.T) {
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
-				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+				dms.Settings.EST.ReEnrollmentSettings.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+				dms.Settings.EST.ReEnrollmentSettings.AuthOptionsExternalWebhook = models.WebhookCall{
 					Name: "myHook",
 					Url:  url + "/verify",
 					Config: models.WebhookCallHttpClient{
@@ -4397,8 +4407,8 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
-						in.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeNoAuth
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.AuthMode = models.ESTAuthModeNoAuth
 					},
 					"1m",
 				)
@@ -4432,7 +4442,7 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EST.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
 					"1m",
 				)
@@ -4483,36 +4493,40 @@ func TestGetAllDMS(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}

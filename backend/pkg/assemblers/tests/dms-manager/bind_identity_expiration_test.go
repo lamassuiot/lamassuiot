@@ -59,40 +59,43 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 		Name:     "TestDMS",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-				EnrollmentCA:       enrollCA.ID,
-				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+			Protocol: models.EST,
+			EST: &models.ESTSettings{
+				EnrollmentSettings: models.ESTEnrollmentSettings{
 					AuthMode: models.ESTAuthModeClientCertificate,
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ChainLevelValidation: -1,
 						ValidationCAs:        []string{bootstrapCA.ID},
 					},
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnrollmentCA: enrollCA.ID,
+						DeviceProvisionProfile: models.DeviceProvisionProfile{
+							Icon:      "BiSolidCreditCardFront",
+							IconColor: "#25ee32",
+							Metadata:  map[string]any{},
+							Tags:      []string{"test"},
+						},
+						RegistrationMode:            models.JITP,
+						EnableReplaceableEnrollment: true,
+						VerifyCSRSignature:          true,
+					},
 				},
-				DeviceProvisionProfile: models.DeviceProvisionProfile{
-					Icon:      "BiSolidCreditCardFront",
-					IconColor: "#25ee32",
-					Metadata:  map[string]any{},
-					Tags:      []string{"test"},
-				},
-				RegistrationMode:            models.JITP,
-				EnableReplaceableEnrollment: true,
-				VerifyCSRSignature:          true,
-			},
-			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				ReEnrollmentSettings: models.ESTReEnrollmentSettings{
 					AuthMode: models.ESTAuthModeClientCertificate,
+					CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+						AdditionalValidationCAs: []string{},
+						ReEnrollmentDelta:       models.TimeDuration(24 * 365 * time.Hour),
+						// Allow re-enrollment any time within a year
+						EnableExpiredRenewal:        true,
+						PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+						CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+					},
 				},
-				AdditionalValidationCAs:     []string{},
-				ReEnrollmentDelta:           models.TimeDuration(24 * 365 * time.Hour), // Allow re-enrollment any time within a year
-				EnableExpiredRenewal:        true,
-				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-				CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-			},
-			CADistributionSettings: models.CADistributionSettings{
-				IncludeLamassuSystemCA: true,
-				IncludeEnrollmentCA:    true,
-				ManagedCAs:             []string{},
+				CADistributionSettings: models.CADistributionSettings{
+					IncludeLamassuSystemCA: true,
+					IncludeEnrollmentCA:    true,
+					ManagedCAs:             []string{},
+				},
 			},
 		},
 	})
@@ -243,17 +246,21 @@ func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
 		Name:     "TestDMS",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-				EnrollmentCA:       testCA.ID,
-			},
-			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+			Protocol: models.EST,
+			EST: &models.ESTSettings{
+				EnrollmentSettings: models.ESTEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnrollmentCA: testCA.ID,
+					},
 				},
-				ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-				CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+				ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+					AuthMode: models.ESTAuthModeClientCertificate,
+					CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+						ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+						PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+						CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+					},
+				},
 			},
 		},
 	})
@@ -336,17 +343,21 @@ func TestBindIdentityToDevice_MultipleBindings_TracksLatestExpiration(t *testing
 		Name:     "TestDMS",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.EST,
-				EnrollmentCA:       testCA.ID,
-			},
-			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+			Protocol: models.EST,
+			EST: &models.ESTSettings{
+				EnrollmentSettings: models.ESTEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnrollmentCA: testCA.ID,
+					},
 				},
-				ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-				CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+				ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+					AuthMode: models.ESTAuthModeClientCertificate,
+					CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+						ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+						PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+						CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+					},
+				},
 			},
 		},
 	})

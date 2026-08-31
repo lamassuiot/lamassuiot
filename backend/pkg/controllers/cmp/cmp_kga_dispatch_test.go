@@ -258,7 +258,7 @@ func extractKGAEnvelopedDataDER(t *testing.T, responseDER []byte) (certDER, envD
 
 func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
+	opts := resolveTestCMPOpts(models.CMPEnrollmentSettings{ServerKeyGenEnabled: true})
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
@@ -340,7 +340,7 @@ func TestHandleCMP_KGA_EmptyPublicKey_RSA_TriggersCentralKeyGeneration(t *testin
 // AllowedProfileIDs to a cr request.
 func TestHandleCMP_KGA_CR_ThreadsOperationContext(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
+	opts := resolveTestCMPOpts(models.CMPEnrollmentSettings{ServerKeyGenEnabled: true})
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	issuedCert, _ := buildSelfSignedCert(t, "kga-cr-device")
@@ -389,7 +389,7 @@ func TestHandleCMP_KGA_CR_ThreadsOperationContext(t *testing.T) {
 
 func TestHandleCMP_KGA_EmptyPublicKey_RequiresProtection(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
+	opts := resolveTestCMPOpts(models.CMPEnrollmentSettings{ServerKeyGenEnabled: true})
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
@@ -434,7 +434,7 @@ func TestHandleCMP_KGA_EmptyPublicKey_RequiresProtection(t *testing.T) {
 // disable it.
 func TestHandleCMP_KGA_DisabledByDefault(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{}) // ServerKeyGenEnabled left at its zero value (false)
+	opts := resolveTestCMPOpts(models.CMPEnrollmentSettings{}) // ServerKeyGenEnabled left at its zero value (false)
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	wrapped := &mockKGAService{MockLightweightCMPService: svc, store: newInMemoryCMPStore()}
@@ -496,7 +496,7 @@ func senderCommonName(t *testing.T, responseDER []byte) string {
 // DN names — the DMS's protection certificate, not the KGA helper cert.
 func TestHandleCMP_KGA_KTRI_ProtectedWithDMSCredentials(t *testing.T) {
 	svc := &cmpmock.MockLightweightCMPService{}
-	opts := resolveTestCMPOpts(models.EnrollmentOptionsLWCRFC9483{ServerKeyGenEnabled: true})
+	opts := resolveTestCMPOpts(models.CMPEnrollmentSettings{ServerKeyGenEnabled: true})
 	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").Return(&opts, nil)
 
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
@@ -555,7 +555,7 @@ func TestHandleCMP_KGA_KTRI_ProtectedWithDMSCredentials(t *testing.T) {
 
 // newKGATestRouter builds a CKG-enabled router over an in-memory store, plus a
 // recipient certificate valid for the RSA/KTRI technique.
-func newKGATestRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issuedCert *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *x509.Certificate, *rsa.PrivateKey) {
+func newKGATestRouter(t *testing.T, opts models.CMPEnrollmentSettings, issuedCert *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *x509.Certificate, *rsa.PrivateKey) {
 	t.Helper()
 
 	opts.ServerKeyGenEnabled = true
@@ -590,7 +590,7 @@ func newKGATestRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, iss
 // with pkiConf instead of rejected as an unknown transactionID.
 func TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
-	router, store, recipientCert, recipientKey := newKGATestRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+	router, store, recipientCert, recipientKey := newKGATestRouter(t, models.CMPEnrollmentSettings{}, issuedCert)
 
 	txID := randomTxID(t)
 	signedDER := signCMPMessage(t, buildTestKGAIR(t, txID, "kga-device"), recipientCert, recipientKey)
@@ -634,7 +634,7 @@ func TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf(t *testing.T) {
 // request does not mint a second key pair and certificate.
 func TestHandleCMP_KGA_DuplicateTransactionIDRejected(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
-	router, _, recipientCert, recipientKey := newKGATestRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+	router, _, recipientCert, recipientKey := newKGATestRouter(t, models.CMPEnrollmentSettings{}, issuedCert)
 
 	txID := randomTxID(t)
 	signedDER := signCMPMessage(t, buildTestKGAIR(t, txID, "kga-device"), recipientCert, recipientKey)
@@ -659,7 +659,7 @@ func TestHandleCMP_KGA_DuplicateTransactionIDRejected(t *testing.T) {
 // worse than an error, since the EE would install an unusable identity.
 func TestHandleCMP_KGA_PollReqRefused(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
-	router, store, recipientCert, recipientKey := newKGATestRouter(t, models.EnrollmentOptionsLWCRFC9483{}, issuedCert)
+	router, store, recipientCert, recipientKey := newKGATestRouter(t, models.CMPEnrollmentSettings{}, issuedCert)
 
 	txID := randomTxID(t)
 	signedDER := signCMPMessage(t, buildTestKGAIR(t, txID, "kga-device"), recipientCert, recipientKey)
@@ -682,7 +682,7 @@ func TestHandleCMP_KGA_PollReqRefused(t *testing.T) {
 func TestHandleCMP_KGA_ImplicitConfirmPersistsConfirmed(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
 	router, store, recipientCert, recipientKey := newKGATestRouter(t,
-		models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true}, issuedCert)
+		models.CMPEnrollmentSettings{AcceptImplicit: true}, issuedCert)
 
 	txID := randomTxID(t)
 	// Same KGA ir, but with id-it-implicitConfirm in the header generalInfo.

@@ -41,35 +41,35 @@ func TestIsImplicitConfirm_AllCombinations(t *testing.T) {
 		eeRequests       bool
 		dmsAccepts       bool
 		dmsLookupError   error
-		dmsLookupReturns *models.EnrollmentOptionsLWCRFC9483
+		dmsLookupReturns *models.CMPEnrollmentSettings
 		want             bool
 	}{
 		{
 			name:             "EE no, DMS no",
 			eeRequests:       false,
 			dmsAccepts:       false,
-			dmsLookupReturns: &models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false},
+			dmsLookupReturns: &models.CMPEnrollmentSettings{AcceptImplicit: false},
 			want:             false,
 		},
 		{
 			name:             "EE no, DMS yes",
 			eeRequests:       false,
 			dmsAccepts:       true,
-			dmsLookupReturns: &models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true},
+			dmsLookupReturns: &models.CMPEnrollmentSettings{AcceptImplicit: true},
 			want:             false,
 		},
 		{
 			name:             "EE yes, DMS no",
 			eeRequests:       true,
 			dmsAccepts:       false,
-			dmsLookupReturns: &models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: false},
+			dmsLookupReturns: &models.CMPEnrollmentSettings{AcceptImplicit: false},
 			want:             false,
 		},
 		{
 			name:             "EE yes, DMS yes",
 			eeRequests:       true,
 			dmsAccepts:       true,
-			dmsLookupReturns: &models.EnrollmentOptionsLWCRFC9483{AcceptImplicit: true},
+			dmsLookupReturns: &models.CMPEnrollmentSettings{AcceptImplicit: true},
 			want:             true,
 		},
 		{

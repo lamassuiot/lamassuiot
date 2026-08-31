@@ -3,39 +3,28 @@ package models
 import "time"
 
 // ResolveCMPSettings returns a copy of in with the nested CMP per-operation
-// schema fully populated (defaults filled) and the two LIVE bridges resolved:
-//
-//   - CKG bridge: the DMS-general ServerKeyGenEnabled flag and the
-//     IR/CR.CentralKeyGeneration.Enabled flags are unified into one effective
-//     value (logical OR) and written back to all three, so the single shared
-//     KGA gate in cmp_enrollment.go stays authoritative regardless of which
-//     field an operator set.
-//
-//   - KUR bridge: the nested CMPKURSettings fields are reshaped 1:1 onto the
-//     shared ReEnrollmentSettings (nested value wins when "set", otherwise the
-//     existing ReEnrollmentSettings value is kept) and the resolved values are
-//     written back into BOTH the nested KUR block and ReEnrollmentSettings, so
-//     the existing re-enrollment enforcement (LWCReenroll window, expiry,
-//     validation CAs, revoke-on-reenroll) honours them unchanged.
+// schema fully populated (defaults filled) and the CKG bridge resolved: the
+// DMS-general ServerKeyGenEnabled flag and the IR/CR.CentralKeyGeneration.Enabled
+// flags are unified into one effective value (logical OR) and written back to
+// all three, so the single shared KGA gate in cmp_enrollment.go stays
+// authoritative regardless of which field an operator set.
 //
 // The function is pure: it does not mutate in and returns a fully-populated
 // value. It only acts when the DMS uses the CMP protocol; for any other
-// protocol it returns in unchanged.
+// protocol (or a nil CMP container) it returns in unchanged.
 //
-// NOTE ON THE KUR SHARED-FIELD COUPLING: ReEnrollmentSettings.ReEnrollmentDelta,
-// EnableExpiredRenewal, AdditionalValidationCAs and RevokeOnReEnrollment are
-// protocol-agnostic fields also consumed by EST re-enrollment and by
-// certificate-expiry monitoring. Configuring them via the CMP kur block
-// therefore also affects those paths. Decoupling per-protocol re-enrollment
-// policy is deliberately out of scope (future work) — see RFC011.
+// The kur block used to be bridged onto a shared, EST-shaped ReEnrollmentSettings
+// because CMP had no re-enrollment block of its own. It does now
+// (CMPSettings.ReEnrollmentSettings), so that reshape is gone and each
+// protocol's renewal policy stands alone.
 func ResolveCMPSettings(in DMSSettings) DMSSettings {
 	out := in
-	if out.EnrollmentSettings.EnrollmentProtocol != CMP {
+	if out.Protocol != CMP || out.CMP == nil {
 		return out
 	}
 
-	opts := out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
-	rs := out.ReEnrollmentSettings
+	cmp := *out.CMP
+	opts := cmp.EnrollmentSettings
 
 	// --- defaults ---------------------------------------------------------
 	opts.IR = resolveIR(opts.IR)
@@ -54,32 +43,20 @@ func ResolveCMPSettings(in DMSSettings) DMSSettings {
 	opts.IR.CentralKeyGeneration.Enabled = ckgEffective
 	opts.CR.CentralKeyGeneration.Enabled = ckgEffective
 
-	// --- KUR bridge (reshape of the shared ReEnrollmentSettings) ----------
-	// renewal_window ↔ ReEnrollmentDelta (non-zero nested wins).
-	if opts.KUR.RenewalWindow != 0 {
-		rs.ReEnrollmentDelta = opts.KUR.RenewalWindow
-	} else {
-		opts.KUR.RenewalWindow = rs.ReEnrollmentDelta
-	}
-	// allow_expired_certificate ↔ EnableExpiredRenewal (enable via either side).
-	expiredEffective := opts.KUR.AllowExpiredCertificate || rs.EnableExpiredRenewal
-	opts.KUR.AllowExpiredCertificate = expiredEffective
-	rs.EnableExpiredRenewal = expiredEffective
-	// additional_validation_ca_ids ↔ AdditionalValidationCAs (non-empty wins).
-	if len(opts.KUR.AdditionalValidationCAIDs) > 0 {
-		rs.AdditionalValidationCAs = append([]string(nil), opts.KUR.AdditionalValidationCAIDs...)
-	} else {
-		// Keep a non-nil slice on the nested side even when the source is empty.
-		opts.KUR.AdditionalValidationCAIDs = append([]string{}, rs.AdditionalValidationCAs...)
-	}
-	// revoke_superseded_certificate ↔ RevokeOnReEnrollment (enable via either).
-	revokeEffective := opts.KUR.RevokeSupersededCertificate || rs.RevokeOnReEnrollment
-	opts.KUR.RevokeSupersededCertificate = revokeEffective
-	rs.RevokeOnReEnrollment = revokeEffective
-
-	out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483 = opts
-	out.ReEnrollmentSettings = rs
+	cmp.EnrollmentSettings = opts
+	cmp.ReEnrollmentSettings = resolveCMPReEnrollment(cmp.ReEnrollmentSettings)
+	out.CMP = &cmp
 	return out
+}
+
+// resolveCMPReEnrollment normalizes the CMP renewal policy. Only the slice is
+// concretized: every other field is a scalar whose zero value is a meaningful
+// "not configured" that the enforcement paths already handle.
+func resolveCMPReEnrollment(rs CMPReEnrollmentSettings) CMPReEnrollmentSettings {
+	if rs.AdditionalValidationCAs == nil {
+		rs.AdditionalValidationCAs = []string{}
+	}
+	return rs
 }
 
 // --- per-operation defaulting ----------------------------------------------
@@ -210,9 +187,6 @@ func resolveKUR(k CMPKURSettings) CMPKURSettings {
 	}
 	if k.IdentityChangePolicy == "" {
 		k.IdentityChangePolicy = CMPIdentityChangePolicyForbid
-	}
-	if k.AdditionalValidationCAIDs == nil {
-		k.AdditionalValidationCAIDs = []string{}
 	}
 	k.PolicyOverrides = resolvePolicyOverrides(k.PolicyOverrides)
 	return k

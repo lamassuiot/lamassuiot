@@ -2,10 +2,10 @@ package models
 
 import "testing"
 
-// optsWith builds an EnrollmentOptionsLWCRFC9483 with the given DMS-general
+// optsWith builds an CMPEnrollmentSettings with the given DMS-general
 // workflow/acceptImplicit and an IR policy_overrides carrying wf/conf.
-func optsWith(general CMPWorkflow, acceptImplicit bool, wf CMPInheritableWorkflow, conf CMPInheritableConfirmation) *EnrollmentOptionsLWCRFC9483 {
-	o := &EnrollmentOptionsLWCRFC9483{
+func optsWith(general CMPWorkflow, acceptImplicit bool, wf CMPInheritableWorkflow, conf CMPInheritableConfirmation) *CMPEnrollmentSettings {
+	o := &CMPEnrollmentSettings{
 		Workflow:       general,
 		AcceptImplicit: acceptImplicit,
 	}
@@ -66,7 +66,7 @@ func TestEffectiveAcceptImplicit(t *testing.T) {
 // TestPolicyOverridesForOperation confirms each enrollment op reads its own
 // nested overrides and everything else gets the zero (all-inherit) value.
 func TestPolicyOverridesForOperation(t *testing.T) {
-	o := &EnrollmentOptionsLWCRFC9483{}
+	o := &CMPEnrollmentSettings{}
 	o.IR.PolicyOverrides = CMPPolicyOverrides{Workflow: CMPInheritableWorkflowPhased}
 	o.CR.PolicyOverrides = CMPPolicyOverrides{Confirmation: CMPInheritableConfirmationExplicit}
 	o.P10CR.PolicyOverrides = CMPPolicyOverrides{Workflow: CMPInheritableWorkflowDirect}

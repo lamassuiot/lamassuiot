@@ -10,7 +10,7 @@
 #      cert is what the CMP client passes via openssl -cert / -extracerts as
 #      the message-protection signer.
 #   3. Append the bootstrap CA's ID to the DMS's
-#      settings.enrollment_settings.lwc_rfc9483_settings.client_certificate_settings.validation_cas
+#      settings.cmp_settings.enrollment_settings.client_certificate_settings.validation_cas
 #      so the DMS Manager chain-validates the signer against it (mirroring the
 #      EST mTLS auth path).
 #
@@ -281,13 +281,13 @@ cmp_bootstrap_setup() {
     #    Key Agreement, via ir and kur) exercise; it defaults to false on a
     #    fresh DMS so operators must opt in explicitly.
     patched_dms=$(echo "${dms_resp}" | jq --arg ca "${ca_id}" --arg chainca "${CHAIN_ROOT_CA_ID:-}" '
-        ( .settings.enrollment_settings.enrollment_ca ) as $enrollca
-        | .settings.enrollment_settings.lwc_rfc9483_settings.client_certificate_settings.validation_cas =
-            (((.settings.enrollment_settings.lwc_rfc9483_settings.client_certificate_settings.validation_cas) // [])
+        ( .settings.cmp_settings.enrollment_settings.enrollment_ca ) as $enrollca
+        | .settings.cmp_settings.enrollment_settings.client_certificate_settings.validation_cas =
+            (((.settings.cmp_settings.enrollment_settings.client_certificate_settings.validation_cas) // [])
                 + [$ca] + (if $enrollca then [$enrollca] else [] end)
                 + (if $chainca != "" then [$chainca] else [] end) | unique)
-        | .settings.enrollment_settings.enable_replaceable_enrollment = true
-        | .settings.enrollment_settings.lwc_rfc9483_settings.server_key_gen_enabled = true
+        | .settings.cmp_settings.enrollment_settings.enable_replaceable_enrollment = true
+        | .settings.cmp_settings.enrollment_settings.server_key_gen_enabled = true
     ')
     curl -sf -X PUT "${server}/api/dmsmanager/v1/dms/${dms_id}" \
         -H 'Content-Type: application/json' \

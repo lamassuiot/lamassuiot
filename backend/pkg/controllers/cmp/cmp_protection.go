@@ -16,7 +16,7 @@ func protectionAlgFailInfo(err error) (int, bool) {
 
 // requireClientCertProtection reports whether the DMS auth mode mandates a
 // signature-protected CMP request.
-func requireClientCertProtection(enrollOpts *models.EnrollmentOptionsLWCRFC9483) bool {
+func requireClientCertProtection(enrollOpts *models.CMPEnrollmentSettings) bool {
 	return enrollOpts.AuthMode == models.CMPAuthModeClientCertificate ||
 		enrollOpts.AuthMode == models.CMPAuthModeClientCertificateAndWebhook
 }
@@ -40,7 +40,7 @@ func requireClientCertProtection(enrollOpts *models.EnrollmentOptionsLWCRFC9483)
 // GENM.AccessPolicy=public_discovery rejected an entire batch — including any
 // valid signed enrollment bundled alongside — over an unsigned genm that would
 // have succeeded had it been sent on its own.
-func requireProtectionForBody(bodyTag int, enrollOpts *models.EnrollmentOptionsLWCRFC9483) bool {
+func requireProtectionForBody(bodyTag int, enrollOpts *models.CMPEnrollmentSettings) bool {
 	switch bodyTag {
 	case corecmp.BodyTagRR, corecmp.BodyTagKUR:
 		return true

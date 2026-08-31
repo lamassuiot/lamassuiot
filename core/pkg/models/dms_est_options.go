@@ -25,14 +25,32 @@ type EnrollmentAuthSettings struct {
 	AuthOptionsExternalWebhook WebhookCall
 }
 
-type EnrollmentOptionsESTRFC7030 struct {
+// ESTSettings is the complete configuration of a DMS that enrolls over EST
+// (RFC 7030). It is reachable only via DMSSettings.EST, which is non-nil
+// exactly when DMSSettings.Protocol is EST.
+type ESTSettings struct {
+	ServerKeyGen           ServerKeyGenSettings    `json:"server_keygen_settings"`
+	EnrollmentSettings     ESTEnrollmentSettings   `json:"enrollment_settings"`
+	ReEnrollmentSettings   ESTReEnrollmentSettings `json:"reenrollment_settings"`
+	CADistributionSettings CADistributionSettings  `json:"ca_distribution_settings"`
+	IssuanceProfileID      string                  `json:"issuance_profile_id"`
+	IssuanceProfile        *IssuanceProfile        `json:"issuance_profile"`
+}
+
+// ESTEnrollmentSettings carries the EST authentication policy plus the shared
+// enrollment knobs. The auth fields sit directly on this struct — the enclosing
+// ESTSettings already says "EST", so a nested est_rfc7030_settings wrapper
+// would only repeat it.
+type ESTEnrollmentSettings struct {
 	AuthMode                   ESTAuthMode                  `json:"auth_mode"`
 	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
 	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook_settings"`
+
+	CommonEnrollmentSettings
 }
 
 // AuthSettings returns the shared authentication policy for this EST DMS.
-func (o EnrollmentOptionsESTRFC7030) AuthSettings() EnrollmentAuthSettings {
+func (o ESTEnrollmentSettings) AuthSettings() EnrollmentAuthSettings {
 	return EnrollmentAuthSettings{
 		AuthMode:                   EnrollmentAuthMode(o.AuthMode),
 		AuthOptionsMTLS:            o.AuthOptionsMTLS,
@@ -40,14 +58,24 @@ func (o EnrollmentOptionsESTRFC7030) AuthSettings() EnrollmentAuthSettings {
 	}
 }
 
-type ReEnrollmentSettings struct {
-	ReEnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"est_rfc7030_settings"`
-	AdditionalValidationCAs       []string                    `json:"additional_validation_cas"`
-	RevokeOnReEnrollment          bool                        `json:"revoke_on_reenrollment"`
-	ReEnrollmentDelta             TimeDuration                `json:"reenrollment_delta"`
-	EnableExpiredRenewal          bool                        `json:"enable_expired_renewal"`
-	PreventiveReEnrollmentDelta   TimeDuration                `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalReEnrollmentDelta     TimeDuration                `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+// ESTReEnrollmentSettings mirrors ESTEnrollmentSettings for re-enrollment: EST
+// re-enrollment authenticates independently of enrollment (typically against
+// the current device certificate), so it carries its own auth policy.
+type ESTReEnrollmentSettings struct {
+	AuthMode                   ESTAuthMode                  `json:"auth_mode"`
+	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
+	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook_settings"`
+
+	CommonReEnrollmentSettings
+}
+
+// AuthSettings returns the shared authentication policy for EST re-enrollment.
+func (o ESTReEnrollmentSettings) AuthSettings() EnrollmentAuthSettings {
+	return EnrollmentAuthSettings{
+		AuthMode:                   EnrollmentAuthMode(o.AuthMode),
+		AuthOptionsMTLS:            o.AuthOptionsMTLS,
+		AuthOptionsExternalWebhook: o.AuthOptionsExternalWebhook,
+	}
 }
 
 type CADistributionSettings struct {

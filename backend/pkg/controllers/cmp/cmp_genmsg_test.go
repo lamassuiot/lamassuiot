@@ -118,7 +118,7 @@ func genRepSingleEntry(t *testing.T, router *gin.Engine, dmsID string, msgDER []
 }
 
 func TestHandleCMP_GenM_CACerts(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 	caCert, _ := buildSelfSignedCert(t, "test-ca")
 	svc.On("LWCCACerts", mock.Anything, "test-dms").Return([]*x509.Certificate{caCert}, nil)
 
@@ -139,7 +139,7 @@ func TestHandleCMP_GenM_CACerts(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_RootCACertUpdate(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{RootCAUpdate: true}},
 	})
 	newRoot, _ := buildSelfSignedCert(t, "new-root")
@@ -160,7 +160,7 @@ func TestHandleCMP_GenM_RootCACertUpdate(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_RootCACertUpdate_NoneAvailable(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{RootCAUpdate: true}},
 	})
 	svc.On("LWCGetRootCACertUpdate", mock.Anything, services.GetRootCACertUpdateInput{APS: "test-dms"}).
@@ -176,7 +176,7 @@ func TestHandleCMP_GenM_RootCACertUpdate_NoneAvailable(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_CertReqTemplate(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CertificateRequestTemplate: true}},
 	})
 	svc.On("LWCGetCertReqTemplate", mock.Anything, services.GetCertReqTemplateInput{APS: "test-dms"}).
@@ -240,7 +240,7 @@ func buildTestCRLStatusList(t *testing.T, issuerRawDN []byte, thisUpdate time.Ti
 }
 
 func TestHandleCMP_GenM_CRLStatusList(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CRLUpdate: true}},
 	})
 
@@ -304,7 +304,7 @@ func TestHandleCMP_GenM_CRLStatusList(t *testing.T) {
 // is MANDATORY for id-it-crlStatusList (RFC 9480 §2.16 gives it no absent
 // alternative), unlike every other support message whose value MUST be absent.
 func TestHandleCMP_GenM_CRLStatusList_MissingValue(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CRLUpdate: true}},
 	})
 
@@ -322,7 +322,7 @@ func TestHandleCMP_GenM_CRLStatusList_MissingValue(t *testing.T) {
 // genp carries id-it-crls with an ABSENT value — "you are current" — rather than
 // re-sending a CRL the EE already has.
 func TestHandleCMP_GenM_CRLStatusList_UpToDate(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{InformationTypes: models.CMPGENMInformationTypes{CRLUpdate: true}},
 	})
 
@@ -582,7 +582,7 @@ func TestPreferredSymmAlgOID(t *testing.T) {
 // TestHandleCMP_GenM_PreferredSymmAlg checks the id-it-preferredSymmAlg response
 // carries the AES variant the DMS configured, not the hardcoded default.
 func TestHandleCMP_GenM_PreferredSymmAlg(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{
 			InformationTypes:            models.CMPGENMInformationTypes{PreferredSymmetricAlgorithm: true},
 			PreferredSymmetricAlgorithm: models.CMPPreferredSymmetricAlgorithmAES128GCM,
@@ -607,7 +607,7 @@ func TestHandleCMP_GenM_PreferredSymmAlg(t *testing.T) {
 // GENM.AccessPolicy, not auth_mode — so capability discovery works regardless
 // of how the DMS authenticates enrollment.
 func TestHandleCMP_GenM_PublicDiscovery_UnprotectedUnderClientCertAuth(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		AuthMode: models.CMPAuthModeClientCertificate,
 		GENM: models.CMPGENMSettings{
 			Enabled:          true,
@@ -631,7 +631,7 @@ func TestHandleCMP_GenM_PublicDiscovery_UnprotectedUnderClientCertAuth(t *testin
 // gate: with GENM.AccessPolicy=require_signed, an unprotected genm is rejected
 // at the wire layer (before any info-type handler runs).
 func TestHandleCMP_GenM_RequireSigned_RejectsUnprotected(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		AuthMode: models.CMPAuthModeNoAuth,
 		GENM: models.CMPGENMSettings{
 			Enabled:          true,
@@ -651,7 +651,7 @@ func TestHandleCMP_GenM_RequireSigned_RejectsUnprotected(t *testing.T) {
 // out of service: it has no config toggle, so without an explicit case in
 // genmInfoTypeEnabled it would fall through the default to being answered.
 func TestHandleCMP_GenM_HardDisabledInfoTypes(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{
 			Enabled:      true,
 			AccessPolicy: models.CMPGENMAccessPolicyPublicDiscovery,
@@ -671,7 +671,7 @@ func TestHandleCMP_GenM_HardDisabledInfoTypes(t *testing.T) {
 // ("not available") rather than a rejection — rejecting the whole genm would turn
 // a legitimate capability query into a CMP error.
 func TestHandleCMP_GenM_CAProtEncCert(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{
 			Enabled:          true,
 			AccessPolicy:     models.CMPGENMAccessPolicyPublicDiscovery,
@@ -688,7 +688,7 @@ func TestHandleCMP_GenM_CAProtEncCert(t *testing.T) {
 // TestHandleCMP_GenM_CAProtEncCertDisabled proves the answer above is still gated
 // on the operator's toggle rather than being unconditional.
 func TestHandleCMP_GenM_CAProtEncCertDisabled(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{
 		GENM: models.CMPGENMSettings{
 			Enabled:          true,
 			AccessPolicy:     models.CMPGENMAccessPolicyPublicDiscovery,
@@ -704,7 +704,7 @@ func TestHandleCMP_GenM_CAProtEncCertDisabled(t *testing.T) {
 }
 
 func TestHandleCMP_GenM_UnknownInfoType(t *testing.T) {
-	router, _, svc := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	unknownOID := asn1.ObjectIdentifier{1, 2, 3, 4, 5, 6, 7}
 	msgDER := buildTestGenM(t, randomTxID(t), buildTestITAV(t, unknownOID, nil))
@@ -722,7 +722,7 @@ func TestHandleCMP_GenM_UnknownInfoType(t *testing.T) {
 // acknowledges with pkiConf — before this it fell through the dispatch default
 // and was answered with "unsupported body tag 23", i.e. an error about an error.
 func TestHandleCMP_EEError(t *testing.T) {
-	router, _, _ := newOptionsRouter(t, models.EnrollmentOptionsLWCRFC9483{})
+	router, _, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{})
 
 	statusInfo := seqDER(t, mustMarshal(t, 2), mustMarshal(t, asn1.BitString{Bytes: []byte{0x04}, BitLength: 6}))
 	errBody := ctxDER(t, corecmp.BodyTagError, seqDER(t, statusInfo))

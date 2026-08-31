@@ -7,32 +7,40 @@ import (
 	"time"
 )
 
-// newCMPSettings returns a minimal DMSSettings whose EnrollmentProtocol is CMP
-// and whose nested/flat CMP fields are all zero — i.e. what a legacy (flat)
-// row deserializes into before resolution.
+// newCMPSettings returns a minimal DMSSettings whose Protocol is CMP and whose
+// nested/flat CMP fields are all zero — i.e. what an unconfigured row
+// deserializes into before resolution.
 func newCMPSettings() DMSSettings {
 	return DMSSettings{
-		EnrollmentSettings: EnrollmentSettings{
-			EnrollmentProtocol: CMP,
-		},
+		Protocol: CMP,
+		CMP:      &CMPSettings{},
 	}
 }
 
 func TestResolveCMPSettings_NonCMPUntouched(t *testing.T) {
-	in := DMSSettings{
-		EnrollmentSettings: EnrollmentSettings{EnrollmentProtocol: EST},
-	}
+	in := DMSSettings{Protocol: EST, EST: &ESTSettings{}}
 	out := ResolveCMPSettings(in)
-	// The nested CMP structs must remain zero for a non-CMP DMS.
-	if out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.IR.RegistrationMode != "" {
-		t.Fatalf("expected non-CMP DMS to be left untouched, got IR=%+v",
-			out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.IR)
+	// An EST DMS must come back with no CMP container conjured up.
+	if out.CMP != nil {
+		t.Fatalf("expected non-CMP DMS to be left untouched, got CMP=%+v", out.CMP)
+	}
+	if out.EST == nil {
+		t.Fatal("expected the EST container to survive resolution")
+	}
+}
+
+func TestResolveCMPSettings_NilCMPContainerUntouched(t *testing.T) {
+	// Protocol says CMP but the container is missing — resolution must not
+	// panic dereferencing it; normalizeProtocolSettings is what allocates it.
+	out := ResolveCMPSettings(DMSSettings{Protocol: CMP})
+	if out.CMP != nil {
+		t.Fatalf("expected nil CMP container to stay nil, got %+v", out.CMP)
 	}
 }
 
 func TestResolveCMPSettings_FreshDefaults(t *testing.T) {
 	out := ResolveCMPSettings(newCMPSettings())
-	opts := out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	opts := out.CMP.EnrollmentSettings
 
 	// Enum defaults.
 	if opts.IR.RegistrationMode != CMPOpRegistrationModeInherit {
@@ -127,9 +135,6 @@ func TestResolveCMPSettings_FreshDefaults(t *testing.T) {
 	if !slices.Equal(opts.RR.AllowedReasons, wantReasons) {
 		t.Errorf("RR.AllowedReasons = %v, want %v", opts.RR.AllowedReasons, wantReasons)
 	}
-	if opts.KUR.AdditionalValidationCAIDs == nil {
-		t.Error("KUR.AdditionalValidationCAIDs is nil, want non-nil empty slice")
-	}
 	if opts.CCR.TrustedRequesterCAIDs == nil || opts.CCR.SubjectConstraints.AllowedDNPatterns == nil || opts.CCR.SubjectConstraints.AllowedDNSSuffixes == nil {
 		t.Error("CCR slices are nil, want non-nil empty slices")
 	}
@@ -152,9 +157,9 @@ func TestResolveCMPSettings_FreshDefaults(t *testing.T) {
 func TestResolveCMPSettings_CKGBridge(t *testing.T) {
 	// (a) legacy flat toggle on → mirrored into ir/cr.
 	in := newCMPSettings()
-	in.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.ServerKeyGenEnabled = true
+	in.CMP.EnrollmentSettings.ServerKeyGenEnabled = true
 	out := ResolveCMPSettings(in)
-	o := out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	o := out.CMP.EnrollmentSettings
 	if !o.ServerKeyGenEnabled || !o.IR.CentralKeyGeneration.Enabled || !o.CR.CentralKeyGeneration.Enabled {
 		t.Errorf("CKG legacy→nested mirror failed: flat=%v ir=%v cr=%v",
 			o.ServerKeyGenEnabled, o.IR.CentralKeyGeneration.Enabled, o.CR.CentralKeyGeneration.Enabled)
@@ -162,71 +167,59 @@ func TestResolveCMPSettings_CKGBridge(t *testing.T) {
 
 	// (b) nested ir toggle on → mirrored back into the flat gate.
 	in2 := newCMPSettings()
-	in2.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.IR.CentralKeyGeneration.Enabled = true
+	in2.CMP.EnrollmentSettings.IR.CentralKeyGeneration.Enabled = true
 	out2 := ResolveCMPSettings(in2)
-	o2 := out2.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	o2 := out2.CMP.EnrollmentSettings
 	if !o2.ServerKeyGenEnabled || !o2.CR.CentralKeyGeneration.Enabled {
 		t.Errorf("CKG nested→flat mirror failed: flat=%v cr=%v",
 			o2.ServerKeyGenEnabled, o2.CR.CentralKeyGeneration.Enabled)
 	}
 }
 
-func TestResolveCMPSettings_KURBridge_FromReEnrollment(t *testing.T) {
-	// Legacy row: only ReEnrollmentSettings populated, nested KUR empty.
+func TestResolveCMPSettings_ReEnrollmentIsIndependent(t *testing.T) {
+	// CMP renewal policy lives on its own ReEnrollmentSettings block and must
+	// survive resolution verbatim. It used to be reshaped onto the kur block
+	// (and vice versa) by a bridge; nothing may rewrite it now.
 	in := newCMPSettings()
-	in.ReEnrollmentSettings = ReEnrollmentSettings{
-		ReEnrollmentDelta:       TimeDuration(48 * time.Hour),
-		EnableExpiredRenewal:    true,
-		AdditionalValidationCAs: []string{"ca-1", "ca-2"},
-		RevokeOnReEnrollment:    true,
+	in.CMP.ReEnrollmentSettings = CMPReEnrollmentSettings{
+		CommonReEnrollmentSettings: CommonReEnrollmentSettings{
+			ReEnrollmentDelta:       TimeDuration(48 * time.Hour),
+			EnableExpiredRenewal:    true,
+			AdditionalValidationCAs: []string{"ca-1", "ca-2"},
+			RevokeOnReEnrollment:    true,
+		},
 	}
-	out := ResolveCMPSettings(in)
-	kur := out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.KUR
+	in.CMP.EnrollmentSettings.KUR = CMPKURSettings{
+		Enabled:   true,
+		KeyPolicy: CMPKeyPolicyPermitReuse, // marks the block non-fresh
+	}
 
-	if kur.RenewalWindow != TimeDuration(48*time.Hour) {
-		t.Errorf("KUR.RenewalWindow = %v, want 48h from ReEnrollmentDelta", time.Duration(kur.RenewalWindow))
+	out := ResolveCMPSettings(in)
+	rs := out.CMP.ReEnrollmentSettings
+
+	if rs.ReEnrollmentDelta != TimeDuration(48*time.Hour) {
+		t.Errorf("ReEnrollmentDelta = %v, want 48h preserved", time.Duration(rs.ReEnrollmentDelta))
 	}
-	if !kur.AllowExpiredCertificate {
-		t.Error("KUR.AllowExpiredCertificate = false, want true from EnableExpiredRenewal")
+	if !rs.EnableExpiredRenewal {
+		t.Error("EnableExpiredRenewal = false, want true preserved")
 	}
-	if !kur.RevokeSupersededCertificate {
-		t.Error("KUR.RevokeSupersededCertificate = false, want true from RevokeOnReEnrollment")
+	if !rs.RevokeOnReEnrollment {
+		t.Error("RevokeOnReEnrollment = false, want true preserved")
 	}
-	if len(kur.AdditionalValidationCAIDs) != 2 {
-		t.Errorf("KUR.AdditionalValidationCAIDs = %v, want [ca-1 ca-2]", kur.AdditionalValidationCAIDs)
+	if !slices.Equal(rs.AdditionalValidationCAs, []string{"ca-1", "ca-2"}) {
+		t.Errorf("AdditionalValidationCAs = %v, want [ca-1 ca-2]", rs.AdditionalValidationCAs)
+	}
+
+	// The kur block keeps only its per-operation concerns, untouched.
+	if kp := out.CMP.EnrollmentSettings.KUR.KeyPolicy; kp != CMPKeyPolicyPermitReuse {
+		t.Errorf("KUR.KeyPolicy = %q, want permit_reuse preserved", kp)
 	}
 }
 
-func TestResolveCMPSettings_KURBridge_ToReEnrollment(t *testing.T) {
-	// New-shape row: nested KUR populated, ReEnrollmentSettings empty → values
-	// must be written back into ReEnrollmentSettings so live enforcement honours them.
-	in := newCMPSettings()
-	in.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.KUR = CMPKURSettings{
-		Enabled:                     true,
-		RenewalWindow:               TimeDuration(12 * time.Hour),
-		AllowExpiredCertificate:     true,
-		AdditionalValidationCAIDs:   []string{"reenroll-ca"},
-		RevokeSupersededCertificate: true,
-		KeyPolicy:                   CMPKeyPolicyRequireNew, // marks the block non-fresh
-	}
-	out := ResolveCMPSettings(in)
-	rs := out.ReEnrollmentSettings
-
-	if rs.ReEnrollmentDelta != TimeDuration(12*time.Hour) {
-		t.Errorf("ReEnrollmentDelta = %v, want 12h from KUR.RenewalWindow", time.Duration(rs.ReEnrollmentDelta))
-	}
-	if !rs.EnableExpiredRenewal {
-		t.Error("EnableExpiredRenewal = false, want true from KUR")
-	}
-	if !rs.RevokeOnReEnrollment {
-		t.Error("RevokeOnReEnrollment = false, want true from KUR")
-	}
-	if len(rs.AdditionalValidationCAs) != 1 || rs.AdditionalValidationCAs[0] != "reenroll-ca" {
-		t.Errorf("AdditionalValidationCAs = %v, want [reenroll-ca]", rs.AdditionalValidationCAs)
-	}
-	// KeyPolicy (persisted-only) must survive.
-	if out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.KUR.KeyPolicy != CMPKeyPolicyRequireNew {
-		t.Errorf("KUR.KeyPolicy = %q, want require_new_key preserved", out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.KUR.KeyPolicy)
+func TestResolveCMPSettings_ReEnrollmentSliceConcretized(t *testing.T) {
+	out := ResolveCMPSettings(newCMPSettings())
+	if out.CMP.ReEnrollmentSettings.AdditionalValidationCAs == nil {
+		t.Error("ReEnrollmentSettings.AdditionalValidationCAs is nil, want non-nil empty slice")
 	}
 }
 
@@ -234,12 +227,12 @@ func TestResolveCMPSettings_PreservesExplicitFalse(t *testing.T) {
 	// A block that has already round-tripped (enum set) must keep an explicit
 	// Enabled=false rather than being re-defaulted to true.
 	in := newCMPSettings()
-	in.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.IR = CMPIRSettings{
+	in.CMP.EnrollmentSettings.IR = CMPIRSettings{
 		Enabled:          false,
 		RegistrationMode: CMPOpRegistrationModeJITP, // non-empty → not fresh
 	}
 	out := ResolveCMPSettings(in)
-	if out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.IR.Enabled {
+	if out.CMP.EnrollmentSettings.IR.Enabled {
 		t.Error("IR.Enabled was re-defaulted to true; explicit false must be preserved")
 	}
 }
@@ -254,32 +247,43 @@ func TestResolveCMPSettings_Idempotent(t *testing.T) {
 	}
 }
 
-func TestResolveCMPSettings_LegacyJSONRoundTrip(t *testing.T) {
-	// A serialized legacy flat CMP blob (no ir/cr/... keys) must deserialize and
-	// resolve without panic or data loss of the flat general fields.
-	legacy := `{
-		"enrollment_settings": {
-			"protocol": "CMP_RFC9483",
-			"lwc_rfc9483_settings": {
+func TestResolveCMPSettings_JSONRoundTrip(t *testing.T) {
+	// A minimal CMP blob (no ir/cr/... keys) must deserialize into the
+	// protocol-scoped shape and resolve without panic or loss of the general
+	// fields. The common enrollment fields are embedded, so they sit flat
+	// alongside the CMP-specific ones rather than under a nested object.
+	raw := `{
+		"protocol": "CMP_RFC9483",
+		"cmp_settings": {
+			"enrollment_settings": {
 				"auth_mode": "CLIENT_CERTIFICATE",
 				"enforce_popo": true,
 				"server_key_gen_enabled": true,
-				"workflow": "phased"
+				"workflow": "phased",
+				"enrollment_ca": "enroll-ca",
+				"registration_mode": "JITP"
+			},
+			"reenrollment_settings": {
+				"reenrollment_delta": "24h0m0s",
+				"revoke_on_reenrollment": true
 			}
-		},
-		"reenrollment_settings": {
-			"reenrollment_delta": "24h0m0s",
-			"revoke_on_reenrollment": true
 		}
 	}`
 	var s DMSSettings
-	if err := json.Unmarshal([]byte(legacy), &s); err != nil {
-		t.Fatalf("legacy blob failed to deserialize: %v", err)
+	if err := json.Unmarshal([]byte(raw), &s); err != nil {
+		t.Fatalf("blob failed to deserialize: %v", err)
 	}
-	out := ResolveCMPSettings(s)
-	o := out.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	if s.CMP == nil {
+		t.Fatal("cmp_settings did not deserialize into the CMP container")
+	}
+	if s.EST != nil {
+		t.Error("est_settings must stay nil for a CMP blob")
+	}
 
-	// Flat general fields survive.
+	out := ResolveCMPSettings(s)
+	o := out.CMP.EnrollmentSettings
+
+	// CMP-specific general fields survive.
 	if o.AuthMode != CMPAuthModeClientCertificate {
 		t.Errorf("AuthMode lost: %q", o.AuthMode)
 	}
@@ -289,15 +293,23 @@ func TestResolveCMPSettings_LegacyJSONRoundTrip(t *testing.T) {
 	if o.Workflow != CMPWorkflowPhased {
 		t.Errorf("Workflow lost: %q", o.Workflow)
 	}
-	// CKG legacy flag mirrored.
+	// Embedded common fields survive alongside them.
+	if o.EnrollmentCA != "enroll-ca" {
+		t.Errorf("EnrollmentCA lost: %q", o.EnrollmentCA)
+	}
+	if o.RegistrationMode != JITP {
+		t.Errorf("RegistrationMode lost: %q", o.RegistrationMode)
+	}
+	// CKG flag mirrored into the per-operation blocks.
 	if !o.IR.CentralKeyGeneration.Enabled {
-		t.Error("legacy server_key_gen_enabled not mirrored into IR CKG")
+		t.Error("server_key_gen_enabled not mirrored into IR CKG")
 	}
-	// KUR bridge picked up the legacy re-enrollment values.
-	if o.KUR.RenewalWindow != TimeDuration(24*time.Hour) {
-		t.Errorf("KUR.RenewalWindow = %v, want 24h from legacy ReEnrollmentDelta", time.Duration(o.KUR.RenewalWindow))
+	// Re-enrollment policy is read straight from its own block.
+	rs := out.CMP.ReEnrollmentSettings
+	if rs.ReEnrollmentDelta != TimeDuration(24*time.Hour) {
+		t.Errorf("ReEnrollmentDelta = %v, want 24h", time.Duration(rs.ReEnrollmentDelta))
 	}
-	if !o.KUR.RevokeSupersededCertificate {
-		t.Error("KUR.RevokeSupersededCertificate not bridged from legacy revoke_on_reenrollment")
+	if !rs.RevokeOnReEnrollment {
+		t.Error("RevokeOnReEnrollment lost")
 	}
 }

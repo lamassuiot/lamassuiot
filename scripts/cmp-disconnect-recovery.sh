@@ -93,10 +93,10 @@ echo "[1/6] Reading DMS configuration..."
 DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
     || fail "cannot fetch DMS ${DMS_ID} at ${SERVER}"
 
-PROT_SERIAL=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.protection_certificate // empty')
-AUTH_MODE=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.auth_mode // "NO_AUTH"')
-ENROLLMENT_CA=$(echo "${DMS_JSON}"  | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.enrollment_ca // empty')
-ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
+PROT_SERIAL=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.protection_certificate // empty')
+AUTH_MODE=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.auth_mode // "NO_AUTH"')
+ENROLLMENT_CA=$(echo "${DMS_JSON}"  | jq -r '.settings.cmp_settings.enrollment_settings.enrollment_ca // empty')
+ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.accept_implicit // false')
 if [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE" ] || [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK" ]; then
     ENFORCE_PROT="true"
 else
@@ -109,7 +109,7 @@ info "enrollment_ca              : ${ENROLLMENT_CA:-<empty>}"
 info "protection_certificate     : ${PROT_SERIAL:-<empty>}"
 
 if [ "${ACCEPT_IMPLICIT}" != "true" ]; then
-    fail "DMS ${DMS_ID} has accept_implicit=false. This test needs accept_implicit=true so openssl skips the certConf round-trip — otherwise the server's handleCertConf would SelectAndDelete the row immediately after IR, leaving nothing for pollReq to recover. Update the DMS (PUT /api/dmsmanager/v1/dms/${DMS_ID} with lwc_rfc9483_settings.accept_implicit=true) and re-run."
+    fail "DMS ${DMS_ID} has accept_implicit=false. This test needs accept_implicit=true so openssl skips the certConf round-trip — otherwise the server's handleCertConf would SelectAndDelete the row immediately after IR, leaving nothing for pollReq to recover. Update the DMS (PUT /api/dmsmanager/v1/dms/${DMS_ID} with cmp_settings.enrollment_settings.accept_implicit=true) and re-run."
 fi
 
 # Build trust anchor / -srvcert just like cmp-full-lifecycle.sh does.

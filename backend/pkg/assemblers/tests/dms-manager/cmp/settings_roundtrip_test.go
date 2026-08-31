@@ -12,19 +12,18 @@ import (
 )
 
 // TestCMPSettings_NestedRoundTrip proves the nested per-operation CMP schema
-// (RFC011) persists through Create → Get and that the two LIVE bridges resolve
-// on the way out:
+// (RFC011) persists through Create → Get and that the remaining LIVE bridge
+// resolves on the way out:
 //
 //   - defaulting: a DMS created with only the flat/general CMP fields comes back
 //     with every nested operation block fully populated (enum + Enabled
-//     defaults), so legacy/partial rows project into the new shape.
+//     defaults), so partial rows project into the new shape.
 //   - CKG bridge: the flat ServerKeyGenEnabled toggle is mirrored into
 //     ir/cr.central_key_generation.enabled.
-//   - KUR bridge: nested KUR fields (renewal_window, allow_expired_certificate,
-//     revoke_superseded_certificate, additional_validation_ca_ids) reshape onto
-//     the shared ReEnrollmentSettings that the live re-enrollment enforcement
-//     already consumes, with the non-zero nested value winning over the
-//     create-time ReEnrollmentSettings value.
+//   - re-enrollment independence: cmp_settings.reenrollment_settings is stored
+//     and read back verbatim. It used to be reshaped from the nested kur block
+//     (and vice versa); now each stands alone, so a create-time value must
+//     survive untouched no matter what the kur block says.
 func TestCMPSettings_NestedRoundTrip(t *testing.T) {
 	f := newCMPTestFixture(t)
 	ctx := context.Background()
@@ -33,17 +32,19 @@ func TestCMPSettings_NestedRoundTrip(t *testing.T) {
 		ID:   "cmp-dms-nested-roundtrip",
 		Name: "CMP Nested Settings Round-Trip",
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: models.CMP,
-				EnrollmentCA:       f.enrollCA.ID,
-				RegistrationMode:   models.PreRegistration,
-				DeviceProvisionProfile: models.DeviceProvisionProfile{
-					Icon:      "cmp",
-					IconColor: "#004466",
-					Metadata:  map[string]any{},
-					Tags:      []string{"cmp"},
-				},
-				EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+			Protocol: models.CMP,
+			CMP: &models.CMPSettings{
+				EnrollmentSettings: models.CMPEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnrollmentCA:     f.enrollCA.ID,
+						RegistrationMode: models.PreRegistration,
+						DeviceProvisionProfile: models.DeviceProvisionProfile{
+							Icon:      "cmp",
+							IconColor: "#004466",
+							Metadata:  map[string]any{},
+							Tags:      []string{"cmp"},
+						},
+					},
 					AuthMode: models.CMPAuthModeClientCertificate,
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ValidationCAs: []string{f.enrollCA.ID},
@@ -52,31 +53,29 @@ func TestCMPSettings_NestedRoundTrip(t *testing.T) {
 					// Flat CKG toggle ON — must mirror into nested ir/cr CKG.
 					ServerKeyGenEnabled: true,
 					// Nested KUR block, marked non-fresh via KeyPolicy so its
-					// explicit values survive resolution and win the bridge.
+					// explicit values survive resolution.
 					KUR: models.CMPKURSettings{
-						Enabled:                     true,
-						KeyPolicy:                   models.CMPKeyPolicyRequireNew,
-						RenewalWindow:               models.TimeDuration(48 * time.Hour),
-						AllowExpiredCertificate:     true,
-						RevokeSupersededCertificate: true,
-						AdditionalValidationCAIDs:   []string{"kur-extra-ca"},
+						Enabled:              true,
+						KeyPolicy:            models.CMPKeyPolicyRequireNew,
+						IdentityChangePolicy: models.CMPIdentityChangePolicySANOnly,
 					},
 				},
-			},
-			// Create-time ReEnrollmentSettings deliberately DIFFER from the
-			// nested KUR block so the round-trip proves the nested (non-zero)
-			// values win the bridge rather than the other way round.
-			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				AdditionalValidationCAs:     []string{},
-				ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-				EnableExpiredRenewal:        false,
-				RevokeOnReEnrollment:        false,
-				PreventiveReEnrollmentDelta: models.TimeDuration(3 * time.Minute),
-				CriticalReEnrollmentDelta:   models.TimeDuration(2 * time.Minute),
-			},
-			CADistributionSettings: models.CADistributionSettings{
-				IncludeLamassuSystemCA: true,
-				IncludeEnrollmentCA:    true,
+				// The renewal policy is independent of the kur block above and
+				// must round-trip exactly as written.
+				ReEnrollmentSettings: models.CMPReEnrollmentSettings{
+					CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+						AdditionalValidationCAs:     []string{"kur-extra-ca"},
+						ReEnrollmentDelta:           models.TimeDuration(48 * time.Hour),
+						EnableExpiredRenewal:        true,
+						RevokeOnReEnrollment:        true,
+						PreventiveReEnrollmentDelta: models.TimeDuration(3 * time.Minute),
+						CriticalReEnrollmentDelta:   models.TimeDuration(2 * time.Minute),
+					},
+				},
+				CADistributionSettings: models.CADistributionSettings{
+					IncludeLamassuSystemCA: true,
+					IncludeEnrollmentCA:    true,
+				},
 			},
 		},
 	})
@@ -86,7 +85,7 @@ func TestCMPSettings_NestedRoundTrip(t *testing.T) {
 	got, err := f.dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: created.ID})
 	require.NoError(t, err)
 
-	opts := got.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	opts := got.Settings.CMP.EnrollmentSettings
 
 	// --- defaulting: nested blocks fully populated on read -----------------
 	assert.Equal(t, models.CMPOpRegistrationModeInherit, opts.IR.RegistrationMode,
@@ -103,21 +102,21 @@ func TestCMPSettings_NestedRoundTrip(t *testing.T) {
 	assert.True(t, opts.IR.CentralKeyGeneration.Enabled, "CKG must mirror into IR")
 	assert.True(t, opts.CR.CentralKeyGeneration.Enabled, "CKG must mirror into CR")
 
-	// --- KUR persisted-only field survives ---------------------------------
+	// --- per-operation KUR fields survive ----------------------------------
 	assert.Equal(t, models.CMPKeyPolicyRequireNew, opts.KUR.KeyPolicy,
-		"persisted-only KUR.KeyPolicy must round-trip unchanged")
+		"KUR.KeyPolicy must round-trip unchanged")
+	assert.Equal(t, models.CMPIdentityChangePolicySANOnly, opts.KUR.IdentityChangePolicy,
+		"KUR.IdentityChangePolicy must round-trip unchanged")
 
-	// --- KUR bridge: nested values reshaped onto ReEnrollmentSettings ------
-	rs := got.Settings.ReEnrollmentSettings
-	assert.Equal(t, models.TimeDuration(48*time.Hour), rs.ReEnrollmentDelta,
-		"nested KUR.RenewalWindow must win over create-time ReEnrollmentDelta")
-	assert.True(t, rs.EnableExpiredRenewal, "KUR.AllowExpiredCertificate must bridge to EnableExpiredRenewal")
-	assert.True(t, rs.RevokeOnReEnrollment, "KUR.RevokeSupersededCertificate must bridge to RevokeOnReEnrollment")
-	assert.Equal(t, []string{"kur-extra-ca"}, rs.AdditionalValidationCAs,
-		"KUR.AdditionalValidationCAIDs must bridge to ReEnrollmentSettings.AdditionalValidationCAs")
+	// --- re-enrollment policy round-trips verbatim -------------------------
+	rs := got.Settings.CMP.ReEnrollmentSettings
+	assert.Equal(t, models.TimeDuration(48*time.Hour), rs.ReEnrollmentDelta)
+	assert.True(t, rs.EnableExpiredRenewal)
+	assert.True(t, rs.RevokeOnReEnrollment)
+	assert.Equal(t, []string{"kur-extra-ca"}, rs.AdditionalValidationCAs)
+	assert.Equal(t, models.TimeDuration(3*time.Minute), rs.PreventiveReEnrollmentDelta)
+	assert.Equal(t, models.TimeDuration(2*time.Minute), rs.CriticalReEnrollmentDelta)
 
-	// --- KUR bridge is symmetric: resolved values also written back to KUR --
-	assert.True(t, opts.KUR.AllowExpiredCertificate)
-	assert.True(t, opts.KUR.RevokeSupersededCertificate)
-	assert.Equal(t, models.TimeDuration(48*time.Hour), opts.KUR.RenewalWindow)
+	// The EST container must stay absent on a CMP DMS.
+	assert.Nil(t, got.Settings.EST, "a CMP DMS must not carry est_settings")
 }

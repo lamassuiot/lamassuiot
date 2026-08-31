@@ -192,7 +192,7 @@ type LightweightCMPCrossCertRequesterValidator interface {
 
 // LightweightCMPKGARecipientValidator restricts which certificates a central
 // key generation (CKG) response may encrypt the freshly generated private key
-// to, via EnrollmentOptionsLWCRFC9483.CKGTrustedEncryptionCAs. The CMP
+// to, via CMPEnrollmentSettings.CKGTrustedEncryptionCAs. The CMP
 // controller uses this before generating any key material: CKG hands over
 // live key material to whoever it trusts as "recipient", so — unlike plain
 // issuance — this check is enforced regardless of the DMS's AuthMode
@@ -201,7 +201,7 @@ type LightweightCMPKGARecipientValidator interface {
 	// LWCValidateKGARecipient returns nil when recipient chain-validates
 	// against CKG.TrustedEncryptionCAs (or, when that list is empty, against
 	// the DMS's general CMP trust boundary — see
-	// EnrollmentOptionsLWCRFC9483.CKGTrustedEncryptionCAs for the fallback
+	// CMPEnrollmentSettings.CKGTrustedEncryptionCAs for the fallback
 	// rationale).
 	LWCValidateKGARecipient(ctx context.Context, aps string, recipient *x509.Certificate) error
 }
@@ -210,7 +210,7 @@ type LightweightCMPKGARecipientValidator interface {
 // DMS-level CMP settings the controller needs to make dispatch decisions
 // (e.g. whether implicit confirmation is allowed).
 // The controller must not cache this value across requests.
-type LWCEnrollmentOptions = models.EnrollmentOptionsLWCRFC9483
+type LWCEnrollmentOptions = models.CMPEnrollmentSettings
 
 // ---------------------------------------------------------------------------
 // RevokeCertificate

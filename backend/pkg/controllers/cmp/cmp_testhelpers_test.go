@@ -72,16 +72,16 @@ import (
 // sites, callers that did NOT explicitly opt into requiring POPO keep it
 // optional post-resolution; a test specifically exercising POPO enforcement
 // sets IR/CR.ProofOfPossession.Required itself and keeps that value.
-func resolveTestCMPOpts(opts models.EnrollmentOptionsLWCRFC9483) models.EnrollmentOptionsLWCRFC9483 {
+func resolveTestCMPOpts(opts models.CMPEnrollmentSettings) models.CMPEnrollmentSettings {
 	irRequiredBefore := opts.IR.ProofOfPossession.Required
 	crRequiredBefore := opts.CR.ProofOfPossession.Required
 	resolved := models.ResolveCMPSettings(models.DMSSettings{
-		EnrollmentSettings: models.EnrollmentSettings{
-			EnrollmentProtocol:          models.CMP,
-			EnrollmentOptionsLWCRFC9483: opts,
+		Protocol: models.CMP,
+		CMP: &models.CMPSettings{
+			EnrollmentSettings: opts,
 		},
 	})
-	out := resolved.EnrollmentSettings.EnrollmentOptionsLWCRFC9483
+	out := resolved.CMP.EnrollmentSettings
 	if !irRequiredBefore {
 		out.IR.ProofOfPossession.Required = false
 	}
@@ -93,13 +93,13 @@ func resolveTestCMPOpts(opts models.EnrollmentOptionsLWCRFC9483) models.Enrollme
 
 // resolvedOpts is resolveTestCMPOpts for call sites that build the mock's
 // LWCGetEnrollmentOptions return value as an inline literal.
-func resolvedOpts(opts models.EnrollmentOptionsLWCRFC9483) *models.EnrollmentOptionsLWCRFC9483 {
+func resolvedOpts(opts models.CMPEnrollmentSettings) *models.CMPEnrollmentSettings {
 	resolved := resolveTestCMPOpts(opts)
 	return &resolved
 }
 
 // newOptionsRouter registers only LWCGetEnrollmentOptions for "test-dms".
-func newOptionsRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
+func newOptionsRouter(t *testing.T, opts models.CMPEnrollmentSettings) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
 	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}
@@ -109,7 +109,7 @@ func newOptionsRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483) (*g
 }
 
 // newEnrollRouter registers LWCGetEnrollmentOptions + LWCEnroll for "test-dms".
-func newEnrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issued *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
+func newEnrollRouter(t *testing.T, opts models.CMPEnrollmentSettings, issued *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
 	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}
@@ -120,7 +120,7 @@ func newEnrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issu
 }
 
 // newReenrollRouter registers LWCGetEnrollmentOptions + LWCReenroll for "test-dms".
-func newReenrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issued *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
+func newReenrollRouter(t *testing.T, opts models.CMPEnrollmentSettings, issued *x509.Certificate) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
 	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}
@@ -131,7 +131,7 @@ func newReenrollRouter(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, is
 }
 
 // newEnrollRouterWFX is newEnrollRouter with a WFX reporter attached.
-func newEnrollRouterWFX(t *testing.T, opts models.EnrollmentOptionsLWCRFC9483, issued *x509.Certificate, reporter cmpwfx.CMPReporter) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
+func newEnrollRouterWFX(t *testing.T, opts models.CMPEnrollmentSettings, issued *x509.Certificate, reporter cmpwfx.CMPReporter) (*gin.Engine, *inMemoryCMPStore, *cmpmock.MockLightweightCMPService) {
 	t.Helper()
 	opts = resolveTestCMPOpts(opts)
 	svc := &cmpmock.MockLightweightCMPService{}

@@ -46,8 +46,8 @@ echo "=== CMP IR (no certConf) → DMS ${DMS_ID} @ ${SERVER} ==="
 # anything. accept_implicit=true would make the server confirm on its own.
 DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
     || fail "cannot fetch DMS ${DMS_ID}"
-ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
-CONFIRM_TIMEOUT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.confirmation_timeout // "0s"')
+ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.accept_implicit // false')
+CONFIRM_TIMEOUT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.confirmation_timeout // "0s"')
 [ "${ACCEPT_IMPLICIT}" = "true" ] && fail "DMS has accept_implicit=true — server would auto-confirm. Set accept_implicit=false on ${DMS_ID} and retry."
 
 # Provision a fresh signer (chain-validated by the DMS) and a device key.

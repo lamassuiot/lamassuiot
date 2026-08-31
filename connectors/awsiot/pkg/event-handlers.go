@@ -263,7 +263,24 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 	}
 
 	if isUpdateEvent {
-		changedManagedCAs := !lms_slices.UnorderedEqualContent(updatedDMS.Previous.Settings.CADistributionSettings.ManagedCAs, updatedDMS.Updated.Settings.CADistributionSettings.ManagedCAs, func(e1, e2 string) bool { return e1 == e2 })
+		// The managed-CA list lives inside whichever protocol container the DMS
+		// uses; a DMS that switched protocols reports its new container's list,
+		// which is the correct trust anchor set to compare against.
+		managedCAs := func(s models.DMSSettings) []string {
+			switch s.Protocol {
+			case models.CMP:
+				if s.CMP != nil {
+					return s.CMP.CADistributionSettings.ManagedCAs
+				}
+			case models.EST:
+				if s.EST != nil {
+					return s.EST.CADistributionSettings.ManagedCAs
+				}
+			}
+			return nil
+		}
+
+		changedManagedCAs := !lms_slices.UnorderedEqualContent(managedCAs(updatedDMS.Previous.Settings), managedCAs(updatedDMS.Updated.Settings), func(e1, e2 string) bool { return e1 == e2 })
 		if changedManagedCAs {
 			_, err = svc.GetDeviceService().GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
 				DMSID: dms.ID,

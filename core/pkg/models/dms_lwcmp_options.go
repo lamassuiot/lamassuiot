@@ -13,9 +13,37 @@ const (
 	CMPAuthModeNoAuth                      CMPAuthMode = "NO_AUTH"
 )
 
-// EnrollmentOptionsLWCRFC9483 holds CMP-specific enrollment settings as defined
-// by RFC 9483 (Lightweight CMP Profile) and RFC 4210.
-type EnrollmentOptionsLWCRFC9483 struct {
+// CMPSettings is the complete configuration of a DMS that enrolls over CMP
+// (RFC 9483 Lightweight CMP Profile / RFC 4210). It is reachable only via
+// DMSSettings.CMP, which is non-nil exactly when DMSSettings.Protocol is CMP.
+//
+// There is deliberately no server_keygen_settings here: CMP central key
+// generation is gated by CMPEnrollmentSettings.ServerKeyGenEnabled and takes
+// its key algorithm from the request itself (RFC 9483 §4.1.6), never from a
+// DMS-configured key type/size the way EST's ServerKeyGen does.
+type CMPSettings struct {
+	EnrollmentSettings     CMPEnrollmentSettings   `json:"enrollment_settings"`
+	ReEnrollmentSettings   CMPReEnrollmentSettings `json:"reenrollment_settings"`
+	CADistributionSettings CADistributionSettings  `json:"ca_distribution_settings"`
+	IssuanceProfileID      string                  `json:"issuance_profile_id"`
+	IssuanceProfile        *IssuanceProfile        `json:"issuance_profile"`
+}
+
+// CMPReEnrollmentSettings is the CMP re-enrollment (kur, RFC 9483 §4.1.3)
+// policy. It holds what used to be reshaped by hand onto a shared, EST-shaped
+// ReEnrollmentSettings: CMPKURSettings now keeps only the per-operation CMP
+// concerns (key policy, identity-change policy, workflow overrides) and the
+// renewal policy proper lives here, symmetric with ESTReEnrollmentSettings.
+type CMPReEnrollmentSettings struct {
+	CommonReEnrollmentSettings
+}
+
+// CMPEnrollmentSettings holds CMP-specific enrollment settings as defined
+// by RFC 9483 (Lightweight CMP Profile) and RFC 4210, plus the shared
+// enrollment knobs.
+type CMPEnrollmentSettings struct {
+	CommonEnrollmentSettings
+
 	// AuthMode / AuthOptionsMTLS / AuthOptionsExternalWebhook are the shared
 	// enrollment authentication policy. CMP supports the same four modes as EST
 	// — NO_AUTH, CLIENT_CERTIFICATE, EXTERNAL_WEBHOOK, and both — validated by
@@ -158,7 +186,7 @@ type EnrollmentOptionsLWCRFC9483 struct {
 }
 
 // AuthSettings returns the shared authentication policy for this CMP DMS.
-func (o EnrollmentOptionsLWCRFC9483) AuthSettings() EnrollmentAuthSettings {
+func (o CMPEnrollmentSettings) AuthSettings() EnrollmentAuthSettings {
 	return EnrollmentAuthSettings{
 		AuthMode:                   EnrollmentAuthMode(o.AuthMode),
 		AuthOptionsMTLS:            o.AuthOptionsMTLS,
@@ -167,7 +195,7 @@ func (o EnrollmentOptionsLWCRFC9483) AuthSettings() EnrollmentAuthSettings {
 }
 
 // CMPWorkflow selects the CMP transaction lifecycle a DMS follows. See the
-// Workflow field on EnrollmentOptionsLWCRFC9483.
+// Workflow field on CMPEnrollmentSettings.
 type CMPWorkflow string
 
 const (

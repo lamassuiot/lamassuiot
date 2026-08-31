@@ -21,13 +21,23 @@ type DMS struct {
 	Settings     DMSSettings    `json:"settings" gorm:"serializer:json"`
 }
 
+// DMSSettings is protocol-scoped: Protocol selects the enrollment protocol, and
+// exactly one of EST/CMP carries every setting for it. The two containers are
+// mutually exclusive — normalizeProtocolSettings (backend/pkg/services/
+// dmsmanager.go) allocates the selected one and nils the other on every
+// create/update, so any DMS read back from storage has precisely one non-nil.
+//
+// Settings that both protocols happen to need (CA distribution, the enrollment
+// CA, the issuance profile, the re-enrollment monitoring deltas) are duplicated
+// into each container rather than hoisted to a shared block: a DMS only ever
+// speaks one protocol, so there is no configuration to share, and keeping the
+// containers self-contained means the JSON for a given protocol reads top to
+// bottom with nothing to cross-reference. Consumers that are protocol-agnostic
+// (CACerts, BindIdentityToDevice, resolveIssuanceProfile) switch on Protocol.
 type DMSSettings struct {
-	ServerKeyGen           ServerKeyGenSettings   `json:"server_keygen_settings"`
-	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
-	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
-	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
-	IssuanceProfileID      string                 `json:"issuance_profile_id"`
-	IssuanceProfile        *IssuanceProfile       `json:"issuance_profile"`
+	Protocol EnrollmentProto `json:"protocol"`
+	EST      *ESTSettings    `json:"est_settings,omitempty"`
+	CMP      *CMPSettings    `json:"cmp_settings,omitempty"`
 }
 
 type EnrollmentProto string
@@ -61,15 +71,28 @@ const (
 	PreRegistration RegistrationMode = "PRE_REGISTRATION"
 )
 
-type EnrollmentSettings struct {
-	EnrollmentProtocol          EnrollmentProto             `json:"protocol"`
-	EnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"est_rfc7030_settings"`
-	EnrollmentOptionsLWCRFC9483 EnrollmentOptionsLWCRFC9483 `json:"lwc_rfc9483_settings"`
-	DeviceProvisionProfile      DeviceProvisionProfile      `json:"device_provisioning_profile"`
-	EnrollmentCA                string                      `json:"enrollment_ca"`
-	EnableReplaceableEnrollment bool                        `json:"enable_replaceable_enrollment"` //switch-like option that enables enrolling, already enrolled devices
-	RegistrationMode            RegistrationMode            `json:"registration_mode"`
-	VerifyCSRSignature          bool                        `json:"verify_csr_signature"` //switch-like option that enables CSR signature verification
+// CommonEnrollmentSettings holds the enrollment knobs that are identical for
+// both protocols. It is embedded into ESTEnrollmentSettings and
+// CMPEnrollmentSettings so the fields sit flat in each protocol's JSON while
+// still being declared once.
+type CommonEnrollmentSettings struct {
+	DeviceProvisionProfile      DeviceProvisionProfile `json:"device_provisioning_profile"`
+	EnrollmentCA                string                 `json:"enrollment_ca"`
+	EnableReplaceableEnrollment bool                   `json:"enable_replaceable_enrollment"` //switch-like option that enables enrolling, already enrolled devices
+	RegistrationMode            RegistrationMode       `json:"registration_mode"`
+	VerifyCSRSignature          bool                   `json:"verify_csr_signature"` //switch-like option that enables CSR signature verification
+}
+
+// CommonReEnrollmentSettings holds the re-enrollment knobs that are identical
+// for both protocols, including the two monitoring deltas that the
+// protocol-agnostic BindIdentityToDevice materializes onto CA metadata.
+type CommonReEnrollmentSettings struct {
+	AdditionalValidationCAs     []string     `json:"additional_validation_cas"`
+	RevokeOnReEnrollment        bool         `json:"revoke_on_reenrollment"`
+	ReEnrollmentDelta           TimeDuration `json:"reenrollment_delta"`
+	EnableExpiredRenewal        bool         `json:"enable_expired_renewal"`
+	PreventiveReEnrollmentDelta TimeDuration `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalReEnrollmentDelta   TimeDuration `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
 }
 
 type AuthOptionsClientCertificate struct {

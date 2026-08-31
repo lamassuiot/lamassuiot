@@ -76,10 +76,10 @@ echo "[1/8] Reading DMS configuration..."
 DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
     || fail "cannot fetch DMS ${DMS_ID} at ${SERVER}"
 
-PROT_SERIAL=$(echo "${DMS_JSON}"     | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.protection_certificate // empty')
-AUTH_MODE=$(echo "${DMS_JSON}"       | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.auth_mode // "NO_AUTH"')
-ENROLLMENT_CA=$(echo "${DMS_JSON}"   | jq -r '.settings.enrollment_settings.enrollment_ca // empty')
-ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
+PROT_SERIAL=$(echo "${DMS_JSON}"     | jq -r '.settings.cmp_settings.enrollment_settings.protection_certificate // empty')
+AUTH_MODE=$(echo "${DMS_JSON}"       | jq -r '.settings.cmp_settings.enrollment_settings.auth_mode // "NO_AUTH"')
+ENROLLMENT_CA=$(echo "${DMS_JSON}"   | jq -r '.settings.cmp_settings.enrollment_settings.enrollment_ca // empty')
+ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.accept_implicit // false')
 if [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE" ] || [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK" ]; then
     ENFORCE_PROT="true"
 else

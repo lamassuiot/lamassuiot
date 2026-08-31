@@ -173,10 +173,12 @@ func dmsForRevokeTest(id string) *models.DMS {
 	// a bare zero-value RR{} would reject every revocation via the new
 	// AllowedReasons allow-list gate before a test's actual scenario runs.
 	settings := models.ResolveCMPSettings(models.DMSSettings{
-		EnrollmentSettings: models.EnrollmentSettings{
-			EnrollmentProtocol: models.CMP,
-			EnrollmentCA:       "test-ca",
-			EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+		Protocol: models.CMP,
+		CMP: &models.CMPSettings{
+			EnrollmentSettings: models.CMPEnrollmentSettings{
+				CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+					EnrollmentCA: "test-ca",
+				},
 				AuthMode: models.CMPAuthModeClientCertificate,
 			},
 		},
@@ -340,7 +342,7 @@ func makeTestRALeaf(t *testing.T, caCert *x509.Certificate, caKey *ecdsa.Private
 // check instead of being refused by the self_only gate first.
 func dmsAllowingTrustedRARevocation(id string) *models.DMS {
 	dms := dmsForRevokeTest(id)
-	dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR.Authorization =
+	dms.Settings.CMP.EnrollmentSettings.RR.Authorization =
 		models.CMPRevocationAuthorizationSelfTrustedRA
 	return dms
 }
@@ -435,7 +437,7 @@ func TestLWCRevokeCertificate_CertificateHold_NotGatedByAllowedReasons(t *testin
 	dms := dmsForRevokeTest("dms-A")
 	// An explicitly configured list that deliberately omits any hold entry —
 	// mirroring a real deployment's persisted settings.
-	dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR.AllowedReasons =
+	dms.Settings.CMP.EnrollmentSettings.RR.AllowedReasons =
 		[]models.CMPRevocationReason{models.CMPRevocationReasonUnspecified}
 	svc, caMock := newRevokeTestSubject(t, dms)
 
@@ -471,7 +473,7 @@ func TestLWCRevokeCertificate_CertificateHold_NotGatedByAllowedReasons(t *testin
 // the original bug that was genuinely a silent bypass.
 func TestLWCRevokeCertificate_PrivilegeWithdrawn_GatedByAllowedReasons(t *testing.T) {
 	dms := dmsForRevokeTest("dms-A")
-	dms.Settings.EnrollmentSettings.EnrollmentOptionsLWCRFC9483.RR.AllowedReasons =
+	dms.Settings.CMP.EnrollmentSettings.RR.AllowedReasons =
 		[]models.CMPRevocationReason{models.CMPRevocationReasonUnspecified}
 	svc, caMock := newRevokeTestSubject(t, dms)
 

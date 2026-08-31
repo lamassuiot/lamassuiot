@@ -61,9 +61,9 @@ echo "[1/5] Reading DMS configuration..."
 DMS_JSON=$(curl -sf "${SERVER}/api/dmsmanager/v1/dms/${DMS_ID}") \
     || fail "cannot fetch DMS ${DMS_ID} at ${SERVER}"
 
-ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.accept_implicit // false')
-CONFIRM_TIMEOUT=$(echo "${DMS_JSON}" | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.confirmation_timeout // "0s"')
-AUTH_MODE=$(echo "${DMS_JSON}"       | jq -r '.settings.enrollment_settings.lwc_rfc9483_settings.auth_mode // "NO_AUTH"')
+ACCEPT_IMPLICIT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.accept_implicit // false')
+CONFIRM_TIMEOUT=$(echo "${DMS_JSON}" | jq -r '.settings.cmp_settings.enrollment_settings.confirmation_timeout // "0s"')
+AUTH_MODE=$(echo "${DMS_JSON}"       | jq -r '.settings.cmp_settings.enrollment_settings.auth_mode // "NO_AUTH"')
 if [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE" ] || [ "${AUTH_MODE}" = "CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK" ]; then
     ENFORCE_PROT="true"
 else

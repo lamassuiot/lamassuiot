@@ -79,10 +79,13 @@ func dmsWithEnrollAuth(id string, replaceable bool) *models.DMS {
 	return &models.DMS{
 		ID: id,
 		Settings: models.DMSSettings{
-			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentCA:                "test-ca",
-				EnableReplaceableEnrollment: replaceable,
-				EnrollmentOptionsLWCRFC9483: models.EnrollmentOptionsLWCRFC9483{
+			Protocol: models.CMP,
+			CMP: &models.CMPSettings{
+				EnrollmentSettings: models.CMPEnrollmentSettings{
+					CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+						EnrollmentCA:                "test-ca",
+						EnableReplaceableEnrollment: replaceable,
+					},
 					AuthMode: models.CMPAuthModeNoAuth,
 				},
 			},
@@ -201,7 +204,7 @@ func TestLWCEnroll_PassesOwnershipAndProceeds(t *testing.T) {
 // at all.
 func TestLWCEnroll_SupersededCertNotRevokedOnEnrollmentFailure(t *testing.T) {
 	dms := dmsWithEnrollAuth("dms-A", true)
-	dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = true
+	dms.Settings.CMP.ReEnrollmentSettings.RevokeOnReEnrollment = true
 	svc, devMock, caMock := newPolicyTestSubject(t, dms)
 	csr := makeTestCSR(t, "device-5")
 

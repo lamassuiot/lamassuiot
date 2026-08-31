@@ -4,7 +4,7 @@ package models
 //
 // This file defines a NESTED, per-operation CMP configuration schema — one
 // struct per protocol operation (ir / cr / p10cr / kur / rr / genm / ccr) —
-// that lives ALONGSIDE the existing flat EnrollmentOptionsLWCRFC9483 fields
+// that lives ALONGSIDE the existing flat CMPEnrollmentSettings fields
 // (see dms_lwcmp_options.go). The flat fields remain the "general" level:
 // auth_mode, protection_certificate, enforce_popo, accept_implicit,
 // confirmation_timeout, workflow and approval_timeout are read directly by the
@@ -260,7 +260,7 @@ type CMPCentralKeyGeneration struct {
 // CMPControl is the shared tri-state control-gate shape used by ir's
 // registration_token and authenticator_control. It stores ONLY a mode — no
 // plaintext secret. Persisting the legacy plaintext answer (the
-// EnrollmentOptionsLWCRFC9483.ExpectedAuthenticator anti-pattern) into the
+// CMPEnrollmentSettings.ExpectedAuthenticator anti-pattern) into the
 // nested schema is intentionally NOT done (RFC011 Open Q2).
 type CMPControl struct {
 	Mode CMPControlMode `json:"mode"`
@@ -352,12 +352,12 @@ type CMPP10CRSettings struct {
 
 // CMPKURSettings configures the Key Update Request (kur, RFC 9483 §4.1.3).
 //
+// This block holds only the per-operation kur concerns. The renewal policy
+// proper — renewal window, expired-certificate allowance, additional validation
+// CAs, revoke-superseded — lives on CMPSettings.ReEnrollmentSettings, which is
+// where dmsmanager_lwcmp.go reads it from.
+//
 // LIVE fields:
-//   - RenewalWindow               ↔ ReEnrollmentSettings.ReEnrollmentDelta
-//     (reshaped 1:1 onto the shared ReEnrollmentSettings by resolution)
-//   - AllowExpiredCertificate      ↔ ReEnrollmentSettings.EnableExpiredRenewal
-//   - AdditionalValidationCAIDs    ↔ ReEnrollmentSettings.AdditionalValidationCAs
-//   - RevokeSupersededCertificate  ↔ ReEnrollmentSettings.RevokeOnReEnrollment
 //   - KeyPolicy (require_new_key rejects a kur that reuses the current public
 //     key) and IdentityChangePolicy (forbid/san_only reject a subject/SAN
 //     change), both enforced in dmsmanager_lwcmp.go
@@ -373,14 +373,10 @@ type CMPP10CRSettings struct {
 // updates for the same cert are rejected; the old identity stays active until
 // confirmation; an unconfirmed new cert is revoked on timeout.
 type CMPKURSettings struct {
-	Enabled                     bool                    `json:"enabled"`
-	RenewalWindow               TimeDuration            `json:"renewal_window"`
-	AllowExpiredCertificate     bool                    `json:"allow_expired_certificate"`
-	AdditionalValidationCAIDs   []string                `json:"additional_validation_ca_ids"`
-	KeyPolicy                   CMPKeyPolicy            `json:"key_policy"`
-	IdentityChangePolicy        CMPIdentityChangePolicy `json:"identity_change_policy"`
-	RevokeSupersededCertificate bool                    `json:"revoke_superseded_certificate"`
-	PolicyOverrides             CMPPolicyOverrides      `json:"policy_overrides"`
+	Enabled              bool                    `json:"enabled"`
+	KeyPolicy            CMPKeyPolicy            `json:"key_policy"`
+	IdentityChangePolicy CMPIdentityChangePolicy `json:"identity_change_policy"`
+	PolicyOverrides      CMPPolicyOverrides      `json:"policy_overrides"`
 }
 
 // CMPRRSettings configures Revocation Requests (rr, RFC 9483 §4.2).
@@ -500,7 +496,7 @@ type CMPCCRSettings struct {
 // enrollment operation ("ir"/"cr"/"p10cr"/"kur"). Any other operation yields
 // the zero value ({inherit, inherit, nil}), so callers cleanly fall back to the
 // DMS-general settings.
-func (o *EnrollmentOptionsLWCRFC9483) PolicyOverridesForOperation(op string) CMPPolicyOverrides {
+func (o *CMPEnrollmentSettings) PolicyOverridesForOperation(op string) CMPPolicyOverrides {
 	switch op {
 	case "ir":
 		return o.IR.PolicyOverrides
@@ -518,7 +514,7 @@ func (o *EnrollmentOptionsLWCRFC9483) PolicyOverridesForOperation(op string) CMP
 // EffectiveWorkflow resolves the transaction workflow (direct vs phased) for a
 // CMP enrollment operation, applying policy_overrides.workflow on top of the
 // DMS-general Workflow. "inherit" (or empty) defers to the general value.
-func (o *EnrollmentOptionsLWCRFC9483) EffectiveWorkflow(op string) CMPWorkflow {
+func (o *CMPEnrollmentSettings) EffectiveWorkflow(op string) CMPWorkflow {
 	switch o.PolicyOverridesForOperation(op).Workflow {
 	case CMPInheritableWorkflowDirect:
 		return CMPWorkflowDirect
@@ -536,7 +532,7 @@ func (o *EnrollmentOptionsLWCRFC9483) EffectiveWorkflow(op string) CMPWorkflow {
 // "inherit" (or empty) defers to the general value. Note this only expresses
 // the server's willingness — implicit confirmation is granted only when the EE
 // also requests it (id-it-implicitConfirm in generalInfo).
-func (o *EnrollmentOptionsLWCRFC9483) EffectiveAcceptImplicit(op string) bool {
+func (o *CMPEnrollmentSettings) EffectiveAcceptImplicit(op string) bool {
 	switch o.PolicyOverridesForOperation(op).Confirmation {
 	case CMPInheritableConfirmationImplicit:
 		return true

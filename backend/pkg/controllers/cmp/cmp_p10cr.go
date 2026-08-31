@@ -39,7 +39,7 @@ import (
 const p10crCertReqID = -1
 
 // handleP10CR processes a p10cr (4) body.
-func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings, signerCert *x509.Certificate) {
 	const respTag = corecmp.BodyTagCP
 
 	csrDER, err := p10crCSRDER(body.Bytes)

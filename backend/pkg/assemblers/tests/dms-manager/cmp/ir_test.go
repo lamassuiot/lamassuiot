@@ -165,7 +165,7 @@ func TestCMPIR_HappyPath(t *testing.T) {
 	signerCert, signerKey, bootstrapCAID := cmpIssueSignerCert(t, f.ctx, f.testServers, "signer-ir-happy-path")
 
 	dms := cmpCreateDMS(t, f.ctx, f.dmsMgr, "cmp-dms-ir-happy-path", f.enrollCA.ID,
-		models.EnrollmentOptionsLWCRFC9483{
+		models.CMPEnrollmentSettings{
 			AuthMode: models.CMPAuthModeClientCertificate,
 			AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 				ValidationCAs: []string{bootstrapCAID},

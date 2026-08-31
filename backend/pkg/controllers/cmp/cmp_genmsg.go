@@ -141,7 +141,7 @@ type genITAV struct {
 // handleGeneralMessage processes a genm (21) body and answers with a genp (22).
 // Signature protection has already been verified by HandleCMP; sender/senderKID
 // binding is intentionally not enforced for genm (see the dispatch in cmp.go).
-func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.EnrollmentOptionsLWCRFC9483, signerCert *x509.Certificate) {
+func (r *cmpHttpRoutes) handleGeneralMessage(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings, signerCert *x509.Certificate) {
 	itavs, err := decodeGenMsgContent(body.Bytes)
 	if err != nil {
 		lFunc.Errorf("genm: decode GenMsgContent: %v", err)
