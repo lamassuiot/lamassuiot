@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -16,6 +18,15 @@ import (
 
 // fakeDMSRepo is a minimal storage.DMSRepo stub that serves a single DMS.
 type fakeDMSRepo struct{ dms *models.DMS }
+
+type approvalCapturingCMPReporter struct {
+	transitions []cmpwfx.CMPTransition
+}
+
+func (r *approvalCapturingCMPReporter) Emit(_ context.Context, transition cmpwfx.CMPTransition) (string, error) {
+	r.transitions = append(r.transitions, transition)
+	return "wfx-job", nil
+}
 
 func (f fakeDMSRepo) Count(ctx context.Context) (int, error) { return 1, nil }
 func (f fakeDMSRepo) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
@@ -87,12 +98,14 @@ func newApproveTestSubject(t *testing.T, confirmationTimeout time.Duration) (*DM
 	}
 	txRepo := &approvalCapturingCMPTxRepo{
 		tx: models.CMPTransaction{
-			TransactionID: "aabbccdd00112233",
-			DMSID:         "dms-A",
-			State:         models.CMPTransactionStatePending,
-			CSR:           (*models.X509CertificateRequest)(makeTestCSR(t, "phased-device")),
-			CreatedAt:     time.Now(),
-			ExpiresAt:     time.Now().Add(time.Hour),
+			TransactionID:     "aabbccdd00112233",
+			DMSID:             "dms-A",
+			RequestType:       "ir",
+			SubjectCommonName: "phased-device",
+			State:             models.CMPTransactionStatePending,
+			CSR:               (*models.X509CertificateRequest)(makeTestCSR(t, "phased-device")),
+			CreatedAt:         time.Now(),
+			ExpiresAt:         time.Now().Add(time.Hour),
 		},
 	}
 	dmsMock := &fakeDMSManagerService{
@@ -153,4 +166,43 @@ func TestApproveCMPTransaction_KeepsLongerConfirmationTimeout(t *testing.T) {
 
 	require.False(t, txRepo.capturedExpiry.Before(before.Add(confTimeout).Add(-2*time.Second)),
 		"a ConfirmationTimeout above the floor must be honored unchanged")
+}
+
+func TestApproveCMPTransaction_EmitsPrincipalsInWFXStatusContext(t *testing.T) {
+	svc, _, dmsMock := newApproveTestSubject(t, 10*time.Minute)
+	reporter := &approvalCapturingCMPReporter{}
+	svc.cmpWFXReporter = reporter
+
+	issuedCert, _ := makeTestCA(t)
+	dmsMock.On("LWCEnroll", mock.Anything, mock.Anything, "dms-A", mock.Anything).Return(issuedCert, nil)
+
+	principals := []string{"admin-a", "admin-b"}
+	ctx := context.WithValue(context.Background(), core.LamassuContextKeyMatchedPrincipals, principals)
+	_, err := svc.ApproveCMPTransaction(ctx, services.ApproveCMPTransactionInput{
+		DMSID:         "dms-A",
+		TransactionID: "aabbccdd00112233",
+	})
+	require.NoError(t, err)
+	require.Len(t, reporter.transitions, 2)
+	for _, transition := range reporter.transitions {
+		require.Equal(t, principals, transition.Principals)
+	}
+}
+
+func TestRejectCMPTransaction_EmitsPrincipalsInWFXStatusContext(t *testing.T) {
+	svc, _, _ := newApproveTestSubject(t, 10*time.Minute)
+	reporter := &approvalCapturingCMPReporter{}
+	svc.cmpWFXReporter = reporter
+
+	principals := []string{"admin-a"}
+	ctx := context.WithValue(context.Background(), core.LamassuContextKeyMatchedPrincipals, principals)
+	_, err := svc.RejectCMPTransaction(ctx, services.RejectCMPTransactionInput{
+		DMSID:         "dms-A",
+		TransactionID: "aabbccdd00112233",
+		Reason:        "policy denied",
+	})
+	require.NoError(t, err)
+	require.Len(t, reporter.transitions, 1)
+	require.Equal(t, cmpwfx.CMPStateRejected, reporter.transitions[0].State)
+	require.Equal(t, principals, reporter.transitions[0].Principals)
 }

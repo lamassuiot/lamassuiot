@@ -77,7 +77,10 @@ type CMPTransition struct {
 	CertSerialNumber  string
 	State             CMPState
 	Reason            string
-	Metadata          map[string]any
+	// Principals identifies the authenticated authorization subjects that
+	// initiated an admin-driven transition such as approval or rejection.
+	Principals []string
+	Metadata   map[string]any
 	// Workflow is the WFX workflow name this transition belongs to. When empty
 	// the reporter falls back to its configured default workflow. Set it from
 	// the DMS's workflow selection so a device's job is created in (and only
@@ -205,7 +208,7 @@ func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) (strin
 	// inbound IR/CR/KUR DER (cmpRequestB64) to the Received state's context.
 	// The result was that the dashboard's per-snapshot ASN.1 viewer never had
 	// any payload to show on the Received state.
-	if job.Status != nil && job.Status.State == string(transition.State) && transition.Reason == "" && len(transition.Metadata) == 0 && transition.CertSerialNumber == "" && transition.RequestType == "" {
+	if job.Status != nil && job.Status.State == string(transition.State) && transition.Reason == "" && len(transition.Principals) == 0 && len(transition.Metadata) == 0 && transition.CertSerialNumber == "" && transition.RequestType == "" {
 		return job.ID, nil
 	}
 
@@ -470,6 +473,9 @@ func buildStatusContext(transition CMPTransition) map[string]any {
 	}
 	if transition.Reason != "" {
 		contextMap["reason"] = transition.Reason
+	}
+	if len(transition.Principals) > 0 {
+		contextMap["principals"] = append([]string(nil), transition.Principals...)
 	}
 	for k, v := range transition.Metadata {
 		contextMap[k] = v

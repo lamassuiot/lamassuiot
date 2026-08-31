@@ -1343,6 +1343,7 @@ func (r *cmpHttpRoutes) rejectCertRequest(ctx *gin.Context, lFunc *logrus.Entry,
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection), rej.Reason, dmsID, rej.FailInfoBit)
 		return
 	}
+	r.logCMPFailure(&header, corecmp.PKIStatus(corecmp.PKIStatusRejection), rej.Reason, dmsID, rej.FailInfoBit)
 	// A rejection carries no issued certificate, so implicit confirmation is
 	// meaningless: RFC 9483 §4.1.1 only allows id-it-implicitConfirm in the
 	// generalInfo of a positive ip/cp/kup. Clear any flag carried over from the
@@ -1364,6 +1365,7 @@ func (r *cmpHttpRoutes) rejectRevocation(ctx *gin.Context, lFunc *logrus.Entry, 
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection), reason, dmsID, failInfoBit)
 		return
 	}
+	r.logCMPFailure(&header, corecmp.PKIStatus(corecmp.PKIStatusRejection), reason, dmsID, failInfoBit)
 	header.ResponseImplicitConfirm = false
 	r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagRP, body, dmsID)
 }
@@ -1381,6 +1383,7 @@ func (r *cmpHttpRoutes) rejectRequest(ctx *gin.Context, lFunc *logrus.Entry, hea
 }
 
 func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *corecmp.RequestPKIHeader, status corecmp.PKIStatus, reason string, aps string, failInfoBits ...int) {
+	r.logCMPFailure(header, status, reason, aps, failInfoBits...)
 	errBody, err := corecmp.MarshalErrorBody(status, reason, failInfoBits...)
 	if err != nil {
 		ctx.Status(http.StatusInternalServerError)
@@ -1414,6 +1417,80 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *corecmp.Reques
 		})
 	}
 	r.sendRawBody(ctx, r.logger, h, corecmp.BodyTagError, errBody, aps)
+}
+
+var cmpFailureInfoNames = map[int]string{
+	corecmp.PKIFailureInfoBadAlg:              "badAlg",
+	corecmp.PKIFailureInfoBadMessageCheck:     "badMessageCheck",
+	corecmp.PKIFailureInfoBadRequest:          "badRequest",
+	corecmp.PKIFailureInfoBadTime:             "badTime",
+	corecmp.PKIFailureInfoBadCertID:           "badCertId",
+	corecmp.PKIFailureInfoBadDataFormat:       "badDataFormat",
+	corecmp.PKIFailureInfoWrongAuthority:      "wrongAuthority",
+	corecmp.PKIFailureInfoIncorrectData:       "incorrectData",
+	corecmp.PKIFailureInfoMissingTimeStamp:    "missingTimeStamp",
+	corecmp.PKIFailureInfoBadPOP:              "badPOP",
+	corecmp.PKIFailureInfoCertRevoked:         "certRevoked",
+	corecmp.PKIFailureInfoCertConfirmed:       "certConfirmed",
+	corecmp.PKIFailureInfoWrongIntegrity:      "wrongIntegrity",
+	corecmp.PKIFailureInfoBadRecipientNonce:   "badRecipientNonce",
+	corecmp.PKIFailureInfoTimeNotAvailable:    "timeNotAvailable",
+	corecmp.PKIFailureInfoUnacceptedPolicy:    "unacceptedPolicy",
+	corecmp.PKIFailureInfoUnacceptedExtension: "unacceptedExtension",
+	corecmp.PKIFailureInfoAddInfoNotAvailable: "addInfoNotAvailable",
+	corecmp.PKIFailureInfoBadSenderNonce:      "badSenderNonce",
+	corecmp.PKIFailureInfoBadCertTemplate:     "badCertTemplate",
+	corecmp.PKIFailureInfoSignerNotTrusted:    "signerNotTrusted",
+	corecmp.PKIFailureInfoTransactionIDInUse:  "transactionIdInUse",
+	corecmp.PKIFailureInfoUnsupportedVersion:  "unsupportedVersion",
+	corecmp.PKIFailureInfoNotAuthorized:       "notAuthorized",
+	corecmp.PKIFailureInfoSystemUnavail:       "systemUnavail",
+	corecmp.PKIFailureInfoSystemFailure:       "systemFailure",
+	corecmp.PKIFailureInfoDuplicateCertReq:    "duplicateCertReq",
+}
+
+// logCMPFailure emits one structured event for every rejected CMP operation.
+// systemFailure is logged at error level so operators can distinguish an
+// internal/service failure from a rejection caused by an invalid request.
+func (r *cmpHttpRoutes) logCMPFailure(header *corecmp.RequestPKIHeader, status corecmp.PKIStatus, reason, dmsID string, failInfoBits ...int) {
+	failInfoNames := make([]string, 0, len(failInfoBits))
+	systemFailure := false
+	for _, bit := range failInfoBits {
+		name, ok := cmpFailureInfoNames[bit]
+		if !ok {
+			name = strconv.Itoa(bit)
+		}
+		failInfoNames = append(failInfoNames, name)
+		systemFailure = systemFailure || bit == corecmp.PKIFailureInfoSystemFailure
+	}
+
+	if status != corecmp.PKIStatus(corecmp.PKIStatusRejection) && !systemFailure {
+		return
+	}
+
+	statusName := strconv.Itoa(int(status))
+	if status == corecmp.PKIStatus(corecmp.PKIStatusRejection) {
+		statusName = "rejection"
+	}
+	fields := logrus.Fields{
+		"component":          "cmp-handler",
+		"dms":                dmsID,
+		"pkiStatus":          statusName,
+		"pkiStatusCode":      int(status),
+		"pkiFailureInfo":     failInfoNames,
+		"pkiFailureInfoBits": append([]int(nil), failInfoBits...),
+		"reason":             reason,
+	}
+	if header != nil && len(header.TransactionID) > 0 {
+		fields["txid"] = hex.EncodeToString(header.TransactionID)
+	}
+
+	entry := r.logger.WithFields(fields)
+	if systemFailure {
+		entry.Error("CMP operation rejected")
+		return
+	}
+	entry.Warn("CMP operation rejected")
 }
 
 // writeCMPResponse logs and writes a fully-assembled response PKIMessage DER

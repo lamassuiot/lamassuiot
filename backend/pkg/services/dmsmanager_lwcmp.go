@@ -298,6 +298,7 @@ func (svc DMSManagerServiceBackend) emitApprovalTransition(ctx context.Context, 
 	if svc.cmpWFXReporter == nil {
 		return
 	}
+	principals, _ := ctx.Value(core.LamassuContextKeyMatchedPrincipals).([]string)
 	if _, err := svc.cmpWFXReporter.Emit(ctx, cmpwfx.CMPTransition{
 		TransactionID:     tx.TransactionID,
 		DMSID:             tx.DMSID,
@@ -306,6 +307,7 @@ func (svc DMSManagerServiceBackend) emitApprovalTransition(ctx context.Context, 
 		CertSerialNumber:  certSerial,
 		State:             state,
 		Reason:            reason,
+		Principals:        append([]string(nil), principals...),
 		Workflow:          cmpwfx.CMPWorkflowNamePhased,
 	}); err != nil {
 		lFunc.WithField("cmpState", state).Warnf("ApproveCMPTransaction: WFX transition export failed: %v", err)
