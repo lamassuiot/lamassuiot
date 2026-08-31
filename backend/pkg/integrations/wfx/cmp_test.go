@@ -82,6 +82,7 @@ func TestBuildStatusContext(t *testing.T) {
 		SubjectCommonName: "device-01",
 		CertSerialNumber:  "1234",
 		Reason:            "duplicate transaction",
+		Principals:        []string{"admin-a", "admin-b"},
 		Metadata: map[string]any{
 			"bodyTag": 0,
 		},
@@ -93,6 +94,7 @@ func TestBuildStatusContext(t *testing.T) {
 	assert.Equal(t, "device-01", contextMap["subjectCommonName"])
 	assert.Equal(t, "1234", contextMap["certSerialNumber"])
 	assert.Equal(t, "duplicate transaction", contextMap["reason"])
+	assert.Equal(t, []string{"admin-a", "admin-b"}, contextMap["principals"])
 	assert.Equal(t, 0, contextMap["bodyTag"])
 }
 
@@ -203,8 +205,8 @@ func newCaptureReporter(t *testing.T, server *captureWFXServer) *cmpReporter {
 	client, err := wfxapi.NewClientWithResponses(server.server.URL+"/api/wfx/v1", wfxapi.WithHTTPClient(&http.Client{Timeout: 5 * time.Second}))
 	require.NoError(t, err)
 	r := &cmpReporter{
-		client:          client,
-		logger:          logrus.NewEntry(logrus.New()),
+		client:           client,
+		logger:           logrus.NewEntry(logrus.New()),
 		workflowName:     DefaultCMPWorkflowName,
 		timeout:          5 * time.Second,
 		ensuredWorkflows: map[string]struct{}{DefaultCMPWorkflowName: {}}, // skip ensureWorkflow; the test fake answers anyway
