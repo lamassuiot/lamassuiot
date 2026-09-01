@@ -1109,7 +1109,22 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			return
 		}
 		lFunc.Infof("pollReq: tx %s still PENDING, replying pollRep(checkAfter=%ds)", txHex, checkAfter)
-		r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagPollRep, repDER, dmsID)
+		responseDER := r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagPollRep, repDER, dmsID)
+		if len(responseDER) == 0 {
+			return
+		}
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			RequestType:       tx.RequestType,
+			SubjectCommonName: tx.SubjectCommonName,
+			State:             cmpwfx.CMPStateAwaitingApproval,
+			Metadata: withCMPMessageB64(map[string]any{
+				"certReqId":    certReqID,
+				"responseType": "pollRep",
+				"checkAfter":   checkAfter,
+			}, cmpMetadataResponseB64, responseDER),
+		})
 
 	case models.CMPTransactionStateIssued:
 		// Determine whether implicit confirm applies for this pollReq delivery.
@@ -1135,12 +1150,9 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			header.ResponseSenderNonce, _ = hex.DecodeString(tx.SentNonce)
 		}
 
-		// Decide whether this delivery is an IP (ir-derived) or CP (cr/p10cr/kur).
-		// PENDING rows store IsReenrollment; for sync-stored ISSUED rows
-		// (lost-response recovery) the original body tag is lost, so we default
-		// to CP — both IP and CP carry the same CertRepMessage structure and
-		// any modern CMP client accepts either as the cert-bearing response.
-		// A p10cr row is never an IP: its response is always cp (RFC 9483 §4.1.4).
+		// Decide whether this delivery is an IP (ir-derived) or CP (cr/p10cr/kur):
+		// pollRespTagFor looks at the persisted tx.RequestType, mirroring the tag
+		// choice made on the original (non-polled) response.
 		respTag := pollRespTagFor(tx)
 		var txCertRaw []byte
 		if tx.Certificate != nil {
@@ -1193,7 +1205,28 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		}
 
 		lFunc.Infof("pollReq: tx %s ISSUED, delivering cert via %s (implicitConfirm=%v)", txHex, cmpTagToString(respTag), implicitConfirm)
-		r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
+		responseDER := r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
+		if len(responseDER) == 0 {
+			return
+		}
+		finalState := cmpwfx.CMPStateAwaitingCertConf
+		if implicitConfirm {
+			finalState = cmpwfx.CMPStateLogicallyComplete
+		}
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			RequestType:       tx.RequestType,
+			SubjectCommonName: tx.SubjectCommonName,
+			CertSerialNumber:  tx.CertSerialNumber,
+			State:             finalState,
+			Metadata: withCMPMessageB64(map[string]any{
+				"certReqId":       certReqID,
+				"responseType":    cmpTagToString(respTag),
+				"implicitConfirm": implicitConfirm,
+				"polled":          true,
+			}, cmpMetadataResponseB64, responseDER),
+		})
 
 	case models.CMPTransactionStateConfirmed:
 		// Lost-response recovery for implicit-confirm enrollments: the IR
@@ -1216,7 +1249,24 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// originally received on the lost IP — keeps the protocol view consistent.
 		header.ResponseImplicitConfirm = true
 		lFunc.Infof("pollReq: tx %s CONFIRMED (implicit), re-delivering cert via %s", txHex, cmpTagToString(respTag))
-		r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
+		responseDER := r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
+		if len(responseDER) == 0 {
+			return
+		}
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			RequestType:       tx.RequestType,
+			SubjectCommonName: tx.SubjectCommonName,
+			CertSerialNumber:  tx.CertSerialNumber,
+			State:             cmpwfx.CMPStateLogicallyComplete,
+			Metadata: withCMPMessageB64(map[string]any{
+				"certReqId":       certReqID,
+				"responseType":    cmpTagToString(respTag),
+				"implicitConfirm": true,
+				"polled":          true,
+			}, cmpMetadataResponseB64, responseDER),
+		})
 
 	case models.CMPTransactionStateIssueFailed:
 		reason := tx.ErrorMessage
@@ -1247,18 +1297,19 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 }
 
 // pollRespTagFor picks the cert-bearing response body tag for a pollReq
-// delivery from the persisted transaction: re-enrollments (kur) and p10cr
-// transactions get cp; everything else (ir/cr sync rows, where the historical
-// default is ip) gets ip. p10cr must never yield an ip — its response body is
-// cp in every phase of the exchange (RFC 9483 §4.1.4).
+// delivery from the persisted transaction's original request type, mirroring
+// enrollmentVariantInitial.respTagFor (cmp_enrollment.go): only an original ir
+// yields ip; everything else (cr, p10cr, kur, ccr) yields the matching
+// cp/ccp. p10cr and cr must never yield an ip — their response body is always
+// cp (RFC 9483 §4.1.4).
 func pollRespTagFor(tx models.CMPTransaction) int {
 	if tx.RequestType == cmpTagToString(corecmp.BodyTagCCR) {
 		return corecmp.BodyTagCCP
 	}
-	if tx.IsReenrollment || tx.RequestType == cmpTagToString(corecmp.BodyTagP10CR) {
-		return corecmp.BodyTagCP
+	if tx.RequestType == cmpTagToString(corecmp.BodyTagIR) {
+		return corecmp.BodyTagIP
 	}
-	return corecmp.BodyTagIP
+	return corecmp.BodyTagCP
 }
 
 // isImplicitConfirm reports whether the current request should be treated as
