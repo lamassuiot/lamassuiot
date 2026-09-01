@@ -12,14 +12,15 @@ import (
 	"github.com/lamassuiot/authz/pkg/engine"
 	authzmw_audit "github.com/lamassuiot/authz/pkg/middlewares/audit"
 	authzmw_eventpub "github.com/lamassuiot/authz/pkg/middlewares/eventpub"
+	authzmw_otel "github.com/lamassuiot/authz/pkg/middlewares/otel"
 	authzmodels "github.com/lamassuiot/authz/pkg/models"
 	"github.com/lamassuiot/authz/pkg/service"
+	"github.com/lamassuiot/authz/pkg/specs"
 	"github.com/lamassuiot/authz/pkg/store"
 	authzgorm "github.com/lamassuiot/authz/sdk/gorm"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	bauditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	beventpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/authz/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -49,6 +50,7 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 	// holds real storage references (the engine uses principalManager.matchService
 	// and principalManager.store which are not exposed by PrincipalService).
 	authzEngine := service.NewAuthzService(eng, principalManager, policyManager, service.WithServiceLogger(lSvc))
+	authzEngine = authzmw_otel.NewAuthzOTelMiddleware(authzEngine)
 
 	// Apply event/audit publisher decorators conditionally.
 	var principalSvc service.PrincipalService = principalManager

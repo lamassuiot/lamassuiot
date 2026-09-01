@@ -7,8 +7,10 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/ThreeDotsLabs/watermill/message/router/plugin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -46,13 +48,26 @@ func OtelTraceExtractor(h message.HandlerFunc) message.HandlerFunc {
 		handlerName := message.HandlerNameFromCtx(msg.Context())
 		topic := message.SubscribeTopicFromCtx(msg.Context())
 
-		ctx, span := tracer.Start(ctx, handlerName,
+		spanName := handlerName
+		attrs := []attribute.KeyValue{
+			semconv.MessagingSystem("amqp"),
+			semconv.MessagingDestinationName(topic),
+			semconv.MessagingOperationReceive,
+		}
+
+		// The message payload is a CloudEvent: surface its type/ID on the span so consumer
+		// spans can be told apart even when the subscription topic is a wildcard (e.g. "#").
+		if cloudEvent, err := helpers.ParseCloudEvent(msg.Payload); err == nil {
+			spanName = fmt.Sprintf("%s %s", handlerName, cloudEvent.Type())
+			attrs = append(attrs,
+				attribute.String("event.type", cloudEvent.Type()),
+				attribute.String("event.id", cloudEvent.ID()),
+			)
+		}
+
+		ctx, span := tracer.Start(ctx, spanName,
 			trace.WithSpanKind(trace.SpanKindConsumer),
-			trace.WithAttributes(
-				semconv.MessagingSystem("amqp"),
-				semconv.MessagingDestinationName(topic),
-				semconv.MessagingOperationReceive,
-			),
+			trace.WithAttributes(attrs...),
 		)
 		defer span.End()
 

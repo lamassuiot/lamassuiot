@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/lamassuiot/authz/pkg/models"
 )
 
 // HTTPMatchType describes how a route's path pattern is matched.
@@ -19,14 +21,27 @@ const (
 	HTTPMatchRegex  HTTPMatchType = "regex"  // full regexp anchored to the path
 )
 
+// HTTPDefaultAction describes the fallback decision applied when a request
+// path falls under a schema's base_paths but matches no configured route.
+type HTTPDefaultAction string
+
+const (
+	HTTPDefaultActionAllow HTTPDefaultAction = "allow"
+	HTTPDefaultActionDeny  HTTPDefaultAction = "deny"
+)
+
 // HTTPRouteConfig maps a method+path pattern to a named logical action.
 type HTTPRouteConfig struct {
-	Name          string                `json:"name"`                  // human-readable label
-	Methods       []string              `json:"methods"`               // HTTP verbs; empty slice = wildcard (any method)
-	Path          string                `json:"path"`                  // pattern string
-	MatchType     HTTPMatchType         `json:"match_type"`            // "exact" | "prefix" | "regex"
-	Action        string                `json:"action"`                // logical action name, referenced in HTTPRule.Actions
-	Constraints   []HTTPRouteConstraint `json:"constraints,omitempty"` // optional subject/request constraints
+	Name        string                `json:"name"`                  // human-readable label
+	Methods     []string              `json:"methods"`               // HTTP verbs; empty slice = wildcard (any method)
+	Path        string                `json:"path"`                  // pattern string
+	MatchType   HTTPMatchType         `json:"match_type"`            // "exact" | "prefix" | "regex"
+	Action      string                `json:"action"`                // logical action name, referenced in HTTPRule.Actions
+	Constraints []HTTPRouteConstraint `json:"constraints,omitempty"` // optional subject/request constraints
+	// SkipAuthz allows the route once a subject has been authenticated, without
+	// requiring any policy to grant its action. Authentication (identity
+	// resolution) still runs; only the authorization decision is bypassed.
+	SkipAuthz     bool `json:"skip_authz,omitempty"`
 	compiledRegex *regexp.Regexp
 }
 
@@ -79,6 +94,14 @@ type HTTPSchemaDefinition struct {
 	Description string                 `json:"description,omitempty"`
 	Routes      []HTTPRouteConfig      `json:"routes,omitempty"`
 	Groups      []HTTPRouteGroupConfig `json:"groups,omitempty"`
+	// BasePaths are the path prefixes owned by this schema (e.g. ["/api/wfx"]).
+	// Used only to resolve DefaultAction for requests that fall under the
+	// service's namespace but match no configured route.
+	BasePaths []string `json:"base_paths,omitempty"`
+	// DefaultAction is applied when a request path matches a BasePaths entry
+	// but no route in this schema matches. "allow" or "deny"; empty behaves
+	// like "deny" (the pre-existing implicit-deny behavior).
+	DefaultAction HTTPDefaultAction `json:"default_action,omitempty"`
 	// AllActions is derived at load time from the unique Action values across all Routes and Groups.
 	AllActions     []string           `json:"all_actions,omitempty"`
 	compiledRoutes []*HTTPRouteConfig `json:"-"`
@@ -89,6 +112,22 @@ type HTTPSchemaDefinition struct {
 // Returns nil when no route matches.
 func (s *HTTPSchemaDefinition) MatchRoute(method, path string) *HTTPRouteConfig {
 	return s.matchRouteEntry(method, path)
+}
+
+// MatchesBasePath reports whether path falls under one of the schema's BasePaths.
+// prefixLen is the length of the matched base path, letting callers pick the
+// most specific schema when multiple schemas' base paths overlap.
+func (s *HTTPSchemaDefinition) MatchesBasePath(path string) (matched bool, prefixLen int) {
+	best := -1
+	for _, bp := range s.BasePaths {
+		bp = strings.TrimSuffix(bp, "/")
+		if path == bp || strings.HasPrefix(path, bp+"/") {
+			if len(bp) > best {
+				best = len(bp)
+			}
+		}
+	}
+	return best >= 0, best
 }
 
 func (s *HTTPSchemaDefinition) matchRouteEntry(method, path string) *HTTPRouteConfig {
@@ -193,6 +232,20 @@ func (r *HTTPSchemaRegistry) validateAndCompile(def *HTTPSchemaDefinition) error
 		return fmt.Errorf("at least one route or group is required")
 	}
 
+	switch def.DefaultAction {
+	case "", HTTPDefaultActionAllow, HTTPDefaultActionDeny:
+	default:
+		return fmt.Errorf("default_action must be %q or %q, got %q", HTTPDefaultActionAllow, HTTPDefaultActionDeny, def.DefaultAction)
+	}
+	if def.DefaultAction != "" && len(def.BasePaths) == 0 {
+		return fmt.Errorf("default_action requires at least one base_path")
+	}
+	for i, bp := range def.BasePaths {
+		if bp == "" || !strings.HasPrefix(bp, "/") {
+			return fmt.Errorf("base_paths[%d]: must be a non-empty absolute path", i)
+		}
+	}
+
 	def.compiledRoutes = nil
 	actionSet := make(map[string]struct{})
 	for i := range def.Routes {
@@ -250,6 +303,10 @@ func validateAndCompileHTTPRoute(route *HTTPRouteConfig, label string) error {
 		return fmt.Errorf("%s: unknown match_type %q (must be exact, prefix, or regex)", label, route.MatchType)
 	}
 
+	if route.SkipAuthz && len(route.Constraints) > 0 {
+		return fmt.Errorf("%s: skip_authz routes cannot declare constraints", label)
+	}
+
 	for i := range route.Constraints {
 		if err := validateHTTPRouteConstraint(route, &route.Constraints[i], fmt.Sprintf("%s constraint at index %d", label, i)); err != nil {
 			return err
@@ -296,6 +353,34 @@ func httpRouteConstraintsMatch(route *HTTPRouteConfig, req HTTPCheckRequest, sub
 			return false
 		}
 		if requestValue != subjectValue {
+			return false
+		}
+	}
+	return true
+}
+
+// httpRuleParamConstraintsMatch enforces a policy grant's param_constraints:
+// literal values, written into the policy itself rather than derived from the
+// subject, that a dynamic request value (regex-captured path segment, query,
+// header, or JSON body field) must equal. Reuses the same extraction as
+// route-level subject constraints, just comparing against a fixed literal
+// instead of a subject attribute — so it works on any existing dynamic route
+// without requiring named capture groups. A grant with no param_constraints
+// for this action is unrestricted (backward compatible). Multiple constraints
+// for the same action are ANDed.
+func httpRuleParamConstraintsMatch(route *HTTPRouteConfig, rule *models.HTTPRule, req HTTPCheckRequest) bool {
+	for _, constraint := range rule.ParamConstraints {
+		if constraint.Action != route.Action {
+			continue
+		}
+		ref := HTTPRequestValueRef{
+			Source: constraint.Request.Source,
+			Name:   constraint.Request.Name,
+			Index:  constraint.Request.Index,
+			Path:   constraint.Request.Path,
+		}
+		value, ok := extractHTTPConstraintRequestValue(route, req, ref)
+		if !ok || value != constraint.Equals {
 			return false
 		}
 	}

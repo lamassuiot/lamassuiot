@@ -24,9 +24,13 @@ func NewPrincipalManager(db *gorm.DB, jwksURL string, enableJWTValidation bool) 
 	if err != nil {
 		return nil, err
 	}
+	ms, err := store.DefaultMatchService(s, jwksURL, enableJWTValidation)
+	if err != nil {
+		return nil, err
+	}
 	return &PrincipalManager{
 		store:        s,
-		matchService: store.DefaultMatchService(s, jwksURL, enableJWTValidation),
+		matchService: ms,
 	}, nil
 }
 

@@ -181,10 +181,42 @@ func (r RelationRule) MarshalJSON() ([]byte, error) {
 // has no relation to the SQL-based Rule type.
 type HTTPRule struct {
 	// SchemaName references an HTTPSchemaDefinition by its "name" field.
-	SchemaName string   `json:"http_schema_name"`
+	SchemaName string `json:"http_schema_name"`
 	// Actions is the list of logical action names from the schema that are granted.
 	// Use ["*"] to grant all actions defined in the schema.
-	Actions    []string `json:"actions"`
+	Actions []string `json:"actions"`
+	// ParamConstraints restricts a granted action to requests whose dynamic
+	// value (a regex-captured path segment, query parameter, header, or JSON
+	// body field) equals a literal value written into this policy grant,
+	// independent of any subject attribute (e.g. grant "system-info-read"
+	// only for system_id "1", regardless of who holds the policy).
+	ParamConstraints []*HTTPRuleParamConstraint `json:"param_constraints,omitempty"`
+}
+
+// HTTPRuleParamConstraint pins one of a route's dynamic request values to a
+// static literal defined by the policy grant itself. Request uses the same
+// source kinds as HTTPRouteConstraint's Request (path_regex_group, query,
+// header, json_body) — the difference is Equals compares to a fixed literal
+// rather than a normalized subject attribute. Duplicated here (rather than
+// shared with the engine package's HTTPRequestValueRef) to avoid a
+// models -> engine import cycle; the field shapes are kept identical.
+type HTTPRuleParamConstraint struct {
+	// Action is the route action (from HTTPRule.Actions) this constraint applies to.
+	Action string `json:"action"`
+	// Request identifies the dynamic request value to compare.
+	Request HTTPRuleRequestRef `json:"request"`
+	// Equals is the literal value the extracted request value must equal.
+	Equals string `json:"equals"`
+}
+
+// HTTPRuleRequestRef mirrors the engine package's HTTPRequestValueRef shape:
+// source | name | index | path. See HTTPRuleParamConstraint for why this is
+// a separate type rather than a shared import.
+type HTTPRuleRequestRef struct {
+	Source string `json:"source"`          // path_regex_group | query | header | json_body
+	Name   string `json:"name,omitempty"`  // query/header name
+	Index  int    `json:"index,omitempty"` // regex capture group index
+	Path   string `json:"path,omitempty"`  // JSON path, e.g. $.device_id
 }
 
 // HasHTTPAction reports whether the rule grants a specific HTTP action.

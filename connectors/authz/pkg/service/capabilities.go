@@ -7,6 +7,10 @@ import (
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // principalWithPoliciesLoader is the subset of PrincipalService used by capability functions.
@@ -20,33 +24,47 @@ type policyByIDLoader interface {
 }
 
 // GetPrincipalPolicies loads policies for a principal.
-func GetPrincipalPolicies(ctx context.Context, e *engine.Engine, pm principalWithPoliciesLoader, polm policyByIDLoader, principalID string) (*engine.PolicyRegistry, error) {
+func GetPrincipalPolicies(ctx context.Context, e *engine.Engine, pm principalWithPoliciesLoader, polm policyByIDLoader, principalID string) (reg *engine.PolicyRegistry, err error) {
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.get_with_policies",
+		trace.WithAttributes(attribute.String("authz.principal_id", principalID)),
+	)
+	defer func() {
+		if reg != nil {
+			span.SetAttributes(attribute.Int("authz.policy_count", len(reg.GetAll())))
+		}
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	log := e.Logger().WithContext(ctx)
 	principal, err := pm.GetPrincipalWithPolicies(ctx, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get principal: %w", err)
 	}
 
-	registry := engine.NewPolicyRegistry()
+	reg = engine.NewPolicyRegistry()
 	for _, pp := range principal.Policies {
-		policy, err := polm.GetPolicy(ctx, pp.PolicyID)
-		if err != nil {
+		policy, pErr := polm.GetPolicy(ctx, pp.PolicyID)
+		if pErr != nil {
 			log.WithFields(logrus.Fields{
 				"policy_id": pp.PolicyID,
-				"error":     err,
+				"error":     pErr,
 			}).Warn("could not load policy")
 			continue
 		}
-		if err := registry.AddPolicy(policy); err != nil {
+		if pErr = reg.AddPolicy(policy); pErr != nil {
 			log.WithFields(logrus.Fields{
 				"policy_id": pp.PolicyID,
-				"error":     err,
+				"error":     pErr,
 			}).Warn("could not register policy")
 			continue
 		}
 	}
 
-	return registry, nil
+	return reg, nil
 }
 
 // GetGlobalCapabilitiesForPrincipal loads the principal's policies and returns the global

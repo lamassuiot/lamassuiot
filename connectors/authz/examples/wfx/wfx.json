@@ -2,6 +2,8 @@
   {
     "name": "Job Manager",
     "description": "Siemens wfx (Workflow Executor) REST API v1.1 — full route mapping for Envoy ext_authz. Base paths: /api/wfx/nbi/v1, /api/wfx/sbi/v1",
+    "base_paths": ["/api/wfx/nbi/v1", "/api/wfx/sbi/v1"],
+    "default_action": "deny",
     "groups": [
       {
         "name": "Mgmt NBI System",
@@ -19,6 +21,14 @@
             "path": "/api/wfx/nbi/v1/version",
             "match_type": "exact",
             "action": "nbi-version-read"
+          },
+          {
+            "name": "openapi",
+            "methods": ["GET"],
+            "path": "/api/wfx/nbi/v1/openapi.json",
+            "match_type": "exact",
+            "action": "nbi-openapi-read",
+            "skip_authz": true
           }
         ]
       },
