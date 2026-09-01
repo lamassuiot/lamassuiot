@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -567,6 +569,19 @@ func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transac
 		"certificate":   certToString(cert),
 		"error_message": errorMessage,
 		"expires_at":    expiresAt,
+	}
+	if cert != nil {
+		// Keep the denormalized lookup column in sync with the certificate being
+		// stored (see cmpTransactionRow.CertSerialNumber). Without this, a
+		// phased-approval transaction (ApproveCMPTransaction, the only caller
+		// that moves a row from PENDING to ISSUED with a freshly issued cert)
+		// leaves cert_serial_number at its PENDING-time empty value forever:
+		// the in-memory struct returned to the approval caller looks correct,
+		// but every later DB read (certConf, revocation-by-serial, the
+		// confirmation monitor) sees "". A later LWCConfirmReenrollment lookup
+		// with an empty serial hits the CA's list endpoint instead of a single
+		// certificate and panics on the resulting nil certificate.
+		updates["cert_serial_number"] = hex.EncodeToString((*x509.Certificate)(cert).SerialNumber.Bytes())
 	}
 	result := s.db.WithContext(ctx).
 		Model(&cmpTransactionRow{}).

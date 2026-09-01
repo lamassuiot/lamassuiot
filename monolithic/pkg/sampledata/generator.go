@@ -1110,9 +1110,8 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 								// suite's RA-initiated revocation tests (using the same
 								// id-kp-cmcRA credential the raVerified POPO tests use) are
 								// authorized alongside plain self-revocation.
-								Authorization:      models.CMPRevocationAuthorizationSelfTrustedRA,
-								AllowRevival:       true,
-								AllowExpiredTarget: true,
+								Authorization: models.CMPRevocationAuthorizationSelfTrustedRA,
+								AllowRevival:  true,
 								// All six RFC 5280 CRLReasons the suite's revocation-reason
 								// tests cycle through — RFC011's own fresh default only
 								// allows four (missing ca_compromise/affiliation_changed).

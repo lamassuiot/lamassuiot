@@ -1346,11 +1346,24 @@ func (svc DMSManagerServiceBackend) LWCConfirmReenrollment(ctx context.Context, 
 	// Resolve the newly issued (now-confirmed) certificate and the device it
 	// belongs to. The device's active identity is still the previous cert
 	// because the bind was deferred at issuance.
+	if certSerialNumber == "" {
+		// A blank serial turns "/v1/certificates/" into "/v1/certificates/" →
+		// (trailing-slash redirect) → the CA's list endpoint instead of a
+		// single-certificate lookup, which decodes into a zero-value
+		// *models.Certificate with no error. Reject explicitly here instead of
+		// letting that zero value reach the dereference below.
+		lFunc.Errorf("aborting reenrollment confirmation: empty certificate serial number")
+		return fmt.Errorf("cannot commit reenrollment: empty certificate serial number")
+	}
 	newCert, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: certSerialNumber,
 	})
 	if err != nil {
 		lFunc.Errorf("could not get confirmed certificate '%s': %s", certSerialNumber, err)
+		return fmt.Errorf("could not get confirmed certificate")
+	}
+	if newCert == nil || newCert.Certificate == nil {
+		lFunc.Errorf("confirmed certificate '%s' lookup returned no certificate", certSerialNumber)
 		return fmt.Errorf("could not get confirmed certificate")
 	}
 
@@ -1791,11 +1804,8 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 				return errs.ErrDMSEnrollInvalidCert
 			}
 		} else {
-			// Self-revocation of a device's own already-expired certificate is
-			// permitted only when RR.AllowExpiredTarget is set (RFC011); the
-			// allowExpired flag on chain validation reflects that policy.
 			candidateCAIDs := trustedRACAIDs(dms)
-			if _, vErr := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, rr.AllowExpiredTarget); vErr != nil {
+			if _, vErr := svc.validateCMPSignerAgainstCAs(ctx, lFunc, signer, candidateCAIDs, false); vErr != nil {
 				lFunc.Errorf("aborting revocation of '%s': signer CN=%s does not chain to a DMS-trusted CA: %s",
 					input.SerialNumber, signer.Subject.CommonName, vErr)
 				return errs.ErrDMSEnrollInvalidCert
@@ -1827,8 +1837,8 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// this, a trusted-RA-authorized signer for one DMS could revoke an
 	// arbitrary certificate belonging to a device under a completely
 	// unrelated DMS merely by naming its serial number — entirely bypassing
-	// that other DMS's own RR policy (authorization, AllowedReasons,
-	// AllowExpiredTarget, ...). Scoped by the certificate's owning device
+	// that other DMS's own RR policy (authorization, AllowedReasons, ...).
+	// Scoped by the certificate's owning device
 	// rather than by CA membership alone, because two DMSes can legitimately
 	// share the same EnrollmentCA (chain-validating the signer against this
 	// DMS's trusted CAs, as done above, does not prove the *target*
@@ -1913,16 +1923,6 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// → certRevoked at the controller.
 	if cert.Status == models.StatusRevoked {
 		lFunc.Warnf("revocation rejected: certificate '%s' is already revoked", input.SerialNumber)
-		return errs.ErrCertificateStatusTransitionNotAllowed
-	}
-
-	// RFC011: RR.AllowExpiredTarget gates whether an already-expired certificate
-	// may be revoked at all. Status is the authoritative expiry signal (kept
-	// current by the expiry monitor) — checked alone, not alongside a raw
-	// ValidTo comparison, since that field isn't guaranteed populated on every
-	// Certificate value a caller constructs.
-	if !rr.AllowExpiredTarget && cert.Status == models.StatusExpired {
-		lFunc.Warnf("revocation rejected: certificate '%s' is expired and RR.AllowExpiredTarget is disabled", input.SerialNumber)
 		return errs.ErrCertificateStatusTransitionNotAllowed
 	}
 

@@ -387,17 +387,21 @@ type CMPKURSettings struct {
 //
 // LIVE (all enforced in dmsmanager_lwcmp.go's LWCRevokeCertificate):
 // Authorization (self_only forbids a trusted-RA revoking on another's
-// behalf), AllowRevival (gates un-revoking a held certificate), AllowExpiredTarget
-// (gates revoking an already-expired certificate), AllowedReasons (rejects a
-// revocation whose reason isn't in the list), TrustedRA.RequireCMCRAEKU. The
-// one exception is TrustedRA.ValidationCAIDs — see its own doc comment.
+// behalf), AllowRevival (gates un-revoking a held certificate), AllowedReasons
+// (rejects a revocation whose reason isn't in the list),
+// TrustedRA.RequireCMCRAEKU. The one exception is TrustedRA.ValidationCAIDs —
+// see its own doc comment.
+//
+// Revoking an already-expired certificate is never permitted: the CA service
+// unconditionally rejects any status transition on a certificate whose status
+// is StatusExpired (ca.go's UpdateCertificateStatus), so there is no
+// per-DMS/RR setting for it.
 type CMPRRSettings struct {
-	Enabled            bool                       `json:"enabled"`
-	Authorization      CMPRevocationAuthorization `json:"authorization"`
-	AllowRevival       bool                       `json:"allow_revival"`
-	AllowExpiredTarget bool                       `json:"allow_expired_target"`
-	AllowedReasons     []CMPRevocationReason      `json:"allowed_reasons"`
-	TrustedRA          CMPTrustedRA               `json:"trusted_ra"`
+	Enabled        bool                       `json:"enabled"`
+	Authorization  CMPRevocationAuthorization `json:"authorization"`
+	AllowRevival   bool                       `json:"allow_revival"`
+	AllowedReasons []CMPRevocationReason      `json:"allowed_reasons"`
+	TrustedRA      CMPTrustedRA               `json:"trusted_ra"`
 }
 
 // CMPGENMInformationTypes gates the individual RFC 9483 §4.3 support messages a

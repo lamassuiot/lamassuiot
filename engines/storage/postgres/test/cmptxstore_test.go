@@ -371,6 +371,8 @@ func TestCMPTx_UpdateStateToIssued(t *testing.T) {
 	require.NotNil(t, got.Certificate, "cert must be written into the row by UpdateState")
 	assert.Equal(t, issuedCert.Raw, got.Certificate.Raw, "cert must be written into the row by UpdateState")
 	assert.Empty(t, got.ErrorMessage)
+	assert.Equal(t, hex.EncodeToString(issuedCert.SerialNumber.Bytes()), got.CertSerialNumber,
+		"UpdateState must persist the cert's serial number alongside the certificate")
 }
 
 // TestCMPTx_UpdateStateToFailed models the worker's error path: when LWCEnroll
