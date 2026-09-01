@@ -1,0 +1,208 @@
+package cryptoenginesv2
+
+import "time"
+
+// CreateKeyRequest is the body for POST /v2/kms/keys.
+// When KeyMaterial is non-empty the server treats it as an import (ImportKey);
+// otherwise a new key is generated (CreateKey).
+//
+// KeySpec describes the key material (e.g. RSA_2048). The authorized operations
+// are the union of Operations and the expansion of KeyUsages; if both are empty
+// the KeySpec's full supported set is authorized. The per-operation algorithm
+// (e.g. RSASSA_PSS_SHA_256) is chosen later, at sign/encrypt time.
+type CreateKeyRequest struct {
+	KeySpec     KeySpec           `json:"key_spec" binding:"required"`
+	KeyUsages   []KeyUsage        `json:"key_usages"`
+	Operations  []Operation       `json:"operations"`
+	Tags        map[string]string `json:"tags"`
+	PolicyID    string            `json:"policy_id"`
+	NotBefore   *time.Time        `json:"not_before"`
+	NotAfter    *time.Time        `json:"not_after"`
+	BackendHint string            `json:"backend_hint"`
+	// KeyMaterial is a base64-encoded PKCS#8 DER blob (asymmetric) or raw key
+	// bytes (symmetric). Present only for the import path.
+	KeyMaterial string `json:"key_material"`
+}
+
+// UpdateKeyRequest is the body for PATCH /v2/kms/keys/{id}.
+// Only the fields that are explicitly set (non-nil) are patched.
+type UpdateKeyRequest struct {
+	Tags     map[string]string `json:"tags"`
+	PolicyID *string           `json:"policy_id"`
+	NotAfter *time.Time        `json:"not_after"`
+}
+
+// SetKeyStateRequest is the body for PUT /v2/kms/keys/{id}/state.
+// Valid target states: enabled, disabled, pendingDeletion.
+// DeletionScheduledAt is required when State is pendingDeletion.
+type SetKeyStateRequest struct {
+	State               KeyState   `json:"state" binding:"required"`
+	DeletionScheduledAt *time.Time `json:"deletion_scheduled_at"`
+}
+
+// RestoreKeyRequest is the body for POST /v2/kms/keys/restore.
+type RestoreKeyRequest struct {
+	BackupBlob string `json:"backup_blob" binding:"required"` // base64-encoded BackupBlob.Bytes
+}
+
+// UpsertAliasRequest is the body for PUT /v2/kms/aliases/{name}.
+// Creates or retargets the alias atomically.
+type UpsertAliasRequest struct {
+	KeyID string `json:"key_id" binding:"required"`
+}
+
+// GenerateRandomRequest is the body for POST /v2/kms/random.
+type GenerateRandomRequest struct {
+	Bytes int `json:"bytes" binding:"required,min=1,max=1024"`
+}
+
+// ---------------------------------------------------------------------------
+// Cryptographic operation requests/responses (POST /v2/kms/keys/{id}/...)
+//
+// All binary fields are base64-encoded (StdEncoding). Algorithm selects the
+// per-operation AlgorithmID (e.g. RSASSA_PSS_SHA_256) and must be compatible
+// with the key's KeySpec.
+// ---------------------------------------------------------------------------
+
+// SignRequest is the body for POST /v2/kms/keys/{id}/sign.
+// Digest is the pre-hashed message digest; the hash must match the one implied
+// by Algorithm (e.g. SHA-256 for RSASSA_PSS_SHA_256).
+type SignRequest struct {
+	Algorithm AlgorithmID `json:"algorithm" binding:"required"`
+	Digest    string      `json:"digest" binding:"required"` // base64
+}
+
+type SignResponse struct {
+	KeyID     string      `json:"id"`
+	Algorithm AlgorithmID `json:"algorithm"`
+	Signature string      `json:"signature"` // base64
+}
+
+// VerifyRequest is the body for POST /v2/kms/keys/{id}/verify.
+type VerifyRequest struct {
+	Algorithm AlgorithmID `json:"algorithm" binding:"required"`
+	Digest    string      `json:"digest" binding:"required"`    // base64
+	Signature string      `json:"signature" binding:"required"` // base64
+}
+
+type VerifyResponse struct {
+	KeyID string `json:"id"`
+	Valid bool   `json:"valid"`
+}
+
+// EncryptRequest is the body for POST /v2/kms/keys/{id}/encrypt. It serves both
+// asymmetric (RSAES_OAEP_*) and symmetric (SYMMETRIC_DEFAULT) keys; the server
+// dispatches on the key's capability. Nonce/AAD apply to symmetric AEAD only.
+type EncryptRequest struct {
+	Algorithm      AlgorithmID `json:"algorithm" binding:"required"`
+	Plaintext      string      `json:"plaintext" binding:"required"` // base64
+	Nonce          string      `json:"nonce"`                        // base64, symmetric only
+	AssociatedData string      `json:"associated_data"`              // base64
+}
+
+type EncryptResponse struct {
+	KeyID      string      `json:"id"`
+	Algorithm  AlgorithmID `json:"algorithm"`
+	Ciphertext string      `json:"ciphertext"`      // base64
+	Nonce      string      `json:"nonce,omitempty"` // base64, symmetric only
+}
+
+// DecryptRequest is the body for POST /v2/kms/keys/{id}/decrypt. For symmetric keys
+// Nonce is required and must match the value returned by encrypt.
+type DecryptRequest struct {
+	Algorithm      AlgorithmID `json:"algorithm" binding:"required"`
+	Ciphertext     string      `json:"ciphertext" binding:"required"` // base64
+	Nonce          string      `json:"nonce"`                         // base64, symmetric only
+	AssociatedData string      `json:"associated_data"`               // base64
+}
+
+type DecryptResponse struct {
+	KeyID     string `json:"id"`
+	Plaintext string `json:"plaintext"` // base64
+}
+
+// MACRequest is the body for POST /v2/kms/keys/{id}/mac.
+type MACRequest struct {
+	Algorithm AlgorithmID `json:"algorithm" binding:"required"`
+	Message   string      `json:"message" binding:"required"` // base64
+}
+
+type MACResponse struct {
+	KeyID     string      `json:"id"`
+	Algorithm AlgorithmID `json:"algorithm"`
+	MAC       string      `json:"mac"` // base64
+}
+
+// VerifyMACRequest is the body for POST /v2/kms/keys/{id}/verify-mac.
+type VerifyMACRequest struct {
+	Algorithm AlgorithmID `json:"algorithm" binding:"required"`
+	Message   string      `json:"message" binding:"required"` // base64
+	MAC       string      `json:"mac" binding:"required"`     // base64
+}
+
+type VerifyMACResponse struct {
+	KeyID string `json:"id"`
+	Valid bool   `json:"valid"`
+}
+
+// WrapKeyRequest is the body for POST /v2/kms/keys/{id}/wrap.
+type WrapKeyRequest struct {
+	Algorithm      AlgorithmID `json:"algorithm" binding:"required"`
+	KeyMaterial    string      `json:"key_material" binding:"required"` // base64
+	AssociatedData string      `json:"associated_data"`                 // base64
+}
+
+type WrapKeyResponse struct {
+	KeyID      string      `json:"id"`
+	Algorithm  AlgorithmID `json:"algorithm"`
+	WrappedKey string      `json:"wrapped_key"` // base64
+}
+
+// UnwrapKeyRequest is the body for POST /v2/kms/keys/{id}/unwrap.
+type UnwrapKeyRequest struct {
+	Algorithm      AlgorithmID `json:"algorithm" binding:"required"`
+	WrappedKey     string      `json:"wrapped_key" binding:"required"` // base64
+	AssociatedData string      `json:"associated_data"`                // base64
+}
+
+type UnwrapKeyResponse struct {
+	KeyID       string `json:"id"`
+	KeyMaterial string `json:"key_material"` // base64
+}
+
+// EncapsulateResponse is returned by POST /v2/kms/keys/{id}/encapsulate. The KEM
+// operation needs no request body: it uses the key's public encapsulation key.
+type EncapsulateResponse struct {
+	KeyID        string `json:"id"`
+	SharedSecret string `json:"shared_secret"` // base64
+	Ciphertext   string `json:"ciphertext"`    // base64
+}
+
+// DecapsulateRequest is the body for POST /v2/kms/keys/{id}/decapsulate.
+type DecapsulateRequest struct {
+	Ciphertext string `json:"ciphertext" binding:"required"` // base64
+}
+
+type DecapsulateResponse struct {
+	KeyID        string `json:"id"`
+	SharedSecret string `json:"shared_secret"` // base64
+}
+
+// AgreeRequest is the body for POST /v2/kms/keys/{id}/agree. PeerPublicKey is a
+// PEM-encoded PKIX public key. When Derive is true the raw shared secret is run
+// through the supplied KDF and DerivedKey is returned instead.
+type AgreeRequest struct {
+	Algorithm     AlgorithmID `json:"algorithm" binding:"required"`
+	PeerPublicKey string      `json:"peer_public_key" binding:"required"` // PEM
+
+	Derive       bool        `json:"derive"`
+	KDFAlgorithm AlgorithmID `json:"kdf_algorithm"`
+	KDFSalt      string      `json:"kdf_salt"` // base64
+	KDFInfo      string      `json:"kdf_info"` // base64
+	KDFLength    int         `json:"kdf_length"`
+}
+
+type AgreeResponse struct {
+	KeyID        string `json:"id"`
+	SharedSecret string `json:"shared_secret"` // base64
+}
