@@ -1298,13 +1298,17 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 
 // pollRespTagFor picks the cert-bearing response body tag for a pollReq
 // delivery from the persisted transaction's original request type, mirroring
-// enrollmentVariantInitial.respTagFor (cmp_enrollment.go): only an original ir
-// yields ip; everything else (cr, p10cr, kur, ccr) yields the matching
-// cp/ccp. p10cr and cr must never yield an ip — their response body is always
-// cp (RFC 9483 §4.1.4).
+// enrollmentVariantInitial.respTagFor / enrollmentVariantUpdate.respTagFor
+// (cmp_enrollment.go): kur always yields kup, an original ir yields ip, and
+// everything else (cr, p10cr, ccr's ccp aside) yields cp. p10cr and cr must
+// never yield an ip, and kur must never yield a cp — their response body is
+// always cp / kup respectively (RFC 9483 §4.1.3 / §4.1.4).
 func pollRespTagFor(tx models.CMPTransaction) int {
 	if tx.RequestType == cmpTagToString(corecmp.BodyTagCCR) {
 		return corecmp.BodyTagCCP
+	}
+	if tx.IsReenrollment {
+		return corecmp.BodyTagKUP
 	}
 	if tx.RequestType == cmpTagToString(corecmp.BodyTagIR) {
 		return corecmp.BodyTagIP
