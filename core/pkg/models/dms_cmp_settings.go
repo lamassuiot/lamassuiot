@@ -197,7 +197,6 @@ func resolveRR(rr CMPRRSettings) CMPRRSettings {
 	if fresh {
 		rr.Authorization = CMPRevocationAuthorizationSelfOnly
 		rr.Enabled = true
-		rr.AllowExpiredTarget = true
 		rr.TrustedRA.RequireCMCRAEKU = true
 		if rr.AllowedReasons == nil {
 			rr.AllowedReasons = []CMPRevocationReason{

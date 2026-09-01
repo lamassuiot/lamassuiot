@@ -73,9 +73,6 @@ func TestResolveCMPSettings_FreshDefaults(t *testing.T) {
 	if opts.RR.Authorization != CMPRevocationAuthorizationSelfOnly {
 		t.Errorf("RR.Authorization = %q, want self_only", opts.RR.Authorization)
 	}
-	if !opts.RR.AllowExpiredTarget {
-		t.Error("RR.AllowExpiredTarget = false, want true for fresh block")
-	}
 	if !opts.RR.TrustedRA.RequireCMCRAEKU {
 		t.Error("RR.TrustedRA.RequireCMCRAEKU = false, want true for fresh block")
 	}
