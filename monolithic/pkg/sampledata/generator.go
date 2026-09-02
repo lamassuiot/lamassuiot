@@ -994,7 +994,8 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 									Metadata:  map[string]interface{}{"sample": true},
 									Tags:      []string{"sample", "cmp"},
 								},
-								RegistrationMode: models.JITP,
+								RegistrationMode:            models.JITP,
+								EnableReplaceableEnrollment: true,
 							},
 							AuthMode:                          models.CMPAuthModeClientCertificate,
 							ProtectionCertificateSerialNumber: protectionCert.SerialNumber,
@@ -1128,9 +1129,10 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 							// p10cr (a plain PKCS#10 CSR) is a privileged-CA-op-style
 							// RFC011 gate too, off by default — the suite's P10cr tests
 							// need it on. No pre-existing-device requirement, matching cr.
+							// Replacing an existing identity now relies solely on the
+							// DMS-general EnableReplaceableEnrollment set above.
 							P10CR: models.CMPP10CRSettings{
-								Enabled:              true,
-								ExistingDevicePolicy: models.CMPExistingDevicePolicyReplace,
+								Enabled: true,
 							},
 							// The suite's genm tests exercise all id-it information types,
 							// including the ones with only a stub data provider
