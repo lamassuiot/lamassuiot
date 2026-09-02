@@ -37,25 +37,6 @@ package models
 // ---------------------------------------------------------------------------
 // Enum types
 
-// CMPOpRegistrationMode selects, per operation, how a device is registered.
-// "inherit" defers to the DMS-level EnrollmentSettings.RegistrationMode.
-type CMPOpRegistrationMode string
-
-const (
-	CMPOpRegistrationModeInherit         CMPOpRegistrationMode = "inherit"
-	CMPOpRegistrationModeJITP            CMPOpRegistrationMode = "jitp"
-	CMPOpRegistrationModePreRegistration CMPOpRegistrationMode = "pre_registration"
-)
-
-// CMPExistingDevicePolicy decides what happens when a request targets an
-// already-registered device.
-type CMPExistingDevicePolicy string
-
-const (
-	CMPExistingDevicePolicyReject  CMPExistingDevicePolicy = "reject"
-	CMPExistingDevicePolicyReplace CMPExistingDevicePolicy = "replace"
-)
-
 // CMPIdentitySource selects where the device identity is read from when a
 // request carries a NULL-DN subject (RFC 9483 §4.1.1). NOT YET enforced — see
 // the top-of-file note on IR.IdentitySource.
@@ -303,8 +284,6 @@ type CMPTrustedRA struct {
 // CMPIRSettings configures the Initialization Request (ir, RFC 9483 §4.1.1).
 type CMPIRSettings struct {
 	Enabled              bool                    `json:"enabled"`
-	RegistrationMode     CMPOpRegistrationMode   `json:"registration_mode"`
-	ExistingDevicePolicy CMPExistingDevicePolicy `json:"existing_device_policy"`
 	IdentitySource       CMPIdentitySource       `json:"identity_source"`
 	ProofOfPossession    CMPProofOfPossession    `json:"proof_of_possession"`
 	RegistrationToken    CMPControl              `json:"registration_token"`
@@ -343,11 +322,9 @@ type CMPCRSettings struct {
 //   - central key generation is NOT available (the client supplies its key);
 //   - CRMF registration controls (regToken/authenticator) do not apply.
 type CMPP10CRSettings struct {
-	Enabled              bool                    `json:"enabled"`
-	RegistrationMode     CMPOpRegistrationMode   `json:"registration_mode"`
-	ExistingDevicePolicy CMPExistingDevicePolicy `json:"existing_device_policy"`
-	AllowedProfileIDs    []string                `json:"allowed_profile_ids"`
-	PolicyOverrides      CMPPolicyOverrides      `json:"policy_overrides"`
+	Enabled           bool               `json:"enabled"`
+	AllowedProfileIDs []string           `json:"allowed_profile_ids"`
+	PolicyOverrides   CMPPolicyOverrides `json:"policy_overrides"`
 }
 
 // CMPKURSettings configures the Key Update Request (kur, RFC 9483 §4.1.3).

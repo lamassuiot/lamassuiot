@@ -43,12 +43,6 @@ func TestResolveCMPSettings_FreshDefaults(t *testing.T) {
 	opts := out.CMP.EnrollmentSettings
 
 	// Enum defaults.
-	if opts.IR.RegistrationMode != CMPOpRegistrationModeInherit {
-		t.Errorf("IR.RegistrationMode = %q, want inherit", opts.IR.RegistrationMode)
-	}
-	if opts.IR.ExistingDevicePolicy != CMPExistingDevicePolicyReject {
-		t.Errorf("IR.ExistingDevicePolicy = %q, want reject", opts.IR.ExistingDevicePolicy)
-	}
 	if opts.IR.IdentitySource != CMPIdentitySourceSubjectOrSAN {
 		t.Errorf("IR.IdentitySource = %q, want subject_or_san", opts.IR.IdentitySource)
 	}
@@ -225,8 +219,8 @@ func TestResolveCMPSettings_PreservesExplicitFalse(t *testing.T) {
 	// Enabled=false rather than being re-defaulted to true.
 	in := newCMPSettings()
 	in.CMP.EnrollmentSettings.IR = CMPIRSettings{
-		Enabled:          false,
-		RegistrationMode: CMPOpRegistrationModeJITP, // non-empty → not fresh
+		Enabled:        false,
+		IdentitySource: CMPIdentitySourceSubjectOnly, // non-empty → not fresh
 	}
 	out := ResolveCMPSettings(in)
 	if out.CMP.EnrollmentSettings.IR.Enabled {

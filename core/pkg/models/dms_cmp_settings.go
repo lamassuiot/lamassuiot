@@ -124,17 +124,11 @@ func resolvePolicyOverrides(p CMPPolicyOverrides) CMPPolicyOverrides {
 // enum there, so an operator's explicit false is preserved thereafter.
 
 func resolveIR(ir CMPIRSettings) CMPIRSettings {
-	fresh := ir.RegistrationMode == ""
+	fresh := ir.IdentitySource == ""
 	if fresh {
-		ir.RegistrationMode = CMPOpRegistrationModeInherit
+		ir.IdentitySource = CMPIdentitySourceSubjectOrSAN
 		ir.Enabled = true
 		ir.ProofOfPossession.Required = true
-	}
-	if ir.ExistingDevicePolicy == "" {
-		ir.ExistingDevicePolicy = CMPExistingDevicePolicyReject
-	}
-	if ir.IdentitySource == "" {
-		ir.IdentitySource = CMPIdentitySourceSubjectOrSAN
 	}
 	ir.ProofOfPossession = resolvePOPO(ir.ProofOfPossession)
 	ir.RegistrationToken = resolveControl(ir.RegistrationToken)
@@ -163,15 +157,8 @@ func resolveCR(cr CMPCRSettings) CMPCRSettings {
 }
 
 func resolveP10CR(p CMPP10CRSettings) CMPP10CRSettings {
-	fresh := p.RegistrationMode == ""
-	if fresh {
-		p.RegistrationMode = CMPOpRegistrationModeInherit
-		// p10cr is disabled by default (the product spec ships it off): only the
-		// enum default is applied here, Enabled stays at its zero value (false).
-	}
-	if p.ExistingDevicePolicy == "" {
-		p.ExistingDevicePolicy = CMPExistingDevicePolicyReject
-	}
+	// p10cr is disabled by default (the product spec ships it off): Enabled
+	// stays at its zero value (false) unless an operator explicitly sets it.
 	if p.AllowedProfileIDs == nil {
 		p.AllowedProfileIDs = []string{}
 	}

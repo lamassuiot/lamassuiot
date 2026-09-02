@@ -88,8 +88,6 @@ func TestCMPSettings_NestedRoundTrip(t *testing.T) {
 	opts := got.Settings.CMP.EnrollmentSettings
 
 	// --- defaulting: nested blocks fully populated on read -----------------
-	assert.Equal(t, models.CMPOpRegistrationModeInherit, opts.IR.RegistrationMode,
-		"fresh IR block must default RegistrationMode to inherit")
 	assert.True(t, opts.IR.Enabled, "fresh IR block must default Enabled=true")
 	assert.True(t, opts.CR.RequireExistingDevice, "fresh CR block must default RequireExistingDevice=true")
 	assert.Equal(t, models.CMPCertificateBehaviorAdditional, opts.CR.CertificateBehavior)

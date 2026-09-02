@@ -776,32 +776,6 @@ func cmpOperationFromContext(ctx context.Context) string {
 	return "ir"
 }
 
-// applyCMPOpRegistrationOverride overrides the DMS-general RegistrationMode /
-// EnableReplaceableEnrollment with an ir/p10cr operation's registration_mode /
-// existing_device_policy, when configured (non-"inherit"/non-empty). CR has no
-// such fields (a cr always targets an already-registered device per its own
-// RequireExistingDevice), so callers only invoke this for ir and p10cr.
-func applyCMPOpRegistrationOverride(enrollSettings models.CommonEnrollmentSettings, mode models.CMPOpRegistrationMode, policy models.CMPExistingDevicePolicy) models.CommonEnrollmentSettings {
-	switch mode {
-	case models.CMPOpRegistrationModeJITP:
-		enrollSettings.RegistrationMode = models.JITP
-	case models.CMPOpRegistrationModePreRegistration:
-		enrollSettings.RegistrationMode = models.PreRegistration
-	}
-	// Only "replace" overrides — it's a genuine per-op opt-in to allow
-	// replacement even under a stricter DMS-general policy. "reject" does NOT
-	// force EnableReplaceableEnrollment off: unlike registration_mode,
-	// CMPExistingDevicePolicy has no "inherit" sentinel and resolveIR/
-	// resolveP10CR always concretize an unset value to "reject", so "reject"
-	// is indistinguishable from "never configured" — treating it as an
-	// override would silently defeat a DMS that explicitly set the general
-	// EnableReplaceableEnrollment=true and never touched this per-op field.
-	if policy == models.CMPExistingDevicePolicyReplace {
-		enrollSettings.EnableReplaceableEnrollment = true
-	}
-	return enrollSettings
-}
-
 // countActiveDeviceCertificates counts the certificates recorded in a device's
 // identity slot (across all versions, not just the current ActiveVersion) that
 // the CA still reports as non-revoked. Backs CR.MaximumActiveCertificates:
@@ -953,16 +927,6 @@ func (svc DMSManagerServiceBackend) LWCEnroll(ctx context.Context, csr *x509.Cer
 	}
 
 	enrollSettings := dms.Settings.CMP.EnrollmentSettings.CommonEnrollmentSettings
-
-	// RFC011: ir/p10cr may override the DMS-general registration_mode /
-	// existing_device_policy; cr has no such fields (see RequireExistingDevice
-	// below instead).
-	switch cmpOp {
-	case "ir":
-		enrollSettings = applyCMPOpRegistrationOverride(enrollSettings, cmpOpts.IR.RegistrationMode, cmpOpts.IR.ExistingDevicePolicy)
-	case "p10cr":
-		enrollSettings = applyCMPOpRegistrationOverride(enrollSettings, cmpOpts.P10CR.RegistrationMode, cmpOpts.P10CR.ExistingDevicePolicy)
-	}
 
 	// RFC011: a cr targets a device that already participates in the PKI; when
 	// the DMS requires that explicitly, reject a cr against an unregistered
