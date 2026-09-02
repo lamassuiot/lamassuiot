@@ -21,26 +21,34 @@ import (
 // cmpTransactionRow is the GORM model that maps to the cmp_transactions table.
 // It is intentionally kept private; callers use the domain type models.CMPTransaction.
 type cmpTransactionRow struct {
-	TransactionID        string    `gorm:"primaryKey;column:transaction_id"`
-	DMSID                string    `gorm:"column:dms_id;not null"`
-	CertSerialNumber     string    `gorm:"column:cert_serial_number;not null;default:''"`
-	Certificate          string    `gorm:"column:certificate"`                                // base64-PEM text; empty for PENDING rows
-	SentNonce            string    `gorm:"column:sent_nonce;not null;default:''"`             // hex-encoded bytes
-	ReceivedNonce        string    `gorm:"column:received_nonce;not null;default:''"`         // hex-encoded request senderNonce
-	SupersededCertSerial string    `gorm:"column:superseded_cert_serial;not null;default:''"` // kur: hex serial of the cert being updated
-	RegToken             string    `gorm:"column:reg_token;not null;default:''"`              // RFC 4211 §6.1 id-regCtrl-regToken, one-time use
-	PopoChallenge        string    `gorm:"column:popo_challenge;not null;default:''"`         // challengeResp POP: hex expected Rand.int
-	State                string    `gorm:"column:state;not null;default:ISSUED"`
-	ErrorMessage         string    `gorm:"column:error_message;not null;default:''"`
-	CSR                  string    `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
-	IsReenrollment       bool      `gorm:"column:is_reenrollment;not null;default:false"`
-	CentralKeyGeneration bool      `gorm:"column:central_key_generation;not null;default:false"` // RFC 9483 §4.1.6 CKG: response not replayable
-	RequestType          string    `gorm:"column:request_type;not null;default:''"`
-	SubjectCommonName    string    `gorm:"column:subject_common_name;not null;default:''"`
-	WFXJobID             string    `gorm:"column:wfx_job_id;not null;default:''"`
-	ConfirmedAt          time.Time `gorm:"column:confirmed_at"`
-	ExpiresAt            time.Time `gorm:"column:expires_at;not null"`
-	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime"`
+	TransactionID        string `gorm:"primaryKey;column:transaction_id"`
+	DMSID                string `gorm:"column:dms_id;not null"`
+	CertSerialNumber     string `gorm:"column:cert_serial_number;not null;default:''"`
+	Certificate          string `gorm:"column:certificate"`                                // base64-PEM text; empty for PENDING rows
+	SentNonce            string `gorm:"column:sent_nonce;not null;default:''"`             // hex-encoded bytes
+	ReceivedNonce        string `gorm:"column:received_nonce;not null;default:''"`         // hex-encoded request senderNonce
+	SupersededCertSerial string `gorm:"column:superseded_cert_serial;not null;default:''"` // kur: hex serial of the cert being updated
+	RegToken             string `gorm:"column:reg_token;not null;default:''"`              // RFC 4211 §6.1 id-regCtrl-regToken, one-time use
+	PopoChallenge        string `gorm:"column:popo_challenge;not null;default:''"`         // challengeResp POP: hex expected Rand.int
+	State                string `gorm:"column:state;not null;default:ISSUED"`
+	ErrorMessage         string `gorm:"column:error_message;not null;default:''"`
+	CSR                  string `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
+	IsReenrollment       bool   `gorm:"column:is_reenrollment;not null;default:false"`
+	CentralKeyGeneration bool   `gorm:"column:central_key_generation;not null;default:false"` // RFC 9483 §4.1.6 CKG: response not replayable
+	RequestType          string `gorm:"column:request_type;not null;default:''"`
+	// POPOMethod/ChallengeType/AuthenticatorControlPresent/AuthModeAtEnrollment
+	// are security-audit metadata recording how this transaction's key
+	// possession and requester identity were established — see the doc
+	// comments on the corresponding models.CMPTransaction fields.
+	POPOMethod                  string    `gorm:"column:popo_method;not null;default:''"`
+	ChallengeType               string    `gorm:"column:challenge_type;not null;default:''"`
+	AuthenticatorControlPresent bool      `gorm:"column:authenticator_control_present;not null;default:false"`
+	AuthModeAtEnrollment        string    `gorm:"column:auth_mode_at_enrollment;not null;default:''"`
+	SubjectCommonName           string    `gorm:"column:subject_common_name;not null;default:''"`
+	WFXJobID                    string    `gorm:"column:wfx_job_id;not null;default:''"`
+	ConfirmedAt                 time.Time `gorm:"column:confirmed_at"`
+	ExpiresAt                   time.Time `gorm:"column:expires_at;not null"`
+	CreatedAt                   time.Time `gorm:"column:created_at;autoCreateTime"`
 }
 
 func certToString(c *models.X509Certificate) string {
@@ -290,26 +298,30 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx models.CM
 		state = models.CMPTransactionStateIssued
 	}
 	row := cmpTransactionRow{
-		TransactionID:        tx.TransactionID,
-		DMSID:                tx.DMSID,
-		CertSerialNumber:     tx.CertSerialNumber,
-		Certificate:          certToString(tx.Certificate),
-		SentNonce:            tx.SentNonce,
-		ReceivedNonce:        tx.ReceivedNonce,
-		SupersededCertSerial: tx.SupersededCertSerial,
-		RegToken:             tx.RegToken,
-		PopoChallenge:        tx.PopoChallenge,
-		State:                string(state),
-		ErrorMessage:         tx.ErrorMessage,
-		CSR:                  csrToString(tx.CSR),
-		IsReenrollment:       tx.IsReenrollment,
-		CentralKeyGeneration: tx.CentralKeyGeneration,
-		RequestType:          tx.RequestType,
-		SubjectCommonName:    tx.SubjectCommonName,
-		WFXJobID:             tx.WFXJobID,
-		ConfirmedAt:          tx.ConfirmedAt,
-		ExpiresAt:            tx.ExpiresAt,
-		CreatedAt:            tx.CreatedAt,
+		TransactionID:               tx.TransactionID,
+		DMSID:                       tx.DMSID,
+		CertSerialNumber:            tx.CertSerialNumber,
+		Certificate:                 certToString(tx.Certificate),
+		SentNonce:                   tx.SentNonce,
+		ReceivedNonce:               tx.ReceivedNonce,
+		SupersededCertSerial:        tx.SupersededCertSerial,
+		RegToken:                    tx.RegToken,
+		PopoChallenge:               tx.PopoChallenge,
+		State:                       string(state),
+		ErrorMessage:                tx.ErrorMessage,
+		CSR:                         csrToString(tx.CSR),
+		IsReenrollment:              tx.IsReenrollment,
+		CentralKeyGeneration:        tx.CentralKeyGeneration,
+		RequestType:                 tx.RequestType,
+		POPOMethod:                  tx.POPOMethod,
+		ChallengeType:               tx.ChallengeType,
+		AuthenticatorControlPresent: tx.AuthenticatorControlPresent,
+		AuthModeAtEnrollment:        tx.AuthModeAtEnrollment,
+		SubjectCommonName:           tx.SubjectCommonName,
+		WFXJobID:                    tx.WFXJobID,
+		ConfirmedAt:                 tx.ConfirmedAt,
+		ExpiresAt:                   tx.ExpiresAt,
+		CreatedAt:                   tx.CreatedAt,
 	}
 
 	// OnConflict(DoNothing) + RowsAffected==0 distinguishes a duplicate key
@@ -936,25 +948,29 @@ func (s *PostgresCMPTransactionStorage) SelectAllByDMS(
 
 func rowToDomain(row cmpTransactionRow) models.CMPTransaction {
 	return models.CMPTransaction{
-		TransactionID:        row.TransactionID,
-		DMSID:                row.DMSID,
-		CertSerialNumber:     row.CertSerialNumber,
-		Certificate:          stringToCert(row.Certificate),
-		SentNonce:            row.SentNonce,
-		ReceivedNonce:        row.ReceivedNonce,
-		SupersededCertSerial: row.SupersededCertSerial,
-		RegToken:             row.RegToken,
-		PopoChallenge:        row.PopoChallenge,
-		State:                models.CMPTransactionState(row.State),
-		ErrorMessage:         row.ErrorMessage,
-		CSR:                  stringToCSR(row.CSR),
-		IsReenrollment:       row.IsReenrollment,
-		CentralKeyGeneration: row.CentralKeyGeneration,
-		RequestType:          row.RequestType,
-		SubjectCommonName:    row.SubjectCommonName,
-		WFXJobID:             row.WFXJobID,
-		ConfirmedAt:          row.ConfirmedAt,
-		ExpiresAt:            row.ExpiresAt,
-		CreatedAt:            row.CreatedAt,
+		TransactionID:               row.TransactionID,
+		DMSID:                       row.DMSID,
+		CertSerialNumber:            row.CertSerialNumber,
+		Certificate:                 stringToCert(row.Certificate),
+		SentNonce:                   row.SentNonce,
+		ReceivedNonce:               row.ReceivedNonce,
+		SupersededCertSerial:        row.SupersededCertSerial,
+		RegToken:                    row.RegToken,
+		PopoChallenge:               row.PopoChallenge,
+		State:                       models.CMPTransactionState(row.State),
+		ErrorMessage:                row.ErrorMessage,
+		CSR:                         stringToCSR(row.CSR),
+		IsReenrollment:              row.IsReenrollment,
+		CentralKeyGeneration:        row.CentralKeyGeneration,
+		RequestType:                 row.RequestType,
+		POPOMethod:                  row.POPOMethod,
+		ChallengeType:               row.ChallengeType,
+		AuthenticatorControlPresent: row.AuthenticatorControlPresent,
+		AuthModeAtEnrollment:        row.AuthModeAtEnrollment,
+		SubjectCommonName:           row.SubjectCommonName,
+		WFXJobID:                    row.WFXJobID,
+		ConfirmedAt:                 row.ConfirmedAt,
+		ExpiresAt:                   row.ExpiresAt,
+		CreatedAt:                   row.CreatedAt,
 	}
 }

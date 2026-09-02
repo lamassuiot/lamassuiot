@@ -51,6 +51,17 @@ func cmpProofOfPossessionFor(o *models.CMPEnrollmentSettings, tag int) models.CM
 	return o.IR.ProofOfPossession
 }
 
+// cmpPOPOMethodCSRSignature and cmpPOPOMethodKURProtectionCert are
+// models.CMPTransaction.POPOMethod values for the two proof-of-possession
+// mechanisms that are fixed protocol invariants rather than configurable
+// models.CMPPOPOMethod choices (see that field's doc comment for the full
+// rationale): p10cr's CSR self-signature (RFC 9483 §4.1.4) and kur's
+// message-protection-cert possession proof (RFC 9483 §4.1.3).
+const (
+	cmpPOPOMethodCSRSignature      = "csr_signature"
+	cmpPOPOMethodKURProtectionCert = "kur_protection_cert"
+)
+
 func popoMethodAllowed(p models.CMPProofOfPossession, method models.CMPPOPOMethod) bool {
 	for _, m := range p.AllowedMethods {
 		if m == method {
@@ -134,6 +145,14 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 
 	useEncrCert := false
 	useChallengeResp := false
+	// popoMethod/challengeType record, for audit purposes, HOW this
+	// transaction's proof-of-possession was actually established — see
+	// models.CMPTransaction.POPOMethod/.ChallengeType for the full value
+	// list. Populated as each POPO branch below resolves; kur and p10cr set
+	// their own fixed values outside this ir/cr-only block (see below and
+	// cmp_p10cr.go).
+	popoMethod := ""
+	challengeType := ""
 	if variant.verifyInnerPOPO {
 		// keyEncipherment [2] / keyAgreement [3]: the "indirect" POP methods
 		// (RFC 4210bis §5.2.8), where possession is proven by a subsequent
@@ -157,6 +176,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 				}
 				lFunc.Infof("%s: encrCert POPO — certificate will be delivered confidentiality-protected (RFC 4210bis §5.2.8.4)", variant.logPrefix)
 				useEncrCert = true
+				popoMethod = string(models.CMPPOPOMethodEncryptedCertificate)
 			case popoIndirectChallengeResp:
 				if !popoMethodAllowed(popoPolicy, models.CMPPOPOMethodChallengeResponse) {
 					lFunc.Warnf("%s: challengeResp POPO rejected: not permitted by DMS POPO allow-list", variant.logPrefix)
@@ -169,6 +189,15 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 				}
 				lFunc.Infof("%s: challengeResp POPO — issuance deferred until popdecr (RFC 4210bis §5.2.8.3)", variant.logPrefix)
 				useChallengeResp = true
+				popoMethod = string(models.CMPPOPOMethodChallengeResponse)
+				// RFC 9810 §7: cmp2021(3) uses encryptedRand, anything else falls
+				// back to the deprecated `challenge` field — mirrors the choice
+				// buildPOPOChallengeEntry makes from the same header.PVNO.
+				if header.PVNO == corecmp.PVNOCMP2021 {
+					challengeType = cmpChallengeTypeEncryptedRand
+				} else {
+					challengeType = cmpChallengeTypeLegacy
+				}
 			case popoIndirectUnsupported:
 				// Fall through: verifyPOPO's default case rejects agreeMAC /
 				// encryptedKey / malformed POPOPrivKey content with badPOP,
@@ -219,6 +248,7 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 			if trustedRA {
 				lFunc.Infof("%s: accepting raVerified POPO from trusted RA (id-kp-cmcRA) CN=%s", variant.logPrefix, signer.Subject.CommonName)
 				// RFC011 POPO.Required override of the legacy EnforcePOPO flag.
+				popoMethod = string(models.CMPPOPOMethodTrustedRA)
 			} else if err := verifyPOPO(req.CertReqDER, req.POPORaw, req.PublicKeyDER, popoPolicy.Required); err != nil {
 				// An EE asserting raVerified is notAuthorized (RFC 9483 §4.1); every
 				// other POPO failure is badPOP.
@@ -233,8 +263,21 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 					FailInfoBit: failBit,
 				})
 				return
+			} else if isSignaturePOPO {
+				// A genuine POPOSigningKey signature was verified. When
+				// isSignaturePOPO is false here, verifyPOPO tolerated an ABSENT
+				// POPO (popoPolicy.Required == false) — leave popoMethod empty
+				// rather than misreport it as "signature".
+				popoMethod = string(models.CMPPOPOMethodSignature)
 			}
 		}
+	}
+	if variant.isReenrollment {
+		// kur: possession is proven by the message-level protection made with
+		// the certificate being updated (RFC 9483 §4.1.3), not by a CRMF POPO
+		// (verifyInnerPOPO is false for kur — see the comment above). This is
+		// a fixed protocol invariant, not a configurable POPO method.
+		popoMethod = cmpPOPOMethodKURProtectionCert
 	}
 
 	// RFC 9483 §4.1.3 / RFC 4211 §6.2: when a KUR carries the optional
@@ -263,8 +306,14 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	// on the control's mere PRESENCE, independent of whether ExpectedAuthenticator
 	// is configured. Scoped to ir only — CMPCRSettings has no such field, so cr
 	// (and kur, which shares this code path) keep the unconditional check below.
+	// authenticatorControlPresent records the control's mere presence for
+	// audit purposes (models.CMPTransaction.AuthenticatorControlPresent),
+	// independent of the ir-only mode gate below — a cr/kur request could in
+	// principle carry the control too, even though only ir enforces a policy
+	// on it.
+	authenticatorControlPresent := corecmp.HasAuthenticatorControl(req.ControlsDER)
 	if body.Tag == corecmp.BodyTagIR {
-		present := corecmp.HasAuthenticatorControl(req.ControlsDER)
+		present := authenticatorControlPresent
 		mode := enrollOpts.IR.AuthenticatorControl.Mode
 		if mode == models.CMPControlModeDisabled && present {
 			lFunc.Warnf("%s: authenticator control rejected: disabled for this DMS (IR.AuthenticatorControl.Mode=disabled)", variant.logPrefix)
@@ -407,6 +456,11 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 	}
 
 	deviceCN := extractCNFromSubjectDER(req.SubjectDER)
+	// All the security-audit fields (popoMethod, challengeType,
+	// authenticatorControlPresent) are already resolved above by this point,
+	// so the Validated transition's metadata is a faithful record of how this
+	// request was authenticated — see CMPTransaction's field docs and
+	// buildStatusContext (wfx/cmp.go), which forwards Metadata verbatim.
 	wfxJobID := r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
 		TransactionID:     hex.EncodeToString(header.TransactionID),
 		DMSID:             dmsID,
@@ -414,17 +468,25 @@ func (r *cmpHttpRoutes) handleEnrollment(ctx *gin.Context, lFunc *logrus.Entry, 
 		SubjectCommonName: deviceCN,
 		State:             cmpwfx.CMPStateValidated,
 		Metadata: map[string]any{
-			"certReqId": req.CertReqID,
+			"certReqId":                   req.CertReqID,
+			"popoMethod":                  popoMethod,
+			"challengeType":               challengeType,
+			"authenticatorControlPresent": authenticatorControlPresent,
+			"authModeAtEnrollment":        string(enrollOpts.AuthMode),
 		},
 	})
 
 	params := issueParams{
-		isReenrollment: variant.isReenrollment,
-		requestTag:     body.Tag,
-		respTag:        respTag,
-		wfxJobID:       wfxJobID,
-		useEncrCert:    useEncrCert,
-		enroll:         variant.enrollFn(r, dmsID),
+		isReenrollment:              variant.isReenrollment,
+		requestTag:                  body.Tag,
+		respTag:                     respTag,
+		wfxJobID:                    wfxJobID,
+		useEncrCert:                 useEncrCert,
+		popoMethod:                  popoMethod,
+		challengeType:               challengeType,
+		authenticatorControlPresent: authenticatorControlPresent,
+		authModeAtEnrollment:        string(enrollOpts.AuthMode),
+		enroll:                      variant.enrollFn(r, dmsID),
 	}
 	if useChallengeResp {
 		r.handlePOPOChallenge(ctx, lFunc, &header, req, dmsID, enrollOpts, params)
@@ -534,7 +596,17 @@ type issueParams struct {
 	// requested public key instead of in the clear. See
 	// buildEncryptedCertRepBody (cmp_popo_indirect.go).
 	useEncrCert bool
-	enroll      func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error)
+	// popoMethod, challengeType, authenticatorControlPresent and
+	// authModeAtEnrollment are security-audit metadata resolved by
+	// handleEnrollment (or, for p10cr/kga, by their own callers) and carried
+	// through to the models.CMPTransaction row persisted by issueAndStore /
+	// issueAndStoreLocked / deferForApproval — see that struct's doc comments
+	// for the value semantics.
+	popoMethod                  string
+	challengeType               string
+	authenticatorControlPresent bool
+	authModeAtEnrollment        string
+	enroll                      func(ctx context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error)
 }
 
 // issueAndStore is the shared enrollment pipeline: build CSR, check duplicate
@@ -765,11 +837,15 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 		// (RFC 9483 §4.1.3); recording its serial lets the pending-update check
 		// lock exactly that certificate until certConf or timeout. Empty for
 		// ir/cr and for unprotected updates.
-		SupersededCertSerial: params.supersededCertSerial,
-		RegToken:             req.RegToken,
-		ConfirmedAt:          confirmedAt,
-		ExpiresAt:            now.Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
-		CreatedAt:            now,
+		SupersededCertSerial:        params.supersededCertSerial,
+		RegToken:                    req.RegToken,
+		POPOMethod:                  params.popoMethod,
+		ChallengeType:               params.challengeType,
+		AuthenticatorControlPresent: params.authenticatorControlPresent,
+		AuthModeAtEnrollment:        params.authModeAtEnrollment,
+		ConfirmedAt:                 confirmedAt,
+		ExpiresAt:                   now.Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
+		CreatedAt:                   now,
 	}); storeErr != nil {
 		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 			lFunc.Warnf("duplicate transactionID %s", txHex)
@@ -1214,9 +1290,17 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 		SentNonce:            hex.EncodeToString(senderNonce),
 		ReceivedNonce:        hex.EncodeToString(header.SenderNonce),
 		RegToken:             req.RegToken,
-		ConfirmedAt:          confirmedAt,
-		ExpiresAt:            now.Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
-		CreatedAt:            now,
+		// KGA (RFC 9483 §4.1.6 central key generation): the server generates
+		// the key pair itself, so there is no client proof-of-possession to
+		// record — POPOMethod is left "" (see that field's doc comment) rather
+		// than inventing a dedicated value, since "the server made the key"
+		// is already fully captured by CentralKeyGeneration=true above.
+		POPOMethod:                  "",
+		AuthenticatorControlPresent: corecmp.HasAuthenticatorControl(req.ControlsDER),
+		AuthModeAtEnrollment:        string(enrollOpts.AuthMode),
+		ConfirmedAt:                 confirmedAt,
+		ExpiresAt:                   now.Add(confirmationTimeoutOrDefault(enrollOpts.ConfirmationTimeout)),
+		CreatedAt:                   now,
 	}); storeErr != nil {
 		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 			lFunc.Warnf("kga: duplicate transactionID %s", txHex)
@@ -1357,6 +1441,16 @@ func (r *cmpHttpRoutes) deferForApproval(
 		// exactly as it does to direct ones.
 		SupersededCertSerial: params.supersededCertSerial,
 		RegToken:             req.RegToken,
+		// Security-audit metadata resolved back in handleEnrollment before the
+		// phased-workflow detour. UpdateState (used when ApproveCMPTransaction
+		// later flips this row PENDING → ISSUED) only touches state/certificate/
+		// error_message/expires_at/cert_serial_number, so these columns are
+		// NOT overwritten on approval — the value recorded here is the one that
+		// survives to the final ISSUED row.
+		POPOMethod:                  params.popoMethod,
+		ChallengeType:               params.challengeType,
+		AuthenticatorControlPresent: params.authenticatorControlPresent,
+		AuthModeAtEnrollment:        params.authModeAtEnrollment,
 		// Approval is a human action: give it a generous window so the request
 		// isn't swept before an operator can act on it (RFC 4210 §5.3.22 leaves
 		// the polling/approval window to server policy). Per-DMS via

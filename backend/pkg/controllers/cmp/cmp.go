@@ -639,8 +639,11 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		State:         models.CMPTransactionStateRevoked,
 		RequestType:   cmpTagToString(corecmp.BodyTagRR),
 		ReceivedNonce: hex.EncodeToString(header.SenderNonce),
-		ExpiresAt:     now,
-		CreatedAt:     now,
+		// rr has no client proof-of-possession to record — POPOMethod stays
+		// "" (not applicable), per models.CMPTransaction's doc comment.
+		AuthModeAtEnrollment: string(enrollOpts.AuthMode),
+		ExpiresAt:            now,
+		CreatedAt:            now,
 	}); insErr != nil {
 		// The revocation already succeeded and is not being undone over a
 		// bookkeeping failure; log loudly, since replay protection for this
