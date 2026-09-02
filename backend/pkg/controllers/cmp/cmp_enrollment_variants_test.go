@@ -199,10 +199,10 @@ func TestHandleCMP_EncrCertPOPO_RSA_IssuesEncryptedCert(t *testing.T) {
 
 	issuedCert, _ := buildSelfSignedCert(t, "encrcert-rsa-device")
 
-	router, _, svc := newEnrollRouter(t, models.CMPEnrollmentSettings{
+	router, store, svc := newEnrollRouter(t, models.CMPEnrollmentSettings{
 		IR: models.CMPIRSettings{ProofOfPossession: models.CMPProofOfPossession{AllowedMethods: []models.CMPPOPOMethod{models.CMPPOPOMethodEncryptedCertificate}}},
 	}, issuedCert)
-	irDER, _ := buildTestIRWithIndirectPOPO(t, "encrcert-rsa-device", &rsaKey.PublicKey, 0 /* encrCert */)
+	irDER, txID := buildTestIRWithIndirectPOPO(t, "encrcert-rsa-device", &rsaKey.PublicKey, 0 /* encrCert */)
 
 	resp := postCMP(t, router, "test-dms", irDER)
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -214,6 +214,12 @@ func TestHandleCMP_EncrCertPOPO_RSA_IssuesEncryptedCert(t *testing.T) {
 	decryptedCert, err := x509.ParseCertificate(plaintext)
 	require.NoError(t, err, "decrypted content must be the raw issued certificate DER")
 	assert.Equal(t, issuedCert.SerialNumber, decryptedCert.SerialNumber)
+
+	tx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok)
+	assert.Equal(t, string(models.CMPPOPOMethodEncryptedCertificate), tx.POPOMethod,
+		"an encrCert-delivered enrollment must record POPOMethod=encrypted_certificate")
+	assert.Empty(t, tx.ChallengeType, "ChallengeType only applies to challenge_response")
 
 	svc.AssertExpectations(t)
 }
@@ -239,6 +245,10 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 	require.True(t, ok, "a PENDING row must be parked awaiting popdecr")
 	assert.Equal(t, models.CMPTransactionStatePending, tx.State)
 	require.NotEmpty(t, tx.PopoChallenge)
+	assert.Equal(t, string(models.CMPPOPOMethodChallengeResponse), tx.POPOMethod)
+	// buildTestPKIHeaderDER sends pvno cmp2000, so the deprecated `challenge`
+	// OCTET STRING encoding is used (RFC 9810 §7) — not encryptedRand.
+	assert.Equal(t, cmpChallengeTypeLegacy, tx.ChallengeType)
 
 	// Decrypt the challenge exactly as a compliant EE would.
 	challengeVal := extractFirstPOPOChallengeValue(t, resp.Body.Bytes())
@@ -260,6 +270,16 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 	require.Equal(t, http.StatusOK, popdecrResp.Code)
 	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, popdecrResp.Body.Bytes()),
 		"a correct popdecr must resume issuance and yield ip")
+
+	// The security-audit metadata recorded on the PENDING row must survive
+	// the resume-from-popdecr transition into the final ISSUED row (see
+	// handlePOPODecKeyResp, which threads tx.POPOMethod/ChallengeType into
+	// the resumed issueAndStore call).
+	finalTx, ok := store.Peek(hex.EncodeToString(txID))
+	require.True(t, ok)
+	assert.Equal(t, models.CMPTransactionStateIssued, finalTx.State, "buildTestIRWithIndirectPOPO does not request implicit confirm, so the resumed row stays ISSUED awaiting certConf")
+	assert.Equal(t, string(models.CMPPOPOMethodChallengeResponse), finalTx.POPOMethod)
+	assert.Equal(t, cmpChallengeTypeLegacy, finalTx.ChallengeType)
 
 	svc.AssertExpectations(t)
 }
@@ -488,6 +508,9 @@ func TestHandleCMP_P10CR_IssuesCP(t *testing.T) {
 	require.True(t, ok, "transaction row must be stored")
 	assert.Equal(t, "p10cr", tx.RequestType)
 	assert.False(t, tx.IsReenrollment)
+	assert.Equal(t, cmpPOPOMethodCSRSignature, tx.POPOMethod,
+		"p10cr's own self-signature IS the proof of possession (RFC 9483 §4.1.4)")
+	assert.False(t, tx.AuthenticatorControlPresent, "p10cr carries no CRMF registration controls")
 
 	// The service must receive the REAL CSR: its signature verifies (unlike the
 	// dummy-signed synthetic CSR the CRMF bodies produce).

@@ -83,6 +83,29 @@ CREATE TABLE cmp_transactions (
     -- entity holds no private key for. certConf and the confirmation-timeout
     -- monitor are unaffected: both need only the stored certificate.
     central_key_generation BOOLEAN     NOT NULL DEFAULT FALSE,
+    -- security-audit metadata: how the requester's key possession and
+    -- identity were established, captured at enrollment time so it survives
+    -- later, unrelated changes to the DMS's configuration — see
+    -- models.CMPTransaction's field docs for the full rationale.
+    --
+    -- which mechanism authenticated proof-of-possession of the enrolled key:
+    -- "signature" | "trusted_ra" | "challenge_response" |
+    -- "encrypted_certificate" | "csr_signature" | "kur_protection_cert" | ""
+    -- (not applicable: rr, ccr, central key generation).
+    popo_method                   TEXT NOT NULL DEFAULT '',
+    -- only meaningful when popo_method = 'challenge_response': "legacy"
+    -- (pvno cmp2000, deprecated `challenge` OCTET STRING, RFC 4210bis
+    -- §5.2.8.3 v2) or "encrypted_rand" (pvno cmp2021, `encryptedRand` CMS
+    -- EnvelopedData, RFC 9810 §5.1.3/§7). Empty otherwise.
+    challenge_type                TEXT NOT NULL DEFAULT '',
+    -- whether the request carried the CRMF id-regCtrl-authenticator control
+    -- (RFC 4211 §6.2), independent of whether the DMS validates its value.
+    authenticator_control_present BOOL NOT NULL DEFAULT FALSE,
+    -- denormalized copy of the DMS's CMP auth_mode (models.CMPAuthMode) at
+    -- the moment this transaction was created. The DMS's auth_mode is
+    -- mutable, so this preserves the historical value even if the DMS is
+    -- later reconfigured.
+    auth_mode_at_enrollment       TEXT NOT NULL DEFAULT '',
     CONSTRAINT cmp_transactions_pkey PRIMARY KEY (transaction_id)
 );
 

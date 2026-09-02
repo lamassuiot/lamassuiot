@@ -1039,16 +1039,19 @@ func TestHandleCMP_KUR_POPO(t *testing.T) {
 			opts := models.CMPEnrollmentSettings{EnforcePOPO: tc.enforcePOPO, AcceptImplicit: true}
 
 			var router *gin.Engine
+			var store *inMemoryCMPStore
 			var svc *cmpmock.MockLightweightCMPService
 			if tc.accepted {
 				issuedCert, _ := buildSelfSignedCert(t, tc.cn)
-				router, _, svc = newReenrollRouter(t, opts, issuedCert)
+				router, store, svc = newReenrollRouter(t, opts, issuedCert)
 			} else {
 				router, _, svc = newOptionsRouter(t, opts)
 			}
 
+			txID := randomTxID(t)
 			kurDER := buildTestKUR(t, testIROptions{
 				CN:                  tc.cn,
+				TransactionID:       txID,
 				WithImplicitConfirm: true,
 			})
 
@@ -1064,6 +1067,12 @@ func TestHandleCMP_KUR_POPO(t *testing.T) {
 			if tc.accepted {
 				assert.Equal(t, corecmp.BodyTagKUP, parseCMPResponseTag(t, resp.Body.Bytes()),
 					"accepted KUR must be answered with a kup body")
+
+				tx, ok := store.Peek(hex.EncodeToString(txID))
+				require.True(t, ok)
+				assert.Equal(t, cmpPOPOMethodKURProtectionCert, tx.POPOMethod,
+					"kur's proof of possession is the message-protection cert being updated (RFC 9483 §4.1.3), a fixed invariant")
+
 				svc.AssertExpectations(t)
 				return
 			}

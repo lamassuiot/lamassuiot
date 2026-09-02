@@ -269,8 +269,14 @@ func (r *cmpHttpRoutes) deferCCRForApproval(
 		RequestType:       cmpTagToString(corecmp.BodyTagCCR),
 		SubjectCommonName: csr.Subject.CommonName,
 		ReceivedNonce:     hex.EncodeToString(header.SenderNonce),
-		ExpiresAt:         time.Now().Add(approvalTimeoutOrDefault(enrollOpts.ApprovalTimeout)),
-		CreatedAt:         time.Now(),
+		// ccr is a CA-to-CA operation with no client key POP to record —
+		// POPOMethod stays "" (not applicable). Its own (optional) POPO
+		// requirement, CCR.RequireProofOfPossession, is a signature over the
+		// CSR verified upstream of this call, not a device-key-possession
+		// proof in the sense POPOMethod documents.
+		AuthModeAtEnrollment: string(enrollOpts.AuthMode),
+		ExpiresAt:            time.Now().Add(approvalTimeoutOrDefault(enrollOpts.ApprovalTimeout)),
+		CreatedAt:            time.Now(),
 	}); storeErr != nil {
 		if errors.Is(storeErr, errs.ErrCMPTransactionAlreadyExists) {
 			lFunc.Warnf("ccr: duplicate transactionID %s", txHex)

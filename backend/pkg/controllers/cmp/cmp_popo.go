@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/cms"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/cms"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	software "github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
@@ -196,6 +196,15 @@ func marshalPOPOChallengeEncryptedRand(witness, envelopedDataDER []byte) ([]byte
 	return corecmp.WrapSequenceDER(content, "Challenge")
 }
 
+// cmpChallengeTypeLegacy and cmpChallengeTypeEncryptedRand are the
+// models.CMPTransaction.ChallengeType values recorded for a challengeResp
+// POPO transaction, matching the pvno-driven choice buildPOPOChallengeEntry
+// makes below (RFC 9810 §7).
+const (
+	cmpChallengeTypeLegacy        = "legacy"
+	cmpChallengeTypeEncryptedRand = "encrypted_rand"
+)
+
 // buildPOPOChallengeEntry builds the DER of a single Challenge entry and, for
 // a keyAgreement (ECDSA) recipient, the ECDH originator whose certificate the
 // caller MUST use to protect the popdecc response. The delivery method is
@@ -323,8 +332,18 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 		WFXJobID:          params.wfxJobID,
 		ReceivedNonce:     hex.EncodeToString(header.SenderNonce),
 		PopoChallenge:     challengeInt.Text(16),
-		ExpiresAt:         time.Now().Add(popoChallengeWindow),
-		CreatedAt:         time.Now(),
+		// params.popoMethod/challengeType/authenticatorControlPresent/
+		// authModeAtEnrollment were already resolved by handleEnrollment
+		// (popoMethod is "challenge_response" and challengeType reflects the
+		// pvno-driven choice made in buildPOPOChallengeEntry above). Persisted
+		// on this PENDING row so handlePOPODecKeyResp can carry them into the
+		// final ISSUED row when it resumes issuance below.
+		POPOMethod:                  params.popoMethod,
+		ChallengeType:               params.challengeType,
+		AuthenticatorControlPresent: params.authenticatorControlPresent,
+		AuthModeAtEnrollment:        params.authModeAtEnrollment,
+		ExpiresAt:                   time.Now().Add(popoChallengeWindow),
+		CreatedAt:                   time.Now(),
 	}); storeErr != nil {
 		lFunc.Errorf("challengeResp: persist pending challenge: %v", storeErr)
 		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
@@ -418,6 +437,13 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 		respTag:    pollRespTagFor(tx),
 		wfxJobID:   tx.WFXJobID,
 		presetCSR:  csr,
+		// Security-audit metadata carries over from the PENDING row parked by
+		// handlePOPOChallenge — it was resolved before the popdecc round trip
+		// and does not change across it.
+		popoMethod:                  tx.POPOMethod,
+		challengeType:               tx.ChallengeType,
+		authenticatorControlPresent: tx.AuthenticatorControlPresent,
+		authModeAtEnrollment:        tx.AuthModeAtEnrollment,
 		enroll: func(c context.Context, csr *x509.CertificateRequest, signerCert *x509.Certificate) (*x509.Certificate, error) {
 			return r.svc.LWCEnroll(c, csr, dmsID, signerCert)
 		},

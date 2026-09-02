@@ -127,7 +127,9 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 		SubjectCommonName: csr.Subject.CommonName,
 		State:             cmpwfx.CMPStateValidated,
 		Metadata: map[string]any{
-			"certReqId": p10crCertReqID,
+			"certReqId":            p10crCertReqID,
+			"popoMethod":           cmpPOPOMethodCSRSignature,
+			"authModeAtEnrollment": string(enrollOpts.AuthMode),
 		},
 	})
 
@@ -136,6 +138,14 @@ func (r *cmpHttpRoutes) handleP10CR(ctx *gin.Context, lFunc *logrus.Entry, heade
 		requestTag:     corecmp.BodyTagP10CR,
 		respTag:        respTag,
 		wfxJobID:       wfxJobID,
+		// p10cr carries no CRMF ProofOfPossession structure: the PKCS#10
+		// self-signature verified above (verifyP10CRPOP) IS the proof of
+		// possession (RFC 9483 §4.1.4) — a fixed protocol invariant, not a
+		// configurable models.CMPPOPOMethod. It also carries no CRMF
+		// registration controls (CMPP10CRSettings's doc comment), so
+		// authenticatorControlPresent stays false.
+		popoMethod:           cmpPOPOMethodCSRSignature,
+		authModeAtEnrollment: string(enrollOpts.AuthMode),
 		// Hand the REAL signed CSR to the service layer instead of a synthetic
 		// one: the PKCS#10 signature is genuine, so downstream CSR-signature
 		// verification (when enabled on the DMS) can succeed.

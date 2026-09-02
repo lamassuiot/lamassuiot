@@ -147,6 +147,77 @@ type CMPTransaction struct {
 	// the confirmation-timeout monitor work normally, since both need only the
 	// certificate.
 	CentralKeyGeneration bool
+	// POPOMethod records which mechanism authenticated proof-of-possession of
+	// the enrolled key for this transaction — i.e. WHY the server trusted that
+	// the requester actually holds the private key it is certifying. It is
+	// security-audit metadata: unlike RegToken/PopoChallenge (which exist to
+	// enforce protocol behaviour), this field exists purely so an operator can
+	// later answer "how was this device authenticated?" without re-deriving it
+	// from the raw request. Possible values:
+	//   - "signature"             — CRMF POPOSigningKey, a signature over the
+	//     CertRequest verified with the requested public key (RFC 4211 §4.1
+	//     clause 3 / models.CMPPOPOMethodSignature).
+	//   - "trusted_ra"            — the request asserted raVerified and the
+	//     message protection signer is a trusted PKI management entity
+	//     (RFC 9483 §5.2.3.2 / models.CMPPOPOMethodTrustedRA).
+	//   - "challenge_response"    — indirect POP via the popdecc/popdecr round
+	//     trip (RFC 4210bis §5.2.8.3 / models.CMPPOPOMethodChallengeResponse).
+	//     See ChallengeType for which challenge encoding was used.
+	//   - "encrypted_certificate" — indirect POP via confidentiality-protected
+	//     certificate delivery (RFC 4210bis §5.2.8.4 /
+	//     models.CMPPOPOMethodEncryptedCertificate).
+	//   - "csr_signature"         — p10cr: the PKCS#10 CSR's own self-signature
+	//     IS the proof of possession (RFC 9483 §4.1.4). This is a fixed
+	//     protocol invariant, not a configurable POPO method — see
+	//     CMPP10CRSettings's doc comment — so it has no models.CMPPOPOMethod
+	//     counterpart.
+	//   - "kur_protection_cert"   — kur: possession is proven by the message
+	//     protection made with the certificate being updated, not by a
+	//     separate CRMF POPO (RFC 9483 §4.1.3). Also a fixed invariant with no
+	//     models.CMPPOPOMethod counterpart.
+	//   - ""                     — not applicable: rr, ccr, or an RFC 9483
+	//     §4.1.6 central-key-generation (KGA) enrollment, where the server
+	//     generates the key pair itself and there is no client POP to attest.
+	//
+	// This is a plain string rather than models.CMPPOPOMethod because that
+	// type is a CONFIGURATION contract (CMPProofOfPossession.AllowedMethods —
+	// what a DMS is willing to accept) and deliberately has no member for the
+	// two fixed protocol invariants (csr_signature/kur_protection_cert) or for
+	// "not applicable". Reusing it here would either force those into the
+	// configuration enum or lose them; a plain string records exactly what
+	// happened without constraining what may be configured.
+	POPOMethod string
+	// ChallengeType records which challengeResp encoding this transaction
+	// used, and is meaningful only when POPOMethod == "challenge_response";
+	// empty otherwise. See buildPOPOChallengeEntry (cmp_popo.go), which
+	// chooses between the two based on the request's declared pvno
+	// (RFC 9810 §7):
+	//   - "legacy"         — pvno cmp2000(2): the deprecated `challenge` OCTET
+	//     STRING field (RFC 4210bis §5.2.8.3 v2).
+	//   - "encrypted_rand" — pvno cmp2021(3): `encryptedRand`, a CMS
+	//     EnvelopedData wrapping the Rand value (RFC 9810 §5.2.8.3.3 / §7).
+	ChallengeType string
+	// AuthenticatorControlPresent records whether the request carried the
+	// CRMF id-regCtrl-authenticator control (RFC 4211 §6.2), independent of
+	// whether the DMS is configured to validate its value — see
+	// corecmp.HasAuthenticatorControl. Note that this does NOT separately
+	// record whether the value matched CMPEnrollmentSettings.ExpectedAuthenticator:
+	// when ExpectedAuthenticator is configured and the control is present but
+	// WRONG, the request is rejected before a transaction row is ever
+	// persisted (see corecmp.ValidateAuthenticatorControl in
+	// cmp_enrollment.go) — so "present" on a persisted row always means
+	// "present and, if a value was configured to check against, valid".
+	AuthenticatorControlPresent bool
+	// AuthModeAtEnrollment is a denormalized copy of enrollOpts.AuthMode
+	// (models.CMPAuthMode, e.g. "CLIENT_CERTIFICATE"/"NO_AUTH"/...) taken at
+	// the moment this transaction was created. The DMS's auth_mode is mutable
+	// configuration — an operator can change it at any time — so without this
+	// copy a later look at an old transaction's authentication context would
+	// silently reflect whatever the DMS is configured with TODAY rather than
+	// what it required when the device actually enrolled. Stored as a plain
+	// string (not models.CMPAuthMode) to match RequestType/SubjectCommonName's
+	// convention in this struct.
+	AuthModeAtEnrollment string
 	// SubjectCommonName is the CommonName from the enrollment request's
 	// CertTemplate (i.e. the device ID). Stored at insertion time so the
 	// management UI can render device-keyed transaction listings without
