@@ -1,0 +1,166 @@
+openapi: 3.0.3
+info:
+  title: Lamassu External Authorization Webhook API
+  version: 1.0.0
+  description: |
+    Contract implemented by an external webhook configured for DMS EST enrollment
+    or reenrollment authorization. Lamassu sends the request using the configured
+    HTTP method (POST by default, or PUT) and authorizes the operation only when
+    the webhook returns a successful response containing `authorized: true`.
+
+externalDocs:
+  description: Lamassu DMS Manager API
+  url: ./dms-manager-openapi.yaml
+
+servers:
+  - url: https://webhook.example.com
+    description: Replace with the configured webhook URL's origin
+
+tags:
+  - name: Authorization
+    description: DMS enrollment authorization callbacks
+
+paths:
+  /:
+    post:
+      tags: [Authorization]
+      summary: Authorize an EST enrollment operation
+      description: |
+        Lamassu invokes this operation for EST enrollment or reenrollment. The
+        configured webhook URL may include a different path. A response with a
+        non-2xx status, an invalid response body, or `authorized: false` denies
+        the operation. If the webhook does not respond before the configured
+        timeout (10 seconds by default), Lamassu denies the operation.
+      operationId: authorizeEstOperationPost
+      security:
+        - {}
+        - ApiKeyAuth: []
+        - OidcBearerAuth: []
+        - MutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookAuthorizationRequest'
+            examples:
+              enrollment:
+                summary: Enrollment authorization request
+                value:
+                  csr: YjY0LWVuY29kZWQtcGVtLWNzci4uLg==
+                  aps: manufacturing-devices
+                  device_cn: device-001
+                  http_request:
+                    headers:
+                      Content-Type: application/pkcs10
+                      User-Agent: est-client/1.0
+                    url: https://pki.example.com/.well-known/est/manufacturing-devices/simpleenroll
+      responses:
+        '200':
+          description: Authorization decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAuthorizationResponse'
+              examples:
+                authorized:
+                  value:
+                    authorized: true
+                denied:
+                  value:
+                    authorized: false
+        '204':
+          description: Not supported because Lamassu requires a JSON response body
+        default:
+          description: Any non-2xx response denies the EST operation
+
+    put:
+      tags: [Authorization]
+      summary: Authorize an EST enrollment operation
+      description: Equivalent to POST; available when the webhook is configured with method `PUT`.
+      operationId: authorizeEstOperationPut
+      security:
+        - {}
+        - ApiKeyAuth: []
+        - OidcBearerAuth: []
+        - MutualTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookAuthorizationRequest'
+      responses:
+        '200':
+          description: Authorization decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAuthorizationResponse'
+        default:
+          description: Any non-2xx response denies the EST operation
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Header name is configurable in the DMS webhook settings.
+    OidcBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT acquired using the configured OIDC client credentials.
+    MutualTLS:
+      type: mutualTLS
+      description: Client certificate authentication using the configured certificate and key.
+
+  schemas:
+    WebhookAuthorizationRequest:
+      type: object
+      required:
+        - csr
+        - aps
+        - device_cn
+        - http_request
+      properties:
+        csr:
+          type: string
+          format: byte
+          description: Base64-encoded PEM-encoded PKCS#10 certificate signing request.
+        aps:
+          type: string
+          minLength: 1
+          description: DMS authentication profile identifier.
+        device_cn:
+          type: string
+          minLength: 1
+          description: Common Name from the CSR subject.
+        http_request:
+          $ref: '#/components/schemas/OriginalHttpRequest'
+
+    OriginalHttpRequest:
+      type: object
+      required:
+        - headers
+        - url
+      properties:
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: First value of each header from the original EST request.
+        url:
+          type: string
+          format: uri-reference
+          description: Original EST request URL, or an empty string when unavailable.
+
+    WebhookAuthorizationResponse:
+      type: object
+      required:
+        - authorized
+      properties:
+        authorized:
+          type: boolean
+          description: Set to true to authorize the EST operation; false denies it.
