@@ -1719,6 +1719,24 @@ func (svc DMSManagerServiceBackend) cmpCertificateOwnerDMS(ctx context.Context, 
 func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
+	// An rr is ALWAYS signature-protected (RFC 9483 §4.2), so a nil signer means
+	// there is nothing to authorize against and the request must be refused.
+	// The controller already guarantees this — requireProtectionForBody returns
+	// true unconditionally for BodyTagRR, so an unprotected rr never reaches
+	// here — but this method must not DEPEND on that: every authorization check
+	// below (RR.Authorization, trusted-RA validation, signer chain validation)
+	// lives inside a `signer != nil` block, which SKIPS rather than denies when
+	// the signer is absent. That shape fails open, so if the always-protected
+	// invariant were ever relaxed upstream — a new auth_mode branch, another
+	// caller of this service method — the whole authorization stack would
+	// silently disappear with no error and no failing test. Enforcing the
+	// precondition here keeps the invariant local to the function that depends
+	// on it.
+	if signerCert == nil {
+		lFunc.Errorf("aborting revocation of '%s': rr carries no protection certificate to authorize against (RFC 9483 §4.2)", input.SerialNumber)
+		return errs.ErrDMSEnrollInvalidCert
+	}
+
 	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: input.APS,
 	})
@@ -1751,6 +1769,9 @@ func (svc DMSManagerServiceBackend) LWCRevokeCertificate(ctx context.Context, in
 	// "a third party is revoking someone else's".
 	selfRevocation := false
 
+	// signerCert is guaranteed non-nil by the precondition at the top of this
+	// method; the guard is kept only so the block cannot fail open again if that
+	// precondition is ever moved or removed.
 	if signer := signerCert; signer != nil {
 		signerSN := helpers.SerialNumberToHexString(signer.SerialNumber)
 		selfRevocation = signerSN == input.SerialNumber
