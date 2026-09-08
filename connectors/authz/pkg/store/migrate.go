@@ -27,9 +27,10 @@ func RunMigrations(db *sql.DB, schema string, logger *logrus.Entry) error {
 // RunMigrationCommand runs a single goose command against the authz database.
 // Supported commands: up, up-to <version>, down, status, version.
 //
-// "down" is destructive here in a way it is not for the per-service pki schemas:
-// the down migration drops principals, principal_policies and policies, i.e. the
-// whole authorization model. Callers are responsible for confirming it.
+// "down" rolls back a single migration, so what it undoes depends on the current
+// version. Rolling back far enough reaches the initial migration, which drops
+// principals, principal_policies and policies — the whole authorization model.
+// Callers are responsible for confirming it.
 //
 // When schema is non-empty it is created if missing. goose resolves both its own
 // goose_db_version table and the migration DDL through search_path, which the
@@ -97,6 +98,11 @@ func ensureSchema(db *sql.DB, schema string, logger *logrus.Entry) error {
 	if schema == "" {
 		return nil
 	}
+	// Schema names are identifiers, and Postgres cannot bind an identifier as a
+	// query parameter, so this statement has to be built by interpolation. The
+	// value is constrained to [A-Za-z_][A-Za-z0-9_]* first, which admits no
+	// quote, whitespace or semicolon, so it cannot terminate or extend the
+	// statement.
 	if !schemaNamePattern.MatchString(schema) {
 		return fmt.Errorf("invalid schema name %q", schema)
 	}

@@ -41,8 +41,10 @@ Commands:
   migrate up-to VERSION   Apply migrations up to VERSION
   migrate status          Show the state of every migration
   migrate version         Print the current database version
-  migrate down --confirm  Roll back the last migration (DESTRUCTIVE: the down migration
-                          drops principals, principal_policies and policies)
+  migrate down --confirm  Roll back the last applied migration. One step at a time, so
+                          what it undoes depends on the current version; rolling back far
+                          enough reaches the initial migration, which drops principals,
+                          principal_policies and policies. Check 'migrate status' first.
 
 Configuration is read from the usual config file, so no connection string is needed.`
 
@@ -60,10 +62,11 @@ func runCommand(ctx context.Context, conf authzconfig.AuthzConfig, command strin
 		}
 		sub, subArgs := args[0], args[1:]
 
-		// The authz down migration drops principals, principal_policies and
-		// policies, so it takes the whole authorization model with it.
+		// Rolling back the authz schema eventually reaches the initial migration,
+		// which drops principals, principal_policies and policies. Which step a
+		// given "down" undoes depends on the current version, so gate them all.
 		if sub == "down" && !slices.Contains(subArgs, "--confirm") {
-			return fmt.Errorf("refusing to run %q without --confirm: it drops principals, principal_policies and policies", sub)
+			return fmt.Errorf("refusing to run %q without --confirm: rolling back this schema can drop principals, principal_policies and policies; check 'migrate status' first", sub)
 		}
 		subArgs = slices.DeleteFunc(subArgs, func(a string) bool { return a == "--confirm" })
 
