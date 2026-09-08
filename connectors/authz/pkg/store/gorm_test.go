@@ -21,7 +21,7 @@ func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
 
 	log := logrus.NewEntry(logrus.New())
 	log.Logger.SetLevel(logrus.ErrorLevel)
-	require.NoError(t, RunMigrations(sqlDB, log))
+	require.NoError(t, RunMigrations(sqlDB, "", log))
 
 	s, err := NewGormPrincipalStore(container.DB)
 	require.NoError(t, err)

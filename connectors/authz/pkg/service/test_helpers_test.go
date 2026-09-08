@@ -27,7 +27,7 @@ func setupDBWithAuthzMigrations(t *testing.T, initSQLPath string) *gorm.DB {
 
 	log := logrus.NewEntry(logrus.New())
 	log.Logger.SetOutput(io.Discard)
-	require.NoError(t, store.RunMigrations(sqlDB, log))
+	require.NoError(t, store.RunMigrations(sqlDB, "", log))
 
 	return container.DB
 }
