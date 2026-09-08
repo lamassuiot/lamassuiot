@@ -36,7 +36,7 @@ func RunMigrations(db *sql.DB, schema string, logger *logrus.Entry) error {
 // goose_db_version table and the migration DDL through search_path, which the
 // connection DSN already carries, so the schema only needs to exist beforehand.
 func RunMigrationCommand(ctx context.Context, db *sql.DB, schema, command string, args []string, logger *logrus.Entry) error {
-	if err := ensureSchema(db, schema, logger); err != nil {
+	if err := ensureSchema(ctx, db, schema, logger); err != nil {
 		return err
 	}
 
@@ -94,21 +94,41 @@ func RunMigrationCommand(ctx context.Context, db *sql.DB, schema, command string
 	}
 }
 
-func ensureSchema(db *sql.DB, schema string, logger *logrus.Entry) error {
+// ensureSchemaFunc creates the schema named by its argument. Postgres cannot
+// bind an identifier as a query parameter, so a configured schema name would
+// otherwise have to be pasted into the statement from Go. This keeps the name a
+// bind parameter and lets the server quote it with format(%I), which is correct
+// for any identifier; the function body itself is a constant.
+const ensureSchemaFunc = `CREATE OR REPLACE FUNCTION pg_temp.lamassu_ensure_schema(schema_name text)
+RETURNS void AS $fn$
+BEGIN
+    EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', schema_name);
+END;
+$fn$ LANGUAGE plpgsql;`
+
+func ensureSchema(ctx context.Context, db *sql.DB, schema string, logger *logrus.Entry) error {
 	if schema == "" {
 		return nil
 	}
-	// Schema names are identifiers, and Postgres cannot bind an identifier as a
-	// query parameter, so this statement has to be built by interpolation. The
-	// value is constrained to [A-Za-z_][A-Za-z0-9_]* first, which admits no
-	// quote, whitespace or semicolon, so it cannot terminate or extend the
-	// statement.
 	if !schemaNamePattern.MatchString(schema) {
 		return fmt.Errorf("invalid schema name %q", schema)
 	}
-	if _, err := db.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema)); err != nil {
+
+	// pg_temp is session scoped, so the helper and the call to it have to run on
+	// the same pooled connection.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, ensureSchemaFunc); err != nil {
+		return fmt.Errorf("prepare schema helper: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, "SELECT pg_temp.lamassu_ensure_schema($1)", schema); err != nil {
 		return fmt.Errorf("create schema %s: %w", schema, err)
 	}
+
 	logger.Infof("using schema: %s", schema)
 	return nil
 }
