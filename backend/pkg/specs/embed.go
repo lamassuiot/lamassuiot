@@ -19,3 +19,6 @@ var DeviceManager []byte
 
 //go:embed alerts-openapi.yaml
 var Alerts []byte
+
+//go:embed enroll-reenroll-webhook-openapi.yaml
+var EnrollReenrollWebhook []byte
