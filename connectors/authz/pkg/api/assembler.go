@@ -108,9 +108,8 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to get raw sql.DB for migrations: %w", err)
 	}
-	lMigrate := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Migrate")
-	if err := store.RunMigrations(sqlDB, lMigrate); err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("database migration failed: %w", err)
+	if err := RunStorageMigrations(conf, sqlDB); err != nil {
+		return nil, nil, nil, nil, err
 	}
 
 	policyStore, err := store.NewGormPolicyStore(authzDB)
@@ -145,18 +144,8 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 		return nil, nil, nil, nil, err
 	}
 
-	if conf.PreloadDir != "" {
-		lPreload := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Preload")
-		if err := preloadPolicies(context.Background(), policyManager, conf.PreloadDir, lPreload); err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("failed to preload policies: %w", err)
-		}
-	}
-
-	if len(conf.Bootstrap) > 0 {
-		lBootstrap := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Bootstrap")
-		if err := runBootstrap(context.Background(), principalManager, conf.Bootstrap, lBootstrap); err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("failed to run bootstrap: %w", err)
-		}
+	if err := seedStorage(context.Background(), conf, principalManager, policyManager); err != nil {
+		return nil, nil, nil, nil, err
 	}
 
 	resolver := principalManager.NewIdentityResolver(policyManager)
