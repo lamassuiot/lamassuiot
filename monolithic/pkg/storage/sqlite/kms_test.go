@@ -49,6 +49,44 @@ func TestKMSStoreOnSQLite(t *testing.T) {
 		assert.False(t, exists)
 	})
 
+	t.Run("upgrades a database still on the old primary key", func(t *testing.T) {
+		old, err := CreateSQLiteDBConnection(logger, "file:upgrade?mode=memory&cache=shared")
+		require.NoError(t, err)
+		require.NoError(t, old.Exec(`CREATE TABLE kms_keys (
+			key_id TEXT NOT NULL,
+			metadata TEXT NULL,
+			name TEXT NOT NULL,
+			algorithm TEXT NOT NULL,
+			size INTEGER NOT NULL,
+			public_key TEXT NOT NULL,
+			creation_ts DATETIME NULL,
+			engine_id TEXT NULL,
+			aliases TEXT DEFAULT '[]',
+			has_private_key INTEGER DEFAULT 1,
+			tags TEXT DEFAULT '[]',
+			PRIMARY KEY (key_id)
+		)`).Error)
+		require.NoError(t, old.Exec(`INSERT INTO kms_keys (key_id, name, algorithm, size, public_key, engine_id)
+			VALUES ('legacy-key', 'legacy', 'RSA', 2048, 'pub', 'hsm-offline')`).Error)
+
+		require.NoError(t, initializeSchema(old))
+
+		var schema string
+		require.NoError(t, old.Raw("SELECT sql FROM sqlite_master WHERE type='table' AND name='kms_keys'").Scan(&schema).Error)
+		assert.Contains(t, schema, "PRIMARY KEY (key_id, engine_id)")
+
+		upgraded, err := postgres.NewKMSPostgresRepository(logger, old)
+		require.NoError(t, err)
+
+		exists, key, err := upgraded.SelectExistsByKeyID(ctx, "legacy-key", "hsm-offline")
+		require.NoError(t, err)
+		require.True(t, exists, "the existing row must survive the rebuild")
+		assert.Equal(t, "legacy", key.Name)
+
+		_, err = upgraded.Insert(ctx, newKey("legacy-key", "online-1", "legacy-online-alias"))
+		require.NoError(t, err, "the upgraded table must accept the same key_id in a second engine")
+	})
+
 	t.Run("composite identity", func(t *testing.T) {
 		copies, err := store.SelectByKeyID(ctx, "shared-key")
 		require.NoError(t, err)

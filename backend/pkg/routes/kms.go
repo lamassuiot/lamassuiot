@@ -38,16 +38,13 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 			}
 		}
 
+		// Resolving an alias reads storage before the caller is known to be authorized, so
+		// every failure denies with the same status: distinguishing "no such key" from
+		// "held by several engines" here would tell an unauthorized caller which
+		// identifiers exist and which are mirrored.
 		key, err := svc.GetKey(c.Request.Context(), services.GetKeyInput{Identifier: identifier})
 		if err != nil {
-			switch err {
-			case errs.ErrKeyEngineRequired:
-				c.AbortWithStatusJSON(400, gin.H{"err": err.Error()})
-			case errs.ErrKeyNotFound:
-				c.AbortWithStatusJSON(404, gin.H{"err": err.Error()})
-			default:
-				c.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
-			}
+			c.AbortWithStatusJSON(403, gin.H{"err": "Access denied"})
 			return nil
 		}
 

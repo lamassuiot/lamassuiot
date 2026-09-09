@@ -25,7 +25,7 @@ func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
 	switch err {
 	case errs.ErrKeyNotFound:
 		ctx.JSON(404, gin.H{"err": err.Error()})
-	case errs.ErrKeyEngineRequired, errs.ErrValidateBadRequest:
+	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrValidateBadRequest:
 		ctx.JSON(400, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(500, gin.H{"err": err.Error()})
