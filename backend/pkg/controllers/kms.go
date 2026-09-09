@@ -21,6 +21,17 @@ func NewKMSHttpRoutes(svc services.KMSService) *kmsHttpRoutes {
 	}
 }
 
+func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
+	switch err {
+	case errs.ErrKeyNotFound:
+		ctx.JSON(404, gin.H{"err": err.Error()})
+	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrValidateBadRequest:
+		ctx.JSON(400, gin.H{"err": err.Error()})
+	default:
+		ctx.JSON(500, gin.H{"err": err.Error()})
+	}
+}
+
 func (r *kmsHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	engine, err := r.svc.GetCryptoEngineProvider(ctx.Request.Context())
 	if err != nil {
@@ -87,14 +98,7 @@ func (r *kmsHttpRoutes) GetKeyByID(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 
 		return
 	}
@@ -119,12 +123,7 @@ func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -163,12 +162,7 @@ func (r *kmsHttpRoutes) ImportKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -198,14 +192,7 @@ func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -235,14 +222,7 @@ func (r *kmsHttpRoutes) UpdateKeyMetadata(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -271,14 +251,7 @@ func (r *kmsHttpRoutes) UpdateKeyName(ctx *gin.Context) {
 		Name: requestBody.Name,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -308,14 +281,7 @@ func (r *kmsHttpRoutes) UpdateKeyTags(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -338,14 +304,7 @@ func (r *kmsHttpRoutes) DeleteKeyByID(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 
 		return
 	}
@@ -377,14 +336,7 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		MessageType: requestBody.MessageType,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 	ctx.JSON(200, signature)
@@ -415,14 +367,7 @@ func (r *kmsHttpRoutes) VerifySignature(ctx *gin.Context) {
 		MessageType: requestBody.MessageType,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 	ctx.JSON(200, valid)
@@ -439,12 +384,7 @@ func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
 		QueryParameters: queryParams,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 

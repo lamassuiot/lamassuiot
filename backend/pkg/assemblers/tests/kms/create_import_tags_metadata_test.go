@@ -489,7 +489,7 @@ func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
 
 				// Retrieve the key
 				retrievedKey, err := kmsSDK.GetKey(context.Background(), services.GetKeyInput{
-					Identifier: createdKey.KeyID,
+					Identifier: createdKey.PKCS11URI,
 				})
 				if err != nil {
 					return fmt.Errorf("failed to retrieve key: %s", err)

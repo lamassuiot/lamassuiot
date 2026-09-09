@@ -213,7 +213,8 @@ type CertificateKeySpec struct {
 	EngineID string         `json:"engine_id"` // optional: target a specific crypto engine
 
 	// --- reuse mode ---
-	// KeyIdentifier references an existing KMS key by its KeyID, Alias, or PKCS11URI.
+	// KeyIdentifier references an existing KMS key by its PKCS11URI, Alias, or KeyID. A bare
+	// KeyID resolves only while a single engine holds the key.
 	KeyIdentifier string `json:"key_identifier"`
 }
 

@@ -1252,8 +1252,9 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 		return
 	}
 
+	// Delete the copy held by this CA's engine, not every engine's copy of the same keyID.
 	err = svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{
-		Identifier: keyID,
+		Identifier: buildPKCS11ID(ca.Certificate.EngineID, keyID, "private"),
 	})
 	if err != nil {
 		lFunc.Warnf("could not delete private key for CA %s from crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)

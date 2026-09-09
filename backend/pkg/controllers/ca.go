@@ -830,7 +830,7 @@ func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 	})
 	if err != nil {
 		switch err {
-		case errs.ErrInvalidKeySpec, errs.ErrValidateBadRequest, errs.ErrCAStatus:
+		case errs.ErrInvalidKeySpec, errs.ErrValidateBadRequest, errs.ErrCAStatus, errs.ErrKeyEngineRequired:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCANotFound, errs.ErrKeyNotFound, errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
