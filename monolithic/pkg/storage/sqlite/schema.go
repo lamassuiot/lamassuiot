@@ -180,6 +180,7 @@ func initializeSchema(db *gorm.DB) error {
 		// - 20251031174938_key.sql: Added engine_id, key_id, aliases, has_private_key, tags;
 		//                           changed primary key from id to key_id; dropped status column;
 		//                           changed metadata to jsonb
+		// - 20260909084500_kms_key_composite_pk.sql: primary key is (key_id, engine_id)
 		`CREATE TABLE IF NOT EXISTS kms_keys (
 			key_id TEXT NOT NULL,
 			metadata TEXT NULL,
@@ -188,11 +189,11 @@ func initializeSchema(db *gorm.DB) error {
 			size INTEGER NOT NULL,
 			public_key TEXT NOT NULL,
 			creation_ts DATETIME NULL,
-			engine_id TEXT NULL,
+			engine_id TEXT NOT NULL,
 			aliases TEXT DEFAULT '[]',
 			has_private_key INTEGER DEFAULT 1,
 			tags TEXT DEFAULT '[]',
-			PRIMARY KEY (key_id)
+			PRIMARY KEY (key_id, engine_id)
 		)`,
 	}
 

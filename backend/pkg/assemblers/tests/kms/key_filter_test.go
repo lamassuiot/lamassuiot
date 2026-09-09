@@ -64,7 +64,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	ud1["critical"] = true
 	ud1["rotation_days"] = 90
 	_, err = kmsTest.Service.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key1.KeyID,
+		ID: key1.PKCS11URI,
 		Patches: helpers.NewPatchBuilder().
 			Add(helpers.JSONPointerBuilder(), ud1).
 			Build(),
@@ -79,7 +79,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	ud2["critical"] = false
 	ud2["rotation_days"] = 30
 	_, err = kmsTest.Service.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key2.KeyID,
+		ID: key2.PKCS11URI,
 		Patches: helpers.NewPatchBuilder().
 			Add(helpers.JSONPointerBuilder(), ud2).
 			Build(),
@@ -94,7 +94,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	ud3["critical"] = true
 	ud3["rotation_days"] = 60
 	_, err = kmsTest.Service.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key3.KeyID,
+		ID: key3.PKCS11URI,
 		Patches: helpers.NewPatchBuilder().
 			Add(helpers.JSONPointerBuilder(), ud3).
 			Build(),

@@ -90,6 +90,8 @@ func (r *kmsHttpRoutes) GetKeyByID(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -201,6 +203,8 @@ func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -238,6 +242,8 @@ func (r *kmsHttpRoutes) UpdateKeyMetadata(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -274,6 +280,8 @@ func (r *kmsHttpRoutes) UpdateKeyName(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -311,6 +319,8 @@ func (r *kmsHttpRoutes) UpdateKeyTags(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -341,6 +351,8 @@ func (r *kmsHttpRoutes) DeleteKeyByID(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -380,6 +392,8 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -418,6 +432,8 @@ func (r *kmsHttpRoutes) VerifySignature(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrKeyEngineRequired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:

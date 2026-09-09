@@ -1,10 +1,13 @@
 package routes
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -15,24 +18,46 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 
 	remoteEngine := newRemoteAuthzEngine(authzConf, models.KMSSource, logger)
 
+	// A key is identified by (key_id, engine_id), so the authz entity key can only be built
+	// from a PKCS#11 URI, which carries the engine in token-id, or from an alias, which is
+	// unique across engines but needs a storage lookup to resolve. Same rule as svc.GetKey;
+	// it lives in both places because the authz middleware is bypassed in admin mode.
 	keyIDExtractor := func(c *gin.Context) map[string]string {
-		pkcs11Uri := c.Param("id")
-		keyUriParts, err := models.ParsePKCS11URI(pkcs11Uri)
-		if err != nil {
+		identifier := c.Param("id")
+
+		if strings.HasPrefix(identifier, "pkcs11:") {
+			keyUriParts, err := models.ParsePKCS11URI(identifier)
+			if err != nil || keyUriParts["id"] == "" || keyUriParts["token-id"] == "" {
+				c.AbortWithStatusJSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+				return nil
+			}
+
 			return map[string]string{
-				"key_id": pkcs11Uri, // Fallback to using the raw ID if parsing fails
+				"key_id":    keyUriParts["id"],
+				"engine_id": keyUriParts["token-id"],
 			}
 		}
 
-		keyID := keyUriParts["id"]
-		engineID := keyUriParts["token-id"]
+		key, err := svc.GetKey(c.Request.Context(), services.GetKeyInput{Identifier: identifier})
+		if err != nil {
+			switch err {
+			case errs.ErrKeyEngineRequired:
+				c.AbortWithStatusJSON(400, gin.H{"err": err.Error()})
+			case errs.ErrKeyNotFound:
+				c.AbortWithStatusJSON(404, gin.H{"err": err.Error()})
+			default:
+				c.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
+			}
+			return nil
+		}
+
 		return map[string]string{
-			"key_id":    keyID,
-			"engine_id": engineID,
+			"key_id":    key.KeyID,
+			"engine_id": key.EngineID,
 		}
 	}
 
-	kmsAuthzMw := middleware.NewCompositeAuthzMiddleware(remoteEngine, "pki", "kms", "kms_key", []string{"key_id", "type", "engine_id"}, logger)
+	kmsAuthzMw := middleware.NewCompositeAuthzMiddleware(remoteEngine, "pki", "kms", "kms_key", []string{"key_id", "engine_id"}, logger)
 
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")

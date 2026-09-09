@@ -1174,7 +1174,11 @@ components:
           description: Crypto engine to generate the key in
         key_identifier:
           type: string
-          description: Optional pre-existing key identifier to reuse
+          description: >-
+            Optional pre-existing key to reuse, given as its PKCS#11 URI, one of its
+            aliases, or its key_id. A key_id resolves only while a single engine holds it:
+            once several engines hold the same key_id it no longer identifies one key and
+            the PKCS#11 URI or an alias must be used instead.
 
     CreateCertificateBody:
       type: object

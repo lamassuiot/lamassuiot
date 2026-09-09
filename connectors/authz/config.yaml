@@ -6,7 +6,7 @@ debug: true
 # Schema name -> path to the JSON schema file
 schemas:
   authz: /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json
-  pki: /home/ubuntu/dev/authz/examples/iot/pki.json
+  pki: /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json
 
 # http_schemas: list of HTTP schema JSON files (for Envoy ext_authz route mapping)
 http_schemas:

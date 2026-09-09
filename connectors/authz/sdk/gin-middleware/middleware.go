@@ -61,6 +61,11 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 		}
 
 		entityKey := entityKeyFunc(c)
+		// An extractor that cannot resolve the entity key aborts the request itself:
+		// authorizing on a partial key would check a different entity than the caller asked for.
+		if c.IsAborted() {
+			return
+		}
 
 		authorized, matchedPrincipals, err := m.engine.MatchAndAuthorize(c.Request.Context(), authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKey)
 		if err != nil {
