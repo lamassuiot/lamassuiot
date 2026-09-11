@@ -2,11 +2,15 @@ package eventpub
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"fmt"
+	"time"
 
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
@@ -104,6 +108,18 @@ func (mw dmsEventPublisher) GetAll(ctx context.Context, input services.GetAllInp
 	return mw.next.GetAll(ctx, input)
 }
 
+func (mw dmsEventPublisher) GetCMPTransactionsByDMS(ctx context.Context, input services.GetCMPTransactionsByDMSInput) (string, error) {
+	return mw.next.GetCMPTransactionsByDMS(ctx, input)
+}
+
+func (mw dmsEventPublisher) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*models.CMPTransaction, error) {
+	return mw.next.ApproveCMPTransaction(ctx, input)
+}
+
+func (mw dmsEventPublisher) RejectCMPTransaction(ctx context.Context, input services.RejectCMPTransactionInput) (*models.CMPTransaction, error) {
+	return mw.next.RejectCMPTransaction(ctx, input)
+}
+
 func (mw dmsEventPublisher) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return mw.next.CACerts(ctx, aps)
 }
@@ -152,4 +168,118 @@ func (mw dmsEventPublisher) BindIdentityToDevice(ctx context.Context, input serv
 		}
 	}()
 	return mw.next.BindIdentityToDevice(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCEnroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	return mw.next.LWCEnroll(ctx, csr, aps, signerCert)
+}
+
+func (mw dmsEventPublisher) LWCReenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, signerCert *x509.Certificate) (*x509.Certificate, error) {
+	return mw.next.LWCReenroll(ctx, csr, aps, signerCert)
+}
+
+func (mw dmsEventPublisher) LWCCACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	return mw.next.LWCCACerts(ctx, aps)
+}
+
+func (mw dmsEventPublisher) LWCRevokeCertificate(ctx context.Context, input services.RevokeCertificateInput, signerCert *x509.Certificate) error {
+	return mw.next.LWCRevokeCertificate(ctx, input, signerCert)
+}
+
+func (mw dmsEventPublisher) LWCGetRootCACertUpdate(ctx context.Context, input services.GetRootCACertUpdateInput) (*services.RootCACertUpdateOutput, error) {
+	return mw.next.LWCGetRootCACertUpdate(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCGetCertReqTemplate(ctx context.Context, input services.GetCertReqTemplateInput) (*services.CertReqTemplateOutput, error) {
+	return mw.next.LWCGetCertReqTemplate(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCGetCRL(ctx context.Context, input services.GetCMPCRLInput) (*x509.RevocationList, error) {
+	return mw.next.LWCGetCRL(ctx, input)
+}
+
+func (mw dmsEventPublisher) LWCGetEnrollmentOptions(ctx context.Context, aps string) (*services.LWCEnrollmentOptions, error) {
+	return mw.next.LWCGetEnrollmentOptions(ctx, aps)
+}
+
+func (mw dmsEventPublisher) LWCProtectionCredentials(ctx context.Context, aps string) ([]*x509.Certificate, crypto.Signer, error) {
+	provider, ok := mw.next.(services.LightweightCMPProtectionProvider)
+	if !ok {
+		return nil, nil, fmt.Errorf("cmp protection credentials not available")
+	}
+	return provider.LWCProtectionCredentials(ctx, aps)
+}
+
+func (mw dmsEventPublisher) LWCConfirmReenrollment(ctx context.Context, aps string, certSerialNumber string) error {
+	confirmer, ok := mw.next.(services.LightweightCMPConfirmer)
+	if !ok {
+		return fmt.Errorf("cmp reenrollment confirmer not available")
+	}
+	return confirmer.LWCConfirmReenrollment(ctx, aps, certSerialNumber)
+}
+
+func (mw dmsEventPublisher) LWCValidateRASigner(ctx context.Context, aps string, signer *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPRAValidator)
+	if !ok {
+		return fmt.Errorf("cmp RA signer validation not available")
+	}
+	return validator.LWCValidateRASigner(ctx, aps, signer)
+}
+
+func (mw dmsEventPublisher) LWCIssueKGAHelperCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, purpose services.KGAHelperPurpose) (*x509.Certificate, []*x509.Certificate, error) {
+	keyGen, ok := mw.next.(services.LightweightCMPKeyGenerator)
+	if !ok {
+		return nil, nil, fmt.Errorf("cmp central key generation not available")
+	}
+	return keyGen.LWCIssueKGAHelperCertificate(ctx, aps, csr, purpose)
+}
+
+func (mw dmsEventPublisher) LWCIssueCrossCertificate(ctx context.Context, aps string, csr *x509.CertificateRequest, reqNotBefore, reqNotAfter *time.Time) (*x509.Certificate, []*x509.Certificate, error) {
+	crossCertifier, ok := mw.next.(services.LightweightCMPCrossCertifier)
+	if !ok {
+		return nil, nil, fmt.Errorf("cmp cross certification not available")
+	}
+	return crossCertifier.LWCIssueCrossCertificate(ctx, aps, csr, reqNotBefore, reqNotAfter)
+}
+
+func (mw dmsEventPublisher) LWCValidateCCRRequester(ctx context.Context, aps string, signer *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPCrossCertRequesterValidator)
+	if !ok {
+		return fmt.Errorf("cmp cross-certification requester validation not available")
+	}
+	return validator.LWCValidateCCRRequester(ctx, aps, signer)
+}
+
+func (mw dmsEventPublisher) LWCValidateKGARecipient(ctx context.Context, aps string, recipient *x509.Certificate) error {
+	validator, ok := mw.next.(services.LightweightCMPKGARecipientValidator)
+	if !ok {
+		return fmt.Errorf("cmp kga recipient validation not available")
+	}
+	return validator.LWCValidateKGARecipient(ctx, aps, recipient)
+}
+
+// GetCMPTransactionRepo forwards the optional cmpTransactionStorer interface
+// through the middleware chain so the HTTP controller can reach the backend repo
+// regardless of how many middleware layers are stacked.
+func (mw dmsEventPublisher) GetCMPTransactionRepo() storage.CMPTransactionRepo {
+	type repoProvider interface {
+		GetCMPTransactionRepo() storage.CMPTransactionRepo
+	}
+	if p, ok := mw.next.(repoProvider); ok {
+		return p.GetCMPTransactionRepo()
+	}
+	return nil
+}
+
+// GetCMPWFXReporter forwards the optional CMP WFX reporter through the
+// middleware chain so the HTTP controller can emit transaction state
+// transitions regardless of how many middlewares wrap the backend.
+func (mw dmsEventPublisher) GetCMPWFXReporter() cmpwfx.CMPReporter {
+	type reporterProvider interface {
+		GetCMPWFXReporter() cmpwfx.CMPReporter
+	}
+	if p, ok := mw.next.(reporterProvider); ok {
+		return p.GetCMPWFXReporter()
+	}
+	return nil
 }

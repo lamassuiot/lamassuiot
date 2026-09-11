@@ -50,6 +50,10 @@ func (m *MockStorageEngine) GetKMSStorage() (KMSKeysRepo, error) {
 	return nil, nil
 }
 
+func (m *MockStorageEngine) GetCMPTransactionStorage() (CMPTransactionRepo, error) {
+	return nil, nil
+}
+
 func TestRegisterStorageEngine(t *testing.T) {
 	mockProvider := config.StorageProvider("mockProvider")
 	mockBuilder := func(logger *logrus.Entry, config config.PluggableStorageEngine) (StorageEngine, error) {

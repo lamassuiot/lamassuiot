@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/asn1"
 	"testing"
 	"time"
 
@@ -602,6 +603,52 @@ func TestApplyIssuanceProfileToTemplate_ExtendedKeyUsage(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestApplyIssuanceProfileToTemplate_ExtraExtKeyUsageOIDs verifies that custom
+// extendedKeyUsage OIDs (e.g. id-kp-cmKGA) flow from the profile into the
+// certificate template's UnknownExtKeyUsage, regardless of HonorExtendedKeyUsages.
+func TestApplyIssuanceProfileToTemplate_ExtraExtKeyUsageOIDs(t *testing.T) {
+	logger := logrus.NewEntry(logrus.New())
+	engine := NewX509Engine(logger, []string{"va.example.com"}, nil)
+	ctx := context.Background()
+	now := time.Now()
+
+	template := &x509.Certificate{
+		Subject:   chelpers.SubjectToPkixName(models.Subject{CommonName: "kga-signer"}),
+		NotBefore: now,
+		NotAfter:  now.Add(time.Hour),
+	}
+	profile := models.IssuanceProfile{
+		Validity:                  models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		ExtendedKeyUsages:         []models.X509ExtKeyUsage{},
+		ExtraExtendedKeyUsageOIDs: []string{"1.3.6.1.5.5.7.3.32"}, // id-kp-cmKGA CMC Key Generation Authority
+	}
+
+	if err := engine.applyIssuanceProfileToTemplate(ctx, template, profile, now); err != nil {
+		t.Fatalf("applyIssuanceProfileToTemplate failed: %v", err)
+	}
+
+	if !chelpers.OidExtKeyUsageCMKGA.Equal(firstUnknownEKU(template)) {
+		t.Fatalf("UnknownExtKeyUsage = %v, want it to contain cmKGA %v",
+			template.UnknownExtKeyUsage, chelpers.OidExtKeyUsageCMKGA)
+	}
+
+	// A malformed OID must surface as an error rather than silently dropping it.
+	bad := models.IssuanceProfile{
+		Validity:                  models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		ExtraExtendedKeyUsageOIDs: []string{"not-an-oid"},
+	}
+	if err := engine.applyIssuanceProfileToTemplate(ctx, &x509.Certificate{}, bad, now); err == nil {
+		t.Fatal("expected error for malformed extra EKU OID, got nil")
+	}
+}
+
+func firstUnknownEKU(t *x509.Certificate) asn1.ObjectIdentifier {
+	if len(t.UnknownExtKeyUsage) == 0 {
+		return nil
+	}
+	return t.UnknownExtKeyUsage[0]
 }
 
 // TestApplyIssuanceProfileToTemplate_CAConstraints tests CA constraint handling

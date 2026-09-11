@@ -168,8 +168,9 @@ type CreateUpdateIssuanceProfileBody struct {
 	SignAsCA               bool                                       `json:"sign_as_ca"`
 	HonorKeyUsage          bool                                       `json:"honor_key_usage"`
 	KeyUsage               models.X509KeyUsage                        `json:"key_usage"`
-	HonorExtendedKeyUsages bool                                       `json:"honor_extended_key_usages"`
-	ExtendedKeyUsages      []models.X509ExtKeyUsage                   `json:"extended_key_usages"`
+	HonorExtendedKeyUsages    bool                                    `json:"honor_extended_key_usages"`
+	ExtendedKeyUsages         []models.X509ExtKeyUsage                `json:"extended_key_usages"`
+	ExtraExtendedKeyUsageOIDs []string                                `json:"extra_extended_key_usage_oids,omitempty"`
 	HonorSubject           bool                                       `json:"honor_subject"`
 	Subject                models.Subject                             `json:"subject"`
 	HonorExtensions        bool                                       `json:"honor_extensions"`

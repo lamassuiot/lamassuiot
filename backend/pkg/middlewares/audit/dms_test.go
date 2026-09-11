@@ -14,8 +14,9 @@ import (
 )
 
 func dmsAuditEventChecker(event models.EventType, expectations []func(*svcmock.MockDMSManagerService), operation func(services.DMSManagerService), assertions func(*CloudEventPublisherMock, *svcmock.MockDMSManagerService)) {
-	mockDMSService := new(svcmock.MockDMSManagerService)
+
 	mockCloudEventPub := new(CloudEventPublisherMock)
+	mockDMSService := new(svcmock.MockDMSManagerService)
 	auditPublisher := AuditPublisher{
 		ICloudEventPublisher: mockCloudEventPub,
 	}

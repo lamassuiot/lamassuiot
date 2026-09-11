@@ -15,4 +15,6 @@ init.sql
 *.logs
 .DS_Store
 testdata
-.codex
+.codexscripts/__pycache__/
+.claude/
+scripts/cmp-ccr-*

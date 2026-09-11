@@ -871,39 +871,43 @@ func TestGetDevicesByDMS(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				ServerKeyGen: models.ServerKeyGenSettings{
-					Enabled: false,
-				},
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					ServerKeyGen: models.ServerKeyGenSettings{
+						Enabled: false,
+					},
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}
@@ -1196,36 +1200,40 @@ func TestDecommissionDevice(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				EnrollmentSettings: models.EnrollmentSettings{
-					EnrollmentProtocol: models.EST,
-					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+				Protocol: models.EST,
+				EST: &models.ESTSettings{
+					EnrollmentSettings: models.ESTEnrollmentSettings{
 						AuthMode: models.ESTAuthModeClientCertificate,
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
 						},
+						CommonEnrollmentSettings: models.CommonEnrollmentSettings{
+							DeviceProvisionProfile: models.DeviceProvisionProfile{
+								Icon:      "BiSolidCreditCardFront",
+								IconColor: "#25ee32-#222222",
+								Metadata:  map[string]any{},
+								Tags:      []string{"iot", "testdms", "cloud"},
+							},
+							RegistrationMode:            models.JITP,
+							EnableReplaceableEnrollment: true,
+							VerifyCSRSignature:          true,
+						},
 					},
-					DeviceProvisionProfile: models.DeviceProvisionProfile{
-						Icon:      "BiSolidCreditCardFront",
-						IconColor: "#25ee32-#222222",
-						Metadata:  map[string]any{},
-						Tags:      []string{"iot", "testdms", "cloud"},
+					ReEnrollmentSettings: models.ESTReEnrollmentSettings{
+						CommonReEnrollmentSettings: models.CommonReEnrollmentSettings{
+							AdditionalValidationCAs:     []string{},
+							ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+							EnableExpiredRenewal:        true,
+							PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+							CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+						},
 					},
-					RegistrationMode:            models.JITP,
-					EnableReplaceableEnrollment: true,
-					VerifyCSRSignature:          true,
-				},
-				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
-					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
-					EnableExpiredRenewal:        true,
-					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
-					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
-				},
-				CADistributionSettings: models.CADistributionSettings{
-					IncludeLamassuSystemCA: true,
-					IncludeEnrollmentCA:    true,
-					ManagedCAs:             []string{},
+					CADistributionSettings: models.CADistributionSettings{
+						IncludeLamassuSystemCA: true,
+						IncludeEnrollmentCA:    true,
+						ManagedCAs:             []string{},
+					},
 				},
 			},
 		}

@@ -111,8 +111,8 @@ type CreateCAInput struct {
 	ParentID     string
 	KeyMetadata  models.KeyMetadata `validate:"required"`
 	Subject      models.Subject     `validate:"required"`
-	ProfileID    string             `validate:"required"`
-	CAExpiration models.Validity    `validate:"required"`
+	ProfileID    string				`validate:"required"`
+	CAExpiration models.Validity 	`validate:"required"`
 	EngineID     string
 	Metadata     map[string]any
 	// CA Issuance Profile - optional profile to apply when creating the CA certificate itself

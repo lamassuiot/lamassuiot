@@ -126,6 +126,17 @@ return nil, err
 return s.DMS, nil
 }
 
+func (s *SQLiteStorageEngine) GetCMPTransactionStorage() (storage.CMPTransactionRepo, error) {
+	if s.CMPTx == nil {
+		var err error
+		s.CMPTx, err = postgres.NewCMPTransactionRepository(s.logger, s.db)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s.CMPTx, nil
+}
+
 func (s *SQLiteStorageEngine) GetEnventsStorage() (storage.EventRepository, error) {
 if s.Events == nil {
 if err := s.initEventsStorage(); err != nil {

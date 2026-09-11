@@ -18,6 +18,8 @@ import (
 	"net"
 	"net/url"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +29,52 @@ import (
 
 // Map x509.ExtKeyUsage to their corresponding OIDs (this is a copy of the internal mapping in crypto/x509, but we need the OIDs here.
 // So we replicate it here since it's not exposed)
+
+// OidExtKeyUsageCMKGA is id-kp-cmKGA (RFC 6402 / RFC 9483 §4.1.6), the
+// extendedKeyUsage a certificate must carry to act as a CMP Key Generation
+// Authority signer. Go's crypto/x509 has no constant for it.
+var OidExtKeyUsageCMKGA = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 32}
+
+// OidExtKeyUsageCMCRA is id-kp-cmcRA (RFC 6402), the extendedKeyUsage marking a
+// certificate as a CMP/CMC Registration Authority. A message-protection signer
+// carrying it is a trusted RA and may assert raVerified proof-of-possession on
+// behalf of an end entity (RFC 9483 §5.2.3.2). Go's crypto/x509 has no constant.
+var OidExtKeyUsageCMCRA = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 28}
+
+// CertHasExtKeyUsageOID reports whether cert carries the given extendedKeyUsage
+// OID, checking both the parsed UnknownExtKeyUsage (custom OIDs Go doesn't map)
+// and any raw ExtendedKeyUsage extension. Used to detect CMP roles (cmcRA/cmKGA)
+// that have no Go x509.ExtKeyUsage constant.
+func CertHasExtKeyUsageOID(cert *x509.Certificate, oid asn1.ObjectIdentifier) bool {
+	if cert == nil {
+		return false
+	}
+	for _, u := range cert.UnknownExtKeyUsage {
+		if u.Equal(oid) {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseObjectIdentifier parses a dotted-decimal OID string (e.g. "1.3.6.1.5.5.7.3.32")
+// into an asn1.ObjectIdentifier. It requires at least two arcs and rejects empty
+// or non-numeric components.
+func ParseObjectIdentifier(s string) (asn1.ObjectIdentifier, error) {
+	parts := strings.Split(strings.TrimSpace(s), ".")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("OID %q must have at least two arcs", s)
+	}
+	oid := make(asn1.ObjectIdentifier, 0, len(parts))
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("invalid OID arc %q in %q", p, s)
+		}
+		oid = append(oid, n)
+	}
+	return oid, nil
+}
 
 var OidExtensionKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 15}
 var OidExtensionExtendedKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 37}
@@ -211,6 +259,36 @@ func ExtractKeyUsageFromCSR(csr *x509.CertificateRequest) (x509.KeyUsage, []x509
 	}
 
 	return kuMask, ekuList, nil
+}
+
+// ExtractUnknownExtKeyUsageOIDsFromCSR returns the extendedKeyUsage purpose OIDs
+// present in the CSR that have no corresponding Go x509.ExtKeyUsage constant
+// (e.g. the CMP-specific id-kp-cmcRA/cmcCA/cmKGA OIDs from RFC 6402 / RFC 9483).
+// ExtractKeyUsageFromCSR deliberately drops these (it only returns mapped
+// x509.ExtKeyUsage values); callers that want to honor them in the issued
+// certificate carry them through x509.Certificate.UnknownExtKeyUsage.
+func ExtractUnknownExtKeyUsageOIDsFromCSR(csr *x509.CertificateRequest) ([]asn1.ObjectIdentifier, error) {
+	var unknown []asn1.ObjectIdentifier
+
+	all := append([]pkix.Extension{}, csr.Extensions...)
+	all = append(all, csr.ExtraExtensions...)
+
+	for _, e := range all {
+		if !e.Id.Equal(OidExtensionExtendedKeyUsage) {
+			continue
+		}
+		var oids []asn1.ObjectIdentifier
+		if _, err := asn1.Unmarshal(e.Value, &oids); err != nil {
+			return nil, fmt.Errorf("unmarshal ExtendedKeyUsage: %w", err)
+		}
+		for _, oid := range oids {
+			if _, ok := ekuOIDToExt[oid.String()]; !ok {
+				unknown = append(unknown, oid)
+			}
+		}
+	}
+
+	return unknown, nil
 }
 
 func GenerateKeyUsagePKIExtension(keyUsage x509.KeyUsage) (pkix.Extension, error) {

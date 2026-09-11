@@ -50,7 +50,7 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 		})
 
 		reqCtx := req.Context()
-		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, crt)
+		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialStruct, crts)
 		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthCredentialString, crtS.String())
 		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthType, string(IdentityExtractorClientCertificate))
 		reqCtx = context.WithValue(reqCtx, core.LamassuContextKeyAuthID, crt.Subject.CommonName)

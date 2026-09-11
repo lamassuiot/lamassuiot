@@ -24,9 +24,20 @@
     },
     "creation_ts": "2024-06-14T08:46:27.740275Z",
     "settings": {
-        "enrollment_settings": {
-            "protocol": "EST_RFC7030",
-            "est_rfc7030_settings": {
+        "protocol": "EST_RFC7030",
+        "est_settings": {
+            "enrollment_settings": {
+                "device_provisioning_profile": {
+                    "icon": "CgSmartphoneShake",
+                    "icon_color": "#302ec3-#9e6c4e",
+                    "metadata": {},
+                    "tags": [
+                        "test"
+                    ]
+                },
+                "enrollment_ca": "39cb81fb-c939-4912-b12f-a74fabff8847",
+                "enable_replaceable_enrollment": true,
+                "registration_mode": "JITP",
                 "auth_mode": "",
                 "client_certificate_settings": {
                     "validation_cas": [
@@ -35,29 +46,18 @@
                     "chain_level_validation": -1
                 }
             },
-            "device_provisioning_profile": {
-                "icon": "CgSmartphoneShake",
-                "icon_color": "#302ec3-#9e6c4e",
-                "metadata": {},
-                "tags": [
-                    "test"
-                ]
+            "reenrollment_settings": {
+                "additional_validation_cas": [],
+                "reenrollment_delta": "2y",
+                "enable_expired_renewal": true,
+                "preventive_delta": "1y",
+                "critical_delta": "10m"
             },
-            "enrollment_ca": "39cb81fb-c939-4912-b12f-a74fabff8847",
-            "enable_replaceable_enrollment": true,
-            "registration_mode": "JITP"
-        },
-        "reenrollment_settings": {
-            "additional_validation_cas": [],
-            "reenrollment_delta": "2y",
-            "enable_expired_renewal": true,
-            "preventive_delta": "1y",
-            "critical_delta": "10m"
-        },
-        "ca_distribution_settings": {
-            "include_system_ca": true,
-            "include_enrollment_ca": true,
-            "managed_cas": []
+            "ca_distribution_settings": {
+                "include_system_ca": true,
+                "include_enrollment_ca": true,
+                "managed_cas": []
+            }
         }
     }
 }
