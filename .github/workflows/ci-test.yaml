@@ -255,7 +255,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.head_ref }}
 
@@ -264,20 +264,20 @@ jobs:
       # config/lamassu.robot committed — no patching step. It MUST be checked
       # out before any `working-directory: cmp-test-suite` step can run.
       - name: Checkout CMP test suite
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           repository: lamassuiot/cmp-test-suite
           ref: main
           path: cmp-test-suite
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: '^1.26.2'
           cache-dependency-path: "**/*.sum"
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
 
@@ -350,13 +350,13 @@ jobs:
       # dorny/test-reporter runs `git ls-files` to resolve annotation paths,
       # so a checkout must exist even though this job doesn't build anything.
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       # Download every test-results-<something> artifact uploaded by the jobs
       # above into its own subfolder (test-results/<artifact-name>/*.xml), so
       # same-named files (e.g. every Go module's junit.xml) don't collide.
       - name: Download all test-result artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: test-results-*
           path: test-results
@@ -426,7 +426,7 @@ jobs:
           ls -la ./*.xml
 
       - name: Publish test results
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@df6247429542221bc30d46a036ee47af1102c451 # v2.7.0
         with:
           name: Test Results
           path: '*.xml'

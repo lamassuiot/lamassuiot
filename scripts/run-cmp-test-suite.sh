@@ -240,7 +240,10 @@ if [ ! -x "venv-cmp-tests/bin/robot" ]; then
     source venv-cmp-tests/bin/activate
 
     REQS_FILE="$(mktemp)"
-    python3 -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml","rb"))["project"]["dependencies"]))' \
+    # tinyec publishes only a source distribution. Exclude its audited, pinned
+    # version from the package-manager input so every package-manager install
+    # can require wheels and therefore cannot execute package build scripts.
+    python3 -c 'import tomllib; deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]; expected = "tinyec==0.4.0"; assert expected in deps, f"expected pinned dependency {expected}"; print("\n".join(dep for dep in deps if dep != expected))' \
         > "${REQS_FILE}" \
         || die "Could not extract dependencies from pyproject.toml"
     # Note: liboqs (post-quantum) is deliberately NOT installed. The suite's
@@ -248,14 +251,37 @@ if [ ! -x "venv-cmp-tests/bin/robot" ]; then
     # (and trigger a full liboqs source build on first import). The fork
     # makes that load best-effort so the classical suite runs PQ-free; PQ tests
     # are excluded at runtime via --exclude pqc.
-    log "Installing $(grep -c . "${REQS_FILE}") runtime dependencies (no project build, no PQ)"
-    # Prefer uv for speed; fall back to plain pip. Both are given a plain
-    # requirements file, so neither attempts to build cmp-test-suite.
-    if pip install --quiet uv && uv pip install -r "${REQS_FILE}"; then
+    # tinyec is pure Python, has no dependencies, and has no wheel on PyPI. Copy
+    # its package files from the hash-verified sdist instead of invoking its
+    # setup.py. A version or artifact change must be reviewed here explicitly.
+    TINYEC_VERSION="0.4.0"
+    TINYEC_SHA256="b0364aab3b9af632b64f24eafae0c8e56cc64b4845648752610f48f2ab0547a3"
+    TINYEC_URL="https://files.pythonhosted.org/packages/76/2f/1bf6060620aae864597422ed50a0b46ad66a720d22e0f5d6c62e58aebff9/tinyec-${TINYEC_VERSION}.tar.gz"
+    TINYEC_ARCHIVE="$(mktemp)"
+    TINYEC_EXTRACT_DIR="$(mktemp -d)"
+    curl --fail --location --silent --show-error --output "${TINYEC_ARCHIVE}" "${TINYEC_URL}" \
+        || die "Failed to download tinyec ${TINYEC_VERSION}"
+    printf '%s  %s\n' "${TINYEC_SHA256}" "${TINYEC_ARCHIVE}" | sha256sum --check --status \
+        || die "tinyec ${TINYEC_VERSION} checksum mismatch"
+    tar -xzf "${TINYEC_ARCHIVE}" -C "${TINYEC_EXTRACT_DIR}" --strip-components=1 \
+        "tinyec-${TINYEC_VERSION}/tinyec" \
+        || die "Failed to extract tinyec ${TINYEC_VERSION}"
+    SITE_PACKAGES="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
+        || die "Could not locate the venv site-packages directory"
+    cp -R "${TINYEC_EXTRACT_DIR}/tinyec" "${SITE_PACKAGES}/" \
+        || die "Failed to install tinyec ${TINYEC_VERSION}"
+    rm -f "${TINYEC_ARCHIVE}"
+    rm -rf "${TINYEC_EXTRACT_DIR}"
+
+    log "Installing $(grep -c . "${REQS_FILE}") wheel-only runtime dependencies (no project build, no PQ)"
+    # Prefer uv for speed; fall back to plain pip. Binary-only mode prevents
+    # either installer from executing dependency build scripts.
+    if pip install --quiet --only-binary=:all: uv && \
+        uv pip install --only-binary=:all: -r "${REQS_FILE}"; then
         :
     else
         warn "uv install failed; falling back to pip"
-        pip install --quiet -r "${REQS_FILE}" \
+        pip install --quiet --only-binary=:all: -r "${REQS_FILE}" \
             || die "Failed to install cmp-test-suite dependencies"
     fi
     rm -f "${REQS_FILE}"
