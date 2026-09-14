@@ -22,6 +22,7 @@ import (
 	"cloudflare/circl/sign/slhdsa"
 	"crypto/mldsa"
 
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/sirupsen/logrus"
@@ -160,7 +161,7 @@ func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve 
 }
 
 func (p *SoftwareCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
-	lFunc := p.logger.WithField("func", "ML-DSA")
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
 	lFunc.Debugf("creating ML-DSA-%v key", dimensions)
 
 	var params mldsa.Parameters
@@ -181,7 +182,7 @@ func (p *SoftwareCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimens
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
+	encDigest, err := p.EncodePKIXPublicKeyDigest(ctx, key.Public())
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -191,7 +192,7 @@ func (p *SoftwareCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimens
 }
 
 func (p *SoftwareCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
-	lFunc := p.logger.WithField("func", "SLH-DSA")
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
 	lFunc.Debugf("creating SLH-DSA paramSet=%v key", paramSet)
 
 	_, key, err := slhdsa.GenerateKey(rand.Reader, slhdsa.ID(paramSet))
@@ -200,7 +201,7 @@ func (p *SoftwareCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, param
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
+	encDigest, err := p.EncodePKIXPublicKeyDigest(ctx, key.Public())
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -213,7 +214,7 @@ func (p *SoftwareCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string
 	lFunc := p.logger.WithField("func", "SLH-DSA")
 	lFunc.Debugf("importing SLH-DSA private key")
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
+	encDigest, err := p.EncodePKIXPublicKeyDigest(context.Background(), key.Public())
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -223,7 +224,7 @@ func (p *SoftwareCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string
 }
 
 func (p *SoftwareCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
-	lFunc := p.logger.WithField("func", "Composite-ML-DSA-RSA")
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
 	lFunc.Debugf("creating Composite-ML-DSA-RSA variant=%v key", variant)
 
 	if variant < 1 || variant > len(x509.CompositeAlgorithms) {
@@ -236,7 +237,7 @@ func (p *SoftwareCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Con
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
+	encDigest, err := p.EncodePKIXPublicKeyDigest(ctx, key.Public())
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -249,7 +250,7 @@ func (p *SoftwareCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Sign
 	lFunc := p.logger.WithField("func", "Composite-ML-DSA-RSA")
 	lFunc.Debugf("importing Composite-ML-DSA-RSA private key")
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
+	encDigest, err := p.EncodePKIXPublicKeyDigest(context.Background(), key.Public())
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -268,7 +269,7 @@ func (p *SoftwareCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer,
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
+	encDigest, err := p.EncodePKIXPublicKeyDigest(context.Background(), key.Public())
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -277,8 +278,9 @@ func (p *SoftwareCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer,
 	return encDigest, key, nil
 }
 
-func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(key interface{}) (string, error) {
-	p.logger.Debugf("marshaling and encoding PKIX private key")
+func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(ctx context.Context, key interface{}) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
+	lFunc.Debugf("marshaling and encoding PKIX private key")
 
 	keyBytes, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
@@ -301,7 +303,7 @@ func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(ctx context.Context, ke
 	var pubkeyBytes []byte
 	var err error
 
-	pubkeyBytes, err := x509.MarshalPKIXPublicKey(key)
+	pubkeyBytes, err = x509.MarshalPKIXPublicKey(key)
 	if err != nil {
 		lFunc.Errorf("could not marshal public key: %s", err)
 		return "", err

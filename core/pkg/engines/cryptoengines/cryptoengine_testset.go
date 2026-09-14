@@ -40,31 +40,34 @@ func SharedTestCreateECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestCreateMLDSAPrivateKey(t *testing.T, engine CryptoEngine) {
-	keyID, signer, err := engine.CreateMLDSAPrivateKey(context.Background(), 44)
+	ctx := context.Background()
+	keyID, signer, err := engine.CreateMLDSAPrivateKey(ctx, 44)
 	assert.NoError(t, err)
 
-	signer2, err := engine.GetPrivateKeyByID(keyID)
+	signer2, err := engine.GetPrivateKeyByID(ctx, keyID)
 	assert.NoError(t, err)
 
 	assert.Equal(t, signer.Public(), signer2.Public())
 }
 
 func SharedTestCreateSLHDSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	ctx := context.Background()
 	// paramSet 1 = slhdsa.SHA2_128s
-	keyID, signer, err := engine.CreateSLHDSAPrivateKey(context.Background(), 1)
+	keyID, signer, err := engine.CreateSLHDSAPrivateKey(ctx, 1)
 	assert.NoError(t, err)
 
-	signer2, err := engine.GetPrivateKeyByID(keyID)
+	signer2, err := engine.GetPrivateKeyByID(ctx, keyID)
 	assert.NoError(t, err)
 
 	assert.Equal(t, signer.Public(), signer2.Public())
 }
 
 func SharedTestCreateEd25519PrivateKey(t *testing.T, engine CryptoEngine) {
+	ctx := context.Background()
 	keyID, signer, err := engine.CreateEd25519PrivateKey()
 	assert.NoError(t, err)
 
-	signer2, err := engine.GetPrivateKeyByID(keyID)
+	signer2, err := engine.GetPrivateKeyByID(ctx, keyID)
 	assert.NoError(t, err)
 
 	assert.Equal(t, signer.Public(), signer2.Public())
@@ -210,7 +213,8 @@ func SharedTestECDSASignature(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestMLDSASignature(t *testing.T, engine CryptoEngine) {
-	keyID, signer, err := engine.CreateMLDSAPrivateKey(context.Background(), 65)
+	ctx := context.Background()
+	keyID, signer, err := engine.CreateMLDSAPrivateKey(ctx, 65)
 	assert.NoError(t, err)
 
 	h := sha256.New()
@@ -221,21 +225,22 @@ func SharedTestMLDSASignature(t *testing.T, engine CryptoEngine) {
 	_, err = signer.Sign(rand.Reader, hashed, crypto.Hash(0))
 	assert.NoError(t, err)
 
-	signer2, err := engine.GetPrivateKeyByID(keyID)
+	signer2, err := engine.GetPrivateKeyByID(ctx, keyID)
 	assert.NoError(t, err)
 
 	assert.Equal(t, signer.Public(), signer2.Public())
 }
 
 func SharedTestSLHDSASignature(t *testing.T, engine CryptoEngine) {
+	ctx := context.Background()
 	// paramSet 5 = slhdsa.SHA2_256s
-	keyID, signer, err := engine.CreateSLHDSAPrivateKey(context.Background(), 5)
+	keyID, signer, err := engine.CreateSLHDSAPrivateKey(ctx, 5)
 	assert.NoError(t, err)
 
 	_, err = signer.Sign(rand.Reader, []byte("message to sign"), crypto.Hash(0))
 	assert.NoError(t, err)
 
-	signer2, err := engine.GetPrivateKeyByID(keyID)
+	signer2, err := engine.GetPrivateKeyByID(ctx, keyID)
 	assert.NoError(t, err)
 
 	assert.Equal(t, signer.Public(), signer2.Public())
@@ -298,11 +303,12 @@ func SharedTestImportSLHDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedTestCreateCompositeMLDSARSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	ctx := context.Background()
 	// variant 1 = MLDSA44-RSA2048-PSS-SHA256
-	keyID, signer, err := engine.CreateCompositeMLDSARSAPrivateKey(context.Background(), 1)
+	keyID, signer, err := engine.CreateCompositeMLDSARSAPrivateKey(ctx, 1)
 	assert.NoError(t, err)
 
-	signer2, err := engine.GetPrivateKeyByID(keyID)
+	signer2, err := engine.GetPrivateKeyByID(ctx, keyID)
 	assert.NoError(t, err)
 
 	// *x509.CompositePublicKey holds its inner keys as closures (adapter
@@ -314,14 +320,15 @@ func SharedTestCreateCompositeMLDSARSAPrivateKey(t *testing.T, engine CryptoEngi
 }
 
 func SharedTestCompositeMLDSARSASignature(t *testing.T, engine CryptoEngine) {
+	ctx := context.Background()
 	// variant 3 = MLDSA65-RSA3072-PSS-SHA512
-	keyID, signer, err := engine.CreateCompositeMLDSARSAPrivateKey(context.Background(), 3)
+	keyID, signer, err := engine.CreateCompositeMLDSARSAPrivateKey(ctx, 3)
 	assert.NoError(t, err)
 
 	_, err = signer.Sign(rand.Reader, []byte("message to sign"), crypto.Hash(0))
 	assert.NoError(t, err)
 
-	signer2, err := engine.GetPrivateKeyByID(keyID)
+	signer2, err := engine.GetPrivateKeyByID(ctx, keyID)
 	assert.NoError(t, err)
 
 	pubKey := signer.Public().(*x509.CompositePublicKey)

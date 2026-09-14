@@ -2241,7 +2241,7 @@ func parsePKCS11URI(uri string) (map[string]string, error) {
 // TestSignMessageWithSLHDSA verifies that SLH-DSA keys can be created via the
 // KMS service and used to sign arbitrary messages with the SLHDSA_PURE algorithm.
 func TestSignMessageWithSLHDSA(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -2379,7 +2379,7 @@ func TestSignMessageWithSLHDSA(t *testing.T) {
 // can be created via the KMS service and used to sign messages with the
 // COMPOSITE_MLDSA_RSA_PURE algorithm.
 func TestSignMessageWithCompositeMLDSARSA(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}

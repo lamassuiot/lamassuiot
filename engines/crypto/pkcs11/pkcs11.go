@@ -13,7 +13,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/asn1"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -569,6 +568,11 @@ func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(ctx context.Context
 }
 
 // TODO -> Add implementation (if posible)
+func (hsmContext *pkcs11EngineContext) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
 func (hsmContext *pkcs11EngineContext) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("pkcs11: unsupported key type (SLH-DSA)")
 }
@@ -582,6 +586,10 @@ func (hsmContext *pkcs11EngineContext) ImportCompositeMLDSARSAPrivateKey(key cry
 func (hsmContext *pkcs11EngineContext) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("pkcs11: unsupported key type (Ed25519)")
 }
+
+func (hsmContext *pkcs11EngineContext) DeleteKey(ctx context.Context, keyID string) error {
+	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
+	lFunc.Debugf("deleting key %s", keyID)
 
 	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
 	if err != nil {

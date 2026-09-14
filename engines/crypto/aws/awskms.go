@@ -379,7 +379,8 @@ func (p *AWSKMSCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (st
 	return "", nil, errors.New("awskms: unsupported key type (Ed25519)")
 }
 
-func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) importKey(ctx context.Context, key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {
+	lFunc := corehelpers.ConfigureLogger(ctx, p.logger)
 	// 1. Create KMS key
 	createKeyOut, err := p.kmscli.CreateKey(ctx, &kms.CreateKeyInput{
 		Origin:   types.OriginTypeExternal,
