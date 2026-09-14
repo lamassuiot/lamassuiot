@@ -1,4 +1,17 @@
-FROM golang:1.26.2-bookworm
+#################################################################################################
+#                                                                                               #
+# Use the custom go fork as a base image                                                        #
+#                                                                                               #
+#################################################################################################
+
+FROM ghcr.io/lamassuiot/golang-pqc:latest
+
+#################################################################################################
+#                                                                                               #
+# Install the application                                                                       #
+#                                                                                               #
+#################################################################################################
+
 WORKDIR /app
 
 COPY core core
@@ -17,14 +30,17 @@ ARG VERSION= # set by build script
 
 RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 
-##############
-
 ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \ 
-    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o kms backend/cmd/kms/main.go 
+    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o kms backend/cmd/kms/main.go 
+
+#################################################################################################
+#                                                                                               #
+# Configure the environment                                                                     #
+#                                                                                               #
+#################################################################################################
 
 # Alpine and scartch dont work for this image due to non corss compileable HSM library
-FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Dependencies for pkcs11-proxy and opensc for pkcs11-tool
@@ -32,12 +48,9 @@ RUN apt-get update && \
     apt-get --no-install-recommends install -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev opensc ca-certificates && \
     apt-get clean
 
-# -DCMAKE_POLICY_VERSION_MINIMUM=3.5 lets CMake 4.x configure pkcs11-proxy's
-# old CMakeLists.txt, and -Wno-error=incompatible-pointer-types keeps GCC 15
-# pointer type diagnostics as warnings instead of build-stopping errors.
 RUN git clone https://github.com/SUNET/pkcs11-proxy && \
     cd pkcs11-proxy && \
-    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_FLAGS="-Wno-error=incompatible-pointer-types" . && make && make install
+    cmake . && make && make install
 
 # Clean build artifacts
 RUN rm -rf /pkcs11-proxy
@@ -46,9 +59,13 @@ RUN apt-get remove -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-de
     apt-get autoremove -y && \
     apt-get clean
 
-RUN groupadd --system lamassu && \
-    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
+ARG USERNAME=lamassu
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
 
-COPY --from=0 /app/kms /
-USER lamassu
-CMD ["/kms"]
+RUN groupadd --gid "$USER_GID" "$USERNAME" \
+    && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" 
+
+USER $USERNAME
+
+CMD ["/app/kms"]

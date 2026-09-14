@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/connectors/awsiot/v3
 
-go 1.26.2
+go 1.27
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.5.1
