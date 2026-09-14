@@ -27,8 +27,8 @@ type CryptoEngine interface {
 	CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error)
 	CreateEd25519PrivateKey() (string, crypto.Signer, error)
 
-	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
-	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
+	ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error)
+	ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error)
 	ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error)
 	ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
 	ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)

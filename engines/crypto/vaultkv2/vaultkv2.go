@@ -228,8 +228,9 @@ func (engine *VaultKV2Engine) CreateEd25519PrivateKey() (string, crypto.Signer, 
 	return "", nil, errors.New("vaultvk2: unsupported key type (Ed25519)")
 }
 
-func (engine *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	engine.logger.Debugf("importing RSA private key")
+func (engine *VaultKV2Engine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("importing RSA private key")
 
 	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
@@ -275,7 +276,8 @@ func (engine *VaultKV2Engine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (s
 	return "", nil, errors.New("vaultvk2: unsupported key type (Ed25519)")
 }
 
-func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) {
+func (engine *VaultKV2Engine) importKey(ctx context.Context, key any) (string, crypto.Signer, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 	pubKey := key.(crypto.Signer).Public()
 
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, pubKey)

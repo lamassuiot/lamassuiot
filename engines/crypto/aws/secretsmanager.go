@@ -166,8 +166,9 @@ func (p *AWSSecretsManagerCryptoEngine) CreateEd25519PrivateKey() (string, crypt
 	return "", nil, errors.New("awskms: unsupported key type (Ed25519)")
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	engine.logger.Debugf("importing RSA private key")
+func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
+	lFunc := corehelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Debugf("importing RSA private key")
 
 	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
@@ -213,7 +214,8 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportEd25519PrivateKey(key ed25519
 	return "", nil, errors.New("aws/secretsmanager: unsupported key type (Ed25519)")
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) importKey(ctx context.Context, key crypto.Signer) (string, crypto.Signer, error) {
+	lFunc := corehelpers.ConfigureLogger(ctx, engine.logger)
 	pubKey := key.Public()
 
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, pubKey)

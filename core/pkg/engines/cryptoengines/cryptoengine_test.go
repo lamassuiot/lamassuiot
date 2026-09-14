@@ -59,7 +59,7 @@ func (m *mockCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, err
 	return "", key, err
 }
 
-func (m *mockCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", key, nil
 }
 
@@ -83,7 +83,7 @@ func (m *mockCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (stri
 	return "", key, nil
 }
 
-func (m *mockCryptoEngine) DeleteKey(keyID string) error {
+func (m *mockCryptoEngine) DeleteKey(ctx context.Context, keyID string) error {
 	return nil
 }
 
