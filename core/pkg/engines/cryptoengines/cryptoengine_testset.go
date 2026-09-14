@@ -305,7 +305,12 @@ func SharedTestCreateCompositeMLDSARSAPrivateKey(t *testing.T, engine CryptoEngi
 	signer2, err := engine.GetPrivateKeyByID(keyID)
 	assert.NoError(t, err)
 
-	assert.Equal(t, signer.Public(), signer2.Public())
+	// *x509.CompositePublicKey holds its inner keys as closures (adapter
+	// pattern), which reflect.DeepEqual - and so assert.Equal - can never
+	// consider equal across two separate instances. Use its dedicated
+	// Equal method (bytes-based) instead.
+	pubKey := signer.Public().(*x509.CompositePublicKey)
+	assert.True(t, pubKey.Equal(signer2.Public()))
 }
 
 func SharedTestCompositeMLDSARSASignature(t *testing.T, engine CryptoEngine) {
@@ -319,7 +324,8 @@ func SharedTestCompositeMLDSARSASignature(t *testing.T, engine CryptoEngine) {
 	signer2, err := engine.GetPrivateKeyByID(keyID)
 	assert.NoError(t, err)
 
-	assert.Equal(t, signer.Public(), signer2.Public())
+	pubKey := signer.Public().(*x509.CompositePublicKey)
+	assert.True(t, pubKey.Equal(signer2.Public()))
 }
 
 func SharedTestImportCompositeMLDSARSAPrivateKey(t *testing.T, engine CryptoEngine) {
@@ -334,7 +340,7 @@ func SharedTestImportCompositeMLDSARSAPrivateKey(t *testing.T, engine CryptoEngi
 	assert.NoError(t, err)
 
 	importedPubKey := importedSigner.Public().(*x509.CompositePublicKey)
-	assert.Equal(t, pubKey, importedPubKey)
+	assert.True(t, pubKey.Equal(importedPubKey))
 }
 
 func SharedTestImportEd25519PrivateKey(t *testing.T, engine CryptoEngine) {
