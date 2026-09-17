@@ -4,12 +4,18 @@ info:
   version: 1.0.0
   description: |
     Device Management Service (DMS) API for managing registration authorities and EST enrollment flows.
+
+    [View Enrollment and Re-enrollment Webhook API](./index.html#enroll-reenroll-webhook)
   contact:
     name: Lamassu IoT
     url: https://github.com/lamassuiot/lamassuiot
   license:
     name: Mozilla Public License 2.0
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
+
+externalDocs:
+  description: Enrollment and Re-enrollment Webhook Authentication API
+  url: ./index.html#enroll-reenroll-webhook
 
 servers:
   - url: /api/dmsmanager/v1
