@@ -18,36 +18,29 @@ jobs:
   open_pr:
     name: "Open PR with release notes and changelog"
     runs-on: ubuntu-latest
-    container: quay.io/git-chglog/git-chglog:0.15.0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install main dependencies
-        run: |
-          apk add bash git grep yq
-          
-      - name: Generate charts changelog files
-        shell: bash
-        run: |
-          set -x
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
+        with:
+          version: v2.14.1
+          args: --tag v${{ github.event.inputs.release_version }}
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
 
-          #
-          # Generate chart CHANGELOG.md file.
-          git-chglog                                                  \
-              --output "CHANGELOG.md"                                 \
-              --no-case                                               \
-              --next-tag "${{ github.event.inputs.release_version }}" 
-
-          #
-          # Generate RELEASE-NOTES.md file.
-          git-chglog                                                  \
-              --no-case                                               \
-              --output "RELEASE-NOTES.md"                             \
-              --next-tag "${{ github.event.inputs.release_version }}" \
-              "${{ github.event.inputs.release_version }}"
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
+        with:
+          version: v2.14.1
+          args: --unreleased --tag v${{ github.event.inputs.release_version }}
+        env:
+          OUTPUT: RELEASE-NOTES.md
+          GITHUB_REPO: ${{ github.repository }}
 
       - name: Read generated files
         id: read-files
