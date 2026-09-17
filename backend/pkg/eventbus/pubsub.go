@@ -1,11 +1,14 @@
 package eventbus
 
 import (
+	"fmt"
+
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -70,14 +73,21 @@ func (p *otelPublisherDecorator) Publish(topic string, messages ...*message.Mess
 	// Get context from the first message
 	ctx := messages[0].Context()
 
+	// The topic a CloudEvent is published on is always its event type (see
+	// eventpub.CloudEventPublisher.PublishCloudEvent), and the message UUID is its event ID.
+	eventType := topic
+	eventID := messages[0].UUID
+
 	// Start a producer span
 	tracer := otel.GetTracerProvider().Tracer("watermill/publisher")
-	ctx, span := tracer.Start(ctx, "amqp.Publisher",
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("amqp.Publisher %s", eventType),
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
 			semconv.MessagingSystem("amqp"),
 			semconv.MessagingDestinationName(topic),
 			semconv.MessagingOperationPublish,
+			attribute.String("event.type", eventType),
+			attribute.String("event.id", eventID),
 		),
 	)
 	defer span.End()
