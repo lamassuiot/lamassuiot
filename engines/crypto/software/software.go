@@ -101,6 +101,14 @@ func (p *SoftwareCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 				Sizes: []int{1, 2, 3, 4, 5, 6, 7, 8},
 			},
 			{
+				Type:  models.KeyType(x509.CompositeMLDSAECDSA),
+				Sizes: []int{9, 10, 11, 12, 13},
+			},
+			{
+				Type:  models.KeyType(x509.CompositeMLDSAEd25519),
+				Sizes: []int{14, 15},
+			},
+			{
 				Type: models.KeyType(x509.Ed25519),
 				Sizes: []int{
 					256,
@@ -225,7 +233,7 @@ func (p *SoftwareCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string
 
 func (p *SoftwareCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
-	lFunc.Debugf("creating Composite-ML-DSA-RSA variant=%v key", variant)
+	lFunc.Debugf("creating Composite-ML-DSA variant=%v key", variant)
 
 	if variant < 1 || variant > len(x509.CompositeAlgorithms) {
 		return "", nil, fmt.Errorf("invalid composite variant %v (use 1-%d)", variant, len(x509.CompositeAlgorithms))
@@ -233,7 +241,7 @@ func (p *SoftwareCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Con
 	algo := x509.CompositeAlgorithms[variant-1]
 	_, key, err := algo.GenerateCompositeKey(rand.Reader)
 	if err != nil {
-		lFunc.Errorf("could not create Composite-ML-DSA-RSA key: %s", err)
+		lFunc.Errorf("could not create Composite-ML-DSA key: %s", err)
 		return "", nil, err
 	}
 
@@ -247,8 +255,8 @@ func (p *SoftwareCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Con
 }
 
 func (p *SoftwareCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
-	lFunc := p.logger.WithField("func", "Composite-ML-DSA-RSA")
-	lFunc.Debugf("importing Composite-ML-DSA-RSA private key")
+	lFunc := p.logger.WithField("func", "Composite-ML-DSA")
+	lFunc.Debugf("importing Composite-ML-DSA private key")
 
 	encDigest, err := p.EncodePKIXPublicKeyDigest(context.Background(), key.Public())
 	if err != nil {

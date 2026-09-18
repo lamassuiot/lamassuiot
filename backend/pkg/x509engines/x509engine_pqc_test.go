@@ -183,6 +183,33 @@ func TestSLHDSACASignsSLHDSALeaf(t *testing.T) {
 
 // --- Composite ML-DSA-RSA tests ---
 
+func TestCreateRootCAWithCompositeMLDSANonRSAVariants(t *testing.T) {
+	for variant := 9; variant <= len(x509.CompositeAlgorithms); variant++ {
+		algorithm := x509.CompositeAlgorithms[variant-1]
+		t.Run(algorithm.Name, func(t *testing.T) {
+			engine := pqcTestEngine(t)
+			soft := pqcSoftEngine(t)
+			ctx := context.Background()
+
+			keyID, signer, err := soft.CreateCompositeMLDSARSAPrivateKey(ctx, variant)
+			require.NoError(t, err)
+
+			cert, err := engine.CreateRootCA(
+				ctx,
+				signer,
+				keyID,
+				models.Subject{CommonName: algorithm.Name + " Test Root CA"},
+				pqcValidity(time.Hour),
+				pqcCAProfile(time.Hour),
+			)
+			require.NoError(t, err)
+			require.NotNil(t, cert)
+			assert.Same(t, algorithm, cert.PublicKey.(*x509.CompositePublicKey).Algorithm())
+			require.NoError(t, cert.CheckSignatureFrom(cert))
+		})
+	}
+}
+
 // TestCreateRootCAWithCompositeMLDSARSA verifies that CreateRootCA produces a
 // valid, self-signed CA certificate when the key is Composite ML-DSA-RSA
 // (variant 1 = MLDSA44-RSA2048-PSS-SHA256).

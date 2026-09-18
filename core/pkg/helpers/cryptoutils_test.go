@@ -69,6 +69,27 @@ func TestGenerateSelfSignedCA(t *testing.T) {
 	}
 }
 
+func TestGenerateSelfSignedCACompositeFamilies(t *testing.T) {
+	for _, keyType := range []x509.PublicKeyAlgorithm{
+		x509.CompositeMLDSARSA,
+		x509.CompositeMLDSAECDSA,
+		x509.CompositeMLDSAEd25519,
+	} {
+		t.Run(keyType.String(), func(t *testing.T) {
+			cert, _, err := GenerateSelfSignedCA(keyType, time.Hour, keyType.String())
+			if err != nil {
+				t.Fatalf("GenerateSelfSignedCA(%s): %v", keyType, err)
+			}
+			if cert.PublicKeyAlgorithm != keyType {
+				t.Fatalf("public key algorithm = %s, want %s", cert.PublicKeyAlgorithm, keyType)
+			}
+			if err := cert.CheckSignatureFrom(cert); err != nil {
+				t.Fatalf("self-signature verification failed: %v", err)
+			}
+		})
+	}
+}
+
 func TestGenerateCertificateRequest(t *testing.T) {
 	subject := cmodels.Subject{
 		CommonName:       "example.com",
