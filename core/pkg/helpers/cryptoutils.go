@@ -147,7 +147,21 @@ func generateKey(keyType x509.PublicKeyAlgorithm) (crypto.Signer, crypto.PublicK
 		key = slhdsaKey
 		pubKey = slhdsaKey.Public()
 	case x509.CompositeMLDSARSA:
-		compKey, err := GenerateCompositeMLDSARSAKey(1) // MLDSA44-RSA2048-PSS-SHA256
+		compKey, err := GenerateCompositeMLDSAKey(1) // MLDSA44-RSA2048-PSS-SHA256
+		if err != nil {
+			return nil, nil, err
+		}
+		key = compKey
+		pubKey = compKey.Public()
+	case x509.CompositeMLDSAECDSA:
+		compKey, err := GenerateCompositeMLDSAKey(9) // MLDSA44-ECDSA-P256-SHA256
+		if err != nil {
+			return nil, nil, err
+		}
+		key = compKey
+		pubKey = compKey.Public()
+	case x509.CompositeMLDSAEd25519:
+		compKey, err := GenerateCompositeMLDSAKey(14) // MLDSA44-Ed25519-SHA512
 		if err != nil {
 			return nil, nil, err
 		}
@@ -366,7 +380,7 @@ func GenerateSLHDSAKey(paramSet int) (crypto.Signer, error) {
 	return priv, nil
 }
 
-func GenerateCompositeMLDSARSAKey(variant int) (crypto.Signer, error) {
+func GenerateCompositeMLDSAKey(variant int) (crypto.Signer, error) {
 	if variant < 1 || variant > len(x509.CompositeAlgorithms) {
 		return nil, fmt.Errorf("invalid composite variant %v (use 1-%d)", variant, len(x509.CompositeAlgorithms))
 	}
@@ -376,6 +390,12 @@ func GenerateCompositeMLDSARSAKey(variant int) (crypto.Signer, error) {
 		return nil, err
 	}
 	return sk, nil
+}
+
+// GenerateCompositeMLDSARSAKey is retained for callers using the original
+// RSA-only API. GenerateCompositeMLDSAKey supports every composite family.
+func GenerateCompositeMLDSARSAKey(variant int) (crypto.Signer, error) {
+	return GenerateCompositeMLDSAKey(variant)
 }
 
 func GenerateEd25519Key() (crypto.Signer, error) {

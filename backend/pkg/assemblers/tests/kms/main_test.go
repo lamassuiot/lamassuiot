@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"slices"
@@ -583,6 +584,66 @@ func TestCreateKey(t *testing.T) {
 			},
 		},
 		{
+			name:   "OK/KeyType-Composite-MLDSA-ECDSA-9",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test Composite-ML-DSA-ECDSA Variant-9 Key",
+					Algorithm: "Composite-ML-DSA-ECDSA",
+					Size:      9, // MLDSA44-ECDSA-P256-SHA256
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created Composite-ML-DSA-ECDSA (variant 9) key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "Composite-ML-DSA-ECDSA" || createdKey.Size != 9 {
+					return fmt.Errorf("unexpected key result for Composite-ML-DSA-ECDSA variant 9: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-Composite-MLDSA-Ed25519-14",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test Composite-ML-DSA-Ed25519 Variant-14 Key",
+					Algorithm: "Composite-ML-DSA-Ed25519",
+					Size:      14, // MLDSA44-Ed25519-SHA512
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created Composite-ML-DSA-Ed25519 (variant 14) key without error, but got error: %s", err)
+				}
+				if createdKey == nil || createdKey.Algorithm != "Composite-ML-DSA-Ed25519" || createdKey.Size != 14 {
+					return fmt.Errorf("unexpected key result for Composite-ML-DSA-Ed25519 variant 14: %+v", createdKey)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Error/Composite-MLDSA-RSA-With-ECDSA-Variant",
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Mismatched Composite Variant",
+					Algorithm: "Composite-ML-DSA-RSA",
+					Size:      9,
+					EngineID:  "filesystem-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected an error for an ECDSA variant labeled as RSA")
+				}
+				return nil
+			},
+		},
+		{
 			name:   "Error/InvalidCompositeMLDSARSAVariant-0",
 			before: func(svc services.KMSService) error { return nil },
 			run: func(kmsSDK services.KMSService) (*models.Key, error) {
@@ -637,6 +698,14 @@ func TestImportKey(t *testing.T) {
 		return key
 	}
 
+	generateComposite := func(variant int) any {
+		_, key, err := x509.CompositeAlgorithms[variant-1].GenerateCompositeKey(rand.Reader)
+		if err != nil {
+			t.Fatalf("could not generate composite variant %d: %s", variant, err)
+		}
+		return key
+	}
+
 	testcases := []struct {
 		name        string
 		before      func()
@@ -659,6 +728,46 @@ func TestImportKey(t *testing.T) {
 				}
 				if key == nil || key.Algorithm != "Ed25519" {
 					return fmt.Errorf("unexpected key result for Ed25519 import: %+v", key)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/Import-Composite-MLDSA-ECDSA",
+			before: func() {},
+			run: func() (*models.Key, error) {
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "Composite ML-DSA ECDSA Key",
+					PrivateKey: generateComposite(9),
+					EngineID:   "filesystem-1",
+				})
+			},
+			resultCheck: func(key *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've imported Composite-ML-DSA-ECDSA key without error, but got: %s", err)
+				}
+				if key == nil || key.Algorithm != "Composite-ML-DSA-ECDSA" || key.Size != 9 {
+					return fmt.Errorf("unexpected key result for Composite-ML-DSA-ECDSA import: %+v", key)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/Import-Composite-MLDSA-Ed25519",
+			before: func() {},
+			run: func() (*models.Key, error) {
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "Composite ML-DSA Ed25519 Key",
+					PrivateKey: generateComposite(14),
+					EngineID:   "filesystem-1",
+				})
+			},
+			resultCheck: func(key *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've imported Composite-ML-DSA-Ed25519 key without error, but got: %s", err)
+				}
+				if key == nil || key.Algorithm != "Composite-ML-DSA-Ed25519" || key.Size != 14 {
+					return fmt.Errorf("unexpected key result for Composite-ML-DSA-Ed25519 import: %+v", key)
 				}
 				return nil
 			},
@@ -2484,6 +2593,62 @@ func TestSignMessageWithCompositeMLDSARSA(t *testing.T) {
 			sig, err := tc.run()
 			if err2 := tc.resultCheck(sig, err); err2 != nil {
 				t.Fatalf("unexpected result in test case: %s", err2)
+			}
+		})
+	}
+}
+
+func TestSignMessageWithCompositeMLDSANonRSAVariants(t *testing.T) {
+	kmsTest, err := StartKMSServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create KMS test server: %s", err)
+	}
+
+	tests := []struct {
+		name      string
+		keyType   string
+		variant   int
+		signature string
+	}{
+		{"ECDSA", "Composite-ML-DSA-ECDSA", 9, "COMPOSITE_MLDSA_ECDSA_PURE"},
+		{"Ed25519", "Composite-ML-DSA-Ed25519", 14, "COMPOSITE_MLDSA_ED25519_PURE"},
+	}
+	message := []byte("composite ml-dsa non-rsa test message")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				Name:      "Composite-Sign-Verify-" + tt.name,
+				Algorithm: tt.keyType,
+				Size:      tt.variant,
+				EngineID:  "filesystem-1",
+			})
+			if err != nil {
+				t.Fatalf("failed to create %s key: %s", tt.keyType, err)
+			}
+
+			signature, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+				Identifier:  key.PKCS11URI,
+				Message:     message,
+				Algorithm:   tt.signature,
+				MessageType: models.Raw,
+			})
+			if err != nil {
+				t.Fatalf("failed to sign with %s: %s", tt.keyType, err)
+			}
+
+			validation, err := kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+				Identifier:  key.PKCS11URI,
+				Message:     message,
+				Algorithm:   tt.signature,
+				MessageType: models.Raw,
+				Signature:   signature.Signature,
+			})
+			if err != nil {
+				t.Fatalf("failed to verify with %s: %s", tt.keyType, err)
+			}
+			if !validation.Valid {
+				t.Fatalf("expected %s signature to be valid", tt.keyType)
 			}
 		})
 	}

@@ -173,12 +173,47 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 	case "ECDSA_SHA_512":
 		isRSA = false
 		hash = crypto.SHA512
-	case "MLDSA_44_PURE", "MLDSA_65_PURE", "MLDSA_87_PURE", "Ed25519_PURE", "SLHDSA_PURE", "COMPOSITE_MLDSA_RSA_PURE":
+	case "MLDSA_44_PURE", "MLDSA_65_PURE", "MLDSA_87_PURE", "Ed25519_PURE", "SLHDSA_PURE",
+		"COMPOSITE_MLDSA_RSA_PURE", "COMPOSITE_MLDSA_ECDSA_PURE", "COMPOSITE_MLDSA_ED25519_PURE":
 		isRSA = false
 	default:
 		err = errors.New("unsupported algorithm")
 	}
 	return
+}
+
+func compositeKeyType(algorithm *x509.CompositeAlgorithm) (string, bool) {
+	switch algorithm {
+	case x509.MLDSA44_RSA2048_PSS_SHA256,
+		x509.MLDSA44_RSA2048_PKCS15_SHA256,
+		x509.MLDSA65_RSA3072_PSS_SHA512,
+		x509.MLDSA65_RSA3072_PKCS15_SHA512,
+		x509.MLDSA65_RSA4096_PSS_SHA512,
+		x509.MLDSA65_RSA4096_PKCS15_SHA512,
+		x509.MLDSA87_RSA3072_PSS_SHA512,
+		x509.MLDSA87_RSA4096_PSS_SHA512:
+		return x509.CompositeMLDSARSA.String(), true
+	case x509.MLDSA44_ECDSA_P256_SHA256,
+		x509.MLDSA65_ECDSA_P256_SHA512,
+		x509.MLDSA65_ECDSA_P384_SHA512,
+		x509.MLDSA87_ECDSA_P384_SHA512,
+		x509.MLDSA87_ECDSA_P521_SHA512:
+		return x509.CompositeMLDSAECDSA.String(), true
+	case x509.MLDSA44_Ed25519_SHA512,
+		x509.MLDSA65_Ed25519_SHA512:
+		return x509.CompositeMLDSAEd25519.String(), true
+	default:
+		return "", false
+	}
+}
+
+func compositeVariant(algorithm *x509.CompositeAlgorithm) (int, bool) {
+	for i, candidate := range x509.CompositeAlgorithms {
+		if candidate == algorithm {
+			return i + 1, true
+		}
+	}
+	return 0, false
 }
 
 // Helper to get engine and signer
@@ -503,10 +538,14 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 			lFunc.Errorf("error creating SLH-DSA private key: %s", err)
 			return nil, err
 		}
-	case "Composite-ML-DSA-RSA":
+	case "Composite-ML-DSA-RSA", "Composite-ML-DSA-ECDSA", "Composite-ML-DSA-Ed25519":
 		if input.Size < 1 || input.Size > len(x509.CompositeAlgorithms) {
-			lFunc.Error("invalid Composite-ML-DSA-RSA variant")
-			return nil, fmt.Errorf("invalid Composite-ML-DSA-RSA variant (use 1-%d)", len(x509.CompositeAlgorithms))
+			lFunc.Error("invalid Composite-ML-DSA variant")
+			return nil, fmt.Errorf("invalid Composite-ML-DSA variant (use 1-%d)", len(x509.CompositeAlgorithms))
+		}
+		variantKeyType, ok := compositeKeyType(x509.CompositeAlgorithms[input.Size-1])
+		if !ok || variantKeyType != input.Algorithm {
+			return nil, fmt.Errorf("composite variant %d is not valid for key type %s", input.Size, input.Algorithm)
 		}
 		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
 		if err != nil {
@@ -515,7 +554,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		}
 		keyID, signer, err = engineInstance.CreateCompositeMLDSARSAPrivateKey(ctx, input.Size)
 		if err != nil {
-			lFunc.Errorf("error creating Composite-ML-DSA-RSA private key: %s", err)
+			lFunc.Errorf("error creating %s private key: %s", input.Algorithm, err)
 			return nil, err
 		}
 	case "Ed25519":
@@ -677,15 +716,15 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 			return nil, fmt.Errorf("unsupported circlSign key scheme: %s", schemeName)
 		}
 	case *x509.CompositePrivateKey:
-		algorithm = "Composite-ML-DSA-RSA"
 		alg := k.Algorithm()
-		for i, ca := range x509.CompositeAlgorithms {
-			if ca == alg {
-				size = i + 1
-				break
-			}
+		var ok bool
+		algorithm, ok = compositeKeyType(alg)
+		if !ok {
+			lFunc.Errorf("unsupported composite algorithm")
+			return nil, errors.New("unsupported composite algorithm")
 		}
-		if size == 0 {
+		size, ok = compositeVariant(alg)
+		if !ok {
 			lFunc.Errorf("unsupported composite algorithm")
 			return nil, errors.New("unsupported composite algorithm")
 		}
