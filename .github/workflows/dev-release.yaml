@@ -93,6 +93,13 @@ jobs:
           fi
           echo "BUILDER=$BUILDER" >> $GITHUB_ENV
 
+      - name: Login to Github Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Validate custom builder
         # Only kms.dockerfile requires apt-get (CGO cross-toolchain install for
         # arm64); other services build with CGO_ENABLED=0 and don't need it.
@@ -111,13 +118,6 @@ jobs:
             echo "::error::Custom builders must be Debian/Ubuntu-based and provide apt-get"
             exit 1
           fi
-
-      - name: Login to Github Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Enable ARM64 emulation for Dockerfiles that need to execute target-architecture
       # binaries during the build. Go services may cross-compile natively via BUILDPLATFORM.
