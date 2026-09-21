@@ -19,7 +19,7 @@ on:
           - other
         default: golang:1.26.2-bookworm
       other:
-        description: "Only used when go = 'other'."
+        description: "Only used when go = 'other'. Must be Debian/Ubuntu-based and provide apt-get (required by the ci/kms.dockerfile arm64 build)."
         type: string
         default: ""
  
@@ -92,6 +92,25 @@ jobs:
             BUILDER="$GO_INPUT"
           fi
           echo "BUILDER=$BUILDER" >> $GITHUB_ENV
+
+      - name: Validate custom builder
+        # Only kms.dockerfile requires apt-get (CGO cross-toolchain install for
+        # arm64); other services build with CGO_ENABLED=0 and don't need it.
+        if: github.event.inputs.go == 'other' && matrix.service == 'kms'
+        env:
+          BUILDER: ${{ github.event.inputs.other }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$BUILDER" ]]; then
+            echo "::error::A custom builder image is required when go=other"
+            exit 1
+          fi
+          docker pull "$BUILDER"
+          if ! docker run --rm --entrypoint /bin/sh "$BUILDER" -c \
+            'test -f /etc/debian_version && command -v apt-get >/dev/null'; then
+            echo "::error::Custom builders must be Debian/Ubuntu-based and provide apt-get"
+            exit 1
+          fi
 
       - name: Login to Github Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0

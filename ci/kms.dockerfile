@@ -7,6 +7,8 @@ WORKDIR /app
 # this intermediate stage (in addition to the default final-stage scan).
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 ARG TARGETARCH
+# Re-declared so the toolchain install step can report the selected builder.
+ARG BUILDER
 
 # go.work/go.work.sum rarely change — keep as an early cache layer.
 COPY go.work go.work
@@ -29,10 +31,21 @@ ARG VERSION= # set by build script
 
 # Install the arm64 cross toolchain only when targeting arm64; CGO_ENABLED is
 # required so miekg/pkcs11 and crypto11 compile and link correctly.
+#
+# Custom BUILDER images are only supported when Debian/Ubuntu-based (they must
+# ship apt-get, or have the cross toolchain preinstalled): the KMS arm64 build
+# needs gcc-aarch64-linux-gnu, which is installed from the builder's apt repos.
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
-      apt-get update && \
-      apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross; \
-      rm -rf /var/lib/apt/lists/*; \
+      if command -v aarch64-linux-gnu-gcc > /dev/null; then \
+        echo "arm64 cross toolchain already present"; \
+      elif command -v apt-get > /dev/null; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross && \
+        rm -rf /var/lib/apt/lists/*; \
+      else \
+        echo "BUILDER image '$BUILDER' must be Debian/Ubuntu-based (apt-get) or have aarch64-linux-gnu-gcc preinstalled for the arm64 KMS build" >&2; \
+        exit 1; \
+      fi; \
     fi
 
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
