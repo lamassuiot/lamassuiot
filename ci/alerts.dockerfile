@@ -1,5 +1,17 @@
-ARG BUILDER=golang:1.26.2-bookworm
-FROM ${BUILDER} AS builder
+#################################################################################################
+#                                                                                               #
+# Use the custom go fork as a base image                                                        #
+#                                                                                               #
+#################################################################################################
+
+FROM ghcr.io/lamassuiot/golang-pqc:latest
+
+#################################################################################################
+#                                                                                               #
+# Install the application                                                                       #
+#                                                                                               #
+#################################################################################################
+
 WORKDIR /app
 # Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
 # this intermediate stage (in addition to the default final-stage scan).
@@ -26,19 +38,24 @@ ARG VERSION= # set by build script
 
 RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 
-RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
-    CGO_ENABLED=0 GOOS=linux \
-    go build \
-      -tags nopkcs11 \
-      -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \
-      -mod vendor \
-      -o alerts \
-      backend/cmd/alerts/main.go
+ENV GOSUMDB=off
+RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
+    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o alerts backend/cmd/alerts/main.go 
 
-# gcr.io/distroless/static-debian12:nonroot provides:
-#   - a minimal (~2 MB) static-binary runtime with CA certificates included
-#     (covers TLS for SMTP notifications and AMQP event bus)
-#   - a pre-configured non-root user (UID/GID 65532) with no shell or package manager
-FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=builder /app/alerts /alerts
-CMD ["/alerts"]
+#################################################################################################
+#                                                                                               #
+# Configure the environment                                                                     #
+#                                                                                               #
+#################################################################################################
+
+ARG USERNAME=lamassu
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+RUN apt-get update && apt-get --no-install-recommends install -y ca-certificates \
+    && apt-get clean
+RUN groupadd --gid "$USER_GID" "$USERNAME" \
+    && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" 
+
+USER $USERNAME
+CMD ["/app/alerts"]

@@ -69,6 +69,27 @@ func TestGenerateSelfSignedCA(t *testing.T) {
 	}
 }
 
+func TestGenerateSelfSignedCACompositeFamilies(t *testing.T) {
+	for _, keyType := range []x509.PublicKeyAlgorithm{
+		x509.CompositeMLDSARSA,
+		x509.CompositeMLDSAECDSA,
+		x509.CompositeMLDSAEd25519,
+	} {
+		t.Run(keyType.String(), func(t *testing.T) {
+			cert, _, err := GenerateSelfSignedCA(keyType, time.Hour, keyType.String())
+			if err != nil {
+				t.Fatalf("GenerateSelfSignedCA(%s): %v", keyType, err)
+			}
+			if cert.PublicKeyAlgorithm != keyType {
+				t.Fatalf("public key algorithm = %s, want %s", cert.PublicKeyAlgorithm, keyType)
+			}
+			if err := cert.CheckSignatureFrom(cert); err != nil {
+				t.Fatalf("self-signature verification failed: %v", err)
+			}
+		})
+	}
+}
+
 func TestGenerateCertificateRequest(t *testing.T) {
 	subject := cmodels.Subject{
 		CommonName:       "example.com",
@@ -186,7 +207,7 @@ func TestValidateCertAndPrivKey(t *testing.T) {
 	if !ok {
 		t.Fatalf("Failed to perform type assertion for rsaKey")
 	}
-	valid, err := ValidateCertAndPrivKey(cert, rsaPrivateKey, nil)
+	valid, err := ValidateCertAndPrivKey(cert, rsaPrivateKey, nil, nil, nil)
 	if err != nil {
 		t.Errorf("Failed to validate RSA private key: %v", err)
 	}
@@ -195,7 +216,7 @@ func TestValidateCertAndPrivKey(t *testing.T) {
 	}
 
 	// Case 2: ECDSA private key matches the certificate
-	valid, err = ValidateCertAndPrivKey(certEc, nil, ecKey.(*ecdsa.PrivateKey))
+	valid, err = ValidateCertAndPrivKey(certEc, nil, ecKey.(*ecdsa.PrivateKey), nil, nil)
 	if err != nil {
 		t.Errorf("Failed to validate ECDSA private key: %v", err)
 	}
@@ -208,7 +229,7 @@ func TestValidateCertAndPrivKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate invalid RSA private key: %v", err)
 	}
-	valid, err = ValidateCertAndPrivKey(cert, invalidRSAKey, nil)
+	valid, err = ValidateCertAndPrivKey(cert, invalidRSAKey, nil, nil, nil)
 	if err != nil {
 		t.Errorf("Failed to validate RSA private key: %v", err)
 	}
@@ -221,7 +242,7 @@ func TestValidateCertAndPrivKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate invalid ECDSA private key: %v", err)
 	}
-	valid, err = ValidateCertAndPrivKey(certEc, nil, invalidECKey)
+	valid, err = ValidateCertAndPrivKey(certEc, nil, invalidECKey, nil, nil)
 	if err != nil {
 		t.Errorf("Failed to validate ECDSA private key: %v", err)
 	}
@@ -230,7 +251,7 @@ func TestValidateCertAndPrivKey(t *testing.T) {
 	}
 
 	// Case 5: Both RSA and ECDSA private keys are nil
-	valid, err = ValidateCertAndPrivKey(cert, nil, nil)
+	valid, err = ValidateCertAndPrivKey(cert, nil, nil, nil, nil)
 	if err == nil {
 		t.Errorf("Expected error when both RSA and ECDSA private keys are nil, but got nil")
 	}

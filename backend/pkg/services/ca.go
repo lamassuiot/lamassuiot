@@ -3,12 +3,14 @@ package services
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -320,11 +322,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				return nil, fmt.Errorf("could not rename imported key: %w", err)
 			}
 		}
-
-		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
-			return nil, fmt.Errorf("could not import key: %w", err)
-		}
 	} else {
 		//search in KMS if key exists for the CA being imported
 		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
@@ -607,9 +604,6 @@ func (svc *CAServiceBackend) resolveCAIssuanceProfile(ctx context.Context, lFunc
 
 func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	if input.Metadata == nil {
-		input.Metadata = map[string]any{}
-	}
 
 	var err error
 	caValidator.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
@@ -626,6 +620,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	if err != nil {
 		return nil, err
 	}
+
+	lFunc.Debugf("creating CA with common name: %s", input.Subject.CommonName)
 
 	// Resolve CA Issuance Profile (for the CA certificate itself)
 	caIssuanceProfile, err := svc.resolveCAIssuanceProfile(ctx, lFunc, input.CAIssuanceProfile, input.CAIssuanceProfileID, &input.CAExpiration)
@@ -656,27 +652,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
-	var key *models.Key
-
-	if input.KeyMetadata.KeyID == "" {
-		key, err = svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
-			Algorithm: input.KeyMetadata.Type.String(),
-			Size:      input.KeyMetadata.Bits,
-			EngineID:  input.EngineID,
-			Name:      fmt.Sprintf("Key For CA CN=%s", input.Subject.CommonName),
-		})
-		if err != nil {
-			lFunc.Errorf("could not create key for CA %s: %s", input.Subject.CommonName, err)
-			return nil, err
-		}
-	} else {
-		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
-			Identifier: input.KeyMetadata.KeyID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get key for CA %s: %s", input.Subject.CommonName, err)
-			return nil, err
-		}
+	key, err := svc.getOrCreateKey(ctx, &input.KeyMetadata, input.EngineID, input.Subject.CommonName)
+	if err != nil {
+		return nil, err
 	}
 
 	signer := NewKMSCryptoSigner(ctx, *key, svc.kmsService)
@@ -777,13 +755,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		return nil, err
 	}
 
-	key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key.KeyID,
-		Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-			ResourceType: "certificate",
-			ResourceID:   helpers.SerialNumberToHexString(ca.SerialNumber),
-		}).Build(),
-	})
+	key, err = svc.updateCAKeyMetadata(ctx, key, ca.SerialNumber)
 	if err != nil {
 		lFunc.Errorf("could not bind CA %s to key %s: %s", input.Subject.CommonName, key.KeyID, err)
 		return nil, err
@@ -821,6 +793,72 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 	lFunc.Debugf("insert CA %s in storage engine", caID)
 	return svc.caStorage.Insert(ctx, &caCert)
+}
+
+func (svc *CAServiceBackend) getOrCreateKey(ctx context.Context, keyMetadata *models.KeyMetadata, engineID string, name string) (*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if keyMetadata.KeyID == "" {
+		key, err := svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
+			Algorithm: keyMetadata.Type.String(),
+			Size:      keyMetadata.Bits,
+			EngineID:  engineID,
+			Name:      fmt.Sprintf("Key For CA CN=%s", name),
+		})
+		if err != nil {
+			lFunc.Errorf("could not create key for CA %s: %s", name, err)
+			return nil, err
+		}
+		return key, nil
+	}
+
+	key, err := svc.kmsService.GetKey(ctx, services.GetKeyInput{
+		Identifier: keyMetadata.KeyID,
+	})
+	if err != nil {
+		lFunc.Errorf("could not get key for CA %s: %s", name, err)
+		return nil, err
+	}
+	return key, nil
+}
+
+func (svc *CAServiceBackend) updateCAKeyMetadata(ctx context.Context, key *models.Key, caSerialNumber *big.Int) (*models.Key, error) {
+	return svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+		ID: key.KeyID,
+		Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+			ResourceType: "certificate",
+			ResourceID:   helpers.SerialNumberToHexString(caSerialNumber),
+		}).Build(),
+	})
+}
+
+func (svc *CAServiceBackend) getCaIssuanceProfile(ctx context.Context, inlineProfile *models.IssuanceProfile, profileID string, caProfileID string) (*models.IssuanceProfile, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	if inlineProfile != nil {
+		return inlineProfile, nil
+	}
+
+	resolveID := profileID
+	if resolveID == "" {
+		resolveID = caProfileID
+	}
+
+	if resolveID != "" {
+		profile, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: resolveID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get issuance profile %s: %s", resolveID, err)
+			return nil, err
+		}
+		return profile, nil
+	}
+
+	defaultProfile := models.IssuanceProfile{
+		HonorExtensions: true,
+		HonorSubject:    true,
+	}
+	return &defaultProfile, nil
 }
 
 // getCACertificateIfExists retrieves the CA certificate for the given caID if it exists.
@@ -1528,29 +1566,8 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 
 	caCertSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 
-	var profile *models.IssuanceProfile
-
 	// Give preference to the embedded IssuanceProfile if it's present
-	if input.IssuanceProfile != nil {
-		profile = input.IssuanceProfile
-	} else if input.IssuanceProfileID != "" {
-		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: input.IssuanceProfileID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
-			return nil, err
-		}
-	} else {
-		// Use the CA default profile
-		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: ca.ProfileID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get default ca issuance profile %s: %s", ca.ProfileID, err)
-			return nil, err
-		}
-	}
+	profile, err := svc.getCaIssuanceProfile(ctx, input.IssuanceProfile, input.IssuanceProfileID, ca.ProfileID)
 
 	lFunc.Debugf("sign certificate request with %s CA", input.CAID)
 	x509Cert, err := engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, *profile)
@@ -2035,6 +2052,26 @@ func createCAValidation(sl validator.StructLevel) {
 	if !helpers.ValidateValidity(ca.CAExpiration) {
 		// lFunc.Errorf("CA Expiration time ref is incompatible with the selected variable")
 		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
+	}
+}
+
+func importCAValidation(sl validator.StructLevel) {
+	ca := sl.Current().Interface().(services.ImportCAInput)
+	caCert := ca.CACertificate
+
+	if ca.Key != nil {
+		var rsaKey *rsa.PrivateKey
+		var ecKey *ecdsa.PrivateKey
+		switch k := ca.Key.(type) {
+		case *rsa.PrivateKey:
+			rsaKey = k
+		case *ecdsa.PrivateKey:
+			ecKey = k
+		}
+		valid, err := chelpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), rsaKey, ecKey, nil, nil)
+		if err != nil || !valid {
+			sl.ReportError(ca.Key, "Key", "Key", "PrivateKeyAndCertificateNotMatch", "")
+		}
 	}
 }
 

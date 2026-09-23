@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -14,6 +16,9 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	circlSign "cloudflare/circl/sign"
+	"cloudflare/circl/sign/slhdsa"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
@@ -168,10 +173,47 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 	case "ECDSA_SHA_512":
 		isRSA = false
 		hash = crypto.SHA512
+	case "MLDSA_44_PURE", "MLDSA_65_PURE", "MLDSA_87_PURE", "Ed25519_PURE", "SLHDSA_PURE",
+		"COMPOSITE_MLDSA_RSA_PURE", "COMPOSITE_MLDSA_ECDSA_PURE", "COMPOSITE_MLDSA_ED25519_PURE":
+		isRSA = false
 	default:
 		err = errors.New("unsupported algorithm")
 	}
 	return
+}
+
+func compositeKeyType(algorithm *x509.CompositeAlgorithm) (string, bool) {
+	switch algorithm {
+	case x509.MLDSA44_RSA2048_PSS_SHA256,
+		x509.MLDSA44_RSA2048_PKCS15_SHA256,
+		x509.MLDSA65_RSA3072_PSS_SHA512,
+		x509.MLDSA65_RSA3072_PKCS15_SHA512,
+		x509.MLDSA65_RSA4096_PSS_SHA512,
+		x509.MLDSA65_RSA4096_PKCS15_SHA512,
+		x509.MLDSA87_RSA3072_PSS_SHA512,
+		x509.MLDSA87_RSA4096_PSS_SHA512:
+		return x509.CompositeMLDSARSA.String(), true
+	case x509.MLDSA44_ECDSA_P256_SHA256,
+		x509.MLDSA65_ECDSA_P256_SHA512,
+		x509.MLDSA65_ECDSA_P384_SHA512,
+		x509.MLDSA87_ECDSA_P384_SHA512,
+		x509.MLDSA87_ECDSA_P521_SHA512:
+		return x509.CompositeMLDSAECDSA.String(), true
+	case x509.MLDSA44_Ed25519_SHA512,
+		x509.MLDSA65_Ed25519_SHA512:
+		return x509.CompositeMLDSAEd25519.String(), true
+	default:
+		return "", false
+	}
+}
+
+func compositeVariant(algorithm *x509.CompositeAlgorithm) (int, bool) {
+	for i, candidate := range x509.CompositeAlgorithms {
+		if candidate == algorithm {
+			return i + 1, true
+		}
+	}
+	return 0, false
 }
 
 // Helper to get engine and signer
@@ -396,11 +438,6 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	if input.Algorithm == "" || input.Size == 0 {
-		lFunc.Error("algorithm and size are required")
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	var engine *cryptoengines.CryptoEngine
 	engineID := ""
 	var ok bool
@@ -425,21 +462,32 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		signer crypto.Signer
 	)
 
-	err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
-	if err != nil {
-		lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
-		return nil, err
-	}
-
 	switch input.Algorithm {
 	case "RSA":
-		bits := input.Size
-		keyID, signer, err = engineInstance.CreateRSAPrivateKey(ctx, bits)
+		if input.Size == 0 {
+			lFunc.Error("size is required for RSA keys")
+			return nil, errs.ErrValidateBadRequest
+		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.CreateRSAPrivateKey(ctx, input.Size)
 		if err != nil {
 			lFunc.Errorf("error creating RSA private key: %s", err)
 			return nil, errors.New("failed to create RSA private key")
 		}
 	case "ECDSA":
+		if input.Size == 0 {
+			lFunc.Error("size is required for ECDSA keys")
+			return nil, errs.ErrValidateBadRequest
+		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
 		var curve elliptic.Curve
 		switch input.Size {
 		case 224:
@@ -457,6 +505,68 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		keyID, signer, err = engineInstance.CreateECDSAPrivateKey(ctx, curve)
 		if err != nil {
 			lFunc.Errorf("error creating ECDSA private key: %s", err)
+			return nil, err
+		}
+	case "ML-DSA":
+		if input.Size != 44 && input.Size != 65 && input.Size != 87 {
+			lFunc.Error("invalid MLDSA key size")
+			return nil, errors.New("invalid MLDSA key size")
+		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.CreateMLDSAPrivateKey(ctx, input.Size)
+		if err != nil {
+			lFunc.Errorf("error creating ML-DSA private key: %s", err)
+			return nil, err
+		}
+	case "SLH-DSA":
+		validParams := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+		if !slices.Contains(validParams, input.Size) {
+			lFunc.Error("invalid SLH-DSA parameter set")
+			return nil, errors.New("invalid SLH-DSA parameter set (use 1-12)")
+		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.CreateSLHDSAPrivateKey(ctx, input.Size)
+		if err != nil {
+			lFunc.Errorf("error creating SLH-DSA private key: %s", err)
+			return nil, err
+		}
+	case "Composite-ML-DSA-RSA", "Composite-ML-DSA-ECDSA", "Composite-ML-DSA-Ed25519":
+		if input.Size < 1 || input.Size > len(x509.CompositeAlgorithms) {
+			lFunc.Error("invalid Composite-ML-DSA variant")
+			return nil, fmt.Errorf("invalid Composite-ML-DSA variant (use 1-%d)", len(x509.CompositeAlgorithms))
+		}
+		variantKeyType, ok := compositeKeyType(x509.CompositeAlgorithms[input.Size-1])
+		if !ok || variantKeyType != input.Algorithm {
+			return nil, fmt.Errorf("composite variant %d is not valid for key type %s", input.Size, input.Algorithm)
+		}
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.CreateCompositeMLDSARSAPrivateKey(ctx, input.Size)
+		if err != nil {
+			lFunc.Errorf("error creating %s private key: %s", input.Algorithm, err)
+			return nil, err
+		}
+	case "Ed25519":
+		input.Size = ed25519.PublicKeySize * 8
+		err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.CreateEd25519PrivateKey()
+		if err != nil {
+			lFunc.Errorf("error creating Ed25519 private key: %s", err)
 			return nil, err
 		}
 	default:
@@ -562,6 +672,69 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		}
 
 		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(ctx, k)
+	case ed25519.PrivateKey:
+		size = 256
+		algorithm = "Ed25519"
+		keyID, signer, err = engineInstance.ImportEd25519PrivateKey(k)
+	case *mldsa.PrivateKey:
+		switch k.PublicKey().Parameters().String() {
+		case "ML-DSA-44":
+			size = 44
+		case "ML-DSA-65":
+			size = 65
+		case "ML-DSA-87":
+			size = 87
+		}
+
+		algorithm = "ML-DSA"
+		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.ImportMLDSAPrivateKey(k)
+	case circlSign.PrivateKey:
+		schemeName := k.Scheme().Name()
+
+		if strings.HasPrefix(schemeName, "SLH-DSA-") {
+			algorithm = "SLH-DSA"
+			id, idErr := slhdsa.IDByName(schemeName)
+			if idErr != nil {
+				lFunc.Errorf("unsupported SLH-DSA scheme: %s", schemeName)
+				return nil, fmt.Errorf("unsupported SLH-DSA scheme: %s", schemeName)
+			}
+			size = int(id)
+
+			err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+			if err != nil {
+				lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+				return nil, err
+			}
+			keyID, signer, err = engineInstance.ImportSLHDSAPrivateKey(k)
+		} else {
+			lFunc.Errorf("unsupported circlSign key scheme: %s", schemeName)
+			return nil, fmt.Errorf("unsupported circlSign key scheme: %s", schemeName)
+		}
+	case *x509.CompositePrivateKey:
+		alg := k.Algorithm()
+		var ok bool
+		algorithm, ok = compositeKeyType(alg)
+		if !ok {
+			lFunc.Errorf("unsupported composite algorithm")
+			return nil, errors.New("unsupported composite algorithm")
+		}
+		size, ok = compositeVariant(alg)
+		if !ok {
+			lFunc.Errorf("unsupported composite algorithm")
+			return nil, errors.New("unsupported composite algorithm")
+		}
+
+		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+		keyID, signer, err = engineInstance.ImportCompositeMLDSARSAPrivateKey(k)
 	default:
 		lFunc.Errorf("unsupported private key type")
 		return nil, errors.New("unsupported private key type")
@@ -825,7 +998,12 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		return nil, err
 	}
 
-	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	var digest []byte
+	if strings.Contains(input.Algorithm, "PURE") {
+		digest = input.Message
+	} else {
+		digest, err = calculateDigest(setup.Hash, input.MessageType, input.Message)
+	}
 	if err != nil {
 		lFunc.Errorf("calculate digest error: %s", err)
 		return nil, err
@@ -880,7 +1058,12 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 
 	publicKey := setup.Signer.Public()
 
-	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	var digest []byte
+	if strings.Contains(input.Algorithm, "PURE") {
+		digest = input.Message
+	} else {
+		digest, err = calculateDigest(setup.Hash, input.MessageType, input.Message)
+	}
 	if err != nil {
 		lFunc.Errorf("calculate digest error: %s", err)
 		return nil, err
@@ -916,11 +1099,25 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 			}, nil
 		}
 	} else {
-		pub, ok := publicKey.(*ecdsa.PublicKey)
-		if !ok {
-			return nil, errors.New("key is not ECDSA key")
+		var valid bool
+		switch pub := publicKey.(type) {
+		case *ecdsa.PublicKey:
+			valid = ecdsa.VerifyASN1(pub, digest, input.Signature)
+		case ed25519.PublicKey:
+			valid = ed25519.Verify(pub, digest, input.Signature)
+		case *mldsa.PublicKey:
+			valid = mldsa.Verify(pub, digest, input.Signature, nil) == nil
+		case circlSign.PublicKey:
+			scheme := pub.Scheme()
+			valid = scheme.Verify(pub, digest, input.Signature, nil)
+		case *x509.CompositePublicKey:
+			valid = pub.Algorithm().CompositeVerify(pub, digest, nil, input.Signature)
+		default:
+			lFunc.Errorf("unsupported key type")
+			return nil, errors.New("unsupported key type")
 		}
-		if !ecdsa.VerifyASN1(pub, digest, input.Signature) {
+
+		if !valid {
 			return &models.MessageValidation{
 				Valid: false,
 			}, nil
