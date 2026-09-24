@@ -14,6 +14,7 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false
       max-parallel: 5
       matrix:
         module:
@@ -66,7 +67,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 300s -coverprofile=coverage.out -covermode=atomic ./...
 
       #- name: Upload coverage reports to Codecov
         #uses: codecov/codecov-action@v7
@@ -119,7 +120,7 @@ jobs:
         env:
           PKCS11_MODULE_PATH: /usr/local/lib/libpkcs11-proxy.so
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 1200s -coverprofile=coverage.out -covermode=atomic ./...
 
       #- name: Upload coverage reports to Codecov
         #uses: codecov/codecov-action@v7
@@ -140,6 +141,7 @@ jobs:
           
   test-backend-assemblers:
     strategy:
+      fail-fast: false
       max-parallel: 5
       matrix:
         module:
@@ -183,7 +185,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 900s -coverprofile=coverage.out -covermode=atomic ./...
 
       #- name: Upload coverage reports to Codecov
         #uses: codecov/codecov-action@v7
@@ -225,7 +227,8 @@ jobs:
         id: run
         working-directory: backend
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          PACKAGES=$(go list ./... | grep -v '/pkg/assemblers/tests')
+          go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 300s -coverprofile=coverage.out -covermode=atomic $PACKAGES
 
       #- name: Upload coverage reports to Codecov
        # uses: codecov/codecov-action@v7
@@ -243,6 +246,7 @@ jobs:
           path: backend/coverage.out
           if-no-files-found: error
           retention-days: 7
+
   sonarqube:
     name: SonarQube
     needs:
