@@ -81,7 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.module.tag }}
-          path: ${{ matrix.module.path }}/coverage.xml
+          path: ${{ matrix.module.path }}/coverage.out
           if-no-files-found: error
 
   test-pkcs11:
@@ -133,7 +133,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-crypto-pkcs11
-          path: engines/crypto/pkcs11/coverage.xml
+          path: engines/crypto/pkcs11/coverage.out
           if-no-files-found: error
 
   test-backend-assemblers:
@@ -196,7 +196,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.module.tag }}
-          path: ${{ matrix.module.path }}/coverage.xml
+          path: ${{ matrix.module.path }}/coverage.out
           if-no-files-found: error
 
   test-backend-rest:
@@ -237,7 +237,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-backend-rest
-          path: backend/coverage.xml
+          path: backend/coverage.out
           if-no-files-found: error
 
   sonarqube:
