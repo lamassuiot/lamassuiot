@@ -10,7 +10,7 @@ code, infrastructure components, and SDKs that power Lamassu deployments.
 
 ![dashboard](./docs/dashboard.png)
 
-      
+
 ## Why Lamassu IoT?
 
 - **Industrial-grade security** – Hardened crypto engines, hardware-backed key storage, and auditable certificate workflows.
