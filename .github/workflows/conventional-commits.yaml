@@ -1,0 +1,62 @@
+name: Conventional Commits
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-conventional-commits:
+    name: Validate PR title and commits
+    runs-on: ubuntu-24.04
+    env:
+      # Keep these types aligned with the groups in cliff.toml.
+      PATTERN: '^(feat|fix|bump|revert|remove|security|test|chore|refactor|docs|build|ci)(\([[:alnum:]][[:alnum:]._,-]*\))?!?: [^[:space:]].*'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Check title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$PR_TITLE" =~ $PATTERN ]]; then
+            echo "ok: $PR_TITLE"
+          else
+            echo "::error::PR title does not follow the Conventional Commits format used by cliff.toml: $PR_TITLE"
+            echo "Expected: <type>[optional scope][!]: <description>"
+            echo "Types: feat, fix, bump, revert, remove, security, test, chore, refactor, docs, build, ci"
+            echo "Examples: feat(cryptoengines): add new cryptoengine; fix: typo in variable name; bump: update dependency versions; chore: release lamassu 3.8.0"
+            exit 1
+          fi
+
+      - name: Check commit message format
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if ! commit_subjects=$(git log --no-merges --format=%s "$BASE_SHA..$HEAD_SHA"); then
+            echo "::error::Could not read commits in the pull request range"
+            exit 1
+          fi
+
+          if [[ -z "$commit_subjects" ]]; then
+            echo "::error::No non-merge commits found in the pull request range"
+            exit 1
+          fi
+
+          failed=0
+          while IFS= read -r subject; do
+            if [[ "$subject" =~ $PATTERN ]]; then
+              echo "ok: $subject"
+            else
+              echo "::error::Commit subject does not follow the Conventional Commits format used by cliff.toml: $subject"
+              failed=1
+            fi
+          done <<< "$commit_subjects"
+
+          exit "$failed"
