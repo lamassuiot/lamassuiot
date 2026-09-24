@@ -83,7 +83,8 @@ jobs:
           name: coverage-${{ matrix.module.tag }}
           path: ${{ matrix.module.path }}/coverage.out
           if-no-files-found: error
-
+          retention-days: 7
+          
   test-pkcs11:
     name: engines/crypto/pkcs11
     runs-on: ubuntu-latest
@@ -135,7 +136,8 @@ jobs:
           name: coverage-crypto-pkcs11
           path: engines/crypto/pkcs11/coverage.out
           if-no-files-found: error
-
+          retention-days: 7
+          
   test-backend-assemblers:
     strategy:
       max-parallel: 5
@@ -198,7 +200,8 @@ jobs:
           name: coverage-${{ matrix.module.tag }}
           path: ${{ matrix.module.path }}/coverage.out
           if-no-files-found: error
-
+          retention-days: 7
+          
   test-backend-rest:
     name: backend (excluding assemblers/tests)
     runs-on: ubuntu-latest
@@ -239,7 +242,7 @@ jobs:
           name: coverage-backend-rest
           path: backend/coverage.out
           if-no-files-found: error
-
+          retention-days: 7
   sonarqube:
     name: SonarQube
     needs:
@@ -259,6 +262,11 @@ jobs:
           pattern: coverage-*
           path: coverage-reports
           merge-multiple: false
+          
+      - name: List downloaded coverage reports
+        run: |
+          echo "Coverage reports downloaded:"
+          find coverage-reports -type f -name "coverage.out"
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
