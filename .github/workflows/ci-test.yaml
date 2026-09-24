@@ -73,6 +73,7 @@ jobs:
         #uses: codecov/codecov-action@v7
         #with:
           #token: ${{ secrets.CODECOV_TOKEN }}
+          #files: ${{ matrix.module.path }}/coverage.out
           #commit_parent: ${{ github.event.pull_request.base.sha }}
           #fail_ci_if_error: true
           #verbose: true
@@ -126,6 +127,7 @@ jobs:
         #uses: codecov/codecov-action@v7
         #with:
           #token: ${{ secrets.CODECOV_TOKEN }}
+          #files: engines/crypto/pkcs11/coverage.out
           #commit_parent: ${{ github.event.pull_request.base.sha }}
           #fail_ci_if_error: true
           #verbose: true
@@ -191,6 +193,7 @@ jobs:
         #uses: codecov/codecov-action@v7
         #with:
           #token: ${{ secrets.CODECOV_TOKEN }}
+          #files: ${{ matrix.module.path }}/coverage.out
           #commit_parent: ${{ github.event.pull_request.base.sha }}
           #fail_ci_if_error: true
           #verbose: true
@@ -234,6 +237,7 @@ jobs:
        # uses: codecov/codecov-action@v7
        # with:
           #token: ${{ secrets.CODECOV_TOKEN }}
+          #files: backend/coverage.out
           #commit_parent: ${{ github.event.pull_request.base.sha }}
           #fail_ci_if_error: true
           #verbose: true
