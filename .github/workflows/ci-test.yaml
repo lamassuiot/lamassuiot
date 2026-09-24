@@ -210,7 +210,7 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: backend-rest
-          name: Build
+          
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
