@@ -1,8 +1,28 @@
 package sqlite
 
 import (
+	"fmt"
+	"strings"
+
 	"gorm.io/gorm"
 )
+
+// kmsKeysTableDDL is shared with upgradeKMSKeysPrimaryKey so the created table and the
+// rebuilt one cannot drift apart.
+const kmsKeysTableDDL = `CREATE TABLE IF NOT EXISTS kms_keys (
+	key_id TEXT NOT NULL,
+	metadata TEXT NULL,
+	name TEXT NOT NULL,
+	algorithm TEXT NOT NULL,
+	size INTEGER NOT NULL,
+	public_key TEXT NOT NULL,
+	creation_ts DATETIME NULL,
+	engine_id TEXT NOT NULL,
+	aliases TEXT DEFAULT '[]',
+	has_private_key INTEGER DEFAULT 1,
+	tags TEXT DEFAULT '[]',
+	PRIMARY KEY (key_id, engine_id)
+)`
 
 // initializeSchema creates all tables in their final state based on the Postgres schema
 // This bypasses migrations and creates tables directly in SQLite-compatible SQL
@@ -180,20 +200,8 @@ func initializeSchema(db *gorm.DB) error {
 		// - 20251031174938_key.sql: Added engine_id, key_id, aliases, has_private_key, tags;
 		//                           changed primary key from id to key_id; dropped status column;
 		//                           changed metadata to jsonb
-		`CREATE TABLE IF NOT EXISTS kms_keys (
-			key_id TEXT NOT NULL,
-			metadata TEXT NULL,
-			name TEXT NOT NULL,
-			algorithm TEXT NOT NULL,
-			size INTEGER NOT NULL,
-			public_key TEXT NOT NULL,
-			creation_ts DATETIME NULL,
-			engine_id TEXT NULL,
-			aliases TEXT DEFAULT '[]',
-			has_private_key INTEGER DEFAULT 1,
-			tags TEXT DEFAULT '[]',
-			PRIMARY KEY (key_id)
-		)`,
+		// - 20260909084500_kms_key_composite_pk.sql: primary key is (key_id, engine_id)
+		kmsKeysTableDDL,
 	}
 
 	for _, stmt := range statements {
@@ -202,5 +210,45 @@ func initializeSchema(db *gorm.DB) error {
 		}
 	}
 
-	return nil
+	return upgradeKMSKeysPrimaryKey(db)
+}
+
+// upgradeKMSKeysPrimaryKey rebuilds kms_keys when an existing database still carries the
+// old single-column primary key. The statements above only create missing tables, and
+// SQLite cannot alter a primary key in place, so without this an existing monolithic
+// database would keep rejecting the same key held by two engines.
+func upgradeKMSKeysPrimaryKey(db *gorm.DB) error {
+	var currentSchema string
+	if err := db.Raw("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'kms_keys'").Scan(&currentSchema).Error; err != nil {
+		return err
+	}
+
+	if currentSchema == "" || strings.Contains(currentSchema, "PRIMARY KEY (key_id, engine_id)") {
+		return nil
+	}
+
+	var orphans int64
+	if err := db.Raw("SELECT count(*) FROM kms_keys WHERE engine_id IS NULL OR engine_id = ''").Scan(&orphans).Error; err != nil {
+		return err
+	}
+
+	if orphans > 0 {
+		return fmt.Errorf("cannot promote (key_id, engine_id) to primary key: %d kms_keys row(s) have no engine_id; backfill them before starting", orphans)
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, stmt := range []string{
+			`ALTER TABLE kms_keys RENAME TO kms_keys_old`,
+			kmsKeysTableDDL,
+			`INSERT INTO kms_keys (key_id, metadata, name, algorithm, size, public_key, creation_ts, engine_id, aliases, has_private_key, tags)
+				SELECT key_id, metadata, name, algorithm, size, public_key, creation_ts, engine_id, aliases, has_private_key, tags FROM kms_keys_old`,
+			`DROP TABLE kms_keys_old`,
+		} {
+			if err := tx.Exec(stmt).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }

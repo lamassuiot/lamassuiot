@@ -28,7 +28,11 @@ type KMSService interface {
 	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
 }
 
-// Identifier can be either KeyID, Alias, or PKCS11URI
+// Identifier can be a PKCS11URI, an Alias, or a KeyID. A key is identified by
+// (KeyID, EngineID) because the same KeyID can be held by several engines at once (e.g. the
+// private key in an offline HSM and the public key in an online engine): the URI carries the
+// engine in token-id and an alias is unique across engines, while a bare KeyID resolves only
+// while a single engine holds it and is rejected once several do.
 type GetKeyInput struct {
 	Identifier string `validate:"required"`
 }

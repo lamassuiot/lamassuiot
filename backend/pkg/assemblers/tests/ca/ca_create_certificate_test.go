@@ -168,7 +168,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
-						KeyIdentifier: key.KeyID,
+						KeyIdentifier: key.PKCS11URI,
 					},
 					Subject: models.Subject{CommonName: "reuse-key-cert"},
 				})
@@ -1134,7 +1134,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 			cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 				CAID: ca.ID,
 				KeySpec: services.CertificateKeySpec{
-					KeyIdentifier: sharedKey.KeyID,
+					KeyIdentifier: sharedKey.PKCS11URI,
 				},
 				Subject: models.Subject{CommonName: fmt.Sprintf("shared-key-cert-%d", i)},
 			})

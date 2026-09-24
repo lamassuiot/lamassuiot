@@ -59,8 +59,31 @@ func (db *PostgresKMSStore) SelectAll(ctx context.Context, req storage.StorageLi
 	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, id string) (bool, *models.Key, error) {
-	return db.querier.SelectExists(ctx, id, nil)
+// The identity of a key is (key_id, engine_id): the same key_id can be held by several
+// engines at once. DBQuerier addresses rows by a single column, so the composite-key
+// operations below build their own WHERE clauses instead of going through it.
+func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, keyID, engineID string) (bool, *models.Key, error) {
+	var elem models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("key_id = ? AND engine_id = ?", keyID, engineID).Limit(1).Find(&elem)
+	if tx.Error != nil {
+		return false, nil, tx.Error
+	}
+
+	if tx.RowsAffected == 0 {
+		return false, nil, nil
+	}
+
+	return true, &elem, nil
+}
+
+func (db *PostgresKMSStore) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
+	var keys []*models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("key_id = ?", keyID).Order("engine_id").Find(&keys)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return keys, nil
 }
 
 func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string) (bool, *models.Key, error) {
@@ -70,7 +93,16 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
 	var elem models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).Limit(1).Find(&elem)
+	query := db.querier.Table(kmsTableName).WithContext(ctx)
+	// The monolithic deployment runs this repository on SQLite, which has neither jsonb nor
+	// the containment operator.
+	if isSQLite(db.querier.DB) {
+		query = query.Where("EXISTS (SELECT 1 FROM json_each(aliases) WHERE value = ?)", alias)
+	} else {
+		query = query.Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias))
+	}
+
+	tx := query.Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -87,9 +119,29 @@ func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	return db.querier.Update(ctx, kmsKey, kmsKey.KeyID)
+	tx := db.querier.Session(&gorm.Session{FullSaveAssociations: true}).Table(kmsTableName).WithContext(ctx).
+		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Save(kmsKey)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	if tx.RowsAffected != 1 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	return kmsKey, nil
 }
 
-func (db *PostgresKMSStore) Delete(ctx context.Context, id string) error {
-	return db.querier.Delete(ctx, id)
+func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) error {
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).
+		Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if tx.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+
+	return nil
 }
