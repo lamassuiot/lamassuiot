@@ -24,19 +24,21 @@ render_always = true
 conventional_commits = true
 filter_unconventional = false
 commit_preprocessors = [
-    { pattern = '\\((\\w+\\s)?#([0-9]+)\\)', replace = "([#${2}](https://github.com/lamassuiot/lamassuiot/issues/${2}))" },
+    { pattern = '\((\\w+\\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/lamassuiot/lamassuiot/issues/${2}))" },
 ]
 commit_parsers = [
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
     { message = "^bump", group = "Bump Versions" },
     { message = "^remove", group = "Removed" },
+    { message = "^revert", group = "Reverts" },
     { message = "^security", group = "Security Fixes" },
     { message = "^test", group = "Tests" },
     { message = "^chore", group = "Chores" },
     { message = "^refactor", group = "Refactor" },
     { message = "^docs", group = "Documentation" },
     { message = "^build", group = "Build" },
+    { message = "^ci", group = "Continuous Integration" },
     { message = ".*", group = "Other" },
 ]
 tag_pattern = "v[0-9].*"
