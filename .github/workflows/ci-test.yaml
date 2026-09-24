@@ -10,18 +10,18 @@ on:
     branches:
       - main
   workflow_dispatch:
-  
+
 jobs:
   test:
     strategy:
       max-parallel: 5
       matrix:
-        module: 
+        module:
           - path: core
             tag: core
           - path: sdk
             tag: sdk
-          - path: shared/subsystems 
+          - path: shared/subsystems
             tag: shared-subsystems
           - path: shared/aws
             tag: shared-aws
@@ -43,7 +43,7 @@ jobs:
             tag: connector-awsiot
           - path: monolithic
             tag: monolithic
-          
+
     name: ${{ matrix.module.path }}
     runs-on: ubuntu-latest
     steps:
@@ -51,13 +51,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
- 
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '^1.26.2' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         working-directory: ${{ matrix.module.path }}
         run: go work sync
@@ -76,30 +76,38 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: ${{ matrix.module.tag }}
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.module.tag }}
+          path: ${{ matrix.module.path }}/coverage.txt
+          if-no-files-found: error
+
   test-pkcs11:
     name: engines/crypto/pkcs11
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
- 
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '^1.26.2' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
-      
+
       - name: Install PKCS11 Proxy Dependencies
         run: |
           sudo apt-get install -y libseccomp-dev #Required for building pkcs11-proxy
           git clone https://github.com/SUNET/pkcs11-proxy
           cd pkcs11-proxy
-          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 . 
+          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .
           make
-          sudo make install 
+          sudo make install
           sudo cp pkcs11-daemon /usr/local/bin/
           ls /usr/local/lib/libpkcs11-proxy.so
- 
+
       - name: Install Dependencies
         working-directory: engines/crypto/pkcs11
         run: go work sync
@@ -120,6 +128,13 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: crypto-pkcs11
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-crypto-pkcs11
+          path: engines/crypto/pkcs11/coverage.txt
+          if-no-files-found: error
 
   test-backend-assemblers:
     strategy:
@@ -151,13 +166,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
- 
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '^1.26.2'
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         working-directory: backend
         run: go work sync
@@ -177,6 +192,13 @@ jobs:
           verbose: true
           flags: ${{ matrix.module.tag }}
 
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.module.tag }}
+          path: ${{ matrix.module.path }}/coverage.txt
+          if-no-files-found: error
+
   test-backend-rest:
     name: backend (excluding assemblers/tests)
     runs-on: ubuntu-latest
@@ -185,13 +207,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
- 
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '^1.26.2'
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         working-directory: backend
         run: go work sync
@@ -210,14 +232,34 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: backend-rest
-          
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-backend-rest
+          path: backend/coverage.txt
+          if-no-files-found: error
+
   sonarqube:
     name: SonarQube
+    needs:
+      - test
+      - test-pkcs11
+      - test-backend-assemblers
+      - test-backend-rest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-reports
+          merge-multiple: false
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
