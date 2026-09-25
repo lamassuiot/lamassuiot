@@ -69,15 +69,15 @@ jobs:
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 300s -coverprofile=coverage.out -covermode=atomic ./...
 
-      #- name: Upload coverage reports to Codecov
-        #uses: codecov/codecov-action@v7
-        #with:
-          #token: ${{ secrets.CODECOV_TOKEN }}
-          #files: ${{ matrix.module.path }}/coverage.out
-          #commit_parent: ${{ github.event.pull_request.base.sha }}
-          #fail_ci_if_error: true
-          #verbose: true
-          #flags: ${{ matrix.module.tag }}
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ matrix.module.path }}/coverage.out
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: ${{ matrix.module.tag }}
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -123,15 +123,15 @@ jobs:
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 1200s -coverprofile=coverage.out -covermode=atomic ./...
 
-      #- name: Upload coverage reports to Codecov
-        #uses: codecov/codecov-action@v7
-        #with:
-          #token: ${{ secrets.CODECOV_TOKEN }}
-          #files: engines/crypto/pkcs11/coverage.out
-          #commit_parent: ${{ github.event.pull_request.base.sha }}
-          #fail_ci_if_error: true
-          #verbose: true
-          #flags: crypto-pkcs11
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: engines/crypto/pkcs11/coverage.out
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: crypto-pkcs11
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -189,15 +189,15 @@ jobs:
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 900s -coverprofile=coverage.out -covermode=atomic ./...
 
-      #- name: Upload coverage reports to Codecov
-        #uses: codecov/codecov-action@v7
-        #with:
-          #token: ${{ secrets.CODECOV_TOKEN }}
-          #files: ${{ matrix.module.path }}/coverage.out
-          #commit_parent: ${{ github.event.pull_request.base.sha }}
-          #fail_ci_if_error: true
-          #verbose: true
-          #flags: ${{ matrix.module.tag }}
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ matrix.module.path }}/coverage.out
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: ${{ matrix.module.tag }}
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -233,15 +233,15 @@ jobs:
           PACKAGES=$(go list ./... | grep -v '/pkg/assemblers/tests')
           go run gotest.tools/gotestsum@latest --format github-actions -- -coverpkg=./... -timeout 300s -coverprofile=coverage.out -covermode=atomic $PACKAGES
 
-      #- name: Upload coverage reports to Codecov
-       # uses: codecov/codecov-action@v7
-       # with:
-          #token: ${{ secrets.CODECOV_TOKEN }}
-          #files: backend/coverage.out
-          #commit_parent: ${{ github.event.pull_request.base.sha }}
-          #fail_ci_if_error: true
-          #verbose: true
-          #flags: backend-rest
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: backend/coverage.out
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: backend-rest
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
