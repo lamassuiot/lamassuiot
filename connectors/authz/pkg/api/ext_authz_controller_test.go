@@ -31,7 +31,7 @@ func TestExtAuthzCheck_AllowsEnvoyHTTPServiceRequest(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "principal-1", rec.Header().Get("x-current-user"))
+	assert.Equal(t, "principal-1", rec.Header().Get("X-Principal-ID"))
 	assert.Empty(t, rec.Body.String())
 }
 
@@ -45,7 +45,7 @@ func TestExtAuthzCheck_AllowsOriginalURLAfterCheckRoute(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "principal-1", rec.Header().Get("x-current-user"))
+	assert.Equal(t, "principal-1", rec.Header().Get("X-Principal-ID"))
 	assert.Empty(t, rec.Body.String())
 }
 
@@ -73,7 +73,7 @@ func TestExtAuthzCheck_DeniesWhenNoFineGrainedHTTPActionGrantsRoute(t *testing.T
 	router.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Empty(t, rec.Header().Get("x-current-user"))
+	assert.Empty(t, rec.Header().Get("X-Principal-ID"))
 	assert.Empty(t, rec.Body.String())
 }
 
