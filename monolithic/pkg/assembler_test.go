@@ -31,7 +31,7 @@ func TestMonolithicAuthzProxyAuthorizeForwardsOriginalRequestAndRestoresBody(t *
 			body:         string(body),
 		}
 
-		w.Header().Set("x-current-user", "device-1")
+		w.Header().Set("X-Principal-ID", "device-1")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -76,11 +76,8 @@ func TestMonolithicAuthzProxyAuthorizeForwardsOriginalRequestAndRestoresBody(t *
 	if captured.body != requestBody {
 		t.Fatalf("unexpected authz body: %s", captured.body)
 	}
-	if req.Header.Get("x-current-user") != "device-1" {
-		t.Fatalf("x-current-user was not propagated")
-	}
-	if req.Header.Get("x-principal-id") != "device-1" {
-		t.Fatalf("x-principal-id was not propagated")
+	if req.Header.Get("X-Principal-ID") != "device-1" {
+		t.Fatalf("X-Principal-ID was not propagated")
 	}
 
 	restoredBody, err := io.ReadAll(req.Body)

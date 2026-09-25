@@ -116,7 +116,7 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 		currentUser = firstString(matchedPrincipals)
 	}
 	if currentUser != "" {
-		c.Header("x-current-user", currentUser)
+		c.Header("X-Principal-ID", currentUser)
 	}
 	logExtAuthzDecision(log, start, http.StatusOK, true, "http_rule grants access to this route", preferPrincipal(matchedPrincipals, currentUser), evaluatedPolicyIDs, result.MatchedPolicyID, nil)
 	c.Status(http.StatusOK)
