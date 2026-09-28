@@ -1,9 +1,12 @@
 ARG BUILDER=golang:1.26.2-bookworm
-FROM ${BUILDER} AS builder
+# Pinned to the runner platform: Go cross-compiles the target architecture
+# natively instead of emulating the whole toolchain with QEMU.
+FROM --platform=$BUILDPLATFORM ${BUILDER} AS builder
 WORKDIR /app
 # Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
 # this intermediate stage (in addition to the default final-stage scan).
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
+ARG TARGETARCH
 
 # go.work/go.work.sum rarely change — keep as an early cache layer.
 COPY go.work go.work
@@ -27,7 +30,7 @@ ARG VERSION= # set by build script
 RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
 
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
-    CGO_ENABLED=0 GOOS=linux \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \
     go build \
       -tags nopkcs11 \
       -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \

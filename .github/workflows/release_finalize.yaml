@@ -303,6 +303,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Enable ARM64 emulation for Dockerfiles that need to execute target-architecture
+      # binaries during the build. Go services may cross-compile natively via BUILDPLATFORM.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        with:
+          platforms: arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Build ${{ matrix.service }} DEV docker image
@@ -310,6 +318,7 @@ jobs:
         with:
           context: .
           file: ci/${{ matrix.service }}.dockerfile
+          platforms: linux/amd64,linux/arm64
           build-args: |
             BASE_IMAGE=alpine:3.14
             SHA1VER=${{ env.SHA1VER }}
