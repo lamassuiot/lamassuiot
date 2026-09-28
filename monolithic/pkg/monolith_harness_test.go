@@ -27,6 +27,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devpki"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devruntime"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devstorage"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -44,6 +45,7 @@ var (
 	harnessCleanups []func()
 	sharedPostgres  *testPostgres
 	monoliths       = map[string]*testMonolith{}
+	inmemoryOnce    sync.Once
 )
 
 type testPostgres struct {
@@ -52,13 +54,14 @@ type testPostgres struct {
 }
 
 type testMonolith struct {
-	name     string
-	httpsURL string
-	rt       *devruntime.Runtime
-	external *devissuer.Issuer
-	conf     MonolithicConfig
-	pg       *testPostgres
-	client   *http.Client
+	name        string
+	httpsURL    string
+	rt          *devruntime.Runtime
+	external    *devissuer.Issuer
+	proxyRoutes map[string]int
+	conf        MonolithicConfig
+	pg          *testPostgres
+	client      *http.Client
 }
 
 func TestMain(m *testing.M) {
@@ -144,14 +147,19 @@ func startMonolith(t *testing.T, name string, mutate func(*MonolithicConfig)) *t
 	}
 	addHarnessCleanup(func() { _ = rt.Close() })
 
-	disabledBus := cconfig.EventBusEngine{Enabled: false, Provider: cconfig.Amqp, Config: map[string]interface{}{}}
+	// Eventbus en memoria, como -inmemory-eventbus: VA necesita el evento
+	// «CA creada» para iniciar su rol de CRL.
+	inmemoryOnce.Do(inmemory.Register)
+	bus := func() cconfig.EventBusEngine {
+		return cconfig.EventBusEngine{LogLevel: cconfig.Info, Enabled: true, Provider: "inmemory", Config: map[string]interface{}{}}
+	}
 	mt := rt.Multitenant
 	mt.Provisioners = rt.DefaultProvisioners()
 	conf := MonolithicConfig{
 		Logs:                  cconfig.Logging{Level: cconfig.Info},
-		PublisherEventBus:     disabledBus,
-		SubscriberEventBus:    disabledBus,
-		SubscriberDLQEventBus: disabledBus,
+		PublisherEventBus:     bus(),
+		SubscriberEventBus:    bus(),
+		SubscriberDLQEventBus: bus(),
 		Storage:               pg.storage,
 		CryptoEngines: []cconfig.CryptoEngineConfig{{
 			ID:       "filesystem-test-1",
@@ -169,17 +177,18 @@ func startMonolith(t *testing.T, name string, mutate func(*MonolithicConfig)) *t
 		mutate(&conf)
 	}
 
-	_, httpsPort, err := RunMonolithicLamassuPKI(conf)
+	assembled, err := AssembleMonolith(conf)
 	if err != nil {
-		t.Fatalf("RunMonolithicLamassuPKI: %v", err)
+		t.Fatalf("AssembleMonolith: %v", err)
 	}
 	m := &testMonolith{
-		name:     name,
-		httpsURL: fmt.Sprintf("https://127.0.0.1:%d", httpsPort),
-		rt:       rt,
-		external: external,
-		conf:     conf,
-		pg:       pg,
+		name:        name,
+		httpsURL:    fmt.Sprintf("https://127.0.0.1:%d", assembled.HTTPSPort),
+		proxyRoutes: assembled.ProxyRoutes,
+		rt:          rt,
+		external:    external,
+		conf:        conf,
+		pg:          pg,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 			// El proxy usa un certificado autofirmado (como hoy en el monolito).

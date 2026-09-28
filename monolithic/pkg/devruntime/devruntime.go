@@ -9,6 +9,7 @@ package devruntime
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -134,14 +135,19 @@ func (rt *Runtime) writeInternalTLS() (monoconfig.InternalTLSConfig, error) {
 		return monoconfig.InternalTLSConfig{}, fmt.Errorf("devruntime: create internal TLS directory: %w", err)
 	}
 	out := monoconfig.InternalTLSConfig{
-		CAFile:   filepath.Join(dir, "ca.crt"),
+		// No «ca.crt»: ese nombre es el del certificado del servicio CA.
+		CAFile:   filepath.Join(dir, "internal-ca.crt"),
 		Services: map[monoconfig.Service]monoconfig.InternalTLSFiles{},
 		Ports:    map[monoconfig.Service]int{},
 	}
 	if err := devpki.WriteFile(out.CAFile, rt.InternalCA.CertPEM()); err != nil {
 		return monoconfig.InternalTLSConfig{}, fmt.Errorf("devruntime: write internal CA: %w", err)
 	}
-	for _, svc := range monoconfig.AllServices {
+	ports, err := reserveLoopbackPorts(len(monoconfig.AllServices))
+	if err != nil {
+		return monoconfig.InternalTLSConfig{}, err
+	}
+	for i, svc := range monoconfig.AllServices {
 		leaf, err := rt.InternalCA.Issue("lamassu-" + string(svc))
 		if err != nil {
 			return monoconfig.InternalTLSConfig{}, err
@@ -157,7 +163,32 @@ func (rt *Runtime) writeInternalTLS() (monoconfig.InternalTLSConfig, error) {
 			return monoconfig.InternalTLSConfig{}, err
 		}
 		out.Services[svc] = files
-		out.Ports[svc] = 0
+		out.Ports[svc] = ports[i]
 	}
 	return out, nil
+}
+
+// reserveLoopbackPorts elige n puertos libres y distintos en 127.0.0.1 (D7).
+// Los clientes SDK de un servicio necesitan el puerto interno del destino
+// antes de montarlo, y el backend no devuelve el puerto real del listener
+// interno cuando se configura 0. Entre el cierre y el Listen del servicio hay
+// una carrera pequeña: si otro proceso toma el puerto, el montaje falla con
+// «address already in use» y el monolito no arranca (fallo explícito).
+func reserveLoopbackPorts(n int) ([]int, error) {
+	listeners := make([]net.Listener, 0, n)
+	defer func() {
+		for _, l := range listeners {
+			_ = l.Close()
+		}
+	}()
+	ports := make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return nil, fmt.Errorf("devruntime: reserve internal port: %w", err)
+		}
+		listeners = append(listeners, l)
+		ports = append(ports, l.Addr().(*net.TCPAddr).Port)
+	}
+	return ports, nil
 }

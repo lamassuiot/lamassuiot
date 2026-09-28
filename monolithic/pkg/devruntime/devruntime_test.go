@@ -99,6 +99,10 @@ func TestInternalCertificatesAreSignedByTheInternalCA(t *testing.T) {
 			}
 		}
 	}
+	caPEM, err := os.ReadFile(in.CAFile)
+	if err != nil || string(caPEM) != string(rt.InternalCA.CertPEM()) {
+		t.Fatalf("%s no contiene la CA interna (¿lo pisa el certificado de un servicio?): %v", in.CAFile, err)
+	}
 	if rt.InternalCA.Certificate().Equal(rt.CA.Certificate()) {
 		t.Fatal("la CA interna y la del emisor deben ser distintas")
 	}

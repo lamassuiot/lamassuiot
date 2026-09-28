@@ -27,7 +27,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Monolith es un monolito ensamblado: los puertos del proxy y a qué puerto
+// de servicio lleva cada prefijo.
+type Monolith struct {
+	HTTPPort    int
+	HTTPSPort   int
+	ProxyRoutes map[string]int
+}
+
 func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
+	m, err := AssembleMonolith(conf)
+	if err != nil {
+		return -1, -1, err
+	}
+	return m.HTTPPort, m.HTTPSPort, nil
+}
+
+// AssembleMonolith monta los servicios y el proxy en modo HTTP.
+func AssembleMonolith(conf MonolithicConfig) (*Monolith, error) {
 	log.SetLevel(log.PanicLevel)
 	if conf.AssemblyMode == Http {
 		// Initialize OTel SDK once at the very beginning, before any HTTP clients are created
@@ -42,11 +59,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		profile, err := devprofile.Build(conf)
 		if err != nil {
-			return -1, -1, fmt.Errorf("invalid multitenant profile: %w", err)
+			return nil, fmt.Errorf("invalid multitenant profile: %w", err)
 		}
 		tenantRoutes, err := newTenantRouteOptionsBuilder(conf)
 		if err != nil {
-			return -1, -1, err
+			return nil, err
 		}
 
 		// Hasta la tarea 12 de la spec 009, sin RuntimeDir los ficheros del
@@ -68,41 +85,47 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		kmsRoutes, err := tenantRoutes.build("KMS", profile.KMS.Server)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
+			return nil, fmt.Errorf("could not assemble KMS Service: %s", err)
 		}
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(profile.KMS, apiInfo, kmsRoutes)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
+			return nil, fmt.Errorf("could not assemble KMS Service: %s", err)
 		}
 
-		kmsConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: kmsPort}, Protocol: cconfig.HTTP, BasePath: ""}
-		kmsSDKBuilder := func(serviceID, src string) services.KMSService {
-			lKMSClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - KMS Client")
-			kmsHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
-				LogLevel:       cconfig.Info,
-				AuthMode:       cconfig.NoAuth,
-				HTTPConnection: kmsConnection,
-			}, lKMSClient)
+		// Los clientes SDK entre servicios usan la config de devprofile:
+		// auth_mode mtls con el certificado del servicio que llama, contra el
+		// listener interno del destino (009 T9). El destino marca la petición
+		// como INTERNAL_SERVICE y opera en el tenant del contexto propagado.
+		kmsSDK := func(cfg cconfig.HTTPClient, serviceID, src string) (services.KMSService, error) {
+			cli, err := sdk.BuildHTTPClient(cfg, chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - KMS Client"))
 			if err != nil {
-				log.Fatalf("could not build HTTP KMS Client: %s", err)
+				return nil, fmt.Errorf("could not build %s KMS client: %w", serviceID, err)
 			}
-
-			return sdk.NewHttpKMSClient(
-				sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, src),
-				fmt.Sprintf("%s://%s%s:%d", kmsConnection.Protocol, kmsConnection.Hostname, kmsConnection.BasePath, kmsConnection.Port),
-			)
+			return sdk.NewHttpKMSClient(sdk.HttpClientWithSourceHeaderInjector(cli, src), sdk.BuildURL(cfg)), nil
 		}
 
 		caRoutes, err := tenantRoutes.build("CA", profile.CA.Server)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
+			return nil, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
-		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(profile.CA, kmsSDKBuilder("KMS", models.KMSSource), apiInfo, caRoutes)
+		caKMS, err := kmsSDK(profile.CA.KMSClient.HTTPClient, "CA", models.CASource)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
+			return nil, fmt.Errorf("could not assemble CA Service: %s", err)
+		}
+		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(profile.CA, caKMS, apiInfo, caRoutes)
+		if err != nil {
+			return nil, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
 
 		caConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: cconfig.HTTP, BasePath: ""}
+		caSDK := func(cfg cconfig.HTTPClient, serviceID, src string) (services.CAService, error) {
+			cli, err := sdk.BuildHTTPClient(cfg, chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - CA Client"))
+			if err != nil {
+				return nil, fmt.Errorf("could not build %s CA client: %w", serviceID, err)
+			}
+			return sdk.NewHttpCAClient(sdk.HttpClientWithSourceHeaderInjector(cli, src), sdk.BuildURL(cfg)), nil
+		}
+		// Solo para el conector AWS IoT, que aún no es multitenant (P6).
 		caSDKBuilder := func(serviceID, src string) services.CAService {
 			lCAClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - CA Client")
 			caHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
@@ -122,24 +145,44 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		vaRoutes, err := tenantRoutes.build("VA", profile.VA.Server)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
+			return nil, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
-		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(profile.VA, caSDKBuilder("VA", models.VASource), kmsSDKBuilder("VA", models.VASource), apiInfo, vaRoutes)
+		vaCA, err := caSDK(profile.VA.CAClient.HTTPClient, "VA", models.VASource)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
+			return nil, fmt.Errorf("could not assemble VA Service: %s", err)
+		}
+		vaKMS, err := kmsSDK(profile.VA.KMSClient.HTTPClient, "VA", models.VASource)
+		if err != nil {
+			return nil, fmt.Errorf("could not assemble VA Service: %s", err)
+		}
+		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(profile.VA, vaCA, vaKMS, apiInfo, vaRoutes)
+		if err != nil {
+			return nil, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
 
 		devRoutes, err := tenantRoutes.build("Device Manager", profile.DeviceManager.Server)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
+			return nil, fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
-		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(profile.DeviceManager, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo, devRoutes)
+		devCA, err := caSDK(profile.DeviceManager.CAClient.HTTPClient, "Device Manager", models.DeviceManagerSource)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
+			return nil, fmt.Errorf("could not assemble Device Manager Service: %s", err)
+		}
+		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(profile.DeviceManager, devCA, apiInfo, devRoutes)
+		if err != nil {
+			return nil, fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
 
 		devMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: cconfig.HTTP, BasePath: ""}
 
+		devMngrSDK := func(cfg cconfig.HTTPClient, serviceID, src string) (services.DeviceManagerService, error) {
+			cli, err := sdk.BuildHTTPClient(cfg, chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DevManager Client"))
+			if err != nil {
+				return nil, fmt.Errorf("could not build %s Device Manager client: %w", serviceID, err)
+			}
+			return sdk.NewHttpDeviceManagerClient(sdk.HttpClientWithSourceHeaderInjector(cli, src), sdk.BuildURL(cfg)), nil
+		}
+		// Solo para el conector AWS IoT, que aún no es multitenant (P6).
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
 			lDevMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DevManager Client")
 			devMngrHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
@@ -160,15 +203,24 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		dmsConf.DownstreamCertificateFile = proxyCertFile
 		dmsRoutes, err := tenantRoutes.build("DMS Manager", dmsConf.Server)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
+			return nil, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
-		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(dmsConf, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo, dmsRoutes)
+		dmsCA, err := caSDK(dmsConf.CAClient.HTTPClient, "DMS Manager", models.DMSManagerSource)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
+			return nil, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
+		}
+		dmsDevMngr, err := devMngrSDK(dmsConf.DevManagerClient.HTTPClient, "DMS Manager", models.DMSManagerSource)
+		if err != nil {
+			return nil, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
+		}
+		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(dmsConf, dmsCA, dmsDevMngr, apiInfo, dmsRoutes)
+		if err != nil {
+			return nil, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
 
 		dmsMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: cconfig.HTTP, BasePath: ""}
 
+		// Solo para el conector AWS IoT, que aún no es multitenant (P6).
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
 			lDMSMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DMSManager Client")
 			dmsMngrHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
@@ -187,26 +239,26 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 		alertsRoutes, err := tenantRoutes.build("Alerts", profile.Alerts.Server)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
+			return nil, fmt.Errorf("could not assemble Alerts Service: %s", err)
 		}
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(profile.Alerts, apiInfo, alertsRoutes)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
+			return nil, fmt.Errorf("could not assemble Alerts Service: %s", err)
 		}
 
 		tmRoutes, err := tenantRoutes.build("Tenant Manager", profile.TenantManager.Server)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble Tenant Manager Service: %s", err)
+			return nil, fmt.Errorf("could not assemble Tenant Manager Service: %s", err)
 		}
 		_, tmPort, err := lamassu.AssembleTenantManagerServiceWithHTTPServer(profile.TenantManager, apiInfo, tmRoutes)
 		if err != nil {
-			return -1, -1, fmt.Errorf("could not assemble Tenant Manager Service: %s", err)
+			return nil, fmt.Errorf("could not assemble Tenant Manager Service: %s", err)
 		}
 
 		if conf.AWSIoTManager.Enabled {
 			err = AssembleAWSIoT(conf, caSDKBuilder, dmsMngrSDKBuilder, deviceMngrSDKBuilder)
 			if err != nil {
-				return -1, -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
+				return nil, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
 			}
 		}
 
@@ -214,6 +266,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		engine.Use(gin.Recovery(), clientCertsToHeaderUsingEnvoyStyle())
 
 		routeMaps := make(map[string]func(c *gin.Context))
+		proxyRoutes := make(map[string]int)
 		routeList := make([]string, 0)
 
 		addRouteMap := func(serviceName, servicePath string, servicePort int) {
@@ -225,6 +278,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			fmt.Printf("  (HTTP)   0.0.0.0:%d%s*  --> %s 127.0.0.1:%d\n", conf.GatewayPortHttp, servicePath, serviceName, servicePort)
 			color.Unset()
 			fmt.Printf("\n")
+			proxyRoutes[servicePath] = servicePort
 			routeMaps[servicePath] = func(c *gin.Context) {
 				remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", servicePort))
 				if err != nil {
@@ -340,10 +394,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			log.Fatal(serverHttp.Serve(listenerHttp))
 		}()
 
-		return usedHttpPort, usedHttpsPort, nil
+		return &Monolith{HTTPPort: usedHttpPort, HTTPSPort: usedHttpsPort, ProxyRoutes: proxyRoutes}, nil
 	}
 
-	return -1, -1, fmt.Errorf("unsupported mode")
+	return nil, fmt.Errorf("unsupported mode")
 }
 
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
