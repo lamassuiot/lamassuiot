@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
@@ -14,15 +14,23 @@ import (
 	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	cryptoenginesv2 "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines_v2"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines_v2/backendregistry"
+	cryptoregistryv2 "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines_v2/registry"
+	metamemoryv2 "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines_v2/store/memory"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/softwarev2/v3"
 	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/fileblob"
 )
 
 func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.APIServiceInfo) (*services.KMSService, int, error) {
@@ -33,9 +41,15 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 
 	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "KMS", "HTTP Server")
 
+	kmsV2Service, err := AssembleKMSV2Service()
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not assemble KMS v2 Service. Exiting: %s", err)
+	}
+
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewKMSHTTPLayer(httpGrp, *kmsService, conf.AuthzClient, lHttp)
+	routes.NewKMSV2HTTPLayer(httpGrp, kmsV2Service)
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
@@ -129,6 +143,34 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 	}
 
 	return &svc, nil
+}
+
+// AssembleKMSV2Service builds a dev-parity KMS v2 service: a software crypto
+// backend persisting key blobs under the OS temp dir, with in-memory key
+// metadata. It is NOT durable across restarts and NOT suitable for
+// production use — it exists to expose the v2 API surface ahead of
+// config-driven v2 engine/storage wiring.
+func AssembleKMSV2Service() (cryptoenginesv2.Service, error) {
+	blobsDir := os.TempDir() + "/lamassu-kms-v2-blobs"
+	if err := os.MkdirAll(blobsDir, 0700); err != nil {
+		return nil, fmt.Errorf("could not create KMS v2 blob store directory: %w", err)
+	}
+
+	blobs, err := blob.OpenBucket(context.Background(), "file://"+blobsDir)
+	if err != nil {
+		return nil, fmt.Errorf("could not open KMS v2 blob store: %w", err)
+	}
+
+	backend, err := softwarev2.New(softwarev2.Options{Blobs: blobs})
+	if err != nil {
+		return nil, fmt.Errorf("could not create KMS v2 software crypto backend: %w", err)
+	}
+
+	metadata := metamemoryv2.New()
+	registry := cryptoregistryv2.NewBuiltinRegistry()
+	backendReg := backendregistry.NewSingleBackendRegistry(backend)
+
+	return cryptoenginesv2.NewService(registry, metadata, backendReg), nil
 }
 
 func createKMSStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.KMSKeysRepo, error) {
