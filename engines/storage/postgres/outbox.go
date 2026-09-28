@@ -76,12 +76,14 @@ func (store *EventOutboxStore) Enqueue(ctx context.Context, record *models.Event
 		record.CreatedAt = time.Now().UTC()
 	}
 
-	result := store.db.WithContext(ctx).Create(record)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+	err = WithTenantTransaction(ctx, store.db, func(tx *gorm.DB) error {
+		return tx.Create(record).Error
+	})
+	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return fmt.Errorf("enqueue event outbox: %w", ErrEventOutboxRecordConflict)
 		}
-		return fmt.Errorf("enqueue event outbox: %w", result.Error)
+		return fmt.Errorf("enqueue event outbox: %w", err)
 	}
 	return nil
 }
@@ -95,7 +97,7 @@ func (store *EventOutboxStore) ClaimPending(ctx context.Context, limit int) ([]m
 		return nil, fmt.Errorf("claim event outbox: %w", err)
 	}
 	var records []models.EventOutboxRecord
-	err = store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = WithTenantTransaction(ctx, store.db, func(tx *gorm.DB) error {
 		if err := tx.Where("tenant_id = ? AND status = ? AND available_at <= ?", tenantContext.TenantID, models.EventOutboxPending, time.Now().UTC()).
 			Order("created_at ASC").Limit(limit).Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).Find(&records).Error; err != nil {
 			return err
@@ -129,18 +131,13 @@ func (store *EventOutboxStore) ScheduleRetry(ctx context.Context, eventID string
 	if err != nil {
 		return fmt.Errorf("schedule event outbox retry: %w", err)
 	}
-	result := store.db.WithContext(ctx).Model(&models.EventOutboxRecord{}).
-		Where("tenant_id = ? AND event_id = ?", tenantContext.TenantID, eventID).
-		Updates(map[string]interface{}{
-			"status":       models.EventOutboxPending,
-			"available_at": availableAt,
-			"last_error":   reason,
-		})
-	if result.Error != nil {
-		return fmt.Errorf("schedule event outbox retry: %w", result.Error)
+	updates := map[string]interface{}{
+		"status":       models.EventOutboxPending,
+		"available_at": availableAt,
+		"last_error":   reason,
 	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+	if err := store.updateTenantRecord(ctx, tenantContext.TenantID, eventID, updates); err != nil {
+		return fmt.Errorf("schedule event outbox retry: %w", err)
 	}
 	return nil
 }
@@ -168,14 +165,25 @@ func (store *EventOutboxStore) updateStatus(ctx context.Context, eventID string,
 	if reason != "" {
 		updates["last_error"] = reason
 	}
-	result := store.db.WithContext(ctx).Model(&models.EventOutboxRecord{}).
-		Where("tenant_id = ? AND event_id = ?", tenantContext.TenantID, eventID).
-		Updates(updates)
-	if result.Error != nil {
-		return fmt.Errorf("update event outbox: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+	if err := store.updateTenantRecord(ctx, tenantContext.TenantID, eventID, updates); err != nil {
+		return fmt.Errorf("update event outbox: %w", err)
 	}
 	return nil
+}
+
+// updateTenantRecord actualiza un evento dentro de una transacción con el tenant
+// fijado, para que la política RLS de event_outbox lo permita.
+func (store *EventOutboxStore) updateTenantRecord(ctx context.Context, tenantID, eventID string, updates map[string]interface{}) error {
+	return WithTenantTransaction(ctx, store.db, func(tx *gorm.DB) error {
+		result := tx.Model(&models.EventOutboxRecord{}).
+			Where("tenant_id = ? AND event_id = ?", tenantID, eventID).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
 }
