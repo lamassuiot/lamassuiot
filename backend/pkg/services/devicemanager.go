@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -50,6 +51,10 @@ func (svc *DeviceManagerServiceBackend) SetService(service services.DeviceManage
 }
 
 func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Validate that status filters are not provided
@@ -142,9 +147,14 @@ func addStatusFilter(queryParams *resources.QueryParameters, status models.Devic
 }
 
 func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (*models.Device, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := deviceValidate.Struct(input)
+	err = deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -163,6 +173,7 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 
 	device := &models.Device{
 		ID:                input.ID,
+		TenantID:          tenantContext.TenantID,
 		IdentitySlot:      nil,
 		Status:            models.DeviceNoIdentity,
 		ExtraSlots:        map[string]*models.Slot[any]{},
@@ -189,6 +200,10 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 }
 
 func (svc DeviceManagerServiceBackend) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices")
@@ -196,6 +211,10 @@ func (svc DeviceManagerServiceBackend) GetDevices(ctx context.Context, input ser
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices owned by DMS with ID=%s", input.DMSID)
@@ -203,6 +222,10 @@ func (svc DeviceManagerServiceBackend) GetDeviceByDMS(ctx context.Context, input
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -224,6 +247,10 @@ func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input 
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (*models.Device, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -300,6 +327,10 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (*models.Device, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -334,6 +365,10 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -421,6 +456,10 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 }
 
 func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) error {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -462,9 +501,14 @@ func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input s
 // ============================================================================
 
 func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (*models.DeviceGroup, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := deviceValidate.Struct(input)
+	err = deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -486,6 +530,7 @@ func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, in
 	now := time.Now()
 	group := &models.DeviceGroup{
 		ID:          input.ID,
+		TenantID:    tenantContext.TenantID,
 		Name:        input.Name,
 		Description: input.Description,
 		ParentID:    input.ParentID,
@@ -512,6 +557,10 @@ func (svc DeviceManagerServiceBackend) CreateDeviceGroup(ctx context.Context, in
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (*models.DeviceGroup, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -570,6 +619,10 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceGroup(ctx context.Context, in
 }
 
 func (svc DeviceManagerServiceBackend) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) error {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -595,6 +648,10 @@ func (svc DeviceManagerServiceBackend) DeleteDeviceGroup(ctx context.Context, in
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -619,6 +676,10 @@ func (svc DeviceManagerServiceBackend) GetDeviceGroupByID(ctx context.Context, i
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all device groups")
@@ -631,6 +692,10 @@ func (svc DeviceManagerServiceBackend) GetDeviceGroups(ctx context.Context, inpu
 }
 
 func (svc DeviceManagerServiceBackend) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -668,6 +733,10 @@ func (svc DeviceManagerServiceBackend) GetDevicesByGroup(ctx context.Context, in
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
