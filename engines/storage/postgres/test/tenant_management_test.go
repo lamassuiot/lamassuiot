@@ -143,7 +143,7 @@ func TestTenantManagementTenantLifecycle(t *testing.T) {
 	createTestTenant(t, store, "org-a", "tenant-a", "alice")
 	now := time.Now().UTC()
 
-	_, err := store.UpdateTenantStatus(ctx, "tenant-a", models.TenantDeleted, now)
+	_, err := store.UpdateTenantStatus(ctx, "tenant-a", models.TenantRestoring, now)
 	require.ErrorIs(t, err, errs.ErrTenantManagerInvalidTransition)
 	_, err = store.UpdateTenantStatus(ctx, "missing", models.TenantSuspended, now)
 	require.ErrorIs(t, err, errs.ErrTenantManagerNotFound)
@@ -156,10 +156,9 @@ func TestTenantManagementTenantLifecycle(t *testing.T) {
 	require.Len(t, summaries, 1)
 	require.Equal(t, models.TenantSuspended, summaries[0].TenantStatus)
 
-	_, err = store.UpdateTenantStatus(ctx, "tenant-a", models.TenantDeprovisioning, now)
-	require.NoError(t, err)
 	tenant, err = store.UpdateTenantStatus(ctx, "tenant-a", models.TenantDeleted, now)
-	require.NoError(t, err)
+	require.NoError(t, err, "suspended tenants are deleted directly")
+	require.Equal(t, models.TenantDeleted, tenant.Status)
 	require.NotNil(t, tenant.DeletedAt)
 	summaries, err = store.ListIdentityMemberships(ctx, tenantManagementIssuer, "alice")
 	require.NoError(t, err)

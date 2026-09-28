@@ -198,6 +198,15 @@ func TestTenantManagerHTTPLifecycle(t *testing.T) {
 	require.Equal(t, http.StatusOK, status, suspended)
 	status, _ = client.do("alice", http.MethodGet, "/api/v2/tenants/"+tenantA+"/memberships", nil)
 	require.Equal(t, http.StatusForbidden, status, "suspended tenants reject new operations")
-	status, _ = client.do("provisioner", http.MethodPut, "/api/v2/provisioning/tenants/"+tenantA+"/status", map[string]any{"status": "DELETED"})
+	status, _ = client.do("provisioner", http.MethodPut, "/api/v2/provisioning/tenants/"+tenantA+"/status", map[string]any{"status": "RESTORING"})
 	require.Equal(t, http.StatusConflict, status, "lifecycle transitions are enforced")
+
+	status, deleted := client.do("provisioner", http.MethodPut, "/api/v2/provisioning/tenants/"+tenantA+"/status", map[string]any{"status": "DELETED"})
+	require.Equal(t, http.StatusOK, status, deleted)
+	require.Equal(t, "DELETED", deleted["status"], "suspended tenants are deleted directly")
+	status, mine = client.do("alice", http.MethodGet, "/api/v2/me/memberships", nil)
+	require.Equal(t, http.StatusOK, status)
+	require.Empty(t, mine["memberships"], "deleted tenants are not offered to their members")
+	status, _ = client.do("alice", http.MethodGet, "/api/v2/tenants/"+tenantA+"/memberships", nil)
+	require.Equal(t, http.StatusForbidden, status, "deleted tenants reject new operations")
 }
