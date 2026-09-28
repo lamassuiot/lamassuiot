@@ -1,0 +1,40 @@
+logs:
+  level: "info"
+
+server:
+  log_level: "debug"
+  listen_address: "0.0.0.0"
+  port: 8085
+  protocol: "http" #http | https
+  
+  authentication:
+    jwt:
+      enabled: true
+      audience: "lamassu"
+      issuer_jwks_urls:
+        "https://keycloak.example.com/realms/lamassu": "https://keycloak.example.com/realms/lamassu/protocol/openid-connect/certs"
+      allowed_algorithms:
+        - "RS256"
+      jwks_cache_ttl: "5m"
+  internal_listener:
+    enabled: true
+    port: 8443
+    cert_file: /internal-tls/tls.crt
+    key_file: /internal-tls/tls.key
+    client_ca_file: /internal-tls/ca.crt
+  tenant_rate_limit:
+    enabled: true
+    requests_per_second: 100
+    burst: 200
+
+openapi:
+  enabled: true
+
+provisioners: []
+storage:
+  log_level: "info"
+  provider: "postgres" #couch_db | postgres | dynamo_db
+  hostname: 
+  port: 5432
+  username: "lamassu_app"
+  password: ""

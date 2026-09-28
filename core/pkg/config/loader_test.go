@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -110,4 +111,32 @@ func TestLoadConfigFromUnsetEnv(t *testing.T) {
 	config, err := LoadConfig[TestServiceConfig](nil)
 	assert.Error(t, err)
 	assert.Nil(t, config)
+}
+
+// TestReadConfigIssuerWithDots comprueba que un issuer con puntos como clave de
+// issuer_jwks_urls se carga sin partirse y sin romper el resto de la
+// configuración anidada (005 T2).
+func TestReadConfigIssuerWithDots(t *testing.T) {
+	var defaults = TestServiceConfig{
+		SecretValue: Password("mysuperpass"),
+	}
+
+	config, err := readConfig[TestServiceConfig]("testdata/issuer-dots-config.yml", &defaults)
+	assert.NoError(t, err)
+	if !assert.NotNil(t, config) {
+		return
+	}
+
+	assert.Equal(t, map[string]string{
+		"https://keycloak.example.com/realms/lamassu": "https://keycloak.example.com/realms/lamassu/protocol/openid-connect/certs",
+		"https://login.example.org/tenant.a/v2.0":     "https://login.example.org/tenant.a/discovery/v2.0/keys",
+	}, config.HttpServer.Authentication.JWT.IssuerJWKSURLs)
+	assert.True(t, config.HttpServer.Authentication.JWT.Enabled)
+	assert.Equal(t, "lamassu", config.HttpServer.Authentication.JWT.Audience)
+	assert.Equal(t, []string{"RS256"}, config.HttpServer.Authentication.JWT.AllowedAlgorithms)
+	assert.Equal(t, 5*time.Minute, config.HttpServer.Authentication.JWT.JWKSCacheTTL)
+	assert.Equal(t, 7777, config.HttpServer.Port)
+	assert.Equal(t, "0.0.0.0", config.HttpServer.ListenAddress)
+	assert.Equal(t, LogLevel("info"), config.Logs.Level)
+	assert.Equal(t, Password("mysuperpass"), config.SecretValue)
 }
