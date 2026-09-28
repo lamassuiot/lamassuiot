@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +18,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devstorage"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/storage/sqlite"
@@ -86,41 +86,27 @@ const (
 )
 
 func main() {
-	standardDockerPorts := flag.Bool("standard-docker-ports", true, "use standard docker ports for services (RabbitMQ, Postgres, Vault, etc.)")
-
-	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
-
-	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")
-	awsIoTManagerAKID := flag.String("awsiot-keyid", "", "AWS IoT Manager AccessKeyID")
-	awsIoTManagerSAK := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
-	awsIoTManagerST := flag.String("awsiot-sessiontoken", "", "AWS IoT Manager SessionToken")
-	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
-	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
-	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem']")
-	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
-	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
-	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
-	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
-	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
-	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
-	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
-	flag.Parse()
+	opts, err := parseOptions(os.Args[1:], os.Stderr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid options: %s\n", err)
+		os.Exit(2)
+	}
 
 	fmt.Println("===================== FLAGS ======================")
 
-	fmt.Printf("AWS IoT Manager Enabled: %v\n", *awsIoTManager)
-	fmt.Printf("Sample Data Enabled: %v\n", *sampleData)
-	if *awsIoTManager {
-		ai := *awsIoTManagerID
+	fmt.Printf("AWS IoT Manager Enabled: %v\n", opts.awsIoTManager)
+	fmt.Printf("Sample Data Enabled: %v\n", opts.sampleData)
+	if opts.awsIoTManager {
+		ai := opts.awsIoTManagerID
 		fmt.Printf("AWS IoT Manager ConnectorID: %s\n", ai)
-		fmt.Printf("AWS IoT Manager AccessKey: %s\n", *awsIoTManagerAKID)
-		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", *awsIoTManagerSAK)
-		fmt.Printf("AWS IoT Manager SessionToken: %s\n", *awsIoTManagerST)
-		fmt.Printf("AWS IoT Manager Region: %s\n", *awsIoTManagerRegion)
+		fmt.Printf("AWS IoT Manager AccessKey: %s\n", opts.awsIoTManagerAKID)
+		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", opts.awsIoTManagerSAK)
+		fmt.Printf("AWS IoT Manager SessionToken: %s\n", opts.awsIoTManagerST)
+		fmt.Printf("AWS IoT Manager Region: %s\n", opts.awsIoTManagerRegion)
 	}
 
-	if *hsmModule != "" {
-		fmt.Printf("HSM - PKCS11 Module Driver: %s\n", *hsmModule)
+	if opts.hsmModule != "" {
+		fmt.Printf("HSM - PKCS11 Module Driver: %s\n", opts.hsmModule)
 	}
 
 	// By default, all crypto engines are enabled
@@ -132,9 +118,9 @@ func main() {
 		Filesystem:        {},
 	}
 
-	if (*cryptoengineOptions) != "" {
+	if opts.cryptoengineOptions != "" {
 		var err error
-		cryptoengineOptionsMap, err = parseCryptoEngineOptions(*cryptoengineOptions)
+		cryptoengineOptionsMap, err = parseCryptoEngineOptions(opts.cryptoengineOptions)
 		if err != nil {
 			log.Fatalf("could not parse crypto engine options: %s", err)
 		}
@@ -218,18 +204,17 @@ func main() {
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 
 	// Register monolithic-specific engines
-	if *useSqlite {
+	if opts.useSqlite {
 		sqlite.Register()
 	}
-	if *useInMemoryEventbus {
+	if opts.useInMemoryEventbus {
 		inmemory.Register()
 	}
 
 	fmt.Println("Storage Engine")
 	var storageConfig cconfig.PluggableStorageEngine
-	var err error
 
-	if *useSqlite {
+	if opts.useSqlite {
 		fmt.Println(">> using SQLite ...")
 		sqlite.Register()
 		storageConfig = cconfig.PluggableStorageEngine{
@@ -240,19 +225,33 @@ func main() {
 			},
 		}
 	} else {
-		fmt.Println(">> launching docker: Postgres ...")
-		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
-		backend, err := posgresSubsystem.Run(*standardDockerPorts)
+		pg, err := devstorage.Start(context.Background(), devstorage.StartOptions{
+			External:     opts.externalPostgres(),
+			StandardPort: opts.standardDockerPorts,
+		})
 		if err != nil {
-			log.Fatalf("could not launch Postgres: %s", err)
+			log.Fatalf("could not start PostgreSQL: %s", err)
+		}
+		if pg.Launched {
+			fmt.Println(">> launched docker: Postgres")
+			fmt.Printf(" 	-- postgres port: %d\n", pg.Admin.Port)
+			fmt.Printf(" 	-- postgres admin user: %s\n", pg.Admin.Username)
+			fmt.Printf(" 	-- postgres admin pass: %s\n", pg.Admin.Password)
+		} else {
+			fmt.Printf(">> using external Postgres %s:%d (admin user %s)\n", pg.Admin.Hostname, pg.Admin.Port, pg.Admin.Username)
 		}
 
-		storageConfig = backend.Config.(cconfig.PluggableStorageEngine)
-
-		fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Config["port"].(int))
-		fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Config["username"].(string))
-		fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
+		storageLogger := chelpers.SetupLogger(cconfig.Info, "Monolithic", "PostgreSQL")
+		prepared, err := devstorage.Prepare(context.Background(), storageLogger, pg.Admin)
+		if err != nil {
+			pg.Cleanup()
+			log.Fatalf("could not prepare PostgreSQL: %s", err)
+		}
+		storageConfig = prepared.Storage
+		fmt.Printf(" 	-- services connect as: %s (random password, row level security applies)\n", devstorage.AppRole)
+		for _, grant := range prepared.Grants {
+			fmt.Printf(" 	-- grant not provided by migrations: %s\n", grant)
+		}
 	}
 
 	fmt.Println("Crypto Engines")
@@ -261,7 +260,7 @@ func main() {
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
-		vaultSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run(*standardDockerPorts)
+		vaultSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run(opts.standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch Hashicorp Vault: %s", err)
 		}
@@ -280,7 +279,7 @@ func main() {
 	var awsBaseCryptoEngine cconfig.CryptoEngineConfig
 	if awsSecretsEnabled || awsKmsEnabled {
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
-		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run(*standardDockerPorts)
+		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run(opts.standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch AWS Platform: %s", err)
 		}
@@ -288,13 +287,13 @@ func main() {
 		awsBaseCryptoEngine = awsSubsystem.Config.(cconfig.CryptoEngineConfig)
 	}
 
-	hsmModulePath := *hsmModule
+	hsmModulePath := opts.hsmModule
 	var pkcs11Cfg cconfig.CryptoEngineConfig
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
 		pkcs11SubsystemBuilder.Prepare(map[string]interface{}{"hsmModulePath": hsmModulePath})
-		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run(*standardDockerPorts)
+		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run(opts.standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch SoftHSM: %s", err)
 		}
@@ -314,7 +313,7 @@ func main() {
 
 	dlqEventBus := eventBus
 
-	if !*disableEventbus && *useInMemoryEventbus {
+	if !opts.disableEventbus && opts.useInMemoryEventbus {
 		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
 		eventBus = cconfig.EventBusEngine{
 			LogLevel: cconfig.Trace,
@@ -327,9 +326,9 @@ func main() {
 		dlqEventBus.Config = make(map[string]interface{})
 
 		fmt.Println(" 	-- inmemory eventbus: ephemeral GoChannel pub/sub")
-	} else if !*disableEventbus && !*useAwsEventbus {
+	} else if !opts.disableEventbus && !opts.useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
-		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(*standardDockerPorts)
+		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(opts.standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch RabbitMQ: %s", err)
 		}
@@ -348,7 +347,7 @@ func main() {
 		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
 		fmt.Printf(" 	-- rabbitmq user: %s\n", basicAuth["username"].(string))
 		fmt.Printf(" 	-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
-	} else if !*disableEventbus && *useAwsEventbus {
+	} else if !opts.disableEventbus && opts.useAwsEventbus {
 		fmt.Println(">> using AWS Eventbus")
 		internalConfig := awsBaseCryptoEngine.Config
 
@@ -361,14 +360,14 @@ func main() {
 	}
 
 	var uiPort int
-	fmt.Printf(">> UI Enabled : %v\n", !*disableUI)
+	fmt.Printf(">> UI Enabled : %v\n", !opts.disableUI)
 
 	cloudConnectors := "[]"
-	if *awsIoTManagerID != "" {
-		cloudConnectors = fmt.Sprintf("[\"aws.%s\"]", *awsIoTManagerID)
+	if opts.awsIoTManagerID != "" {
+		cloudConnectors = fmt.Sprintf("[\"aws.%s\"]", opts.awsIoTManagerID)
 	}
 
-	if !*disableUI {
+	if !opts.disableUI {
 		containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
 			Tag:        "latest",                        // version
@@ -465,20 +464,20 @@ func main() {
 		AssemblyMode:          pkg.Http,
 		CryptoEngines:         cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
-			Enabled:   !*disableMonitor,
+			Enabled:   !opts.disableMonitor,
 			Frequency: "2m",
 		},
 		Storage:            *pluglableStorageConfig,
-		PopulateSampleData: *sampleData,
+		PopulateSampleData: opts.sampleData,
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
-			Enabled:     *awsIoTManager,
-			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
+			Enabled:     opts.awsIoTManager,
+			ConnectorID: fmt.Sprintf("aws.%s", opts.awsIoTManagerID),
 			AWSSDKConfig: laws.AWSSDKConfig{
 				AWSAuthenticationMethod: laws.Static,
-				AccessKeyID:             *awsIoTManagerAKID,
-				SecretAccessKey:         cconfig.Password(*awsIoTManagerSAK),
-				SessionToken:            cconfig.Password(*awsIoTManagerST),
-				Region:                  *awsIoTManagerRegion,
+				AccessKeyID:             opts.awsIoTManagerAKID,
+				SecretAccessKey:         cconfig.Password(opts.awsIoTManagerSAK),
+				SessionToken:            cconfig.Password(opts.awsIoTManagerST),
+				Region:                  opts.awsIoTManagerRegion,
 			},
 		},
 	}
@@ -512,7 +511,7 @@ func main() {
 	fmt.Println("========================================================================")
 
 	// Populate sample data if enabled
-	if *sampleData {
+	if opts.sampleData {
 		logger := chelpers.SetupLogger(cconfig.Info, "SampleData", "Populator")
 		// Use the internal HTTP ports since services are behind the gateway
 		// We'll construct URLs using the gateway
