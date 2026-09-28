@@ -118,7 +118,7 @@ func TestTenantHandlerFlowsReachServicesWithValidatedContextAndDenyTenantB(t *te
 			register: func(root *gin.RouterGroup, options *routesTenantOptions) {
 				service := new(svcmock.MockCAService)
 				service.On("GetCAByID", validatedHandlerFlowContext(), mock.Anything).Return(&models.CACertificate{ID: "ca-a"}, nil).Once()
-				NewCAHTTPLayer(root, service, options.routes)
+				NewCAHTTPLayer(logrus.NewEntry(logrus.New()), root, service, options.routes)
 				options.assertA = func(t *testing.T) { service.AssertNumberOfCalls(t, "GetCAByID", 1) }
 				options.assertB = func(t *testing.T) { service.AssertNumberOfCalls(t, "GetCAByID", 1) }
 			},
@@ -243,7 +243,7 @@ func TestEveryAdministrativeHandlerReachesServiceForAAndDeniesB(t *testing.T) {
 		"ca": func(root *gin.RouterGroup, tracker *handlerFlowServiceTracker) {
 			service := new(svcmock.MockCAService)
 			registerHandlerFlowMockMethods(&service.Mock, reflect.TypeOf((*services.CAService)(nil)).Elem(), tracker)
-			NewCAHTTPLayer(root, service, options)
+			NewCAHTTPLayer(logrus.NewEntry(logrus.New()), root, service, options)
 		},
 		"kms": func(root *gin.RouterGroup, tracker *handlerFlowServiceTracker) {
 			service := new(svcmock.MockKMSService)

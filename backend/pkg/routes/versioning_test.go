@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/sirupsen/logrus"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -175,7 +176,7 @@ func TestTenantAwareV1AppliesDefaultTenantAndPermission(t *testing.T) {
 func TestTenantAwareRoutesFailClosedWhenNotConfigured(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewCAHTTPLayer(router.Group("/"), nil)
+	NewCAHTTPLayer(logrus.NewEntry(logrus.New()), router.Group("/"), nil)
 
 	for path, wantStatus := range map[string]int{
 		"/api/v2/tenants/tenant-a/cas": http.StatusInternalServerError,

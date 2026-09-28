@@ -11,7 +11,7 @@ import (
 func TestCAAndKMSRoutesPublishV1AndTenantAwareV2Contracts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	caRoutes := registeredRoutes(func(group *gin.RouterGroup) {
-		NewCAHTTPLayer(group, nil)
+		NewCAHTTPLayer(logrus.NewEntry(logrus.New()), group, nil)
 	})
 	kmsRoutes := registeredRoutes(func(group *gin.RouterGroup) {
 		NewKMSHTTPLayer(logrus.NewEntry(logrus.New()), group, nil)

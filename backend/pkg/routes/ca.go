@@ -5,10 +5,11 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	tenantcontext "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/tenant-context"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/sirupsen/logrus"
 )
 
-func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService, options ...TenantRouteOptions) {
-	routes := controllers.NewCAHttpRoutes(svc)
+func NewCAHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, svc services.CAService, options ...TenantRouteOptions) {
+	routes := controllers.NewCAHttpRoutes(logger, svc)
 	config := tenantRouteOptions(options)
 	v1, v2 := TenantAwareGroups(parentRouterGroup, config)
 	register := func(router *gin.RouterGroup) {

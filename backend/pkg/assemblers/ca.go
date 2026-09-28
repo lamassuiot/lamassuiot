@@ -35,7 +35,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 
 	httpEngine := routes.NewGinEngineWithCORS(lHttp, conf.Server.CORSAllowedOrigins, tenantOptions.JWTValidator)
 	httpGrp := httpEngine.Group("/")
-	routes.NewCAHTTPLayer(httpGrp, *caService, tenantOptions)
+	routes.NewCAHTTPLayer(lHttp, httpGrp, *caService, tenantOptions)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)

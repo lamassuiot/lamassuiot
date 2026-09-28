@@ -9,15 +9,18 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/sirupsen/logrus"
 )
 
 type caHttpRoutes struct {
-	svc services.CAService
+	logger *logrus.Entry
+	svc    services.CAService
 }
 
-func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
+func NewCAHttpRoutes(logger *logrus.Entry, svc services.CAService) *caHttpRoutes {
 	return &caHttpRoutes{
-		svc: svc,
+		logger: logger,
+		svc:    svc,
 	}
 }
 
@@ -65,7 +68,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		case errs.ErrCAAlreadyExists:
 			ctx.JSON(409, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not create CA")
 		}
 		return
 	}
@@ -94,7 +97,7 @@ func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get stats")
 		}
 
 		return
@@ -131,7 +134,7 @@ func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get stats")
 		}
 
 		return
@@ -195,7 +198,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		case errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not import CA")
 		}
 
 		return
@@ -242,7 +245,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update CA")
 		}
 
 		return
@@ -281,7 +284,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list CAs")
 		}
 
 		return
@@ -323,7 +326,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list CAs")
 		}
 
 		return
@@ -369,7 +372,7 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get CA")
 		}
 
 		return
@@ -421,7 +424,7 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 		case errs.ErrCascadeDeleteNotAllowed:
 			ctx.JSON(403, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not delete CA")
 		}
 
 		return
@@ -464,7 +467,7 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 		case errs.ErrCertificateStatusTransitionNotAllowed:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update CA")
 		}
 
 		return
@@ -504,7 +507,7 @@ func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update CA")
 		}
 
 		return
@@ -547,7 +550,7 @@ func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
 		case errs.ErrCAExpired:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not reissue CA")
 		}
 
 		return
@@ -588,7 +591,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get certificate")
 		}
 
 		return
@@ -627,7 +630,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list certificates")
 		}
 
 		return
@@ -671,7 +674,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list certificates")
 		}
 
 		return
@@ -731,7 +734,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 		case errs.ErrCANotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list certificates")
 		}
 
 		return
@@ -788,7 +791,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 		case errs.ErrCAStatus:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not sign certificate")
 		}
 
 		return
@@ -835,7 +838,7 @@ func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 		case errs.ErrCANotFound, errs.ErrKeyNotFound, errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not create certificate")
 		}
 		return
 	}
@@ -877,7 +880,7 @@ func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 		case errs.ErrCANotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not sign message")
 		}
 
 		return
@@ -929,7 +932,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 		case errs.ErrCANotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not verify signature")
 		}
 
 		return
@@ -981,7 +984,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list certificates")
 		}
 
 		return
@@ -1030,7 +1033,7 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list certificates")
 		}
 
 		return
@@ -1087,7 +1090,7 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update certificate")
 		}
 
 		return
@@ -1126,7 +1129,7 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update certificate")
 		}
 		return
 	}
@@ -1167,7 +1170,7 @@ func (r *caHttpRoutes) DeleteCertificate(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not delete certificate")
 		}
 
 		return
@@ -1191,7 +1194,7 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not import certificate")
 		}
 		return
 	}
@@ -1218,7 +1221,7 @@ func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list issuance profiles")
 		}
 
 		return
@@ -1250,7 +1253,7 @@ func (r *caHttpRoutes) GetIssuanceProfileByID(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get issuance profile")
 		}
 
 		return
@@ -1292,7 +1295,7 @@ func (r *caHttpRoutes) CreateIssuanceProfile(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not create issuance profile")
 		}
 
 		return
@@ -1346,7 +1349,7 @@ func (r *caHttpRoutes) UpdateIssuanceProfile(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update issuance profile")
 		}
 
 		return
@@ -1373,11 +1376,19 @@ func (r *caHttpRoutes) DeleteIssuanceProfile(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not delete issuance profile")
 		}
 
 		return
 	}
 
 	ctx.JSON(204, gin.H{})
+}
+
+// writeInternalError responde con un 500 genérico y uniforme y deja el error
+// real (driver, PostgreSQL o engine) solo en el log del servicio, para no
+// revelar detalles internos ni de otro tenant (004 T4.10).
+func (r *caHttpRoutes) writeInternalError(ctx *gin.Context, err error, generic string) {
+	helpers.ConfigureLogger(ctx.Request.Context(), r.logger).WithError(err).Errorf("%s %s: %s", ctx.Request.Method, ctx.FullPath(), generic)
+	ctx.JSON(500, gin.H{"err": generic})
 }

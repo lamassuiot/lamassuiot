@@ -308,7 +308,7 @@ func setup(t *testing.T, tenantCount int, rateLimit cconfig.HttpServerTenantRate
 	logger := logrus.NewEntry(logrus.New())
 	logger.Logger.SetLevel(logrus.ErrorLevel)
 	engine := routes.NewGinEngine(logger)
-	routes.NewCAHTTPLayer(engine.Group("/"), ca.Service, options)
+	routes.NewCAHTTPLayer(logger, engine.Group("/"), ca.Service, options)
 	server := httptest.NewServer(engine)
 	t.Cleanup(server.Close)
 

@@ -31,7 +31,7 @@ func TestTenantAdministrativeEndpointPermissionMatrix(t *testing.T) {
 		},
 	}
 	registrars := map[string]func(*gin.RouterGroup){
-		"ca":             func(root *gin.RouterGroup) { NewCAHTTPLayer(root, nil, options) },
+		"ca":             func(root *gin.RouterGroup) { NewCAHTTPLayer(logrus.NewEntry(logrus.New()), root, nil, options) },
 		"kms":            func(root *gin.RouterGroup) { NewKMSHTTPLayer(logrus.NewEntry(logrus.New()), root, nil, options) },
 		"device-manager": func(root *gin.RouterGroup) { NewDeviceManagerHTTPLayer(root, nil, options) },
 		"dms-manager": func(root *gin.RouterGroup) {
