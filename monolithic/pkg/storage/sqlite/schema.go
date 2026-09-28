@@ -142,16 +142,18 @@ func initializeSchema(db *gorm.DB) error {
 
 		// Events table - Final state (no migrations)
 		`CREATE TABLE IF NOT EXISTS events (
+			tenant_id TEXT NOT NULL,
 			event_type TEXT NOT NULL,
 			event TEXT NULL,
 			last_seen DATETIME NULL,
 			total_seen INTEGER NULL,
-			PRIMARY KEY (event_type)
+			PRIMARY KEY (tenant_id, event_type)
 		)`,
 
 		// Subscriptions table - Final state (no migrations)
 		`CREATE TABLE IF NOT EXISTS subscriptions (
 			id TEXT NOT NULL,
+			tenant_id TEXT NOT NULL,
 			user_id TEXT NULL,
 			event_type TEXT NULL,
 			subscription_date DATETIME NULL,

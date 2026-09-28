@@ -171,3 +171,7 @@ return nil, err
 }
 return s.KMS, nil
 }
+
+func (s *SQLiteStorageEngine) GetControlPlaneMembershipStorage() (storage.ControlPlaneMembershipRepo, error) {
+	return nil, fmt.Errorf("control plane tenant storage is not supported by sqlite")
+}
