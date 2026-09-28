@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -119,12 +120,7 @@ func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		writeKeyWriteError(ctx, err, errs.ErrKeyCreationFailed)
 		return
 	}
 
@@ -163,16 +159,25 @@ func (r *kmsHttpRoutes) ImportKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		writeKeyWriteError(ctx, err, errs.ErrKeyImportFailed)
 		return
 	}
 
 	ctx.JSON(201, key)
+}
+
+// writeKeyWriteError responde a un fallo al crear o importar una clave: 400 y
+// 409 con su error, y para el resto un 500 genérico sin el texto del driver ni
+// del engine, que queda en el log del servicio (004 T4.5).
+func writeKeyWriteError(ctx *gin.Context, err error, generic error) {
+	switch {
+	case errors.Is(err, errs.ErrValidateBadRequest):
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+	case errors.Is(err, errs.ErrKeyAlreadyExists):
+		ctx.JSON(409, gin.H{"err": errs.ErrKeyAlreadyExists.Error()})
+	default:
+		ctx.JSON(500, gin.H{"err": generic.Error()})
+	}
 }
 
 func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {

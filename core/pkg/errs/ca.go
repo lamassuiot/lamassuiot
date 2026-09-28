@@ -29,7 +29,10 @@ var (
 	ErrIssuanceProfileNotFound error = errors.New("issuance profile not found")
 
 	//KMS
-	ErrKeyNotFound error = errors.New("key not found")
+	ErrKeyNotFound       error = errors.New("key not found")
+	ErrKeyAlreadyExists  error = errors.New("key already exists")
+	ErrKeyImportFailed   error = errors.New("could not import key")
+	ErrKeyCreationFailed error = errors.New("could not create key")
 
 	// CreateCertificate
 	ErrInvalidKeySpec error = errors.New("invalid key spec: exactly one of (Type+Bits) or KeyIdentifier must be provided")

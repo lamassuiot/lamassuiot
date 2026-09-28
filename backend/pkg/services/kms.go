@@ -578,8 +578,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	var (
-		keyID     string
-		signer    crypto.Signer
+		publicKey crypto.PublicKey
 		algorithm string
 		size      int
 	)
@@ -588,39 +587,49 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	case *rsa.PrivateKey:
 		size = k.N.BitLen()
 		algorithm = "RSA"
-
-		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
-		if err != nil {
-			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
-			return nil, err
-		}
-
-		keyID, signer, err = engineInstance.ImportRSAPrivateKey(k)
+		publicKey = &k.PublicKey
 	case *ecdsa.PrivateKey:
 		size = k.Params().BitSize
 		algorithm = "ECDSA"
-
-		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
-		if err != nil {
-			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
-			return nil, err
-		}
-
-		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(k)
+		publicKey = &k.PublicKey
 	default:
 		lFunc.Errorf("unsupported private key type")
 		return nil, errors.New("unsupported private key type")
 	}
+
+	err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
 	if err != nil {
-		lFunc.Errorf("failed to import private key: %s", err)
-		return nil, errors.New("failed to import private key")
+		lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+		return nil, err
 	}
 
-	publicKey := signer.Public()
-	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	// 004 T4.5: el keyID se calcula antes de escribir para detectar el
+	// duplicado del propio tenant sin tocar el engine.
+	keyID, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(publicKey)
+	if err != nil {
+		lFunc.Errorf("could not compute the key ID: %s", err)
+		return nil, errs.ErrKeyImportFailed
+	}
+	exists, _, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID)
+	if err != nil {
+		lFunc.Errorf("could not check if key %s exists: %s", keyID, err)
+		return nil, errs.ErrKeyImportFailed
+	}
+	if exists {
+		lFunc.Infof("key %s already exists in this tenant", keyID)
+		return nil, errs.ErrKeyAlreadyExists
+	}
+
+	signer, written, err := svc.writeOrAdoptKeyMaterial(lFunc, engineInstance, keyID, input.PrivateKey, publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(signer.Public())
 	if err != nil {
 		lFunc.Errorf("failed to marshal public key: %s", err)
-		return nil, errors.New("failed to marshal public key")
+		svc.removeWrittenKeyMaterial(lFunc, engineInstance, keyID, written)
+		return nil, errs.ErrKeyImportFailed
 	}
 
 	pemBlockPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
@@ -653,7 +662,69 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		Metadata:      metadata,
 	}
 
-	return svc.kmsStorage.Insert(ctx, &kmsKey)
+	inserted, err := svc.kmsStorage.Insert(ctx, &kmsKey)
+	if err != nil {
+		lFunc.Errorf("could not store key %s: %s", keyID, err)
+		// Si otra petición del mismo tenant insertó la fila entre la
+		// comprobación y la inserción, el material es suyo: no se borra.
+		if exists, _, lookupErr := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID); lookupErr == nil && exists {
+			return nil, errs.ErrKeyAlreadyExists
+		}
+		svc.removeWrittenKeyMaterial(lFunc, engineInstance, keyID, written)
+		return nil, errs.ErrKeyImportFailed
+	}
+
+	return inserted, nil
+}
+
+// writeOrAdoptKeyMaterial escribe la clave en el engine del tenant o, si el
+// engine ya tiene material con ese keyID y la misma clave pública (huérfano del
+// propio tenant), lo adopta sin reescribirlo. written indica si esta llamada
+// escribió material.
+func (svc *KMSServiceBackend) writeOrAdoptKeyMaterial(lFunc *logrus.Entry, engine cryptoengines.CryptoEngine, keyID string, privateKey any, publicKey crypto.PublicKey) (crypto.Signer, bool, error) {
+	if existing, err := engine.GetPrivateKeyByID(keyID); err == nil && existing != nil {
+		comparable, ok := existing.Public().(interface{ Equal(crypto.PublicKey) bool })
+		if !ok || !comparable.Equal(publicKey) {
+			lFunc.Errorf("engine material for key %s does not match the imported public key", keyID)
+			return nil, false, errs.ErrKeyImportFailed
+		}
+		lFunc.Infof("adopting existing engine material for key %s", keyID)
+		return existing, false, nil
+	}
+
+	var (
+		writtenID string
+		signer    crypto.Signer
+		err       error
+	)
+	switch k := privateKey.(type) {
+	case *rsa.PrivateKey:
+		writtenID, signer, err = engine.ImportRSAPrivateKey(k)
+	case *ecdsa.PrivateKey:
+		writtenID, signer, err = engine.ImportECDSAPrivateKey(k)
+	default:
+		return nil, false, errors.New("unsupported private key type")
+	}
+	if err != nil {
+		lFunc.Errorf("failed to import private key: %s", err)
+		return nil, false, errs.ErrKeyImportFailed
+	}
+	if writtenID != keyID {
+		lFunc.Errorf("engine stored key %s under unexpected ID %s", keyID, writtenID)
+		return nil, false, errs.ErrKeyImportFailed
+	}
+	return signer, true, nil
+}
+
+// removeWrittenKeyMaterial borra lo que escribió esta llamada, nunca material
+// que ya existía antes.
+func (svc *KMSServiceBackend) removeWrittenKeyMaterial(lFunc *logrus.Entry, engine cryptoengines.CryptoEngine, keyID string, written bool) {
+	if !written {
+		return
+	}
+	if err := engine.DeleteKey(keyID); err != nil {
+		lFunc.Errorf("could not remove key material %s after a failed import: %s", keyID, err)
+	}
 }
 
 func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size int, engine cryptoengines.CryptoEngine) error {
