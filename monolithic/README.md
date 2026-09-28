@@ -110,7 +110,7 @@ Tras arrancar, el monolito:
 
 1. busca o crea, como `provisioner`, la organización «Demo» y el tenant «Demo» con `demo-admin` como `tenant_admin`;
 2. como `demo-admin`, da `pki_admin` a `sample-data` y `operator` a `demo-operator`;
-3. crea por las rutas v2 de «Demo» perfiles, dos CA raíz (una con clave importada en KMS con un token `SERVICE` de `sample-data`), certificados, un DMS (como `demo-admin`, que tiene `dms.write`) y 50 dispositivos, 10 de ellos con certificado (como `demo-operator`).
+3. crea por las rutas v2 de «Demo» perfiles, dos CA raíz (una con una clave generada en cada arranque e importada en KMS con un token `SERVICE` de `sample-data`), certificados, un DMS (como `demo-admin`, que tiene `dms.write`) y 50 dispositivos, 10 de ellos con certificado (como `demo-operator`).
 
 Un fallo no para el monolito: se avisa con el paso que falló. Si ya existía un tenant «Demo» de otro emisor (base reutilizada), se avisa y no se crean datos. Si `-provisioner` sustituye al provisioner por defecto, la provisión da `403` y también se avisa.
 
@@ -224,7 +224,7 @@ Valida en local: provisión y ciclo de vida simple de tenants, memberships y sus
 
 **No valida** (sigue siendo trabajo del despliegue real, gate G5 de `001-328`):
 
-- el gateway Envoy y sus reglas (el proxy del monolito solo reproduce los prefijos);
+- el gateway Envoy y sus reglas (el proxy del monolito solo reproduce los prefijos). En particular, el proxy local **no sanea `x-forwarded-client-cert`**: pasa al servicio las cabeceras que manda el cliente y solo añade la del certificado TLS presentado, mientras que Envoy la sustituye (`forward_client_cert_details: SANITIZE`). Un cliente local puede mandar su propia cabecera con cualquier certificado, así que las pruebas de EST y de autenticación de dispositivos por certificado contra el monolito no valen como prueba del gateway;
 - Keycloak/Cognito ni un flujo OIDC real (login, refresh); el emisor local no es un IdP;
 - el chart de Helm, sus values, secretos, migraciones como Job y su orden de arranque;
 - HSM real, Vault/AWS con permisos reales, carga y escalado;
@@ -233,7 +233,7 @@ Valida en local: provisión y ciclo de vida simple de tenants, memberships y sus
 
 ## Límites conocidos
 
-- El motor `filesystem` guarda las claves de las CA en `/tmp/gotest` y VA usa `/tmp/lamassuiot/va`, fuera del directorio propio: no se borran al salir.
+- El motor `filesystem` guarda las claves de las CA en `/tmp/gotest` y VA usa `/tmp/lamassuiot/va`, fuera del directorio propio: no se borran al salir. `-sample-data` no choca con las claves de arranques anteriores porque la clave que importa es nueva en cada arranque; para liberar espacio, `rm -rf /tmp/gotest /tmp/lamassuiot/va` con el monolito parado.
 - Con PostgreSQL en Docker, la base es desechable: cada arranque empieza vacío (salvo el tenant por defecto de las migraciones).
 - La reserva de puertos internos tiene una carrera pequeña (decisión D7): si otro proceso toma el puerto, el arranque falla con «address already in use» y basta con repetirlo.
 - El SDK solo promueve `/v1/…` a v2 cuando la URL base no tiene ruta: para usar el SDK contra el monolito, apunta al puerto del servicio (como hace `-sample-data`), no al proxy con prefijo.

@@ -9,7 +9,7 @@ The sample data generator creates:
 ### Certificate Authorities
 
 1. **Imported Root CA** (`sample-imported-root-ca`)
-   - Uses the embedded ECDSA P-256 private key from `ecdsa_p256_key.pem`
+   - Uses an ECDSA P-256 private key generated on every start and imported into KMS
    - Self-signed certificate with 10-year validity
    - Imported into the system via the ImportCA API
 
@@ -57,9 +57,7 @@ The `PopulateSampleData` function is called during service initialization and cr
 
 ## Private Key
 
-The ECDSA P-256 private key in `ecdsa_p256_key.pem` is embedded into the binary at compile time using Go's `//go:embed` directive. This allows the imported CA to be created consistently across different environments without requiring external key files.
-
-**Note**: This key is for development/testing purposes only and should not be used in production environments.
+The private key of the imported CA is generated on every start (outside KMS) and then imported with the ImportKey API. It is not a fixed, embedded key: the `filesystem` crypto engine names each key file after the key's hash, and the development binary keeps its keys in `/tmp/gotest` across starts, so a fixed key made the second start on the same machine fail with `file exists`.
 
 ## Certificate Details
 

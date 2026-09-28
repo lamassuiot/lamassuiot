@@ -39,10 +39,11 @@ func TestMain(m *testing.M) {
 }
 
 type monolith struct {
-	rt       *devruntime.Runtime
-	routes   map[string]int
-	httpsURL string
-	client   *http.Client
+	rt        *devruntime.Runtime
+	routes    map[string]int
+	httpsURL  string
+	client    *http.Client
+	cryptoDir string
 }
 
 var shared *monolith
@@ -51,9 +52,17 @@ var shared *monolith
 // multitenant con el emisor local, eventbus en memoria y crypto filesystem.
 func startMonolith(t *testing.T) *monolith {
 	t.Helper()
-	if shared != nil {
-		return shared
+	if shared == nil {
+		shared = launchMonolith(t, "")
 	}
+	return shared
+}
+
+// launchMonolith lanza un PostgreSQL propio y un monolito sobre él, como un
+// arranque del binario. Con cryptoDir vacío usa un directorio crypto nuevo;
+// si no, el indicado, que persiste entre arranques como /tmp/gotest.
+func launchMonolith(t *testing.T, cryptoDir string) *monolith {
+	t.Helper()
 	ctx := context.Background()
 	pgStarted, err := devstorage.Start(ctx, devstorage.StartOptions{StandardPort: false})
 	if err != nil {
@@ -70,6 +79,9 @@ func startMonolith(t *testing.T) *monolith {
 		t.Fatal(err)
 	}
 	cleanups = append(cleanups, func() { _ = os.RemoveAll(dir) })
+	if cryptoDir == "" {
+		cryptoDir = filepath.Join(dir, "crypto")
+	}
 	rt, err := devruntime.Start(devruntime.Options{Dir: filepath.Join(dir, "runtime"), DevIssuer: true})
 	if err != nil {
 		t.Fatalf("devruntime.Start: %v", err)
@@ -90,7 +102,7 @@ func startMonolith(t *testing.T) *monolith {
 			ID:       "filesystem-test-1",
 			Type:     cconfig.FilesystemProvider,
 			Metadata: map[string]interface{}{},
-			Config:   map[string]interface{}{"storage_directory": filepath.Join(dir, "crypto")},
+			Config:   map[string]interface{}{"storage_directory": cryptoDir},
 		}},
 		Monitoring:   cconfig.MonitoringJob{Enabled: false, Frequency: "2m"},
 		Domains:      []string{"localhost"},
@@ -101,7 +113,7 @@ func startMonolith(t *testing.T) *monolith {
 	if err != nil {
 		t.Fatalf("AssembleMonolith: %v", err)
 	}
-	shared = &monolith{
+	return &monolith{
 		rt:       rt,
 		routes:   assembled.ProxyRoutes,
 		httpsURL: fmt.Sprintf("https://127.0.0.1:%d", assembled.HTTPSPort),
@@ -109,8 +121,8 @@ func startMonolith(t *testing.T) *monolith {
 			Timeout:   30 * time.Second,
 			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
 		},
+		cryptoDir: cryptoDir,
 	}
-	return shared
 }
 
 // options son las del arranque real: puertos directos de los servicios y
@@ -246,5 +258,36 @@ func TestPopulateSampleDataNamesTheFailedStep(t *testing.T) {
 	_, err = sampledata.PopulateSampleData(context.Background(), logger, opts)
 	if err == nil || !strings.Contains(err.Error(), "token") {
 		t.Errorf("error sin el paso fallido: %v", err)
+	}
+}
+
+// TestPopulateSampleDataOnSecondStartWithSameCryptoDir: requisitos 9.1 y 9.2
+// en un segundo arranque en el mismo equipo. El binario guarda las claves del
+// motor filesystem en /tmp/gotest, que no se borra: un arranque nuevo (con su
+// PostgreSQL vacío) sobre el directorio crypto de uno anterior tiene que crear
+// otra vez todos los datos de ejemplo, sin avisos.
+func TestPopulateSampleDataOnSecondStartWithSameCryptoDir(t *testing.T) {
+	first := startMonolith(t)
+	logger := chelpers.SetupLogger(cconfig.Info, "SampleData", "Test")
+	if _, err := sampledata.PopulateSampleData(context.Background(), logger, first.options()); err != nil {
+		t.Fatalf("primer arranque: %v", err)
+	}
+
+	second := launchMonolith(t, first.cryptoDir)
+	result, err := sampledata.PopulateSampleData(context.Background(), logger, second.options())
+	if err != nil {
+		t.Fatalf("segundo arranque: %v", err)
+	}
+	if len(result.Warnings) > 0 {
+		t.Errorf("avisos en el segundo arranque: %v", result.Warnings)
+	}
+	status, body := second.get(t, "/api/ca/api/v2/tenants/"+result.TenantID+"/cas", sampledata.SampleDataSubject)
+	if status != http.StatusOK {
+		t.Fatalf("GET cas: %d %.300s", status, body)
+	}
+	for _, id := range []string{"sample-generated-root-ca", "sample-imported-root-ca"} {
+		if !strings.Contains(body, id) {
+			t.Errorf("la CA %s no está en el tenant Demo del segundo arranque: %.500s", id, body)
+		}
 	}
 }

@@ -7,8 +7,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	_ "embed"
-	"encoding/pem"
 	"fmt"
 	"time"
 
@@ -16,9 +14,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
-
-//go:embed ecdsa_p256_key.pem
-var embeddedPrivateKey []byte
 
 // populate crea los datos de ejemplo con los clientes SDK ya autenticados y
 // con el contexto de tenant en ctx (rutas v2 del tenant de demostración).
@@ -1021,17 +1016,17 @@ func generateAndSignCertificate(ctx context.Context, caService services.CAServic
 	return signedCert, nil
 }
 
-// importKeyAndCreateCA imports a private key into KMS and creates a CA using that key
+// importKeyAndCreateCA imports a private key into KMS and creates a CA using that key.
+//
+// La clave se genera en cada arranque, fuera de KMS, y se importa: el motor
+// filesystem nombra el fichero por el hash de la clave y el binario guarda
+// las claves en /tmp/gotest, que persiste entre arranques. Con una clave fija,
+// el segundo arranque en el mismo equipo fallaba con «file exists» (spec 009,
+// seguimiento de la revisión).
 func importKeyAndCreateCA(ctx context.Context, logger *logrus.Entry, kmsService services.KMSService, caService services.CAService, profileID string) (string, error) {
-	// Parse the embedded private key
-	block, _ := pem.Decode(embeddedPrivateKey)
-	if block == nil {
-		return "", fmt.Errorf("failed to decode PEM block containing private key")
-	}
-
-	privateKey, err := x509.ParseECPrivateKey(block.Bytes)
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse EC private key: %w", err)
+		return "", fmt.Errorf("failed to generate the key to import: %w", err)
 	}
 
 	// Step 1: Import the private key into KMS
