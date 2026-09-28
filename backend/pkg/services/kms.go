@@ -34,6 +34,9 @@ type Engine struct {
 	Default  bool
 	TenantID string
 	Service  cryptoengines.CryptoEngine
+	// DeriveForTenant construye la instancia por tenant de un engine global.
+	// Si es nil, el engine global se comparte entre tenants.
+	DeriveForTenant TenantEngineDeriver
 }
 
 type KMSServiceBackend struct {
@@ -41,6 +44,8 @@ type KMSServiceBackend struct {
 	kmsStorage            storage.KMSKeysRepo
 	cryptoEngines         map[string]*cryptoengines.CryptoEngine
 	engineTenants         map[string]string
+	engineDerivers        map[string]TenantEngineDeriver
+	tenantEngines         *tenantEngineCache
 	defaultCryptoEngine   *cryptoengines.CryptoEngine
 	defaultCryptoEngineID string
 	logger                *logrus.Entry
@@ -59,6 +64,7 @@ func NewKMSService(builder KMSServiceBuilder) (services.KMSService, error) {
 
 	engines := map[string]*cryptoengines.CryptoEngine{}
 	engineTenants := map[string]string{}
+	engineDerivers := map[string]TenantEngineDeriver{}
 	var defaultCryptoEngine *cryptoengines.CryptoEngine
 	var defaultCryptoEngineID string
 
@@ -66,6 +72,8 @@ func NewKMSService(builder KMSServiceBuilder) (services.KMSService, error) {
 		engines[engineID] = &engineInstance.Service
 		if engineInstance.TenantID != "" {
 			engineTenants[engineID] = engineInstance.TenantID
+		} else if engineInstance.DeriveForTenant != nil {
+			engineDerivers[engineID] = engineInstance.DeriveForTenant
 		}
 		if engineInstance.Default {
 			defaultCryptoEngine = &engineInstance.Service
@@ -80,6 +88,8 @@ func NewKMSService(builder KMSServiceBuilder) (services.KMSService, error) {
 	svc := &KMSServiceBackend{
 		cryptoEngines:         engines,
 		engineTenants:         engineTenants,
+		engineDerivers:        engineDerivers,
+		tenantEngines:         newTenantEngineCache(),
 		defaultCryptoEngine:   defaultCryptoEngine,
 		defaultCryptoEngineID: defaultCryptoEngineID,
 		kmsStorage:            builder.KMSStorage,
@@ -206,15 +216,13 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 }
 
 // Helper to get engine and signer
-func (svc *KMSServiceBackend) getEngineAndSigner(engineID, keyID string) (*cryptoengines.CryptoEngine, crypto.Signer, error) {
-	engine, ok := svc.cryptoEngines[engineID]
-	if !ok {
-		return nil, nil, errors.New("engine not found")
+func (svc *KMSServiceBackend) getEngineAndSigner(ctx context.Context, engineID, keyID string) (cryptoengines.CryptoEngine, crypto.Signer, error) {
+	engine, err := svc.resolveEngine(ctx, engineID)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	engineInstance := *engine
-
-	signer, err := engineInstance.GetPrivateKeyByID(keyID)
+	signer, err := engine.GetPrivateKeyByID(keyID)
 	if err != nil || signer == nil {
 		return nil, nil, errors.New("could not get signing key")
 	}
@@ -227,7 +235,7 @@ type kmsOperationSetup struct {
 	IsRSA  bool
 	IsPSS  bool
 	Signer crypto.Signer
-	Engine *cryptoengines.CryptoEngine
+	Engine cryptoengines.CryptoEngine
 }
 
 func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
@@ -254,7 +262,7 @@ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifie
 	}
 
 	// Get engine and signer
-	engine, signer, err := svc.getEngineAndSigner(key.EngineID, key.KeyID)
+	engine, signer, err := svc.getEngineAndSigner(ctx, key.EngineID, key.KeyID)
 	if err != nil {
 		return nil, err
 	}
@@ -451,27 +459,15 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	var engine *cryptoengines.CryptoEngine
-	engineID := ""
-	var ok bool
-
-	if input.EngineID == "" {
-		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+	engineID := input.EngineID
+	if engineID == "" {
 		engineID = svc.defaultCryptoEngineID
-	} else {
-		engine, ok = svc.cryptoEngines[input.EngineID]
-		engineID = input.EngineID
 	}
-
-	if !ok {
-		lFunc.Errorf("engine with id %s not found", engineID)
-		return nil, fmt.Errorf("crypto engine not found")
-	}
-	if err := svc.validateEngineTenant(ctx, engineID); err != nil {
+	engineInstance, err := svc.resolveEngine(ctx, engineID)
+	if err != nil {
+		lFunc.Errorf("could not resolve engine with id %s: %s", engineID, err)
 		return nil, err
 	}
-
-	engineInstance := *engine
 
 	var (
 		keyID  string
@@ -571,27 +567,15 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	// Check if EngineID is provided, otherwise use default
-	var engine *cryptoengines.CryptoEngine
-	engineID := ""
-	var ok bool
-
-	if input.EngineID == "" {
-		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+	engineID := input.EngineID
+	if engineID == "" {
 		engineID = svc.defaultCryptoEngineID
-	} else {
-		engine, ok = svc.cryptoEngines[input.EngineID]
-		engineID = input.EngineID
 	}
-
-	if !ok {
-		lFunc.Errorf("engine with id %s not found", engineID)
-		return nil, fmt.Errorf("crypto engine not found")
-	}
-	if err := svc.validateEngineTenant(ctx, engineID); err != nil {
+	engineInstance, err := svc.resolveEngine(ctx, engineID)
+	if err != nil {
+		lFunc.Errorf("could not resolve engine with id %s: %s", engineID, err)
 		return nil, err
 	}
-
-	engineInstance := *engine
 
 	var (
 		keyID     string
@@ -848,14 +832,11 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 		return err
 	}
 
-	engine, ok := svc.cryptoEngines[key.EngineID]
-	if !ok {
-		return fmt.Errorf("engine with id %s not found", key.EngineID)
-	}
-	if err := svc.validateEngineTenant(ctx, key.EngineID); err != nil {
+	engineInstance, err := svc.resolveEngine(ctx, key.EngineID)
+	if err != nil {
+		lFunc.Errorf("could not resolve engine with id %s: %s", key.EngineID, err)
 		return err
 	}
-	engineInstance := *engine
 
 	_, err = engineInstance.GetPrivateKeyByID(key.KeyID)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -145,20 +146,44 @@ func createCryptoEngines(logger *log.Entry, conf config.KMSConfig) (map[string]*
 	engines := map[string]*lservices.Engine{}
 
 	for _, cfg := range conf.CryptoEngineConfig.CryptoEngines {
+		// Un PKCS#11 global no tiene partición por tenant: no puede ser el
+		// engine por defecto (004, decisión «Engines globales PKCS#11»).
+		if cfg.ID == conf.CryptoEngineConfig.DefaultEngine && cfg.Type == cconfig.PKCS11Provider && cfg.TenantID == "" {
+			return nil, fmt.Errorf("the default crypto engine %s is a global PKCS#11 engine: declare a tenant_id for it or choose another default engine", cfg.ID)
+		}
+	}
+
+	for _, cfg := range conf.CryptoEngineConfig.CryptoEngines {
 		engine, err := cebuilder.BuildCryptoEngine(logger, cfg)
 
 		if err != nil {
 			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)
 		} else {
 			engines[cfg.ID] = &lservices.Engine{
-				Default:  cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
-				TenantID: cfg.TenantID,
-				Service:  engine,
+				Default:         cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
+				TenantID:        cfg.TenantID,
+				Service:         engine,
+				DeriveForTenant: tenantEngineDeriver(logger, cfg),
 			}
 		}
 	}
 
 	return engines, nil
+}
+
+// tenantEngineDeriver devuelve cómo construir la instancia por tenant de un
+// engine global: la misma configuración con TenantID fijado, que en filesystem
+// usa la raíz <dir>/tenants/<tenant>/ (004 T4.2). Solo se deriva filesystem;
+// el resto de engines globales se comparten como hasta ahora.
+func tenantEngineDeriver(logger *log.Entry, cfg cconfig.CryptoEngineConfig) lservices.TenantEngineDeriver {
+	if cfg.TenantID != "" || cfg.Type != cconfig.FilesystemProvider {
+		return nil
+	}
+	return func(tenantID string) (cryptoengines.CryptoEngine, error) {
+		tenantCfg := cfg
+		tenantCfg.TenantID = tenantID
+		return cebuilder.BuildCryptoEngine(logger.WithField("tenant", tenantID), tenantCfg)
+	}
 }
 
 func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID string) error {
