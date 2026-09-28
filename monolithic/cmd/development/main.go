@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -22,7 +20,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devstorage"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
@@ -402,6 +399,12 @@ func main() {
 	}
 	multitenant := rt.Multitenant
 	multitenant.Provisioners = opts.effectiveProvisioners(rt.DefaultProvisioners())
+	multitenant.V1 = opts.v1Config()
+	if multitenant.V1.DefaultTenantID == "" {
+		fmt.Println(" 	-- v1 API: disabled (503), as with the Helm chart; use -v1-default-tenant and -v1-sunset to serve it")
+	} else {
+		fmt.Printf(" 	-- v1 API: served in tenant %s until %s (Deprecation, Sunset and Link headers)\n", multitenant.V1.DefaultTenantID, multitenant.V1.SunsetAt.Format(time.RFC3339))
+	}
 	for _, provisioner := range multitenant.Provisioners {
 		fmt.Printf(" 	-- tenant provisioner: %s | %s\n", provisioner.Issuer, provisioner.Subject)
 	}
@@ -514,21 +517,11 @@ func main() {
 	fmt.Print(lamassuLogo)
 	fmt.Print(readyToPKI)
 
-	http.DefaultClient.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
-
-	time.Sleep(3 * time.Second)
-	kmsSDK := sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/kms", conf.GatewayPortHttps))
-	engines, err := kmsSDK.GetCryptoEngineProvider(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("==================== Available Crypto Engines ==========================")
-	for _, engine := range engines {
+	// Motores configurados. Antes se pedían a KMS por /v1/engines, pero v1
+	// responde 503 salvo -v1-default-tenant y -v1-sunset (P3, 009 T10) y las
+	// rutas v2 exigen un token con membership.
+	fmt.Println("==================== Configured Crypto Engines =========================")
+	for _, engine := range conf.CryptoEngines {
 		fmt.Println(engine.ID)
 	}
 	fmt.Println("========================================================================")

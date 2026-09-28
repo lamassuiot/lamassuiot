@@ -9,10 +9,13 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	pgconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/monoconfig"
 )
 
 const defaultExternalPostgresPort = 5432
@@ -55,6 +58,10 @@ type options struct {
 	externalIssuers []cconfig.HttpServerJWTIssuer
 	issuerCAFiles   []string
 	provisioners    []config.TenantManagerProvisioner
+
+	v1DefaultTenant string
+	v1SunsetRaw     string
+	v1Sunset        time.Time
 }
 
 // parseOptions lee y valida las opciones. Un error significa que el monolito
@@ -102,6 +109,8 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 		return nil
 	})
 
+	fs.StringVar(&o.v1DefaultTenant, "v1-default-tenant", "", "serve the v1 API in this tenant (UUID); requires -v1-sunset. Without both, v1 answers 503 as with the Helm chart")
+	fs.StringVar(&o.v1SunsetRaw, "v1-sunset", "", "v1 retirement date (RFC 3339) sent in the Sunset header; requires -v1-default-tenant")
 	fs.Func("provisioner", "identity allowed to create organizations and tenants, as <issuer>|<subject> (repeatable; default: the local issuer's provisioner)", func(value string) error {
 		provisioner, err := parseProvisionerOption(value)
 		if err != nil {
@@ -130,6 +139,9 @@ func (o *options) validate() error {
 	}
 
 	if err := o.validateIssuers(); err != nil {
+		return err
+	}
+	if err := o.validateV1(); err != nil {
 		return err
 	}
 
@@ -212,6 +224,34 @@ func parseProvisionerOption(value string) (config.TenantManagerProvisioner, erro
 		return config.TenantManagerProvisioner{}, fmt.Errorf("invalid -provisioner %q: use <issuer>|<subject>", value)
 	}
 	return config.TenantManagerProvisioner{Issuer: parts[0], Subject: parts[1]}, nil
+}
+
+// v1Config es la política de v1 (P3).
+func (o *options) v1Config() monoconfig.V1Config {
+	return monoconfig.V1Config{DefaultTenantID: o.v1DefaultTenant, SunsetAt: o.v1Sunset}
+}
+
+// validateV1 aplica P3: sin opciones, v1 responde 503 como con el chart; con
+// las dos, v1 se atiende en ese tenant hasta la fecha dada. No hay ninguna
+// fecha por defecto: una sola opción es un error que nombra la que falta.
+func (o *options) validateV1() error {
+	switch {
+	case o.v1DefaultTenant == "" && o.v1SunsetRaw == "":
+		return nil
+	case o.v1SunsetRaw == "":
+		return errors.New("-v1-default-tenant requires -v1-sunset: v1 is served only when both are given (there is no default retirement date)")
+	case o.v1DefaultTenant == "":
+		return errors.New("-v1-sunset requires -v1-default-tenant: v1 is served only when both are given")
+	}
+	if parsed, err := uuid.Parse(o.v1DefaultTenant); err != nil || parsed.String() != strings.ToLower(o.v1DefaultTenant) {
+		return fmt.Errorf("-v1-default-tenant %q must be a tenant UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)", o.v1DefaultTenant)
+	}
+	sunset, err := time.Parse(time.RFC3339, o.v1SunsetRaw)
+	if err != nil {
+		return fmt.Errorf("-v1-sunset %q must be an RFC 3339 date and time (YYYY-MM-DDThh:mm:ssZ): %w", o.v1SunsetRaw, err)
+	}
+	o.v1Sunset = sunset
+	return nil
 }
 
 // externalPostgres devuelve el PostgreSQL externo pedido con -postgres-host, o
