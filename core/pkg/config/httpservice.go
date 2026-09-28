@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 type HTTPConnection struct {
 	Protocol        HTTPProtocol `mapstructure:"protocol"`
 	BasePath        string       `mapstructure:"base_path"`
@@ -16,18 +18,56 @@ const (
 // HttpServer is the configuration for the HTTP server
 
 type HttpServer struct {
-	LogLevel           LogLevel                 `mapstructure:"log_level"`
-	HealthCheckLogging bool                     `mapstructure:"health_check"`
-	ListenAddress      string                   `mapstructure:"listen_address"`
-	Port               int                      `mapstructure:"port"`
-	Protocol           HTTPProtocol             `mapstructure:"protocol"`
-	CertFile           string                   `mapstructure:"cert_file"`
-	KeyFile            string                   `mapstructure:"key_file"`
-	Authentication     HttpServerAuthentication `mapstructure:"authentication"`
+	LogLevel           LogLevel                   `mapstructure:"log_level"`
+	HealthCheckLogging bool                       `mapstructure:"health_check"`
+	ListenAddress      string                     `mapstructure:"listen_address"`
+	Port               int                        `mapstructure:"port"`
+	Protocol           HTTPProtocol               `mapstructure:"protocol"`
+	CertFile           string                     `mapstructure:"cert_file"`
+	KeyFile            string                     `mapstructure:"key_file"`
+	Authentication     HttpServerAuthentication   `mapstructure:"authentication"`
+	Versioning         HttpServerVersioning       `mapstructure:"versioning"`
+	CORSAllowedOrigins []string                   `mapstructure:"cors_allowed_origins"`
+	TenantRateLimit    HttpServerTenantRateLimit  `mapstructure:"tenant_rate_limit"`
+	InternalListener   HttpServerInternalListener `mapstructure:"internal_listener"`
+}
+
+// HttpServerInternalListener is a second HTTPS listener for service-to-service
+// calls. It requires a client certificate issued by ClientCAFile (the internal
+// platform CA); requests accepted there act as the internal service identity
+// on the tenant already validated by the original request.
+type HttpServerInternalListener struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	Port         int    `mapstructure:"port"`
+	CertFile     string `mapstructure:"cert_file"`
+	KeyFile      string `mapstructure:"key_file"`
+	ClientCAFile string `mapstructure:"client_ca_file"`
+}
+
+// HttpServerTenantRateLimit caps the requests each tenant can make to the
+// tenant-scoped routes of one service instance (token bucket per tenant).
+type HttpServerTenantRateLimit struct {
+	Enabled           bool    `mapstructure:"enabled"`
+	RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+	Burst             int     `mapstructure:"burst"`
 }
 
 type HttpServerAuthentication struct {
 	MutualTLS HttpServerMutualTLSAuthentication `mapstructure:"mutual_tls"`
+	JWT       HttpServerJWTAuthentication       `mapstructure:"jwt"`
+}
+
+type HttpServerJWTAuthentication struct {
+	Enabled           bool              `mapstructure:"enabled"`
+	Audience          string            `mapstructure:"audience"`
+	IssuerJWKSURLs    map[string]string `mapstructure:"issuer_jwks_urls"`
+	AllowedAlgorithms []string          `mapstructure:"allowed_algorithms"`
+	JWKSCacheTTL      time.Duration     `mapstructure:"jwks_cache_ttl"`
+}
+
+type HttpServerVersioning struct {
+	V1DefaultTenantID string    `mapstructure:"v1_default_tenant_id"`
+	V1SunsetAt        time.Time `mapstructure:"v1_sunset_at"`
 }
 
 type HttpServerMutualTLSAuthentication struct {

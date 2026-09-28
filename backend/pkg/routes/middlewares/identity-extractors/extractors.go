@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
@@ -22,20 +23,29 @@ type HttpAuthReqExtractor interface {
 	ExtractAuthentication(ctx *gin.Context, req http.Request)
 }
 
-func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
+func RequestMetadataToContextMiddleware(logger *logrus.Entry, validators ...*JWTValidator) gin.HandlerFunc {
+	var jwtValidator *JWTValidator
+	if len(validators) > 0 {
+		jwtValidator = validators[0]
+	}
 	authExtractors := []HttpAuthReqExtractor{
 		ClientCertificateExtractor{
 			logger: logger,
 		},
 
 		JWTExtractor{
-			logger: logger,
+			logger:    logger,
+			validator: jwtValidator,
 		},
 	}
 
 	return func(c *gin.Context) {
 		for _, authExtractor := range authExtractors {
 			authExtractor.ExtractAuthentication(c, *c.Request)
+		}
+		if _, hasClientCertificate := c.Get(string(IdentityExtractorClientCertificate)); hasClientCertificate && strings.TrimSpace(c.GetHeader("Authorization")) != "" {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "multiple authentication methods are not allowed"})
+			return
 		}
 
 		UpdateContextWithRequest(c, c.Request.Header)

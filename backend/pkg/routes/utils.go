@@ -6,9 +6,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	tenantcontext "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/tenant-context"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -27,32 +30,60 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
-func NewGinEngine(logger *logrus.Entry) *gin.Engine {
+func NewGinEngine(logger *logrus.Entry, validators ...*identityextractors.JWTValidator) *gin.Engine {
+	return NewGinEngineWithCORS(logger, nil, validators...)
+}
+
+func NewGinEngineWithCORS(logger *logrus.Entry, allowedOrigins []string, validators ...*identityextractors.JWTValidator) *gin.Engine {
 	gin.ForceConsoleColor()
 	gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, nuHandlers int) {
 		logger.Debugf("Endpoint: %-6s %s", httpMethod, absolutePath)
 	}
 
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowAllOrigins = true
-	corsConfig.AllowHeaders = []string{"*"}
-
 	router := gin.New()
-	router.Use(
-		cors.New(corsConfig),
+	middlewares := make([]gin.HandlerFunc, 0, 7)
+	if len(allowedOrigins) > 0 && validCORSOrigins(allowedOrigins) {
+		corsConfig := cors.DefaultConfig()
+		corsConfig.AllowOrigins = append([]string(nil), allowedOrigins...)
+		corsConfig.AllowHeaders = []string{"Accept", "Authorization", "Content-Length", "Content-Type", "Origin", "X-LMS-Tenant-ID", "X-Request-ID", "X-Tenant-ID"}
+		middlewares = append(middlewares, cors.New(corsConfig))
+	}
+	middlewares = append(middlewares,
 		otelgin.Middleware("gin-server"),
 		headerextractors.RequestMetadataToContextMiddleware(logger),
-		identityextractors.RequestMetadataToContextMiddleware(logger),
+		identityextractors.RequestMetadataToContextMiddleware(logger, validators...),
 		basiclogger.UseLogger(logger),
 		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
 			logger.Trace(dumpStr)
 		}),
 	)
+	router.Use(middlewares...)
 
 	return router
 }
 
+func validCORSOrigins(origins []string) bool {
+	if len(origins) == 0 {
+		return false
+	}
+	for _, origin := range origins {
+		parsed, err := url.Parse(origin)
+		if err != nil || strings.TrimSpace(origin) != origin || strings.Contains(origin, "*") || parsed.User != nil || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || origin != parsed.Scheme+"://"+parsed.Host {
+			return false
+		}
+	}
+	return true
+}
+
 func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCfg cconfig.HttpServer, apiInfo models.APIServiceInfo) (int, error) {
+	port, _, err := RunHttpRouterWithShutdown(logger, routerEngine, httpServerCfg, apiInfo)
+	return port, err
+}
+
+func RunHttpRouterWithShutdown(logger *logrus.Entry, routerEngine http.Handler, httpServerCfg cconfig.HttpServer, apiInfo models.APIServiceInfo) (int, func() error, error) {
+	if err := validateHTTPServerSecurity(httpServerCfg); err != nil {
+		return -1, nil, err
+	}
 	hCheckRoute := controllers.NewHealthCheckRoute(apiInfo)
 	mainLogger := logger
 	if !httpServerCfg.HealthCheckLogging {
@@ -62,7 +93,7 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 		mainLogger = nooutLogger.WithField("", "")
 	}
 
-	healthEngine := NewGinEngine(mainLogger)
+	healthEngine := NewGinEngineWithCORS(mainLogger, httpServerCfg.CORSAllowedOrigins)
 	healthEngine.GET("/health", hCheckRoute.HealthCheck)
 
 	mainEngine := http.NewServeMux()
@@ -81,7 +112,7 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port))
 	if err != nil {
-		return -1, err
+		return -1, nil, err
 	}
 
 	usedPort := listener.Addr().(*net.TCPAddr).Port
@@ -173,10 +204,75 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	case <-ctxTimeout.Done():
 		logger.Info("HTTP server ready to accept requests")
 	case err := <-httpErrChan:
-		return -1, err
+		return -1, nil, err
 	}
 
-	return usedPort, nil
+	if !httpServerCfg.InternalListener.Enabled {
+		return usedPort, server.Close, nil
+	}
+	internalServer, err := runInternalListener(logger, mainEngine, httpServerCfg)
+	if err != nil {
+		server.Close()
+		return -1, nil, err
+	}
+	return usedPort, func() error {
+		internalErr := internalServer.Close()
+		if err := server.Close(); err != nil {
+			return err
+		}
+		return internalErr
+	}, nil
+}
+
+// runInternalListener serves the same routes on a second HTTPS port that only
+// accepts client certificates issued by the internal platform CA. Requests
+// accepted there are marked as internal service calls.
+func runInternalListener(logger *logrus.Entry, handler http.Handler, httpServerCfg cconfig.HttpServer) (*http.Server, error) {
+	cfg := httpServerCfg.InternalListener
+	if cfg.CertFile == "" || cfg.KeyFile == "" || cfg.ClientCAFile == "" {
+		return nil, fmt.Errorf("internal listener requires cert_file, key_file and client_ca_file")
+	}
+	caPEM, err := os.ReadFile(cfg.ClientCAFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not read internal client CA: %w", err)
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("internal client CA file contains no certificates")
+	}
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, cfg.Port))
+	if err != nil {
+		return nil, err
+	}
+	server := &http.Server{
+		Handler:      tenantcontext.MarkInternalServiceRequest(handler),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		TLSConfig: &tls.Config{
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  clientCAs,
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+	logger.Infof("internal HTTPS listener on %s (mTLS, internal CA)", listener.Addr())
+	go func() {
+		if err := server.ServeTLS(listener, cfg.CertFile, cfg.KeyFile); err != nil && err != http.ErrServerClosed {
+			logger.Errorf("internal listener stopped: %s", err)
+		}
+	}()
+	return server, nil
+}
+
+func validateHTTPServerSecurity(httpServerCfg cconfig.HttpServer) error {
+	if httpServerCfg.Authentication.MutualTLS.Enabled && httpServerCfg.Protocol != cconfig.HTTPS {
+		return fmt.Errorf("mutual TLS authentication requires HTTPS")
+	}
+	for _, origin := range httpServerCfg.CORSAllowedOrigins {
+		if !validCORSOrigins([]string{origin}) {
+			return fmt.Errorf("invalid CORS origin %q; configure an exact http(s) origin without path or wildcard", origin)
+		}
+	}
+	return nil
 }
 
 type respBodyWriter struct {
