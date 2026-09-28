@@ -25,7 +25,8 @@ const (
 
 func NewAWSIoTEventHandler(l *logrus.Entry, svc AWSCloudConnectorService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
-		Logger: l,
+		Logger:                l,
+		RequireTenantEnvelope: true,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, e *event.Event) error {
 				return handlerWrapper(ctx, e, svc, l, updateCertificateStatusHandler)
@@ -113,7 +114,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 	}
 
 	if awsIoTCoreCACfg.Registration.Status == IoTAWSCAMetadataRegistrationRequested {
-		_, err = svc.RegisterCA(context.Background(), RegisterCAInput{
+		_, err = svc.RegisterCA(ctx, RegisterCAInput{
 			CACertificate:         *ca,
 			RegisterConfiguration: awsIoTCoreCACfg,
 		})
@@ -155,7 +156,7 @@ func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc
 		return nil
 	}
 
-	err = svc.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
+	err = svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 		Certificate: *cert,
 	})
 
@@ -208,7 +209,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 
 	switch dmsAwsAutomationConfig.RegistrationMode {
 	case JitpAWSIoTRegistrationMode:
-		err = svc.RegisterUpdateJITPProvisioner(context.Background(), RegisterUpdateJITPProvisionerInput{
+		err = svc.RegisterUpdateJITPProvisioner(ctx, RegisterUpdateJITPProvisionerInput{
 			DMS:           dms,
 			AwsJITPConfig: dmsAwsAutomationConfig,
 		})
@@ -252,7 +253,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 			policiesToRegisterOrUpdate = dmsAwsAutomationConfig.Policies
 		}
 
-		err = svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
+		err = svc.RegisterUpdatePolicies(ctx, RegisterUpdatePoliciesInput{
 			Policies: policiesToRegisterOrUpdate,
 		})
 		if err != nil {
@@ -347,7 +348,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 		return nil
 	}
 
-	dms, err := svc.GetDMSService().GetDMSByID(context.Background(), services.GetDMSByIDInput{
+	dms, err := svc.GetDMSService().GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: attachedBy.AuthorizedBy.RAID,
 	})
 	if err != nil {
@@ -412,7 +413,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 		return nil
 	}
 
-	dms, err := svc.GetDMSService().GetDMSByID(context.Background(), services.GetDMSByIDInput{
+	dms, err := svc.GetDMSService().GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: device.DMSOwner,
 	})
 	if err != nil {

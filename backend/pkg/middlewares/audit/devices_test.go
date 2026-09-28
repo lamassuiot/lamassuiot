@@ -1,7 +1,6 @@
 package auditpub
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -42,7 +41,7 @@ func deviceAuditWithoutErrors[E any, O any](t *testing.T, method string, input E
 
 	operation := func(deviceMiddleware services.DeviceManagerService) {
 		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.Nil(t, r[1].Interface())
 	}
 
@@ -64,7 +63,7 @@ func deviceAuditVoidWithoutErrors(t *testing.T, method string, input interface{}
 
 	operation := func(deviceMiddleware services.DeviceManagerService) {
 		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.Nil(t, r[0].Interface())
 	}
 
@@ -86,7 +85,7 @@ func deviceAuditVoidWithErrors(t *testing.T, method string, input interface{}, e
 
 	operation := func(deviceMiddleware services.DeviceManagerService) {
 		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.NotNil(t, r[0].Interface())
 	}
 
@@ -108,7 +107,7 @@ func deviceAuditWithErrors[E any, O any](t *testing.T, method string, input E, e
 
 	operation := func(deviceMiddleware services.DeviceManagerService) {
 		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.NotNil(t, r[1].Interface())
 	}
 

@@ -15,7 +15,8 @@ import (
 
 func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
-		Logger: l,
+		Logger:                l,
+		RequireTenantEnvelope: true,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
 			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, svc, l) },

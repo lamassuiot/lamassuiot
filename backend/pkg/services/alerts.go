@@ -8,6 +8,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	eventfilters "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/event_filters"
 	outputchannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -40,6 +41,10 @@ func NewAlertsService(builder AlertsServiceBuilder) services.AlertsService {
 }
 
 func (svc *AlertsServiceBackend) storeLastEventInstance(ctx context.Context, input *services.HandleEventInput) error {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return err
+	}
 	exists, storedEv, err := svc.eventStorage.GetLatestEventByEventType(ctx, models.EventType(input.Event.Type()))
 	if err != nil {
 		return err
@@ -50,6 +55,7 @@ func (svc *AlertsServiceBackend) storeLastEventInstance(ctx context.Context, inp
 	}
 
 	storedEv.TotalSeen++
+	storedEv.TenantID = tenantContext.TenantID
 	storedEv.EventType = models.EventType(input.Event.Type())
 	storedEv.Event = input.Event
 	storedEv.LastSeen = time.Now()
@@ -60,6 +66,9 @@ func (svc *AlertsServiceBackend) storeLastEventInstance(ctx context.Context, inp
 
 func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *services.HandleEventInput) error {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return err
+	}
 
 	lFunc.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
 	err := svc.storeLastEventInstance(ctx, input)
@@ -131,10 +140,15 @@ func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input
 
 func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *services.SubscribeInput) ([]*models.Subscription, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	lFunc.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
 	sub := &models.Subscription{
 		ID:               uuid.NewString(),
+		TenantID:         tenantContext.TenantID,
 		UserID:           input.UserID,
 		EventType:        input.EventType,
 		SubscriptionDate: time.Now(),
@@ -142,7 +156,7 @@ func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *services.
 		Channel:          input.Channel,
 	}
 
-	_, err := svc.subsStorage.Subscribe(ctx, sub)
+	_, err = svc.subsStorage.Subscribe(ctx, sub)
 	if err != nil {
 		lFunc.Errorf("could not insert new subscription. Got unexpected error: %s", err)
 		return nil, err

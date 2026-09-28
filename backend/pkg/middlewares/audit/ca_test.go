@@ -50,7 +50,7 @@ func auditWithoutErrors[E any, O any](t *testing.T, method string, input E, even
 
 	operation := func(caMiddleware services.CAService) {
 		m := reflect.ValueOf(caMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.Nil(t, r[1].Interface())
 	}
 
@@ -72,7 +72,7 @@ func auditWithErrors[E any, O any](t *testing.T, method string, input E, event m
 
 	operation := func(caMiddleware services.CAService) {
 		m := reflect.ValueOf(caMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.NotNil(t, r[1].Interface())
 	}
 

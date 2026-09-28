@@ -222,7 +222,7 @@ type RegisterAndAttachThingInput struct {
 func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
+	err := svc.RegisterUpdatePolicies(ctx, RegisterUpdatePoliciesInput{
 		Policies: input.DMSIoTAutomationConfig.Policies,
 	})
 	if err != nil {
@@ -230,7 +230,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		return err
 	}
 
-	err = svc.RegisterGroups(context.Background(), RegisterGroupsInput{
+	err = svc.RegisterGroups(ctx, RegisterGroupsInput{
 		Groups: input.DMSIoTAutomationConfig.GroupNames,
 	})
 	if err != nil {
@@ -238,7 +238,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		return err
 	}
 
-	_, err = svc.iotSDK.DescribeThing(context.Background(), &iot.DescribeThingInput{
+	_, err = svc.iotSDK.DescribeThing(ctx, &iot.DescribeThingInput{
 		ThingName: &input.DeviceID,
 	})
 	if err == nil {
@@ -250,7 +250,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		})
 		pageNum := 0
 		for paginator.HasMorePages() {
-			output, err := paginator.NextPage(context.TODO())
+			output, err := paginator.NextPage(ctx)
 			if err != nil {
 				lFunc.Warnf("error while iterating principals for thing %s: %s", input.DeviceID, err)
 			}
@@ -260,7 +260,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 				//get cerID only
 
 				certIDSplit := strings.Split(value, "/")
-				_, err = svc.iotSDK.UpdateCertificate(context.Background(), &iot.UpdateCertificateInput{
+				_, err = svc.iotSDK.UpdateCertificate(ctx, &iot.UpdateCertificateInput{
 					CertificateId: aws.String(certIDSplit[1]),
 					NewStatus:     types.CertificateStatusRevoked,
 				})
@@ -331,7 +331,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		}
 	}
 
-	ca, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+	ca, err := svc.CaSDK.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: input.BindedIdentity.Certificate.IssuerCAMetadata.ID,
 	})
 	if err != nil {
@@ -353,7 +353,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		return err
 	}
 
-	registrationOutput, err := svc.iotSDK.RegisterThing(context.Background(), &iot.RegisterThingInput{
+	registrationOutput, err := svc.iotSDK.RegisterThing(ctx, &iot.RegisterThingInput{
 		TemplateBody: aws.String(string(templateB)),
 		Parameters:   params,
 	})
@@ -366,7 +366,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		ARN: registrationOutput.ResourceArns["certificate"],
 	}
 
-	_, err = svc.CaSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+	_, err = svc.CaSDK.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: input.BindedIdentity.Certificate.SerialNumber,
 		Patches: chelpers.NewPatchBuilder().
 			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), awsCertMetadata).
@@ -442,7 +442,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.
 		return nil
 	}
 
-	_, err = svc.iotSDK.UpdateCertificate(context.Background(), &iot.UpdateCertificateInput{
+	_, err = svc.iotSDK.UpdateCertificate(ctx, &iot.UpdateCertificateInput{
 		CertificateId: aws.String(certIDSplit[1]),
 		NewStatus:     status,
 	})
@@ -484,7 +484,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 	}
 
 	var rnf *iotdataplaneTypes.ResourceNotFoundException
-	getShadowOutput, err := svc.iotdataplaneSDK.GetThingShadow(context.Background(), getShadowReq)
+	getShadowOutput, err := svc.iotdataplaneSDK.GetThingShadow(ctx, getShadowReq)
 	if err != nil {
 		if !errors.As(err, &rnf) {
 			return fmt.Errorf("could not get device %s shadow: %s", input.DeviceID, err)
@@ -555,7 +555,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		shadowUpdateMsg.ShadowName = &input.DMSIoTAutomationConfig.ShadowConfig.ShadowName
 	}
 
-	_, err = svc.iotdataplaneSDK.UpdateThingShadow(context.Background(), shadowUpdateMsg)
+	_, err = svc.iotdataplaneSDK.UpdateThingShadow(ctx, shadowUpdateMsg)
 	if err != nil {
 		lFunc.Errorf("could not create Update Shadow for thing %s: %s", input.DeviceID, err)
 		return err
@@ -651,7 +651,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 
 		for _, caMeta := range res.Certificates {
 			totalAWSRegCAs++
-			descRes, err := svc.iotSDK.DescribeCACertificate(context.Background(), &iot.DescribeCACertificateInput{CertificateId: caMeta.CertificateId})
+			descRes, err := svc.iotSDK.DescribeCACertificate(ctx, &iot.DescribeCACertificateInput{CertificateId: caMeta.CertificateId})
 			if err != nil {
 				lFunc.Errorf("something went wrong while describing '%s' CA certificate from AWS IoT: %s", *caMeta.CertificateId, err)
 				return cas, err
@@ -671,7 +671,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 				continueIter = false
 			}
 
-			lmsCA, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: string(descCrt.SubjectKeyId)})
+			lmsCA, err := svc.CaSDK.GetCAByID(ctx, services.GetCAByIDInput{CAID: string(descCrt.SubjectKeyId)})
 			if err != nil {
 				lFunc.Warnf("skipping CA with ID AWS '%s' - LAMASSU '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, string(descCrt.SubjectKeyId), err)
 				continue
@@ -713,7 +713,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 	}()
 
 	//check if CA already registered in AWS
-	cas, err := svc.GetRegisteredCAs(context.Background())
+	cas, err := svc.GetRegisteredCAs(ctx)
 	if err != nil {
 		lFunc.Errorf("could not get Registered CAs: %s", err)
 		return nil, err
@@ -767,7 +767,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 	}
 
 	if input.RegisterConfiguration.Registration.PrimaryAccount {
-		regCode, err := svc.iotSDK.GetRegistrationCode(context.Background(), &iot.GetRegistrationCodeInput{})
+		regCode, err := svc.iotSDK.GetRegistrationCode(ctx, &iot.GetRegistrationCodeInput{})
 		if err != nil {
 			return nil, err
 		}
@@ -786,7 +786,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 
 		// Sign verification certificate CSR
 		lFunc.Debugf("signing validation csr with cn=%s", csr.Subject.CommonName)
-		singOutput, err := svc.CaSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+		singOutput, err := svc.CaSDK.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:              input.CACertificate.ID,
 			CertRequest:       &csr,
 			IssuanceProfileID: input.CACertificate.ProfileID,
@@ -810,7 +810,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 	}
 
 	lFunc.Debugf("registering id=%s cn=%s CA certificate in AWS", input.ID, input.Certificate.Subject.CommonName)
-	regResponse, err := svc.iotSDK.RegisterCACertificate(context.Background(), registerInput)
+	regResponse, err := svc.iotSDK.RegisterCACertificate(ctx, registerInput)
 	if err != nil {
 		lFunc.Errorf("something went wrong while registering CA certificate in AWS IoT: %s", err)
 		return nil, err
@@ -965,7 +965,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 		policies = append(policies, policy.PolicyName)
 	}
 
-	err = svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
+	err = svc.RegisterUpdatePolicies(ctx, RegisterUpdatePoliciesInput{
 		Policies: input.AwsJITPConfig.Policies,
 	})
 	if err != nil {
@@ -986,7 +986,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 		provRoleARN = fmt.Sprintf("arn:aws:iam::%s:role/JITPRole", svc.AccountID)
 		lFunc.Warnf("using default provisioning role. Make sure %s IAM Role exists in the %s account", provRoleARN, svc.AccountID)
 	}
-	cpTemplate, err := svc.iotSDK.CreateProvisioningTemplate(context.Background(), &iot.CreateProvisioningTemplateInput{
+	cpTemplate, err := svc.iotSDK.CreateProvisioningTemplate(ctx, &iot.CreateProvisioningTemplateInput{
 		ProvisioningRoleArn: aws.String(provRoleARN),
 		TemplateBody:        &templateBody,
 		TemplateName:        &input.DMS.ID,
@@ -1005,7 +1005,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 
 	if input.AwsJITPConfig.JITPProvisioningTemplate.AWSCACertificateId != "" {
 		lFunc.Infof("updating AWS CA Certificate %s assigning JITP '%s' template", input.AwsJITPConfig.JITPProvisioningTemplate.AWSCACertificateId, input.DMS.ID)
-		_, err = svc.iotSDK.UpdateCACertificate(context.Background(), &iot.UpdateCACertificateInput{
+		_, err = svc.iotSDK.UpdateCACertificate(ctx, &iot.UpdateCACertificateInput{
 			CertificateId:             &input.AwsJITPConfig.JITPProvisioningTemplate.AWSCACertificateId,
 			NewAutoRegistrationStatus: types.AutoRegistrationStatusEnable,
 			NewStatus:                 types.CACertificateStatusActive,

@@ -1,7 +1,6 @@
 package auditpub
 
 import (
-	"context"
 	"crypto/x509"
 	"errors"
 	"reflect"
@@ -43,7 +42,7 @@ func crlAuditWithoutErrors[E any, O any](t *testing.T, method string, input E, e
 
 	operation := func(crlMiddleware services.CRLService) {
 		m := reflect.ValueOf(crlMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.Nil(t, r[1].Interface())
 	}
 
@@ -65,7 +64,7 @@ func crlAuditWithErrors[E any, O any](t *testing.T, method string, input E, even
 
 	operation := func(crlMiddleware services.CRLService) {
 		m := reflect.ValueOf(crlMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		r := m.Call([]reflect.Value{reflect.ValueOf(auditTestContext()), reflect.ValueOf(input)})
 		assert.NotNil(t, r[1].Interface())
 	}
 

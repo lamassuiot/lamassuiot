@@ -12,7 +12,8 @@ import (
 
 func NewAlertsEventHandler(l *logrus.Entry, svc services.AlertsService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
-		Logger: l,
+		Logger:                l,
+		RequireTenantEnvelope: true,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
 			string(models.EventAnyKey): func(ctx context.Context, e *event.Event) error {
 				return svc.HandleEvent(ctx, &services.HandleEventInput{

@@ -7,6 +7,9 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -15,8 +18,9 @@ import (
 )
 
 type CryptoMonitor struct {
-	logger  *logrus.Entry
-	service services.CAService
+	logger       *logrus.Entry
+	service      services.CAService
+	tenantLister storage.ActiveTenantLister
 }
 
 func NewCryptoMonitor(service services.CAService, logger *logrus.Entry) *CryptoMonitor {
@@ -26,15 +30,44 @@ func NewCryptoMonitor(service services.CAService, logger *logrus.Entry) *CryptoM
 	}
 }
 
+func (svc *CryptoMonitor) SetTenantLister(tenantLister storage.ActiveTenantLister) {
+	svc.tenantLister = tenantLister
+}
+
 func (svc *CryptoMonitor) Run() {
 	ctx := helpers.InitContext()
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	now := time.Now()
 	lFunc.Info("starting periodic CAs and Certificate check for expired certificates")
+	if svc.tenantLister == nil {
+		lFunc.Error("cannot run tenant-scoped crypto monitoring without an active tenant lister")
+		return
+	}
+	tenants, err := svc.tenantLister.ListActiveTenants(ctx)
+	if err != nil {
+		lFunc.Errorf("could not list active tenants for crypto monitoring: %s", err)
+		return
+	}
 
-	svc.scanCAsForUpdate(ctx, now)
-	svc.scanCertificatesForUpdate(ctx, now)
+	for _, tenant := range tenants {
+		if tenant.ID == "" || tenant.OrganizationID == "" || tenant.Status != models.TenantActive {
+			lFunc.Error("skipping active tenant record with invalid identity or status")
+			continue
+		}
+		tenantContext := core.WithTenantContext(ctx, core.TenantContext{
+			OrganizationID: tenant.OrganizationID,
+			TenantID:       tenant.ID,
+			ActorID:        "ca-crypto-monitor",
+			ActorType:      "system",
+			CorrelationID:  uuid.NewString(),
+			Source:         "ca-crypto-monitor",
+			TenantStatus:   tenant.Status,
+			Validated:      true,
+		})
+		svc.scanCAsForUpdate(tenantContext, now)
+		svc.scanCertificatesForUpdate(tenantContext, now)
+	}
 
 	end := time.Now()
 	lFunc.Infof("ending check. Took %v", end.Sub(now))

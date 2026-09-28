@@ -16,7 +16,8 @@ import (
 
 func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
-		Logger: l,
+		Logger:                l,
+		RequireTenantEnvelope: true,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
 			string(models.EventUpdateCertificateMetadataKey): func(ctx context.Context, m *event.Event) error { return updateCertMetaHandler(ctx, m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey):   func(ctx context.Context, m *event.Event) error { return updateCertStatusHandler(ctx, m, svc, l) },

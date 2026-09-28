@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -25,7 +26,7 @@ func TestHandleUpdateCertificate(t *testing.T) {
 	}
 
 	message := message.Message{
-		Payload: eventContent,
+		Payload: tenantEventPayload(t, eventContent),
 	}
 
 	// Prepare mocks
@@ -64,7 +65,7 @@ func TestHandleUpdateCertificateNotAttached(t *testing.T) {
 	}
 
 	message := message.Message{
-		Payload: eventContent,
+		Payload: tenantEventPayload(t, eventContent),
 	}
 
 	// Prepare mocks
@@ -90,7 +91,7 @@ func TestHandleUpdateCertificateNotSameConnector(t *testing.T) {
 	}
 
 	message := message.Message{
-		Payload: eventContent,
+		Payload: tenantEventPayload(t, eventContent),
 	}
 
 	// Prepare mocks
@@ -188,8 +189,30 @@ func prepareMessage(t *testing.T, file string, prevState []map[string]interface{
 	if err != nil {
 		t.Error(err)
 	}
-	message.Payload = content
+	message.Payload = tenantEventPayload(t, content)
 	return &message
+}
+
+func tenantEventPayload(t *testing.T, payload []byte) []byte {
+	t.Helper()
+	cloudEvent, err := helpers.ParseCloudEvent(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cloudEvent.Time().IsZero() {
+		cloudEvent.SetTime(time.Now().UTC())
+	}
+	cloudEvent.SetExtension("tenantid", "tenant-test")
+	cloudEvent.SetExtension("organizationid", "org-test")
+	cloudEvent.SetExtension("actorid", "actor-test")
+	cloudEvent.SetExtension("actortype", "system")
+	cloudEvent.SetExtension("correlationid", "correlation-test")
+	cloudEvent.SetExtension("eventversion", "1")
+	tenantPayload, err := json.Marshal(cloudEvent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tenantPayload
 }
 
 // A device certificate is updated and the preventive delta is NOT changed (previous=true, updated=true)

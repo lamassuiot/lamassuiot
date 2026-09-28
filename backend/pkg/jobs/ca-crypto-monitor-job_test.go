@@ -3,14 +3,48 @@ package jobs
 import (
 	"context"
 	"crypto/x509"
+	"sync"
 	"testing"
 	"time"
 
+	core "github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	svcmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+func TestCryptoMonitorUsesTenantContext(t *testing.T) {
+	mockService := new(svcmock.MockCAService)
+	job := NewCryptoMonitor(mockService, helpers.SetupLogger("error", "CA", "Crypto Monitor"))
+	job.SetTenantLister(activeTenantListerStub{tenants: []models.Tenant{
+		{ID: "tenant-a", OrganizationID: "org-a", Status: models.TenantActive},
+		{ID: "tenant-b", OrganizationID: "org-b", Status: models.TenantActive},
+	}})
+
+	var mu sync.Mutex
+	seen := map[string]bool{}
+	verifyTenant := func(args mock.Arguments) {
+		tenantContext, err := core.RequireTenantContext(args.Get(0).(context.Context))
+		if err != nil {
+			t.Errorf("crypto monitor received invalid tenant context: %s", err)
+			return
+		}
+		mu.Lock()
+		seen[tenantContext.TenantID] = true
+		mu.Unlock()
+	}
+	mockService.On("GetCAs", mock.Anything, mock.Anything).Run(verifyTenant).Return("", nil)
+	mockService.On("GetCertificatesByStatus", mock.Anything, mock.Anything).Run(verifyTenant).Return("", nil)
+
+	job.Run()
+
+	mockService.AssertExpectations(t)
+	if len(seen) != 2 {
+		t.Fatalf("expected crypto monitor to process both active tenants, got %v", seen)
+	}
+}
 
 func TestUpdateCertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	mockService := new(svcmock.MockCAService)
