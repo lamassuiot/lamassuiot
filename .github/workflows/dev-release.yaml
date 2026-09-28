@@ -46,6 +46,7 @@ jobs:
             dmsmanager,
             va,
             alerts,
+            tenant-manager,
             aws-connector,
             lamassu-db-migration,
             ca-to-kms-migration,
