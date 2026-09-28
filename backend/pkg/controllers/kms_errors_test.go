@@ -22,6 +22,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/sirupsen/logrus"
 )
 
 type keyWriteErrorKMS struct {
@@ -74,7 +75,7 @@ func TestKMSKeyWriteErrorsAreUniform(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			routes := NewKMSHttpRoutes(keyWriteErrorKMS{err: test.err})
+			routes := NewKMSHttpRoutes(logrus.NewEntry(logrus.New()), keyWriteErrorKMS{err: test.err})
 			router := gin.New()
 			router.POST("/keys", routes.CreateKey)
 			router.POST("/keys/import", routes.ImportKey)

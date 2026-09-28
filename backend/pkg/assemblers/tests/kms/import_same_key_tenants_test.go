@@ -67,8 +67,9 @@ func TestKMSImportSameKeyInTwoTenants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not build tenant route options: %s", err)
 	}
-	router := routes.NewGinEngine(logrus.NewEntry(logrus.New()))
-	routes.NewKMSHTTPLayer(router.Group("/"), *kmsService, tenantOptions)
+	logger := logrus.NewEntry(logrus.New())
+	router := routes.NewGinEngine(logger)
+	routes.NewKMSHTTPLayer(logger, router.Group("/"), *kmsService, tenantOptions)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 

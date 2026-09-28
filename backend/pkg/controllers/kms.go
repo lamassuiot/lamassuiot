@@ -10,15 +10,18 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/sirupsen/logrus"
 )
 
 type kmsHttpRoutes struct {
-	svc services.KMSService
+	logger *logrus.Entry
+	svc    services.KMSService
 }
 
-func NewKMSHttpRoutes(svc services.KMSService) *kmsHttpRoutes {
+func NewKMSHttpRoutes(logger *logrus.Entry, svc services.KMSService) *kmsHttpRoutes {
 	return &kmsHttpRoutes{
-		svc: svc,
+		logger: logger,
+		svc:    svc,
 	}
 }
 
@@ -27,7 +30,7 @@ func (r *kmsHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get crypto engines")
 		}
 
 		return
@@ -57,7 +60,7 @@ func (r *kmsHttpRoutes) GetKeys(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not list keys")
 		}
 
 		return
@@ -94,7 +97,7 @@ func (r *kmsHttpRoutes) GetKeyByID(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get key")
 		}
 
 		return
@@ -120,7 +123,7 @@ func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		writeKeyWriteError(ctx, err, errs.ErrKeyCreationFailed)
+		r.writeKeyWriteError(ctx, err, errs.ErrKeyCreationFailed)
 		return
 	}
 
@@ -159,7 +162,7 @@ func (r *kmsHttpRoutes) ImportKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		writeKeyWriteError(ctx, err, errs.ErrKeyImportFailed)
+		r.writeKeyWriteError(ctx, err, errs.ErrKeyImportFailed)
 		return
 	}
 
@@ -169,15 +172,23 @@ func (r *kmsHttpRoutes) ImportKey(ctx *gin.Context) {
 // writeKeyWriteError responde a un fallo al crear o importar una clave: 400 y
 // 409 con su error, y para el resto un 500 genérico sin el texto del driver ni
 // del engine, que queda en el log del servicio (004 T4.5).
-func writeKeyWriteError(ctx *gin.Context, err error, generic error) {
+func (r *kmsHttpRoutes) writeKeyWriteError(ctx *gin.Context, err error, generic error) {
 	switch {
 	case errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
 	case errors.Is(err, errs.ErrKeyAlreadyExists):
 		ctx.JSON(409, gin.H{"err": errs.ErrKeyAlreadyExists.Error()})
 	default:
-		ctx.JSON(500, gin.H{"err": generic.Error()})
+		r.writeInternalError(ctx, err, generic.Error())
 	}
+}
+
+// writeInternalError responde con un 500 genérico y uniforme y deja el error
+// real (driver, PostgreSQL o engine) solo en el log del servicio, para no
+// revelar detalles internos ni de otro tenant (004 T4.9).
+func (r *kmsHttpRoutes) writeInternalError(ctx *gin.Context, err error, generic string) {
+	helpers.ConfigureLogger(ctx.Request.Context(), r.logger).WithError(err).Errorf("%s %s: %s", ctx.Request.Method, ctx.FullPath(), generic)
+	ctx.JSON(500, gin.H{"err": generic})
 }
 
 func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
@@ -209,7 +220,7 @@ func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update key")
 		}
 		return
 	}
@@ -246,7 +257,7 @@ func (r *kmsHttpRoutes) UpdateKeyMetadata(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update key")
 		}
 		return
 	}
@@ -282,7 +293,7 @@ func (r *kmsHttpRoutes) UpdateKeyName(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update key")
 		}
 		return
 	}
@@ -319,7 +330,7 @@ func (r *kmsHttpRoutes) UpdateKeyTags(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not update key")
 		}
 		return
 	}
@@ -349,7 +360,7 @@ func (r *kmsHttpRoutes) DeleteKeyByID(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not delete key")
 		}
 
 		return
@@ -385,10 +396,10 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
+		case errs.ErrValidateBadRequest, errs.ErrInvalidDigestSize:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not sign message")
 		}
 		return
 	}
@@ -423,10 +434,10 @@ func (r *kmsHttpRoutes) VerifySignature(ctx *gin.Context) {
 		switch err {
 		case errs.ErrKeyNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
+		case errs.ErrValidateBadRequest, errs.ErrInvalidDigestSize:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not verify signature")
 		}
 		return
 	}
@@ -448,7 +459,7 @@ func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			r.writeInternalError(ctx, err, "could not get key stats")
 		}
 		return
 	}

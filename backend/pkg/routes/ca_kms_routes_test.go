@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 func TestCAAndKMSRoutesPublishV1AndTenantAwareV2Contracts(t *testing.T) {
@@ -13,7 +14,7 @@ func TestCAAndKMSRoutesPublishV1AndTenantAwareV2Contracts(t *testing.T) {
 		NewCAHTTPLayer(group, nil)
 	})
 	kmsRoutes := registeredRoutes(func(group *gin.RouterGroup) {
-		NewKMSHTTPLayer(group, nil)
+		NewKMSHTTPLayer(logrus.NewEntry(logrus.New()), group, nil)
 	})
 	assertV2RoutesMirrorV1(t, caRoutes)
 	assertV2RoutesMirrorV1(t, kmsRoutes)

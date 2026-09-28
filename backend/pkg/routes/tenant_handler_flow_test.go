@@ -129,7 +129,7 @@ func TestTenantHandlerFlowsReachServicesWithValidatedContextAndDenyTenantB(t *te
 			register: func(root *gin.RouterGroup, options *routesTenantOptions) {
 				service := new(svcmock.MockKMSService)
 				service.On("GetKey", validatedHandlerFlowContext(), mock.Anything).Return(&models.Key{KeyID: "key-a", TenantID: handlerFlowTenantA}, nil).Once()
-				NewKMSHTTPLayer(root, service, options.routes)
+				NewKMSHTTPLayer(logrus.NewEntry(logrus.New()), root, service, options.routes)
 				options.assertA = func(t *testing.T) { service.AssertNumberOfCalls(t, "GetKey", 1) }
 				options.assertB = func(t *testing.T) { service.AssertNumberOfCalls(t, "GetKey", 1) }
 			},
@@ -248,7 +248,7 @@ func TestEveryAdministrativeHandlerReachesServiceForAAndDeniesB(t *testing.T) {
 		"kms": func(root *gin.RouterGroup, tracker *handlerFlowServiceTracker) {
 			service := new(svcmock.MockKMSService)
 			registerHandlerFlowMockMethods(&service.Mock, reflect.TypeOf((*services.KMSService)(nil)).Elem(), tracker)
-			NewKMSHTTPLayer(root, service, options)
+			NewKMSHTTPLayer(logrus.NewEntry(logrus.New()), root, service, options)
 		},
 		"device-manager": func(root *gin.RouterGroup, tracker *handlerFlowServiceTracker) {
 			service := new(svcmock.MockDeviceManagerService)

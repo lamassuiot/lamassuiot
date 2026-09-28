@@ -4,10 +4,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/sirupsen/logrus"
 )
 
-func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService, options ...TenantRouteOptions) {
-	routes := controllers.NewKMSHttpRoutes(svc)
+func NewKMSHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, svc services.KMSService, options ...TenantRouteOptions) {
+	routes := controllers.NewKMSHttpRoutes(logger, svc)
 	config := tenantRouteOptions(options)
 	v1, v2 := TenantAwareGroups(parentRouterGroup, config)
 	register := func(router *gin.RouterGroup) {

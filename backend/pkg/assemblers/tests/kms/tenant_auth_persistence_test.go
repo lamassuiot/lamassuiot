@@ -97,7 +97,7 @@ func TestKMSHTTPSJWTAndMTLSPersistsTenantKey(t *testing.T) {
 		AllowedAlgos:   map[string]struct{}{jwt.SigningMethodRS256.Alg(): {}},
 	}
 	router := routes.NewGinEngine(logger, validator)
-	routes.NewKMSHTTPLayer(router.Group("/"), *kmsService, routes.TenantRouteOptions{
+	routes.NewKMSHTTPLayer(logger, router.Group("/"), *kmsService, routes.TenantRouteOptions{
 		Memberships:      memberships,
 		IdentityProvider: tenantcontext.HTTPIdentityProvider,
 		Authorization:    tenantcontext.NewPermissionAuthorizationEngine(),

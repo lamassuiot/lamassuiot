@@ -33,6 +33,7 @@ var (
 	ErrKeyAlreadyExists  error = errors.New("key already exists")
 	ErrKeyImportFailed   error = errors.New("could not import key")
 	ErrKeyCreationFailed error = errors.New("could not create key")
+	ErrInvalidDigestSize error = errors.New("invalid digest size")
 
 	// CreateCertificate
 	ErrInvalidKeySpec error = errors.New("invalid key spec: exactly one of (Type+Bits) or KeyIdentifier must be provided")

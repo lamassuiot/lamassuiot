@@ -522,7 +522,7 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 	if err != nil {
 		return nil, err
 	}
-	routes.NewKMSHTTPLayer(httpEngine.Group("/"), *svc, tenantOptions)
+	routes.NewKMSHTTPLayer(logger, httpEngine.Group("/"), *svc, tenantOptions)
 	port, err := routes.RunHttpRouter(logger, httpEngine, kmsConfig.Server, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
