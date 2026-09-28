@@ -49,6 +49,7 @@ func GetPrincipalPolicies(ctx context.Context, e *engine.Engine, pm principalWit
 	for _, pp := range principal.Policies {
 		policy, pErr := polm.GetPolicy(ctx, pp.PolicyID)
 		if pErr != nil {
+			span.RecordError(pErr, trace.WithAttributes(attribute.String("authz.policy_id", pp.PolicyID)))
 			log.WithFields(logrus.Fields{
 				"policy_id": pp.PolicyID,
 				"error":     pErr,
@@ -56,6 +57,7 @@ func GetPrincipalPolicies(ctx context.Context, e *engine.Engine, pm principalWit
 			continue
 		}
 		if pErr = reg.AddPolicy(policy); pErr != nil {
+			span.RecordError(pErr, trace.WithAttributes(attribute.String("authz.policy_id", pp.PolicyID)))
 			log.WithFields(logrus.Fields{
 				"policy_id": pp.PolicyID,
 				"error":     pErr,

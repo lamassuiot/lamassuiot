@@ -744,6 +744,100 @@ func TestHTTPSchemaRegistry_DefaultActionValidation(t *testing.T) {
 	}
 }
 
+// TestHTTPSchemaRegistry_BasePathConflictValidation covers load-time
+// rejection of two schemas that declare the exact same base_paths entry with
+// conflicting default_action: evaluateHTTPOverride would then pick a winner
+// based on unspecified map iteration order, so this must fail fast at load
+// time instead of behaving non-deterministically in production. Declaring
+// the same base_paths with the *same* default_action is fine — the winner is
+// unspecified there too, but it doesn't matter, since either schema produces
+// the same decision.
+func TestHTTPSchemaRegistry_BasePathConflictValidation(t *testing.T) {
+	writeTwoSchemas := func(t *testing.T, schemaA, schemaB string) string {
+		return writeHTTPSchemaTestFile(t, "["+schemaA+","+schemaB+"]")
+	}
+
+	t.Run("conflicting default_action on identical base_paths is rejected", func(t *testing.T) {
+		registry := NewHTTPSchemaRegistry()
+		path := writeTwoSchemas(t,
+			`{
+				"name": "svc-a",
+				"base_paths": ["/api/shared"],
+				"default_action": "deny",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/a", "match_type": "exact", "action": "a"}]
+			}`,
+			`{
+				"name": "svc-b",
+				"base_paths": ["/api/shared"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/b", "match_type": "exact", "action": "b"}]
+			}`,
+		)
+		err := registry.Load(path)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `base_paths "/api/shared" conflicts with schema "svc-a"`)
+		assert.Contains(t, err.Error(), `"deny" vs "allow"`)
+	})
+
+	t.Run("an empty default_action is treated as deny for the conflict check", func(t *testing.T) {
+		registry := NewHTTPSchemaRegistry()
+		path := writeTwoSchemas(t,
+			`{
+				"name": "svc-a",
+				"base_paths": ["/api/shared"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/a", "match_type": "exact", "action": "a"}]
+			}`,
+			`{
+				"name": "svc-b",
+				"base_paths": ["/api/shared"],
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/b", "match_type": "exact", "action": "b"}]
+			}`,
+		)
+		err := registry.Load(path)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `"allow" vs "deny"`)
+	})
+
+	t.Run("identical base_paths with matching default_action is allowed", func(t *testing.T) {
+		registry := NewHTTPSchemaRegistry()
+		path := writeTwoSchemas(t,
+			`{
+				"name": "svc-a",
+				"base_paths": ["/api/shared"],
+				"default_action": "deny",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/a", "match_type": "exact", "action": "a"}]
+			}`,
+			`{
+				"name": "svc-b",
+				"base_paths": ["/api/shared"],
+				"default_action": "deny",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/b", "match_type": "exact", "action": "b"}]
+			}`,
+		)
+		require.NoError(t, registry.Load(path))
+	})
+
+	t.Run("different base_paths never conflict", func(t *testing.T) {
+		registry := NewHTTPSchemaRegistry()
+		path := writeTwoSchemas(t,
+			`{
+				"name": "svc-a",
+				"base_paths": ["/api/a"],
+				"default_action": "deny",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/a/x", "match_type": "exact", "action": "a"}]
+			}`,
+			`{
+				"name": "svc-b",
+				"base_paths": ["/api/b"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/b/x", "match_type": "exact", "action": "b"}]
+			}`,
+		)
+		require.NoError(t, registry.Load(path))
+	})
+}
+
 // TestHTTPSchemaRegistry_SkipAuthzRejectsConstraints covers load-time
 // validation that a skip_authz route cannot also declare subject constraints,
 // since the two are contradictory: skip_authz bypasses authz entirely while
@@ -893,6 +987,53 @@ func TestEngineCheckHTTPRequest_SchemaDefaultAction(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, result.Allowed, "unmapped path under an explicit deny-by-default base path stays denied")
+}
+
+// TestEngineCheckHTTPRequest_SchemaDefaultActionDoesNotOverrideOtherSchemasRoute
+// covers a multi-schema deployment where one schema's base_paths overlaps
+// another schema's explicit route: schema "global" owns the whole /api
+// namespace with default_action allow, while schema "wfx" defines a specific,
+// policy-gated route under that same namespace. The wfx route must still
+// require a policy grant — "global"'s default_action must never apply to a
+// path that another loaded schema maps explicitly.
+func TestEngineCheckHTTPRequest_SchemaDefaultActionDoesNotOverrideOtherSchemasRoute(t *testing.T) {
+	schemaPath := writeHTTPSchemaTestFile(t, `[
+		{
+			"name": "global",
+			"base_paths": ["/api"],
+			"default_action": "allow",
+			"routes": [
+				{"name": "misc", "methods": ["GET"], "path": "/api/misc", "match_type": "exact", "action": "misc-read"}
+			]
+		},
+		{
+			"name": "wfx",
+			"routes": [
+				{"name": "jobs-list", "methods": ["GET"], "path": "/api/wfx/nbi/v1/jobs", "match_type": "exact", "action": "jobs-list"}
+			]
+		}
+	]`)
+	eng, err := NewEngine(nil, nil, WithHTTPSchemas([]string{schemaPath}))
+	require.NoError(t, err)
+
+	noPolicies := NewPolicyRegistry()
+	subject := SubjectPolicySet{Subject: ResolvedSubject{PrincipalID: "p1"}, Policies: noPolicies}
+
+	result, err := eng.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/wfx/nbi/v1/jobs",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Allowed, "a route explicitly owned by schema wfx must require a policy grant, regardless of schema global's default_action: allow")
+
+	result, err = eng.CheckHTTPRequest(context.Background(), HTTPCheckRequest{
+		Method:   "GET",
+		Path:     "/api/unmapped-endpoint",
+		Subjects: []SubjectPolicySet{subject},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Allowed, "a path with no explicit route in any schema still falls back to global's default_action: allow")
 }
 
 // TestEngineCheckHTTPRequest_StaticParamConstraint covers the "static

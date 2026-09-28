@@ -205,9 +205,48 @@ func (r *HTTPSchemaRegistry) Load(path string) error {
 		if _, exists := r.schemas[def.Name]; exists {
 			return fmt.Errorf("duplicate http schema name %q (from %s)", def.Name, path)
 		}
+		if err := r.validateBasePathConflicts(def); err != nil {
+			return fmt.Errorf("invalid http schema %q in %s: %w", def.Name, path, err)
+		}
 		r.schemas[def.Name] = def
 	}
 	return nil
+}
+
+// validateBasePathConflicts rejects a schema whose base_paths would create a
+// non-deterministic default_action outcome against an already-loaded schema.
+// evaluateHTTPOverride picks the schema with the longest matching base_paths
+// prefix (HTTPSchemaDefinition.MatchesBasePath); two different schemas can
+// only tie on prefix length for the same request when they declare the exact
+// same base_paths string, and map iteration order over the registry is
+// unspecified, so a tie would let the winning schema vary between requests
+// and process restarts. This is only a real hazard when the two schemas
+// disagree on the effective default_action (empty is treated as "deny", per
+// HTTPSchemaDefinition.DefaultAction's documented default) — if they agree,
+// either winner produces the same decision, so that combination is allowed.
+func (r *HTTPSchemaRegistry) validateBasePathConflicts(def *HTTPSchemaDefinition) error {
+	defAction := effectiveDefaultAction(def.DefaultAction)
+	for _, existing := range r.schemas {
+		existingAction := effectiveDefaultAction(existing.DefaultAction)
+		for _, bp := range def.BasePaths {
+			for _, existingBp := range existing.BasePaths {
+				if bp != existingBp {
+					continue
+				}
+				if defAction != existingAction {
+					return fmt.Errorf("base_paths %q conflicts with schema %q: both declare it, with different default_action (%q vs %q); the winner would depend on unspecified map iteration order", bp, existing.Name, existingAction, defAction)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func effectiveDefaultAction(action HTTPDefaultAction) HTTPDefaultAction {
+	if action == "" {
+		return HTTPDefaultActionDeny
+	}
+	return action
 }
 
 // Get retrieves an HTTP schema by name. Returns an error when not found.

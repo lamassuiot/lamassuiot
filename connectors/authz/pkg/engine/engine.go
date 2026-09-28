@@ -313,7 +313,13 @@ func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (re
 		}
 		span.End()
 	}()
-	_ = ctx // ctx is used by the span; pass through if needed by future sub-calls
+	log := helpers.ConfigureLogger(ctx, e.logger)
+	defer func() {
+		log.WithFields(logrus.Fields{
+			"method": req.Method, "path": req.Path,
+			"allowed": result.Allowed, "matched_action": result.MatchedAction,
+		}).Info("http authorization decision")
+	}()
 
 	if overrideResult, decided := e.evaluateHTTPOverride(req); decided {
 		result = overrideResult
@@ -360,18 +366,34 @@ func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (re
 // Both are independent of any subject's policy grants, so this runs before
 // the per-subject grant loop: a skip_authz route or a schema default fully
 // determines the outcome without consulting policies.
+//
+// A schema's default_action only applies once NO loaded schema has an
+// explicit route for the request. Otherwise, when two schemas' base_paths
+// overlap, one schema's default_action could apply to a path that another
+// schema owns via an explicit (non-skip_authz) route, bypassing the policy
+// grant that route requires. So route matching is resolved across every
+// schema first — a skip_authz route still short-circuits immediately, since
+// it takes priority over any other schema's route or default_action for the
+// same request — before the base_paths/default_action fallback ever runs.
 func (e *Engine) evaluateHTTPOverride(req HTTPCheckRequest) (result HTTPCheckResult, decided bool) {
-	var bestSchema *HTTPSchemaDefinition
-	bestPrefixLen := -1
-
+	matchedRoute := false
 	for _, schema := range e.httpSchemas.GetAll() {
 		route := schema.MatchRoute(req.Method, req.Path)
-		if route != nil {
-			if route.SkipAuthz {
-				return HTTPCheckResult{Allowed: true, MatchedAction: route.Action}, true
-			}
+		if route == nil {
 			continue
 		}
+		if route.SkipAuthz {
+			return HTTPCheckResult{Allowed: true, MatchedAction: route.Action}, true
+		}
+		matchedRoute = true
+	}
+	if matchedRoute {
+		return HTTPCheckResult{}, false
+	}
+
+	var bestSchema *HTTPSchemaDefinition
+	bestPrefixLen := -1
+	for _, schema := range e.httpSchemas.GetAll() {
 		if matched, prefixLen := schema.MatchesBasePath(req.Path); matched && prefixLen > bestPrefixLen {
 			bestSchema, bestPrefixLen = schema, prefixLen
 		}
