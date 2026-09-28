@@ -68,6 +68,10 @@ func TestKMSStoreOnSQLite(t *testing.T) {
 		)`).Error)
 		require.NoError(t, old.Exec(`INSERT INTO kms_keys (key_id, name, algorithm, size, public_key, engine_id)
 			VALUES ('legacy-key', 'legacy', 'RSA', 2048, 'pub', 'hsm-offline')`).Error)
+		// Earlier versions accepted an alias equal to another key's key_id; once key_id wins
+		// over an alias it would address that other key, so the upgrade drops it.
+		require.NoError(t, old.Exec(`INSERT INTO kms_keys (key_id, name, algorithm, size, public_key, engine_id, aliases)
+			VALUES ('other-key', 'other', 'RSA', 2048, 'pub', 'hsm-offline', '["legacy-key","keep-me","other-key"]')`).Error)
 
 		require.NoError(t, initializeSchema(old))
 
@@ -82,6 +86,10 @@ func TestKMSStoreOnSQLite(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, exists, "the existing row must survive the rebuild")
 		assert.Equal(t, "legacy", key.Name)
+
+		_, other, err := upgraded.SelectExistsByKeyID(ctx, "other-key", "hsm-offline")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"keep-me"}, other.Aliases, "aliases equal to a key_id must be dropped, the rest kept")
 
 		_, err = upgraded.Insert(ctx, newKey("legacy-key", "online-1", "legacy-online-alias"))
 		require.NoError(t, err, "the upgraded table must accept the same key_id in a second engine")

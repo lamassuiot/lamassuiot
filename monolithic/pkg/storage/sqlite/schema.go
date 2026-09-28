@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -249,6 +250,31 @@ func upgradeKMSKeysPrimaryKey(db *gorm.DB) error {
 			}
 		}
 
-		return nil
+		return dropAliasesShadowedByKeyIDs(tx)
 	})
+}
+
+// dropAliasesShadowedByKeyIDs mirrors 20260909084500_kms_key_composite_pk.sql: identifiers
+// now resolve as a key_id before an alias, so an alias equal to any key_id would silently
+// start addressing that other key. Earlier versions did not reject such aliases, so they
+// are dropped rather than left to redirect requests.
+func dropAliasesShadowedByKeyIDs(tx *gorm.DB) error {
+	var shadowed []string
+	if err := tx.Raw(`SELECT a.value || ' (on key ' || k.key_id || ' in engine ' || k.engine_id || ')'
+		FROM kms_keys AS k, json_each(k.aliases) AS a
+		WHERE a.value IN (SELECT key_id FROM kms_keys)`).Scan(&shadowed).Error; err != nil {
+		return err
+	}
+
+	if len(shadowed) == 0 {
+		return nil
+	}
+
+	tx.Logger.Warn(context.Background(), "removing aliases that match an existing key_id: %s", strings.Join(shadowed, ", "))
+
+	return tx.Exec(`UPDATE kms_keys SET aliases = (
+			SELECT json_group_array(value) FROM json_each(kms_keys.aliases)
+			WHERE value NOT IN (SELECT key_id FROM kms_keys)
+		)
+		WHERE EXISTS (SELECT 1 FROM json_each(kms_keys.aliases) WHERE value IN (SELECT key_id FROM kms_keys))`).Error
 }

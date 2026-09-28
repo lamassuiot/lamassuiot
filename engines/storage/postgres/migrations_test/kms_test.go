@@ -39,10 +39,31 @@ func migrationTest_KMS_20251031174938_key(t *testing.T, logger *logrus.Entry, co
 }
 
 func migrationTest_KMS_20260909084500_kms_key_composite_pk(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Earlier versions accepted an alias equal to another key's key_id. Once key_id wins
+	// over an alias, that alias would address the other key, so the migration drops it.
+	tx := con.Exec(`INSERT INTO kms_keys
+		(key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, aliases)
+		VALUES('def456', '{}', 'Other', 'RSA', 2048, 'pub', '2024-11-25 10:46:28.914', 'hsm-offline', '["abc123", "keep-me", "def456"]');
+	`)
+	if tx.Error != nil {
+		t.Fatalf("failed to insert a key with a shadowed alias: %v", tx.Error)
+	}
+
 	ApplyMigration(t, logger, con, kmsDBName)
 
+	var aliases string
+	tx = con.Raw("SELECT aliases::text FROM kms_keys WHERE key_id = 'def456'").Scan(&aliases)
+	if tx.Error != nil {
+		t.Fatalf("failed to read aliases: %v", tx.Error)
+	}
+	assert.JSONEq(t, `["keep-me"]`, aliases, "aliases equal to a key_id must be dropped, the rest kept")
+
+	var abcAliases string
+	con.Raw("SELECT aliases::text FROM kms_keys WHERE key_id = 'abc123'").Scan(&abcAliases)
+	assert.JSONEq(t, `[]`, abcAliases, "keys without colliding aliases must be left alone")
+
 	var pkCols string
-	tx := con.Raw(`
+	tx = con.Raw(`
 		SELECT string_agg(a.attname, ',' ORDER BY k.ord)
 		FROM pg_constraint con
 		JOIN pg_class c ON c.oid = con.conrelid

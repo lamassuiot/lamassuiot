@@ -16,6 +16,43 @@ BEGIN
     END IF;
 END $$;
 
+-- Identifiers now resolve as a key_id before an alias, so an alias equal to any key_id
+-- would silently start addressing that other key. Earlier versions did not reject such
+-- aliases; drop them rather than redirect signing, update or delete requests. This cannot
+-- be undone by the Down migration.
+DO $$
+DECLARE shadowed text;
+BEGIN
+    SELECT string_agg(format('%s (on key %s in engine %s)', a.alias, k.key_id, k.engine_id), ', ')
+    INTO shadowed
+    FROM kms_keys AS k
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE WHEN jsonb_typeof(k.aliases) = 'array' THEN k.aliases ELSE '[]'::jsonb END
+    ) AS a(alias)
+    WHERE EXISTS (SELECT 1 FROM kms_keys AS owner WHERE owner.key_id = a.alias);
+
+    IF shadowed IS NULL THEN
+        RETURN;
+    END IF;
+
+    RAISE NOTICE 'removing aliases that match an existing key_id: %', shadowed;
+
+    UPDATE kms_keys AS k
+    SET aliases = (
+        SELECT COALESCE(jsonb_agg(a.alias ORDER BY a.ord), '[]'::jsonb)
+        FROM jsonb_array_elements(k.aliases) WITH ORDINALITY AS a(alias, ord)
+        WHERE NOT EXISTS (SELECT 1 FROM kms_keys AS owner WHERE owner.key_id = a.alias #>> '{}')
+    )
+    WHERE jsonb_typeof(k.aliases) = 'array'
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(
+            CASE WHEN jsonb_typeof(k.aliases) = 'array' THEN k.aliases ELSE '[]'::jsonb END
+        ) AS a(alias)
+        JOIN kms_keys AS owner ON owner.key_id = a.alias
+      );
+END $$;
+
 ALTER TABLE kms_keys ALTER COLUMN engine_id SET NOT NULL;
 ALTER TABLE kms_keys DROP CONSTRAINT keys_pkey;
 ALTER TABLE kms_keys ADD CONSTRAINT keys_pkey PRIMARY KEY (key_id, engine_id);
