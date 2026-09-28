@@ -18,12 +18,10 @@ const (
 type TenantStatus string
 
 const (
-	TenantProvisioning   TenantStatus = "PROVISIONING"
-	TenantActive         TenantStatus = "ACTIVE"
-	TenantSuspended      TenantStatus = "SUSPENDED"
-	TenantDeprovisioning TenantStatus = "DEPROVISIONING"
-	TenantDeleted        TenantStatus = "DELETED"
-	TenantRestoring      TenantStatus = "RESTORING"
+	TenantActive    TenantStatus = "ACTIVE"
+	TenantSuspended TenantStatus = "SUSPENDED"
+	TenantDeleted   TenantStatus = "DELETED"
+	TenantRestoring TenantStatus = "RESTORING"
 )
 
 type MembershipStatus string
@@ -121,7 +119,7 @@ func (membership Membership) Validate(organizationID string, tenantID string) er
 
 func isTenantStatus(status TenantStatus) bool {
 	switch status {
-	case TenantProvisioning, TenantActive, TenantSuspended, TenantDeprovisioning, TenantDeleted, TenantRestoring:
+	case TenantActive, TenantSuspended, TenantDeleted, TenantRestoring:
 		return true
 	default:
 		return false
@@ -166,11 +164,10 @@ func IsIsolationMode(mode IsolationMode) bool {
 }
 
 var tenantStatusTransitions = map[TenantStatus][]TenantStatus{
-	TenantActive:         {TenantSuspended, TenantDeprovisioning},
-	TenantSuspended:      {TenantActive, TenantDeprovisioning},
-	TenantDeprovisioning: {TenantDeleted},
-	TenantDeleted:        {TenantRestoring},
-	TenantRestoring:      {TenantSuspended},
+	TenantActive:    {TenantSuspended, TenantDeleted},
+	TenantSuspended: {TenantActive, TenantDeleted},
+	TenantDeleted:   {TenantRestoring},
+	TenantRestoring: {TenantSuspended},
 }
 
 // CanTransitionTenantStatus reports whether the tenant lifecycle allows moving from one status to another.

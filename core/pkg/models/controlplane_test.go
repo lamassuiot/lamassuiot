@@ -24,6 +24,12 @@ func TestTenantValidate(t *testing.T) {
 	invalidStatus := validTenant
 	invalidStatus.Status = TenantStatus("UNKNOWN")
 	require.Error(t, invalidStatus.Validate())
+
+	for _, retired := range []TenantStatus{"PROVISIONING", "DEPROVISIONING"} {
+		retiredStatus := validTenant
+		retiredStatus.Status = retired
+		require.Error(t, retiredStatus.Validate(), "%s is no longer a tenant status", retired)
+	}
 }
 
 func TestMembershipValidate(t *testing.T) {
@@ -51,9 +57,8 @@ func TestCanTransitionTenantStatus(t *testing.T) {
 	allowed := [][2]TenantStatus{
 		{TenantActive, TenantSuspended},
 		{TenantSuspended, TenantActive},
-		{TenantActive, TenantDeprovisioning},
-		{TenantSuspended, TenantDeprovisioning},
-		{TenantDeprovisioning, TenantDeleted},
+		{TenantActive, TenantDeleted},
+		{TenantSuspended, TenantDeleted},
 		{TenantDeleted, TenantRestoring},
 		{TenantRestoring, TenantSuspended},
 	}
@@ -62,11 +67,14 @@ func TestCanTransitionTenantStatus(t *testing.T) {
 	}
 
 	denied := [][2]TenantStatus{
-		{TenantActive, TenantDeleted},
 		{TenantDeleted, TenantActive},
+		{TenantDeleted, TenantSuspended},
 		{TenantRestoring, TenantActive},
-		{TenantProvisioning, TenantActive},
+		{TenantActive, TenantRestoring},
 		{TenantActive, TenantActive},
+		{TenantStatus("PROVISIONING"), TenantActive},
+		{TenantActive, TenantStatus("DEPROVISIONING")},
+		{TenantStatus("DEPROVISIONING"), TenantDeleted},
 	}
 	for _, transition := range denied {
 		require.False(t, CanTransitionTenantStatus(transition[0], transition[1]), "%s -> %s", transition[0], transition[1])
