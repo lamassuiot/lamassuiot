@@ -505,7 +505,7 @@ func main() {
 		},
 	}
 
-	_, _, err = pkg.RunMonolithicLamassuPKI(conf)
+	monolith, err := pkg.AssembleMonolith(conf)
 	if err != nil {
 		fmt.Println("could not start monolithic PKI. Shuting down: ", err)
 		panic(err)
@@ -523,17 +523,24 @@ func main() {
 	}
 	fmt.Println("========================================================================")
 
-	// Populate sample data if enabled
+	// Datos de ejemplo en el tenant «Demo», por v2 y con tokens del emisor
+	// local (009 T11). Un fallo solo se avisa: el monolito sigue en marcha.
 	if opts.sampleData {
 		logger := chelpers.SetupLogger(cconfig.Info, "SampleData", "Populator")
-		// Use the internal HTTP ports since services are behind the gateway
-		// We'll construct URLs using the gateway
-		caServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/ca", conf.GatewayPortHttp)
-		deviceServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/devmanager", conf.GatewayPortHttp)
-
-		err := sampledata.PopulateSampleData(context.Background(), logger, caServiceURL, deviceServiceURL)
-		if err != nil {
-			fmt.Printf("Warning: Failed to populate sample data: %v\n", err)
+		if rt.Issuer == nil {
+			fmt.Println("Warning: -sample-data needs the local token issuer (-dev-issuer); no sample data created")
+		} else {
+			result, err := sampledata.PopulateSampleData(context.Background(), logger, sampledata.Options{
+				Targets: sampledata.TargetsFromProxyRoutes("127.0.0.1", monolith.ProxyRoutes),
+				Issuer:  rt.Issuer.Issuer(),
+				Tokens:  rt.Issuer.Token,
+			})
+			if err != nil {
+				fmt.Printf("Warning: failed to populate sample data: %v\n", err)
+			} else {
+				fmt.Printf(">> sample data in tenant %s (organization %s); identities: %s (tenant_admin), %s (pki_admin), %s (operator); %d warnings\n",
+					result.TenantID, result.OrganizationID, sampledata.DemoAdminSubject, sampledata.SampleDataSubject, sampledata.DemoOperatorSubject, len(result.Warnings))
+			}
 		}
 	}
 
