@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -18,7 +19,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/monoconfig"
 )
 
-const defaultExternalPostgresPort = 5432
+const (
+	defaultExternalPostgresPort = 5432
+	defaultListenAddress        = "127.0.0.1"
+	defaultHTTPSPort            = 8443
+	defaultHTTPPort             = 8080
+)
 
 // errSQLiteNotSupported aplica la opción (a) de la spec 009 (P1, aprobada el
 // 2026-09-28): el monolito es multitenant y solo arranca con PostgreSQL.
@@ -62,6 +68,10 @@ type options struct {
 	v1DefaultTenant string
 	v1SunsetRaw     string
 	v1Sunset        time.Time
+
+	listen    string
+	httpsPort int
+	httpPort  int
 }
 
 // parseOptions lee y valida las opciones. Un error significa que el monolito
@@ -75,7 +85,7 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 
 	fs.StringVar(&o.hsmModule, "hsm-module-path", "", "enable HSM support")
 
-	fs.BoolVar(&o.awsIoTManager, "awsiot", false, "enable AWS IoT Manager")
+	fs.BoolVar(&o.awsIoTManager, "awsiot", false, "not supported in the multitenant monolith: the AWS IoT connector is not tenant-aware (the monolith exits with an error)")
 	fs.StringVar(&o.awsIoTManagerAKID, "awsiot-keyid", "", "AWS IoT Manager AccessKeyID")
 	fs.StringVar(&o.awsIoTManagerSAK, "awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
 	fs.StringVar(&o.awsIoTManagerST, "awsiot-sessiontoken", "", "AWS IoT Manager SessionToken")
@@ -86,7 +96,7 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 	fs.BoolVar(&o.disableEventbus, "disable-eventbus", false, "disable eventbus")
 	fs.BoolVar(&o.useAwsEventbus, "use-aws-eventbus", false, "use AWS Eventbus")
 	fs.BoolVar(&o.useInMemoryEventbus, "inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
-	fs.BoolVar(&o.disableUI, "disable-ui", false, "Disable UI docker loading")
+	fs.BoolVar(&o.disableUI, "disable-ui", true, "the published UI (lamassu-ui) is not launched: it uses the v1 API without OIDC; -disable-ui=false is an error")
 	fs.BoolVar(&o.useSqlite, "sqlite", false, "not supported: SQLite does not isolate tenants (the monolith exits with an error)")
 	fs.BoolVar(&o.sampleData, "sample-data", false, "populate the server with sample data for manual testing")
 
@@ -120,6 +130,10 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 		return nil
 	})
 
+	fs.StringVar(&o.listen, "listen", defaultListenAddress, "IP address where the proxy listens; any address other than loopback exposes the API to other hosts (services and the local token issuer stay on 127.0.0.1)")
+	fs.IntVar(&o.httpsPort, "https-port", defaultHTTPSPort, "HTTPS port of the proxy (0: a random free port)")
+	fs.IntVar(&o.httpPort, "http-port", defaultHTTPPort, "HTTP port of the proxy (0: a random free port)")
+
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -138,6 +152,19 @@ func (o *options) validate() error {
 		return errSQLiteNotSupported
 	}
 
+	// P6: el conector AWS IoT llama a los SDK sin contexto de tenant.
+	if o.awsIoTManager {
+		return errors.New("-awsiot is not supported: the AWS IoT connector is not tenant-aware yet, " +
+			"so it cannot run in the multitenant monolith (decision P6 of spec 009)")
+	}
+	// P4: la imagen publicada lamassu-ui usa v1 sin OIDC y no funcionaría.
+	if !o.disableUI {
+		return errors.New("-disable-ui=false is not supported: the published UI (lamassu-ui) uses the v1 API without OIDC, " +
+			"and v1 answers 503 in the multitenant monolith (decision P4 of spec 009)")
+	}
+	if err := o.validateListen(); err != nil {
+		return err
+	}
 	if err := o.validateIssuers(); err != nil {
 		return err
 	}
@@ -252,6 +279,34 @@ func (o *options) validateV1() error {
 	}
 	o.v1Sunset = sunset
 	return nil
+}
+
+// validateListen aplica P5: el proxy escucha en una dirección IP explícita,
+// 127.0.0.1 por defecto.
+func (o *options) validateListen() error {
+	if net.ParseIP(o.listen) == nil {
+		return fmt.Errorf("-listen %q must be an IP address (default %s)", o.listen, defaultListenAddress)
+	}
+	for name, port := range map[string]int{"-https-port": o.httpsPort, "-http-port": o.httpPort} {
+		if port < 0 || port > 65535 {
+			return fmt.Errorf("%s %d is not a valid TCP port", name, port)
+		}
+	}
+	if o.httpsPort != 0 && o.httpsPort == o.httpPort {
+		return fmt.Errorf("-https-port and -http-port cannot both be %d", o.httpsPort)
+	}
+	return nil
+}
+
+// warnings son los avisos de las opciones que reducen la seguridad por
+// defecto; se imprimen en el banner y en el log.
+func (o *options) warnings() []string {
+	var out []string
+	if ip := net.ParseIP(o.listen); ip != nil && !ip.IsLoopback() {
+		out = append(out, fmt.Sprintf("-listen %s: the proxy is reachable from other hosts, and any of them can use the API with a valid token; "+
+			"the services and the local token issuer stay on 127.0.0.1", o.listen))
+	}
+	return out
 }
 
 // externalPostgres devuelve el PostgreSQL externo pedido con -postgres-host, o

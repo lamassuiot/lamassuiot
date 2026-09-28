@@ -34,11 +34,13 @@ type MonolithicConfig struct {
 	AssemblyMode          LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`
 	GatewayPortHttps      int                            `mapstructure:"gateway_port_https"`
 	GatewayPortHttp       int                            `mapstructure:"gateway_port_http"`
-	AWSIoTManager         MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
-	VAStorageDir          string                         `mapstructure:"va_storage_directory"`
-	UIPort                int                            `mapstructure:"ui_port"`
-	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
-	Multitenant           MultitenantConfig              `mapstructure:"multitenant"`
+	// ProxyListenAddress es la interfaz del proxy. Vacía: 127.0.0.1 (P5).
+	ProxyListenAddress string                        `mapstructure:"proxy_listen_address"`
+	AWSIoTManager      MonolithicAWSIoTManagerConfig `mapstructure:"aws_iot_manager"`
+	VAStorageDir       string                        `mapstructure:"va_storage_directory"`
+	UIPort             int                           `mapstructure:"ui_port"`
+	PopulateSampleData bool                          `mapstructure:"populate_sample_data"`
+	Multitenant        MultitenantConfig             `mapstructure:"multitenant"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {
@@ -84,8 +86,8 @@ type MultitenantConfig struct {
 	// JWT al descargar el JWKS, además de las del sistema: la del emisor local
 	// y las de -issuer-ca-file. No se toca SSL_CERT_DIR del proceso.
 	JWKSTrustedCAFiles []string `mapstructure:"jwks_trusted_ca_files"`
-	// RuntimeDir es el directorio de los ficheros generados al arrancar
-	// (certificados y claves). Vacío: el directorio de trabajo (hasta 009 T12).
+	// RuntimeDir es el directorio propio (0700) de los ficheros generados al
+	// arrancar (certificados y claves). Obligatorio: nada va al cwd (D9).
 	RuntimeDir string `mapstructure:"runtime_dir"`
 	// Provisioners son las identidades que pueden crear organizaciones y tenants.
 	Provisioners []config.TenantManagerProvisioner `mapstructure:"provisioners"`

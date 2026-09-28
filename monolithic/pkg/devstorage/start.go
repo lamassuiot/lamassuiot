@@ -43,6 +43,9 @@ type Postgres struct {
 	Admin pgconfig.PostgresPSEConfig
 	// Launched indica que el contenedor lo lanzó el monolito (entorno desechable).
 	Launched bool
+	// ContainerID es el contenedor lanzado (vacío con un PostgreSQL externo).
+	// Cleanup borra solo ese contenedor.
+	ContainerID string
 	Cleanup  func()
 }
 
@@ -112,7 +115,7 @@ func Start(ctx context.Context, opts StartOptions) (*Postgres, error) {
 		return nil, fmt.Errorf("PostgreSQL container did not become ready: %w", err)
 	}
 
-	return &Postgres{Admin: admin, Launched: true, Cleanup: func() { _ = cleanup() }}, nil
+	return &Postgres{Admin: admin, Launched: true, ContainerID: container.Container.ID, Cleanup: func() { _ = cleanup() }}, nil
 }
 
 func checkPortFree(port int) error {

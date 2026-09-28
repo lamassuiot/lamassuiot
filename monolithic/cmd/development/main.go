@@ -3,13 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
+	"sync"
 	"syscall"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -20,11 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devstorage"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
-	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
 )
 
 const readyToPKI = `
@@ -88,20 +82,83 @@ func main() {
 		fmt.Fprintf(os.Stderr, "invalid options: %s\n", err)
 		os.Exit(2)
 	}
+	os.Exit(runMonolith(opts))
+}
 
-	fmt.Println("===================== FLAGS ======================")
+// runMonolith arranca el monolito y lo mantiene en marcha hasta Ctrl+C. Un
+// fallo de arranque (error o panic) libera lo que el propio proceso creó y
+// devuelve 1; Ctrl+C lo libera y sale con 0 (requisito 1.4, 009 T12).
+func runMonolith(opts *options) (code int) {
+	res := &resources{}
 
-	fmt.Printf("AWS IoT Manager Enabled: %v\n", opts.awsIoTManager)
-	fmt.Printf("Sample Data Enabled: %v\n", opts.sampleData)
-	if opts.awsIoTManager {
-		ai := opts.awsIoTManagerID
-		fmt.Printf("AWS IoT Manager ConnectorID: %s\n", ai)
-		fmt.Printf("AWS IoT Manager AccessKey: %s\n", opts.awsIoTManagerAKID)
-		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", opts.awsIoTManagerSAK)
-		fmt.Printf("AWS IoT Manager SessionToken: %s\n", opts.awsIoTManagerST)
-		fmt.Printf("AWS IoT Manager Region: %s\n", opts.awsIoTManagerRegion)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signals
+		fmt.Println("ctrl+c triggered. Cleaning up")
+		res.release()
+		os.Exit(0)
+	}()
+
+	defer func() {
+		if r := recover(); r != nil {
+			printWColor(" !! Panic !! ", color.FgWhite, color.BgRed)
+			fmt.Fprintln(os.Stderr, r)
+			res.release()
+			code = 1
+		}
+	}()
+
+	if err := start(opts, res); err != nil {
+		fmt.Fprintf(os.Stderr, "could not start the monolith: %s\n", err)
+		res.release()
+		return 1
 	}
+	select {}
+}
 
+// resources son las cosas que el proceso creó y debe liberar al salir: sus
+// contenedores (cada uno por su propio recurso, nunca por etiqueta), el
+// emisor local y el directorio propio. Se liberan en orden inverso y una sola
+// vez; lo que se registra después de liberar se libera en el acto.
+type resources struct {
+	mu       sync.Mutex
+	released bool
+	releases []func()
+}
+
+func (r *resources) add(name string, release func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	f := func() {
+		fmt.Printf(" -- releasing %s\n", name)
+		release()
+	}
+	if r.released {
+		f()
+		return
+	}
+	r.releases = append(r.releases, f)
+}
+
+func (r *resources) release() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.released {
+		return
+	}
+	r.released = true
+	fmt.Println("========== CLEANING UP ==========")
+	for i := len(r.releases) - 1; i >= 0; i-- {
+		r.releases[i]()
+	}
+}
+
+// start lanza PostgreSQL y los servicios auxiliares, genera el directorio
+// propio y monta el monolito. Devuelve nil cuando el proxy ya atiende.
+func start(opts *options, res *resources) error {
+	fmt.Println("===================== FLAGS ======================")
+	fmt.Printf("Sample Data Enabled: %v\n", opts.sampleData)
 	if opts.hsmModule != "" {
 		fmt.Printf("HSM - PKCS11 Module Driver: %s\n", opts.hsmModule)
 	}
@@ -119,86 +176,10 @@ func main() {
 		var err error
 		cryptoengineOptionsMap, err = parseCryptoEngineOptions(opts.cryptoengineOptions)
 		if err != nil {
-			log.Fatalf("could not parse crypto engine options: %s", err)
+			return fmt.Errorf("could not parse crypto engine options: %w", err)
 		}
 		fmt.Printf("Crypto Engines: %v\n", cryptoengineOptionsMap)
 	}
-	runtimeDirCleanup := func() {}
-	cleanup := func() {
-		fmt.Println("========== CLEANING UP ==========")
-		runtimeDirCleanup()
-
-		cli, err := docker.NewClientFromEnv()
-		if err != nil {
-			fmt.Println("could not create docker client: ", err)
-			return
-		}
-
-		// List all containers (running or not)
-		containers, err := cli.ListContainers(docker.ListContainersOptions{
-			All: true,
-		})
-		if err != nil {
-			log.Printf("Could not list containers during cleanup: %s", err)
-			return
-		}
-
-		// Label to match
-		targetLabel := "group"
-		targetValue := "lamassuiot-monolithic"
-
-		for _, container := range containers {
-			labels := container.Labels
-			if val, ok := labels[targetLabel]; ok && val == targetValue {
-				log.Printf("Found container %s with label %s=%s", container.ID, targetLabel, targetValue)
-
-				// Stop the container
-				err := cli.StopContainer(container.ID, 10)
-				if err != nil {
-					log.Printf("Error stopping container %s: %v", container.ID, err)
-				} else {
-					log.Printf("Stopped container %s", container.ID)
-				}
-
-				// Remove the container
-				err = cli.RemoveContainer(docker.RemoveContainerOptions{
-					ID:    container.ID,
-					Force: true,
-				})
-				if err != nil {
-					log.Printf("Error removing container %s: %v", container.ID, err)
-				} else {
-					log.Printf("Removed container %s", container.ID)
-				}
-			}
-		}
-	}
-
-	//capture future panics
-	defer func() {
-		if err := recover(); err != nil {
-			printWColor(" !! Panic !! ", color.FgWhite, color.BgRed)
-			fmt.Println(err)
-			fmt.Println()
-
-			printWColor("cleaning up", color.FgRed, color.BgBlack)
-			fmt.Println()
-
-			cleanup()
-		}
-	}()
-
-	//capture CTRL+C
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		for range c {
-			// sig is a ^C, handle it
-			fmt.Println("ctrl+c triggered. Cleaning up")
-			cleanup()
-			os.Exit(0)
-		}
-	}()
 
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 
@@ -208,21 +189,22 @@ func main() {
 	}
 
 	fmt.Println("Storage Engine")
-	var storageConfig cconfig.PluggableStorageEngine
-
 	// Solo PostgreSQL: parseOptions rechaza -sqlite (spec 009, P1).
 	pg, err := devstorage.Start(context.Background(), devstorage.StartOptions{
 		External:     opts.externalPostgres(),
 		StandardPort: opts.standardDockerPorts,
 	})
 	if err != nil {
-		log.Fatalf("could not start PostgreSQL: %s", err)
+		return fmt.Errorf("could not start PostgreSQL: %w", err)
 	}
+	res.add("PostgreSQL", pg.Cleanup)
+	postgresDescription := fmt.Sprintf("external %s:%d", pg.Admin.Hostname, pg.Admin.Port)
 	if pg.Launched {
-		fmt.Println(">> launched docker: Postgres")
-		fmt.Printf(" 	-- postgres port: %d\n", pg.Admin.Port)
-		fmt.Printf(" 	-- postgres admin user: %s\n", pg.Admin.Username)
-		fmt.Printf(" 	-- postgres admin pass: %s\n", pg.Admin.Password)
+		postgresDescription = fmt.Sprintf("Docker container %.12s on %s:%d", pg.ContainerID, pg.Admin.Hostname, pg.Admin.Port)
+		fmt.Printf(">> launched docker: Postgres (container %.12s)\n", pg.ContainerID)
+		fmt.Printf(" \t-- postgres port: %d\n", pg.Admin.Port)
+		fmt.Printf(" \t-- postgres admin user: %s\n", pg.Admin.Username)
+		fmt.Printf(" \t-- postgres admin pass: %s\n", pg.Admin.Password)
 	} else {
 		fmt.Printf(">> using external Postgres %s:%d (admin user %s)\n", pg.Admin.Hostname, pg.Admin.Port, pg.Admin.Username)
 	}
@@ -230,30 +212,29 @@ func main() {
 	storageLogger := chelpers.SetupLogger(cconfig.Info, "Monolithic", "PostgreSQL")
 	prepared, err := devstorage.Prepare(context.Background(), storageLogger, pg.Admin)
 	if err != nil {
-		pg.Cleanup()
-		log.Fatalf("could not prepare PostgreSQL: %s", err)
+		return fmt.Errorf("could not prepare PostgreSQL: %w", err)
 	}
-	storageConfig = prepared.Storage
-	fmt.Printf(" 	-- services connect as: %s (random password, row level security applies)\n", devstorage.AppRole)
+	storageConfig := prepared.Storage
+	fmt.Printf(" \t-- services connect as: %s (random password, row level security applies)\n", devstorage.AppRole)
 
 	fmt.Println("Crypto Engines")
 
 	var vaultCryptoEngine cconfig.CryptoEngineConfig
-	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
 		vaultSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run(opts.standardDockerPorts)
 		if err != nil {
-			log.Fatalf("could not launch Hashicorp Vault: %s", err)
+			return fmt.Errorf("could not launch Hashicorp Vault: %w", err)
 		}
+		res.add("Hashicorp Vault", vaultSubsystem.AfterSuite)
 
-		vaultCryptoEngine := vaultSubsystem.Config.(cconfig.CryptoEngineConfig)
+		vaultCryptoEngine = vaultSubsystem.Config.(cconfig.CryptoEngineConfig)
 
 		port := (vaultCryptoEngine.Config)["port"].(int)
-		rootToken = (*vaultSubsystem.Extra)["rootToken"].(string)
+		rootToken := (*vaultSubsystem.Extra)["rootToken"].(string)
 
-		fmt.Printf(" 	-- vault port: %d\n", port)
-		fmt.Printf(" 	-- vault root token: %s\n", rootToken)
+		fmt.Printf(" \t-- vault port: %d\n", port)
+		fmt.Printf(" \t-- vault root token: %s\n", rootToken)
 	}
 
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
@@ -263,8 +244,9 @@ func main() {
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
 		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run(opts.standardDockerPorts)
 		if err != nil {
-			log.Fatalf("could not launch AWS Platform: %s", err)
+			return fmt.Errorf("could not launch AWS Platform: %w", err)
 		}
+		res.add("AWS Platform", awsSubsystem.AfterSuite)
 
 		awsBaseCryptoEngine = awsSubsystem.Config.(cconfig.CryptoEngineConfig)
 	}
@@ -277,15 +259,14 @@ func main() {
 		pkcs11SubsystemBuilder.Prepare(map[string]interface{}{"hsmModulePath": hsmModulePath})
 		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run(opts.standardDockerPorts)
 		if err != nil {
-			log.Fatalf("could not launch SoftHSM: %s", err)
+			return fmt.Errorf("could not launch SoftHSM: %w", err)
 		}
+		res.add("SoftHSM", pkcs11Subsystem.AfterSuite)
 
 		pkcs11Cfg = pkcs11Subsystem.Config.(cconfig.CryptoEngineConfig)
-
 	}
 
 	fmt.Println("Async Messaging Engine")
-	adminPort := 0
 	eventBus := cconfig.EventBusEngine{
 		LogLevel: cconfig.Trace,
 		Enabled:  false,
@@ -307,28 +288,29 @@ func main() {
 		dlqEventBus = eventBus
 		dlqEventBus.Config = make(map[string]interface{})
 
-		fmt.Println(" 	-- inmemory eventbus: ephemeral GoChannel pub/sub")
+		fmt.Println(" \t-- inmemory eventbus: ephemeral GoChannel pub/sub")
 	} else if !opts.disableEventbus && !opts.useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
 		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(opts.standardDockerPorts)
 		if err != nil {
-			log.Fatalf("could not launch RabbitMQ: %s", err)
+			return fmt.Errorf("could not launch RabbitMQ: %w", err)
 		}
+		res.add("RabbitMQ", rabbitmqSubsystem.AfterSuite)
 
 		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
 		// make a copy for DLQ using deep copy
 
-		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
+		adminPort := (*rabbitmqSubsystem.Extra)["adminPort"].(int)
 		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
 
 		dlqEventBus = eventBus
 		dlqEventBus.Config = deepCopy(eventBus.Config)
 		dlqEventBus.Config["exchange"] = "lamassu-dlq"
 
-		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
-		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
-		fmt.Printf(" 	-- rabbitmq user: %s\n", basicAuth["username"].(string))
-		fmt.Printf(" 	-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
+		fmt.Printf(" \t-- rabbitmq UI port: %d\n", adminPort)
+		fmt.Printf(" \t-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
+		fmt.Printf(" \t-- rabbitmq user: %s\n", basicAuth["username"].(string))
+		fmt.Printf(" \t-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
 	} else if !opts.disableEventbus && opts.useAwsEventbus {
 		fmt.Println(">> using AWS Eventbus")
 		internalConfig := awsBaseCryptoEngine.Config
@@ -341,42 +323,16 @@ func main() {
 		}
 	}
 
-	var uiPort int
-	fmt.Printf(">> UI Enabled : %v\n", !opts.disableUI)
-
-	cloudConnectors := "[]"
-	if opts.awsIoTManagerID != "" {
-		cloudConnectors = fmt.Sprintf("[\"aws.%s\"]", opts.awsIoTManagerID)
-	}
-
-	if !opts.disableUI {
-		containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
-			Tag:        "latest",                        // version
-			Env:        []string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors},
-			Labels: map[string]string{
-				"group": "lamassuiot-monolithic",
-			},
-		}, func(hc *docker.HostConfig) {
-			hc.AutoRemove = true
-		})
-
-		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
-
-		if err != nil {
-			containerCleanup()
-			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
-		}
-	}
+	// La UI publicada (lamassu-ui) no se lanza: usa v1 sin OIDC (P4).
 
 	fmt.Println("Identity (JWT)")
 	// Directorio propio (0700) para certificados y claves generados al
-	// arrancar; se borra en el cleanup.
+	// arrancar; se borra al salir.
 	runtimeDir, err := os.MkdirTemp("", "lamassu-monolith-")
 	if err != nil {
-		log.Fatalf("could not create runtime directory: %s", err)
+		return fmt.Errorf("could not create runtime directory: %w", err)
 	}
-	runtimeDirCleanup = func() { _ = os.RemoveAll(runtimeDir) }
+	res.add("runtime directory "+runtimeDir, func() { _ = os.RemoveAll(runtimeDir) })
 	rt, err := devruntime.Start(devruntime.Options{
 		Dir:             runtimeDir,
 		DevIssuer:       opts.devIssuer,
@@ -384,30 +340,12 @@ func main() {
 		ExternalCAFiles: opts.issuerCAFiles,
 	})
 	if err != nil {
-		cleanup()
-		log.Fatalf("could not prepare the multitenant runtime: %s", err)
+		return fmt.Errorf("could not prepare the multitenant runtime: %w", err)
 	}
-	if rt.Issuer != nil {
-		fmt.Printf(">> local token issuer (development only, 127.0.0.1): %s\n", rt.Issuer.Issuer())
-		fmt.Printf(" 	-- get a token: curl --cacert %s/monolith-ca.crt -X POST %s -d '{\"subject\":\"alice\"}'\n", runtimeDir, rt.Issuer.TokenURL())
-	}
-	for _, issuer := range rt.Multitenant.Issuers {
-		fmt.Printf(" 	-- accepted JWT issuer: %s (JWKS %s)\n", issuer.Issuer, issuer.JWKSURL)
-	}
+	res.add("local token issuer", func() { _ = rt.Close() })
 	multitenant := rt.Multitenant
 	multitenant.Provisioners = opts.effectiveProvisioners(rt.DefaultProvisioners())
 	multitenant.V1 = opts.v1Config()
-	if multitenant.V1.DefaultTenantID == "" {
-		fmt.Println(" 	-- v1 API: disabled (503), as with the Helm chart; use -v1-default-tenant and -v1-sunset to serve it")
-	} else {
-		fmt.Printf(" 	-- v1 API: served in tenant %s until %s (Deprecation, Sunset and Link headers)\n", multitenant.V1.DefaultTenantID, multitenant.V1.SunsetAt.Format(time.RFC3339))
-	}
-	for _, provisioner := range multitenant.Provisioners {
-		fmt.Printf(" 	-- tenant provisioner: %s | %s\n", provisioner.Issuer, provisioner.Subject)
-	}
-	if len(multitenant.Provisioners) == 0 {
-		fmt.Println(" 	-- no tenant provisioner configured: nobody can create organizations or tenants (use -provisioner)")
-	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
@@ -466,8 +404,6 @@ func main() {
 
 	cryptoEnginesConfig.CryptoEngines = cryptoEngines
 
-	pluglableStorageConfig := &storageConfig
-
 	conf := pkg.MonolithicConfig{
 		OtelConfig: cconfig.OTELConfig{
 			Metrics: cconfig.OTELMetricsConfig{Enabled: false},
@@ -475,40 +411,28 @@ func main() {
 			Logging: cconfig.OTELLoggingConfig{Enabled: false},
 		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
-		UIPort:                uiPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,
 		PublisherEventBus:     eventBus,
 		Domains:               []string{"dev.lamassu.test", "localhost"},
-		GatewayPortHttps:      8443,
-		GatewayPortHttp:       8080,
+		GatewayPortHttps:      opts.httpsPort,
+		GatewayPortHttp:       opts.httpPort,
+		ProxyListenAddress:    opts.listen,
 		AssemblyMode:          pkg.Http,
 		CryptoEngines:         cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
 			Enabled:   !opts.disableMonitor,
 			Frequency: "2m",
 		},
-		Storage:            *pluglableStorageConfig,
+		Storage:            storageConfig,
 		PopulateSampleData: opts.sampleData,
 		Multitenant:        multitenant,
-		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
-			Enabled:     opts.awsIoTManager,
-			ConnectorID: fmt.Sprintf("aws.%s", opts.awsIoTManagerID),
-			AWSSDKConfig: laws.AWSSDKConfig{
-				AWSAuthenticationMethod: laws.Static,
-				AccessKeyID:             opts.awsIoTManagerAKID,
-				SecretAccessKey:         cconfig.Password(opts.awsIoTManagerSAK),
-				SessionToken:            cconfig.Password(opts.awsIoTManagerST),
-				Region:                  opts.awsIoTManagerRegion,
-			},
-		},
 	}
 
 	monolith, err := pkg.AssembleMonolith(conf)
 	if err != nil {
-		fmt.Println("could not start monolithic PKI. Shuting down: ", err)
-		panic(err)
+		return err
 	}
 
 	fmt.Print(lamassuLogo)
@@ -544,9 +468,19 @@ func main() {
 		}
 	}
 
-	forever := make(chan struct{})
-	<-forever
-
+	fmt.Print(renderBanner(bannerInfo{
+		RuntimeDir:    runtimeDir,
+		ListenAddress: monolith.ListenAddress,
+		HTTPSPort:     monolith.HTTPSPort,
+		HTTPPort:      monolith.HTTPPort,
+		Issuers:       multitenant.Issuers,
+		LocalIssuer:   rt.Issuer,
+		Provisioners:  multitenant.Provisioners,
+		V1:            multitenant.V1,
+		Postgres:      postgresDescription,
+		Warnings:      opts.warnings(),
+	}))
+	return nil
 }
 
 func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, error) {

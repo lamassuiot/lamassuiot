@@ -30,10 +30,15 @@ import (
 // Monolith es un monolito ensamblado: los puertos del proxy y a qué puerto
 // de servicio lleva cada prefijo.
 type Monolith struct {
-	HTTPPort    int
-	HTTPSPort   int
-	ProxyRoutes map[string]int
+	// ListenAddress es la interfaz del proxy.
+	ListenAddress string
+	HTTPPort      int
+	HTTPSPort     int
+	ProxyRoutes   map[string]int
 }
+
+// DefaultProxyListenAddress es la interfaz del proxy si no se configura (P5).
+const DefaultProxyListenAddress = "127.0.0.1"
 
 func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 	m, err := AssembleMonolith(conf)
@@ -46,6 +51,14 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 // AssembleMonolith monta los servicios y el proxy en modo HTTP.
 func AssembleMonolith(conf MonolithicConfig) (*Monolith, error) {
 	log.SetLevel(log.PanicLevel)
+	// Las claves del proxy van al directorio propio, nunca al cwd (D9).
+	if conf.Multitenant.RuntimeDir == "" {
+		return nil, fmt.Errorf("a runtime directory (Multitenant.RuntimeDir) is required for the proxy certificate and key")
+	}
+	listenAddress := conf.ProxyListenAddress
+	if listenAddress == "" {
+		listenAddress = DefaultProxyListenAddress
+	}
 	if conf.AssemblyMode == Http {
 		// Initialize OTel SDK once at the very beginning, before any HTTP clients are created
 		// This ensures trace context propagation works correctly across all services
@@ -66,22 +79,11 @@ func AssembleMonolith(conf MonolithicConfig) (*Monolith, error) {
 			return nil, err
 		}
 
-		// Hasta la tarea 12 de la spec 009, sin RuntimeDir los ficheros del
-		// proxy siguen en el directorio de trabajo.
 		proxyCertFile := filepath.Join(conf.Multitenant.RuntimeDir, "proxy.crt")
 		proxyKeyFile := filepath.Join(conf.Multitenant.RuntimeDir, "proxy.key")
-
-		key, _ := chelpers.GenerateRSAKey(2048)
-		keyPem, _ := chelpers.PrivateKeyToPEM(key)
-		os.WriteFile(proxyKeyFile, []byte(keyPem), 0600)
-
-		crt, err := chelpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
-		if err != nil {
-			panic(fmt.Sprintf("could not create self signed cert: %s", err))
+		if err := writeProxyCertificate(proxyCertFile, proxyKeyFile); err != nil {
+			return nil, err
 		}
-
-		crtPem := chelpers.CertificateToPEM(crt)
-		os.WriteFile(proxyCertFile, []byte(crtPem), 0600)
 
 		kmsRoutes, err := tenantRoutes.build("KMS", profile.KMS.Server)
 		if err != nil {
@@ -274,8 +276,8 @@ func AssembleMonolith(conf MonolithicConfig) (*Monolith, error) {
 			subpath = strings.TrimSuffix(subpath, "/")
 			color.Set(color.BgCyan)
 			color.Set(color.FgWhite)
-			fmt.Printf("  (HTTPS)  0.0.0.0:%d%s*  --> %s 127.0.0.1:%d\n", conf.GatewayPortHttps, servicePath, serviceName, servicePort)
-			fmt.Printf("  (HTTP)   0.0.0.0:%d%s*  --> %s 127.0.0.1:%d\n", conf.GatewayPortHttp, servicePath, serviceName, servicePort)
+			fmt.Printf("  (HTTPS)  %s  %s*  --> %s 127.0.0.1:%d\n", listenAddress, servicePath, serviceName, servicePort)
+			fmt.Printf("  (HTTP)   %s  %s*  --> %s 127.0.0.1:%d\n", listenAddress, servicePath, serviceName, servicePort)
 			color.Unset()
 			fmt.Printf("\n")
 			proxyRoutes[servicePath] = servicePort
@@ -358,14 +360,15 @@ func AssembleMonolith(conf MonolithicConfig) (*Monolith, error) {
 
 		buildReverseProxyGlobalHandler(engine)
 
-		listenerHttps, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", conf.GatewayPortHttps))
+		listenerHttps, err := net.Listen("tcp", net.JoinHostPort(listenAddress, fmt.Sprint(conf.GatewayPortHttps)))
 		if err != nil {
-			log.Fatalf("could not get Gateway net Listener: %s", err)
+			return nil, fmt.Errorf("could not listen for the HTTPS proxy on %s port %d: %w", listenAddress, conf.GatewayPortHttps, err)
 		}
 
-		listenerHttp, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", conf.GatewayPortHttp))
+		listenerHttp, err := net.Listen("tcp", net.JoinHostPort(listenAddress, fmt.Sprint(conf.GatewayPortHttp)))
 		if err != nil {
-			log.Fatalf("could not get Gateway net Listener: %s", err)
+			_ = listenerHttps.Close()
+			return nil, fmt.Errorf("could not listen for the HTTP proxy on %s port %d: %w", listenAddress, conf.GatewayPortHttp, err)
 		}
 
 		usedHttpsPort := listenerHttps.Addr().(*net.TCPAddr).Port
@@ -394,10 +397,34 @@ func AssembleMonolith(conf MonolithicConfig) (*Monolith, error) {
 			log.Fatal(serverHttp.Serve(listenerHttp))
 		}()
 
-		return &Monolith{HTTPPort: usedHttpPort, HTTPSPort: usedHttpsPort, ProxyRoutes: proxyRoutes}, nil
+		return &Monolith{ListenAddress: listenAddress, HTTPPort: usedHttpPort, HTTPSPort: usedHttpsPort, ProxyRoutes: proxyRoutes}, nil
 	}
 
 	return nil, fmt.Errorf("unsupported mode")
+}
+
+// writeProxyCertificate escribe el certificado autofirmado del proxy y su
+// clave con permisos 0600.
+func writeProxyCertificate(certFile, keyFile string) error {
+	key, err := chelpers.GenerateRSAKey(2048)
+	if err != nil {
+		return fmt.Errorf("could not generate the proxy key: %w", err)
+	}
+	keyPem, err := chelpers.PrivateKeyToPEM(key)
+	if err != nil {
+		return fmt.Errorf("could not encode the proxy key: %w", err)
+	}
+	if err := os.WriteFile(keyFile, []byte(keyPem), 0o600); err != nil {
+		return fmt.Errorf("could not write the proxy key: %w", err)
+	}
+	crt, err := chelpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
+	if err != nil {
+		return fmt.Errorf("could not create the proxy certificate: %w", err)
+	}
+	if err := os.WriteFile(certFile, []byte(chelpers.CertificateToPEM(crt)), 0o600); err != nil {
+		return fmt.Errorf("could not write the proxy certificate: %w", err)
+	}
+	return nil
 }
 
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
