@@ -27,8 +27,8 @@ RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
 
 FROM ubuntu:26.04
 
-RUN groupadd --system lamassu && \
-    useradd --system --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
+RUN groupadd --system --gid 65532 lamassu && \
+    useradd --system --uid 65532 --gid lamassu --no-create-home --shell /usr/sbin/nologin lamassu
 
 COPY --from=builder /app/authz /
 COPY --from=builder /app/connectors/authz/cmd/preload /etc/lamassuiot/authz/preload
