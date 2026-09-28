@@ -16,7 +16,20 @@ var ControlPlaneDBName = "controlplane"
 const (
 	controlPlaneTenantManagementVersion = int64(20260925120000)
 	controlPlaneSimplifyLifecycle       = int64(20260928120000)
+	controlPlaneGrantLamassuApp         = int64(20260928130000)
 )
+
+// controlPlaneAppTables son las tablas de controlplane que usa el rol de
+// aplicación sin privilegios (Tenant Manager, membresías, selectores, outbox).
+var controlPlaneAppTables = []string{
+	"organizations",
+	"tenants",
+	"identities",
+	"memberships",
+	"invitations",
+	"dedicated_crypto_selectors",
+	"event_outbox",
+}
 
 // TestControlPlaneSimplifyTenantLifecycleMigration checks that the tenant
 // lifecycle migration retires PROVISIONING and DEPROVISIONING (005 T10.1).
@@ -84,5 +97,64 @@ func TestControlPlaneSimplifyTenantLifecycleMigration(t *testing.T) {
 	for _, restored := range []string{"PROVISIONING", "DEPROVISIONING"} {
 		require.NoError(t, con.Exec(`INSERT INTO tenants (id, organization_id, name, status, isolation_mode) VALUES (?, 'org-a', ?, ?, 'POOLED')`,
 			"t-down-"+restored, "down-"+restored, restored).Error, "down restores the six-state check")
+	}
+}
+
+// TestControlPlaneGrantLamassuAppMigration comprueba que lamassu_app recibe
+// SELECT/INSERT/UPDATE/DELETE sobre las tablas de controlplane tras up y los
+// pierde tras down (005 T10.1).
+func TestControlPlaneGrantLamassuAppMigration(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "test")
+	cleanup, con := RunDB(t, logger, ControlPlaneDBName)
+	defer cleanup()
+
+	ctx := context.Background()
+	m := postgres.NewMigrator(logger, con)
+	_, err := m.Goose.UpTo(ctx, controlPlaneSimplifyLifecycle)
+	require.NoError(t, err)
+
+	privileges := []string{"SELECT", "INSERT", "UPDATE", "DELETE"}
+	roleExists := func() bool {
+		var exists bool
+		require.NoError(t, con.Raw(`SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lamassu_app')`).Scan(&exists).Error)
+		return exists
+	}
+	hasPrivilege := func(table, privilege string) bool {
+		var granted bool
+		require.NoError(t, con.Raw(`SELECT has_table_privilege('lamassu_app', ?, ?)`, table, privilege).Scan(&granted).Error)
+		return granted
+	}
+
+	if roleExists() {
+		for _, table := range controlPlaneAppTables {
+			for _, privilege := range privileges {
+				require.False(t, hasPrivilege(table, privilege), "lamassu_app has no %s on %s before the migration", privilege, table)
+			}
+		}
+	}
+
+	_, err = m.Goose.UpTo(ctx, controlPlaneGrantLamassuApp)
+	require.NoError(t, err)
+	current, err := m.Goose.GetDBVersion(ctx)
+	require.NoError(t, err)
+	require.Equal(t, controlPlaneGrantLamassuApp, current)
+
+	require.True(t, roleExists(), "the migration creates lamassu_app when missing")
+	for _, table := range controlPlaneAppTables {
+		for _, privilege := range privileges {
+			require.True(t, hasPrivilege(table, privilege), "lamassu_app has %s on %s after up", privilege, table)
+		}
+	}
+
+	_, err = m.Goose.DownTo(ctx, controlPlaneSimplifyLifecycle)
+	require.NoError(t, err)
+	current, err = m.Goose.GetDBVersion(ctx)
+	require.NoError(t, err)
+	require.Equal(t, controlPlaneSimplifyLifecycle, current)
+
+	for _, table := range controlPlaneAppTables {
+		for _, privilege := range privileges {
+			require.False(t, hasPrivilege(table, privilege), "lamassu_app loses %s on %s after down", privilege, table)
+		}
 	}
 }
