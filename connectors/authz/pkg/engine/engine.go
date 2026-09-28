@@ -294,7 +294,7 @@ func (e *Engine) CheckHTTP(ctx context.Context, policies *PolicyRegistry, method
 // CheckHTTPRequest evaluates HTTP route action grants plus optional route
 // constraints against each subject independently.
 func (e *Engine) CheckHTTPRequest(ctx context.Context, req HTTPCheckRequest) (result HTTPCheckResult, err error) {
-	ctx, span := otel.Tracer(engineTracer).Start(ctx, "engine.CheckHTTP",
+	ctx, span := otel.Tracer(engineTracer).Start(ctx, "engine.CheckHTTPRequest",
 		trace.WithAttributes(
 			attribute.String("http.method", req.Method),
 			attribute.String("http.path", req.Path),
