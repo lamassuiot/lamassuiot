@@ -15,6 +15,7 @@ const (
 
 type DMS struct {
 	ID           string         `json:"id" gorm:"primaryKey"`
+	TenantID     string         `json:"tenant_id" gorm:"index;not null"`
 	Name         string         `json:"name"`
 	Metadata     map[string]any `json:"metadata" gorm:"serializer:json"`
 	CreationDate time.Time      `json:"creation_ts"`

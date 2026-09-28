@@ -6,6 +6,7 @@ import (
 
 type VARole struct {
 	CASubjectKeyID string        `json:"ca_ski" gorm:"column:ca_ski;"`
+	TenantID       string        `json:"tenant_id" gorm:"index;not null"`
 	CRLOptions     VACRLRole     `json:"crl_options" gorm:"embedded;embeddedPrefix:crl_"`
 	LatestCRL      LatestCRLMeta `json:"latest_crl" gorm:"embedded;embeddedPrefix:latest_crl_"`
 }

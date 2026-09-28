@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
@@ -50,10 +51,24 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	}
 
 	// Add OTel Tracing
-	err = db.Use(tracing.NewPlugin())
+	if err := db.Use(tracing.NewPlugin()); err != nil {
+		return nil, err
+	}
 
-	return db, err
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	maxOpen := cfg.MaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = defaultMaxOpenConns
+	}
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxOpen)
+	return db, nil
 }
+
+const defaultMaxOpenConns = 20
 
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
 	schema.RegisterSerializer("text", TextSerializer{})
@@ -170,13 +185,21 @@ type postgresDBQuerier[E any] struct {
 	*gorm.DB
 	tableName        string
 	primaryKeyColumn string
+	// hasTenantColumn caches whether this table can be tenant-scoped: the Go model exposes a
+	// TenantID field, the connection is PostgreSQL (not SQLite), and the physical table
+	// actually has a tenant_id column. The last check matters for migration-verification
+	// tests, which construct repositories against intermediate, pre-tenant-migration schema
+	// snapshots; those must keep behaving as unscoped, single-tenant tables.
+	hasTenantColumn bool
 }
 
 func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) postgresDBQuerier[E] {
+	hasTenantColumn := isTenantScopedEntity[E]() && !isSQLite(db) && db.Migrator().HasColumn(tableName, tenantIDColumnName)
 	return postgresDBQuerier[E]{
 		DB:               db,
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
+		hasTenantColumn:  hasTenantColumn,
 	}
 }
 
@@ -184,6 +207,71 @@ type gormExtraOps struct {
 	query           interface{}
 	additionalWhere []interface{}
 	joins           []string
+}
+
+// tenantIDFieldName is the Go struct field name that every tenant-scoped model must expose.
+const tenantIDFieldName = "TenantID"
+
+// tenantIDColumnName is the Postgres column backing tenantIDFieldName.
+const tenantIDColumnName = "tenant_id"
+
+// isTenantScopedEntity reports whether E carries a TenantID field and therefore must be
+// scoped to the caller's tenant. Control-plane and global models without TenantID are left
+// untouched.
+func isTenantScopedEntity[E any]() bool {
+	var zero E
+	t := reflect.TypeOf(zero)
+	if t == nil || t.Kind() != reflect.Struct {
+		return false
+	}
+	_, found := t.FieldByName(tenantIDFieldName)
+	return found
+}
+
+// setTenantID forces the TenantID field of elem (a *E) to tenantID, overriding any value a
+// caller may have supplied. This guarantees no tenant_id can be chosen by client input.
+func setTenantID(elem any, tenantID string) {
+	v := reflect.ValueOf(elem)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	field := v.FieldByName(tenantIDFieldName)
+	if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
+		field.SetString(tenantID)
+	}
+}
+
+// tenantScope resolves the tenant that must scope this operation. ok=false means the entity
+// is not tenant-scoped (or the connection is SQLite, which does not support the RLS-backed
+// multi-tenancy model and keeps its pre-existing single-tenant behaviour), so the caller must
+// proceed without tenant enforcement. When ok=true and err!=nil, the caller must fail closed:
+// no tenant-scoped operation is allowed without a validated TenantContext.
+func (db *postgresDBQuerier[E]) tenantScope(ctx context.Context) (tenantID string, ok bool, err error) {
+	if !db.hasTenantColumn {
+		return "", false, nil
+	}
+
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return "", true, err
+	}
+
+	return tenantContext.TenantID, true, nil
+}
+
+func (db *postgresDBQuerier[E]) tenantIDColumn() string {
+	return db.tableName + "." + tenantIDColumnName
+}
+
+// withTenantScopedTx runs fn against a *gorm.DB already scoped to ctx. When the operation is
+// tenant-scoped it executes inside a transaction with `app.tenant_id` set via SET LOCAL so
+// that PostgreSQL RLS policies (USING/WITH CHECK) enforce the same boundary at the database
+// layer. Non tenant-scoped operations keep the previous, unscoped behaviour.
+func (db *postgresDBQuerier[E]) withTenantScopedTx(ctx context.Context, scoped bool, fn func(tx *gorm.DB) error) error {
+	if scoped {
+		return WithTenantTransaction(ctx, db.DB, fn)
+	}
+	return fn(db.DB.WithContext(ctx))
 }
 
 func applyExtraOpts(tx *gorm.DB, extraOpts []gormExtraOps) *gorm.DB {
@@ -201,13 +289,21 @@ func applyExtraOpts(tx *gorm.DB, extraOpts []gormExtraOps) *gorm.DB {
 }
 
 func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtraOps) (int, error) {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return -1, err
+	}
+
 	var count int64
-	tx := db.Table(db.tableName).WithContext(ctx)
-
-	tx = applyExtraOpts(tx, extraOpts)
-
-	tx.Count(&count)
-	if err := tx.Error; err != nil {
+	err = db.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		q = applyExtraOpts(q, extraOpts)
+		return q.Count(&count).Error
+	})
+	if err != nil {
 		return -1, err
 	}
 
@@ -215,17 +311,24 @@ func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtra
 }
 
 func (db *postgresDBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.FilterOption, extraOpts []gormExtraOps) (int, error) {
-	var count int64
-	tx := db.Table(db.tableName).WithContext(ctx)
-
-	for _, filter := range filters {
-		tx = FilterOperandToWhereClause(filter, tx)
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return -1, err
 	}
 
-	tx = applyExtraOpts(tx, extraOpts)
-
-	tx.Count(&count)
-	if err := tx.Error; err != nil {
+	var count int64
+	err = db.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		for _, filter := range filters {
+			q = FilterOperandToWhereClause(filter, q)
+		}
+		q = applyExtraOpts(q, extraOpts)
+		return q.Count(&count).Error
+	})
+	if err != nil {
 		return -1, err
 	}
 
@@ -233,8 +336,30 @@ func (db *postgresDBQuerier[E]) CountFiltered(ctx context.Context, filters []res
 }
 
 func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var bookmark string
+	err = db.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		base := tx.Table(db.tableName)
+		if scoped {
+			base = base.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		var innerErr error
+		bookmark, innerErr = db.selectAllBody(ctx, base, queryParams, extraOpts, exhaustiveRun, applyFunc)
+		return innerErr
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return bookmark, nil
+}
+
+func (db *postgresDBQuerier[E]) selectAllBody(ctx context.Context, tx *gorm.DB, queryParams *resources.QueryParameters, extraOpts []gormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
-	tx := db.Table(db.tableName)
 
 	offset := 0
 	limit := 15
@@ -446,13 +571,27 @@ func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string
 		searchCol = *queryCol
 	}
 
-	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
-	if tx.Error != nil {
-		return false, nil, tx.Error
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return false, nil, err
 	}
 
-	if tx.RowsAffected == 0 {
+	var elem E
+	var rowsAffected int64
+	err = db.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName).Preload(clause.Associations).Limit(1)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		result := q.Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	if err != nil {
+		return false, nil, err
+	}
+
+	if rowsAffected == 0 {
 		return false, nil, nil // No record found, but no error
 	}
 
@@ -460,8 +599,18 @@ func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string
 }
 
 func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
-	if err := tx.Error; err != nil {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scoped {
+		setTenantID(elem, tenantID)
+	}
+
+	err = db.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		return tx.Table(db.tableName).Create(elem).Error
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -469,12 +618,36 @@ func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID stri
 }
 
 func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
-	if err := tx.Error; err != nil {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scoped {
+		// No arbitrary tenant reassignment: the context tenant always wins.
+		setTenantID(elem, tenantID)
+	}
+
+	var rowsAffected int64
+	err = db.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		q := tx.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		// NOTE: intentionally uses Select("*").Updates(...) instead of Save(...). GORM's
+		// Save() falls back to `INSERT ... ON CONFLICT DO UPDATE` whenever the WHERE clause
+		// matches zero rows, which would silently hijack another tenant's row (or create a
+		// phantom row for an unknown ID) instead of failing. Updates never performs that
+		// fallback, so a cross-tenant or non-existent elemID correctly yields zero rows
+		// affected below.
+		result := q.Select("*").Updates(elem)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	if tx.RowsAffected != 1 {
+	if rowsAffected != 1 {
 		return nil, gorm.ErrRecordNotFound
 	}
 
@@ -482,12 +655,26 @@ func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID stri
 }
 
 func (db *postgresDBQuerier[E]) Delete(ctx context.Context, elemID string) error {
-	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
-	if err := tx.Error; err != nil {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
 		return err
 	}
 
-	if tx.RowsAffected != 1 {
+	var rowsAffected int64
+	err = db.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		result := q.Delete(nil)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected != 1 {
 		return gorm.ErrRecordNotFound
 	}
 

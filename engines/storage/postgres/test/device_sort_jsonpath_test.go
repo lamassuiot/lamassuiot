@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
@@ -17,6 +18,16 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 	defer suite.AfterSuite()
 
 	db := suite.DB["devicemanager"]
+	ctx := core.WithTenantContext(context.Background(), core.TenantContext{
+		OrganizationID: "organization",
+		TenantID:       "tenant-test",
+		ActorID:        "actor",
+		ActorType:      "user",
+		CorrelationID:  "correlation",
+		Source:         "test",
+		TenantStatus:   core.TenantActive,
+		Validated:      true,
+	})
 	logger := logrus.NewEntry(logrus.New())
 	logger.Logger.SetLevel(logrus.TraceLevel)
 
@@ -36,7 +47,8 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 	// Insert test data: 3 devices with different metadata
 	devices := []models.Device{
 		{
-			ID: "device_prod",
+			ID:       "device_prod",
+			TenantID: "tenant-test",
 			Metadata: map[string]any{
 				"env":      "prod",
 				"priority": float64(10), // JSON numbers are float64
@@ -48,7 +60,8 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 			ExtraSlots:        map[string]*models.Slot[any]{},
 		},
 		{
-			ID: "device_dev",
+			ID:       "device_dev",
+			TenantID: "tenant-test",
 			Metadata: map[string]any{
 				"env":      "dev",
 				"priority": float64(20),
@@ -60,7 +73,8 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 			ExtraSlots:        map[string]*models.Slot[any]{},
 		},
 		{
-			ID: "device_stage",
+			ID:       "device_stage",
+			TenantID: "tenant-test",
 			Metadata: map[string]any{
 				"env":      "stage",
 				"priority": float64(5),
@@ -92,7 +106,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 		}
 
 		var result []models.Device
-		_, err := repo.SelectAll(context.Background(), false, func(d models.Device) {
+		_, err := repo.SelectAll(ctx, false, func(d models.Device) {
 			result = append(result, d)
 		}, queryParams, nil)
 
@@ -119,7 +133,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 		}
 
 		var result []models.Device
-		_, err := repo.SelectAll(context.Background(), false, func(d models.Device) {
+		_, err := repo.SelectAll(ctx, false, func(d models.Device) {
 			result = append(result, d)
 		}, queryParams, nil)
 
@@ -146,7 +160,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 
 		// First page
 		var firstPage []models.Device
-		bookmark, err := repo.SelectAll(context.Background(), false, func(d models.Device) {
+		bookmark, err := repo.SelectAll(ctx, false, func(d models.Device) {
 			firstPage = append(firstPage, d)
 		}, queryParams, nil)
 
@@ -160,7 +174,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 		// Second page using bookmark
 		queryParams.NextBookmark = bookmark
 		var secondPage []models.Device
-		bookmark2, err := repo.SelectAll(context.Background(), false, func(d models.Device) {
+		bookmark2, err := repo.SelectAll(ctx, false, func(d models.Device) {
 			secondPage = append(secondPage, d)
 		}, queryParams, nil)
 
@@ -184,7 +198,8 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 		// Create devices with dates in metadata
 		devices := []models.Device{
 			{
-				ID: "device_new",
+				ID:       "device_new",
+				TenantID: "tenant-test",
 				Metadata: map[string]any{
 					"created_at": "2026-01-15T10:00:00Z",
 				},
@@ -195,7 +210,8 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 				ExtraSlots:        map[string]*models.Slot[any]{},
 			},
 			{
-				ID: "device_old",
+				ID:       "device_old",
+				TenantID: "tenant-test",
 				Metadata: map[string]any{
 					"created_at": "2025-01-10T08:30:00Z",
 				},
@@ -206,7 +222,8 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 				ExtraSlots:        map[string]*models.Slot[any]{},
 			},
 			{
-				ID: "device_mid",
+				ID:       "device_mid",
+				TenantID: "tenant-test",
 				Metadata: map[string]any{
 					"created_at": "2025-06-20T14:15:00Z",
 				},
@@ -235,7 +252,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 		}
 
 		var result []models.Device
-		_, err = repo.SelectAll(context.Background(), false, func(d models.Device) {
+		_, err = repo.SelectAll(ctx, false, func(d models.Device) {
 			result = append(result, d)
 		}, queryParams, nil)
 

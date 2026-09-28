@@ -69,13 +69,27 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 }
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
-	var elem models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).Limit(1).Find(&elem)
-	if tx.Error != nil {
-		return false, nil, tx.Error
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return false, nil, err
 	}
 
-	if tx.RowsAffected == 0 {
+	var elem models.Key
+	var rowsAffected int64
+	err = db.querier.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(kmsTableName).Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias))
+		if scoped {
+			q = q.Where("tenant_id = ?", tenantID)
+		}
+		result := q.Limit(1).Find(&elem)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	if err != nil {
+		return false, nil, err
+	}
+
+	if rowsAffected == 0 {
 		return false, nil, nil // No record found, but no error
 	}
 

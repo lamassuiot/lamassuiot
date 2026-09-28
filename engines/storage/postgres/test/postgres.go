@@ -80,12 +80,11 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 		Tag:        "14",       // version
 		Env:        []string{"POSTGRES_PASSWORD=" + passwd},
 		Labels: map[string]string{
-			"group": "lamassuiot-monolithic",
+			"group": "lamassuiot-test-fixture",
 		},
 		PortBindings: map[docker.Port][]docker.PortBinding{},
 	}, func(hc *docker.HostConfig) {
 		hc.Mounts = mounts
-		hc.AutoRemove = false
 
 		if exposeAsStandardPort {
 			hc.PortBindings = map[docker.Port][]docker.PortBinding{

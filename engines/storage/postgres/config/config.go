@@ -7,4 +7,7 @@ type PostgresPSEConfig struct {
 	Port     int             `mapstructure:"port"`
 	Username string          `mapstructure:"username"`
 	Password config.Password `mapstructure:"password"`
+	// MaxOpenConns bounds the connections of each database pool (default 20),
+	// so load on one service cannot exhaust PostgreSQL max_connections.
+	MaxOpenConns int `mapstructure:"max_open_conns"`
 }

@@ -12,6 +12,7 @@ import (
 type Key struct {
 	PKCS11URI     string         `json:"pkcs11_uri" gorm:"-"`
 	KeyID         string         `json:"key_id"`
+	TenantID      string         `json:"tenant_id" gorm:"index;not null"`
 	Name          string         `json:"name"`
 	Aliases       []string       `json:"aliases" gorm:"serializer:json"`
 	EngineID      string         `json:"engine_id"`

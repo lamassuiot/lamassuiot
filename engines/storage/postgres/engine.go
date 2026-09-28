@@ -7,6 +7,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 func Register() {
@@ -20,18 +21,21 @@ func Register() {
 }
 
 const (
-	CA_DB_NAME     = "ca"
-	DEVICE_DB_NAME = "devicemanager"
-	DMS_DB_NAME    = "dmsmanager"
-	ALERTS_DB_NAME = "alerts"
-	VA_DB_NAME     = "va"
-	KMS_DB_NAME    = "kms"
+	CA_DB_NAME           = "ca"
+	DEVICE_DB_NAME       = "devicemanager"
+	DMS_DB_NAME          = "dmsmanager"
+	ALERTS_DB_NAME       = "alerts"
+	VA_DB_NAME           = "va"
+	KMS_DB_NAME          = "kms"
+	CONTROLPLANE_DB_NAME = "controlplane"
 )
 
 type PostgresStorageEngine struct {
 	storage.CommonStorageEngine
-	Config lconfig.PostgresPSEConfig
-	logger *log.Entry
+	Config                 lconfig.PostgresPSEConfig
+	logger                 *log.Entry
+	controlPlaneDB         *gorm.DB
+	controlPlaneMembership storage.ControlPlaneMembershipRepo
 }
 
 func NewStorageEngine(logger *log.Entry, config lconfig.PostgresPSEConfig) (storage.StorageEngine, error) {
@@ -209,4 +213,32 @@ func (s *PostgresStorageEngine) GetKMSStorage() (storage.KMSKeysRepo, error) {
 		s.KMS = kmsStore
 	}
 	return s.KMS, nil
+}
+
+func (s *PostgresStorageEngine) initializeControlPlaneStorage() error {
+	if s.controlPlaneDB == nil {
+		db, err := CreatePostgresDBConnection(s.logger, s.Config, CONTROLPLANE_DB_NAME)
+		if err != nil {
+			return fmt.Errorf("could not create control plane postgres client: %w", err)
+		}
+		s.controlPlaneDB = db
+	}
+	if s.controlPlaneMembership == nil {
+		s.controlPlaneMembership = NewControlPlaneMembershipRepository(s.controlPlaneDB)
+	}
+	return nil
+}
+
+func (s *PostgresStorageEngine) GetTenantManagementStorage() (storage.TenantManagementRepo, error) {
+	if err := s.initializeControlPlaneStorage(); err != nil {
+		return nil, err
+	}
+	return NewTenantManagementRepository(s.controlPlaneDB), nil
+}
+
+func (s *PostgresStorageEngine) GetControlPlaneMembershipStorage() (storage.ControlPlaneMembershipRepo, error) {
+	if err := s.initializeControlPlaneStorage(); err != nil {
+		return nil, err
+	}
+	return s.controlPlaneMembership, nil
 }

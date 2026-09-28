@@ -30,7 +30,7 @@ func init() {
 		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=alerts port=5432 sslmode=disable" status`)
 		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=devicemanager port=5432 sslmode=disable" up-to 5`)
 		log.Println()
-		log.Println("Valid databases: ca, devicemanager, dmsmanager, alerts, va, kms")
+		log.Println("Valid databases: ca, devicemanager, dmsmanager, alerts, va, kms, controlplane")
 		log.Println()
 		log.Println("Commands:")
 		log.Println("  up                   Migrate the DB to the most recent version available")
@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Validate database name
-	validDatabases := []string{"ca", "devicemanager", "dmsmanager", "alerts", "va", "kms"}
+	validDatabases := []string{"ca", "devicemanager", "dmsmanager", "alerts", "va", "kms", "controlplane"}
 	if !contains(validDatabases, dbName) {
 		log.Fatalf("goose-lamassu: invalid database: %s. Must be one of: %s", dbName, strings.Join(validDatabases, ", "))
 	}

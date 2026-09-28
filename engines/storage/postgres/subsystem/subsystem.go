@@ -39,8 +39,8 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 	}
 
 	beforeEach := func() error {
+		postgresEngine.BeforeEach()
 		for _, dbName := range p.dbs {
-			postgresEngine.BeforeEach()
 			switch dbName {
 			case "ca":
 				_, err := postgres.NewCAPostgresRepository(logger, postgresEngine.DB[dbName])
@@ -73,6 +73,8 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize KMS tables: %s", err)
 				}
+			case postgres.CONTROLPLANE_DB_NAME:
+				// The control plane schema is managed by SQL migrations.
 			default:
 				return fmt.Errorf("unknown db name: %s", dbName)
 			}

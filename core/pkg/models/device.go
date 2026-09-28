@@ -28,6 +28,7 @@ const (
 
 type Device struct {
 	ID                string                    `json:"id" gorm:"primaryKey"`
+	TenantID          string                    `json:"tenant_id" gorm:"index;not null"`
 	Tags              []string                  `json:"tags" gorm:"serializer:json"`
 	Status            DeviceStatus              `json:"status"`
 	Icon              string                    `json:"icon"`
@@ -81,7 +82,8 @@ type DeviceGroupFilterOption struct {
 
 type DeviceGroup struct {
 	ID          string                    `json:"id" gorm:"primaryKey"`
-	Name        string                    `json:"name" gorm:"uniqueIndex"`
+	TenantID    string                    `json:"tenant_id" gorm:"index;not null;uniqueIndex:device_groups_tenant_name,priority:1"`
+	Name        string                    `json:"name" gorm:"uniqueIndex:device_groups_tenant_name,priority:2"`
 	Description string                    `json:"description"`
 	ParentID    *string                   `json:"parent_id,omitempty" gorm:"column:parent_id"`
 	Criteria    []DeviceGroupFilterOption `json:"criteria" gorm:"serializer:json"`

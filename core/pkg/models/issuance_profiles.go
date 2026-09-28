@@ -2,6 +2,7 @@ package models
 
 type IssuanceProfile struct {
 	ID          string `json:"id" gorm:"primaryKey"`
+	TenantID    string `json:"tenant_id" gorm:"index;not null"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 

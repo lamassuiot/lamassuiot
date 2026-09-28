@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
@@ -46,34 +47,54 @@ func (db *PostgresDeviceGroupsStore) SelectByID(ctx context.Context, id string) 
 // SelectAncestors returns all ancestor groups (parent chain) for a given group ID
 // using a recursive CTE to traverse the hierarchy from the given group up to the root
 func (db *PostgresDeviceGroupsStore) SelectAncestors(ctx context.Context, id string) ([]*models.DeviceGroup, error) {
-	var ancestors []*models.DeviceGroup
-
-	// Recursive CTE query to get all ancestors
+	// Recursive CTE query to get all ancestors, scoped to the caller's tenant so the
+	// traversal never walks into another tenant's hierarchy.
 	query := `
 		WITH RECURSIVE ancestor_chain AS (
 			-- Base case: start with the given group
-			SELECT id, name, description, parent_id, criteria, created_at, updated_at
+			SELECT id, tenant_id, name, description, parent_id, criteria, created_at, updated_at
 			FROM device_groups
-			WHERE id = ?
+			WHERE id = ? AND tenant_id = ?
 			
 			UNION ALL
 			
 			-- Recursive case: get parent of current group
-			SELECT dg.id, dg.name, dg.description, dg.parent_id, dg.criteria, dg.created_at, dg.updated_at
+			SELECT dg.id, dg.tenant_id, dg.name, dg.description, dg.parent_id, dg.criteria, dg.created_at, dg.updated_at
 			FROM device_groups dg
-			INNER JOIN ancestor_chain ac ON dg.id = ac.parent_id
+			INNER JOIN ancestor_chain ac ON dg.id = ac.parent_id AND dg.tenant_id = ac.tenant_id
 		)
 		SELECT id, name, description, parent_id, criteria, created_at, updated_at
 		FROM ancestor_chain
 		ORDER BY created_at ASC
 	`
 
-	result := db.db.WithContext(ctx).Raw(query, id).Scan(&ancestors)
-	if result.Error != nil {
-		return nil, result.Error
+	var ancestors []*models.DeviceGroup
+	err := db.withTenantScope(ctx, func(tx *gorm.DB, tenantID string) error {
+		return tx.Raw(query, id, tenantID).Scan(&ancestors).Error
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return ancestors, nil
+}
+
+// withTenantScope runs fn with the caller's TenantID, wrapped in a PostgreSQL transaction
+// that sets `app.tenant_id` so RLS also enforces the boundary. On SQLite (single-tenant
+// legacy mode) it runs fn without a tenant requirement, matching the generic querier.
+func (db *PostgresDeviceGroupsStore) withTenantScope(ctx context.Context, fn func(tx *gorm.DB, tenantID string) error) error {
+	if !db.querier.hasTenantColumn {
+		return fn(db.db.WithContext(ctx), "")
+	}
+
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	return WithTenantTransaction(ctx, db.db, func(tx *gorm.DB) error {
+		return fn(tx, tenantContext.TenantID)
+	})
 }
 
 // Insert creates a new device group with validation to prevent circular references
@@ -113,14 +134,13 @@ func (db *PostgresDeviceGroupsStore) validateNoCircularReference(ctx context.Con
 	}
 
 	// Check if the proposed parent is actually a descendant of this group
-	// Use a recursive query to find all descendants of groupID
-	var count int64
+	// Use a recursive query to find all descendants of groupID, scoped to the caller's tenant
 	query := `
 		WITH RECURSIVE descendant_chain AS (
 			-- Base case: start with the current group
 			SELECT id, parent_id
 			FROM device_groups
-			WHERE id = ?
+			WHERE id = ? AND tenant_id = ?
 			
 			UNION ALL
 			
@@ -128,13 +148,17 @@ func (db *PostgresDeviceGroupsStore) validateNoCircularReference(ctx context.Con
 			SELECT dg.id, dg.parent_id
 			FROM device_groups dg
 			INNER JOIN descendant_chain dc ON dg.parent_id = dc.id
+			WHERE dg.tenant_id = ?
 		)
 		SELECT COUNT(*) FROM descendant_chain WHERE id = ?
 	`
 
-	result := db.db.WithContext(ctx).Raw(query, groupID, parentID).Scan(&count)
-	if result.Error != nil {
-		return result.Error
+	var count int64
+	err := db.withTenantScope(ctx, func(tx *gorm.DB, tenantID string) error {
+		return tx.Raw(query, groupID, tenantID, tenantID, parentID).Scan(&count).Error
+	})
+	if err != nil {
+		return err
 	}
 
 	if count > 0 {

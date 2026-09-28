@@ -4,12 +4,31 @@ import (
 	"context"
 	"testing"
 
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	postgrestest "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/test"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// deviceGroupsTenantContext builds a validated TenantContext for the given tenant, matching
+// the pattern used by the RLS integration tests.
+func deviceGroupsTenantContext(tenantID string) context.Context {
+	return core.WithTenantContext(context.Background(), core.TenantContext{
+		OrganizationID: "organization",
+		TenantID:       tenantID,
+		ActorID:        "actor",
+		ActorType:      "user",
+		CorrelationID:  "correlation",
+		Source:         "test",
+		TenantStatus:   core.TenantActive,
+		Validated:      true,
+	})
+}
 
 func TestDeviceGroupsRepository(t *testing.T) {
 	logger := helpers.SetupLogger(config.Info, "test", "device-groups-repo")
@@ -29,7 +48,7 @@ func TestDeviceGroupsRepository(t *testing.T) {
 		repo, err := NewDeviceGroupsRepository(logger, db)
 		assert.NoError(t, err)
 
-		ctx := context.Background()
+		ctx := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000002")
 
 		// Test Insert
 		rootGroup := &models.DeviceGroup{
@@ -87,7 +106,7 @@ func TestDeviceGroupsRepository(t *testing.T) {
 		repo, err := NewDeviceGroupsRepository(logger, db)
 		assert.NoError(t, err)
 
-		ctx := context.Background()
+		ctx := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000002")
 
 		// Create hierarchy: root -> child -> grandchild
 		root := &models.DeviceGroup{
@@ -153,7 +172,7 @@ func TestDeviceGroupsRepository(t *testing.T) {
 		repo, err := NewDeviceGroupsRepository(logger, db)
 		assert.NoError(t, err)
 
-		ctx := context.Background()
+		ctx := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000002")
 
 		// Try to create a group with itself as parent
 		selfParent := "20000000-0000-0000-0000-000000000001"
@@ -186,7 +205,7 @@ func TestDeviceGroupsRepository(t *testing.T) {
 		repo, err := NewDeviceGroupsRepository(logger, db)
 		assert.NoError(t, err)
 
-		ctx := context.Background()
+		ctx := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000002")
 
 		// Create: A -> B -> C
 		groupA := &models.DeviceGroup{
@@ -229,4 +248,132 @@ func TestDeviceGroupsRepository(t *testing.T) {
 
 		_ = pgConfig // Just to avoid unused warning
 	})
+}
+
+// TestDeviceGroupsRepositoryTenantIsolation verifies that the generic postgres querier
+// enforces tenant scoping for device groups: writes without a valid TenantContext fail
+// closed, the tenant from the context always wins over any client-supplied value, and a
+// tenant can neither read, update, nor delete another tenant's group.
+func TestDeviceGroupsRepositoryTenantIsolation(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "device-groups-repo-tenant-isolation")
+
+	_, suite := postgrestest.BeforeSuite([]string{"devicemanager"}, false)
+	defer suite.AfterSuite()
+	suite.BeforeEach()
+
+	db := suite.DB["devicemanager"]
+	migrator := NewMigrator(logger, db)
+	migrator.MigrateToLatest()
+
+	repo, err := NewDeviceGroupsRepository(logger, db)
+	require.NoError(t, err)
+
+	tenantA := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000002")
+	tenantB := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000003")
+
+	// No TenantContext: every write fails closed.
+	_, err = repo.Insert(context.Background(), &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000001",
+		Name:     "No Context",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.Error(t, err)
+
+	// Insert forces the tenant from the context, ignoring any client-supplied TenantID.
+	groupA, err := repo.Insert(tenantA, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000002",
+		TenantID: "attacker-supplied-tenant",
+		Name:     "Tenant A Group",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "00000000-0000-0000-0000-000000000002", groupA.TenantID)
+
+	_, err = repo.Insert(tenantB, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000003",
+		Name:     "Tenant B Group",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+	_, err = repo.Insert(tenantA, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000004",
+		Name:     "Tenant A Group 2",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+	_, err = repo.Insert(tenantB, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000005",
+		Name:     "Tenant B Group 2",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+
+	// Tenant B cannot read tenant A's group; no data of A is revealed.
+	exists, found, err := repo.SelectByID(tenantB, groupA.ID)
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.Nil(t, found)
+
+	// Tenant A can read its own group.
+	exists, found, err = repo.SelectByID(tenantA, groupA.ID)
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, "Tenant A Group", found.Name)
+
+	// Tenant B cannot update tenant A's group.
+	updated := *groupA
+	updated.Description = "hijacked"
+	_, err = repo.Update(tenantB, &updated)
+	require.Error(t, err)
+
+	// Tenant B cannot delete tenant A's group.
+	err = repo.Delete(tenantB, groupA.ID)
+	require.Error(t, err)
+
+	// The group is still visible to its own tenant, untouched.
+	exists, found, err = repo.SelectByID(tenantA, groupA.ID)
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, "Tenant A Group", found.Name)
+
+	// Counts are scoped per tenant.
+	countA, err := repo.Count(tenantA)
+	require.NoError(t, err)
+	require.Equal(t, 2, countA)
+
+	countB, err := repo.Count(tenantB)
+	require.NoError(t, err)
+	require.Equal(t, 2, countB)
+
+	query := &resources.QueryParameters{
+		PageSize: 1,
+		Sort: resources.SortOptions{
+			SortMode:  resources.SortModeAsc,
+			SortField: "id",
+		},
+	}
+	var tenantAPage []string
+	bookmark, err := repo.SelectAll(tenantA, storage.StorageListRequest[models.DeviceGroup]{
+		QueryParams: query,
+		ApplyFunc:   func(group models.DeviceGroup) { tenantAPage = append(tenantAPage, group.Name) },
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, bookmark)
+	require.Equal(t, []string{"Tenant A Group"}, tenantAPage)
+
+	tenantAPage = nil
+	_, err = repo.SelectAll(tenantA, storage.StorageListRequest[models.DeviceGroup]{
+		QueryParams: &resources.QueryParameters{NextBookmark: bookmark},
+		ApplyFunc:   func(group models.DeviceGroup) { tenantAPage = append(tenantAPage, group.Name) },
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Tenant A Group 2"}, tenantAPage)
+
+	var tenantBPage []string
+	_, err = repo.SelectAll(tenantB, storage.StorageListRequest[models.DeviceGroup]{
+		QueryParams: &resources.QueryParameters{NextBookmark: bookmark},
+		ApplyFunc:   func(group models.DeviceGroup) { tenantBPage = append(tenantBPage, group.Name) },
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Tenant B Group 2"}, tenantBPage)
 }
