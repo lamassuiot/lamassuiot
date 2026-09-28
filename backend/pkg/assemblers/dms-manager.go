@@ -19,17 +19,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
+func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo, routeOptions ...routes.TenantRouteOptions) (*services.DMSManagerService, int, error) {
+	lHttp := chelpers.SetupLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
+	tenantOptions, err := resolveTenantRouteOptions(lHttp, conf.Storage, conf.Server, routeOptions)
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not configure tenant-aware HTTP routes: %w", err)
+	}
 	service, err := AssembleDMSManagerService(conf, caService, deviceService)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
 
-	lHttp := chelpers.SetupLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := routes.NewGinEngineWithCORS(lHttp, conf.Server.CORSAllowedOrigins, tenantOptions.JWTValidator)
 	httpGrp := httpEngine.Group("/")
-	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service)
+	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service, tenantOptions)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run DMS Manager http server: %s", err)

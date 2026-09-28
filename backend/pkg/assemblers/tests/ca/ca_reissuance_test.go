@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -20,6 +21,7 @@ func TestReissueCAService(t *testing.T) {
 	}
 
 	caTest := serverTest.CA
+	tenantContext := reissueTestTenantContext()
 
 	var testcases = []struct {
 		name        string
@@ -33,7 +35,7 @@ func TestReissueCAService(t *testing.T) {
 				return "", nil // Empty CAID to trigger validation error
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID: caID,
 				})
 			},
@@ -53,7 +55,7 @@ func TestReissueCAService(t *testing.T) {
 				return "non-existent-ca-id", nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID: caID,
 				})
 			},
@@ -77,7 +79,7 @@ func TestReissueCAService(t *testing.T) {
 				}
 
 				// Revoke the CA
-				_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				_, err = caSDK.UpdateCAStatus(tenantContext, services.UpdateCAStatusInput{
 					CAID:   ca.ID,
 					Status: models.StatusRevoked,
 				})
@@ -88,7 +90,7 @@ func TestReissueCAService(t *testing.T) {
 				return ca.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID: caID,
 				})
 			},
@@ -114,7 +116,7 @@ func TestReissueCAService(t *testing.T) {
 				time.Sleep(time.Second)
 
 				// Mark the CA as expired
-				_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				_, err = caSDK.UpdateCAStatus(tenantContext, services.UpdateCAStatusInput{
 					CAID:   ca.ID,
 					Status: models.StatusExpired,
 				})
@@ -125,7 +127,7 @@ func TestReissueCAService(t *testing.T) {
 				return ca.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID: caID,
 					IssuanceProfile: &models.IssuanceProfile{
 						Validity: models.Validity{
@@ -157,7 +159,7 @@ func TestReissueCAService(t *testing.T) {
 				return ca.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID: caID,
 				})
 			},
@@ -227,7 +229,7 @@ func TestReissueCAService(t *testing.T) {
 				}
 
 				// Verify old certificate was updated with linking metadata
-				oldCert, err := caSDK.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+				oldCert, err := caSDK.GetCertificateBySerialNumber(tenantContext, services.GetCertificatesBySerialNumberInput{
 					SerialNumber: originalCA.Certificate.SerialNumber,
 				})
 				if err != nil {
@@ -266,7 +268,7 @@ func TestReissueCAService(t *testing.T) {
 				return subCA.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID:            caID,
 					IssuanceProfile: &models.IssuanceProfile{SignAsCA: true},
 				})
@@ -328,7 +330,7 @@ func TestReissueCAService(t *testing.T) {
 				return ca.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID: caID,
 				})
 			},
@@ -395,7 +397,7 @@ func TestReissueCAService(t *testing.T) {
 					Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24 * 365)},
 					SignAsCA: true,
 				}
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID:            caID,
 					IssuanceProfile: inlineProfile,
 				})
@@ -435,7 +437,7 @@ func TestReissueCAService(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
 				// Create a custom issuance profile
-				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				profile, err := caSDK.CreateIssuanceProfile(tenantContext, services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:     "CustomProfileForReissuance",
 						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24 * 365)},
@@ -447,7 +449,7 @@ func TestReissueCAService(t *testing.T) {
 				}
 
 				// Reissue with profile reference
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID:              caID,
 					IssuanceProfileID: profile.ID,
 				})
@@ -486,7 +488,7 @@ func TestReissueCAService(t *testing.T) {
 				return ca.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
-				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+				return caSDK.ReissueCA(tenantContext, services.ReissueCAInput{
 					CAID: caID,
 				})
 			},
@@ -576,7 +578,7 @@ func TestReissueCAService(t *testing.T) {
 			var originalCA *models.CACertificate
 			var originalSerialNumber string
 			if caID != "" && caID != "non-existent-ca-id" {
-				originalCA, _ = caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+				originalCA, _ = caTest.Service.GetCAByID(tenantContext, services.GetCAByIDInput{
 					CAID: caID,
 				})
 				if originalCA != nil {
@@ -588,11 +590,20 @@ func TestReissueCAService(t *testing.T) {
 
 			// Get fresh CA data after reissuance to see the actual updated state
 			if reissuedCA != nil && err == nil {
-				freshCA, _ := caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+				freshCA, _ := caTest.Service.GetCAByID(tenantContext, services.GetCAByIDInput{
 					CAID: caID,
 				})
 				if freshCA != nil {
 					reissuedCA = freshCA
+				}
+			}
+			if err == nil && reissuedCA != nil {
+				validatedTenant, contextErr := core.RequireTenantContext(tenantContext)
+				if contextErr != nil {
+					t.Fatalf("could not validate reissuance test tenant context: %s", contextErr)
+				}
+				if reissuedCA.TenantID != validatedTenant.TenantID || reissuedCA.Certificate.TenantID != validatedTenant.TenantID {
+					t.Fatalf("reissued CA and embedded certificate must retain tenant %s, got CA=%s certificate=%s", validatedTenant.TenantID, reissuedCA.TenantID, reissuedCA.Certificate.TenantID)
 				}
 			}
 
@@ -724,7 +735,8 @@ func createTestCA(caSDK services.CAService, commonName string, toExpire bool) (*
 	issuanceDur := models.TimeDuration(time.Hour * 24 * 180) // 6 months
 
 	// Create issuance profile
-	profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+	ctx := reissueTestTenantContext()
+	profile, err := caSDK.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
 		Profile: models.IssuanceProfile{
 			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 		},
@@ -734,7 +746,7 @@ func createTestCA(caSDK services.CAService, commonName string, toExpire bool) (*
 	}
 
 	// Create CA
-	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+	ca, err := caSDK.CreateCA(ctx, services.CreateCAInput{
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: commonName},
 		CAExpiration: models.Validity{Type: models.Duration, Duration: caDur},
@@ -753,7 +765,8 @@ func createSubordinateCA(caSDK services.CAService, parentCAID string, commonName
 	issuanceDur := models.TimeDuration(time.Hour * 24 * 90) // 3 months
 
 	// Create issuance profile
-	profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+	ctx := reissueTestTenantContext()
+	profile, err := caSDK.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
 		Profile: models.IssuanceProfile{
 			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 		},
@@ -763,7 +776,7 @@ func createSubordinateCA(caSDK services.CAService, parentCAID string, commonName
 	}
 
 	// Create subordinate CA
-	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+	ca, err := caSDK.CreateCA(ctx, services.CreateCAInput{
 		ParentID:     parentCAID,
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: commonName},
@@ -775,4 +788,17 @@ func createSubordinateCA(caSDK services.CAService, parentCAID string, commonName
 	}
 
 	return ca, nil
+}
+
+func reissueTestTenantContext() context.Context {
+	return core.WithTenantContext(context.Background(), core.TenantContext{
+		OrganizationID: "org-ca-reissue",
+		TenantID:       "00000000-0000-0000-0000-000000000002",
+		ActorID:        "actor-ca-reissue",
+		ActorType:      "test",
+		CorrelationID:  "correlation-ca-reissue",
+		Source:         "test",
+		TenantStatus:   core.TenantActive,
+		Validated:      true,
+	})
 }

@@ -30,7 +30,7 @@ func TestBindIDEvent(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 
-		profile, err := testServers.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		profile, err := testServers.CA.Service.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 			Profile: models.IssuanceProfile{
 				Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			},
@@ -39,7 +39,7 @@ func TestBindIDEvent(t *testing.T) {
 			return nil, fmt.Errorf("failed creating bootstrap CA issuance profile: %s", err)
 		}
 
-		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		return testServers.CA.Service.CreateCA(tenantTestCtx(), services.CreateCAInput{
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:      models.Subject{CommonName: name},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
@@ -93,7 +93,7 @@ func TestBindIDEvent(t *testing.T) {
 
 		modifier(&input)
 
-		return dmsMgr.Service.CreateDMS(context.Background(), input)
+		return dmsMgr.Service.CreateDMS(tenantTestCtx(), input)
 	}
 
 	evCatcher := func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
@@ -171,7 +171,7 @@ func TestBindIDEvent(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -192,7 +192,7 @@ func TestBindIDEvent(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -228,7 +228,7 @@ func TestBindIDEvent(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -249,7 +249,7 @@ func TestBindIDEvent(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				enrollCrt, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCrt, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -257,7 +257,7 @@ func TestBindIDEvent(t *testing.T) {
 				estCli.Certificates = []*x509.Certificate{enrollCrt}
 				estCli.PrivateKey = enrollKey
 
-				_, err = estCli.Reenroll(context.Background(), enrollCSR)
+				_, err = estCli.Reenroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while re-enrolling: %s", err)
 				}
@@ -299,7 +299,7 @@ func TestBindIDEvent(t *testing.T) {
 
 				deviceKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				deviceCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("device-%s", uuid.NewString())}, deviceKey)
-				deviceCert, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				deviceCert, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              manualEnrollCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(deviceCsr),
 					IssuanceProfileID: manualEnrollCA.ProfileID,
@@ -308,7 +308,7 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 				}
 
-				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(context.Background(), services.CreateDeviceInput{
+				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(tenantTestCtx(), services.CreateDeviceInput{
 					ID:        deviceCert.Subject.CommonName,
 					Alias:     "",
 					Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,
@@ -321,7 +321,7 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not register device: %s", err)
 				}
 
-				_, err = testServers.DMSManager.HttpDeviceManagerSDK.BindIdentityToDevice(context.Background(), services.BindIdentityToDeviceInput{
+				_, err = testServers.DMSManager.HttpDeviceManagerSDK.BindIdentityToDevice(tenantTestCtx(), services.BindIdentityToDeviceInput{
 					DeviceID:                device.ID,
 					CertificateSerialNumber: deviceCert.SerialNumber,
 					BindMode:                models.DeviceEventTypeProvisioned,
@@ -365,7 +365,7 @@ func TestBindIDEvent(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              unauthCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -386,7 +386,7 @@ func TestBindIDEvent(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				enrollCrt, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCrt, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err == nil {
 					t.Fatalf("expected to get an error while enrolling. Got none")
 				}
@@ -439,7 +439,7 @@ func TestBindIDEvent(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -460,12 +460,12 @@ func TestBindIDEvent(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				enrollCrt, err := estCli.Reenroll(context.Background(), enrollCSR)
+				enrollCrt, err := estCli.Reenroll(tenantTestCtx(), enrollCSR)
 				if err == nil {
 					t.Fatalf("expected to get an error while re-enrolling. Got none")
 				}
@@ -541,9 +541,9 @@ func TestBindIDEvent(t *testing.T) {
 
 			go tc.eventCatcher(newMessages, resultChannel)
 
-			ctxTimeout, cancel := context.WithTimeout(context.Background(), tc.maxTime)
+			ctxTimeout, cancel := context.WithTimeout(tenantTestCtx(), tc.maxTime)
 			defer cancel()
-			go router.Run(context.Background())
+			go router.Run(tenantTestCtx())
 
 			tc.run()
 

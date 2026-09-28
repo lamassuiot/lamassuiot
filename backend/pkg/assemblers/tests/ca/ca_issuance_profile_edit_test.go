@@ -1,7 +1,6 @@
 package ca
 
 import (
-	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -28,7 +27,7 @@ func TestEditCAProfiles(t *testing.T) {
 
 	// Helper function to create an issuance profile
 	createProfile := func(t *testing.T, name, description string, validity models.Validity) *models.IssuanceProfile {
-		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		profile, err := serverTest.CA.Service.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 			Profile: models.IssuanceProfile{
 				Name:                   name,
 				Description:            description,
@@ -50,7 +49,7 @@ func TestEditCAProfiles(t *testing.T) {
 
 	// Helper function to create a CA
 	createCA := func(t *testing.T, caID string, profileID string) *models.CACertificate {
-		ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		ca, err := serverTest.CA.Service.CreateCA(tenantTestCtx(), services.CreateCAInput{
 			ID:           caID,
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 			Subject:      models.Subject{CommonName: "TestCA"},
@@ -84,7 +83,7 @@ func TestEditCAProfiles(t *testing.T) {
 				return ca.ID, newProfile.ID, nil
 			},
 			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
-				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				return caSDK.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      caID,
 					ProfileID: newProfileID,
 				})
@@ -122,7 +121,7 @@ func TestEditCAProfiles(t *testing.T) {
 				return "nonexistent-ca-id", newProfile.ID, nil
 			},
 			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
-				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				return caSDK.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      caID,
 					ProfileID: newProfileID,
 				})
@@ -152,7 +151,7 @@ func TestEditCAProfiles(t *testing.T) {
 				return ca.ID, profile.ID, nil
 			},
 			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
-				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				return caSDK.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      caID,
 					ProfileID: newProfileID,
 				})
@@ -189,7 +188,7 @@ func TestEditCAProfiles(t *testing.T) {
 				return ca.ID, newProfile.ID, nil
 			},
 			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
-				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				return caSDK.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      caID,
 					ProfileID: newProfileID,
 				})
@@ -218,7 +217,7 @@ func TestEditCAProfiles(t *testing.T) {
 				ca := createCA(t, "test-ca-4", profile1.ID)
 
 				// Update to second profile
-				_, err := serverTest.CA.Service.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				_, err := serverTest.CA.Service.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      ca.ID,
 					ProfileID: profile2.ID,
 				})
@@ -230,7 +229,7 @@ func TestEditCAProfiles(t *testing.T) {
 				return ca.ID, profile3.ID, nil
 			},
 			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
-				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				return caSDK.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      caID,
 					ProfileID: newProfileID,
 				})
@@ -260,7 +259,7 @@ func TestEditCAProfiles(t *testing.T) {
 				return ca.ID, "non-existent-profile-id", nil
 			},
 			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
-				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				return caSDK.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      caID,
 					ProfileID: newProfileID,
 				})
@@ -296,7 +295,7 @@ func TestEditCAProfiles(t *testing.T) {
 			// Get original CA state (only if CA exists)
 			var originalCA *models.CACertificate
 			if caID != "nonexistent-ca-id" { // Skip for test cases with nonexistent CA
-				originalCA, err = caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: caID})
+				originalCA, err = caTest.Service.GetCAByID(tenantTestCtx(), services.GetCAByIDInput{CAID: caID})
 				if err != nil {
 					t.Fatalf("failed to get original CA state: %s", err)
 				}
@@ -331,7 +330,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 		{
 			name: "OK/UpdateIssuanceProfile-BasicFields",
 			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
-				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				return svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:        "OriginalProfile",
 						Description: "Original description",
@@ -346,7 +345,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 				updatedProfile.Description = "Updated description"
 				updatedProfile.Validity = models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 6)}
 
-				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+				return caSDK.UpdateIssuanceProfile(tenantTestCtx(), services.UpdateIssuanceProfileInput{
 					Profile: updatedProfile,
 				})
 			},
@@ -378,7 +377,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 		{
 			name: "OK/UpdateIssuanceProfile-KeyUsageSettings",
 			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
-				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				return svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:                   "KeyUsageProfile",
 						Description:            "Profile for key usage testing",
@@ -401,7 +400,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
 				}
 
-				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+				return caSDK.UpdateIssuanceProfile(tenantTestCtx(), services.UpdateIssuanceProfileInput{
 					Profile: updatedProfile,
 				})
 			},
@@ -433,7 +432,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 		{
 			name: "OK/UpdateIssuanceProfile-SignAsSetting",
 			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
-				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				return svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:        "CAProfile",
 						Description: "Profile for CA signing",
@@ -448,7 +447,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 				updatedProfile.SignAsCA = true
 				updatedProfile.Description = "Updated to sign as CA"
 
-				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+				return caSDK.UpdateIssuanceProfile(tenantTestCtx(), services.UpdateIssuanceProfileInput{
 					Profile: updatedProfile,
 				})
 			},
@@ -471,7 +470,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 		{
 			name: "OK/UpdateIssuanceProfile-ValidityTypeChange",
 			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
-				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				return svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:        "ValidityProfile",
 						Description: "Profile for validity testing",
@@ -485,7 +484,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 				futureTime := time.Now().Add(time.Hour * 48)
 				updatedProfile.Validity = models.Validity{Type: models.Time, Time: futureTime}
 
-				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+				return caSDK.UpdateIssuanceProfile(tenantTestCtx(), services.UpdateIssuanceProfileInput{
 					Profile: updatedProfile,
 				})
 			},
@@ -508,7 +507,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 		{
 			name: "OK/UpdateIssuanceProfile-ChangeKeyUsageAndExtendedKeyUsage",
 			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
-				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				return svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:                   "KeyUsageChangeProfile",
 						Description:            "Profile for testing key usage changes",
@@ -532,7 +531,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 					models.X509ExtKeyUsage(x509.ExtKeyUsageEmailProtection),
 				}
 
-				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+				return caSDK.UpdateIssuanceProfile(tenantTestCtx(), services.UpdateIssuanceProfileInput{
 					Profile: updatedProfile,
 				})
 			},
@@ -586,7 +585,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 		{
 			name: "OK/UpdateIssuanceProfile-DisableKeyUsageHonoring",
 			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
-				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				return svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:                   "DisableKeyUsageProfile",
 						Description:            "Profile for testing disabling key usage honoring",
@@ -608,7 +607,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 				updatedProfile.HonorKeyUsage = false
 				updatedProfile.HonorExtendedKeyUsages = false
 
-				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+				return caSDK.UpdateIssuanceProfile(tenantTestCtx(), services.UpdateIssuanceProfileInput{
 					Profile: updatedProfile,
 				})
 			},
@@ -682,7 +681,7 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 			name: "OK/SignCertificateAfterProfileUpdate",
 			before: func(svc services.CAService) (string, string, string, error) {
 				// Create initial profile
-				originalProfile, err := svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				originalProfile, err := svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:     "OriginalProfile",
 						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 2)},
@@ -693,7 +692,7 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 				}
 
 				// Create CA
-				ca, err := svc.CreateCA(context.Background(), services.CreateCAInput{
+				ca, err := svc.CreateCA(tenantTestCtx(), services.CreateCAInput{
 					ID:           "test-ca-with-certs",
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA"},
@@ -705,7 +704,7 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 				}
 
 				// Create new profile
-				newProfile, err := svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				newProfile, err := svc.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:     "NewProfile",
 						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 4)},
@@ -716,7 +715,7 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 				}
 
 				// Update CA profile
-				_, err = svc.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+				_, err = svc.UpdateCAProfile(tenantTestCtx(), services.UpdateCAProfileInput{
 					CAID:      ca.ID,
 					ProfileID: newProfile.ID,
 				})
@@ -739,7 +738,7 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 				}
 
 				// Sign certificate using the CA with updated profile
-				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+				return caSDK.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              caID,
 					CertRequest:       (*models.X509CertificateRequest)(csr),
 					IssuanceProfileID: newProfileID,

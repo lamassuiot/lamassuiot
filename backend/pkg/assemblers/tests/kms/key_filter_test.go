@@ -1,7 +1,6 @@
 package kms
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,7 +13,7 @@ import (
 )
 
 func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)

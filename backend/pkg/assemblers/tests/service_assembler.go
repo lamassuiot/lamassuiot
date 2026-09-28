@@ -18,12 +18,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
+	tenantcontext "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/tenant-context"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
+	pgconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
+	"github.com/sirupsen/logrus"
 )
 
 type TestServiceBuilder struct {
@@ -32,6 +39,7 @@ type TestServiceBuilder struct {
 	withDatabase         []string
 	withMonitor          bool
 	withService          []Service
+	withTenantIDs        []string
 	withSmtp             *config.SMTPServer
 	allowCascadeDelete   bool
 	cascadeDeleteExplSet bool
@@ -62,6 +70,11 @@ func (b TestServiceBuilder) WithService(services ...Service) TestServiceBuilder 
 	return b
 }
 
+func (b TestServiceBuilder) WithTenantIDs(tenantIDs ...string) TestServiceBuilder {
+	b.withTenantIDs = append(b.withTenantIDs, tenantIDs...)
+	return b
+}
+
 func (b TestServiceBuilder) WithSmtp(smtp *config.SMTPServer) TestServiceBuilder {
 	b.withSmtp = smtp
 	return b
@@ -87,7 +100,7 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 		}
 	}
 
-	storageConfig, err := PreparePostgresForTest(b.withDatabase)
+	storageConfig, err := PreparePostgresForTest(b.withDatabase, b.withTenantIDs...)
 	if err != nil {
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
@@ -212,6 +225,13 @@ type TestServer struct {
 	AfterSuite func()
 }
 
+const testDefaultTenantID = "00000000-0000-0000-0000-000000000002"
+const (
+	testDefaultOrganizationID = "00000000-0000-0000-0000-000000000001"
+	testIdentityIssuer        = "test-issuer"
+	testIdentitySubject       = "test-kms-client"
+)
+
 func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 	rabbitmqSubsystem := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ)
 
@@ -228,7 +248,11 @@ func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 
 }
 
-func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
+func PreparePostgresForTest(dbs []string, tenantIDs ...string) (*TestStorageEngineConfig, error) {
+	if !slices.Contains(dbs, postgres.CONTROLPLANE_DB_NAME) {
+		dbs = append(slices.Clone(dbs), postgres.CONTROLPLANE_DB_NAME)
+	}
+
 	postgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
 
 	postgresSubsystem.Prepare(dbs)
@@ -237,9 +261,88 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 		return nil, err
 	}
 
+	seedControlPlane := func() (seedErr error) {
+		pgConfig, err := cconfig.DecodeStruct[pgconfig.PostgresPSEConfig](backend.Config.(cconfig.PluggableStorageEngine).Config)
+		if err != nil {
+			return fmt.Errorf("could not decode control plane test database config: %w", err)
+		}
+		db, err := postgres.CreatePostgresDBConnection(logrus.NewEntry(logrus.New()), pgConfig, postgres.CONTROLPLANE_DB_NAME)
+		if err != nil {
+			return fmt.Errorf("could not connect to control plane test database: %w", err)
+		}
+		sqlDB, err := db.DB()
+		if err != nil {
+			return fmt.Errorf("could not get control plane test database connection: %w", err)
+		}
+		defer func() {
+			if err := sqlDB.Close(); seedErr == nil && err != nil {
+				seedErr = fmt.Errorf("could not close control plane test database connection: %w", err)
+			}
+		}()
+
+		if err := db.Exec(`
+			INSERT INTO organizations (id, name)
+			VALUES (?, ?)
+			ON CONFLICT (id) DO NOTHING
+		`, testDefaultOrganizationID, "Default Organization").Error; err != nil {
+			return fmt.Errorf("could not seed control plane test organization: %w", err)
+		}
+
+		if err := db.Exec(`
+			INSERT INTO identities (issuer, subject)
+			VALUES (?, ?)
+			ON CONFLICT (issuer, subject) DO NOTHING
+		`, testIdentityIssuer, testIdentitySubject).Error; err != nil {
+			return fmt.Errorf("could not seed control plane test identity: %w", err)
+		}
+
+		tenantIDs := append([]string{testDefaultTenantID}, tenantIDs...)
+		seen := make(map[string]struct{}, len(tenantIDs))
+		for _, tenantID := range tenantIDs {
+			if tenantID == "" {
+				return fmt.Errorf("control plane test tenant ID cannot be empty")
+			}
+			if _, exists := seen[tenantID]; exists {
+				continue
+			}
+			seen[tenantID] = struct{}{}
+
+			tenantName := "Test Tenant " + tenantID
+			if tenantID == testDefaultTenantID {
+				tenantName = "Default Tenant"
+			}
+			if err := db.Exec(`
+				INSERT INTO tenants (id, organization_id, name, status, isolation_mode)
+				VALUES (?, ?, ?, ?, ?)
+				ON CONFLICT (id) DO NOTHING
+			`, tenantID, testDefaultOrganizationID, tenantName, models.TenantActive, models.IsolationPooled).Error; err != nil {
+				return fmt.Errorf("could not seed control plane test tenant %q: %w", tenantID, err)
+			}
+
+			if err := db.Exec(`
+				INSERT INTO memberships (id, organization_id, tenant_id, identity_issuer, identity_subject, role, status)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT (tenant_id, identity_issuer, identity_subject) DO NOTHING
+			`, "test-membership-"+tenantID, testDefaultOrganizationID, tenantID, testIdentityIssuer, testIdentitySubject, models.RolePKIAdmin, models.MembershipActive).Error; err != nil {
+				return fmt.Errorf("could not seed control plane test membership for tenant %q: %w", tenantID, err)
+			}
+		}
+
+		return nil
+	}
+	if err := seedControlPlane(); err != nil {
+		backend.AfterSuite()
+		return nil, fmt.Errorf("could not seed control plane test data: %w", err)
+	}
+
 	return &TestStorageEngineConfig{
-		Config:     backend.Config.(cconfig.PluggableStorageEngine),
-		BeforeEach: backend.BeforeEach,
+		Config: backend.Config.(cconfig.PluggableStorageEngine),
+		BeforeEach: func() error {
+			if err := backend.BeforeEach(); err != nil {
+				return err
+			}
+			return seedControlPlane()
+		},
 		AfterSuite: backend.AfterSuite,
 	}, nil
 
@@ -311,10 +414,91 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	}
 }
 
+func newTestKMSTenantRouteOptions(storageConfig cconfig.PluggableStorageEngine) (routes.TenantRouteOptions, error) {
+	engine, err := builder.BuildStorageEngine(logrus.NewEntry(logrus.New()), storageConfig)
+	if err != nil {
+		return routes.TenantRouteOptions{}, fmt.Errorf("could not create test tenant membership storage: %w", err)
+	}
+	memberships, err := engine.GetControlPlaneMembershipStorage()
+	if err != nil {
+		return routes.TenantRouteOptions{}, fmt.Errorf("could not get test tenant membership storage: %w", err)
+	}
+
+	return routes.TenantRouteOptions{
+		Memberships: memberships,
+		// This fixed identity is trusted only by the in-process test server.
+		IdentityProvider: func(context.Context) (tenantcontext.AuthenticatedIdentity, error) {
+			return tenantcontext.AuthenticatedIdentity{
+				Issuer:    testIdentityIssuer,
+				Subject:   testIdentitySubject,
+				ActorType: "SERVICE",
+				Permissions: []string{
+					"kms.read",
+					"key.read",
+					"key.manage",
+					"key.import",
+					"key.sign",
+					"key.verify",
+				},
+			}, nil
+		},
+		Authorization: tenantcontext.NewPermissionAuthorizationEngine(),
+		Versioning: cconfig.HttpServerVersioning{
+			V1DefaultTenantID: testDefaultTenantID,
+			V1SunsetAt:        time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}, nil
+}
+
+// newTestTenantRouteOptions configures the in-process CA, Device Manager, DMS,
+// VA and Alerts test servers: the fixed test identity resolves its membership
+// in the control plane, v1 routes map to the default tenant, and every
+// operation granted to that membership is allowed so functional tests are not
+// coupled to the RBAC matrix (covered by the routes and tenant-context suites).
+func newTestTenantRouteOptions(storageConfig cconfig.PluggableStorageEngine) (routes.TenantRouteOptions, error) {
+	options, err := newTestKMSTenantRouteOptions(storageConfig)
+	if err != nil {
+		return routes.TenantRouteOptions{}, err
+	}
+	options.IdentityProvider = func(context.Context) (tenantcontext.AuthenticatedIdentity, error) {
+		return tenantcontext.AuthenticatedIdentity{Issuer: testIdentityIssuer, Subject: testIdentitySubject, ActorType: "SERVICE"}, nil
+	}
+	options.Authorization = tenantcontext.AuthorizationEngineFunc(func(context.Context, tenantcontext.AuthorizationRequest) error {
+		return nil
+	})
+	return options, nil
+}
+
+// DefaultTenantContext returns a validated TenantContext for the default test
+// tenant, for tests that call services directly instead of through HTTP.
+func DefaultTenantContext() context.Context {
+	return TenantContextFor(testDefaultTenantID)
+}
+
+// TenantContextFor returns a validated TenantContext for a tenant seeded with
+// WithTenantIDs (all test tenants belong to the default test organization).
+// An optional correlation ID replaces the default one.
+func TenantContextFor(tenantID string, correlationID ...string) context.Context {
+	correlation := "test-correlation"
+	if len(correlationID) > 0 && correlationID[0] != "" {
+		correlation = correlationID[0]
+	}
+	return core.WithTenantContext(context.Background(), core.TenantContext{
+		OrganizationID: testDefaultOrganizationID,
+		TenantID:       tenantID,
+		ActorID:        testIdentitySubject,
+		ActorType:      "SERVICE",
+		CorrelationID:  correlation,
+		Source:         "test",
+		TenantStatus:   core.TenantActive,
+		Validated:      true,
+	})
+}
+
 func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig, monitor bool, allowCascadeDelete bool) (*KMSTestServer, error) {
 	storageEngine.Config.LogLevel = cconfig.Trace
 
-	svc, port, err := assemblers.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
+	kmsConfig := config.KMSConfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Debug,
 		},
@@ -326,7 +510,20 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 		CryptoEngineConfig: cryptoEngines.Config,
 		PublisherEventBus:  eventBus.Config,
 		Storage:            storageEngine.Config,
-	}, models.APIServiceInfo{
+	}
+	svc, err := assemblers.AssembleKMSService(kmsConfig)
+	if err != nil {
+		return nil, fmt.Errorf("could not assemble KMS service: %w", err)
+	}
+
+	logger := logrus.NewEntry(logrus.New())
+	httpEngine := routes.NewGinEngine(logger)
+	tenantOptions, err := newTestKMSTenantRouteOptions(storageEngine.Config)
+	if err != nil {
+		return nil, err
+	}
+	routes.NewKMSHTTPLayer(httpEngine.Group("/"), *svc, tenantOptions)
+	port, err := routes.RunHttpRouter(logger, httpEngine, kmsConfig.Server, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
@@ -347,6 +544,10 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 }
 
 func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, monitor bool, allowCascadeDelete bool, kmsTestServer KMSTestServer) (*CATestServer, error) {
+	routeOptions, err := newTestTenantRouteOptions(storageEngine.Config)
+	if err != nil {
+		return nil, err
+	}
 	storageEngine.Config.LogLevel = cconfig.Trace
 
 	svc, scheduler, port, err := assemblers.AssembleCAServiceWithHTTPServer(config.CAConfig{
@@ -370,7 +571,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
-	})
+	}, routeOptions)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not assemble CA with HTTP server: %s", err)
@@ -391,6 +592,10 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 }
 
 func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
+	routeOptions, err := newTestTenantRouteOptions(storageEngine.Config)
+	if err != nil {
+		return nil, err
+	}
 	svc, port, err := assemblers.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
@@ -408,7 +613,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
-	})
+	}, routeOptions)
 	if err != nil {
 		return nil, fmt.Errorf("could not assemble Device Manager Service. Exiting: %s", err)
 	}
@@ -426,6 +631,10 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 }
 
 func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
+	routeOptions, err := newTestTenantRouteOptions(storageEngine.Config)
+	if err != nil {
+		return nil, err
+	}
 	key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 	crt, _ := chelpers.GenerateSelfSignedCertificate(key, "downstream")
 	downstreamPath := fmt.Sprintf("/tmp/%s", crt.SerialNumber.String())
@@ -433,7 +642,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 	downstreamKeyPath := fmt.Sprintf("%s.key", downstreamPath)
 
 	crtPem := chelpers.CertificateToPEM(crt)
-	err := os.WriteFile(downstreamCertPath, []byte(crtPem), 0600)
+	err = os.WriteFile(downstreamCertPath, []byte(crtPem), 0600)
 	if err != nil {
 		return nil, fmt.Errorf("could not save downstream cert. Exiting: %s", err)
 	}
@@ -471,7 +680,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 			Version:   "test",
 			BuildSHA:  "-",
 			BuildTime: "-",
-		})
+		}, routeOptions)
 	if err != nil {
 		return nil, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
@@ -496,6 +705,10 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 }
 
 func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, kmsTestServer *KMSTestServer, monitor bool) (*VATestServer, error) {
+	routeOptions, err := newTestTenantRouteOptions(storageEngine.Config)
+	if err != nil {
+		return nil, err
+	}
 	crlSvc, _, port, err := assemblers.AssembleVAServiceWithHTTPServer(config.VAconfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
@@ -521,11 +734,12 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 				"storage_directory": "/tmp/lamassuiot",
 			},
 		},
-	}, caTestServer.HttpCASDK, kmsTestServer.HttpKMSSDK, models.APIServiceInfo{
+		// Keep VA tenant-isolation tests on the service boundary; CA HTTP SDK versioning is covered separately.
+	}, caTestServer.Service, kmsTestServer.HttpKMSSDK, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
-	})
+	}, routeOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -545,6 +759,10 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 }
 
 func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, smptConfig *config.SMTPServer) (*AlertsTestServer, error) {
+	routeOptions, err := newTestTenantRouteOptions(storageEngine.Config)
+	if err != nil {
+		return nil, err
+	}
 	if smptConfig == nil {
 		smptConfig = &config.SMTPServer{}
 	}
@@ -565,7 +783,7 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
-	})
+	}, routeOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -812,4 +1030,11 @@ func StartWebhookServer() (*gin.Engine, string, func(), error) {
 	}
 
 	return router, url, shutdown, nil
+}
+
+// TestTenantRouteOptions exposes the in-process tenant route options (fixed
+// test identity, v1 to the default tenant, permissive authorization) for tests
+// that mount their own HTTP routers, such as the load runner.
+func TestTenantRouteOptions(storageConfig cconfig.PluggableStorageEngine) (routes.TenantRouteOptions, error) {
+	return newTestTenantRouteOptions(storageConfig)
 }

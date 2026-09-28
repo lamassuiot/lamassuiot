@@ -16,7 +16,7 @@ import (
 // TestGetKeyStatsFiltered is a comprehensive test suite for the KMS statistics endpoint
 // with filtering support. Tests are organized as subtests within a single server instance.
 func TestGetKeyStatsFiltered(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	// Start KMS server once for all subtests
 	kmsTest, err := StartKMSServiceTestServer(t, false)

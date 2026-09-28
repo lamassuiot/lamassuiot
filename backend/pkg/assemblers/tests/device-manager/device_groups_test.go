@@ -1,7 +1,6 @@
 package devicemanager
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -14,7 +13,7 @@ import (
 )
 
 func TestCreateDeviceGroup(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -131,7 +130,7 @@ func TestCreateDeviceGroup(t *testing.T) {
 }
 
 func TestNestedDeviceGroups(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -222,7 +221,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 }
 
 func TestGetDevicesByGroup(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -347,7 +346,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 }
 
 func TestGetDeviceGroupStats(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -446,7 +445,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 }
 
 func TestUpdateDeviceGroup(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -500,7 +499,7 @@ func TestUpdateDeviceGroup(t *testing.T) {
 }
 
 func TestDeleteDeviceGroup(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -543,7 +542,7 @@ func TestDeleteDeviceGroup(t *testing.T) {
 }
 
 func TestGetDeviceGroups(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -597,7 +596,7 @@ func TestGetDeviceGroups(t *testing.T) {
 }
 
 func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)

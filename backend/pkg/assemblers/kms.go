@@ -24,17 +24,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.APIServiceInfo) (*services.KMSService, int, error) {
+func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.APIServiceInfo, routeOptions ...routes.TenantRouteOptions) (*services.KMSService, int, error) {
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "KMS", "HTTP Server")
+	tenantOptions, err := resolveTenantRouteOptions(lHttp, conf.Storage, conf.Server, routeOptions)
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not configure tenant-aware HTTP routes: %w", err)
+	}
 	kmsService, err := AssembleKMSService(conf)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble KMS Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "KMS", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := routes.NewGinEngineWithCORS(lHttp, conf.Server.CORSAllowedOrigins, tenantOptions.JWTValidator)
 	httpGrp := httpEngine.Group("/")
-	routes.NewKMSHTTPLayer(httpGrp, *kmsService)
+	routes.NewKMSHTTPLayer(httpGrp, *kmsService, tenantOptions)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run KMS Service http server: %s", err)
@@ -115,7 +118,7 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 		}
 
 		svc = eventpub.NewKMSEventBusPublisher(eventPublisher)(svc)
-		svc = auditpub.NewKMSAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
+		svc = auditpub.NewKMSAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher, lAudit))(svc)
 
 		//this utilizes the middlewares from within the KMS service (if svc.service.func is used instead of regular svc.func)
 		kmsSvc.SetService(svc)
@@ -148,8 +151,9 @@ func createCryptoEngines(logger *log.Entry, conf config.KMSConfig) (map[string]*
 			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)
 		} else {
 			engines[cfg.ID] = &lservices.Engine{
-				Default: cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
-				Service: engine,
+				Default:  cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
+				TenantID: cfg.TenantID,
+				Service:  engine,
 			}
 		}
 	}

@@ -27,7 +27,7 @@ func TestManageSuscriptions(t *testing.T) {
 
 	alertsTest := serverTest.Alerts
 
-	user1Subs, err := alertsTest.Service.Subscribe(context.TODO(),
+	user1Subs, err := alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user1",
 			EventType: models.EventCreateCAKey,
@@ -42,7 +42,7 @@ func TestManageSuscriptions(t *testing.T) {
 	}
 	user1SubsId := user1Subs[0].ID
 
-	user2Subs, err := alertsTest.Service.Subscribe(context.TODO(),
+	user2Subs, err := alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user2",
 			EventType: models.EventCreateCAKey,
@@ -58,7 +58,7 @@ func TestManageSuscriptions(t *testing.T) {
 
 	user2SubsId := user2Subs[0].ID
 
-	_, err = alertsTest.Service.Subscribe(context.TODO(),
+	_, err = alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user2",
 			EventType: models.EventCreateDMSKey,
@@ -72,29 +72,29 @@ func TestManageSuscriptions(t *testing.T) {
 		t.Fatalf("could not subscribe user2: %s", err)
 	}
 
-	subscriptions, err := alertsTest.Service.GetUserSubscriptions(context.TODO(), &services.GetUserSubscriptionsInput{UserID: "user1"})
+	subscriptions, err := alertsTest.Service.GetUserSubscriptions(alertsTenantContext("tenant-alerts-test"), &services.GetUserSubscriptionsInput{UserID: "user1"})
 	if err != nil {
 		t.Fatalf("could not get subscriptions for user1: %s", err)
 	}
 	assert.Equal(t, 1, len(subscriptions), "user1 should have 1 subscription")
 
-	subscriptions, err = alertsTest.Service.GetUserSubscriptions(context.TODO(), &services.GetUserSubscriptionsInput{UserID: "user2"})
+	subscriptions, err = alertsTest.Service.GetUserSubscriptions(alertsTenantContext("tenant-alerts-test"), &services.GetUserSubscriptionsInput{UserID: "user2"})
 	if err != nil {
 		t.Fatalf("could not get subscriptions for user2: %s", err)
 	}
 	assert.Equal(t, 2, len(subscriptions), "user2 should have 2 subscription")
 
 	// Unsubscribe
-	alertsTest.Service.Unsubscribe(context.TODO(), &services.UnsubscribeInput{UserID: "user1", SubscriptionID: user1SubsId})
-	subscriptions, err = alertsTest.Service.GetUserSubscriptions(context.TODO(), &services.GetUserSubscriptionsInput{UserID: "user1"})
+	alertsTest.Service.Unsubscribe(alertsTenantContext("tenant-alerts-test"), &services.UnsubscribeInput{UserID: "user1", SubscriptionID: user1SubsId})
+	subscriptions, err = alertsTest.Service.GetUserSubscriptions(alertsTenantContext("tenant-alerts-test"), &services.GetUserSubscriptionsInput{UserID: "user1"})
 	if err != nil {
 		t.Fatalf("could not get subscriptions for user1: %s", err)
 	}
 	assert.Equal(t, 0, len(subscriptions), "user1 should have 0 subscription")
 
-	alertsTest.Service.Unsubscribe(context.TODO(), &services.UnsubscribeInput{UserID: "user2", SubscriptionID: user2SubsId})
+	alertsTest.Service.Unsubscribe(alertsTenantContext("tenant-alerts-test"), &services.UnsubscribeInput{UserID: "user2", SubscriptionID: user2SubsId})
 
-	subscriptions, err = alertsTest.Service.GetUserSubscriptions(context.TODO(), &services.GetUserSubscriptionsInput{UserID: "user2"})
+	subscriptions, err = alertsTest.Service.GetUserSubscriptions(alertsTenantContext("tenant-alerts-test"), &services.GetUserSubscriptionsInput{UserID: "user2"})
 	if err != nil {
 		t.Fatalf("could not get subscriptions for user1: %s", err)
 	}
@@ -109,7 +109,7 @@ func TestGetLastEvents(t *testing.T) {
 	}
 
 	alertsTest := serverTest.Alerts
-	eventSamples, err := alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{})
+	eventSamples, err := alertsTest.Service.GetLatestEventsPerEventType(alertsTenantContext("tenant-alerts-test"), &services.GetLatestEventsPerEventTypeInput{})
 	if err != nil {
 		t.Fatalf("could not get latest events: %s", err)
 	}
@@ -118,37 +118,37 @@ func TestGetLastEvents(t *testing.T) {
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
 	payload := map[string]string{"key": "value"}
-	ctx := context.Background()
+	ctx := alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 	event := helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
 
-	eventSamples, err = alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{})
+	eventSamples, err = alertsTest.Service.GetLatestEventsPerEventType(alertsTenantContext("tenant-alerts-test"), &services.GetLatestEventsPerEventTypeInput{})
 	if err != nil {
 		t.Fatalf("could not get latest events: %s", err)
 	}
 	assert.Equal(t, 1, len(eventSamples), "should have 1 events")
 	assert.Equal(t, eventType, eventSamples[0].EventType, "should have the same event type")
 
-	ctx = context.Background()
+	ctx = alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateDMSKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 	event = helpers.BuildCloudEvent(ctx, payload)
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
-	eventSamples, err = alertsTest.Service.GetLatestEventsPerEventType(context.TODO(), &services.GetLatestEventsPerEventTypeInput{})
+	eventSamples, err = alertsTest.Service.GetLatestEventsPerEventType(alertsTenantContext("tenant-alerts-test"), &services.GetLatestEventsPerEventTypeInput{})
 	if err != nil {
 		t.Fatalf("could not get latest events: %s", err)
 	}
@@ -186,7 +186,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 
 	alertsTest := serverTest.Alerts
 
-	alertsTest.Service.Subscribe(context.TODO(),
+	alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user1",
 			EventType: models.EventCreateCAKey,
@@ -204,7 +204,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	ctx := context.Background()
+	ctx := alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
@@ -212,19 +212,19 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 
 	event := helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
-	ctx = context.Background()
+	ctx = alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 	event = helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
@@ -246,7 +246,7 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 
 	alertsTest := serverTest.Alerts
 
-	alertsTest.Service.Subscribe(context.TODO(),
+	alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user1",
 			EventType: models.EventCreateCAKey,
@@ -264,27 +264,27 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	ctx := context.Background()
+	ctx := alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
 	event := helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
-	ctx = context.Background()
+	ctx = alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
 	event = helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
@@ -328,7 +328,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
   }
 }`
 
-	alertsTest.Service.Subscribe(context.TODO(),
+	alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user1",
 			EventType: models.EventCreateCAKey,
@@ -348,24 +348,24 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	eventSource := "test://source"
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
 
-	ctx := context.Background()
+	ctx := alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 	event := helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
-	ctx = context.Background()
+	ctx = alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 	event = helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
@@ -407,7 +407,7 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 		c.JSON(200, gin.H{"message": "ok"})
 	})
 
-	alertsTest.Service.Subscribe(context.TODO(),
+	alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user1",
 			EventType: models.EventCreateCAKey,
@@ -422,7 +422,7 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 		},
 	)
 
-	alertsTest.Service.Subscribe(context.TODO(),
+	alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user2",
 			EventType: models.EventCreateCAKey,
@@ -436,7 +436,7 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 		},
 	)
 
-	alertsTest.Service.Subscribe(context.TODO(),
+	alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user1",
 			EventType: models.EventCreateCertificateKey,
@@ -455,13 +455,13 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 	eventSource := "test://source"
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
 
-	ctx := context.Background()
+	ctx := alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
 	event := helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
@@ -473,12 +473,12 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 	isWebhookCalledPost = false
 	isTeamsCalledPost = false
 
-	ctx = context.Background()
+	ctx = alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCertificateKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
 	event = helpers.BuildCloudEvent(ctx, payload)
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
@@ -518,7 +518,7 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 	}
 	alertsTest := serverTest.Alerts
 
-	alertsTest.Service.Subscribe(context.TODO(),
+	alertsTest.Service.Subscribe(alertsTenantContext("tenant-alerts-test"),
 		&services.SubscribeInput{
 			UserID:    "user1",
 			EventType: models.EventCreateCAKey,
@@ -536,13 +536,13 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 	eventSource := "test://source"
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
 
-	ctx := context.Background()
+	ctx := alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
 	event := helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
@@ -551,13 +551,13 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 	assert.Equal(t, 1, len(messages), "should have 1 messages")
 
 	eventType = models.EventBindDeviceIdentityKey
-	ctx = context.Background()
+	ctx = alertsTenantContext("tenant-alerts-test")
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
 	event = helpers.BuildCloudEvent(ctx, payload)
 
-	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	err = alertsTest.Service.HandleEvent(alertsTenantContext("tenant-alerts-test"), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}

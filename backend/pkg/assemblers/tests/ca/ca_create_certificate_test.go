@@ -1,7 +1,6 @@
 package ca
 
 import (
-	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -25,7 +24,7 @@ func createActiveCA(t *testing.T, caSDK services.CAService) *models.CACertificat
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 	caDur := models.TimeDuration(time.Hour * 24)
 
-	profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+	profile, err := caSDK.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 		Profile: models.IssuanceProfile{
 			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 		},
@@ -34,7 +33,7 @@ func createActiveCA(t *testing.T, caSDK services.CAService) *models.CACertificat
 		t.Fatalf("createActiveCA: could not create issuance profile: %s", err)
 	}
 
-	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+	ca, err := caSDK.CreateCA(tenantTestCtx(), services.CreateCAInput{
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "CreateCertTest-CA"},
 		CAExpiration: models.Validity{Type: models.Duration, Duration: caDur},
@@ -49,7 +48,7 @@ func createActiveCA(t *testing.T, caSDK services.CAService) *models.CACertificat
 // revokeCA moves the CA to Revoked status so we can test inactive-CA scenarios.
 func revokeCA(t *testing.T, caSDK services.CAService, caID string) {
 	t.Helper()
-	_, err := caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+	_, err := caSDK.UpdateCAStatus(tenantTestCtx(), services.UpdateCAStatusInput{
 		CAID:             caID,
 		Status:           models.StatusRevoked,
 		RevocationReason: models.RevocationReason(1),
@@ -88,7 +87,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -125,7 +124,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.ECDSA),
@@ -157,7 +156,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
 				// Create a standalone key in KMS that the certificate should reuse.
-				key, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				key, err := kmsTest.HttpKMSSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Algorithm: "RSA",
 					Size:      2048,
 					Name:      "reuse-key-for-cert",
@@ -166,7 +165,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 					return nil, fmt.Errorf("failed to pre-create KMS key: %s", err)
 				}
 
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						KeyIdentifier: key.KeyID,
@@ -197,7 +196,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
 				customValidity := models.TimeDuration(time.Hour * 6)
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -237,7 +236,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
 				customValidity := models.TimeDuration(time.Hour * 3)
-				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				profile, err := caSDK.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:     "custom-3h-profile",
 						Validity: models.Validity{Type: models.Duration, Duration: customValidity},
@@ -247,7 +246,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 					return nil, fmt.Errorf("failed to create issuance profile: %s", err)
 				}
 
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -281,7 +280,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -316,7 +315,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
 				// "filesystem-1" is the default engine wired by PrepareCryptoEnginesForTest.
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type:     models.KeyType(x509.RSA),
@@ -351,7 +350,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -386,7 +385,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						// Both generate and reuse mode set simultaneously.
@@ -416,7 +415,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID:    caID,
 					KeySpec: services.CertificateKeySpec{
 						// Nothing set - no Type/Bits and no KeyIdentifier.
@@ -443,7 +442,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -471,7 +470,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						// Type intentionally omitted (zero value); only Bits set.
@@ -499,7 +498,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return "non-existent-ca-id", nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -529,7 +528,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return ca.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -557,7 +556,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						KeyIdentifier: "this-key-does-not-exist",
@@ -585,7 +584,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -616,7 +615,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
 				// Referenced profile: 8h validity.
-				refProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				refProfile, err := caSDK.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:     "8h-profile",
 						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(8 * time.Hour)},
@@ -627,7 +626,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				}
 
 				// Inline profile: 4h validity — must win over the 8h reference.
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -704,7 +703,7 @@ func TestCreateCertificateService(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID:    caID,
 					KeySpec: services.CertificateKeySpec{},
 					Subject: models.Subject{CommonName: "bad-spec"},
@@ -723,7 +722,7 @@ func TestCreateCertificateService(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type:          models.KeyType(x509.RSA),
@@ -746,7 +745,7 @@ func TestCreateCertificateService(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -768,7 +767,7 @@ func TestCreateCertificateService(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						// Type = zero value, Bits set — other partial direction
@@ -793,7 +792,7 @@ func TestCreateCertificateService(t *testing.T) {
 				return "does-not-exist", nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -817,7 +816,7 @@ func TestCreateCertificateService(t *testing.T) {
 			before: func(caSDK services.CAService) (string, error) {
 				ca := createActiveCA(t, caSDK)
 				// Manually force the CA to the Expired status.
-				_, err := caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				_, err := caSDK.UpdateCAStatus(tenantTestCtx(), services.UpdateCAStatusInput{
 					CAID:   ca.ID,
 					Status: models.StatusExpired,
 				})
@@ -827,7 +826,7 @@ func TestCreateCertificateService(t *testing.T) {
 				return ca.ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -854,7 +853,7 @@ func TestCreateCertificateService(t *testing.T) {
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
 				// No IssuanceProfile / IssuanceProfileID provided →
 				// the service should use the CA's own ProfileID.
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -884,7 +883,7 @@ func TestCreateCertificateService(t *testing.T) {
 				return createActiveCA(t, caSDK).ID, nil
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -916,7 +915,7 @@ func TestCreateCertificateService(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
 				// Create a referenced profile with a 9h validity.
-				refProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				refProfile, err := caSDK.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 					Profile: models.IssuanceProfile{
 						Name:     "9h-profile",
 						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(9 * time.Hour)},
@@ -928,7 +927,7 @@ func TestCreateCertificateService(t *testing.T) {
 
 				// Provide both an inline profile (5h) AND the ID reference (9h).
 				// Inline must win.
-				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+				return caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
 						Type: models.KeyType(x509.RSA),
@@ -1010,7 +1009,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 		ca := createActiveCA(t, caTest.Service)
 
 		// Call through the full HTTP SDK (includes event-publisher + audit middlewares).
-		cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+		cert, err := caTest.HttpCASDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 			CAID: ca.ID,
 			KeySpec: services.CertificateKeySpec{
 				Type: models.KeyType(x509.RSA),
@@ -1033,7 +1032,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 
 		// Verify the certificate was actually stored (proves the service
 		// ran to completion despite the middleware wrappers).
-		stored, err := caTest.Service.GetCertificateBySerialNumber(context.Background(),
+		stored, err := caTest.Service.GetCertificateBySerialNumber(tenantTestCtx(),
 			services.GetCertificatesBySerialNumberInput{SerialNumber: cert.SerialNumber})
 		if err != nil {
 			t.Fatalf("GetCertificateBySerialNumber returned error after CreateCertificate: %s", err)
@@ -1057,7 +1056,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 		ca := createActiveCA(t, caTest.Service)
 		revokeCA(t, caTest.Service, ca.ID)
 
-		_, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+		_, err := caTest.HttpCASDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 			CAID: ca.ID,
 			KeySpec: services.CertificateKeySpec{
 				Type: models.KeyType(x509.RSA),
@@ -1086,7 +1085,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 		serials := map[string]struct{}{}
 
 		for i := 0; i < 3; i++ {
-			cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+			cert, err := caTest.HttpCASDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 				CAID: ca.ID,
 				KeySpec: services.CertificateKeySpec{
 					Type: models.KeyType(x509.RSA),
@@ -1115,7 +1114,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 		ca := createActiveCA(t, caTest.Service)
 		kmsTest := serverTest.KMS
 
-		sharedKey, err := kmsTest.HttpKMSSDK.CreateKey(context.Background(), services.CreateKeyInput{
+		sharedKey, err := kmsTest.HttpKMSSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 			Algorithm: "RSA",
 			Size:      2048,
 			Name:      "shared-key",
@@ -1126,7 +1125,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 
 		var prevSerial string
 		for i := 0; i < 2; i++ {
-			cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+			cert, err := caTest.HttpCASDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 				CAID: ca.ID,
 				KeySpec: services.CertificateKeySpec{
 					KeyIdentifier: sharedKey.KeyID,

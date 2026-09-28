@@ -1,7 +1,6 @@
 package ca
 
 import (
-	"context"
 	"crypto"
 	"crypto/elliptic"
 	"crypto/x509"
@@ -75,21 +74,21 @@ func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMet
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.NotAfter, tcExpirationTime.UTC().Truncate(time.Minute))
 	}
 
-	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassu.io/ocsp")
+	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp")
 	}
 
-	if cert.OCSPServer[1] != "http://va.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/ocsp")
+	if cert.OCSPServer[1] != "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp")
 	}
 
 	v2CrlID := hex.EncodeToString(cert.AuthorityKeyId)
-	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/crl/"+v2CrlID)
+	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID)
 	}
 
-	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassu.io/crl/"+v2CrlID)
+	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID)
 	}
 	return nil
 }
@@ -104,21 +103,21 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 		return fmt.Errorf("unexpected result, got: %t, want: %t", cert.IsCA, true)
 	}
 
-	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassu.io/ocsp")
+	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp")
 	}
 
-	if cert.OCSPServer[1] != "http://va.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/ocsp")
+	if cert.OCSPServer[1] != "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/ocsp")
 	}
 
 	v2CrlID := hex.EncodeToString(ca.SubjectKeyId)
-	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/crl/"+v2CrlID)
+	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID)
 	}
 
-	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassu.io/crl/"+v2CrlID)
+	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassu.io/tenants/00000000-0000-0000-0000-000000000002/crl/"+v2CrlID)
 	}
 
 	return nil
@@ -185,7 +184,7 @@ func TestCreateRootCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := tenantTestCtx()
 			key, err := kms.CreateKey(ctx, services.CreateKeyInput{
 				Algorithm: tc.keyMetadata.Type.String(),
 				Size:      tc.keyMetadata.Bits,
@@ -325,7 +324,7 @@ func TestRootCAExtendedKeyUsage(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := tenantTestCtx()
 			key, err := kms.CreateKey(ctx, services.CreateKeyInput{
 				Algorithm: tc.keyMetadata.Type.String(),
 				Size:      tc.keyMetadata.Bits,
@@ -411,10 +410,10 @@ func TestCreateSubordinateCA(t *testing.T) {
 	caExpirationTime := time.Now().AddDate(2, 0, 0) // Set expiration time to 2 years from now
 	expirationTime := time.Now().AddDate(1, 0, 0)   // Set expiration time to 1 year from now
 
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	// Create RSA Root CA
-	keyRSA, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+	keyRSA, err := kmsSvc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 		Algorithm: "RSA",
 		Size:      2048,
 		Name:      "rootCA-RSA",
@@ -435,7 +434,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	}
 
 	// Create ECDSA Root CA
-	keyEC, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+	keyEC, err := kmsSvc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 		Algorithm: "ECDSA",
 		Size:      256,
 		Name:      "rootCA-EC",
@@ -538,7 +537,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			// Create subordinate CA key using KMS
-			subCAKey, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+			subCAKey, err := kmsSvc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 				Algorithm: tc.keyMetadata.Type.String(),
 				Size:      tc.keyMetadata.Bits,
 				Name:      tc.subordinateCAID,
@@ -584,10 +583,10 @@ func TestSignCertificateRequest(t *testing.T) {
 	caExpirationTime := time.Now().AddDate(2, 0, 0) // Set expiration time to 2 year from now
 	expirationTime := time.Now().AddDate(1, 0, 0)   // Set expiration time to 1 year from now
 
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	// Create RSA CA key
-	keyRSA, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+	keyRSA, err := kmsSvc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 		Algorithm: "RSA",
 		Size:      2048,
 		Name:      "signCertReq-RSA",
@@ -609,7 +608,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	}
 
 	// Create ECDSA CA key
-	keyEC, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+	keyEC, err := kmsSvc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 		Algorithm: "ECDSA",
 		Size:      256,
 		Name:      "signCertReq-EC",
@@ -980,7 +979,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := tenantTestCtx()
 			csr, errCsr := chelpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.key())
 			cert, errSing := x509Engine.SignCertificateRequest(ctx, csr, tc.caCertificate, tc.caSigner, tc.profile)
 			err := tc.check(cert, tc.subject, tc.keyType, expirationTime, errCsr, errSing)

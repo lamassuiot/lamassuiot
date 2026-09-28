@@ -1,7 +1,6 @@
 package dmsmanager
 
 import (
-	"context"
 	"crypto/elliptic"
 	"crypto/x509"
 	"fmt"
@@ -19,7 +18,7 @@ import (
 
 func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	require.NoError(t, err, "could not create DMS Manager test server")
@@ -212,7 +211,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 
 func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	require.NoError(t, err, "could not create DMS Manager test server")
@@ -305,7 +304,7 @@ func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
 
 func TestBindIdentityToDevice_MultipleBindings_TracksLatestExpiration(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	require.NoError(t, err, "could not create DMS Manager test server")

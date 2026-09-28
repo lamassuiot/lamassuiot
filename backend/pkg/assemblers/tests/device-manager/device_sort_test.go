@@ -1,7 +1,6 @@
 package devicemanager
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -392,7 +391,7 @@ func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
 }
 
 func TestGetDevicesSortSQLInjection(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)

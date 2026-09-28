@@ -2,7 +2,6 @@ package dmsmanager
 
 import (
 	"bytes"
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
@@ -65,18 +64,18 @@ func TestCreateDMS(t *testing.T) {
 		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
-	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(tenantTestCtx(), dmsSample)
 	if err != nil {
 		t.Fatalf("could not create DMS: %s", err)
 	}
 
 	checkDMS(t, dms, dmsSample)
-	_, err = dmsMgr.Service.CreateDMS(context.Background(), dmsSample)
+	_, err = dmsMgr.Service.CreateDMS(tenantTestCtx(), dmsSample)
 	if err == nil {
 		t.Fatalf("duplicate dms creation should fail")
 	}
 
-	dmsFromDB, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsSample.ID})
+	dmsFromDB, err := dmsMgr.Service.GetDMSByID(tenantTestCtx(), services.GetDMSByIDInput{ID: dmsSample.ID})
 	if err != nil {
 		t.Fatalf("could not get DMS by ID: %s", err)
 	}
@@ -93,7 +92,7 @@ func TestUpdateDMS(t *testing.T) {
 		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
-	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(tenantTestCtx(), dmsSample)
 	if err != nil {
 		t.Fatalf("could not create DMS: %s", err)
 	}
@@ -101,12 +100,12 @@ func TestUpdateDMS(t *testing.T) {
 
 	dms.Name = "MyIotFleet2"
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: *dms})
+	_, err = dmsMgr.Service.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{DMS: *dms})
 	if err != nil {
 		t.Fatalf("could not update DMS: %s", err)
 	}
 
-	dmsFromDB, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsSample.ID})
+	dmsFromDB, err := dmsMgr.Service.GetDMSByID(tenantTestCtx(), services.GetDMSByIDInput{ID: dmsSample.ID})
 	if err != nil {
 		t.Fatalf("could not get DMS by ID: %s", err)
 	}
@@ -131,7 +130,7 @@ func TestUpdateDMSMetadata(t *testing.T) {
 		Metadata: map[string]any{"test": "test"},
 	}
 
-	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(tenantTestCtx(), dmsSample)
 	if err != nil {
 		t.Fatalf("could not create DMS: %s", err)
 	}
@@ -146,7 +145,7 @@ func TestUpdateDMSMetadata(t *testing.T) {
 			name: "OK",
 			run: func() (*models.DMS, error) {
 
-				dms, err := dmsMgr.Service.UpdateDMSMetadata(context.Background(), services.UpdateDMSMetadataInput{
+				dms, err := dmsMgr.Service.UpdateDMSMetadata(tenantTestCtx(), services.UpdateDMSMetadataInput{
 					ID: dmsID,
 					Patches: chelpers.NewPatchBuilder().
 						Add(chelpers.JSONPointerBuilder(), dmsUpdMeta).
@@ -188,7 +187,7 @@ func TestDeleteDMS(t *testing.T) {
 					ID:   dmsID,
 					Name: "MyIotFleet",
 				}
-				dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+				dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(tenantTestCtx(), dmsSample)
 				if err != nil {
 					t.Fatalf("could not create DMS: %s", err)
 				}
@@ -199,7 +198,7 @@ func TestDeleteDMS(t *testing.T) {
 					t.Fatalf("could not delete DMS: %s", err)
 				}
 
-				_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsID})
+				_, err = dmsMgr.Service.GetDMSByID(tenantTestCtx(), services.GetDMSByIDInput{ID: dmsID})
 				if err == nil {
 					t.Fatalf("Get DMS by ID should fail")
 				}
@@ -230,7 +229,7 @@ func TestDeleteDMS(t *testing.T) {
 
 			tc.setup(dmsMgr)
 
-			err = dmsMgr.Service.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: dmsID})
+			err = dmsMgr.Service.DeleteDMS(tenantTestCtx(), services.DeleteDMSInput{ID: dmsID})
 
 			tc.resultCheck(dmsMgr, err)
 		})
@@ -248,7 +247,7 @@ func TestUpdateMissingDMSShouldFail(t *testing.T) {
 		Name: "MyIotFleet",
 	}
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: dmsSample})
+	_, err = dmsMgr.Service.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{DMS: dmsSample})
 	if err == nil {
 		t.Fatalf("Update DMS should fail")
 	}
@@ -262,7 +261,7 @@ func TestGetMissingDMSShouldFail(t *testing.T) {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
-	_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsID})
+	_, err = dmsMgr.Service.GetDMSByID(tenantTestCtx(), services.GetDMSByIDInput{ID: dmsID})
 	if err == nil {
 		t.Fatalf("Get DMS by ID should fail")
 	}
@@ -272,7 +271,7 @@ func TestGetMissingDMSShouldFail(t *testing.T) {
 
 func TestESTEnroll(t *testing.T) {
 	// t.Parallel()
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -343,7 +342,7 @@ func TestESTEnroll(t *testing.T) {
 
 		modifier(&input)
 
-		return dmsMgr.Service.CreateDMS(context.Background(), input)
+		return dmsMgr.Service.CreateDMS(tenantTestCtx(), input)
 	}
 
 	var testcases = []struct {
@@ -376,7 +375,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -397,7 +396,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -453,7 +452,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -474,7 +473,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -531,7 +530,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -565,7 +564,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not register device: %s", err)
 				}
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -622,7 +621,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -656,7 +655,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not register device: %s", err)
 				}
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -713,7 +712,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -734,7 +733,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -785,7 +784,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -824,7 +823,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -848,7 +847,7 @@ func TestESTEnroll(t *testing.T) {
 				// Wait for the certificate to expire
 				time.Sleep(2 * time.Second)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -888,7 +887,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -912,7 +911,7 @@ func TestESTEnroll(t *testing.T) {
 				// Wait for the certificate to expire
 				time.Sleep(2 * time.Second)
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -969,7 +968,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -978,7 +977,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 				}
 
-				_, err = testServers.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+				_, err = testServers.CA.Service.UpdateCertificateStatus(tenantTestCtx(), services.UpdateCertificateStatusInput{
 					SerialNumber:     bootCrt.SerialNumber,
 					NewStatus:        models.StatusRevoked,
 					RevocationReason: ocsp.KeyCompromise,
@@ -999,7 +998,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -1039,7 +1038,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -1048,7 +1047,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 				}
 
-				_, err = testServers.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+				_, err = testServers.CA.Service.UpdateCertificateStatus(tenantTestCtx(), services.UpdateCertificateStatusInput{
 					SerialNumber:     bootCrt.SerialNumber,
 					NewStatus:        models.StatusRevoked,
 					RevocationReason: ocsp.KeyCompromise,
@@ -1072,7 +1071,7 @@ func TestESTEnroll(t *testing.T) {
 				// Wait for the certificate to expire
 				time.Sleep(2 * time.Second)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -1112,7 +1111,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -1133,12 +1132,12 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("could not enroll device for the first time: %s", err)
 				}
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -1224,7 +1223,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -1320,7 +1319,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -1381,7 +1380,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
@@ -1448,7 +1447,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err == nil {
 					t.Fatalf("expected error. Got none")
 				}
@@ -1462,14 +1461,14 @@ func TestESTEnroll(t *testing.T) {
 					Key:    "mySecret",
 				}
 
-				_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				_, err = dmsMgr.Service.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
 				}
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, err
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
@@ -1539,7 +1538,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
@@ -1565,7 +1564,7 @@ func TestESTEnroll(t *testing.T) {
 
 		// 		lifespanCABootDur, _ := models.ParseDuration("1y")
 		// 		issuanceCABootDur, _ := models.ParseDuration("1m")
-		// 		bootstrapCA, err := externalTestServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		// 		bootstrapCA, err := externalTestServers.CA.Service.CreateCA(tenantTestCtx(), services.CreateCAInput{
 		// 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 		// 			Subject:            models.Subject{CommonName: "ExternalCA"},
 		// 			CAExpiration:       models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
@@ -1576,7 +1575,7 @@ func TestESTEnroll(t *testing.T) {
 		// 			t.Fatalf("could not create external Bootstrap CA: %s", err)
 		// 		}
 
-		// 		importedBootstrapCA, err := testServers.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
+		// 		importedBootstrapCA, err := testServers.CA.Service.ImportCA(tenantTestCtx(), services.ImportCAInput{
 		// 			ID:                 fmt.Sprintf("my-external-CA-%s", uuid.NewString()),
 		// 			CAType:             models.CertificateTypeImportedWithoutKey,
 		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
@@ -1603,7 +1602,7 @@ func TestESTEnroll(t *testing.T) {
 
 		// 		bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 		// 		bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-		// 		bootCrt, err := externalTestServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+		// 		bootCrt, err := externalTestServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 		// 			CAID:         bootstrapCA.ID,
 		// 			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 		// 			IssuanceProfile: models.IssuanceProfile{
@@ -1617,7 +1616,7 @@ func TestESTEnroll(t *testing.T) {
 		// 			t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 		// 		}
 
-		// 		_, err = externalTestServers.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+		// 		_, err = externalTestServers.CA.Service.UpdateCertificateStatus(tenantTestCtx(), services.UpdateCertificateStatusInput{
 		// 			SerialNumber:     bootCrt.SerialNumber,
 		// 			NewStatus:        models.StatusRevoked,
 		// 			RevocationReason: ocsp.KeyCompromise,
@@ -1638,7 +1637,7 @@ func TestESTEnroll(t *testing.T) {
 		// 		enrollKey, _ := chelpers.GenerateRSAKey(2048)
 		// 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-		// 		_, err = estCli.Enroll(context.Background(), enrollCSR)
+		// 		_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 		// 		return nil, nil, nil, err
 		// 	},
 		// 	resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -1753,7 +1752,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -1779,7 +1778,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("failed to parse corrupted CSR: %v", err)
 				}
 
-				enrollCRT, err := estCli.Enroll(context.Background(), badCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), badCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -1835,7 +1834,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -1861,7 +1860,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("failed to parse corrupted CSR: %v", err)
 				}
 
-				_, err = estCli.Enroll(context.Background(), badCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), badCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -2438,7 +2437,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -2459,7 +2458,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -2521,7 +2520,7 @@ func TestESTEnroll(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -2542,7 +2541,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -2610,7 +2609,7 @@ func TestESTEnroll(t *testing.T) {
 				// sign boot cert with differentCA (not trusted by DMS)
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              differentCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: differentCA.ProfileID,
@@ -2631,7 +2630,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if webhookCallCount.Load() != 0 {
 					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
 				}
@@ -2701,7 +2700,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "device-no-cert"}, enrollKey)
 
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				_, err = estCli.Enroll(tenantTestCtx(), enrollCSR)
 				if webhookCallCount.Load() != 0 {
 					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
 				}
@@ -2731,7 +2730,7 @@ func TestESTGetCACerts(t *testing.T) {
 	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
-		profile, err := testServers.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		profile, err := testServers.CA.Service.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 			Profile: models.IssuanceProfile{
 				Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			},
@@ -2740,7 +2739,7 @@ func TestESTGetCACerts(t *testing.T) {
 			t.Fatalf("could not create issuance profile: %s", err)
 		}
 
-		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		return testServers.CA.Service.CreateCA(tenantTestCtx(), services.CreateCAInput{
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:      models.Subject{CommonName: name},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
@@ -2800,7 +2799,7 @@ func TestESTGetCACerts(t *testing.T) {
 		}
 		modifier(&input)
 
-		return dmsMgr.Service.CreateDMS(context.Background(), input)
+		return dmsMgr.Service.CreateDMS(tenantTestCtx(), input)
 	}
 
 	createDMS(func(in *services.CreateDMSInput) {
@@ -2821,7 +2820,7 @@ func TestESTGetCACerts(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.CACerts(context.Background())
+				_, err = estCli.CACerts(tenantTestCtx())
 
 				return nil, err
 			},
@@ -2849,7 +2848,7 @@ func TestESTGetCACerts(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				caCerts, err := estCli.CACerts(context.Background())
+				caCerts, err := estCli.CACerts(tenantTestCtx())
 
 				return caCerts, err
 			},
@@ -2880,7 +2879,7 @@ func TestESTGetCACerts(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				caCerts, err := estCli.CACerts(context.Background())
+				caCerts, err := estCli.CACerts(tenantTestCtx())
 
 				return caCerts, err
 			},
@@ -2918,7 +2917,7 @@ func TestESTGetCACerts(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				caCerts, err := estCli.CACerts(context.Background())
+				caCerts, err := estCli.CACerts(tenantTestCtx())
 
 				return caCerts, err
 			},
@@ -2958,7 +2957,7 @@ func TestESTGetCACerts(t *testing.T) {
 
 func TestESTServerKeyGen(t *testing.T) {
 	// t.Parallel()
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -2968,7 +2967,7 @@ func TestESTServerKeyGen(t *testing.T) {
 	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
-		profile, err := testServers.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		profile, err := testServers.CA.Service.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 			Profile: models.IssuanceProfile{
 				Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			},
@@ -2976,7 +2975,7 @@ func TestESTServerKeyGen(t *testing.T) {
 		if err != nil {
 			t.Fatalf("could not create issuance profile: %s", err)
 		}
-		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		return testServers.CA.Service.CreateCA(tenantTestCtx(), services.CreateCAInput{
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:      models.Subject{CommonName: name},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
@@ -3071,7 +3070,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -3170,7 +3169,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 					CAID:              bootstrapCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfileID: bootstrapCA.ProfileID,
@@ -3378,7 +3377,7 @@ func TestESTReEnroll(t *testing.T) {
 	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
-		profile, err := testServers.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		profile, err := testServers.CA.Service.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 			Profile: models.IssuanceProfile{
 				Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			},
@@ -3387,7 +3386,7 @@ func TestESTReEnroll(t *testing.T) {
 			t.Fatalf("could not create issuance profile: %s", err)
 		}
 
-		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		return testServers.CA.Service.CreateCA(tenantTestCtx(), services.CreateCAInput{
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:      models.Subject{CommonName: name},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
@@ -3442,7 +3441,7 @@ func TestESTReEnroll(t *testing.T) {
 
 		modifier(&input)
 
-		return dmsMgr.Service.CreateDMS(context.Background(), input)
+		return dmsMgr.Service.CreateDMS(tenantTestCtx(), input)
 	}
 
 	prepReenrollScenario := func(dmsModifier func(in *services.CreateDMSInput), enrollDur string) (dms *models.DMS, enrollmentCA, deviceCert *x509.Certificate, deviceKey any) {
@@ -3469,7 +3468,7 @@ func TestESTReEnroll(t *testing.T) {
 
 		bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 		bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-		bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+		bootCrt, err := testServers.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 			CAID:              bootstrapCA.ID,
 			CertRequest:       (*models.X509CertificateRequest)(bootCsr),
 			IssuanceProfileID: bootstrapCA.ProfileID,
@@ -3490,7 +3489,7 @@ func TestESTReEnroll(t *testing.T) {
 		enrollKey, _ := chelpers.GenerateRSAKey(2048)
 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-		enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+		enrollCRT, err := estCli.Enroll(tenantTestCtx(), enrollCSR)
 		if err != nil {
 			t.Fatalf("unexpected error while enrolling: %s", err)
 		}
@@ -3547,7 +3546,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				reEnrollCRT, err := estCli.Reenroll(tenantTestCtx(), newCsr)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -3584,7 +3583,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -3619,7 +3618,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -3656,7 +3655,7 @@ func TestESTReEnroll(t *testing.T) {
 
 				time.Sleep(time.Second * 4)
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				reEnrollCRT, err := estCli.Reenroll(tenantTestCtx(), newCsr)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -3693,7 +3692,7 @@ func TestESTReEnroll(t *testing.T) {
 
 				time.Sleep(time.Second * 4)
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -3728,7 +3727,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = testServers.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+				_, err = testServers.CA.Service.UpdateCertificateStatus(tenantTestCtx(), services.UpdateCertificateStatusInput{
 					SerialNumber:     helpers.SerialNumberToHexString(deviceCrt.SerialNumber),
 					NewStatus:        models.StatusRevoked,
 					RevocationReason: ocsp.Superseded,
@@ -3737,7 +3736,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("could not revoke certificate: %s", err)
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -3769,7 +3768,7 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -3786,7 +3785,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				reEnrollCRT, err := estCli.Reenroll(tenantTestCtx(), newCsr)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -3820,7 +3819,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -3890,7 +3889,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				crt1, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+				crt1, err := testServers.CA.Service.GetCertificateBySerialNumber(tenantTestCtx(), services.GetCertificatesBySerialNumberInput{
 					SerialNumber: helpers.SerialNumberToHexString(deviceCrt1.SerialNumber),
 				})
 				if err != nil {
@@ -3926,7 +3925,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				crt2, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+				crt2, err := testServers.CA.Service.GetCertificateBySerialNumber(tenantTestCtx(), services.GetCertificatesBySerialNumberInput{
 					SerialNumber: helpers.SerialNumberToHexString(deviceCrt2.SerialNumber),
 				})
 				if err != nil {
@@ -3970,7 +3969,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), badCSR)
+				reEnrollCRT, err := estCli.Reenroll(tenantTestCtx(), badCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -4008,7 +4007,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), badCSR)
+				_, err = estCli.Reenroll(tenantTestCtx(), badCSR)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -4052,7 +4051,7 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode:           config.NoAuth,
 					},
 				}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -4070,7 +4069,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				reEnrollCRT, err := estCli.Reenroll(tenantTestCtx(), newCsr)
 				if err != nil {
 					t.Fatalf("unexpected error while reenrolling: %s", err)
 				}
@@ -4114,7 +4113,7 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode:           config.NoAuth,
 					},
 				}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -4131,7 +4130,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -4173,7 +4172,7 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode:           config.NoAuth,
 					},
 				}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -4190,7 +4189,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				reEnrollCRT, err := estCli.Reenroll(tenantTestCtx(), newCsr)
 				if err != nil {
 					t.Fatalf("unexpected error while reenrolling: %s", err)
 				}
@@ -4234,7 +4233,7 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode:           config.NoAuth,
 					},
 				}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -4251,7 +4250,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -4296,7 +4295,7 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode:           config.NoAuth,
 					},
 				}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -4317,7 +4316,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				if webhookCallCount.Load() != 0 {
 					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
 				}
@@ -4361,7 +4360,7 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode:           config.NoAuth,
 					},
 				}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -4379,7 +4378,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				if webhookCallCount.Load() != 0 {
 					t.Fatalf("webhook must not be called when client certificate validation fails first, but was called %d time(s)", webhookCallCount.Load())
 				}
@@ -4412,7 +4411,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				reEnrollCRT, err := estCli.Reenroll(tenantTestCtx(), newCsr)
 				if err != nil {
 					t.Fatalf("unexpected error while reenrolling: %s", err)
 				}
@@ -4437,7 +4436,7 @@ func TestESTReEnroll(t *testing.T) {
 				)
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
-				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(tenantTestCtx(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -4454,7 +4453,7 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				_, err = estCli.Reenroll(context.Background(), newCsr)
+				_, err = estCli.Reenroll(tenantTestCtx(), newCsr)
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -4525,7 +4524,7 @@ func TestGetAllDMS(t *testing.T) {
 
 		modifier(&input)
 
-		return dmsMgr.Service.CreateDMS(context.Background(), input)
+		return dmsMgr.Service.CreateDMS(tenantTestCtx(), input)
 	}
 
 	var testcases = []struct {
@@ -4572,7 +4571,7 @@ func TestGetAllDMS(t *testing.T) {
 					},
 				}
 
-				bookmark, err := dmsMgr.HttpDeviceManagerSDK.GetAll(context.Background(), request)
+				bookmark, err := dmsMgr.HttpDeviceManagerSDK.GetAll(tenantTestCtx(), request)
 
 				fmt.Println(bookmark)
 
@@ -4626,7 +4625,7 @@ func TestGetAllDMS(t *testing.T) {
 					},
 				}
 
-				bookmark, err := dmsMgr.HttpDeviceManagerSDK.GetAll(context.Background(), request)
+				bookmark, err := dmsMgr.HttpDeviceManagerSDK.GetAll(tenantTestCtx(), request)
 
 				fmt.Println(bookmark)
 
@@ -4699,7 +4698,7 @@ func (c *pemESTClient) commonEnrollPEM(r *x509.CertificateRequest, renew bool) (
 
 	uriEndpoint := fmt.Sprintf("%s%s", c.baseEndpoint, endpoint)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, uriEndpoint, reqBody)
+	req, err := http.NewRequestWithContext(tenantTestCtx(), http.MethodPost, uriEndpoint, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make new HTTP request: %w", err)
 	}

@@ -15,7 +15,7 @@ import (
 // TestGetDMSStatsFiltered is an optimized test suite that starts the server once,
 // populates all test data, and then runs multiple test scenarios as subtests
 func TestGetDMSStatsFiltered(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	// Start server once for all subtests
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)

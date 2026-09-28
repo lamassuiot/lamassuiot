@@ -20,17 +20,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo models.APIServiceInfo) (*services.AlertsService, int, error) {
+func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo models.APIServiceInfo, routeOptions ...routes.TenantRouteOptions) (*services.AlertsService, int, error) {
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "Alerts", "HTTP Server")
+	tenantOptions, err := resolveTenantRouteOptions(lHttp, conf.Storage, conf.Server, routeOptions)
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not configure tenant-aware HTTP routes: %w", err)
+	}
 	service, err := AssembleAlertsService(conf)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble Alerts Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "Alerts", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := routes.NewGinEngineWithCORS(lHttp, conf.Server.CORSAllowedOrigins, tenantOptions.JWTValidator)
 	httpGrp := httpEngine.Group("/")
-	routes.NewAlertsHTTPLayer(httpGrp, *service)
+	routes.NewAlertsHTTPLayer(httpGrp, *service, tenantOptions)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Alerts http server: %s", err)

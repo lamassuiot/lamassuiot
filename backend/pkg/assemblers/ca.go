@@ -22,17 +22,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSService, serviceInfo models.APIServiceInfo) (*services.CAService, *jobs.JobScheduler, int, error) {
+func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSService, serviceInfo models.APIServiceInfo, routeOptions ...routes.TenantRouteOptions) (*services.CAService, *jobs.JobScheduler, int, error) {
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "CA", "HTTP Server")
+	tenantOptions, err := resolveTenantRouteOptions(lHttp, conf.Storage, conf.Server, routeOptions)
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("could not configure tenant-aware HTTP routes: %w", err)
+	}
 	caService, scheduler, err := AssembleCAService(conf, kmsSDK)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "CA", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := routes.NewGinEngineWithCORS(lHttp, conf.Server.CORSAllowedOrigins, tenantOptions.JWTValidator)
 	httpGrp := httpEngine.Group("/")
-	routes.NewCAHTTPLayer(httpGrp, *caService)
+	routes.NewCAHTTPLayer(httpGrp, *caService, tenantOptions)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)
@@ -95,7 +98,7 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 		}
 
 		svc = eventpub.NewCAEventBusPublisher(eventPublisher)(svc)
-		svc = auditpub.NewCAAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
+		svc = auditpub.NewCAAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher, lAudit))(svc)
 
 		//this utilizes the middlewares from within the CA service (if svc.service.func is used instead of regular svc.func)
 		caSvc.SetService(svc)
@@ -104,7 +107,20 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 	var scheduler *jobs.JobScheduler
 	if conf.CertificateMonitoringJob.Enabled {
 		log.Infof("Crypto Monitoring is enabled")
+		controlPlaneEngine, err := builder.BuildStorageEngine(lStorage, conf.Storage)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not create control plane storage for crypto monitoring: %w", err)
+		}
+		membershipRepo, err := controlPlaneEngine.GetControlPlaneMembershipStorage()
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not get control plane tenant storage for crypto monitoring: %w", err)
+		}
+		tenantLister, ok := membershipRepo.(storage.ActiveTenantLister)
+		if !ok {
+			return nil, nil, fmt.Errorf("control plane tenant storage does not support active tenant listing")
+		}
 		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
+		monitorJob.SetTenantLister(tenantLister)
 		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, monitorJob)
 		scheduler.Start()
 	}

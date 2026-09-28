@@ -1,7 +1,6 @@
 package ca
 
 import (
-	"context"
 	"crypto/x509"
 	"testing"
 
@@ -19,7 +18,7 @@ func TestCAIssuanceProfiles(t *testing.T) {
 
 	caSvc := serverTest.CA.HttpCASDK
 
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	// Create IssuanceProfile
 	profile := &models.IssuanceProfile{
@@ -102,7 +101,7 @@ func TestFilterCAsByProfileID(t *testing.T) {
 	assert.NoError(t, err, "could not create CA test server")
 
 	caSvc := serverTest.CA.HttpCASDK
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 
 	// Create first IssuanceProfile
 	profile1 := &models.IssuanceProfile{

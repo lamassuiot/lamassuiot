@@ -1,7 +1,6 @@
 package ca
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -173,7 +172,7 @@ func TestGetCertificatesFilterByMetadataJsonPath(t *testing.T) {
 
 	// Populate metadata for all certificates
 	updateMetadata := func(serialNumber string, metadata map[string]interface{}) {
-		_, err := caTest.Service.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+		_, err := caTest.Service.UpdateCertificateMetadata(tenantTestCtx(), services.UpdateCertificateMetadataInput{
 			SerialNumber: serialNumber,
 			Patches: chelpers.NewPatchBuilder().
 				Add(chelpers.JSONPointerBuilder(), metadata).
@@ -372,7 +371,7 @@ func TestGetCertificatesFilterByMetadataJsonPath(t *testing.T) {
 				},
 			}
 
-			_, err := caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+			_, err := caTest.HttpCASDK.GetCertificates(tenantTestCtx(), services.GetCertificatesInput{
 				ListInput: resources.ListInput[models.Certificate]{
 					QueryParameters: qp,
 					ExhaustiveRun:   true,

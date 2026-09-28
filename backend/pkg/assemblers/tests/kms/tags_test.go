@@ -1,7 +1,6 @@
 package kms
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -24,7 +23,7 @@ func TestUpdateKeyTags(t *testing.T) {
 		{
 			name: "OK/AddTagsToNewKey",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				return svc.CreateKey(context.Background(), services.CreateKeyInput{
+				return svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key for Tags",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -32,7 +31,7 @@ func TestUpdateKeyTags(t *testing.T) {
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"production", "critical", "us-east-1"},
 				})
@@ -67,7 +66,7 @@ func TestUpdateKeyTags(t *testing.T) {
 		{
 			name: "OK/UpdateExistingTags",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				key, err := svc.CreateKey(context.Background(), services.CreateKeyInput{
+				key, err := svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with Initial Tags",
 					Algorithm: "ECDSA",
 					Size:      256,
@@ -77,13 +76,13 @@ func TestUpdateKeyTags(t *testing.T) {
 					return nil, err
 				}
 				// Add initial tags
-				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return svc.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"development", "temporary"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"production", "permanent", "critical"},
 				})
@@ -123,7 +122,7 @@ func TestUpdateKeyTags(t *testing.T) {
 		{
 			name: "OK/ClearAllTags",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				key, err := svc.CreateKey(context.Background(), services.CreateKeyInput{
+				key, err := svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with Tags to Clear",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -133,13 +132,13 @@ func TestUpdateKeyTags(t *testing.T) {
 					return nil, err
 				}
 				// Add initial tags
-				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return svc.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"tag1", "tag2", "tag3"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{},
 				})
@@ -157,7 +156,7 @@ func TestUpdateKeyTags(t *testing.T) {
 		{
 			name: "OK/SetSingleTag",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				return svc.CreateKey(context.Background(), services.CreateKeyInput{
+				return svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key Single Tag",
 					Algorithm: "ECDSA",
 					Size:      384,
@@ -165,7 +164,7 @@ func TestUpdateKeyTags(t *testing.T) {
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"important"},
 				})
@@ -186,7 +185,7 @@ func TestUpdateKeyTags(t *testing.T) {
 		{
 			name: "OK/UpdateTagsMultipleTimes",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				key, err := svc.CreateKey(context.Background(), services.CreateKeyInput{
+				key, err := svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key Multiple Updates",
 					Algorithm: "RSA",
 					Size:      4096,
@@ -196,7 +195,7 @@ func TestUpdateKeyTags(t *testing.T) {
 					return nil, err
 				}
 				// First update
-				key, err = svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				key, err = svc.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"tag1"},
 				})
@@ -204,13 +203,13 @@ func TestUpdateKeyTags(t *testing.T) {
 					return nil, err
 				}
 				// Second update
-				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return svc.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"tag1", "tag2"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"final-tag"},
 				})
@@ -231,7 +230,7 @@ func TestUpdateKeyTags(t *testing.T) {
 		{
 			name: "OK/UpdateTagsUsingAlias",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				key, err := svc.CreateKey(context.Background(), services.CreateKeyInput{
+				key, err := svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with Alias",
 					Algorithm: "ECDSA",
 					Size:      256,
@@ -241,14 +240,14 @@ func TestUpdateKeyTags(t *testing.T) {
 					return nil, err
 				}
 				// Add an alias
-				return svc.UpdateKeyAliases(context.Background(), services.UpdateKeyAliasesInput{
+				return svc.UpdateKeyAliases(tenantTestCtx(), services.UpdateKeyAliasesInput{
 					ID:      key.KeyID,
 					Patches: []models.PatchOperation{{Op: models.PatchAdd, Path: "/-", Value: "my-test-alias"}},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				// Update tags using the alias instead of KeyID
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   "my-test-alias",
 					Tags: []string{"aliased-tag"},
 				})
@@ -269,7 +268,7 @@ func TestUpdateKeyTags(t *testing.T) {
 		{
 			name: "OK/UpdateTagsUsingPKCS11URI",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				return svc.CreateKey(context.Background(), services.CreateKeyInput{
+				return svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with PKCS11 URI",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -278,7 +277,7 @@ func TestUpdateKeyTags(t *testing.T) {
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				// Update tags using PKCS11URI
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.PKCS11URI,
 					Tags: []string{"uri-based-tag"},
 				})
@@ -302,7 +301,7 @@ func TestUpdateKeyTags(t *testing.T) {
 				return &models.Key{KeyID: "nonexistent-key-id"}, nil
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   "nonexistent-key-id",
 					Tags: []string{"tag1"},
 				})
@@ -320,7 +319,7 @@ func TestUpdateKeyTags(t *testing.T) {
 				return &models.Key{}, nil
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return kmsSDK.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   "",
 					Tags: []string{"tag1"},
 				})
@@ -370,7 +369,7 @@ func TestGetKeyWithTags(t *testing.T) {
 		{
 			name: "OK/GetKeyWithTags",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				key, err := svc.CreateKey(context.Background(), services.CreateKeyInput{
+				key, err := svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with Tags for Retrieval",
 					Algorithm: "ECDSA",
 					Size:      256,
@@ -380,13 +379,13 @@ func TestGetKeyWithTags(t *testing.T) {
 					return nil, err
 				}
 				// Add tags
-				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
+				return svc.UpdateKeyTags(tenantTestCtx(), services.UpdateKeyTagsInput{
 					ID:   key.KeyID,
 					Tags: []string{"test-tag-1", "test-tag-2", "test-tag-3"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.GetKey(context.Background(), services.GetKeyInput{
+				return kmsSDK.GetKey(tenantTestCtx(), services.GetKeyInput{
 					Identifier: key.KeyID,
 				})
 			},
@@ -418,7 +417,7 @@ func TestGetKeyWithTags(t *testing.T) {
 		{
 			name: "OK/GetKeyWithNoTags",
 			before: func(svc services.KMSService) (*models.Key, error) {
-				return svc.CreateKey(context.Background(), services.CreateKeyInput{
+				return svc.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key without Tags",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -426,7 +425,7 @@ func TestGetKeyWithTags(t *testing.T) {
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
-				return kmsSDK.GetKey(context.Background(), services.GetKeyInput{
+				return kmsSDK.GetKey(tenantTestCtx(), services.GetKeyInput{
 					Identifier: key.KeyID,
 				})
 			},

@@ -1,7 +1,6 @@
 package kms
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -29,7 +28,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 			name:   "OK/CreateKeyWithTags",
 			before: func(svc services.KMSService) error { return nil },
 			run: func(kmsSDK services.KMSService) (*models.Key, error) {
-				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				return kmsSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with Tags",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -70,7 +69,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 			name:   "OK/CreateKeyWithMetadata",
 			before: func(svc services.KMSService) error { return nil },
 			run: func(kmsSDK services.KMSService) (*models.Key, error) {
-				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				return kmsSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with Metadata",
 					Algorithm: "ECDSA",
 					Size:      256,
@@ -123,7 +122,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 			name:   "OK/CreateKeyWithTagsAndMetadata",
 			before: func(svc services.KMSService) error { return nil },
 			run: func(kmsSDK services.KMSService) (*models.Key, error) {
-				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				return kmsSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key with Both",
 					Algorithm: "RSA",
 					Size:      4096,
@@ -158,7 +157,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 			name:   "OK/CreateKeyWithoutTagsOrMetadata",
 			before: func(svc services.KMSService) error { return nil },
 			run: func(kmsSDK services.KMSService) (*models.Key, error) {
-				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				return kmsSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key Plain",
 					Algorithm: "ECDSA",
 					Size:      384,
@@ -197,7 +196,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 			name:   "OK/CreateKeyWithEmptyTagsAndMetadata",
 			before: func(svc services.KMSService) error { return nil },
 			run: func(kmsSDK services.KMSService) (*models.Key, error) {
-				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				return kmsSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Test Key Empty Arrays",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -268,7 +267,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 					return nil, err
 				}
 
-				return kmsSDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsSDK.ImportKey(tenantTestCtx(), services.ImportKeyInput{
 					PrivateKey: privKey,
 					Name:       "Imported RSA Key with Tags",
 					Tags:       []string{"imported", "rsa-key", "archive"},
@@ -317,7 +316,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 					return nil, err
 				}
 
-				return kmsSDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsSDK.ImportKey(tenantTestCtx(), services.ImportKeyInput{
 					PrivateKey: privKey,
 					Name:       "Imported ECDSA Key with Metadata",
 					Metadata: map[string]any{
@@ -364,7 +363,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 					return nil, err
 				}
 
-				return kmsSDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsSDK.ImportKey(tenantTestCtx(), services.ImportKeyInput{
 					PrivateKey: privKey,
 					Name:       "Imported Key with Both",
 					Tags:       []string{"migration", "legacy"},
@@ -403,7 +402,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 					return nil, err
 				}
 
-				return kmsSDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsSDK.ImportKey(tenantTestCtx(), services.ImportKeyInput{
 					PrivateKey: privKey,
 					Name:       "Imported Plain Key",
 				})
@@ -474,7 +473,7 @@ func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
 			name: "OK/CreateRetrieveKeyPersistsTags",
 			run: func(kmsSDK services.KMSService) error {
 				// Create key with tags
-				createdKey, err := kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
+				createdKey, err := kmsSDK.CreateKey(tenantTestCtx(), services.CreateKeyInput{
 					Name:      "Persistence Test Key",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -488,7 +487,7 @@ func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
 				}
 
 				// Retrieve the key
-				retrievedKey, err := kmsSDK.GetKey(context.Background(), services.GetKeyInput{
+				retrievedKey, err := kmsSDK.GetKey(tenantTestCtx(), services.GetKeyInput{
 					Identifier: createdKey.KeyID,
 				})
 				if err != nil {

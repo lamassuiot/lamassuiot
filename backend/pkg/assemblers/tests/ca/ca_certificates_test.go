@@ -1,7 +1,6 @@
 package ca
 
 import (
-	"context"
 	"crypto/x509"
 	"fmt"
 	"strings"
@@ -40,7 +39,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 				}
 
 				// Expire the CA first so it can be deleted
-				_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				_, err = caSDK.UpdateCAStatus(tenantTestCtx(), services.UpdateCAStatusInput{
 					CAID:   ca.ID,
 					Status: models.StatusExpired,
 				})
@@ -49,7 +48,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 				}
 
 				// Delete the CA to make the certificate orphaned
-				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+				err = caSDK.DeleteCA(tenantTestCtx(), services.DeleteCAInput{
 					CAID: ca.ID,
 				})
 				if err != nil {
@@ -59,7 +58,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 				return cert.SerialNumber, ca.ID, nil
 			},
 			run: func(caSDK services.CAService, certSerialNumber string) error {
-				return caSDK.DeleteCertificate(context.Background(), services.DeleteCertificateInput{
+				return caSDK.DeleteCertificate(tenantTestCtx(), services.DeleteCertificateInput{
 					SerialNumber: certSerialNumber,
 				})
 			},
@@ -82,7 +81,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 				return cert.SerialNumber, ca.ID, nil
 			},
 			run: func(caSDK services.CAService, certSerialNumber string) error {
-				return caSDK.DeleteCertificate(context.Background(), services.DeleteCertificateInput{
+				return caSDK.DeleteCertificate(tenantTestCtx(), services.DeleteCertificateInput{
 					SerialNumber: certSerialNumber,
 				})
 			},
@@ -103,7 +102,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 				return "non-existent-cert-serial", "", nil
 			},
 			run: func(caSDK services.CAService, certSerialNumber string) error {
-				return caSDK.DeleteCertificate(context.Background(), services.DeleteCertificateInput{
+				return caSDK.DeleteCertificate(tenantTestCtx(), services.DeleteCertificateInput{
 					SerialNumber: certSerialNumber,
 				})
 			},
@@ -155,7 +154,7 @@ func TestDeleteCertificateService(t *testing.T) {
 				return "", "", nil
 			},
 			run: func(caSDK services.CAService, certSerialNumber string) error {
-				return caSDK.DeleteCertificate(context.Background(), services.DeleteCertificateInput{
+				return caSDK.DeleteCertificate(tenantTestCtx(), services.DeleteCertificateInput{
 					SerialNumber: certSerialNumber,
 				})
 			},
@@ -220,7 +219,7 @@ func TestSignCertificateWithDefaultProfile(t *testing.T) {
 		t.Fatalf("failed to generate CSR: %s", err)
 	}
 
-	cert, err := caTest.HttpCASDK.SignCertificate(context.Background(), services.SignCertificateInput{
+	cert, err := caTest.HttpCASDK.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 		CAID:        ca.ID,
 		CertRequest: (*models.X509CertificateRequest)(csr),
 	})
@@ -251,7 +250,7 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
 	// Create issuance profile
-	profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+	profile, err := caSDK.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 		Profile: models.IssuanceProfile{
 			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 		},
@@ -261,7 +260,7 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 	}
 
 	// Create CA
-	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+	ca, err := caSDK.CreateCA(tenantTestCtx(), services.CreateCAInput{
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "TestCA"},
 		CAExpiration: models.Validity{Type: models.Duration, Duration: caDur},
@@ -293,7 +292,7 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 	}
 
 	// Sign certificate with the CA (CA is already active by default)
-	cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+	cert, err := caSDK.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 		CAID:        ca.ID,
 		CertRequest: (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: &models.IssuanceProfile{
@@ -315,7 +314,7 @@ func createCertificateWithExtensions(t *testing.T, caSDK services.CAService, caI
 		profileExtendedKeyUsage = append(profileExtendedKeyUsage, models.X509ExtKeyUsage(usage))
 	}
 
-	cert, err := caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+	cert, err := caSDK.CreateCertificate(tenantTestCtx(), services.CreateCertificateInput{
 		CAID: caID,
 		KeySpec: services.CertificateKeySpec{
 			Type: models.KeyType(x509.RSA),
@@ -389,7 +388,7 @@ func TestGetCertificatesFilterBySubjectKeyID(t *testing.T) {
 		},
 	}
 
-	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+	_, err = caTest.HttpCASDK.GetCertificates(tenantTestCtx(), services.GetCertificatesInput{
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: qp,
 			ExhaustiveRun:   true,
@@ -461,7 +460,7 @@ func TestGetCertificatesFilterBySubjectKeyIDNotIn(t *testing.T) {
 		},
 	}
 
-	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+	_, err = caTest.HttpCASDK.GetCertificates(tenantTestCtx(), services.GetCertificatesInput{
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: qp,
 			ExhaustiveRun:   true,
@@ -538,7 +537,7 @@ func TestGetCertificatesFilterBySubjectKeyIDNotInIgnoreCase(t *testing.T) {
 		},
 	}
 
-	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+	_, err = caTest.HttpCASDK.GetCertificates(tenantTestCtx(), services.GetCertificatesInput{
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: qp,
 			ExhaustiveRun:   true,
@@ -599,7 +598,7 @@ func TestGetCertificatesFilterByExtensionKeyUsage(t *testing.T) {
 		},
 	}
 
-	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+	_, err = caTest.HttpCASDK.GetCertificates(tenantTestCtx(), services.GetCertificatesInput{
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: qp,
 			ExhaustiveRun:   true,
@@ -662,7 +661,7 @@ func TestGetCertificatesFilterByExtensionExtendedKeyUsageIgnoreCase(t *testing.T
 		},
 	}
 
-	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+	_, err = caTest.HttpCASDK.GetCertificates(tenantTestCtx(), services.GetCertificatesInput{
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: qp,
 			ExhaustiveRun:   true,

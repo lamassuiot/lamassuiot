@@ -1,7 +1,6 @@
 package dmsmanager
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
@@ -291,7 +290,7 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 }
 
 func TestGetDMSFilterBySettingsJsonPath(t *testing.T) {
-	ctx := context.Background()
+	ctx := tenantTestCtx()
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)

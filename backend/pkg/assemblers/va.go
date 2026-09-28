@@ -15,6 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -25,17 +26,20 @@ import (
 
 var serviceID = "va"
 
-func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, kmsService services.KMSService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
+func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, kmsService services.KMSService, serviceInfo models.APIServiceInfo, routeOptions ...routes.TenantRouteOptions) (*services.CRLService, *services.OCSPService, int, error) {
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "VA", "HTTP Server")
+	tenantOptions, err := resolveTenantRouteOptions(lHttp, conf.Storage, conf.Server, routeOptions)
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("could not configure tenant-aware HTTP routes: %w", err)
+	}
 	crl, ocsp, err := AssembleVAService(conf, caService, kmsService)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not assemble VA Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "VA", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := routes.NewGinEngineWithCORS(lHttp, conf.Server.CORSAllowedOrigins, tenantOptions.JWTValidator)
 	httpGrp := httpEngine.Group("/")
-	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl)
+	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl, tenantOptions)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run VA http server: %s", err)
@@ -50,12 +54,12 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")
 
-	storage, err := builder.BuildStorageEngine(lStorage, conf.Storage)
+	storageEngine, err := builder.BuildStorageEngine(lStorage, conf.Storage)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
 
-	vaRoleRepo, err := storage.GetVARoleStorage()
+	vaRoleRepo, err := storageEngine.GetVARoleStorage()
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not get device storage: %s", err)
 	}
@@ -107,7 +111,15 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 	}
 
 	if conf.CRLMonitoringJob.Enabled {
-		err := createCRLMonitoringJob(conf, crl)
+		membershipRepo, err := storageEngine.GetControlPlaneMembershipStorage()
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not get control plane tenant storage for CRL monitoring: %w", err)
+		}
+		tenantLister, ok := membershipRepo.(storage.ActiveTenantLister)
+		if !ok {
+			return nil, nil, fmt.Errorf("control plane tenant storage does not support active tenant listing")
+		}
+		err = createCRLMonitoringJob(conf, crl, tenantLister)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -171,7 +183,7 @@ func createSubscriberEventBus(conf config.VAconfig, crlSvc services.CRLService) 
 	return nil
 }
 
-func createCRLMonitoringJob(conf config.VAconfig, crl services.CRLService) error {
+func createCRLMonitoringJob(conf config.VAconfig, crl services.CRLService, tenantLister storage.ActiveTenantLister) error {
 
 	log.Infof("VA CRL Monitoring is enabled")
 	lJob := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
@@ -183,6 +195,7 @@ func createCRLMonitoringJob(conf config.VAconfig, crl services.CRLService) error
 	}
 
 	monitorJob := jobs.NewVACrlMonitorJob(lJob, crl, blindPeriod)
+	monitorJob.SetTenantLister(tenantLister)
 	scheduler := jobs.NewJobScheduler(lJob, frequency, monitorJob)
 	scheduler.Start()
 

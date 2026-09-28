@@ -1,7 +1,6 @@
 package ca
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -27,7 +26,7 @@ func TestGetStatsFiltered(t *testing.T) {
 
 	// Helper function to create issuance profile
 	createProfile := func(t *testing.T) *models.IssuanceProfile {
-		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		profile, err := serverTest.CA.Service.CreateIssuanceProfile(tenantTestCtx(), services.CreateIssuanceProfileInput{
 			Profile: models.IssuanceProfile{
 				Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
 			},
@@ -41,7 +40,7 @@ func TestGetStatsFiltered(t *testing.T) {
 	// Helper function to create CA with specific metadata
 	createCAWithMetadata := func(t *testing.T, id, commonName string, metadata map[string]interface{}) *models.CACertificate {
 		profile := createProfile(t)
-		ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		ca, err := serverTest.CA.Service.CreateCA(tenantTestCtx(), services.CreateCAInput{
 			ID:           id,
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 			Subject:      models.Subject{CommonName: commonName},
@@ -72,7 +71,7 @@ func TestGetStatsFiltered(t *testing.T) {
 			t.Fatalf("failed generating CSR: %s", err)
 		}
 
-		cert, err := serverTest.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+		cert, err := serverTest.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 			CAID:        caID,
 			CertRequest: (*models.X509CertificateRequest)(csr),
 		})
@@ -82,7 +81,7 @@ func TestGetStatsFiltered(t *testing.T) {
 
 		// Update metadata after issuance if needed
 		if metadata != nil {
-			cert, err = serverTest.CA.Service.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+			cert, err = serverTest.CA.Service.UpdateCertificateMetadata(tenantTestCtx(), services.UpdateCertificateMetadataInput{
 				SerialNumber: cert.SerialNumber,
 				Patches: chelpers.NewPatchBuilder().
 					Add(chelpers.JSONPointerBuilder(), metadata).
@@ -106,7 +105,7 @@ func TestGetStatsFiltered(t *testing.T) {
 			name:   "OK/GetStatsWithoutFilters",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
-				return caSDK.GetStats(context.Background(), services.GetStatsInput{})
+				return caSDK.GetStats(tenantTestCtx(), services.GetStatsInput{})
 			},
 			resultCheck: func(stats *models.CAStats, err error) error {
 				if err != nil {
@@ -127,7 +126,7 @@ func TestGetStatsFiltered(t *testing.T) {
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
-				return caSDK.GetStats(context.Background(), services.GetStatsInput{
+				return caSDK.GetStats(tenantTestCtx(), services.GetStatsInput{
 					CAQueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{
 							{
@@ -153,7 +152,7 @@ func TestGetStatsFiltered(t *testing.T) {
 		{
 			name: "OK/FilterCertificatesByMetadata",
 			before: func(svc services.CAService) error {
-				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				ca, err := svc.GetCAByID(tenantTestCtx(), services.GetCAByIDInput{CAID: DefaultCAID})
 				if err != nil {
 					return err
 				}
@@ -164,7 +163,7 @@ func TestGetStatsFiltered(t *testing.T) {
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
-				return caSDK.GetStats(context.Background(), services.GetStatsInput{
+				return caSDK.GetStats(tenantTestCtx(), services.GetStatsInput{
 					CertificateQueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{
 							{
@@ -195,7 +194,7 @@ func TestGetStatsFiltered(t *testing.T) {
 			name:   "Err/StatusFilterRejectedForCA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
-				return caSDK.GetStats(context.Background(), services.GetStatsInput{
+				return caSDK.GetStats(tenantTestCtx(), services.GetStatsInput{
 					CAQueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{
 							{
@@ -218,7 +217,7 @@ func TestGetStatsFiltered(t *testing.T) {
 			name:   "Err/StatusFilterRejectedForCertificate",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
-				return caSDK.GetStats(context.Background(), services.GetStatsInput{
+				return caSDK.GetStats(tenantTestCtx(), services.GetStatsInput{
 					CertificateQueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{
 							{
@@ -293,7 +292,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 			t.Fatalf("failed generating CSR: %s", err)
 		}
 
-		cert, err := serverTest.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+		cert, err := serverTest.CA.Service.SignCertificate(tenantTestCtx(), services.SignCertificateInput{
 			CAID:        caID,
 			CertRequest: (*models.X509CertificateRequest)(csr),
 		})
@@ -303,7 +302,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 
 		// Update metadata after issuance if needed
 		if metadata != nil {
-			cert, err = serverTest.CA.Service.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+			cert, err = serverTest.CA.Service.UpdateCertificateMetadata(tenantTestCtx(), services.UpdateCertificateMetadataInput{
 				SerialNumber: cert.SerialNumber,
 				Patches: chelpers.NewPatchBuilder().
 					Add(chelpers.JSONPointerBuilder(), metadata).
@@ -327,7 +326,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 			name:   "OK/GetStatsByCAIDWithoutFilters",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (map[models.CertificateStatus]int, error) {
-				return caSDK.GetStatsByCAID(context.Background(), services.GetStatsByCAIDInput{
+				return caSDK.GetStatsByCAID(tenantTestCtx(), services.GetStatsByCAIDInput{
 					CAID: DefaultCAID,
 				})
 			},
@@ -345,7 +344,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 		{
 			name: "OK/FilterCertificatesByMetadata",
 			before: func(svc services.CAService) error {
-				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				ca, err := svc.GetCAByID(tenantTestCtx(), services.GetCAByIDInput{CAID: DefaultCAID})
 				if err != nil {
 					return err
 				}
@@ -356,7 +355,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 				return nil
 			},
 			run: func(caSDK services.CAService) (map[models.CertificateStatus]int, error) {
-				return caSDK.GetStatsByCAID(context.Background(), services.GetStatsByCAIDInput{
+				return caSDK.GetStatsByCAID(tenantTestCtx(), services.GetStatsByCAIDInput{
 					CAID: DefaultCAID,
 					CertificateQueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{
@@ -388,7 +387,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 			name:   "Err/StatusFilterRejected",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (map[models.CertificateStatus]int, error) {
-				return caSDK.GetStatsByCAID(context.Background(), services.GetStatsByCAIDInput{
+				return caSDK.GetStatsByCAID(tenantTestCtx(), services.GetStatsByCAIDInput{
 					CAID: DefaultCAID,
 					CertificateQueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{

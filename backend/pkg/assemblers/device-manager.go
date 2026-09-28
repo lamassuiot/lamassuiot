@@ -21,17 +21,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.DeviceManagerService, int, error) {
+func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig, caService services.CAService, serviceInfo models.APIServiceInfo, routeOptions ...routes.TenantRouteOptions) (*services.DeviceManagerService, int, error) {
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "Device Manager", "HTTP Server")
+	tenantOptions, err := resolveTenantRouteOptions(lHttp, conf.Storage, conf.Server, routeOptions)
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not configure tenant-aware HTTP routes: %w", err)
+	}
 	service, err := AssembleDeviceManagerService(conf, caService)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble Device Manager Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "Device Manager", "HTTP Server")
-
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := routes.NewGinEngineWithCORS(lHttp, conf.Server.CORSAllowedOrigins, tenantOptions.JWTValidator)
 	httpGrp := httpEngine.Group("/")
-	routes.NewDeviceManagerHTTPLayer(httpGrp, *service)
+	routes.NewDeviceManagerHTTPLayer(httpGrp, *service, tenantOptions)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Device Manager http server: %s", err)
