@@ -165,7 +165,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 
-		exists, _, err := kmsStorage.SelectExistsByKeyID(ctx, entry.keyID)
+		exists, _, err := kmsStorage.SelectExistsByKeyID(ctx, entry.keyID, entry.engineID)
 		if err != nil {
 			logger.Errorf("could not check key %s in KMS storage: %s", entry.keyID, err)
 			failed++

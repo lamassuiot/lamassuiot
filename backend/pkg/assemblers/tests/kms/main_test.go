@@ -874,6 +874,30 @@ func TestGetKey(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			// A keyID alone is a search, not an identity: it resolves only while a single
+			// engine holds the key. Ambiguity across engines is covered by the storage tests.
+			name: "OK/GetKey-BareKeyIDWhileHeldByOneEngine",
+			before: func() {
+				validKeyID = importKey("KeyByBareID", 2048)
+			},
+			run: func() (*models.Key, error) {
+				keyUriParts, err := models.ParsePKCS11URI(validKeyID)
+				if err != nil {
+					return nil, err
+				}
+				return kmsTest.HttpKMSSDK.GetKey(context.Background(), services.GetKeyInput{Identifier: keyUriParts["id"]})
+			},
+			resultCheck: func(key *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error on GetKey: %s", err)
+				}
+				if key == nil || key.PKCS11URI != validKeyID {
+					return fmt.Errorf("unexpected key result for GetKey: %+v", key)
+				}
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {

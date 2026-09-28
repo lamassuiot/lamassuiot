@@ -13,18 +13,20 @@ import (
 )
 
 type certSignerImpl struct {
-	sdk  services.KMSService
-	cert *x509.Certificate
-	ctx  context.Context
+	sdk      services.KMSService
+	cert     *x509.Certificate
+	engineID string
+	ctx      context.Context
 }
 
 func NewCertificateSigner(ctx context.Context, cert *models.Certificate, kmsSDK services.KMSService) crypto.Signer {
 	x509Cert := (*x509.Certificate)(cert.Certificate)
 
 	return &certSignerImpl{
-		ctx:  ctx,
-		sdk:  kmsSDK,
-		cert: x509Cert,
+		ctx:      ctx,
+		sdk:      kmsSDK,
+		cert:     x509Cert,
+		engineID: cert.EngineID,
 	}
 }
 
@@ -41,8 +43,15 @@ func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerO
 		return nil, err
 	}
 
+	// The certificate's key is addressed by (keyID, engineID): the SKI alone would stop
+	// resolving as soon as another engine holds a copy of the same key.
+	identifier := ski
+	if s.engineID != "" {
+		identifier = buildPKCS11ID(s.engineID, ski, "private")
+	}
+
 	key, err := s.sdk.GetKey(s.ctx, services.GetKeyInput{
-		Identifier: ski,
+		Identifier: identifier,
 	})
 
 	if err != nil {

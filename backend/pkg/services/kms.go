@@ -278,53 +278,67 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return nil, errs.ErrValidateBadRequest
 	}
 
+	// A key is identified by (key_id, engine_id). A PKCS#11 URI carries the engine in
+	// token-id and an alias is unique across engines, so both address a single key. A bare
+	// keyID is only a search: it resolves while one engine holds it and is rejected once
+	// several do, rather than silently picking a copy.
 	if strings.HasPrefix(input.Identifier, "pkcs11:") {
 		lFunc.Debugf("checking if Key '%s' exists via PKCS11URI", input.Identifier)
-		_, keyID, _, err := parsePKCS11ID(input.Identifier)
+		engineID, keyID, _, err := parsePKCS11ID(input.Identifier)
 		if err != nil {
 			lFunc.Errorf("failed to parse PKCS11 ID: %s", err)
-			return nil, err
+			return nil, errs.ErrValidateBadRequest
 		}
 
-		lFunc.Debugf("checking if Key '%s' exists via KeyID", keyID)
-		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID)
+		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, engineID)
 		if err != nil {
-			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", keyID, err)
+			lFunc.Errorf("something went wrong while checking if key '%s' exists in engine '%s': %s", keyID, engineID, err)
 			return nil, err
 		}
 
 		if !exists {
-			lFunc.Infof("key %s can not be found in storage engine via keyID", keyID)
+			lFunc.Infof("key %s can not be found in engine %s", keyID, engineID)
 			return nil, errs.ErrKeyNotFound
 		}
 
 		return key, nil
-	} else {
-
-		lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
-		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, input.Identifier)
-		if err != nil {
-			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
-			return nil, err
-		}
-
-		if !exists {
-			lFunc.Infof("key %s can not be found in storage engine via keyID", input.Identifier)
-			lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
-			exists, key, err = svc.kmsStorage.SelectExistsByAlias(ctx, input.Identifier)
-			if err != nil {
-				lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
-				return nil, err
-			}
-
-			if !exists {
-				lFunc.Infof("key %s can not be found in storage engine via alias", input.Identifier)
-				return nil, errs.ErrKeyNotFound
-			}
-		}
-
-		return key, nil
 	}
+
+	// A keyID takes precedence over an alias, so an alias can never shadow the key whose
+	// keyID it happens to match.
+	lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
+	copies, err := svc.kmsStorage.SelectByKeyID(ctx, input.Identifier)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+		return nil, err
+	}
+
+	if len(copies) == 1 {
+		return copies[0], nil
+	}
+
+	if len(copies) > 1 {
+		engineIDs := make([]string, len(copies))
+		for i, k := range copies {
+			engineIDs[i] = k.EngineID
+		}
+		lFunc.Infof("keyID %s is held by engines %v; an engine must be specified", input.Identifier, engineIDs)
+		return nil, errs.ErrKeyEngineRequired
+	}
+
+	lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
+	exists, key, err := svc.kmsStorage.SelectExistsByAlias(ctx, input.Identifier)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if alias '%s' exists in storage engine: %s", input.Identifier, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Infof("key %s can not be found in storage engine via keyID or alias", input.Identifier)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	return key, nil
 }
 
 func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
@@ -695,6 +709,19 @@ func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input servic
 				lFunc.Errorf("duplicate alias '%s' found for key '%s'", alias, input.ID)
 				return nil, fmt.Errorf("duplicate alias found")
 			}
+
+			// A keyID wins over an alias when resolving an identifier, so an alias that
+			// matches one would never resolve to this key.
+			shadowed, err := svc.kmsStorage.SelectByKeyID(ctx, alias)
+			if err != nil {
+				lFunc.Errorf("failed to check if alias '%s' collides with a keyID: %v", alias, err)
+				return nil, err
+			}
+
+			if len(shadowed) > 0 {
+				lFunc.Errorf("alias '%s' collides with an existing keyID", alias)
+				return nil, errs.ErrKeyAliasCollidesWithKeyID
+			}
 		}
 	}
 
@@ -804,8 +831,8 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 		return err
 	}
 
-	lFunc.Debugf("deleting key %s from storage engine", key.KeyID)
-	err = svc.kmsStorage.Delete(ctx, key.KeyID)
+	lFunc.Debugf("deleting key %s (engine %s) from storage engine", key.KeyID, key.EngineID)
+	err = svc.kmsStorage.Delete(ctx, key.KeyID, key.EngineID)
 	if err != nil {
 		lFunc.Errorf("delete by ID error: %s", err)
 		return fmt.Errorf("failed to delete key from storage: %w", err)
