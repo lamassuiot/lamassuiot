@@ -7,10 +7,12 @@ import (
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
 	"math/big"
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -20,6 +22,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"go.opentelemetry.io/otel"
@@ -67,12 +70,70 @@ func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	return svc, nil
 }
 
+func tenantCRLObjectKey(ctx context.Context, caSKI, version string) (string, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !validObjectKeyComponent(tenantContext.TenantID) || !validObjectKeyComponent(caSKI) ||
+		!validObjectKeyComponent(version) {
+		return "", fmt.Errorf("invalid tenant CRL object key components")
+	}
+	return fmt.Sprintf("pki/va/crl/tenants/%s/%s/%s.crl", tenantContext.TenantID, caSKI, version), nil
+}
+
+// readCRLObject reads a CRL from its tenant-scoped key. CRLs written before
+// multi-tenancy live under the legacy key pki/va/crl/{ski}/{version}.crl and
+// belong to the default tenant: for that tenant a missing object is read from
+// the legacy key and copied to the tenant key, so existing CAs keep serving
+// their CRL without a separate migration step.
+func readCRLObject(ctx context.Context, logger *logrus.Entry, bucket *blob.Bucket, caSKI string, version string) ([]byte, error) {
+	objectKey, err := tenantCRLObjectKey(ctx, caSKI, version)
+	if err != nil {
+		return nil, err
+	}
+	data, err := bucket.ReadAll(ctx, objectKey)
+	if err == nil || gcerrors.Code(err) != gcerrors.NotFound {
+		return data, err
+	}
+	tenantContext, tenantErr := core.RequireTenantContext(ctx)
+	if tenantErr != nil || tenantContext.TenantID != models.DefaultTenantID {
+		return nil, err
+	}
+	legacyData, legacyErr := bucket.ReadAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", caSKI, version))
+	if legacyErr != nil {
+		return nil, err
+	}
+	if writeErr := bucket.WriteAll(ctx, objectKey, legacyData, nil); writeErr != nil {
+		logger.Warnf("could not copy legacy CRL %s/%s to the tenant key: %s", caSKI, version, writeErr)
+	}
+	return legacyData, nil
+}
+
+func validObjectKeyComponent(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '-' && char != '_' {
+			return false
+		}
+	}
+	return true
+}
+
 func (svc *CRLServiceBackend) SetService(service services.CRLService) {
 	svc.service = service
 }
 
 func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLInput) (*x509.RevocationList, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := crlValidate.Struct(input)
 	if err != nil {
@@ -96,7 +157,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 		versionStr = role.LatestCRL.Version.String()
 	}
 
-	crlPem, err := svc.bucket.ReadAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, versionStr))
+	crlPem, err := readCRLObject(ctx, lFunc, svc.bucket, input.CASubjectKeyID, versionStr)
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading CRL: %s", err)
 		return nil, err
@@ -115,6 +176,9 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 
 func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	var ca *models.CACertificate
 	_, err := svc.caSDK.GetCAs(ctx, services.GetCAsInput{
@@ -173,6 +237,9 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	defer span.End()
 
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := crlValidate.Struct(input)
 	if err != nil {
@@ -247,7 +314,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	extensions := []pkix.Extension{}
 
-	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.SubjectKeyID))
+	idp, err := svc.getDistributionPointExtension(ctx, string(crlCA.Certificate.SubjectKeyID))
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
@@ -282,7 +349,11 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	}
 
 	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
-	err = svc.bucket.WriteAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, crl.Number), crlPem, nil)
+	objectKey, err := tenantCRLObjectKey(ctx, input.CASubjectKeyID, crl.Number.String())
+	if err != nil {
+		return nil, err
+	}
+	err = svc.bucket.WriteAll(ctx, objectKey, crlPem, nil)
 	if err != nil {
 		lFunc.Errorf("something went wrong while saving CRL: %s", err)
 		return nil, err
@@ -304,6 +375,9 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 }
 
 func (svc CRLServiceBackend) GetVARole(ctx context.Context, input services.GetVARoleInput) (*models.VARole, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 	if err != nil {
 		return nil, err
@@ -317,6 +391,9 @@ func (svc CRLServiceBackend) GetVARole(ctx context.Context, input services.GetVA
 }
 
 func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 	return svc.vaRepo.GetAll(ctx, storage.StorageListRequest[models.VARole]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		QueryParams:   input.QueryParameters,
@@ -328,13 +405,15 @@ func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetV
 }
 
 func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
-	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
-	if !exists {
-		return nil, errs.ErrVARoleNotFound
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
 	}
-
+	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 	if err != nil {
 		return nil, err
+	}
+	if !exists {
+		return nil, errs.ErrVARoleNotFound
 	}
 
 	role.CRLOptions = input.CRLRole
@@ -342,7 +421,7 @@ func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.Up
 	return svc.vaRepo.Update(ctx, role)
 }
 
-func (svc CRLServiceBackend) getDistributionPointExtension(aki string) (*pkix.Extension, error) {
+func (svc CRLServiceBackend) getDistributionPointExtension(ctx context.Context, aki string) (*pkix.Extension, error) {
 	type DistributionPointName struct { // CHOICE
 		FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
 		RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
@@ -360,7 +439,7 @@ func (svc CRLServiceBackend) getDistributionPointExtension(aki string) (*pkix.Ex
 
 	idpNames := []asn1.RawValue{}
 	for _, name := range svc.vaDomains {
-		idpNames = append(idpNames, asn1.RawValue{Tag: 6, Class: 2, Bytes: []byte(fmt.Sprintf("http://%s/crl/%s", name, aki))})
+		idpNames = append(idpNames, asn1.RawValue{Tag: 6, Class: 2, Bytes: []byte(x509engines.CRLURL(ctx, name, aki))})
 	}
 
 	// Add Issuing Distribution Point

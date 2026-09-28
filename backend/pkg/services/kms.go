@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -30,14 +31,16 @@ import (
 type KMSMiddleware func(services.KMSService) services.KMSService
 
 type Engine struct {
-	Default bool
-	Service cryptoengines.CryptoEngine
+	Default  bool
+	TenantID string
+	Service  cryptoengines.CryptoEngine
 }
 
 type KMSServiceBackend struct {
 	service               services.KMSService
 	kmsStorage            storage.KMSKeysRepo
 	cryptoEngines         map[string]*cryptoengines.CryptoEngine
+	engineTenants         map[string]string
 	defaultCryptoEngine   *cryptoengines.CryptoEngine
 	defaultCryptoEngineID string
 	logger                *logrus.Entry
@@ -55,11 +58,15 @@ func NewKMSService(builder KMSServiceBuilder) (services.KMSService, error) {
 	kmsValidator = validator.New()
 
 	engines := map[string]*cryptoengines.CryptoEngine{}
+	engineTenants := map[string]string{}
 	var defaultCryptoEngine *cryptoengines.CryptoEngine
 	var defaultCryptoEngineID string
 
 	for engineID, engineInstance := range builder.CryptoEngines {
 		engines[engineID] = &engineInstance.Service
+		if engineInstance.TenantID != "" {
+			engineTenants[engineID] = engineInstance.TenantID
+		}
 		if engineInstance.Default {
 			defaultCryptoEngine = &engineInstance.Service
 			defaultCryptoEngineID = engineID
@@ -72,6 +79,7 @@ func NewKMSService(builder KMSServiceBuilder) (services.KMSService, error) {
 
 	svc := &KMSServiceBackend{
 		cryptoEngines:         engines,
+		engineTenants:         engineTenants,
 		defaultCryptoEngine:   defaultCryptoEngine,
 		defaultCryptoEngineID: defaultCryptoEngineID,
 		kmsStorage:            builder.KMSStorage,
@@ -92,8 +100,16 @@ func (svc *KMSServiceBackend) SetService(service services.KMSService) {
 }
 
 func (svc *KMSServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	info := []*models.CryptoEngineProvider{}
 	for engineID, engine := range svc.cryptoEngines {
+		engineTenant := svc.engineTenants[engineID]
+		if engineTenant != "" && engineTenant != tenantContext.TenantID {
+			continue
+		}
 		engineInstance := *engine
 		engineInfo := engineInstance.GetEngineConfig()
 		info = append(info, &models.CryptoEngineProvider{
@@ -104,6 +120,21 @@ func (svc *KMSServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*m
 	}
 
 	return info, nil
+}
+
+func validateEngineTenant(ctx context.Context, engineID, engineTenant string) error {
+	if engineTenant == "" {
+		return nil
+	}
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil || tenantContext.TenantID != engineTenant {
+		return core.ErrTenantResourceAccessDenied
+	}
+	return nil
+}
+
+func (svc *KMSServiceBackend) validateEngineTenant(ctx context.Context, engineID string) error {
+	return validateEngineTenant(ctx, engineID, svc.engineTenants[engineID])
 }
 
 // parse URIs such as
@@ -253,6 +284,9 @@ func calculateDigest(hash crypto.Hash, messageType models.SignMessageType, messa
 }
 
 func (svc *KMSServiceBackend) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	nextBookmark, err := svc.kmsStorage.SelectAll(ctx, storage.StorageListRequest[models.Key]{
@@ -270,6 +304,9 @@ func (svc *KMSServiceBackend) GetKeys(ctx context.Context, input services.GetKey
 }
 
 func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := kmsValidator.Struct(input)
@@ -297,6 +334,9 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 			lFunc.Infof("key %s can not be found in storage engine via keyID", keyID)
 			return nil, errs.ErrKeyNotFound
 		}
+		if err := svc.validateEngineTenant(ctx, key.EngineID); err != nil {
+			return nil, err
+		}
 
 		return key, nil
 	} else {
@@ -322,12 +362,18 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 				return nil, errs.ErrKeyNotFound
 			}
 		}
+		if err := svc.validateEngineTenant(ctx, key.EngineID); err != nil {
+			return nil, err
+		}
 
 		return key, nil
 	}
 }
 
 func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	stats := &models.KeyStats{
@@ -388,9 +434,13 @@ func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.Ge
 }
 
 func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := kmsValidator.Struct(input)
+	err = kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("CreateKeyInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -416,6 +466,9 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
 		return nil, fmt.Errorf("crypto engine not found")
+	}
+	if err := svc.validateEngineTenant(ctx, engineID); err != nil {
+		return nil, err
 	}
 
 	engineInstance := *engine
@@ -489,6 +542,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
 		EngineID:      engineID,
+		TenantID:      tenantContext.TenantID,
 		Name:          input.Name,
 		Aliases:       []string{},
 		HasPrivateKey: true,
@@ -504,9 +558,13 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 }
 
 func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := kmsValidator.Struct(input)
+	err = kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("ImportKeyInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -528,6 +586,9 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
 		return nil, fmt.Errorf("crypto engine not found")
+	}
+	if err := svc.validateEngineTenant(ctx, engineID); err != nil {
+		return nil, err
 	}
 
 	engineInstance := *engine
@@ -596,6 +657,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
 		EngineID:      engineID,
+		TenantID:      tenantContext.TenantID,
 		Name:          input.Name,
 		Aliases:       []string{},
 		HasPrivateKey: true,
@@ -790,6 +852,9 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 	if !ok {
 		return fmt.Errorf("engine with id %s not found", key.EngineID)
 	}
+	if err := svc.validateEngineTenant(ctx, key.EngineID); err != nil {
+		return err
+	}
 	engineInstance := *engine
 
 	_, err = engineInstance.GetPrivateKeyByID(key.KeyID)
@@ -817,6 +882,9 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 }
 
 func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Setup common KMS operation components
@@ -870,6 +938,9 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 }
 
 func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Setup common KMS operation components

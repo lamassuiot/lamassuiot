@@ -17,6 +17,7 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -101,6 +102,9 @@ func certificateExtensionsFromX509(cert *x509.Certificate) models.CertificateExt
 
 func (svc *CAServiceBackend) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	// Validate that status filters are not provided for CA or Certificate query parameters
 	if input.CAQueryParameters != nil {
@@ -238,6 +242,9 @@ func addStatusFilterToQueryParams(queryParams *resources.QueryParameters, status
 
 func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	// Validate that status filter is not provided in certificate query parameters
 	if input.CertificateQueryParameters != nil {
@@ -269,7 +276,10 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.
 
 func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	var err error
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	// Validate IssuanceProfileID exists if provided (required for ImportedWithKey type)
 	if input.ProfileID != "" {
@@ -470,11 +480,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	ca := &models.CACertificate{
 		ID:         caID,
+		TenantID:   tenantContext.TenantID,
 		Metadata:   map[string]interface{}{},
 		ProfileID:  input.ProfileID,
 		CreationTS: time.Now(),
 		Level:      level,
 		Certificate: models.Certificate{
+			TenantID:            tenantContext.TenantID,
 			SubjectKeyID:        skid,
 			AuthorityKeyID:      akid,
 			Certificate:         input.CACertificate,
@@ -607,11 +619,14 @@ func (svc *CAServiceBackend) resolveCAIssuanceProfile(ctx context.Context, lFunc
 
 func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if input.Metadata == nil {
 		input.Metadata = map[string]any{}
 	}
 
-	var err error
 	caValidator.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
 	err = caValidator.Struct(input)
 	if err != nil {
@@ -791,11 +806,13 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 	caCert := models.CACertificate{
 		ID:         caID,
+		TenantID:   tenantContext.TenantID,
 		Metadata:   input.Metadata,
 		ProfileID:  input.ProfileID,
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
+			TenantID:       tenantContext.TenantID,
 			SubjectKeyID:   skid,
 			AuthorityKeyID: akid,
 			Certificate:    (*models.X509Certificate)(ca),
@@ -850,6 +867,9 @@ func (svc *CAServiceBackend) getCACertificateIfExists(ctx context.Context, caID 
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -867,6 +887,9 @@ func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input services.GetCA
 
 func (svc *CAServiceBackend) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 
 	nextBookmark, err := svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
@@ -884,6 +907,9 @@ func (svc *CAServiceBackend) GetCAs(ctx context.Context, input services.GetCAsIn
 
 func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input services.GetCABySerialNumberInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -908,6 +934,9 @@ func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input serv
 
 func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input services.GetCAsByCommonNameInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 
 	lFunc.Debugf("reading CAs by %s common name", input.CommonName)
 	nextBookmark, err := svc.caStorage.SelectByCommonName(ctx, input.CommonName, storage.StorageListRequest[models.CACertificate]{
@@ -933,6 +962,9 @@ func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input servi
 //     CA already revoked
 func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1022,6 +1054,9 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 
 func (svc *CAServiceBackend) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1055,6 +1090,9 @@ func (svc *CAServiceBackend) UpdateCAProfile(ctx context.Context, input services
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1273,8 +1311,12 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 //     The CA is expired and cannot be reissued (reserved for future renewal feature)
 func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err := caValidator.Struct(input)
+	err = caValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("ReissueCAInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -1417,6 +1459,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	// Create the new certificate record
 	newCertificateRecord := models.Certificate{
+		TenantID:         tenantContext.TenantID,
 		SerialNumber:     helpers.SerialNumberToHexString(newCert.SerialNumber),
 		SubjectKeyID:     newSKID,
 		AuthorityKeyID:   newAKID,
@@ -1469,6 +1512,9 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 //     Cascade delete not allowed by configuration.
 func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1504,8 +1550,12 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err := caValidator.Struct(input)
+	err = caValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("SignCertificateInput struct validation error: %s", err)
 		return nil, errs.ErrCANotFound
@@ -1574,23 +1624,27 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	// Detect whether the subject key is managed in the KMS and, if so, bind it to this certificate.
 	certType := models.CertificateTypeImportedWithoutKey
 	engineID := ""
+	bindKey := func() {}
 	subjectKey, getKeyErr := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: ski})
 	if getKeyErr == nil && subjectKey.HasPrivateKey {
 		certType = models.CertificateTypeManaged
 		engineID = subjectKey.EngineID
-		_, bindErr := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: subjectKey.KeyID,
-			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   helpers.SerialNumberToHexString(x509Cert.SerialNumber),
-			}).Build(),
-		})
-		if bindErr != nil {
-			lFunc.Warnf("could not bind key %s to certificate %s: %s", subjectKey.KeyID, helpers.SerialNumberToHexString(x509Cert.SerialNumber), bindErr)
+		bindKey = func() {
+			_, bindErr := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+				ID: subjectKey.KeyID,
+				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+					ResourceType: "certificate",
+					ResourceID:   helpers.SerialNumberToHexString(x509Cert.SerialNumber),
+				}).Build(),
+			})
+			if bindErr != nil {
+				lFunc.Warnf("could not bind key %s to certificate %s: %s", subjectKey.KeyID, helpers.SerialNumberToHexString(x509Cert.SerialNumber), bindErr)
+			}
 		}
 	}
 
 	cert := models.Certificate{
+		TenantID:    tenantContext.TenantID,
 		Metadata:    map[string]interface{}{},
 		Type:        certType,
 		Certificate: (*models.X509Certificate)(x509Cert),
@@ -1613,17 +1667,33 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		EngineID:            engineID,
 	}
 
-	// CAs get inserted into the CA storage engine by the CreateCA method. Don't insert them here.
-	if !x509Cert.IsCA {
-		lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
-		return svc.certStorage.Insert(ctx, &cert)
-	}
+	return svc.storeIssuedCertificate(ctx, &cert, bindKey)
+}
 
-	return &cert, nil
+// storeIssuedCertificate persists a newly signed certificate before binding
+// its KMS key to it. If the insert fails the key is not bound and the
+// certificate is never returned, so a failed issuance leaves no dangling KMS
+// reference. The binding stays best-effort. CAs are inserted by CreateCA, so
+// they are not stored here.
+func (svc *CAServiceBackend) storeIssuedCertificate(ctx context.Context, cert *models.Certificate, bindKey func()) (*models.Certificate, error) {
+	if cert.IsCA {
+		bindKey()
+		return cert, nil
+	}
+	stored, err := svc.certStorage.Insert(ctx, cert)
+	if err != nil {
+		return nil, err
+	}
+	bindKey()
+	return stored, nil
 }
 
 func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	x509Cert := (*x509.Certificate)(input.Certificate)
 	status := models.StatusActive
@@ -1638,6 +1708,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 	}
 
 	newCert := models.Certificate{
+		TenantID:            tenantContext.TenantID,
 		Metadata:            input.Metadata,
 		Type:                models.CertificateTypeImportedWithoutKey,
 		Certificate:         (*models.X509Certificate)(input.Certificate),
@@ -1690,6 +1761,9 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 
 func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.SignatureSignInput) ([]byte, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1758,6 +1832,9 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 
 func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (bool, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return false, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1798,6 +1875,9 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1821,6 +1901,9 @@ func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, i
 }
 
 func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 	return svc.certStorage.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1836,6 +1919,9 @@ func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input services
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input services.GetCertificatesByCAInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1866,6 +1952,9 @@ func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input serv
 
 func (svc *CAServiceBackend) GetCertificatesByExpirationDate(ctx context.Context, input services.GetCertificatesByExpirationDateInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 
 	lFunc.Debugf("reading certificates by expiration date. expiresafter: %s. expiresbefore: %s", input.ExpiresAfter, input.ExpiresBefore)
 	return svc.certStorage.SelectByExpirationDate(ctx, input.ExpiresBefore, input.ExpiresAfter, storage.StorageListRequest[models.Certificate]{
@@ -1877,6 +1966,9 @@ func (svc *CAServiceBackend) GetCertificatesByExpirationDate(ctx context.Context
 }
 
 func (svc *CAServiceBackend) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 	return svc.certStorage.SelectByCAIDAndStatus(ctx, input.CAID, input.Status, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1886,6 +1978,9 @@ func (svc *CAServiceBackend) GetCertificatesByCaAndStatus(ctx context.Context, i
 }
 
 func (svc *CAServiceBackend) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 	return svc.certStorage.SelectByStatus(ctx, input.Status, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1903,6 +1998,9 @@ func (svc *CAServiceBackend) GetCertificatesByStatus(ctx context.Context, input 
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1952,6 +2050,9 @@ func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input 
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -1989,6 +2090,9 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 //     Cannot delete certificate because the issuer CA still exists in the system.
 func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return err
+	}
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -2039,6 +2143,9 @@ func createCAValidation(sl validator.StructLevel) {
 }
 
 func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return "", err
+	}
 	return svc.issuanceProfilesStorage.SelectAll(ctx, storage.StorageListRequest[models.IssuanceProfile]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -2049,6 +2156,9 @@ func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input serv
 
 func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	exists, profile, err := svc.issuanceProfilesStorage.SelectByID(ctx, input.ProfileID)
 	if err != nil {
@@ -2065,6 +2175,9 @@ func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input s
 
 func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 	id := uuid.NewString()
 	input.Profile.ID = id
 	lFunc.Infof("creating issuance profile '%s' with ID '%s'", input.Profile.Name, id)
@@ -2084,10 +2197,16 @@ func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input se
 }
 
 func (svc *CAServiceBackend) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 	return svc.issuanceProfilesStorage.Update(ctx, &input.Profile)
 }
 
 func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return err
+	}
 	return svc.issuanceProfilesStorage.Delete(ctx, input.ProfileID)
 }
 
@@ -2102,6 +2221,9 @@ func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input se
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	if err := caValidator.Struct(input); err != nil {
 		return nil, errs.ErrValidateBadRequest

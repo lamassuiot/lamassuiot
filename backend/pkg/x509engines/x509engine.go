@@ -80,7 +80,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 	}
 
 	// Add OCSP and CRL distribution points
-	engine.addDistributionPoints(&template, rawHex)
+	engine.addDistributionPoints(ctx, &template, rawHex)
 
 	// Apply issuance profile to template
 	err := engine.applyIssuanceProfileToTemplate(ctx, &template, profile, time.Now())
@@ -167,7 +167,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	}
 
 	// Add OCSP and CRL distribution points
-	engine.addDistributionPoints(&certificateTemplate, ca.SubjectKeyId)
+	engine.addDistributionPoints(ctx, &certificateTemplate, ca.SubjectKeyId)
 
 	// Apply issuance profile to template
 	err = engine.applyIssuanceProfileToTemplate(ctx, &certificateTemplate, profile, now)
@@ -243,12 +243,13 @@ func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validi
 // This should be called on the initial template before applying the issuance profile.
 //
 // Parameters:
+//   - ctx: carries the tenant used to build tenant-scoped VA URLs
 //   - template: x509.Certificate template to modify in-place
 //   - crlKeyID: key ID for CRL distribution point URLs
-func (engine X509Engine) addDistributionPoints(template *x509.Certificate, crlKeyID []byte) {
+func (engine X509Engine) addDistributionPoints(ctx context.Context, template *x509.Certificate, crlKeyID []byte) {
 	for _, domain := range engine.vaDomains {
-		template.OCSPServer = append(template.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, hex.EncodeToString(crlKeyID)))
+		template.OCSPServer = append(template.OCSPServer, OCSPURL(ctx, domain))
+		template.CRLDistributionPoints = append(template.CRLDistributionPoints, CRLURL(ctx, domain, hex.EncodeToString(crlKeyID)))
 	}
 }
 

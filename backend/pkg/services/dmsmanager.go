@@ -244,6 +244,9 @@ func (svc DMSManagerServiceBackend) GetAll(ctx context.Context, input services.G
 
 func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	cas := []*x509.Certificate{}
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
@@ -635,6 +638,9 @@ func (svc DMSManagerServiceBackend) authenticateEST(
 //     Only Bootstrap cert (CA issued By Lamassu)
 func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	lFunc.Logger.SetFormatter(getESTLogFormatter())
 
@@ -812,6 +818,9 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, err
+	}
 
 	lFunc.Logger.SetFormatter(getESTLogFormatter())
 
@@ -1047,6 +1056,9 @@ func checkCSRSignature(lFunc *logrus.Entry, csr *x509.CertificateRequest, operat
 
 func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return nil, nil, err
+	}
 
 	var privKey any
 	var err error

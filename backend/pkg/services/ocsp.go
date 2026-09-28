@@ -1,11 +1,15 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
+	"fmt"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -32,7 +36,32 @@ func NewOCSPService(builder OCSPServiceBuilder) services.OCSPService {
 	}
 }
 
+func ocspIssuerMatches(request *ocsp.Request, issuer *x509.Certificate) bool {
+	if request == nil || issuer == nil {
+		return false
+	}
+	requestDER, err := ocsp.CreateRequest(issuer, issuer, &ocsp.RequestOptions{Hash: request.HashAlgorithm})
+	if err != nil {
+		return false
+	}
+	expected, err := ocsp.ParseRequest(requestDER)
+	if err != nil {
+		return false
+	}
+	return request.HashAlgorithm == expected.HashAlgorithm &&
+		bytes.Equal(request.IssuerNameHash, expected.IssuerNameHash) &&
+		bytes.Equal(request.IssuerKeyHash, expected.IssuerKeyHash)
+}
+
 func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, fmt.Errorf("OCSP request is required")
+	}
+
 	ocspCrtSN := helpers.SerialNumberToHexString(req.SerialNumber)
 	crt, err := svc.caSDK.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: ocspCrtSN,
@@ -40,12 +69,15 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-
 	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: crt.IssuerCAMetadata.ID,
 	})
 	if err != nil {
 		return nil, err
+	}
+	if crt.TenantID != tenantContext.TenantID || ca.TenantID != tenantContext.TenantID ||
+		!ocspIssuerMatches(req, (*x509.Certificate)(ca.Certificate.Certificate)) {
+		return nil, errs.ErrCANotFound
 	}
 
 	status := ocsp.Unknown

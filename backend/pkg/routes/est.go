@@ -7,10 +7,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewESTHttpRoutes(logger *logrus.Entry, router *gin.RouterGroup, svc services.ESTService) *gin.RouterGroup {
+func NewESTHttpRoutes(logger *logrus.Entry, router *gin.RouterGroup, svc services.ESTService, middlewares ...gin.HandlerFunc) *gin.RouterGroup {
 	routes := controllers.NewESTHttpRoutes(logger, svc)
 
-	est := router.Group("/.well-known/est")
+	est := router.Group("/.well-known/est", middlewares...)
 
 	est.GET("/cacerts", routes.GetCACerts)
 	est.GET("/:aps/cacerts", routes.GetCACerts)
