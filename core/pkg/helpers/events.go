@@ -3,15 +3,21 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const tenantEventVersion = "1"
+
+var ErrInvalidTenantCloudEvent = errors.New("invalid tenant cloud event")
 
 func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
 	event := cloudevents.NewEvent()
@@ -68,6 +74,116 @@ func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
 	}
 
 	return event
+}
+
+func BuildTenantCloudEvent(ctx context.Context, payload interface{}) (event.Event, error) {
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if err != nil {
+		return event.Event{}, fmt.Errorf("build tenant cloud event: %w", err)
+	}
+
+	eventType := eventContextString(ctx, core.LamassuContextKeyEventType)
+	if eventType == "" {
+		return event.Event{}, fmt.Errorf("build tenant cloud event: event type is required")
+	}
+	source := eventContextString(ctx, core.LamassuContextKeySource)
+	if source == "" {
+		source = tenantContext.Source
+	}
+	if source == "" {
+		return event.Event{}, fmt.Errorf("build tenant cloud event: event source is required")
+	}
+
+	cloudEvent := BuildCloudEvent(ctx, payload)
+	if cloudEvent.ID() == "" || cloudEvent.ID() == "unknown" {
+		cloudEvent.SetID(uuid.NewString())
+	}
+	cloudEvent.SetType(eventType)
+	cloudEvent.SetSource(fmt.Sprintf("source://%s/%s", core.LamassuContextKeySource, source))
+	cloudEvent.SetExtension("tenantid", tenantContext.TenantID)
+	cloudEvent.SetExtension("organizationid", tenantContext.OrganizationID)
+	cloudEvent.SetExtension("actorid", tenantContext.ActorID)
+	cloudEvent.SetExtension("actortype", tenantContext.ActorType)
+	cloudEvent.SetExtension("correlationid", tenantContext.CorrelationID)
+	cloudEvent.SetExtension("eventversion", tenantEventVersion)
+
+	if err := ValidateTenantCloudEvent(&cloudEvent); err != nil {
+		return event.Event{}, fmt.Errorf("build tenant cloud event: %w", err)
+	}
+	return cloudEvent, nil
+}
+
+func TenantContextFromCloudEvent(cloudEvent *event.Event) (core.TenantContext, error) {
+	if err := ValidateTenantCloudEvent(cloudEvent); err != nil {
+		return core.TenantContext{}, err
+	}
+
+	tenantContext := core.TenantContext{
+		OrganizationID: cloudEventExtension(cloudEvent, "organizationid"),
+		TenantID:       cloudEventExtension(cloudEvent, "tenantid"),
+		ActorID:        cloudEventExtension(cloudEvent, "actorid"),
+		ActorType:      cloudEventExtension(cloudEvent, "actortype"),
+		CorrelationID:  cloudEventExtension(cloudEvent, "correlationid"),
+		Source:         cloudEvent.Source(),
+		TenantStatus:   core.TenantActive,
+		Validated:      true,
+	}
+	if err := tenantContext.Validate(); err != nil {
+		return core.TenantContext{}, fmt.Errorf("%w: %v", ErrInvalidTenantCloudEvent, err)
+	}
+	return tenantContext, nil
+}
+
+func ValidateTenantCloudEvent(cloudEvent *event.Event) error {
+	if cloudEvent == nil {
+		return fmt.Errorf("%w: event is required", ErrInvalidTenantCloudEvent)
+	}
+	if err := cloudEvent.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidTenantCloudEvent, err)
+	}
+	if cloudEvent.SpecVersion() != "1.0" || cloudEvent.ID() == "" || cloudEvent.ID() == "unknown" ||
+		cloudEvent.Type() == "" || cloudEvent.Source() == "" || cloudEvent.Time().IsZero() {
+		return fmt.Errorf("%w: CloudEvent identity, type, source, time and 1.0 spec version are required", ErrInvalidTenantCloudEvent)
+	}
+	for _, extension := range []string{
+		"tenantid",
+		"organizationid",
+		"actorid",
+		"actortype",
+		"correlationid",
+		"eventversion",
+	} {
+		if cloudEventExtension(cloudEvent, extension) == "" {
+			return fmt.Errorf("%w: extension %s is required", ErrInvalidTenantCloudEvent, extension)
+		}
+	}
+	if cloudEventExtension(cloudEvent, "eventversion") != tenantEventVersion {
+		return fmt.Errorf("%w: unsupported event version %q", ErrInvalidTenantCloudEvent, cloudEventExtension(cloudEvent, "eventversion"))
+	}
+	return nil
+}
+
+func eventContextString(ctx context.Context, key string) string {
+	switch value := ctx.Value(key).(type) {
+	case string:
+		return value
+	case models.EventType:
+		return string(value)
+	default:
+		return ""
+	}
+}
+
+func cloudEventExtension(cloudEvent *event.Event, key string) string {
+	rawValue, err := cloudEvent.Context.GetExtension(key)
+	if err != nil {
+		return ""
+	}
+	value, ok := rawValue.(string)
+	if !ok {
+		return ""
+	}
+	return value
 }
 
 func ParseCloudEvent(msg []byte) (*event.Event, error) {

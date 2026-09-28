@@ -3,8 +3,10 @@ package eventpub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
@@ -21,20 +23,33 @@ type CloudEventPublisher struct {
 }
 
 func (cemp *CloudEventPublisher) PublishCloudEvent(ctx context.Context, payload interface{}) {
-	event := helpers.BuildCloudEvent(ctx, payload)
+	var cloudEvent event.Event
+	if _, err := core.TenantContextFromContext(ctx); err == nil {
+		tenantEvent, buildErr := helpers.BuildTenantCloudEvent(ctx, payload)
+		if buildErr != nil {
+			cemp.Logger.Errorf("error while building tenant cloud event: %s", buildErr)
+			return
+		}
+		cloudEvent = tenantEvent
+	} else if errors.Is(err, core.ErrTenantContextRequired) {
+		cloudEvent = helpers.BuildCloudEvent(ctx, payload)
+	} else {
+		cemp.Logger.Errorf("error while reading tenant context for cloud event: %s", err)
+		return
+	}
 
-	eventBytes, marshalErr := json.Marshal(event)
+	eventBytes, marshalErr := json.Marshal(cloudEvent)
 	if marshalErr != nil {
 		cemp.Logger.Errorf("error while serializing event: %s", marshalErr)
 		return
 	}
 
-	cemp.Logger.Tracef("publishing event: Type=%s Source=%s \n%s", event.Type(), event.Source(), string(eventBytes))
+	cemp.Logger.Tracef("publishing event: Type=%s Source=%s ID=%s", cloudEvent.Type(), cloudEvent.Source(), cloudEvent.ID())
 
-	msg := message.NewMessage(event.ID(), eventBytes)
+	msg := message.NewMessage(cloudEvent.ID(), eventBytes)
 	msg.SetContext(ctx) // Pass context to publisher decorator for OTEL trace propagation
 
-	cemp.Publisher.Publish(event.Type(), msg)
+	cemp.Publisher.Publish(cloudEvent.Type(), msg)
 }
 
 type EventPublisherWithSourceMiddleware struct {

@@ -2,11 +2,17 @@ package eventhandling
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"sync"
 	"testing"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -124,4 +130,84 @@ func TestHandleAnyEvent(t *testing.T) {
 	assert.NoError(t, err)
 	svc.AssertCalled(t, "Event1", mock.Anything)
 
+}
+
+func TestHandleMessagePropagatesConcurrentTenantContexts(t *testing.T) {
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	entry := logrus.NewEntry(logger)
+	var mu sync.Mutex
+	seen := make(map[string]string)
+	handler := CloudEventHandler{
+		Logger:                entry,
+		RequireTenantEnvelope: true,
+		DispatchMap: map[string]func(context.Context, *event.Event) error{
+			"tenant.event": func(ctx context.Context, _ *event.Event) error {
+				tenantContext, err := core.RequireTenantContext(ctx)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				seen[tenantContext.TenantID] = tenantContext.CorrelationID
+				mu.Unlock()
+				return nil
+			},
+		},
+	}
+
+	var wait sync.WaitGroup
+	for _, item := range []struct{ tenantID, correlationID string }{
+		{"tenant-a", "corr-a"},
+		{"tenant-b", "corr-b"},
+	} {
+		wait.Add(1)
+		go func(tenantID, correlationID string) {
+			defer wait.Done()
+			ctx := core.WithTenantContext(context.Background(), core.TenantContext{
+				OrganizationID: "org-" + tenantID,
+				TenantID:       tenantID,
+				ActorID:        "worker",
+				ActorType:      "system",
+				CorrelationID:  correlationID,
+				Source:         "test",
+				TenantStatus:   core.TenantActive,
+				Validated:      true,
+			})
+			ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, "tenant.event")
+			cloudEvent, err := helpers.BuildTenantCloudEvent(ctx, map[string]string{"value": tenantID})
+			if err != nil {
+				t.Errorf("could not build tenant event: %s", err)
+				return
+			}
+			payload, err := json.Marshal(cloudEvent)
+			if err != nil {
+				t.Errorf("could not serialize tenant event: %s", err)
+				return
+			}
+			msg := message.NewMessage(fmt.Sprintf("%s-%s", tenantID, correlationID), payload)
+			if err := handler.HandleMessage(msg); err != nil {
+				t.Errorf("tenant event was rejected: %s", err)
+			}
+		}(item.tenantID, item.correlationID)
+	}
+	wait.Wait()
+
+	assert.Equal(t, map[string]string{"tenant-a": "corr-a", "tenant-b": "corr-b"}, seen)
+
+	legacyEvent := &message.Message{Payload: []byte(`{"type":"tenant.event","specversion":"1.0","id":"legacy","source":"test","time":"2026-09-23T11:00:00Z"}`)}
+	assert.ErrorIs(t, handler.HandleMessage(legacyEvent), helpers.ErrInvalidTenantCloudEvent)
+}
+
+func TestHandleMessageRejectsInvalidTenantEnvelope(t *testing.T) {
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	handler := CloudEventHandler{
+		Logger:                logrus.NewEntry(logger),
+		RequireTenantEnvelope: true,
+		DispatchMap: map[string]func(context.Context, *event.Event) error{
+			"tenant.event": func(context.Context, *event.Event) error { return nil },
+		},
+	}
+	invalidEnvelope := &message.Message{Payload: []byte(`{"specversion":"1.0","id":"event-1","source":"test","type":"tenant.event","time":"2026-09-23T11:00:00Z","tenantid":"tenant-a"}`)}
+	assert.ErrorIs(t, handler.HandleMessage(invalidEnvelope), helpers.ErrInvalidTenantCloudEvent)
 }
