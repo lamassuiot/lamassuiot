@@ -188,6 +188,8 @@ func NewHTTPSchemaRegistry() *HTTPSchemaRegistry {
 
 // Load reads and parses an HTTP schema JSON file. The file must contain a JSON array
 // of HTTPSchemaDefinition objects. Each schema name must be unique across all loaded files.
+// Loading is all-or-nothing per file: if any schema in the file is invalid, none of
+// the file's schemas are registered.
 func (r *HTTPSchemaRegistry) Load(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -197,40 +199,49 @@ func (r *HTTPSchemaRegistry) Load(path string) error {
 	if err := json.Unmarshal(data, &defs); err != nil {
 		return fmt.Errorf("parse http schema JSON from %s: %w", path, err)
 	}
+	staged := make(map[string]*HTTPSchemaDefinition, len(defs))
 	for i := range defs {
 		def := &defs[i]
 		if err := r.validateAndCompile(def); err != nil {
 			return fmt.Errorf("invalid http schema %q in %s: %w", def.Name, path, err)
 		}
-		if _, exists := r.schemas[def.Name]; exists {
+		_, loaded := r.schemas[def.Name]
+		_, inFile := staged[def.Name]
+		if loaded || inFile {
 			return fmt.Errorf("duplicate http schema name %q (from %s)", def.Name, path)
 		}
-		if err := r.validateBasePathConflicts(def); err != nil {
-			return fmt.Errorf("invalid http schema %q in %s: %w", def.Name, path, err)
+		for _, others := range []map[string]*HTTPSchemaDefinition{r.schemas, staged} {
+			if err := validateBasePathConflicts(def, others); err != nil {
+				return fmt.Errorf("invalid http schema %q in %s: %w", def.Name, path, err)
+			}
 		}
-		r.schemas[def.Name] = def
+		staged[def.Name] = def
+	}
+	for name, def := range staged {
+		r.schemas[name] = def
 	}
 	return nil
 }
 
 // validateBasePathConflicts rejects a schema whose base_paths would create a
-// non-deterministic default_action outcome against an already-loaded schema.
+// non-deterministic default_action outcome against any schema in others.
 // evaluateHTTPOverride picks the schema with the longest matching base_paths
 // prefix (HTTPSchemaDefinition.MatchesBasePath); two different schemas can
-// only tie on prefix length for the same request when they declare the exact
-// same base_paths string, and map iteration order over the registry is
-// unspecified, so a tie would let the winning schema vary between requests
-// and process restarts. This is only a real hazard when the two schemas
-// disagree on the effective default_action (empty is treated as "deny", per
-// HTTPSchemaDefinition.DefaultAction's documented default) — if they agree,
-// either winner produces the same decision, so that combination is allowed.
-func (r *HTTPSchemaRegistry) validateBasePathConflicts(def *HTTPSchemaDefinition) error {
+// only tie on prefix length for the same request when they declare the same
+// base path (compared after trimming a trailing "/", as MatchesBasePath does),
+// and map iteration order over the registry is unspecified, so a tie would let
+// the winning schema vary between requests and process restarts. This is only
+// a real hazard when the two schemas disagree on the effective default_action
+// (empty is treated as "deny", per HTTPSchemaDefinition.DefaultAction's
+// documented default) — if they agree, either winner produces the same
+// decision, so that combination is allowed.
+func validateBasePathConflicts(def *HTTPSchemaDefinition, others map[string]*HTTPSchemaDefinition) error {
 	defAction := effectiveDefaultAction(def.DefaultAction)
-	for _, existing := range r.schemas {
+	for _, existing := range others {
 		existingAction := effectiveDefaultAction(existing.DefaultAction)
 		for _, bp := range def.BasePaths {
 			for _, existingBp := range existing.BasePaths {
-				if bp != existingBp {
+				if strings.TrimSuffix(bp, "/") != strings.TrimSuffix(existingBp, "/") {
 					continue
 				}
 				if defAction != existingAction {

@@ -818,6 +818,81 @@ func TestHTTPSchemaRegistry_BasePathConflictValidation(t *testing.T) {
 		require.NoError(t, registry.Load(path))
 	})
 
+	t.Run("a trailing slash does not hide a conflict", func(t *testing.T) {
+		registry := NewHTTPSchemaRegistry()
+		path := writeTwoSchemas(t,
+			`{
+				"name": "svc-a",
+				"base_paths": ["/api"],
+				"default_action": "deny",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/a", "match_type": "exact", "action": "a"}]
+			}`,
+			`{
+				"name": "svc-b",
+				"base_paths": ["/api/"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/b", "match_type": "exact", "action": "b"}]
+			}`,
+		)
+		err := registry.Load(path)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `conflicts with schema "svc-a"`)
+	})
+
+	t.Run("a rejected file registers none of its schemas", func(t *testing.T) {
+		registry := NewHTTPSchemaRegistry()
+		path := writeTwoSchemas(t,
+			`{
+				"name": "svc-a",
+				"base_paths": ["/api/shared"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/a", "match_type": "exact", "action": "a"}]
+			}`,
+			`{
+				"name": "svc-b",
+				"base_paths": ["/api/shared"],
+				"default_action": "deny",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/b", "match_type": "exact", "action": "b"}]
+			}`,
+		)
+		require.Error(t, registry.Load(path))
+		assert.Empty(t, registry.GetAll(), "svc-a must not stay active when its file failed to load")
+	})
+
+	t.Run("a rejected file leaves previously loaded files intact", func(t *testing.T) {
+		registry := NewHTTPSchemaRegistry()
+		first := writeHTTPSchemaTestFile(t, `[{
+			"name": "svc-a",
+			"base_paths": ["/api/shared"],
+			"default_action": "deny",
+			"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/a", "match_type": "exact", "action": "a"}]
+		}]`)
+		require.NoError(t, registry.Load(first))
+
+		second := writeTwoSchemas(t,
+			`{
+				"name": "svc-b",
+				"base_paths": ["/api/other"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/other/b", "match_type": "exact", "action": "b"}]
+			}`,
+			`{
+				"name": "svc-c",
+				"base_paths": ["/api/shared"],
+				"default_action": "allow",
+				"routes": [{"name": "r", "methods": ["GET"], "path": "/api/shared/c", "match_type": "exact", "action": "c"}]
+			}`,
+		)
+		err := registry.Load(second)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `conflicts with schema "svc-a"`)
+
+		_, err = registry.Get("svc-a")
+		assert.NoError(t, err, "schemas from an earlier successful load stay registered")
+		_, err = registry.Get("svc-b")
+		assert.Error(t, err, "valid schemas from the rejected file must not be registered")
+	})
+
 	t.Run("different base_paths never conflict", func(t *testing.T) {
 		registry := NewHTTPSchemaRegistry()
 		path := writeTwoSchemas(t,
