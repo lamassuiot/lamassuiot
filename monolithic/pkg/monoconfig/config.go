@@ -80,6 +80,13 @@ type MultitenantConfig struct {
 	Audience string `mapstructure:"audience"`
 	// Issuers son los issuers JWT de confianza (emisor local e IdP externos).
 	Issuers []cconfig.HttpServerJWTIssuer `mapstructure:"issuers"`
+	// JWKSTrustedCAFiles son las CA (PEM) en las que confían los validadores
+	// JWT al descargar el JWKS, además de las del sistema: la del emisor local
+	// y las de -issuer-ca-file. No se toca SSL_CERT_DIR del proceso.
+	JWKSTrustedCAFiles []string `mapstructure:"jwks_trusted_ca_files"`
+	// RuntimeDir es el directorio de los ficheros generados al arrancar
+	// (certificados y claves). Vacío: el directorio de trabajo (hasta 009 T12).
+	RuntimeDir string `mapstructure:"runtime_dir"`
 	// Provisioners son las identidades que pueden crear organizaciones y tenants.
 	Provisioners []config.TenantManagerProvisioner `mapstructure:"provisioners"`
 	V1           V1Config                          `mapstructure:"v1"`

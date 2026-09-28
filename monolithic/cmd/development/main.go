@@ -18,6 +18,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devruntime"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devstorage"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
@@ -125,8 +126,10 @@ func main() {
 		}
 		fmt.Printf("Crypto Engines: %v\n", cryptoengineOptionsMap)
 	}
+	runtimeDirCleanup := func() {}
 	cleanup := func() {
 		fmt.Println("========== CLEANING UP ==========")
+		runtimeDirCleanup()
 
 		cli, err := docker.NewClientFromEnv()
 		if err != nil {
@@ -372,6 +375,32 @@ func main() {
 		}
 	}
 
+	fmt.Println("Identity (JWT)")
+	// Directorio propio (0700) para certificados y claves generados al
+	// arrancar; se borra en el cleanup.
+	runtimeDir, err := os.MkdirTemp("", "lamassu-monolith-")
+	if err != nil {
+		log.Fatalf("could not create runtime directory: %s", err)
+	}
+	runtimeDirCleanup = func() { _ = os.RemoveAll(runtimeDir) }
+	rt, err := devruntime.Start(devruntime.Options{
+		Dir:             runtimeDir,
+		DevIssuer:       opts.devIssuer,
+		ExternalIssuers: opts.externalIssuers,
+		ExternalCAFiles: opts.issuerCAFiles,
+	})
+	if err != nil {
+		cleanup()
+		log.Fatalf("could not prepare the multitenant runtime: %s", err)
+	}
+	if rt.Issuer != nil {
+		fmt.Printf(">> local token issuer (development only, 127.0.0.1): %s\n", rt.Issuer.Issuer())
+		fmt.Printf(" 	-- get a token: curl --cacert %s/monolith-ca.crt -X POST %s -d '{\"subject\":\"alice\"}'\n", runtimeDir, rt.Issuer.TokenURL())
+	}
+	for _, issuer := range rt.Multitenant.Issuers {
+		fmt.Printf(" 	-- accepted JWT issuer: %s (JWKS %s)\n", issuer.Issuer, issuer.JWKSURL)
+	}
+
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
 	cryptoEnginesConfig := config.CryptoEngines{
@@ -454,6 +483,7 @@ func main() {
 		},
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: opts.sampleData,
+		Multitenant:        rt.Multitenant,
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     opts.awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", opts.awsIoTManagerID),

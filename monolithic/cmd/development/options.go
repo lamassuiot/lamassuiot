@@ -1,10 +1,14 @@
 package main
 
 import (
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
+	"os"
+	"strings"
 
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	pgconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
@@ -45,6 +49,10 @@ type options struct {
 	postgresPort          int
 	postgresAdminUser     string
 	postgresAdminPassword string
+
+	devIssuer       bool
+	externalIssuers []cconfig.HttpServerJWTIssuer
+	issuerCAFiles   []string
 }
 
 // parseOptions lee y valida las opciones. Un error significa que el monolito
@@ -78,6 +86,20 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 	fs.StringVar(&o.postgresAdminUser, "postgres-admin-user", "", "administrative user of the existing PostgreSQL (default postgres; requires -postgres-host)")
 	fs.StringVar(&o.postgresAdminPassword, "postgres-admin-password", "", "password of the administrative user (requires -postgres-host)")
 
+	fs.BoolVar(&o.devIssuer, "dev-issuer", true, "run the local token issuer on 127.0.0.1 (development only: any local process can get a token for any identity)")
+	fs.Func("issuer", "external JWT issuer accepted by every service, as issuer=<iss>,jwks=<https JWKS URL> (repeatable)", func(value string) error {
+		issuer, err := parseIssuerOption(value)
+		if err != nil {
+			return err
+		}
+		o.externalIssuers = append(o.externalIssuers, issuer)
+		return nil
+	})
+	fs.Func("issuer-ca-file", "PEM CA trusted when fetching the JWKS of the -issuer providers (repeatable)", func(value string) error {
+		o.issuerCAFiles = append(o.issuerCAFiles, value)
+		return nil
+	})
+
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -94,6 +116,10 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 func (o *options) validate() error {
 	if o.useSqlite {
 		return errSQLiteNotSupported
+	}
+
+	if err := o.validateIssuers(); err != nil {
+		return err
 	}
 
 	if o.postgresHost == "" {
@@ -115,6 +141,48 @@ func (o *options) validate() error {
 		o.postgresAdminUser = "postgres"
 	}
 	return nil
+}
+
+func (o *options) validateIssuers() error {
+	if !o.devIssuer && len(o.externalIssuers) == 0 {
+		return errors.New("-dev-issuer=false requires at least one -issuer: the multitenant monolith cannot disable JWT authentication")
+	}
+	for _, file := range o.issuerCAFiles {
+		pemBytes, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("-issuer-ca-file %s: %w", file, err)
+		}
+		if !x509.NewCertPool().AppendCertsFromPEM(pemBytes) {
+			return fmt.Errorf("-issuer-ca-file %s contains no PEM certificates", file)
+		}
+	}
+	return nil
+}
+
+// parseIssuerOption lee issuer=<iss>,jwks=<url>. El issuer se conserva
+// exacto (puntos y mayúsculas, requisito 4.2); el JWKS debe ser https.
+func parseIssuerOption(value string) (cconfig.HttpServerJWTIssuer, error) {
+	const format = "use issuer=<iss>,jwks=<https JWKS URL>"
+	fields := map[string]string{}
+	for _, part := range strings.Split(value, ",") {
+		key, val, ok := strings.Cut(part, "=")
+		if !ok || (key != "issuer" && key != "jwks") {
+			return cconfig.HttpServerJWTIssuer{}, fmt.Errorf("invalid -issuer %q: %s", value, format)
+		}
+		if _, dup := fields[key]; dup {
+			return cconfig.HttpServerJWTIssuer{}, fmt.Errorf("invalid -issuer %q: %s appears twice", value, key)
+		}
+		fields[key] = val
+	}
+	issuer := cconfig.HttpServerJWTIssuer{Issuer: fields["issuer"], JWKSURL: fields["jwks"]}
+	if issuer.Issuer == "" || issuer.JWKSURL == "" {
+		return cconfig.HttpServerJWTIssuer{}, fmt.Errorf("invalid -issuer %q: %s", value, format)
+	}
+	jwks, err := url.Parse(issuer.JWKSURL)
+	if err != nil || jwks.Scheme != "https" || jwks.Host == "" {
+		return cconfig.HttpServerJWTIssuer{}, fmt.Errorf("invalid -issuer %q: the JWKS URL must be an absolute https URL", value)
+	}
+	return issuer, nil
 }
 
 // externalPostgres devuelve el PostgreSQL externo pedido con -postgres-host, o

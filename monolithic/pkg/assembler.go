@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,11 +17,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devprofile"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
 	log "github.com/sirupsen/logrus"
@@ -39,9 +40,23 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			BuildTime: "-",
 		}
 
+		profile, err := devprofile.Build(conf)
+		if err != nil {
+			return -1, -1, fmt.Errorf("invalid multitenant profile: %w", err)
+		}
+		tenantRoutes, err := newTenantRouteOptionsBuilder(conf)
+		if err != nil {
+			return -1, -1, err
+		}
+
+		// Hasta la tarea 12 de la spec 009, sin RuntimeDir los ficheros del
+		// proxy siguen en el directorio de trabajo.
+		proxyCertFile := filepath.Join(conf.Multitenant.RuntimeDir, "proxy.crt")
+		proxyKeyFile := filepath.Join(conf.Multitenant.RuntimeDir, "proxy.key")
+
 		key, _ := chelpers.GenerateRSAKey(2048)
 		keyPem, _ := chelpers.PrivateKeyToPEM(key)
-		os.WriteFile("proxy.key", []byte(keyPem), 0600)
+		os.WriteFile(proxyKeyFile, []byte(keyPem), 0600)
 
 		crt, err := chelpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
 		if err != nil {
@@ -49,32 +64,13 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		crtPem := chelpers.CertificateToPEM(crt)
-		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
+		os.WriteFile(proxyCertFile, []byte(crtPem), 0600)
 
-		vaDomains := []string{}
-		for _, domain := range conf.Domains {
-			vaDomains = append(vaDomains, fmt.Sprintf("%s:%d/api/va", domain, conf.GatewayPortHttp))
+		kmsRoutes, err := tenantRoutes.build("KMS", profile.KMS.Server)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
 		}
-
-		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
-			CryptoEngineConfig: config.CryptoEngines{
-				LogLevel:      cconfig.Info,
-				DefaultEngine: conf.CryptoEngines[0].ID,
-				CryptoEngines: conf.CryptoEngines,
-			},
-			PublisherEventBus: conf.PublisherEventBus,
-			Storage:           conf.Storage,
-		}, apiInfo)
+		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(profile.KMS, apiInfo, kmsRoutes)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
 		}
@@ -97,22 +93,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			)
 		}
 
-		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
-			PublisherEventBus:        conf.PublisherEventBus,
-			Storage:                  conf.Storage,
-			CertificateMonitoringJob: conf.Monitoring,
-			VAServerDomains:          vaDomains,
-		}, kmsSDKBuilder("KMS", models.KMSSource), apiInfo)
+		caRoutes, err := tenantRoutes.build("CA", profile.CA.Server)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
+		}
+		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(profile.CA, kmsSDKBuilder("KMS", models.KMSSource), apiInfo, caRoutes)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
@@ -135,51 +120,20 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			)
 		}
 
-		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
-			FilesystemStorage: cconfig.FSStorageConfig{
-				ID:   "fs",
-				Type: cconfig.LocalFilesystem,
-				Config: map[string]interface{}{
-					"storage_directory": conf.VAStorageDir,
-				},
-			},
-			CRLMonitoringJob:      conf.Monitoring,
-			SubscriberEventBus:    conf.SubscriberEventBus,
-			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
-			PublisherEventBus:     conf.PublisherEventBus,
-			Storage:               conf.Storage,
-			VADomains:             vaDomains,
-		}, caSDKBuilder("VA", models.VASource), kmsSDKBuilder("VA", models.VASource), apiInfo)
+		vaRoutes, err := tenantRoutes.build("VA", profile.VA.Server)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
+		}
+		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(profile.VA, caSDKBuilder("VA", models.VASource), kmsSDKBuilder("VA", models.VASource), apiInfo, vaRoutes)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
 
-		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
-			PublisherEventBus:     conf.PublisherEventBus,
-			SubscriberEventBus:    conf.SubscriberEventBus,
-			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
-			Storage:               conf.Storage,
-		}, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo)
+		devRoutes, err := tenantRoutes.build("Device Manager", profile.DeviceManager.Server)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
+		}
+		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(profile.DeviceManager, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo, devRoutes)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
@@ -202,21 +156,13 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				fmt.Sprintf("%s://%s%s:%d", devMngrConnection.Protocol, devMngrConnection.Hostname, devMngrConnection.BasePath, devMngrConnection.Port),
 			)
 		}
-		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
-			PublisherEventBus:         conf.PublisherEventBus,
-			DownstreamCertificateFile: "proxy.crt",
-			Storage:                   conf.Storage,
-		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
+		dmsConf := profile.DMS
+		dmsConf.DownstreamCertificateFile = proxyCertFile
+		dmsRoutes, err := tenantRoutes.build("DMS Manager", dmsConf.Server)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
+		}
+		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(dmsConf, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo, dmsRoutes)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
@@ -239,21 +185,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				fmt.Sprintf("%s://%s%s:%d", dmsMngrConnection.Protocol, dmsMngrConnection.Hostname, dmsMngrConnection.BasePath, dmsMngrConnection.Port),
 			)
 		}
-		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
-			Logs: cconfig.Logging{
-				Level: conf.Logs.Level,
-			},
-			Server: cconfig.HttpServer{
-				LogLevel:           conf.Logs.Level,
-				HealthCheckLogging: true,
-				ListenAddress:      "0.0.0.0",
-				Port:               0,
-				Protocol:           cconfig.HTTP,
-			},
-			SubscriberEventBus:    conf.SubscriberEventBus,
-			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
-			Storage:               conf.Storage,
-		}, apiInfo)
+		alertsRoutes, err := tenantRoutes.build("Alerts", profile.Alerts.Server)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
+		}
+		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(profile.Alerts, apiInfo, alertsRoutes)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
 		}
@@ -367,7 +303,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		usedHttpsPort := listenerHttps.Addr().(*net.TCPAddr).Port
-		usedHttpPort := listenerHttps.Addr().(*net.TCPAddr).Port
+		usedHttpPort := listenerHttp.Addr().(*net.TCPAddr).Port
 
 		go func() {
 			serverHttps := http.Server{
@@ -379,7 +315,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ReadHeaderTimeout: time.Second * 10,
 			}
 
-			log.Fatal(serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"))
+			log.Fatal(serverHttps.ServeTLS(listenerHttps, proxyCertFile, proxyKeyFile))
 		}()
 
 		go func() {
