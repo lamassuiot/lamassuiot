@@ -594,9 +594,8 @@ func readAndRestoreRequestBody(req *http.Request) ([]byte, error) {
 }
 
 func propagateAuthzHeaders(reqHeaders, authzHeaders http.Header) {
-	if currentUser := authzHeaders.Get("x-current-user"); currentUser != "" {
-		reqHeaders.Set("x-current-user", currentUser)
-		reqHeaders.Set("x-principal-id", currentUser)
+	if principalID := authzHeaders.Get("X-Principal-ID"); principalID != "" {
+		reqHeaders.Set("X-Principal-ID", principalID)
 	}
 }
 
