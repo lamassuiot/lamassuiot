@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	core "github.com/lamassuiot/lamassuiot/core/v3"
@@ -515,23 +516,9 @@ func (db *postgresDBQuerier[E]) selectAllBody(ctx context.Context, tx *gorm.DB, 
 
 	tx = applyExtraOpts(tx, extraOpts)
 
-	if offset > 0 {
-		tx.Offset(offset)
-	}
-
 	if exhaustiveRun {
-		res := tx.WithContext(ctx).Preload(clause.Associations).FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
-			for _, elem := range elems {
-				applyFunc(elem)
-			}
-
-			return nil
-		})
-		if res.Error != nil {
-			return "", res.Error
-		}
-
-		return "", nil
+		sorted := sortBy != "" || (queryParams != nil && queryParams.Sort.SortField != "")
+		return "", db.selectAllInBatches(ctx, tx, offset, limit, sorted, applyFunc)
 	} else {
 		tx.Offset(offset)
 		tx.Limit(limit + 1)
@@ -560,6 +547,85 @@ func (db *postgresDBQuerier[E]) selectAllBody(ctx context.Context, tx *gorm.DB, 
 		}
 
 		return base64.RawURLEncoding.EncodeToString([]byte(nextBookmark)), nil
+	}
+}
+
+var batchSchemaCache sync.Map
+
+// batchKeyFields returns the model fields that identify a row within the (tenant-scoped)
+// query: the gorm primary key fields, which may be composite (events: tenant_id, event_type),
+// or the querier's primary key column when the model declares none (va_role, kms_keys).
+func (db *postgresDBQuerier[E]) batchKeyFields() ([]*schema.Field, error) {
+	s, err := schema.Parse(new(E), &batchSchemaCache, db.NamingStrategy)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(s.PrimaryFields) > 0 {
+		return s.PrimaryFields, nil
+	}
+
+	if field := s.LookUpField(db.primaryKeyColumn); field != nil {
+		return []*schema.Field{field}, nil
+	}
+
+	return nil, fmt.Errorf("table %s: no key column to paginate on", db.tableName)
+}
+
+// selectAllInBatches reads every row matching tx in batches of limit rows, skipping the
+// first offset rows. gorm's FindInBatches is not used because it requires a single primary
+// key and fails with "primary key required" on composite keys or models without one.
+// Unsorted runs paginate by key (keyset) ordered by the key columns; sorted runs keep the
+// requested order, tie-broken by the key columns, and paginate by offset.
+func (db *postgresDBQuerier[E]) selectAllInBatches(ctx context.Context, tx *gorm.DB, offset int, limit int, sorted bool, applyFunc func(elem E)) error {
+	keyFields, err := db.batchKeyFields()
+	if err != nil {
+		return err
+	}
+
+	if limit <= 0 {
+		limit = 15
+	}
+
+	keyColumns := make([]string, 0, len(keyFields))
+	for _, field := range keyFields {
+		keyColumns = append(keyColumns, tx.Statement.Quote(clause.Column{Table: db.tableName, Name: field.DBName}))
+		tx = tx.Order(clause.OrderByColumn{Column: clause.Column{Table: db.tableName, Name: field.DBName}})
+	}
+	base := tx.WithContext(ctx).Preload(clause.Associations).Session(&gorm.Session{})
+
+	var lastKey []any
+	for batch := 0; ; batch++ {
+		q := base.Limit(limit)
+		switch {
+		case sorted:
+			q = q.Offset(offset + batch*limit)
+		case lastKey == nil:
+			q = q.Offset(offset)
+		default:
+			placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(lastKey)), ", ")
+			q = q.Where(fmt.Sprintf("(%s) > (%s)", strings.Join(keyColumns, ", "), placeholders), lastKey...)
+		}
+
+		var elems []E
+		if err := q.Find(&elems).Error; err != nil {
+			return err
+		}
+
+		for _, elem := range elems {
+			applyFunc(elem)
+		}
+
+		if len(elems) < limit {
+			return nil
+		}
+
+		last := reflect.ValueOf(&elems[len(elems)-1]).Elem()
+		lastKey = make([]any, 0, len(keyFields))
+		for _, field := range keyFields {
+			value, _ := field.ValueOf(ctx, last)
+			lastKey = append(lastKey, value)
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package alerts
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -101,4 +102,56 @@ func alertsTenantContext(tenantID string) context.Context {
 		TenantStatus:   core.TenantActive,
 		Validated:      true,
 	})
+}
+
+// Regresión de GET /events/latest con 15 o más tipos de evento por tenant: la lectura
+// exhaustiva fallaba con «primary key required» porque events tiene PK compuesta.
+func TestAlertsLatestEventsWithManyEventTypes(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "alerts", "kms").WithService(tests.ALERTS).Build(t)
+	if err != nil {
+		t.Fatalf("could not create Alerts test server: %s", err)
+	}
+
+	tenantA := alertsTenantContext("00000000-0000-0000-0000-00000000000a")
+	tenantB := alertsTenantContext("00000000-0000-0000-0000-00000000000b")
+
+	handle := func(ctx context.Context, eventType string) {
+		event := cloudevents.NewEvent()
+		event.SetID(eventType)
+		event.SetSource("many-event-types-test")
+		event.SetType(eventType)
+		if err := event.SetData(cloudevents.ApplicationJSON, map[string]string{"type": eventType}); err != nil {
+			t.Fatalf("could not create test event: %s", err)
+		}
+		if err := serverTest.Alerts.Service.HandleEvent(ctx, &services.HandleEventInput{Event: event}); err != nil {
+			t.Fatalf("could not store event %s: %s", eventType, err)
+		}
+	}
+
+	const eventTypes = 40
+	for i := 0; i < eventTypes; i++ {
+		handle(tenantA, fmt.Sprintf("test.many.types.%02d", i))
+	}
+	handle(tenantB, "test.many.types.00")
+
+	tenantAEvents, err := serverTest.Alerts.Service.GetLatestEventsPerEventType(tenantA, &services.GetLatestEventsPerEventTypeInput{})
+	if err != nil {
+		t.Fatalf("could not query tenant A events: %s", err)
+	}
+	if len(tenantAEvents) != eventTypes {
+		t.Fatalf("expected tenant A to see %d event types, got %d", eventTypes, len(tenantAEvents))
+	}
+	for _, ev := range tenantAEvents {
+		if ev.TenantID != "00000000-0000-0000-0000-00000000000a" {
+			t.Fatalf("tenant A read a row of tenant %s", ev.TenantID)
+		}
+	}
+
+	tenantBEvents, err := serverTest.Alerts.Service.GetLatestEventsPerEventType(tenantB, &services.GetLatestEventsPerEventTypeInput{})
+	if err != nil {
+		t.Fatalf("could not query tenant B events: %s", err)
+	}
+	if len(tenantBEvents) != 1 {
+		t.Fatalf("expected tenant B to see one event type, got %d", len(tenantBEvents))
+	}
 }
