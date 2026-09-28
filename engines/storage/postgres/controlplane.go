@@ -52,6 +52,14 @@ func (store *ControlPlaneMembershipStore) ListActiveTenants(ctx context.Context)
 	return tenants, result.Error
 }
 
+func (store *ControlPlaneMembershipStore) ListNonDeletedTenants(ctx context.Context) ([]models.Tenant, error) {
+	var tenants []models.Tenant
+	result := store.db.WithContext(ctx).
+		Where("status <> ? AND deleted_at IS NULL", models.TenantDeleted).
+		Find(&tenants)
+	return tenants, result.Error
+}
+
 func (store *ControlPlaneMembershipStore) GetActiveTenant(ctx context.Context, tenantID string) (*models.Tenant, error) {
 	var tenant models.Tenant
 	result := store.db.WithContext(ctx).

@@ -23,6 +23,13 @@ type ActiveTenantLister interface {
 	ListActiveTenants(ctx context.Context) ([]models.Tenant, error)
 }
 
+// NonDeletedTenantLister enumerates every tenant that has not been deleted,
+// whatever its status, for startup maintenance steps such as the KMS key
+// migration to tenant roots (004 T4.6).
+type NonDeletedTenantLister interface {
+	ListNonDeletedTenants(ctx context.Context) ([]models.Tenant, error)
+}
+
 // ActiveTenantGetter resolves one ACTIVE, non-deleted tenant by ID. Public PKI
 // endpoints use it to build a tenant context from the tenant in the URL.
 type ActiveTenantGetter interface {

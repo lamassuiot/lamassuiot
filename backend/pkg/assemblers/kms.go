@@ -84,6 +84,12 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 		}
 	}
 
+	// 004 T4.6: antes de servir, las claves de la raíz plana de los engines
+	// filesystem globales pasan a la raíz de su tenant.
+	if err := migrateTenantKeys(lSvc, conf, engines, kmsStorage); err != nil {
+		return nil, fmt.Errorf("could not migrate crypto engine keys to tenant roots: %w", err)
+	}
+
 	svc, err := lservices.NewKMSService(lservices.KMSServiceBuilder{
 		Logger:        lSvc,
 		KMSStorage:    kmsStorage,
