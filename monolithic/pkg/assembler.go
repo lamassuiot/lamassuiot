@@ -194,6 +194,15 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
 		}
 
+		tmRoutes, err := tenantRoutes.build("Tenant Manager", profile.TenantManager.Server)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble Tenant Manager Service: %s", err)
+		}
+		_, tmPort, err := lamassu.AssembleTenantManagerServiceWithHTTPServer(profile.TenantManager, apiInfo, tmRoutes)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble Tenant Manager Service: %s", err)
+		}
+
 		if conf.AWSIoTManager.Enabled {
 			err = AssembleAWSIoT(conf, caSDKBuilder, dmsMngrSDKBuilder, deviceMngrSDKBuilder)
 			if err != nil {
@@ -267,6 +276,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+		// Mismo prefijo que el gateway de Helm: /api/tenants/api/v2/... llega
+		// al Tenant Manager como /api/v2/...
+		addRouteMap("Tenant Manager", "/api/tenants/", tmPort)
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
 			proxy := func(c *gin.Context) {

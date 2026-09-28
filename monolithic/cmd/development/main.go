@@ -400,6 +400,14 @@ func main() {
 	for _, issuer := range rt.Multitenant.Issuers {
 		fmt.Printf(" 	-- accepted JWT issuer: %s (JWKS %s)\n", issuer.Issuer, issuer.JWKSURL)
 	}
+	multitenant := rt.Multitenant
+	multitenant.Provisioners = opts.effectiveProvisioners(rt.DefaultProvisioners())
+	for _, provisioner := range multitenant.Provisioners {
+		fmt.Printf(" 	-- tenant provisioner: %s | %s\n", provisioner.Issuer, provisioner.Subject)
+	}
+	if len(multitenant.Provisioners) == 0 {
+		fmt.Println(" 	-- no tenant provisioner configured: nobody can create organizations or tenants (use -provisioner)")
+	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
@@ -483,7 +491,7 @@ func main() {
 		},
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: opts.sampleData,
-		Multitenant:        rt.Multitenant,
+		Multitenant:        multitenant,
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     opts.awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", opts.awsIoTManagerID),

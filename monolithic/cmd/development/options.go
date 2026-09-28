@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	pgconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 )
@@ -53,6 +54,7 @@ type options struct {
 	devIssuer       bool
 	externalIssuers []cconfig.HttpServerJWTIssuer
 	issuerCAFiles   []string
+	provisioners    []config.TenantManagerProvisioner
 }
 
 // parseOptions lee y valida las opciones. Un error significa que el monolito
@@ -97,6 +99,15 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 	})
 	fs.Func("issuer-ca-file", "PEM CA trusted when fetching the JWKS of the -issuer providers (repeatable)", func(value string) error {
 		o.issuerCAFiles = append(o.issuerCAFiles, value)
+		return nil
+	})
+
+	fs.Func("provisioner", "identity allowed to create organizations and tenants, as <issuer>|<subject> (repeatable; default: the local issuer's provisioner)", func(value string) error {
+		provisioner, err := parseProvisionerOption(value)
+		if err != nil {
+			return err
+		}
+		o.provisioners = append(o.provisioners, provisioner)
 		return nil
 	})
 
@@ -183,6 +194,24 @@ func parseIssuerOption(value string) (cconfig.HttpServerJWTIssuer, error) {
 		return cconfig.HttpServerJWTIssuer{}, fmt.Errorf("invalid -issuer %q: the JWKS URL must be an absolute https URL", value)
 	}
 	return issuer, nil
+}
+
+// effectiveProvisioners son los -provisioner explícitos o, si no hay, el
+// provisioner del emisor local.
+func (o *options) effectiveProvisioners(local []config.TenantManagerProvisioner) []config.TenantManagerProvisioner {
+	if len(o.provisioners) > 0 {
+		return append([]config.TenantManagerProvisioner(nil), o.provisioners...)
+	}
+	return append([]config.TenantManagerProvisioner(nil), local...)
+}
+
+// parseProvisionerOption lee <iss>|<sub>; ambos se conservan exactos.
+func parseProvisionerOption(value string) (config.TenantManagerProvisioner, error) {
+	parts := strings.Split(value, "|")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return config.TenantManagerProvisioner{}, fmt.Errorf("invalid -provisioner %q: use <issuer>|<subject>", value)
+	}
+	return config.TenantManagerProvisioner{Issuer: parts[0], Subject: parts[1]}, nil
 }
 
 // externalPostgres devuelve el PostgreSQL externo pedido con -postgres-host, o
