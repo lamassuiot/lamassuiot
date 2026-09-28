@@ -140,3 +140,82 @@ func TestReadConfigIssuerWithDots(t *testing.T) {
 	assert.Equal(t, LogLevel("info"), config.Logs.Level)
 	assert.Equal(t, Password("mysuperpass"), config.SecretValue)
 }
+
+// TestReadConfigIssuerJWKSList comprueba que issuer_jwks conserva exactos los
+// issuers con mayúsculas y puntos: son valores, no claves de mapa, y viper no
+// los pasa a minúsculas ni los parte (005 T2).
+func TestReadConfigIssuerJWKSList(t *testing.T) {
+	config, err := readConfig[TestServiceConfig]("testdata/issuer-jwks-list-config.yml", nil)
+	assert.NoError(t, err)
+	if !assert.NotNil(t, config) {
+		return
+	}
+
+	jwtConfig := config.HttpServer.Authentication.JWT
+	assert.Equal(t, []HttpServerJWTIssuer{
+		{
+			Issuer:  "https://Keycloak.Example.com/realms/Lamassu",
+			JWKSURL: "https://Keycloak.Example.com/realms/Lamassu/protocol/openid-connect/certs",
+		},
+		{
+			Issuer:  "https://login.example.org/tenant.a/v2.0",
+			JWKSURL: "https://login.example.org/tenant.a/discovery/v2.0/keys",
+		},
+	}, jwtConfig.IssuerJWKS)
+	assert.Empty(t, jwtConfig.IssuerJWKSURLs)
+
+	issuers, deprecated, err := jwtConfig.ResolveIssuerJWKS()
+	assert.NoError(t, err)
+	assert.False(t, deprecated)
+	assert.Equal(t, map[string]string{
+		"https://Keycloak.Example.com/realms/Lamassu": "https://Keycloak.Example.com/realms/Lamassu/protocol/openid-connect/certs",
+		"https://login.example.org/tenant.a/v2.0":     "https://login.example.org/tenant.a/discovery/v2.0/keys",
+	}, issuers)
+}
+
+// TestResolveIssuerJWKSDeprecatedMap comprueba que el formato antiguo
+// issuer_jwks_urls se sigue aceptando durante la transición, marcado como
+// obsoleto (005 T2).
+func TestResolveIssuerJWKSDeprecatedMap(t *testing.T) {
+	config, err := readConfig[TestServiceConfig]("testdata/issuer-dots-config.yml", nil)
+	assert.NoError(t, err)
+	if !assert.NotNil(t, config) {
+		return
+	}
+
+	issuers, deprecated, err := config.HttpServer.Authentication.JWT.ResolveIssuerJWKS()
+	assert.NoError(t, err)
+	assert.True(t, deprecated)
+	assert.Equal(t, config.HttpServer.Authentication.JWT.IssuerJWKSURLs, issuers)
+}
+
+// TestResolveIssuerJWKSRejectsBothFormats comprueba que definir a la vez
+// issuer_jwks e issuer_jwks_urls es un error de configuración (005 T2).
+func TestResolveIssuerJWKSRejectsBothFormats(t *testing.T) {
+	config, err := readConfig[TestServiceConfig]("testdata/issuer-jwks-both-config.yml", nil)
+	assert.NoError(t, err)
+	if !assert.NotNil(t, config) {
+		return
+	}
+
+	_, _, err = config.HttpServer.Authentication.JWT.ResolveIssuerJWKS()
+	assert.ErrorContains(t, err, "issuer_jwks")
+	assert.ErrorContains(t, err, "issuer_jwks_urls")
+}
+
+// TestResolveIssuerJWKSRejectsInvalidEntries comprueba que la lista no admite
+// issuers vacíos ni repetidos (005 T2).
+func TestResolveIssuerJWKSRejectsInvalidEntries(t *testing.T) {
+	for name, entries := range map[string][]HttpServerJWTIssuer{
+		"empty issuer": {{Issuer: "", JWKSURL: "https://issuer.example/jwks"}},
+		"duplicated issuer": {
+			{Issuer: "https://issuer.example", JWKSURL: "https://issuer.example/jwks"},
+			{Issuer: "https://issuer.example", JWKSURL: "https://issuer.example/other"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := HttpServerJWTAuthentication{IssuerJWKS: entries}.ResolveIssuerJWKS()
+			assert.Error(t, err)
+		})
+	}
+}

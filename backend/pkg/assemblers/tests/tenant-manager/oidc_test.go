@@ -79,10 +79,10 @@ func TestOIDCClientCredentialsReachTenantData(t *testing.T) {
 
 	// Backend configured exactly as in a deployment: issuer allowlist, JWKS
 	// over HTTPS, audience and algorithms.
-	validator, err := identityextractors.NewJWTValidator(cconfig.HttpServerJWTAuthentication{
+	validator, err := identityextractors.NewJWTValidator(logrus.NewEntry(logrus.New()), cconfig.HttpServerJWTAuthentication{
 		Enabled:           true,
 		Audience:          audience,
-		IssuerJWKSURLs:    map[string]string{issuer: issuer + "/protocol/openid-connect/certs"},
+		IssuerJWKS:        []cconfig.HttpServerJWTIssuer{{Issuer: issuer, JWKSURL: issuer + "/protocol/openid-connect/certs"}},
 		AllowedAlgorithms: []string{"RS256"},
 		JWKSCacheTTL:      time.Minute,
 	}, providerClient)

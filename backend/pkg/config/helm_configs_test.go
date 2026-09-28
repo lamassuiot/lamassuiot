@@ -8,8 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// dottedIssuer es el issuer con puntos que usan los values de testdata/helm.
-const dottedIssuer = "https://keycloak.example.com/realms/lamassu"
+// mixedCaseIssuer es el issuer con mayúsculas y puntos que usan los values de
+// testdata/helm (un realm de Keycloak distingue mayúsculas).
+const mixedCaseIssuer = "https://Keycloak.Example.com/realms/Lamassu"
 
 // serviceConfig es la parte común de la configuración de los servicios.
 type serviceConfig struct {
@@ -31,15 +32,18 @@ func loadHelmConfig[E any](t *testing.T, service string, common func(*E) service
 	assert.Equal(t, cconfig.Postgres, c.Storage.Provider, "storage.provider")
 	assert.True(t, c.Server.Authentication.JWT.Enabled, "server.authentication.jwt.enabled")
 	assert.Equal(t, "lamassu", c.Server.Authentication.JWT.Audience)
-	assert.Equal(t, map[string]string{
-		dottedIssuer: dottedIssuer + "/protocol/openid-connect/certs",
-	}, c.Server.Authentication.JWT.IssuerJWKSURLs)
+	assert.Equal(t, []cconfig.HttpServerJWTIssuer{{
+		Issuer:  mixedCaseIssuer,
+		JWKSURL: mixedCaseIssuer + "/protocol/openid-connect/certs",
+	}}, c.Server.Authentication.JWT.IssuerJWKS)
+	assert.Empty(t, c.Server.Authentication.JWT.IssuerJWKSURLs)
 }
 
 // TestLoadHelmServiceConfigs carga la configuración que el chart genera para
-// cada servicio, con un issuer JWT con puntos (005 T2). Los ficheros de
-// testdata/helm salen de `helm template` de lamassu-helm con
-// auth.backendJwt.enabled=true y services.tenantManager.enabled=true.
+// cada servicio, con un issuer JWT con mayúsculas y puntos en la lista
+// issuer_jwks (005 T2). Los ficheros de testdata/helm salen de `helm template`
+// de lamassu-helm con auth.backendJwt.enabled=true, auth.backendJwt.issuerJwks
+// y services.tenantManager.enabled=true.
 func TestLoadHelmServiceConfigs(t *testing.T) {
 	t.Run("alerts", func(t *testing.T) {
 		loadHelmConfig(t, "alerts", func(c *AlertsConfig) serviceConfig { return serviceConfig{c.Server, c.Storage} })

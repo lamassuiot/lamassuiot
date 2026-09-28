@@ -14,6 +14,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v4"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -82,15 +83,27 @@ func (validator JWTValidator) Validate(rawToken string) (*jwt.Token, error) {
 	return token, nil
 }
 
-func NewJWTValidator(config cconfig.HttpServerJWTAuthentication, client *http.Client) (*JWTValidator, error) {
+// NewJWTValidator construye el validador a partir de la configuración. Admite
+// el formato obsoleto issuer_jwks_urls durante la transición y avisa en el log.
+func NewJWTValidator(logger *logrus.Entry, config cconfig.HttpServerJWTAuthentication, client *http.Client) (*JWTValidator, error) {
 	if !config.Enabled {
 		return nil, nil
 	}
-	if config.Audience == "" || len(config.IssuerJWKSURLs) == 0 || len(config.AllowedAlgorithms) == 0 || config.JWKSCacheTTL <= 0 {
+	issuerJWKSURLs, deprecated, err := config.ResolveIssuerJWKS()
+	if err != nil {
+		return nil, err
+	}
+	if deprecated {
+		if logger == nil {
+			logger = logrus.NewEntry(logrus.StandardLogger())
+		}
+		logger.Warn("JWT authentication uses the deprecated issuer_jwks_urls map: migrate to the issuer_jwks list (issuer, jwks_url); map keys are lowercased, so issuers with uppercase letters never match the token iss")
+	}
+	if config.Audience == "" || len(issuerJWKSURLs) == 0 || len(config.AllowedAlgorithms) == 0 || config.JWKSCacheTTL <= 0 {
 		return nil, errors.New("enabled JWT authentication requires audience, issuer JWKS URLs, allowed algorithms and positive cache TTL")
 	}
-	allowedIssuers := make(map[string]struct{}, len(config.IssuerJWKSURLs))
-	for issuer, jwksURL := range config.IssuerJWKSURLs {
+	allowedIssuers := make(map[string]struct{}, len(issuerJWKSURLs))
+	for issuer, jwksURL := range issuerJWKSURLs {
 		if issuer == "" {
 			return nil, errors.New("JWT issuer must not be empty")
 		}
@@ -109,7 +122,7 @@ func NewJWTValidator(config cconfig.HttpServerJWTAuthentication, client *http.Cl
 	if client == nil {
 		client = &http.Client{Timeout: defaultJWKSRequestTO}
 	}
-	resolver := NewJWKSResolver(client, config.IssuerJWKSURLs, config.JWKSCacheTTL)
+	resolver := NewJWKSResolver(client, issuerJWKSURLs, config.JWKSCacheTTL)
 	return &JWTValidator{
 		KeyFunc:        resolver.KeyFunc,
 		AllowedIssuers: allowedIssuers,

@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
 type HTTPConnection struct {
 	Protocol        HTTPProtocol `mapstructure:"protocol"`
@@ -58,11 +62,48 @@ type HttpServerAuthentication struct {
 }
 
 type HttpServerJWTAuthentication struct {
-	Enabled           bool              `mapstructure:"enabled"`
-	Audience          string            `mapstructure:"audience"`
+	Enabled    bool                  `mapstructure:"enabled"`
+	Audience   string                `mapstructure:"audience"`
+	IssuerJWKS []HttpServerJWTIssuer `mapstructure:"issuer_jwks"`
+	// IssuerJWKSURLs es el formato antiguo (mapa issuer -> JWKS URL).
+	//
+	// Deprecated: viper pasa a minúsculas las claves de mapa, así que un
+	// issuer con mayúsculas no coincide con el iss del token. Usar IssuerJWKS;
+	// se mantiene solo durante la transición.
 	IssuerJWKSURLs    map[string]string `mapstructure:"issuer_jwks_urls"`
 	AllowedAlgorithms []string          `mapstructure:"allowed_algorithms"`
 	JWKSCacheTTL      time.Duration     `mapstructure:"jwks_cache_ttl"`
+}
+
+// HttpServerJWTIssuer es un issuer JWT de confianza y la URL de su JWKS. El
+// issuer es un valor, no una clave de mapa: se conserva exacto (mayúsculas y
+// puntos incluidos) y debe coincidir con el iss del token.
+type HttpServerJWTIssuer struct {
+	Issuer  string `mapstructure:"issuer"`
+	JWKSURL string `mapstructure:"jwks_url"`
+}
+
+// ResolveIssuerJWKS devuelve el mapa issuer -> JWKS URL de la configuración.
+// Acepta issuer_jwks o, durante la transición, issuer_jwks_urls (deprecated
+// es true en ese caso); definir ambos es un error de configuración.
+func (c HttpServerJWTAuthentication) ResolveIssuerJWKS() (issuers map[string]string, deprecated bool, err error) {
+	if len(c.IssuerJWKS) > 0 && len(c.IssuerJWKSURLs) > 0 {
+		return nil, false, errors.New("JWT authentication defines both issuer_jwks and the deprecated issuer_jwks_urls: keep only issuer_jwks")
+	}
+	if len(c.IssuerJWKSURLs) > 0 {
+		return c.IssuerJWKSURLs, true, nil
+	}
+	issuers = make(map[string]string, len(c.IssuerJWKS))
+	for i, entry := range c.IssuerJWKS {
+		if entry.Issuer == "" {
+			return nil, false, fmt.Errorf("issuer_jwks[%d]: issuer must not be empty", i)
+		}
+		if _, duplicated := issuers[entry.Issuer]; duplicated {
+			return nil, false, fmt.Errorf("issuer_jwks[%d]: issuer %q is duplicated", i, entry.Issuer)
+		}
+		issuers[entry.Issuer] = entry.JWKSURL
+	}
+	return issuers, false, nil
 }
 
 type HttpServerVersioning struct {

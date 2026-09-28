@@ -153,15 +153,15 @@ func TestJWKSResolverValidatesTokenByIssuerAndKeyID(t *testing.T) {
 }
 
 func TestNewJWTValidatorRejectsIncompleteConfiguration(t *testing.T) {
-	_, err := NewJWTValidator(cconfig.HttpServerJWTAuthentication{Enabled: true}, nil)
+	_, err := NewJWTValidator(nil, cconfig.HttpServerJWTAuthentication{Enabled: true}, nil)
 	require.Error(t, err)
 }
 
 func TestNewJWTValidatorRequiresHTTPSForConfiguredJWKS(t *testing.T) {
-	_, err := NewJWTValidator(cconfig.HttpServerJWTAuthentication{
+	_, err := NewJWTValidator(nil, cconfig.HttpServerJWTAuthentication{
 		Enabled:           true,
 		Audience:          "lamassu-api",
-		IssuerJWKSURLs:    map[string]string{"https://issuer.example": "http://issuer.example/jwks"},
+		IssuerJWKS:        []cconfig.HttpServerJWTIssuer{{Issuer: "https://issuer.example", JWKSURL: "http://issuer.example/jwks"}},
 		AllowedAlgorithms: []string{jwt.SigningMethodRS256.Alg()},
 		JWKSCacheTTL:      time.Minute,
 	}, nil)
@@ -169,10 +169,10 @@ func TestNewJWTValidatorRequiresHTTPSForConfiguredJWKS(t *testing.T) {
 }
 
 func TestNewJWTValidatorUsesConfiguredIssuerAllowlist(t *testing.T) {
-	validator, err := NewJWTValidator(cconfig.HttpServerJWTAuthentication{
+	validator, err := NewJWTValidator(nil, cconfig.HttpServerJWTAuthentication{
 		Enabled:           true,
 		Audience:          "lamassu-api",
-		IssuerJWKSURLs:    map[string]string{"https://issuer.example": "https://issuer.example/jwks"},
+		IssuerJWKS:        []cconfig.HttpServerJWTIssuer{{Issuer: "https://issuer.example", JWKSURL: "https://issuer.example/jwks"}},
 		AllowedAlgorithms: []string{jwt.SigningMethodRS256.Alg()},
 		JWKSCacheTTL:      time.Minute,
 	}, nil)

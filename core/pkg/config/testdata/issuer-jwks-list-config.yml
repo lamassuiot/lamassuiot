@@ -1,0 +1,17 @@
+logs:
+  level: "info"
+http_server:
+  port: 7777
+  listen_address: "0.0.0.0"
+  authentication:
+    jwt:
+      enabled: true
+      audience: "lamassu"
+      issuer_jwks:
+        - issuer: "https://Keycloak.Example.com/realms/Lamassu"
+          jwks_url: "https://Keycloak.Example.com/realms/Lamassu/protocol/openid-connect/certs"
+        - issuer: "https://login.example.org/tenant.a/v2.0"
+          jwks_url: "https://login.example.org/tenant.a/discovery/v2.0/keys"
+      allowed_algorithms:
+        - "RS256"
+      jwks_cache_ttl: "5m"

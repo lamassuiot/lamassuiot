@@ -30,8 +30,9 @@ func EncodeStruct[E any](source E) (map[string]interface{}, error) {
 }
 
 // configKeyDelimiter separa los niveles de las claves de viper. No puede ser
-// "." (el valor por defecto): las claves de issuer_jwks_urls son URLs de
-// issuers que llevan puntos y viper las partiría en mapas anidados.
+// "." (el valor por defecto): las claves del formato obsoleto
+// issuer_jwks_urls son URLs de issuers que llevan puntos y viper las partiría
+// en mapas anidados.
 const configKeyDelimiter = "::"
 
 func readConfig[E any](configFilePath string, defaults *E) (*E, error) {

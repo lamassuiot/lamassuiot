@@ -20,7 +20,7 @@ func newTenantRouteOptions(logger *logrus.Entry, storageConfig cconfig.Pluggable
 	if err != nil {
 		return routes.TenantRouteOptions{}, fmt.Errorf("could not get tenant membership storage: %w", err)
 	}
-	jwtValidator, err := identityextractors.NewJWTValidator(server.Authentication.JWT, nil)
+	jwtValidator, err := identityextractors.NewJWTValidator(logger, server.Authentication.JWT, nil)
 	if err != nil {
 		return routes.TenantRouteOptions{}, fmt.Errorf("could not configure JWT authentication: %w", err)
 	}

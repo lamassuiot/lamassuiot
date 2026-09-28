@@ -1,0 +1,13 @@
+http_server:
+  authentication:
+    jwt:
+      enabled: true
+      audience: "lamassu"
+      issuer_jwks:
+        - issuer: "https://keycloak.example.com/realms/lamassu"
+          jwks_url: "https://keycloak.example.com/realms/lamassu/protocol/openid-connect/certs"
+      issuer_jwks_urls:
+        "https://keycloak.example.com/realms/lamassu": "https://keycloak.example.com/realms/lamassu/protocol/openid-connect/certs"
+      allowed_algorithms:
+        - "RS256"
+      jwks_cache_ttl: "5m"
