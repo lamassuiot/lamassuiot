@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Lamassu DMS Manager API
-  version: 1.0.0
+  version: 2.0.0
   description: |
     Device Management Service (DMS) API for managing registration authorities and EST enrollment flows.
   contact:
@@ -12,8 +12,14 @@ info:
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
 servers:
+  - url: /api/dmsmanager/api/v2/tenants/{tenantId}
+    description: Tenant-scoped DMS Manager API v2
+    variables:
+      tenantId:
+        default: example-tenant
+        description: Replace with a tenant the authenticated identity is authorized to access.
   - url: /api/dmsmanager/v1
-    description: DMS Manager API
+    description: Deprecated v1 compatibility API. Requires configured default tenant and sunset; retirement date is not approved.
 
 tags:
   - name: DMS
@@ -22,7 +28,7 @@ tags:
     description: Enrollment over Secure Transport (RFC 7030)
 
 paths:
-  /v1/stats:
+  /stats:
     get:
       tags: [DMS]
       summary: Get DMS statistics
@@ -42,7 +48,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms:
+  /dms:
     get:
       tags: [DMS]
       summary: List DMS instances
@@ -81,7 +87,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms/{id}:
+  /dms/{id}:
     get:
       tags: [DMS]
       summary: Get DMS by ID
@@ -130,7 +136,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms/{id}/metadata:
+  /dms/{id}/metadata:
     put:
       tags: [DMS]
       summary: Update DMS metadata
@@ -176,7 +182,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/dms/bind-identity:
+  /dms/bind-identity:
     post:
       tags: [DMS]
       summary: Bind an identity certificate to a device
@@ -198,6 +204,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/cacerts:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     get:
       tags: [EST]
       summary: Retrieve CA certificates for EST enrollment
@@ -214,6 +223,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/cacerts:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     get:
       tags: [EST]
       summary: Retrieve CA certificates for a specific EST authentication profile
@@ -232,6 +244,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/simpleenroll:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     post:
       tags: [EST]
       summary: EST simple enroll
@@ -256,6 +271,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/simpleenroll:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     post:
       tags: [EST]
       summary: EST simple enroll for authentication profile
@@ -282,6 +300,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/simplereenroll:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     post:
       tags: [EST]
       summary: EST simple reenroll
@@ -306,6 +327,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/simplereenroll:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     post:
       tags: [EST]
       summary: EST simple reenroll for authentication profile
@@ -332,6 +356,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/serverkeygen:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     post:
       tags: [EST]
       summary: EST server key generation enrollment
@@ -356,6 +383,9 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/{aps}/serverkeygen:
+    servers:
+      - url: /api/dmsmanager
+        description: EST protocol endpoint; not tenant-scoped through the administrative API.
     post:
       tags: [EST]
       summary: EST server key generation for authentication profile

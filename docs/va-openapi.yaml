@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Lamassu VA API
-  version: 1.0.0
+  version: 2.0.0
   description: |
     Validation Authority (VA) API for Lamassu IoT Platform.
     This API provides certificate validation services including OCSP (Online Certificate Status Protocol)
@@ -14,8 +14,14 @@ info:
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
 servers:
+  - url: /api/va/api/v2/tenants/{tenantId}
+    description: Tenant-scoped VA administration API v2
+    variables:
+      tenantId:
+        default: example-tenant
+        description: Replace with a tenant the authenticated identity is authorized to access.
   - url: /api/va/v1
-    description: VA API
+    description: Deprecated VA administration compatibility API. Requires configured default tenant and sunset; retirement date is not approved.
 
 tags:
   - name: OCSP
@@ -27,6 +33,9 @@ tags:
 
 paths:
   /ocsp/{ocsp_request}:
+    servers:
+      - url: /api/va
+        description: OCSP protocol endpoint; not tenant-scoped through the administrative API.
     get:
       tags:
         - OCSP
@@ -67,6 +76,9 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /ocsp:
+    servers:
+      - url: /api/va
+        description: OCSP protocol endpoint; not tenant-scoped through the administrative API.
     post:
       tags:
         - OCSP
@@ -107,6 +119,9 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /crl/{ca-ski}:
+    servers:
+      - url: /api/va
+        description: CRL protocol endpoint; not tenant-scoped through the administrative API.
     get:
       tags:
         - CRL
@@ -152,7 +167,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /v1/roles/{ca-ski}:
+  /roles/{ca-ski}:
     get:
       tags:
         - VA Roles

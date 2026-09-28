@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Lamassu CA API
-  version: 1.0.0
+  version: 2.0.0
   description: |
     Certificate Authority (CA) service API for Lamassu IoT Platform.
     Manages CAs, certificates, signing requests, issuance profiles, and related
@@ -14,8 +14,14 @@ info:
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
 servers:
+  - url: /api/ca/api/v2/tenants/{tenantId}
+    description: Tenant-scoped CA API v2
+    variables:
+      tenantId:
+        default: example-tenant
+        description: Replace with a tenant the authenticated identity is authorized to access.
   - url: /api/ca/v1
-    description: CA API v1
+    description: Deprecated v1 compatibility API. Requires configured default tenant and sunset; retirement date is not approved.
 
 tags:
   - name: Certificate Authorities
@@ -533,6 +539,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/GetCertificatesResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Certificates]
+      summary: Create and issue a certificate
+      description: Generate a key pair or reuse a KMS key, then issue a certificate signed by the specified CA.
+      operationId: createCertificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCertificateBody'
+      responses:
+        '201':
+          description: Certificate issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /certificates/status/{status}:
@@ -1153,6 +1180,36 @@ components:
           type: string
         is_ca:
           type: boolean
+
+    CreateCertificateBody:
+      type: object
+      required: [ca_id, key_spec, subject]
+      properties:
+        ca_id:
+          type: string
+        key_spec:
+          type: object
+          description: Fields depend on whether a key is generated or an existing KMS key is reused.
+          properties:
+            type:
+              type: string
+              description: Public key algorithm.
+            bits:
+              type: integer
+            engine_id:
+              type: string
+            key_identifier:
+              type: string
+              description: Existing key identifier when reusing a KMS key.
+        subject:
+          $ref: '#/components/schemas/Subject'
+        issuance_profile_id:
+          type: string
+        issuance_profile:
+          $ref: '#/components/schemas/IssuanceProfile'
+        metadata:
+          type: object
+          additionalProperties: true
 
     IssuerCAMetadata:
       type: object

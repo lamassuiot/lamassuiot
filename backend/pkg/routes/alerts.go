@@ -6,14 +6,19 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func NewAlertsHTTPLayer(router *gin.RouterGroup, svc services.AlertsService) {
+func NewAlertsHTTPLayer(router *gin.RouterGroup, svc services.AlertsService, options ...TenantRouteOptions) {
 	routes := controllers.NewAlertsHttpRoutes(svc)
 
-	rv1 := router.Group("/v1")
-
-	rv1.GET("/events/latest", routes.GetLatestEventsPerEventType)
-
-	rv1.GET("/user/:userId/subscriptions", routes.GetUserSubscriptions)
-	rv1.POST("/user/:userId/subscribe", routes.Subscribe)
-	rv1.POST("/user/:userId/unsubscribe/:subId", routes.Unsubscribe)
+	config := tenantRouteOptions(options)
+	v1, v2 := TenantAwareGroups(router, config)
+	register := func(version *gin.RouterGroup) {
+		alertRead := PermissionGroup(version, "alert.read", config.Authorization)
+		subscriptionManage := PermissionGroup(version, "subscription.manage", config.Authorization)
+		alertRead.GET("/events/latest", routes.GetLatestEventsPerEventType)
+		alertRead.GET("/user/:userId/subscriptions", routes.GetUserSubscriptions)
+		subscriptionManage.POST("/user/:userId/subscribe", routes.Subscribe)
+		subscriptionManage.POST("/user/:userId/unsubscribe/:subId", routes.Unsubscribe)
+	}
+	register(v1)
+	register(v2)
 }

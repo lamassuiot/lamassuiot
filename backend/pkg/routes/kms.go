@@ -6,25 +6,32 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService) {
+func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService, options ...TenantRouteOptions) {
 	routes := controllers.NewKMSHttpRoutes(svc)
+	config := tenantRouteOptions(options)
+	v1, v2 := TenantAwareGroups(parentRouterGroup, config)
+	register := func(router *gin.RouterGroup) {
+		kmsRead := PermissionGroup(router, "kms.read", config.Authorization)
+		keyRead := PermissionGroup(router, "key.read", config.Authorization)
+		keyManage := PermissionGroup(router, "key.manage", config.Authorization)
+		keyImport := PermissionGroup(router, "key.import", config.Authorization)
+		keySign := PermissionGroup(router, "key.sign", config.Authorization)
+		keyVerify := PermissionGroup(router, "key.verify", config.Authorization)
 
-	router := parentRouterGroup
-	rv1 := router.Group("/v1")
-
-	rv1.GET("/stats", routes.GetStats)
-	rv1.GET("/engines", routes.GetCryptoEngineProvider)
-
-	// KMS
-	rv1.GET("/keys", routes.GetKeys)
-	rv1.GET("/keys/:id", routes.GetKeyByID)
-	rv1.POST("/keys", routes.CreateKey)
-	rv1.POST("/keys/import", routes.ImportKey)
-	rv1.PUT("/keys/:id/alias", routes.UpdateKeyAliases)
-	rv1.PUT("/keys/:id/name", routes.UpdateKeyName)
-	rv1.PUT("/keys/:id/tags", routes.UpdateKeyTags)
-	rv1.PUT("/keys/:id/metadata", routes.UpdateKeyMetadata)
-	rv1.DELETE("/keys/:id", routes.DeleteKeyByID)
-	rv1.POST("/keys/:id/sign", routes.SignMessage)
-	rv1.POST("/keys/:id/verify", routes.VerifySignature)
+		kmsRead.GET("/stats", routes.GetStats)
+		kmsRead.GET("/engines", routes.GetCryptoEngineProvider)
+		keyRead.GET("/keys", routes.GetKeys)
+		keyRead.GET("/keys/:id", routes.GetKeyByID)
+		keyManage.POST("/keys", routes.CreateKey)
+		keyImport.POST("/keys/import", routes.ImportKey)
+		keyManage.PUT("/keys/:id/alias", routes.UpdateKeyAliases)
+		keyManage.PUT("/keys/:id/name", routes.UpdateKeyName)
+		keyManage.PUT("/keys/:id/tags", routes.UpdateKeyTags)
+		keyManage.PUT("/keys/:id/metadata", routes.UpdateKeyMetadata)
+		keyManage.DELETE("/keys/:id", routes.DeleteKeyByID)
+		keySign.POST("/keys/:id/sign", routes.SignMessage)
+		keyVerify.POST("/keys/:id/verify", routes.VerifySignature)
+	}
+	register(v1)
+	register(v2)
 }

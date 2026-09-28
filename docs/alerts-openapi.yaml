@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Lamassu Alerts API
-  version: 1.0.0
+  version: 2.0.0
   description: |
     Alerts and notification subscription API for Lamassu IoT Platform.
     Provides access to the latest events per event type and lets users manage
@@ -14,8 +14,14 @@ info:
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
 servers:
+  - url: /api/alerts/api/v2/tenants/{tenantId}
+    description: Tenant-scoped Alerts API v2
+    variables:
+      tenantId:
+        default: example-tenant
+        description: Replace with a tenant the authenticated identity is authorized to access.
   - url: /api/alerts/v1
-    description: Alerts API v1
+    description: Deprecated v1 compatibility API. Requires configured default tenant and sunset; retirement date is not approved.
 
 tags:
   - name: Events

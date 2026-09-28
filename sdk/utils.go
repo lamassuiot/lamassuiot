@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,10 +22,61 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
+
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 )
 
 func BuildURL(cfg config.HTTPClient) string {
 	return fmt.Sprintf("%s://%s:%d%s", cfg.Protocol, cfg.Hostname, cfg.Port, cfg.BasePath)
+}
+
+func tenantAwareEndpoint(ctx context.Context, baseURL string, path string) (string, error) {
+	tenantContext, err := core.TenantContextFromContext(ctx)
+	if errors.Is(err, core.ErrTenantContextRequired) {
+		return baseURL + "/v1" + path, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if err := tenantContext.Validate(); err != nil {
+		return "", err
+	}
+	return baseURL + "/api/v2/tenants/" + url.PathEscape(tenantContext.TenantID) + path, nil
+}
+
+// tenantIDHeader propagates the caller's tenant to downstream services. It matches the
+// primary header name accepted by backend/pkg/routes/middlewares/tenant-context
+// (TenantIDHeader = "X-Tenant-ID"); the legacy "X-LMS-Tenant-ID" alias is only honored on
+// the receiving side and is never emitted by this SDK.
+const tenantIDHeader = "X-Tenant-ID"
+
+// addTenantContextHeader promotes legacy administrative SDK paths to tenant-aware v2
+// whenever the caller carries a validated tenant context. Calls without a tenant retain
+// their explicit v1 compatibility path.
+func addTenantContextHeader(ctx context.Context, req *http.Request) error {
+	tenantContext, err := core.TenantContextFromContext(ctx)
+	if errors.Is(err, core.ErrTenantContextRequired) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := tenantContext.Validate(); err != nil {
+		return err
+	}
+
+	req.Header.Set(tenantIDHeader, tenantContext.TenantID)
+	if req.URL.Path == "/v1" || strings.HasPrefix(req.URL.Path, "/v1/") {
+		suffix := strings.TrimPrefix(req.URL.EscapedPath(), "/v1")
+		versionedPath := "/api/v2/tenants/" + url.PathEscape(tenantContext.TenantID) + suffix
+		parsedURL, err := url.ParseRequestURI(versionedPath)
+		if err != nil {
+			return fmt.Errorf("build tenant-scoped SDK URL: %w", err)
+		}
+		req.URL.Path = parsedURL.Path
+		req.URL.RawPath = parsedURL.RawPath
+	}
+	return nil
 }
 
 func HttpClientWithSourceHeaderInjector(cli *http.Client, sourceID string) *http.Client {
@@ -178,6 +230,9 @@ func requestWithBody[T any](ctx context.Context, client *http.Client, method str
 	}
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	if err := addTenantContextHeader(ctx, r); err != nil {
+		return m, err
+	}
 	res, err := client.Do(r)
 	if err != nil {
 		return m, err
@@ -209,6 +264,9 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	if err := addTenantContextHeader(ctx, r); err != nil {
+		return m, err
+	}
 	res, err := client.Do(r)
 	if err != nil {
 		return m, err
@@ -235,6 +293,9 @@ func DeleteWithBody[T any](ctx context.Context, client *http.Client, url string,
 
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	if err := addTenantContextHeader(ctx, r); err != nil {
+		return m, err
+	}
 	res, err := client.Do(r)
 	if err != nil {
 		return m, err
@@ -261,6 +322,9 @@ func Delete(ctx context.Context, client *http.Client, url string, knownErrors ma
 
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	if err := addTenantContextHeader(ctx, r); err != nil {
+		return err
+	}
 	res, err := client.Do(r)
 	if err != nil {
 		return err

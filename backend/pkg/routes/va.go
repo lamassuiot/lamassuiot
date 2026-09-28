@@ -7,15 +7,28 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp services.OCSPService, crl services.CRLService) {
+func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp services.OCSPService, crl services.CRLService, options ...TenantRouteOptions) {
 	vaRoutes := controllers.NewVAHttpRoutes(logger, ocsp, crl)
 
-	httpGrp.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
-	httpGrp.POST("/ocsp", vaRoutes.Verify)
-	httpGrp.GET("/crl/:ca-ski", vaRoutes.CRL)
+	config := tenantRouteOptions(options)
+	// CRL and OCSP are public. Certificates carry /tenants/{tenantId}/... URLs;
+	// the legacy routes without a tenant serve the default tenant.
+	for _, public := range []*gin.RouterGroup{
+		httpGrp.Group("", publicTenantMiddleware(config, "va")),
+		httpGrp.Group("/tenants/:tenantId", publicTenantMiddleware(config, "va")),
+	} {
+		public.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
+		public.POST("/ocsp", vaRoutes.Verify)
+		public.GET("/crl/:ca-ski", vaRoutes.CRL)
+	}
 
-	v1 := httpGrp.Group("/v1")
-
-	v1.GET("/roles/:ca-ski", vaRoutes.GetRoleByID)
-	v1.PUT("/roles/:ca-ski", vaRoutes.UpdateRole)
+	v1, v2 := TenantAwareGroups(httpGrp, config)
+	register := func(version *gin.RouterGroup) {
+		roleRead := PermissionGroup(version, "va.read", config.Authorization)
+		roleManage := PermissionGroup(version, "role.manage", config.Authorization)
+		roleRead.GET("/roles/:ca-ski", vaRoutes.GetRoleByID)
+		roleManage.PUT("/roles/:ca-ski", vaRoutes.UpdateRole)
+	}
+	register(v1)
+	register(v2)
 }

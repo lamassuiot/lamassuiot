@@ -55,6 +55,9 @@ func (cli *httpCAClient) GetStats(ctx context.Context, input services.GetStatsIn
 	r.URL.RawQuery = query.Encode()
 
 	r.Header.Add("Content-Type", "application/json")
+	if err := addTenantContextHeader(ctx, r); err != nil {
+		return nil, err
+	}
 	res, err := cli.httpClient.Do(r)
 	if err != nil {
 		return nil, err
@@ -89,6 +92,9 @@ func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetS
 	r.URL.RawQuery = query.Encode()
 
 	r.Header.Add("Content-Type", "application/json")
+	if err := addTenantContextHeader(ctx, r); err != nil {
+		return nil, err
+	}
 	res, err := cli.httpClient.Do(r)
 	if err != nil {
 		return nil, err

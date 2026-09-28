@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: Lamassu KMS API
-  version: 1.0.0
+  version: 2.0.0
   description: |
     Key Management Service (KMS) API for Lamassu IoT Platform.
-    This API provides cryptographic key lifecycle management including key creation, 
+    This API provides cryptographic key lifecycle management including key creation,
     import, update, deletion, signing, and signature verification operations.
   contact:
     name: Lamassu IoT
@@ -14,8 +14,14 @@ info:
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
 servers:
+  - url: /api/kms/api/v2/tenants/{tenantId}
+    description: Tenant-scoped KMS API v2
+    variables:
+      tenantId:
+        default: example-tenant
+        description: Replace with a tenant the authenticated identity is authorized to access.
   - url: /api/kms/v1
-    description: KMS API v1
+    description: Deprecated v1 compatibility API. Requires configured default tenant and sunset; retirement date is not approved.
 
 tags:
   - name: Engines

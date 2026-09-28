@@ -530,7 +530,7 @@ func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.ReissueCA(ctx, services.ReissueCAInput{
+	ca, err := r.svc.ReissueCA(ctx.Request.Context(), services.ReissueCAInput{
 		CAID:              params.ID,
 		IssuanceProfile:   requestBody.Profile,
 		IssuanceProfileID: requestBody.ProfileID,

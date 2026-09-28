@@ -6,30 +6,35 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManagerService) {
+func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManagerService, options ...TenantRouteOptions) {
 	routes := controllers.NewDeviceManagerHttpRoutes(svc)
+	config := tenantRouteOptions(options)
+	v1, v2 := TenantAwareGroups(router, config)
+	register := func(version *gin.RouterGroup) {
+		deviceRead := PermissionGroup(version, "device.read", config.Authorization)
+		deviceWrite := PermissionGroup(version, "device.write", config.Authorization)
+		deviceDecommission := PermissionGroup(version, "device.decommission", config.Authorization)
+		groupRead := PermissionGroup(version, "group.read", config.Authorization)
+		groupWrite := PermissionGroup(version, "group.write", config.Authorization)
 
-	rv1 := router.Group("/v1")
-	rv1.GET("/stats", routes.GetStats)
-	rv1.GET("/devices", routes.GetAllDevices)
-	rv1.POST("/devices", routes.CreateDevice)
-	rv1.GET("/devices/:id", routes.GetDeviceByID)
-	rv1.DELETE("/devices/:id", routes.DeleteDevice)
-	rv1.PUT("/devices/:id/idslot", routes.UpdateDeviceIdentitySlot)
-	rv1.PUT("/devices/:id/metadata", routes.UpdateDeviceMetadata)
-	rv1.PATCH("/devices/:id/metadata", routes.UpdateDeviceMetadata)
-	rv1.DELETE("/devices/:id/decommission", routes.DecommissionDevice)
-	rv1.GET("/devices/dms/:id", routes.GetDevicesByDMS)
-
-	// Device Groups routes
-	deviceGroupsRoutes := rv1.Group("/device-groups")
-	{
-		deviceGroupsRoutes.POST("", routes.CreateDeviceGroup)
-		deviceGroupsRoutes.GET("", routes.GetAllDeviceGroups)
-		deviceGroupsRoutes.GET("/:id", routes.GetDeviceGroupByID)
-		deviceGroupsRoutes.PUT("/:id", routes.UpdateDeviceGroup)
-		deviceGroupsRoutes.DELETE("/:id", routes.DeleteDeviceGroup)
-		deviceGroupsRoutes.GET("/:id/devices", routes.GetDevicesByGroup)
-		deviceGroupsRoutes.GET("/:id/stats", routes.GetDeviceGroupStats)
+		deviceRead.GET("/stats", routes.GetStats)
+		deviceRead.GET("/devices", routes.GetAllDevices)
+		deviceWrite.POST("/devices", routes.CreateDevice)
+		deviceRead.GET("/devices/:id", routes.GetDeviceByID)
+		deviceWrite.DELETE("/devices/:id", routes.DeleteDevice)
+		deviceWrite.PUT("/devices/:id/idslot", routes.UpdateDeviceIdentitySlot)
+		deviceWrite.PUT("/devices/:id/metadata", routes.UpdateDeviceMetadata)
+		deviceWrite.PATCH("/devices/:id/metadata", routes.UpdateDeviceMetadata)
+		deviceDecommission.DELETE("/devices/:id/decommission", routes.DecommissionDevice)
+		deviceRead.GET("/devices/dms/:id", routes.GetDevicesByDMS)
+		groupWrite.POST("/device-groups", routes.CreateDeviceGroup)
+		groupRead.GET("/device-groups", routes.GetAllDeviceGroups)
+		groupRead.GET("/device-groups/:id", routes.GetDeviceGroupByID)
+		groupWrite.PUT("/device-groups/:id", routes.UpdateDeviceGroup)
+		groupWrite.DELETE("/device-groups/:id", routes.DeleteDeviceGroup)
+		groupRead.GET("/device-groups/:id/devices", routes.GetDevicesByGroup)
+		groupRead.GET("/device-groups/:id/stats", routes.GetDeviceGroupStats)
 	}
+	register(v1)
+	register(v2)
 }
