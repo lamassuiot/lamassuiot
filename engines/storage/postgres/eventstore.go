@@ -8,6 +8,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PostgresEventsStore struct {
@@ -27,15 +28,46 @@ func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.Eve
 	}, nil
 }
 
+// InsertUpdateEvent registra una aparición de ev.EventType para el tenant en un único upsert
+// atómico: la primera crea la fila con total_seen = 1 y las siguientes incrementan el contador
+// en la base de datos. Así, eventos concurrentes del mismo tipo (bus en memoria o varias
+// réplicas de Alerts) no chocan en la clave (tenant_id, event_type) ni pierden incrementos.
+// ev.TotalSeen se ignora a la entrada y se devuelve con el valor almacenado.
 func (db *PostgresEventsStore) InsertUpdateEvent(ctx context.Context, ev *models.AlertLatestEvent) (*models.AlertLatestEvent, error) {
-	event, err := db.querier.Update(ctx, ev, string(ev.EventType))
-	if err == nil {
-		return event, nil
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if err == gorm.ErrRecordNotFound {
-		return db.querier.Insert(ctx, ev, string(ev.EventType))
+	if scoped {
+		// El tenant del contexto siempre manda.
+		setTenantID(ev, tenantID)
 	}
-	return nil, err
+	ev.TotalSeen = 1
+
+	// SQLite no tiene GREATEST: su MAX escalar es equivalente.
+	greatest := "GREATEST"
+	if isSQLite(db.db) {
+		greatest = "MAX"
+	}
+
+	err = db.querier.withTenantScopedTx(ctx, scoped, func(tx *gorm.DB) error {
+		return tx.Table(db.querier.tableName).Clauses(
+			clause.OnConflict{
+				Columns: []clause.Column{{Name: tenantIDColumnName}, {Name: "event_type"}},
+				DoUpdates: clause.Set{
+					{Column: clause.Column{Name: "event"}, Value: gorm.Expr("excluded.event")},
+					{Column: clause.Column{Name: "last_seen"}, Value: gorm.Expr(greatest + "(events.last_seen, excluded.last_seen)")},
+					{Column: clause.Column{Name: "total_seen"}, Value: gorm.Expr("COALESCE(events.total_seen, 0) + 1")},
+				},
+			},
+			clause.Returning{},
+		).Create(ev).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return ev, nil
 }
 
 func (db *PostgresEventsStore) GetLatestEventByEventType(ctx context.Context, eventType models.EventType) (bool, *models.AlertLatestEvent, error) {

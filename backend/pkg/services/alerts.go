@@ -45,20 +45,15 @@ func (svc *AlertsServiceBackend) storeLastEventInstance(ctx context.Context, inp
 	if err != nil {
 		return err
 	}
-	exists, storedEv, err := svc.eventStorage.GetLatestEventByEventType(ctx, models.EventType(input.Event.Type()))
-	if err != nil {
-		return err
-	}
 
-	if !exists {
-		storedEv = &models.AlertLatestEvent{}
+	// El contador lo incrementa la base de datos en un upsert atómico: leer la fila y hacer
+	// TotalSeen++ aquí perdería incrementos con eventos concurrentes del mismo tipo.
+	storedEv := &models.AlertLatestEvent{
+		TenantID:  tenantContext.TenantID,
+		EventType: models.EventType(input.Event.Type()),
+		Event:     input.Event,
+		LastSeen:  time.Now(),
 	}
-
-	storedEv.TotalSeen++
-	storedEv.TenantID = tenantContext.TenantID
-	storedEv.EventType = models.EventType(input.Event.Type())
-	storedEv.Event = input.Event
-	storedEv.LastSeen = time.Now()
 
 	_, err = svc.eventStorage.InsertUpdateEvent(ctx, storedEv)
 	return err
