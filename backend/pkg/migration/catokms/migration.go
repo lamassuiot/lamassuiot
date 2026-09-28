@@ -7,10 +7,12 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"time"
 
 	storagebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -28,14 +30,37 @@ type Result struct {
 // This is the primary entry point for programmatic callers (e.g. Lambda handlers)
 // that manage their own storage connections.
 func Migrate(ctx context.Context, logger *log.Entry, caStorage storage.CACertificatesRepo, kmsStorage storage.KMSKeysRepo, dryRun bool) (Result, error) {
+	_, contextErr := core.TenantContextFromContext(ctx)
+	var tenantID string
+	if contextErr == nil {
+		tenantContext, err := core.RequireTenantContext(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		tenantID = tenantContext.TenantID
+	} else if !errors.Is(contextErr, core.ErrTenantContextRequired) {
+		return Result{}, contextErr
+	}
+
 	keyMap, err := collectKeys(ctx, logger, caStorage)
 	if err != nil {
 		return Result{}, fmt.Errorf("collect keys: %w", err)
+	}
+	for _, entry := range keyMap {
+		entry.tenantID = tenantID
 	}
 	logger.Infof("found %d unique keys across CA certificates", len(keyMap))
 
 	ins, skip, fail := runMigration(ctx, logger, kmsStorage, keyMap, dryRun)
 	return Result{Inserted: ins, Skipped: skip, Failed: fail}, nil
+}
+
+// MigrateTenant performs the CA-to-KMS backfill under one validated tenant scope.
+func MigrateTenant(ctx context.Context, logger *log.Entry, caStorage storage.CACertificatesRepo, kmsStorage storage.KMSKeysRepo, dryRun bool) (Result, error) {
+	if _, err := core.RequireTenantContext(ctx); err != nil {
+		return Result{}, err
+	}
+	return Migrate(ctx, logger, caStorage, kmsStorage, dryRun)
 }
 
 // MigrateWithConfig builds CA and KMS storage from a single Postgres config and runs the
@@ -56,7 +81,51 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 		return Result{}, fmt.Errorf("get KMS storage: %w", err)
 	}
 
-	return Migrate(ctx, logger, caStorage, kmsStorage, dryRun)
+	if _, err := core.RequireTenantContext(ctx); err == nil {
+		return MigrateTenant(ctx, logger, caStorage, kmsStorage, dryRun)
+	}
+	membershipStorage, err := engine.GetControlPlaneMembershipStorage()
+	if err != nil {
+		return Result{}, fmt.Errorf("get control plane storage: %w", err)
+	}
+	lister, ok := membershipStorage.(storage.ActiveTenantLister)
+	if !ok {
+		return Result{}, errors.New("control plane storage cannot list active tenants")
+	}
+	return MigrateAllTenants(ctx, logger, lister, caStorage, kmsStorage, dryRun)
+}
+
+// MigrateAllTenants runs MigrateTenant once per active tenant of the control
+// plane, each under its own system TenantContext, and adds up the results.
+// Tenant-scoped repositories reject queries without a tenant, so a global run
+// is never attempted.
+func MigrateAllTenants(ctx context.Context, logger *log.Entry, lister storage.ActiveTenantLister, caStorage storage.CACertificatesRepo, kmsStorage storage.KMSKeysRepo, dryRun bool) (Result, error) {
+	tenants, err := lister.ListActiveTenants(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("list active tenants: %w", err)
+	}
+	total := Result{}
+	for _, tenant := range tenants {
+		tenantCtx := core.WithTenantContext(ctx, core.TenantContext{
+			OrganizationID: tenant.OrganizationID,
+			TenantID:       tenant.ID,
+			ActorID:        "ca-to-kms-migration",
+			ActorType:      "system",
+			CorrelationID:  "ca-to-kms-migration-" + tenant.ID,
+			Source:         "ca-to-kms-migration",
+			TenantStatus:   tenant.Status,
+			Validated:      true,
+		})
+		result, err := MigrateTenant(tenantCtx, logger.WithField("tenant_id", tenant.ID), caStorage, kmsStorage, dryRun)
+		if err != nil {
+			return total, fmt.Errorf("migrate tenant %s: %w", tenant.ID, err)
+		}
+		total.Inserted += result.Inserted
+		total.Skipped += result.Skipped
+		total.Failed += result.Failed
+	}
+	logger.Infof("migrated %d active tenants", len(tenants))
+	return total, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +134,7 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 
 // keyEntry accumulates all data needed to build a models.Key record.
 type keyEntry struct {
+	tenantID    string
 	engineID    string
 	keyID       string // subject_key_id == KMS key_id (SHA-256 hex of PKIX public key)
 	algorithm   string
@@ -79,8 +149,17 @@ type keyEntry struct {
 // collectKeys scans MANAGED and IMPORTED_WITH_KEY CA certs and groups them by key.
 func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACertificatesRepo) (map[string]*keyEntry, error) {
 	keyMap := map[string]*keyEntry{}
+	tenantContext, tenantErr := core.RequireTenantContext(ctx)
+	if tenantErr != nil && !errors.Is(tenantErr, core.ErrTenantContextRequired) {
+		return nil, tenantErr
+	}
+	var ownershipErr error
 
 	collect := func(ca models.CACertificate) {
+		if tenantErr == nil && ca.TenantID != "" && ca.TenantID != tenantContext.TenantID {
+			ownershipErr = core.ErrTenantResourceAccessDenied
+			return
+		}
 		cert := ca.Certificate
 		if cert.EngineID == "" || cert.SubjectKeyID == "" {
 			logger.Warnf("skipping CA %s: missing engine_id or subject_key_id", ca.ID)
@@ -150,6 +229,9 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACer
 		if err != nil {
 			return nil, fmt.Errorf("could not list CA certs of type %s: %w", certType, err)
 		}
+		if ownershipErr != nil {
+			return nil, ownershipErr
+		}
 	}
 
 	return keyMap, nil
@@ -186,6 +268,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 		}
 
 		key := &models.Key{
+			TenantID:      entry.tenantID,
 			KeyID:         entry.keyID,
 			EngineID:      entry.engineID,
 			Name:          entry.name,

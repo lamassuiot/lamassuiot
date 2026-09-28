@@ -28,6 +28,7 @@ type VaultKV2Engine struct {
 	softCryptoEngine *software.SoftwareCryptoEngine
 	kvv2Client       *api.KVv2
 	mountPath        string
+	tenantID         string
 	vaultClient      *api.Client
 	logger           *logrus.Entry
 }
@@ -35,6 +36,9 @@ type VaultKV2Engine struct {
 func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[vconfig.HashicorpVaultSDK]) (cryptoengines.CryptoEngine, error) {
 	var err error
 	lVault := logger.WithField("subsystem-provider", "Vault-KV2")
+	if conf.TenantID != "" && !safeVaultPathComponent(conf.TenantID) {
+		return nil, fmt.Errorf("invalid tenant ID for Vault crypto engine")
+	}
 	address := fmt.Sprintf("%s://%s:%d", conf.Config.Protocol, conf.Config.Hostname, conf.Config.Port)
 
 	lVault.Debugf("configuring VaultKV2 Engine")
@@ -104,6 +108,7 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapt
 		logger:           lVault,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(lVault),
 		mountPath:        conf.Config.MountPath,
+		tenantID:         conf.TenantID,
 		vaultClient:      vaultClient,
 		kvv2Client:       kv2,
 	}, nil
@@ -140,7 +145,11 @@ func (engine *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
 
 func (engine *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
 	engine.logger.Debugf("requesting private key with ID [%s]", keyID)
-	key, err := engine.kvv2Client.Get(context.Background(), keyID)
+	path, err := engine.keyPath(keyID)
+	if err != nil {
+		return nil, err
+	}
+	key, err := engine.kvv2Client.Get(context.Background(), path)
 	if err != nil {
 		engine.logger.Errorf("could not get private key: %s", err)
 		return nil, errors.New("could not get private key")
@@ -169,7 +178,11 @@ func (engine *VaultKV2Engine) ListPrivateKeyIDs() ([]string, error) {
 	engine.logger.Debugf("listing private keys")
 
 	// Send the LIST request
-	resp, err := engine.vaultClient.Logical().List(fmt.Sprintf("%s/metadata", engine.mountPath))
+	listPath := fmt.Sprintf("%s/metadata", engine.mountPath)
+	if engine.tenantID != "" {
+		listPath += "/tenants/" + engine.tenantID
+	}
+	resp, err := engine.vaultClient.Logical().List(listPath)
 	if err != nil {
 		return nil, fmt.Errorf("error making request to vault: %w", err)
 	}
@@ -188,7 +201,11 @@ func (engine *VaultKV2Engine) ListPrivateKeyIDs() ([]string, error) {
 
 	var keys []string
 	for _, key := range resp.Data["keys"].([]any) {
-		keys = append(keys, key.(string))
+		keyID, ok := key.(string)
+		if !ok {
+			return nil, fmt.Errorf("vault returned an invalid key name")
+		}
+		keys = append(keys, keyID)
 	}
 
 	engine.logger.Debugf("successfully retrieved private keys")
@@ -266,7 +283,11 @@ func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) 
 		"key": b64PemKey,
 	}
 
-	_, err = engine.kvv2Client.Put(context.Background(), keyID, keyMap)
+	path, err := engine.keyPath(keyID)
+	if err != nil {
+		return "", nil, err
+	}
+	_, err = engine.kvv2Client.Put(context.Background(), path, keyMap)
 	if err != nil {
 		engine.logger.Errorf("could not save the private key in vault: %s", err)
 		return "", nil, err
@@ -282,20 +303,28 @@ func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) 
 }
 
 func (engine *VaultKV2Engine) RenameKey(oldID, newID string) error {
-	key, err := engine.kvv2Client.Get(context.Background(), oldID)
+	oldPath, err := engine.keyPath(oldID)
+	if err != nil {
+		return err
+	}
+	newPath, err := engine.keyPath(newID)
+	if err != nil {
+		return err
+	}
+	key, err := engine.kvv2Client.Get(context.Background(), oldPath)
 	if err != nil {
 		engine.logger.Errorf("could not get private key: %s", err)
 		return errors.New("could not get private key")
 	}
 
-	_, err = engine.kvv2Client.Put(context.Background(), newID, key.Data)
+	_, err = engine.kvv2Client.Put(context.Background(), newPath, key.Data)
 	if err != nil {
 		engine.logger.Errorf("could not save the private key in vault: %s", err)
 		return err
 	}
 
 	// Delete the old key
-	err = engine.kvv2Client.Delete(context.Background(), oldID)
+	err = engine.kvv2Client.Delete(context.Background(), oldPath)
 	if err != nil {
 		engine.logger.Errorf("could not delete the old key: %s", err)
 		return err
@@ -305,8 +334,37 @@ func (engine *VaultKV2Engine) RenameKey(oldID, newID string) error {
 }
 
 func (engine *VaultKV2Engine) DeleteKey(keyID string) error {
-	err := engine.kvv2Client.Delete(context.Background(), keyID)
+	path, err := engine.keyPath(keyID)
+	if err != nil {
+		return err
+	}
+	err = engine.kvv2Client.Delete(context.Background(), path)
 	return err
+}
+
+func (engine *VaultKV2Engine) keyPath(keyID string) (string, error) {
+	if !safeVaultPathComponent(keyID) {
+		return "", fmt.Errorf("invalid Vault key ID")
+	}
+	if engine.tenantID != "" {
+		return "tenants/" + engine.tenantID + "/" + keyID, nil
+	}
+	return keyID, nil
+}
+
+func safeVaultPathComponent(value string) bool {
+	if value == "" || value == "." || value == ".." {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '-' && char != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 // ---------------------

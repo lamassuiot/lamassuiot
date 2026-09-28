@@ -2,6 +2,7 @@ package config
 
 type CryptoEngineConfig struct {
 	ID       string                 `mapstructure:"id"`
+	TenantID string                 `mapstructure:"tenant_id"`
 	Metadata map[string]interface{} `mapstructure:"metadata"`
 	Type     CryptoEngineProvider   `mapstructure:"type"`
 	Config   map[string]interface{} `mapstructure:",remain"`
@@ -9,6 +10,7 @@ type CryptoEngineConfig struct {
 
 type CryptoEngineConfigAdapter[E any] struct {
 	ID       string
+	TenantID string
 	Metadata map[string]interface{}
 	Type     CryptoEngineProvider
 	Config   E
@@ -21,6 +23,7 @@ func (c CryptoEngineConfigAdapter[E]) Marshal(ce CryptoEngineConfig) (*CryptoEng
 	}
 	return &CryptoEngineConfigAdapter[E]{
 		ID:       ce.ID,
+		TenantID: ce.TenantID,
 		Metadata: ce.Metadata,
 		Type:     ce.Type,
 		Config:   config,
@@ -36,6 +39,7 @@ func (c CryptoEngineConfigAdapter[E]) Unmarshal() (*CryptoEngineConfig, error) {
 
 	return &CryptoEngineConfig{
 		ID:       c.ID,
+		TenantID: c.TenantID,
 		Metadata: c.Metadata,
 		Type:     c.Type,
 		Config:   config,

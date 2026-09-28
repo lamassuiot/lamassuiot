@@ -19,11 +19,48 @@ import (
 	"testing"
 	"time"
 
+	core "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	log "github.com/sirupsen/logrus"
 )
+
+func TestMigrateTenantRequiresValidatedTenantContext(t *testing.T) {
+	_, err := MigrateTenant(context.Background(), silentLogger(), &mockCACertStorage{}, newMockKMSStorage(), false)
+	if !errors.Is(err, core.ErrTenantContextRequired) {
+		t.Fatalf("expected missing tenant context error, got %v", err)
+	}
+}
+
+func TestMigrateTenantPropagatesOwnershipAndRejectsForeignCA(t *testing.T) {
+	ctx := core.WithTenantContext(context.Background(), core.TenantContext{
+		OrganizationID: "org-a",
+		TenantID:       "tenant-a",
+		ActorID:        "migration",
+		ActorType:      "system",
+		CorrelationID:  "migration-test",
+		Source:         "test",
+		TenantStatus:   core.TenantActive,
+		Validated:      true,
+	})
+	ca := newRSACACert(t, "ca-tenant-a", "serial-tenant-a", "engine-a", models.CertificateTypeManaged, 2048, "Tenant CA", time.Now())
+	ca.TenantID = "tenant-a"
+	kms := newMockKMSStorage()
+	result, err := MigrateTenant(ctx, silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca}}, kms, false)
+	if err != nil {
+		t.Fatalf("tenant migration failed: %s", err)
+	}
+	if result.Inserted != 1 || len(kms.inserted) != 1 || kms.inserted[0].TenantID != "tenant-a" {
+		t.Fatalf("tenant ownership was not propagated: result=%+v inserted=%+v", result, kms.inserted)
+	}
+
+	foreignCA := ca
+	foreignCA.TenantID = "tenant-b"
+	if _, err := MigrateTenant(ctx, silentLogger(), &mockCACertStorage{certs: []models.CACertificate{foreignCA}}, newMockKMSStorage(), false); !errors.Is(err, core.ErrTenantResourceAccessDenied) {
+		t.Fatalf("expected foreign CA ownership to be rejected, got %v", err)
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Package-level signing key (generated once; shared across all test certs)

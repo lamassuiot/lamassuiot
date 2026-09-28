@@ -16,7 +16,7 @@ func RegisterAWSKMS() {
 			log.Warnf("skipping AWS KMS engine with id %s: %s", conf.ID, err)
 		}
 
-		return NewAWSKMSEngine(logger, *awsCfg, conf.Metadata)
+		return NewAWSKMSEngineForTenant(logger, *awsCfg, conf.Metadata, conf.ID, conf.TenantID)
 	})
 }
 

@@ -8,9 +8,13 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
@@ -24,6 +28,8 @@ type FilesystemCryptoEngine struct {
 	softCryptoEngine *software.SoftwareCryptoEngine
 	config           models.CryptoEngineInfo
 	storageDirectory string
+	storageRoot      *os.Root
+	tenantID         string
 	logger           *logrus.Entry
 }
 
@@ -34,16 +40,35 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 		"lamassu.io/cryptoengine.golang.storage-path": conf,
 	}
 
-	err := checkAndCreateStorageDir(lGo, conf.Config.StorageDirectory)
+	storageDirectory := conf.Config.StorageDirectory
+	if conf.TenantID != "" {
+		if !isSafePathComponent(conf.TenantID) {
+			return nil, fmt.Errorf("invalid tenant ID for filesystem crypto engine")
+		}
+		storageDirectory = filepath.Join(storageDirectory, "tenants", conf.TenantID)
+	}
+	err := checkAndCreateStorageDir(lGo, storageDirectory)
 	if err != nil {
 		return nil, err
+	}
+	storageRoot, err := os.OpenRoot(storageDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("could not open filesystem crypto storage root: %w", err)
+	}
+	if conf.TenantID != "" {
+		if err := storageRoot.Chmod(".", 0700); err != nil {
+			_ = storageRoot.Close()
+			return nil, fmt.Errorf("could not restrict tenant crypto storage root: %w", err)
+		}
 	}
 
 	meta := helpers.MergeMaps(&defaultMeta, &conf.Metadata)
 	return &FilesystemCryptoEngine{
 		logger:           lGo,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(lGo),
-		storageDirectory: conf.Config.StorageDirectory,
+		storageDirectory: storageDirectory,
+		storageRoot:      storageRoot,
+		tenantID:         conf.TenantID,
 		config: models.CryptoEngineInfo{
 			Type:          models.Golang,
 			SecurityLevel: models.SL0,
@@ -80,11 +105,32 @@ func (engine *FilesystemCryptoEngine) GetEngineConfig() models.CryptoEngineInfo 
 	return engine.config
 }
 
+func (engine *FilesystemCryptoEngine) Close() error {
+	return engine.storageRoot.Close()
+}
+
 func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
 	engine.logger.Debugf("reading %s Key", keyID)
-	file := filepath.Join(engine.storageDirectory, keyID)
+	file, err := engine.keyPath(keyID)
+	if err != nil {
+		return nil, err
+	}
+	keyFile, err := engine.storageRoot.Open(file)
+	if err != nil {
+		engine.logger.Errorf("Could not read %s Key: %s", keyID, err)
+		return nil, err
+	}
+	defer keyFile.Close()
 
-	pemBytes, err := os.ReadFile(file)
+	info, err := keyFile.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("key path is not a regular file")
+	}
+
+	pemBytes, err := io.ReadAll(keyFile)
 	if err != nil {
 		engine.logger.Errorf("Could not read %s Key: %s", keyID, err)
 		return nil, err
@@ -95,14 +141,14 @@ func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Si
 
 func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 	// Update KeyIDs in folder and remove old naming
-	entries, err := os.ReadDir(engine.storageDirectory)
+	entries, err := fs.ReadDir(engine.storageRoot.FS(), ".")
 	if err != nil {
 		return nil, err
 	}
 
 	var keyIDs []string
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
 			continue
 		}
 
@@ -114,7 +160,29 @@ func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 
 func (engine *FilesystemCryptoEngine) RenameKey(oldID, newID string) error {
 	engine.logger.Debugf("renaming key %s to %s", oldID, newID)
-	err := os.Rename(filepath.Join(engine.storageDirectory, oldID), filepath.Join(engine.storageDirectory, newID))
+	oldPath, err := engine.keyPath(oldID)
+	if err != nil {
+		return err
+	}
+	oldInfo, err := engine.storageRoot.Lstat(oldPath)
+	if err != nil {
+		return err
+	}
+	if !oldInfo.Mode().IsRegular() {
+		return fmt.Errorf("source key path is not a regular file")
+	}
+	newPath, err := engine.keyPath(newID)
+	if err != nil {
+		return err
+	}
+	err = engine.storageRoot.Link(oldPath, newPath)
+	if err != nil {
+		engine.logger.Errorf("could not rename key %s to %s: %s", oldID, newID, err)
+		return err
+	}
+	if err = engine.storageRoot.Remove(oldPath); err != nil {
+		_ = engine.storageRoot.Remove(newPath)
+	}
 	if err != nil {
 		engine.logger.Errorf("could not rename key %s to %s: %s", oldID, newID, err)
 		return err
@@ -151,7 +219,11 @@ func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(ctx context.Context,
 }
 
 func (engine *FilesystemCryptoEngine) DeleteKey(keyID string) error {
-	return os.Remove(engine.storageDirectory + "/" + keyID)
+	file, err := engine.keyPath(keyID)
+	if err != nil {
+		return err
+	}
+	return engine.storageRoot.Remove(file)
 }
 
 func (engine *FilesystemCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
@@ -201,10 +273,22 @@ func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto
 		return "", nil, err
 	}
 
-	file := filepath.Join(engine.storageDirectory, keyID)
-	err = os.WriteFile(file, pemKey, 0600)
+	file, err := engine.keyPath(keyID)
+	if err != nil {
+		return "", nil, err
+	}
+	keyFile, err := engine.storageRoot.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		engine.logger.Errorf("could not store RSA private key: %s", err)
+		return "", nil, err
+	}
+	if _, err = keyFile.Write(pemKey); err != nil {
+		_ = keyFile.Close()
+		_ = engine.storageRoot.Remove(file)
+		return "", nil, err
+	}
+	if err = keyFile.Close(); err != nil {
+		_ = engine.storageRoot.Remove(file)
 		return "", nil, err
 	}
 
@@ -217,19 +301,55 @@ func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto
 	return keyID, signer, nil
 }
 
-func checkAndCreateStorageDir(logger *logrus.Entry, dir string) error {
-	var err error
-	if _, err = os.Stat(dir); os.IsNotExist(err) {
-		logger.Warnf("storage directory %s does not exist. Will create such directory", dir)
-		err = os.MkdirAll(dir, 0750)
-		if err != nil {
-			logger.Errorf("something went wrong while creating storage path: %s", err)
+func (engine *FilesystemCryptoEngine) keyPath(keyID string) (string, error) {
+	if !isSafePathComponent(keyID) {
+		return "", fmt.Errorf("invalid key ID")
+	}
+	return keyID, nil
+}
+
+func isSafePathComponent(value string) bool {
+	if value == "" || value == "." || value == ".." {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '-' && char != '_' {
+			return false
 		}
-		return err
-	} else if err != nil {
-		logger.Errorf("something went wrong while checking storage: %s", err)
+	}
+	return true
+}
+
+func checkAndCreateStorageDir(logger *logrus.Entry, dir string) error {
+	absolutePath, err := filepath.Abs(dir)
+	if err != nil {
 		return err
 	}
-
+	volume := filepath.VolumeName(absolutePath)
+	current := volume + string(os.PathSeparator)
+	relative := strings.TrimPrefix(absolutePath, current)
+	for _, component := range strings.Split(relative, string(os.PathSeparator)) {
+		if component == "" {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			if err := os.Mkdir(current, 0750); err != nil {
+				logger.Errorf("something went wrong while creating storage path: %s", err)
+				return err
+			}
+			info, err = os.Lstat(current)
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("filesystem crypto storage path must contain only real directories")
+		}
+	}
 	return nil
 }

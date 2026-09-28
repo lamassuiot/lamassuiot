@@ -11,7 +11,17 @@ import (
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestTenantKeyPathScopesAndValidatesKeyIDs(t *testing.T) {
+	engine := &VaultKV2Engine{tenantID: "tenant-a"}
+	path, err := engine.keyPath("key-123")
+	require.NoError(t, err)
+	require.Equal(t, "tenants/tenant-a/key-123", path)
+	_, err = engine.keyPath("../other-tenant/key")
+	require.Error(t, err)
+}
 
 func testGetEngineConfig(t *testing.T, engine cryptoengines.CryptoEngine) {
 	config := engine.GetEngineConfig()

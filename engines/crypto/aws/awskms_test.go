@@ -18,6 +18,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestTenantScopedAliasesAndTags(t *testing.T) {
+	engine := &AWSKMSCryptoEngine{tenantID: "tenant-a", engineID: "engine-a"}
+	assert.Equal(t, "alias/tenants/tenant-a/engines/engine-a/key-123", engine.aliasName("key-123"))
+	tags := engine.keyTags()
+	assert.Len(t, tags, 2)
+	assert.Equal(t, "lamassu:tenant-id", *tags[0].TagKey)
+	assert.Equal(t, "tenant-a", *tags[0].TagValue)
+	assert.Equal(t, "lamassu:engine-id", *tags[1].TagKey)
+	assert.Equal(t, "engine-a", *tags[1].TagValue)
+}
+
 func TestNewAWSKMSEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAWSKMSEngine")
 	awsConf := aws.Config{}

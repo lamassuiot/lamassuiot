@@ -47,3 +47,27 @@ func TestCryptoEngineConfigAdapterUnmarshal(t *testing.T) {
 		t.Errorf("expected %v, got %v", adapter, result)
 	}
 }
+
+func TestCryptoEngineConfigAdapterPreservesTenantID(t *testing.T) {
+	ce := CryptoEngineConfig{
+		ID:       "tenant-engine",
+		TenantID: "tenant-a",
+		Type:     FilesystemProvider,
+		Config:   map[string]interface{}{"Key": "value"},
+	}
+	adapter, err := (CryptoEngineConfigAdapter[TestConfig]{}).Marshal(ce)
+	if err != nil {
+		t.Fatalf("could not decode tenant-scoped engine config: %v", err)
+	}
+	if adapter.TenantID != ce.TenantID {
+		t.Fatalf("tenant ID lost while decoding: got %q, want %q", adapter.TenantID, ce.TenantID)
+	}
+
+	roundTripped, err := adapter.Unmarshal()
+	if err != nil {
+		t.Fatalf("could not encode tenant-scoped engine config: %v", err)
+	}
+	if roundTripped.TenantID != ce.TenantID {
+		t.Fatalf("tenant ID lost while encoding: got %q, want %q", roundTripped.TenantID, ce.TenantID)
+	}
+}

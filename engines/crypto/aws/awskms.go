@@ -37,9 +37,18 @@ type AWSKMSCryptoEngine struct {
 	config           models.CryptoEngineInfo
 	kmscli           *kms.Client
 	kmsConfig        aws.Config
+	tenantID         string
+	engineID         string
 }
 
 func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
+	return NewAWSKMSEngineForTenant(logger, awsConf, metadata, "", "")
+}
+
+func NewAWSKMSEngineForTenant(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any, engineID, tenantID string) (cryptoengines.CryptoEngine, error) {
+	if tenantID != "" && (!safeAliasComponent(tenantID) || !safeAliasComponent(engineID)) {
+		return nil, fmt.Errorf("tenant-scoped AWS KMS engine requires safe tenant and engine IDs")
+	}
 	lAWSKMS = logger.WithField("subsystem-provider", "AWS-KMS")
 
 	httpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, lAWSKMS)
@@ -53,6 +62,8 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 	return &AWSKMSCryptoEngine{
 		kmscli:           kmscli,
 		kmsConfig:        awsConf,
+		tenantID:         tenantID,
+		engineID:         engineID,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(lAWSKMS),
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSKMS,
@@ -84,6 +95,38 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 
 func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return p.config
+}
+
+func (p *AWSKMSCryptoEngine) aliasName(keyID string) string {
+	if p.tenantID != "" {
+		return fmt.Sprintf("alias/tenants/%s/engines/%s/%s", p.tenantID, p.engineID, keyID)
+	}
+	return fmt.Sprintf(aliasFormat, keyID)
+}
+
+func (p *AWSKMSCryptoEngine) keyTags() []types.Tag {
+	if p.tenantID == "" {
+		return nil
+	}
+	return []types.Tag{
+		{TagKey: aws.String("lamassu:tenant-id"), TagValue: aws.String(p.tenantID)},
+		{TagKey: aws.String("lamassu:engine-id"), TagValue: aws.String(p.engineID)},
+	}
+}
+
+func safeAliasComponent(value string) bool {
+	if value == "" || value == "." || value == ".." {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '-' && char != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 // getAllKMSKeys retrieves all KMS keys with pagination support
@@ -139,6 +182,7 @@ func (p *AWSKMSCryptoEngine) getAliasesForKey(ctx context.Context, keyID *string
 
 // findKeyArnByAlias searches for a key ARN matching the given alias name
 func (p *AWSKMSCryptoEngine) findKeyArnByAlias(ctx context.Context, keyAlias string) (string, error) {
+	expectedAlias := p.aliasName(keyAlias)
 	keys, err := p.getAllKMSKeys(ctx)
 	if err != nil {
 		lAWSKMS.Errorf("could not get key list: %s", err)
@@ -153,8 +197,7 @@ func (p *AWSKMSCryptoEngine) findKeyArnByAlias(ctx context.Context, keyAlias str
 		}
 
 		for _, alias := range aliases {
-			aliasName := strings.ReplaceAll(*alias.AliasName, "alias/", "")
-			if aliasName == keyAlias {
+			if alias.AliasName != nil && *alias.AliasName == expectedAlias {
 				return *key.KeyArn, nil
 			}
 		}
@@ -183,7 +226,14 @@ func (p *AWSKMSCryptoEngine) collectUserAliasNames(aliases []types.AliasListEntr
 		if strings.HasPrefix(*alias.AliasName, "alias/aws/") {
 			continue
 		}
-		aliasName := strings.ReplaceAll(*alias.AliasName, "alias/", "")
+		aliasName := strings.TrimPrefix(*alias.AliasName, "alias/")
+		if p.tenantID != "" {
+			prefix := fmt.Sprintf("tenants/%s/engines/%s/", p.tenantID, p.engineID)
+			if !strings.HasPrefix(aliasName, prefix) {
+				continue
+			}
+			aliasName = strings.TrimPrefix(aliasName, prefix)
+		}
 		aliasNames = append(aliasNames, aliasName)
 	}
 	return aliasNames
@@ -258,6 +308,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(ctx context.Context, keySpec types
 	key, err := p.kmscli.CreateKey(ctx, &kms.CreateKeyInput{
 		KeyUsage: types.KeyUsageTypeSignVerify,
 		KeySpec:  keySpec,
+		Tags:     p.keyTags(),
 	})
 
 	if err != nil {
@@ -279,7 +330,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(ctx context.Context, keySpec types
 	}
 
 	_, err = p.kmscli.CreateAlias(ctx, &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf(aliasFormat, keyID)),
+		AliasName:   aws.String(p.aliasName(keyID)),
 		TargetKeyId: key.KeyMetadata.Arn,
 	})
 
@@ -335,6 +386,7 @@ func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (s
 		Origin:   types.OriginTypeExternal,
 		KeySpec:  spec,
 		KeyUsage: types.KeyUsageTypeSignVerify,
+		Tags:     p.keyTags(),
 	})
 	if err != nil {
 		lAWSKMS.Errorf("could not create key: %s", err)
@@ -350,7 +402,7 @@ func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (s
 
 	// 3. Create alias (non-fatal)
 	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf(aliasFormat, keyID)),
+		AliasName:   aws.String(p.aliasName(keyID)),
 		TargetKeyId: createKeyOut.KeyMetadata.Arn,
 	})
 	if err != nil {
@@ -434,7 +486,7 @@ func (p *AWSKMSCryptoEngine) importPrivateKeyDer(der []byte, arn string) error {
 
 func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
 	desc, err := p.kmscli.DescribeKey(context.Background(), &kms.DescribeKeyInput{
-		KeyId: aws.String(fmt.Sprintf(aliasFormat, oldID)),
+		KeyId: aws.String(p.aliasName(oldID)),
 	})
 	if err != nil {
 		lAWSKMS.Errorf("could not get key description: %s", err)
@@ -442,7 +494,7 @@ func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
 	}
 
 	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf(aliasFormat, newID)),
+		AliasName:   aws.String(p.aliasName(newID)),
 		TargetKeyId: desc.KeyMetadata.Arn,
 	})
 	if err != nil {
@@ -451,7 +503,7 @@ func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
 	}
 
 	_, err = p.kmscli.DeleteAlias(context.Background(), &kms.DeleteAliasInput{
-		AliasName: aws.String(fmt.Sprintf(aliasFormat, oldID)),
+		AliasName: aws.String(p.aliasName(oldID)),
 	})
 	if err != nil {
 		lAWSKMS.Errorf("could not delete key: %s", err)

@@ -38,6 +38,9 @@ type pkcs11EngineContext struct {
 }
 
 func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]) (cryptoengines.CryptoEngine, error) {
+	if conf.TenantID != "" && !safePKCS11Component(conf.TenantID) {
+		return nil, fmt.Errorf("invalid tenant ID for PKCS#11 engine")
+	}
 	lPkcs11 := logger.WithField("subsystem-provider", "PKCS11")
 	config := &crypto11.Config{
 		Path:       conf.Config.ModulePath,
@@ -67,6 +70,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	lPkcs11.Debugf("pkcs11 provier has %d slots", len(pkcs11ProviderSlots))
 	var tokenInfo pkcs11.TokenInfo
 	var slotID uint
+	tokenFound := false
 	for _, slot := range pkcs11ProviderSlots {
 		lPkcs11.Tracef("geting slot '%d' info", slot)
 		tokenInfoResp, err := pkcs11ProviderContext.GetTokenInfo(slot)
@@ -79,7 +83,11 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		if config.TokenLabel == tokenInfoResp.Label {
 			tokenInfo = tokenInfoResp
 			slotID = slot
+			tokenFound = true
 		}
+	}
+	if !tokenFound {
+		return nil, fmt.Errorf("configured PKCS#11 token was not found")
 	}
 
 	pkcs11ProviderInfo, err := pkcs11ProviderContext.GetInfo()
@@ -90,7 +98,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 
 	pkcs11SupportedKeys := []models.SupportedKeyTypeInfo{}
 
-	rsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(pkcs11ProviderSlots[0], []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)})
+	rsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(slotID, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)})
 	if err == nil {
 		pkcs11SupportedKeys = append(pkcs11SupportedKeys, models.SupportedKeyTypeInfo{
 			Type:  models.KeyType(x509.RSA),
@@ -101,7 +109,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		lPkcs11.Errorf("could not get RSA PKCS mechanism. Provider might not support RSA or something went wrong: %s", err)
 	}
 
-	ecdsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(pkcs11ProviderSlots[0], []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)})
+	ecdsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(slotID, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)})
 	if err == nil {
 		pkcs11SupportedKeys = append(pkcs11SupportedKeys, models.SupportedKeyTypeInfo{
 			Type:  models.KeyType(x509.ECDSA),
@@ -117,6 +125,11 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		"lamassu.io/cryptoengine/pkcs11/library":          pkcs11ProviderInfo.LibraryDescription,
 		"lamassu.io/cryptoengine/pkcs11/manufacturer":     pkcs11ProviderInfo.ManufacturerID,
 		"lamassu.io/cryptoengine/pkcs11/model":            tokenInfo.Model,
+		"lamassu.io/cryptoengine/pkcs11/token-label":      config.TokenLabel,
+		"lamassu.io/cryptoengine/pkcs11/slot-id":          slotID,
+	}
+	if conf.TenantID != "" {
+		defaultMeta["lamassu.io/cryptoengine/tenant-id"] = conf.TenantID
 	}
 
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
@@ -137,6 +150,21 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		},
 		config: *config,
 	}, nil
+}
+
+func safePKCS11Component(value string) bool {
+	if value == "" || value == "." || value == ".." {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '-' && char != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func (hsmContext *pkcs11EngineContext) GetEngineConfig() models.CryptoEngineInfo {
