@@ -12,6 +12,13 @@ import (
 
 const defaultExternalPostgresPort = 5432
 
+// errSQLiteNotSupported aplica la opción (a) de la spec 009 (P1, aprobada el
+// 2026-09-28): el monolito es multitenant y solo arranca con PostgreSQL.
+var errSQLiteNotSupported = errors.New("-sqlite is not supported: SQLite does not isolate tenants " +
+	"(no row level security, no unprivileged role and no control plane), so it cannot run the multitenant monolith. " +
+	"Start with PostgreSQL instead: without storage options the monolith launches PostgreSQL in Docker, " +
+	"or use an existing one with -postgres-host and -postgres-admin-password (and optionally -postgres-port and -postgres-admin-user)")
+
 // options son las opciones de línea de órdenes del monolito, ya validadas.
 type options struct {
 	standardDockerPorts bool
@@ -63,7 +70,7 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 	fs.BoolVar(&o.useAwsEventbus, "use-aws-eventbus", false, "use AWS Eventbus")
 	fs.BoolVar(&o.useInMemoryEventbus, "inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
 	fs.BoolVar(&o.disableUI, "disable-ui", false, "Disable UI docker loading")
-	fs.BoolVar(&o.useSqlite, "sqlite", false, "use sqlite storage engine")
+	fs.BoolVar(&o.useSqlite, "sqlite", false, "not supported: SQLite does not isolate tenants (the monolith exits with an error)")
 	fs.BoolVar(&o.sampleData, "sample-data", false, "populate the server with sample data for manual testing")
 
 	fs.StringVar(&o.postgresHost, "postgres-host", "", "use an existing PostgreSQL at this host instead of launching one in Docker (needs CREATEDB and CREATEROLE)")
@@ -85,6 +92,10 @@ func parseOptions(args []string, output io.Writer) (*options, error) {
 }
 
 func (o *options) validate() error {
+	if o.useSqlite {
+		return errSQLiteNotSupported
+	}
+
 	if o.postgresHost == "" {
 		if o.postgresPort != 0 || o.postgresAdminUser != "" || o.postgresAdminPassword != "" {
 			return errors.New("-postgres-port, -postgres-admin-user and -postgres-admin-password require -postgres-host")

@@ -21,7 +21,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/devstorage"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
-	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/storage/sqlite"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
@@ -204,9 +203,6 @@ func main() {
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 
 	// Register monolithic-specific engines
-	if opts.useSqlite {
-		sqlite.Register()
-	}
 	if opts.useInMemoryEventbus {
 		inmemory.Register()
 	}
@@ -214,44 +210,33 @@ func main() {
 	fmt.Println("Storage Engine")
 	var storageConfig cconfig.PluggableStorageEngine
 
-	if opts.useSqlite {
-		fmt.Println(">> using SQLite ...")
-		sqlite.Register()
-		storageConfig = cconfig.PluggableStorageEngine{
-			LogLevel: cconfig.Info,
-			Provider: cconfig.SQLite,
-			Config: map[string]interface{}{
-				"path": "file::memory:?cache=shared",
-			},
-		}
+	// Solo PostgreSQL: parseOptions rechaza -sqlite (spec 009, P1).
+	pg, err := devstorage.Start(context.Background(), devstorage.StartOptions{
+		External:     opts.externalPostgres(),
+		StandardPort: opts.standardDockerPorts,
+	})
+	if err != nil {
+		log.Fatalf("could not start PostgreSQL: %s", err)
+	}
+	if pg.Launched {
+		fmt.Println(">> launched docker: Postgres")
+		fmt.Printf(" 	-- postgres port: %d\n", pg.Admin.Port)
+		fmt.Printf(" 	-- postgres admin user: %s\n", pg.Admin.Username)
+		fmt.Printf(" 	-- postgres admin pass: %s\n", pg.Admin.Password)
 	} else {
-		pg, err := devstorage.Start(context.Background(), devstorage.StartOptions{
-			External:     opts.externalPostgres(),
-			StandardPort: opts.standardDockerPorts,
-		})
-		if err != nil {
-			log.Fatalf("could not start PostgreSQL: %s", err)
-		}
-		if pg.Launched {
-			fmt.Println(">> launched docker: Postgres")
-			fmt.Printf(" 	-- postgres port: %d\n", pg.Admin.Port)
-			fmt.Printf(" 	-- postgres admin user: %s\n", pg.Admin.Username)
-			fmt.Printf(" 	-- postgres admin pass: %s\n", pg.Admin.Password)
-		} else {
-			fmt.Printf(">> using external Postgres %s:%d (admin user %s)\n", pg.Admin.Hostname, pg.Admin.Port, pg.Admin.Username)
-		}
+		fmt.Printf(">> using external Postgres %s:%d (admin user %s)\n", pg.Admin.Hostname, pg.Admin.Port, pg.Admin.Username)
+	}
 
-		storageLogger := chelpers.SetupLogger(cconfig.Info, "Monolithic", "PostgreSQL")
-		prepared, err := devstorage.Prepare(context.Background(), storageLogger, pg.Admin)
-		if err != nil {
-			pg.Cleanup()
-			log.Fatalf("could not prepare PostgreSQL: %s", err)
-		}
-		storageConfig = prepared.Storage
-		fmt.Printf(" 	-- services connect as: %s (random password, row level security applies)\n", devstorage.AppRole)
-		for _, grant := range prepared.Grants {
-			fmt.Printf(" 	-- grant not provided by migrations: %s\n", grant)
-		}
+	storageLogger := chelpers.SetupLogger(cconfig.Info, "Monolithic", "PostgreSQL")
+	prepared, err := devstorage.Prepare(context.Background(), storageLogger, pg.Admin)
+	if err != nil {
+		pg.Cleanup()
+		log.Fatalf("could not prepare PostgreSQL: %s", err)
+	}
+	storageConfig = prepared.Storage
+	fmt.Printf(" 	-- services connect as: %s (random password, row level security applies)\n", devstorage.AppRole)
+	for _, grant := range prepared.Grants {
+		fmt.Printf(" 	-- grant not provided by migrations: %s\n", grant)
 	}
 
 	fmt.Println("Crypto Engines")
