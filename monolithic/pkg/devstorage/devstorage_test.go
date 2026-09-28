@@ -91,7 +91,6 @@ func TestPrepareWithLamassuApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	t.Logf("GRANT aplicados por el monolito además de las migraciones: %d %v", len(res.Grants), res.Grants)
 	app := appConfig(t, res)
 	adminPG := mustOpen(t, admin, "postgres")
 
@@ -222,6 +221,28 @@ func TestPrepareWithLamassuApp(t *testing.T) {
 		var n int64
 		if err := db.Raw("SELECT count(*) FROM tenants").Scan(&n).Error; err != nil {
 			t.Errorf("lamassu_app no puede leer controlplane con la nueva contraseña: %v", err)
+		}
+	})
+
+	// Una tabla o secuencia sin permisos para lamassu_app es un hueco de las
+	// migraciones que el chart también tendría: Prepare falla y no lo tapa.
+	t.Run("MissingGrantFailsInsteadOfBeingGranted", func(t *testing.T) {
+		if err := caAdmin.Exec("CREATE TABLE public.forgotten_table (id int); CREATE SEQUENCE public.forgotten_seq").Error; err != nil {
+			t.Fatal(err)
+		}
+		_, err := Prepare(context.Background(), logger, admin)
+		if err == nil {
+			t.Fatal("Prepare no falla con una tabla sin permisos para lamassu_app")
+		}
+		for _, hint := range []string{"ca", "forgotten_table", "forgotten_seq", "migration"} {
+			if !strings.Contains(err.Error(), hint) {
+				t.Errorf("el error %q no nombra %q", err, hint)
+			}
+		}
+		var granted bool
+		caAdmin.Raw("SELECT has_table_privilege(?, 'public.forgotten_table', 'SELECT')", AppRole).Scan(&granted)
+		if granted {
+			t.Error("Prepare concedió permisos que las migraciones no dan")
 		}
 	})
 }

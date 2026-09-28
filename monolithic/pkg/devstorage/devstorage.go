@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
@@ -34,17 +35,18 @@ var Databases = []string{
 }
 
 // Result es la configuración de almacenamiento de los servicios (con
-// lamassu_app) y los GRANT que Prepare tuvo que añadir a los de las
-// migraciones. Con las migraciones actuales Grants queda vacío; si no lo
-// está, el chart tiene el mismo hueco y hay que corregir la migración.
+// lamassu_app).
 type Result struct {
 	Storage cconfig.PluggableStorageEngine
-	Grants  []string
 }
 
 // Prepare crea las bases que falten, las migra como administrador, fija una
 // contraseña aleatoria a lamassu_app y comprueba sus permisos. Es idempotente:
 // sirve para un PostgreSQL en Docker o para uno externo ya preparado.
+//
+// Los permisos de lamassu_app vienen solo de las migraciones, como en el
+// chart. Si falta alguno, Prepare falla en vez de concederlo: el chart tendría
+// el mismo hueco y el monolito no debe tapar lo que en el clúster fallaría.
 func Prepare(ctx context.Context, logger *logrus.Entry, admin pgconfig.PostgresPSEConfig) (*Result, error) {
 	if admin.Hostname == "" || admin.Username == "" {
 		return nil, errors.New("postgres admin hostname and username are required")
@@ -78,13 +80,17 @@ func Prepare(ctx context.Context, logger *logrus.Entry, admin pgconfig.PostgresP
 		return nil, fmt.Errorf("could not set %s password: %w", AppRole, err)
 	}
 
-	var grants []string
+	var missing []string
 	for _, name := range Databases {
-		applied, err := grantMissing(logger, admin, name)
+		gaps, err := missingPrivileges(logger, admin, name)
 		if err != nil {
 			return nil, err
 		}
-		grants = append(grants, applied...)
+		missing = append(missing, gaps...)
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("%s lacks privileges that the migrations must grant (the Helm chart has the same gap; add the GRANT to the migration that creates the object): %s",
+			AppRole, strings.Join(missing, "; "))
 	}
 
 	storageConfig, err := cconfig.EncodeStruct(pgconfig.PostgresPSEConfig{
@@ -104,7 +110,6 @@ func Prepare(ctx context.Context, logger *logrus.Entry, admin pgconfig.PostgresP
 			Provider: cconfig.Postgres,
 			Config:   storageConfig,
 		},
-		Grants: grants,
 	}, nil
 }
 
@@ -166,9 +171,9 @@ func checkAppRole(adminDB *gorm.DB) error {
 	return nil
 }
 
-// grantMissing concede a lamassu_app el DML de las tablas y el uso de las
-// secuencias que las migraciones no le hayan dado, y devuelve lo aplicado.
-func grantMissing(logger *logrus.Entry, admin pgconfig.PostgresPSEConfig, name string) ([]string, error) {
+// missingPrivileges devuelve las tablas sin DML y las secuencias sin
+// USAGE/SELECT para lamassu_app en la base name.
+func missingPrivileges(logger *logrus.Entry, admin pgconfig.PostgresPSEConfig, name string) ([]string, error) {
 	db, closeDB, err := connect(logger, admin, name)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to database %s: %w", name, err)
@@ -192,25 +197,14 @@ func grantMissing(logger *logrus.Entry, admin pgconfig.PostgresPSEConfig, name s
 		return nil, fmt.Errorf("could not check %s sequence privileges in %s: %w", AppRole, name, err)
 	}
 
-	var applied []string
+	var missing []string
 	for _, table := range tables {
-		stmt := fmt.Sprintf("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%s TO %s", table, AppRole)
-		if err := db.Exec(stmt).Error; err != nil {
-			return nil, fmt.Errorf("%s: %s: %w", name, stmt, err)
-		}
-		applied = append(applied, name+": "+stmt)
+		missing = append(missing, fmt.Sprintf("%s: SELECT, INSERT, UPDATE, DELETE on table public.%s", name, table))
 	}
 	for _, sequence := range sequences {
-		stmt := fmt.Sprintf("GRANT USAGE, SELECT ON SEQUENCE public.%s TO %s", sequence, AppRole)
-		if err := db.Exec(stmt).Error; err != nil {
-			return nil, fmt.Errorf("%s: %s: %w", name, stmt, err)
-		}
-		applied = append(applied, name+": "+stmt)
+		missing = append(missing, fmt.Sprintf("%s: USAGE, SELECT on sequence public.%s", name, sequence))
 	}
-	for _, stmt := range applied {
-		logger.Warnf("grant not provided by migrations, applied by the monolith: %s", stmt)
-	}
-	return applied, nil
+	return missing, nil
 }
 
 func randomPassword() (string, error) {

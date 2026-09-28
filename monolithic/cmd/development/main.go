@@ -235,9 +235,6 @@ func main() {
 	}
 	storageConfig = prepared.Storage
 	fmt.Printf(" 	-- services connect as: %s (random password, row level security applies)\n", devstorage.AppRole)
-	for _, grant := range prepared.Grants {
-		fmt.Printf(" 	-- grant not provided by migrations: %s\n", grant)
-	}
 
 	fmt.Println("Crypto Engines")
 
