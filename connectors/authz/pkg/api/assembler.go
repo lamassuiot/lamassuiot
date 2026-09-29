@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	authzconfig "github.com/lamassuiot/authz/pkg/config"
@@ -180,8 +179,8 @@ func preloadPolicies(ctx context.Context, pm *service.PolicyManager, dir string,
 			continue
 		}
 
-		if !strings.HasPrefix(policy.ID, "lamassu.") {
-			policy.ID = "lamassu." + policy.ID
+		if !service.IsSystemPolicy(policy.ID) {
+			policy.ID = service.SystemPolicyPrefix + policy.ID
 		}
 
 		if err := pm.CreatePolicy(ctx, &policy); err != nil {
