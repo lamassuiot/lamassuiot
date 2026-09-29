@@ -47,6 +47,7 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 		"ext_authz_incoming_url": incomingURL,
 		"ext_authz_original_url": originalURL,
 		"ext_authz_path":         path,
+		"request_id":             c.GetHeader("x-request-id"),
 	})
 
 	// 1. Extract auth material from Envoy-forwarded headers.

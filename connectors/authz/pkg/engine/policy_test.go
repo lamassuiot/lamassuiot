@@ -622,3 +622,145 @@ func TestPolicyRegistry_Load_WithSchemaNameFields(t *testing.T) {
 		t.Fatalf("Expected relation target devicemanager.device, got %s", rule.Relations[0].QualifiedTo())
 	}
 }
+
+// TestValidateHTTPRuleStruct_ParamConstraints covers load-time validation of
+// http_rule param_constraints — a misconfigured static grant must be rejected
+// rather than silently matching (or never matching) at check time.
+func TestValidateHTTPRuleStruct_ParamConstraints(t *testing.T) {
+	tests := []struct {
+		name    string
+		rule    *models.HTTPRule
+		wantErr string
+	}{
+		{
+			name: "valid path_regex_group constraint",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{
+						Action:  "system-info-read",
+						Request: models.HTTPRuleRequestRef{Source: "path_regex_group", Index: 1},
+						Equals:  "1",
+					},
+				},
+			},
+		},
+		{
+			name: "valid query constraint",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{
+						Action:  "system-info-read",
+						Request: models.HTTPRuleRequestRef{Source: "query", Name: "system_id"},
+						Equals:  "1",
+					},
+				},
+			},
+		},
+		{
+			name: "missing action",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Request: models.HTTPRuleRequestRef{Source: "path_regex_group", Index: 1}, Equals: "1"},
+				},
+			},
+			wantErr: "action is required",
+		},
+		{
+			name: "action not granted by this rule",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-delete", Request: models.HTTPRuleRequestRef{Source: "path_regex_group", Index: 1}, Equals: "1"},
+				},
+			},
+			wantErr: "must also be listed in actions",
+		},
+		{
+			name: "missing equals",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Request: models.HTTPRuleRequestRef{Source: "path_regex_group", Index: 1}},
+				},
+			},
+			wantErr: "equals is required",
+		},
+		{
+			name: "path_regex_group non-positive index",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Request: models.HTTPRuleRequestRef{Source: "path_regex_group", Index: 0}, Equals: "1"},
+				},
+			},
+			wantErr: "index must be greater than zero",
+		},
+		{
+			name: "query missing name",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Request: models.HTTPRuleRequestRef{Source: "query"}, Equals: "1"},
+				},
+			},
+			wantErr: "name is required",
+		},
+		{
+			name: "json_body missing path",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Request: models.HTTPRuleRequestRef{Source: "json_body"}, Equals: "1"},
+				},
+			},
+			wantErr: "json_body path is required",
+		},
+		{
+			name: "unsupported source",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"system-info-read"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Request: models.HTTPRuleRequestRef{Source: "cookie"}, Equals: "1"},
+				},
+			},
+			wantErr: "unsupported request source",
+		},
+		{
+			name: "wildcard action grant covers any param constraint action",
+			rule: &models.HTTPRule{
+				SchemaName: "mysvc",
+				Actions:    []string{"*"},
+				ParamConstraints: []*models.HTTPRuleParamConstraint{
+					{Action: "system-info-read", Request: models.HTTPRuleRequestRef{Source: "path_regex_group", Index: 1}, Equals: "1"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateHTTPRuleStruct(tt.rule)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tt.wantErr, err)
+			}
+		})
+	}
+}

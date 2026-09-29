@@ -104,6 +104,7 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 
 	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
+		log.WithFields(logrus.Fields{"auth_type": req.AuthType, "error": err}).Error("match principals failed")
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to match principals: " + err.Error()})
 		return
 	}
@@ -206,6 +207,7 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 
 	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
 	if err != nil {
+		log.WithFields(logrus.Fields{"auth_type": req.AuthType, "error": err}).Error("match principals failed")
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to match principals: " + err.Error()})
 		return
 	}

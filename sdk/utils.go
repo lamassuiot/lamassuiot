@@ -37,9 +37,6 @@ func HttpClientWithCustomHeaders(cli *http.Client, header string, value string) 
 		transport = cli.Transport
 	}
 
-	// Add OTel Tracing
-	transport = otelhttp.NewTransport(transport)
-
 	cli.Transport = customHeaderRoundTripper{
 		transport: transport,
 		header:    header,
@@ -152,6 +149,8 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 			TLSClientConfig: tlsConfig,
 		}
 	}
+
+	client.Transport = otelhttp.NewTransport(client.Transport)
 
 	return hhelpers.BuildHTTPClientWithTracerLogger(client, logger)
 }
