@@ -148,6 +148,7 @@ func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
 // @Param request body dto.UpdatePolicyRequest true "Policy update request"
 // @Success 200 {object} dto.PolicyResponse
 // @Failure 400 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/policies/{id} [put]
@@ -172,6 +173,13 @@ func (ctrl *PolicyController) UpdatePolicy(c *gin.Context) {
 	req.ApplyToPolicy(policy)
 
 	if err := ctrl.policyManager.UpdatePolicy(c.Request.Context(), policy); err != nil {
+		if err.Error() == fmt.Sprintf("system-managed policy %q cannot be updated", policyID) {
+			c.JSON(http.StatusForbidden, dto.ErrorResponse{
+				Error:   "Cannot update system-managed policy",
+				Details: map[string]string{"policyId": policyID},
+			})
+			return
+		}
 		replyInternalError(c, "Failed to update policy", err)
 		return
 	}

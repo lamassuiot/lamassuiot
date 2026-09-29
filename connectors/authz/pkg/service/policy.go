@@ -37,6 +37,9 @@ func (pm *PolicyManager) GetPolicy(ctx context.Context, policyID string) (*model
 }
 
 func (pm *PolicyManager) UpdatePolicy(ctx context.Context, policy *models.Policy) error {
+	if strings.HasPrefix(policy.ID, "lamassu.") {
+		return fmt.Errorf("system-managed policy %q cannot be updated", policy.ID)
+	}
 	if err := engine.ValidatePolicyStruct(policy); err != nil {
 		return fmt.Errorf("invalid policy: %w", err)
 	}
