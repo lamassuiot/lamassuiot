@@ -450,6 +450,13 @@ func main() {
 			cleanup, wfxContainer, _, err := dockerrunner.RunDocker("ghcr.io/siemens/wfx",
 				dockertest.WithTag("latest"),
 				dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
+					// The image entrypoint has its own host flags; replace it so both APIs
+					// bind to the container interfaces on the ports we publish.
+					cfg.Entrypoint = []string{"wfx"}
+					cfg.Cmd = []string{
+						"--client-host=http://0.0.0.0:9080",
+						"--mgmt-host=http://0.0.0.0:9081",
+					}
 					cfg.ExposedPorts = network.PortSet{
 						network.MustParsePort("9080/tcp"): struct{}{},
 						network.MustParsePort("9081/tcp"): struct{}{},
@@ -461,11 +468,8 @@ func main() {
 					"PGUSER=" + pgUser,
 					"PGPASSWORD=" + pgPassword,
 					"PGDATABASE=wfx",
+					"PGSSLMODE=disable",
 					"WFX_STORAGE=postgres",
-					"WFX_CLIENT_HOST=0.0.0.0",
-					"WFX_CLIENT_PORT=9080",
-					"WFX_MGMT_HOST=0.0.0.0",
-					"WFX_MGMT_PORT=9081",
 					"WFX_LOG_FORMAT=json",
 					"WFX_LOG_LEVEL=debug",
 				}),
