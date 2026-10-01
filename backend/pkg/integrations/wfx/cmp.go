@@ -185,6 +185,13 @@ func (r *cmpReporter) Emit(ctx context.Context, transition CMPTransition) (strin
 	defer cancel()
 
 	workflowName := r.resolveWorkflowName(transition)
+	if transition.Workflow == "" {
+		// Callers outside a CMP request (e.g. the confirmation monitor) do not
+		// know which workflow the DMS selected. Falling back to the default
+		// would miss a job living in the other workflow and open an orphan one
+		// there, leaving the real job stuck in its last state.
+		workflowName = r.locateJobWorkflow(ctx, transition, workflowName)
+	}
 	if err := r.ensureWorkflow(ctx, workflowName); err != nil {
 		return "", err
 	}
@@ -278,26 +285,12 @@ func (r *cmpReporter) ensureWorkflow(ctx context.Context, name string) error {
 // definition.transactionId once the job is found — this avoids racing two
 // IRs from the same device into the same WFX job.
 func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition, workflowName string) (*wfxapi.Job, bool, error) {
-	limit := int32(100)
-	params := &wfxapi.GetJobsParams{
-		ParamClientID: ptr(transition.SubjectCommonName),
-		ParamWorkflow: ptr(workflowName),
-		ParamLimit:    &limit,
-	}
-
-	getResp, err := r.client.GetJobsWithResponse(ctx, params)
+	existing, err := r.findJob(ctx, transition, workflowName)
 	if err != nil {
-		return nil, false, fmt.Errorf("query WFX jobs for device %s: %w", transition.SubjectCommonName, err)
+		return nil, false, err
 	}
-	if getResp.JSON200 != nil {
-		for i := range getResp.JSON200.Content {
-			job := getResp.JSON200.Content[i]
-			if jobMatchesTransaction(&job, transition.TransactionID) {
-				return &job, false, nil
-			}
-		}
-	} else {
-		return nil, false, fmt.Errorf("query WFX jobs for device %s failed: HTTP %d", transition.SubjectCommonName, getResp.StatusCode())
+	if existing != nil {
+		return existing, false, nil
 	}
 
 	body := wfxapi.PostJobsJSONRequestBody{
@@ -318,6 +311,56 @@ func (r *cmpReporter) ensureJob(ctx context.Context, transition CMPTransition, w
 		return createResp.JSON201, true, nil
 	}
 	return nil, false, fmt.Errorf("create WFX job for tx %s (device %s) failed: HTTP %d", transition.TransactionID, transition.SubjectCommonName, createResp.StatusCode())
+}
+
+// findJob looks up the job of the transition's transaction inside one
+// workflow. It returns (nil, nil) when the workflow has no such job.
+func (r *cmpReporter) findJob(ctx context.Context, transition CMPTransition, workflowName string) (*wfxapi.Job, error) {
+	limit := int32(100)
+	params := &wfxapi.GetJobsParams{
+		ParamClientID: ptr(transition.SubjectCommonName),
+		ParamWorkflow: ptr(workflowName),
+		ParamLimit:    &limit,
+	}
+
+	getResp, err := r.client.GetJobsWithResponse(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("query WFX jobs for device %s: %w", transition.SubjectCommonName, err)
+	}
+	if getResp.JSON200 == nil {
+		return nil, fmt.Errorf("query WFX jobs for device %s failed: HTTP %d", transition.SubjectCommonName, getResp.StatusCode())
+	}
+	for i := range getResp.JSON200.Content {
+		job := getResp.JSON200.Content[i]
+		if jobMatchesTransaction(&job, transition.TransactionID) {
+			return &job, nil
+		}
+	}
+	return nil, nil
+}
+
+// locateJobWorkflow returns the workflow that already holds the job of the
+// transition's transaction, checking preferred first and then every CMP
+// workflow. It returns preferred when no workflow has the job (or the lookups
+// fail), so the caller keeps its previous behaviour.
+func (r *cmpReporter) locateJobWorkflow(ctx context.Context, transition CMPTransition, preferred string) string {
+	candidates := []string{preferred}
+	for _, name := range []string{CMPWorkflowNameDirect, CMPWorkflowNamePhased} {
+		if name != preferred {
+			candidates = append(candidates, name)
+		}
+	}
+	for _, name := range candidates {
+		job, err := r.findJob(ctx, transition, name)
+		if err != nil {
+			r.logger.WithField("workflow", name).Debugf("could not look up WFX job for tx %s: %v", transition.TransactionID, err)
+			continue
+		}
+		if job != nil {
+			return name
+		}
+	}
+	return preferred
 }
 
 // jobMatchesTransaction reports whether a WFX job's definition.transactionId

@@ -269,3 +269,81 @@ func TestEmit_ReceivedState_NoMetadataSkipsPush(t *testing.T) {
 	assert.Nil(t, server.findStatusUpdate(CMPStateReceived),
 		"empty Received transition should be suppressed (job is already in Received)")
 }
+
+// TestEmit_NoWorkflow_FindsJobInPhasedWorkflow guards the confirmation
+// monitor's Rejected emission, which carries no Workflow: the job lives in the
+// phased workflow, so the reporter must find it there instead of opening an
+// orphan job in the default (direct) workflow and leaving the real one in
+// AwaitingCertConf.
+func TestEmit_NoWorkflow_FindsJobInPhasedWorkflow(t *testing.T) {
+	var (
+		mu      sync.Mutex
+		created int
+		puts    []string
+	)
+	writeJSON := func(w http.ResponseWriter, status int, v any) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(v)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/wfx/v1/workflows/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, wfxapi.Workflow{Name: CMPWorkflowNamePhased})
+	})
+	mux.HandleFunc("/api/wfx/v1/jobs", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.Method == http.MethodPost {
+			created++
+			writeJSON(w, http.StatusCreated, wfxapi.Job{ID: "orphan"})
+			return
+		}
+		content := []wfxapi.Job{}
+		if r.URL.Query().Get("workflow") == CMPWorkflowNamePhased {
+			content = append(content, wfxapi.Job{
+				ID:         "job-phased",
+				Definition: map[string]any{"transactionId": "tx-1"},
+				Status:     &wfxapi.JobStatus{State: string(CMPStateAwaitingCertConf)},
+			})
+		}
+		writeJSON(w, http.StatusOK, wfxapi.PaginatedJobList{Content: content})
+	})
+	mux.HandleFunc("/api/wfx/v1/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		var req wfxapi.PutJobsIdStatusJSONRequestBody
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		id := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/wfx/v1/jobs/"), "/")[0]
+		mu.Lock()
+		puts = append(puts, id+":"+req.State)
+		mu.Unlock()
+		writeJSON(w, http.StatusOK, wfxapi.Job{ID: id, Status: &wfxapi.JobStatus{State: req.State}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	client, err := wfxapi.NewClientWithResponses(srv.URL+"/api/wfx/v1", wfxapi.WithHTTPClient(&http.Client{Timeout: 5 * time.Second}))
+	require.NoError(t, err)
+	reporter := &cmpReporter{
+		client:       client,
+		logger:       logrus.NewEntry(logrus.New()),
+		workflowName: DefaultCMPWorkflowName,
+		timeout:      5 * time.Second,
+		ensuredWorkflows: map[string]struct{}{
+			CMPWorkflowNameDirect: {},
+			CMPWorkflowNamePhased: {},
+		},
+	}
+
+	jobID, err := reporter.Emit(context.Background(), CMPTransition{
+		TransactionID:     "tx-1",
+		SubjectCommonName: "device-01",
+		State:             CMPStateRejected,
+		Reason:            "certConf wait time expired",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "job-phased", jobID)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Zero(t, created, "no orphan job may be created in the default workflow")
+	assert.Equal(t, []string{"job-phased:" + string(CMPStateRejected)}, puts)
+}
