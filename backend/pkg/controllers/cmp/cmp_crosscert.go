@@ -236,7 +236,7 @@ func (r *cmpHttpRoutes) handleCrossCertification(ctx *gin.Context, lFunc *logrus
 }
 
 // deferCCRForApproval implements CCR.Workflow=administrator_approval: it
-// persists the request as a PENDING transaction (RequestType "ccr") and
+// persists the request as a AwaitingApproval transaction (RequestType "ccr") and
 // returns a CMP "waiting" ccp response, mirroring cmp_enrollment.go's
 // deferForApproval for ir/cr/kur. An administrator later calls
 // ApproveCMPTransaction, which issues the cross-certificate via
@@ -264,7 +264,7 @@ func (r *cmpHttpRoutes) deferCCRForApproval(
 	if storeErr := r.store.Insert(storeCtx, models.CMPTransaction{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
-		State:             models.CMPTransactionStatePending,
+		State:             models.CMPTransactionStateAwaitingApproval,
 		CSR:               (*models.X509CertificateRequest)(csr),
 		RequestType:       cmpTagToString(corecmp.BodyTagCCR),
 		SubjectCommonName: csr.Subject.CommonName,
@@ -283,7 +283,7 @@ func (r *cmpHttpRoutes) deferCCRForApproval(
 			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
 			return
 		}
-		lFunc.Errorf("ccr: store PENDING transaction: %v", storeErr)
+		lFunc.Errorf("ccr: store AwaitingApproval transaction: %v", storeErr)
 		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}

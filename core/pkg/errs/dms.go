@@ -23,7 +23,7 @@ var (
 	ErrCMPTransactionNotFound error = errors.New("CMP transaction not found")
 
 	// ErrCMPTransactionNotPending is returned when an admin tries to approve a
-	// CMP transaction that is not awaiting approval (i.e. not in PENDING state,
+	// CMP transaction that is not awaiting approval (i.e. not in AwaitingApproval state,
 	// or already expired).
 	ErrCMPTransactionNotPending error = errors.New("CMP transaction is not awaiting approval")
 

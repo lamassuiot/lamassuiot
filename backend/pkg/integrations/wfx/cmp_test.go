@@ -13,6 +13,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	wfxapi "github.com/siemens/wfx/generated/api"
+	wfxworkflow "github.com/siemens/wfx/workflow"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,9 +23,9 @@ func TestDirectCMPWorkflow(t *testing.T) {
 	workflow := cmpWorkflowForName(CMPWorkflowNameDirect)
 
 	assert.Equal(t, CMPWorkflowNameDirect, workflow.Name)
-	assert.Len(t, workflow.States, 7)
-	assert.Len(t, workflow.Transitions, 8)
-	assert.Len(t, workflow.Groups, 2)
+	assert.Len(t, workflow.States, 12)
+	assert.Len(t, workflow.Transitions, 19)
+	assert.Len(t, workflow.Groups, 3)
 
 	actors := map[string]string{}
 	for _, transition := range workflow.Transitions {
@@ -40,6 +41,23 @@ func TestDirectCMPWorkflow(t *testing.T) {
 	assert.Equal(t, CMPActorPKI, actors["Responded->LogicallyComplete"])
 	assert.Equal(t, CMPActorDevice, actors["AwaitingCertConf->Confirmed"])
 	assert.Equal(t, CMPActorPKI, actors["AwaitingCertConf->Rejected"])
+	assert.Equal(t, CMPActorPKI, actors["Validated->IssueFailed"])
+
+	// Proof-of-possession round trip: the device answers the challenge.
+	assert.Equal(t, CMPActorPKI, actors["Validated->AwaitingPoPResponse"])
+	assert.Equal(t, CMPActorDevice, actors["AwaitingPoPResponse->Responded"])
+	assert.Equal(t, CMPActorPKI, actors["AwaitingPoPResponse->Expired"])
+
+	// Confirmation-timeout revocation is the PKI's; revocation requests come
+	// from the device (rr) or an administrator.
+	assert.Equal(t, CMPActorPKI, actors["AwaitingCertConf->Revoking"])
+	assert.Equal(t, CMPActorPKI, actors["Revoking->Revoked"])
+	// No way back from Revoking: WFX rejects cyclic workflows.
+	_, rollback := actors["Revoking->AwaitingCertConf"]
+	assert.False(t, rollback)
+	assert.Equal(t, "device, admin", actors["AwaitingCertConf->Revoked"])
+	assert.Equal(t, "device, admin", actors["Confirmed->Revoked"])
+	assert.Equal(t, "device, admin", actors["LogicallyComplete->Revoked"])
 
 	// Direct has no approval gate.
 	_, hasApproval := actors["Validated->AwaitingApproval"]
@@ -50,8 +68,8 @@ func TestPhasedCMPWorkflow(t *testing.T) {
 	workflow := cmpWorkflowForName(CMPWorkflowNamePhased)
 
 	assert.Equal(t, CMPWorkflowNamePhased, workflow.Name)
-	assert.Len(t, workflow.States, 8) // direct + AwaitingApproval
-	assert.Len(t, workflow.Transitions, 10)
+	assert.Len(t, workflow.States, 14) // direct + AwaitingApproval + Approving
+	assert.Len(t, workflow.Transitions, 25)
 
 	actors := map[string]string{}
 	for _, transition := range workflow.Transitions {
@@ -61,8 +79,15 @@ func TestPhasedCMPWorkflow(t *testing.T) {
 
 	// Issuance is gated behind AwaitingApproval; only the admin releases it.
 	assert.Equal(t, CMPActorPKI, actors["Validated->AwaitingApproval"])
-	assert.Equal(t, CMPActorAdmin, actors["AwaitingApproval->Responded"])
+	assert.Equal(t, CMPActorAdmin, actors["AwaitingApproval->Approving"])
 	assert.Equal(t, CMPActorAdmin, actors["AwaitingApproval->Rejected"])
+	assert.Equal(t, CMPActorPKI, actors["AwaitingApproval->Expired"])
+	assert.Equal(t, CMPActorAdmin, actors["Approving->Responded"])
+	assert.Equal(t, CMPActorAdmin, actors["Approving->Rejected"])
+	assert.Equal(t, CMPActorPKI, actors["Approving->IssueFailed"])
+	// Only the admin releases a parked request: there is no direct jump.
+	_, jump := actors["AwaitingApproval->Responded"]
+	assert.False(t, jump)
 	// Phased never auto-issues straight from Validated.
 	_, direct := actors["Validated->Responded"]
 	assert.False(t, direct)
@@ -346,4 +371,58 @@ func TestEmit_NoWorkflow_FindsJobInPhasedWorkflow(t *testing.T) {
 	defer mu.Unlock()
 	assert.Zero(t, created, "no orphan job may be created in the default workflow")
 	assert.Equal(t, []string{"job-phased:" + string(CMPStateRejected)}, puts)
+}
+
+// TestCMPWorkflows_Consistency guards the single state vocabulary: every state
+// a transition or group names is defined by the workflow, every persisted
+// transaction state exists in WFX under the same name, and the workflow's
+// initial state comes first.
+func TestCMPWorkflows_Consistency(t *testing.T) {
+	persisted := []models.CMPTransactionState{
+		models.CMPTransactionStateAwaitingPoPResponse,
+		models.CMPTransactionStateAwaitingApproval,
+		models.CMPTransactionStateApproving,
+		models.CMPTransactionStateAwaitingCertConf,
+		models.CMPTransactionStateLogicallyComplete,
+		models.CMPTransactionStateConfirmed,
+		models.CMPTransactionStateRevoking,
+		models.CMPTransactionStateRevoked,
+		models.CMPTransactionStateRejected,
+		models.CMPTransactionStateIssueFailed,
+		models.CMPTransactionStateExpired,
+	}
+
+	for _, name := range []string{CMPWorkflowNameDirect, CMPWorkflowNamePhased} {
+		workflow := cmpWorkflowForName(name)
+
+		// WFX validates every workflow it is asked to create (unique states,
+		// non-overlapping groups, exactly one initial state, no cycles); a
+		// definition it rejects makes every transition export fail with HTTP 400.
+		require.NoError(t, wfxworkflow.ValidateWorkflow(&workflow), "%s must pass WFX's own validation", name)
+
+		defined := map[string]bool{}
+		for _, state := range workflow.States {
+			defined[state.Name] = true
+		}
+		require.NotEmpty(t, workflow.States)
+		assert.Equal(t, string(CMPStateReceived), workflow.States[0].Name, "%s: initial state must come first", name)
+
+		for _, transition := range workflow.Transitions {
+			assert.True(t, defined[transition.From], "%s: transition from undefined state %q", name, transition.From)
+			assert.True(t, defined[transition.To], "%s: transition to undefined state %q", name, transition.To)
+		}
+		for _, group := range workflow.Groups {
+			for _, state := range group.States {
+				assert.True(t, defined[state], "%s: group %s names undefined state %q", name, group.Name, state)
+			}
+		}
+
+		for _, state := range persisted {
+			// AwaitingApproval/Approving only exist in the phased workflow.
+			if name == CMPWorkflowNameDirect && (state == CMPStateAwaitingApproval || state == CMPStateApproving) {
+				continue
+			}
+			assert.True(t, defined[string(state)], "%s: persisted state %q missing from the workflow", name, state)
+		}
+	}
 }

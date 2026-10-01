@@ -185,7 +185,7 @@ type uriCMPTransactionParam struct {
 	TransactionID string `uri:"txid" binding:"required"`
 }
 
-// ApproveCMPTransaction approves a PENDING phased-workflow CMP transaction,
+// ApproveCMPTransaction approves an AwaitingApproval phased-workflow CMP transaction,
 // issuing the certificate so the EE can retrieve it via pollReq.
 func (r *dmsManagerHttpRoutes) ApproveCMPTransaction(ctx *gin.Context) {
 	var params uriCMPTransactionParam
@@ -213,9 +213,9 @@ func (r *dmsManagerHttpRoutes) ApproveCMPTransaction(ctx *gin.Context) {
 	ctx.JSON(200, cmpTransactionToResponse(*tx))
 }
 
-// RejectCMPTransaction denies a PENDING phased-workflow CMP transaction. Body
+// RejectCMPTransaction denies an AwaitingApproval phased-workflow CMP transaction. Body
 // is OPTIONAL — when present it must be JSON of the form {"reason": "..."}.
-// The transaction transitions to ISSUE_FAILED carrying the reason; the EE
+// The transaction transitions to Rejected carrying the reason; the EE
 // learns of it on the next pollReq.
 func (r *dmsManagerHttpRoutes) RejectCMPTransaction(ctx *gin.Context) {
 	var params uriCMPTransactionParam

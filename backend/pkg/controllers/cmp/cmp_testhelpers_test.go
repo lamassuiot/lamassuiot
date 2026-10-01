@@ -375,7 +375,7 @@ func (s *inMemoryCMPStore) ClaimPending(_ context.Context, id string) (models.CM
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
-	if !ok || tx.State != models.CMPTransactionStatePending || (!tx.ExpiresAt.IsZero() && time.Now().After(tx.ExpiresAt)) {
+	if !ok || tx.State != models.CMPTransactionStateAwaitingApproval || (!tx.ExpiresAt.IsZero() && time.Now().After(tx.ExpiresAt)) {
 		return models.CMPTransaction{}, false, nil
 	}
 	tx.State = models.CMPTransactionStateApproving
@@ -391,7 +391,7 @@ func (s *inMemoryCMPStore) ClaimIssuedForRevocation(_ context.Context, id string
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
-	if !ok || tx.State != models.CMPTransactionStateIssued {
+	if !ok || (tx.State != models.CMPTransactionStateAwaitingCertConf && tx.State != models.CMPTransactionStateRevoking) {
 		return models.CMPTransaction{}, false, nil
 	}
 	tx.State = models.CMPTransactionStateRevoking
@@ -423,7 +423,7 @@ func (s *inMemoryCMPStore) HasUnconfirmedReenrollment(_ context.Context, dmsID, 
 	defer s.mu.Unlock()
 	for _, tx := range s.txs {
 		if tx.DMSID == dmsID && tx.SupersededCertSerial == supersededCertSerial &&
-			tx.IsReenrollment && tx.State == models.CMPTransactionStateIssued &&
+			tx.IsReenrollment && tx.State == models.CMPTransactionStateAwaitingCertConf &&
 			time.Now().Before(tx.ExpiresAt) {
 			return true, nil
 		}
@@ -497,7 +497,7 @@ func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]models
 	defer s.mu.Unlock()
 	out := make([]models.CMPTransaction, 0)
 	for _, tx := range s.txs {
-		if tx.State == models.CMPTransactionStatePending {
+		if tx.State == models.CMPTransactionStateAwaitingApproval {
 			out = append(out, tx)
 			if limit > 0 && len(out) >= limit {
 				break
@@ -509,7 +509,7 @@ func (s *inMemoryCMPStore) SelectPending(_ context.Context, limit int) ([]models
 
 func (s *inMemoryCMPStore) DeleteExpired(_ context.Context) error { return nil }
 
-func (s *inMemoryCMPStore) Confirm(_ context.Context, id string) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
+func (s *inMemoryCMPStore) Confirm(_ context.Context, id string, to models.CMPTransactionState) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, ok := s.txs[id]
@@ -517,10 +517,10 @@ func (s *inMemoryCMPStore) Confirm(_ context.Context, id string) (models.CMPTran
 		return models.CMPTransaction{}, "", false, nil
 	}
 	prior := tx.State
-	if tx.State != models.CMPTransactionStateIssued {
+	if tx.State != models.CMPTransactionStateAwaitingCertConf {
 		return models.CMPTransaction{}, prior, false, nil
 	}
-	tx.State = models.CMPTransactionStateConfirmed
+	tx.State = to
 	tx.ConfirmedAt = time.Now()
 	s.txs[id] = tx
 	return tx, prior, true, nil
@@ -530,7 +530,7 @@ func (s *inMemoryCMPStore) MarkRevokedByCertSerial(_ context.Context, certSerial
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, tx := range s.txs {
-		if tx.CertSerialNumber == certSerial && tx.State == models.CMPTransactionStateConfirmed {
+		if tx.CertSerialNumber == certSerial && (tx.State.IsConfirmed() || tx.State == models.CMPTransactionStateAwaitingCertConf || tx.State == models.CMPTransactionStateRevoking) {
 			tx.State = models.CMPTransactionStateRevoked
 			s.txs[id] = tx
 		}
@@ -554,7 +554,7 @@ func (s *inMemoryCMPStore) SelectExpiredIssued(_ context.Context, limit int) ([]
 	defer s.mu.Unlock()
 	var out []models.CMPTransaction
 	for _, tx := range s.txs {
-		if (tx.State == models.CMPTransactionStateIssued || tx.State == models.CMPTransactionStateRevoking) && time.Now().After(tx.ExpiresAt) {
+		if (tx.State == models.CMPTransactionStateAwaitingCertConf || tx.State == models.CMPTransactionStateRevoking) && time.Now().After(tx.ExpiresAt) {
 			out = append(out, tx)
 			if limit > 0 && len(out) >= limit {
 				break
@@ -569,7 +569,7 @@ func (s *inMemoryCMPStore) SelectExpiredPending(_ context.Context, limit int) ([
 	defer s.mu.Unlock()
 	var out []models.CMPTransaction
 	for _, tx := range s.txs {
-		if (tx.State == models.CMPTransactionStatePending || tx.State == models.CMPTransactionStateApproving) && time.Now().After(tx.ExpiresAt) {
+		if (tx.State == models.CMPTransactionStateAwaitingApproval || tx.State == models.CMPTransactionStateAwaitingPoPResponse || tx.State == models.CMPTransactionStateApproving) && time.Now().After(tx.ExpiresAt) {
 			out = append(out, tx)
 			if limit > 0 && len(out) >= limit {
 				break

@@ -585,7 +585,7 @@ func newKGATestRouter(t *testing.T, opts models.CMPEnrollmentSettings, issuedCer
 }
 
 // TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf is the primary
-// regression test: a CKG enrollment must persist an ISSUED row flagged as
+// regression test: a CKG enrollment must persist an AwaitingCertConf row flagged as
 // central key generation, and the EE's follow-up certConf must then be accepted
 // with pkiConf instead of rejected as an unknown transactionID.
 func TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf(t *testing.T) {
@@ -606,8 +606,8 @@ func TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf(t *testing.T) {
 	txHex := hex.EncodeToString(txID)
 	tx, ok := store.Peek(txHex)
 	require.True(t, ok, "a CKG enrollment must persist a transaction row")
-	assert.Equal(t, models.CMPTransactionStateIssued, tx.State,
-		"explicit-confirm CKG must park the row as ISSUED awaiting certConf")
+	assert.Equal(t, models.CMPTransactionStateAwaitingCertConf, tx.State,
+		"explicit-confirm CKG must park the row as AwaitingCertConf awaiting certConf")
 	assert.True(t, tx.CentralKeyGeneration, "the row must be flagged as central key generation")
 	require.NotNil(t, tx.Certificate, "the issued certificate must be stored so certConf can verify certHash")
 	assert.Equal(t, deliveredCertDER, tx.Certificate.Raw,
@@ -627,7 +627,7 @@ func TestHandleCMP_KGA_PersistsTransactionAndAcceptsCertConf(t *testing.T) {
 	after, ok := store.Peek(txHex)
 	require.True(t, ok)
 	assert.Equal(t, models.CMPTransactionStateConfirmed, after.State,
-		"a verified certConf must transition the CKG row to CONFIRMED")
+		"a verified certConf must transition the CKG row to Confirmed")
 }
 
 // TestHandleCMP_KGA_DuplicateTransactionIDRejected verifies a replayed CKG
@@ -667,7 +667,7 @@ func TestHandleCMP_KGA_PollReqRefused(t *testing.T) {
 
 	tx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
-	require.Equal(t, models.CMPTransactionStateIssued, tx.State)
+	require.Equal(t, models.CMPTransactionStateAwaitingCertConf, tx.State)
 
 	pollResp := postCMP(t, router, "test-dms", buildTestPollReq(t, txID, 0))
 	require.Equal(t, http.StatusOK, pollResp.Code)
@@ -677,7 +677,7 @@ func TestHandleCMP_KGA_PollReqRefused(t *testing.T) {
 
 // TestHandleCMP_KGA_ImplicitConfirmPersistsConfirmed verifies that when the EE
 // requests implicit confirmation and the DMS grants it, the CKG row is stored
-// directly as CONFIRMED — so the confirmation-timeout monitor does not later
+// directly as LogicallyComplete — so the confirmation-timeout monitor does not later
 // revoke a certificate that RFC 4210 §5.2.8 already considers complete.
 func TestHandleCMP_KGA_ImplicitConfirmPersistsConfirmed(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "kga-device")
@@ -702,7 +702,7 @@ func TestHandleCMP_KGA_ImplicitConfirmPersistsConfirmed(t *testing.T) {
 
 	tx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "an implicit-confirm CKG enrollment must still persist a row")
-	assert.Equal(t, models.CMPTransactionStateConfirmed, tx.State,
+	assert.Equal(t, models.CMPTransactionStateLogicallyComplete, tx.State,
 		"implicit confirmation completes the transaction at delivery (RFC 4210 §5.2.8)")
 	assert.True(t, tx.CentralKeyGeneration)
 	assert.Equal(t, tx.CreatedAt, tx.ConfirmedAt,

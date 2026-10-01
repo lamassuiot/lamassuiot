@@ -72,7 +72,7 @@ type CMPEnrollmentSettings struct {
 	ConfirmationTimeout TimeDuration `json:"confirmation_timeout"`
 
 	// ApprovalTimeout is how long a phased-workflow transaction waits in
-	// PENDING for an administrator to approve (or reject) issuance before it
+	// AwaitingApproval for an administrator to approve (or reject) issuance before it
 	// is swept by DeleteExpired. Only meaningful when Workflow=phased.
 	// When unset/zero the controller falls back to a 7-day default — long
 	// enough that an operator has a chance to act, much longer than the

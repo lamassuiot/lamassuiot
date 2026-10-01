@@ -12,6 +12,7 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -365,9 +366,9 @@ func parseExtraCertsCount(t *testing.T, responseDER []byte) int {
 //   - explicit: the DMS is not implicit and the EE omits id-it-implicitConfirm,
 //     so the flow requires a certConf (tag 24) → pkiConf (tag 19) round-trip.
 //   - implicit: the DMS is implicit and the EE includes id-it-implicitConfirm,
-//     so the cert is usable immediately; the row is nonetheless born CONFIRMED
+//     so the cert is usable immediately; the row is nonetheless born LogicallyComplete
 //     and persisted for lost-response recovery via pollReq (the confirmation
-//     monitor never touches CONFIRMED rows).
+//     monitor never touches LogicallyComplete rows).
 func TestHandleCMP_ConfirmModes(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -415,11 +416,11 @@ func TestHandleCMP_ConfirmModes(t *testing.T) {
 				"initial response must carry the operation's cert-response tag")
 
 			if tc.implicit {
-				// Row is born CONFIRMED and persists for pollReq recovery.
+				// Row is born LogicallyComplete and persists for pollReq recovery.
 				storedTx, found := store.Peek(hex.EncodeToString(txID))
 				assert.True(t, found, "implicit confirm must persist a row for pollReq recovery")
 				if found {
-					assert.Equal(t, models.CMPTransactionStateConfirmed, storedTx.State)
+					assert.Equal(t, models.CMPTransactionStateLogicallyComplete, storedTx.State)
 					assert.NotNil(t, storedTx.Certificate)
 				}
 			} else {
@@ -1122,7 +1123,7 @@ func buildCRLReasonExtension(t *testing.T, reason int) []byte {
 }
 
 // TestHandleCMP_PollReq_WhileIssued_DeliversCert verifies that a pollReq
-// against an ISSUED row delivers the cert in an ip/cp body. The row stays in
+// against an AwaitingCertConf row delivers the cert in an ip/cp body. The row stays in
 // the store afterwards so certConf can still operate.
 func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "recovery-device-001")
@@ -1133,7 +1134,7 @@ func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 	require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
 		TransactionID: hex.EncodeToString(txID),
 		DMSID:         "test-dms",
-		State:         models.CMPTransactionStateIssued,
+		State:         models.CMPTransactionStateAwaitingCertConf,
 		Certificate:   (*models.X509Certificate)(issuedCert),
 		ExpiresAt:     time.Now().Add(5 * time.Minute),
 		CreatedAt:     time.Now(),
@@ -1145,7 +1146,7 @@ func TestHandleCMP_PollReq_WhileIssued_DeliversCert(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	tag := parseResponseBodyTag(t, resp.Body.Bytes())
 	assert.Contains(t, []int{corecmp.BodyTagIP, corecmp.BodyTagCP}, tag,
-		"ISSUED-state pollReq must deliver via ip or cp")
+		"AwaitingCertConf-state pollReq must deliver via ip or cp")
 	status, hasCKP := parseIPBodyStatus(t, resp.Body.Bytes())
 	assert.Equal(t, corecmp.PKIStatusAccepted, status, "delivered cert response must be accepted (0)")
 	assert.True(t, hasCKP, "delivered response must carry CertifiedKeyPair with the cert")
@@ -1172,7 +1173,7 @@ func TestHandleCMP_PollReq_UnknownTxID_ReturnsError(t *testing.T) {
 }
 
 // TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason verifies that an
-// ISSUE_FAILED row (kept for forward-compatibility with future async
+// IssueFailed row (kept for forward-compatibility with future async
 // reintroduction) surfaces the failure reason in an error PKIMessage.
 func TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason(t *testing.T) {
 	router, store, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{})
@@ -1192,7 +1193,7 @@ func TestHandleCMP_PollReq_IssueFailed_ReturnsErrorWithReason(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.Code)
 	assert.Equal(t, corecmp.BodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
-		"ISSUE_FAILED state must produce a CMP error body, not pollRep")
+		"IssueFailed state must produce a CMP error body, not pollRep")
 }
 
 // TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked verifies that polling a
@@ -1221,7 +1222,7 @@ func TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.Code)
 	assert.Equal(t, corecmp.BodyTagError, parseResponseBodyTag(t, resp.Body.Bytes()),
-		"REVOKED state must produce a CMP error body, not pollRep")
+		"Revoked state must produce a CMP error body, not pollRep")
 	fi := parseFailInfoBitString(t, resp.Body.Bytes())
 	assert.True(t, bitSet(fi, corecmp.PKIFailureInfoCertRevoked),
 		"failInfo must set certRevoked (10), not systemFailure")
@@ -1229,7 +1230,7 @@ func TestHandleCMP_PollReq_Revoked_ReturnsCertRevoked(t *testing.T) {
 
 // TestHandleCMP_PhasedWorkflow_DefersIssuance verifies that a DMS configured
 // with the phased (admin-gated) workflow does NOT issue inline: the IR is
-// parked as a PENDING transaction carrying the CSR, the EE receives an IP
+// parked as a AwaitingApproval transaction carrying the CSR, the EE receives an IP
 // "waiting" response, and LWCEnroll is never called (issuance is deferred
 // until an administrator approves). RFC 9483 §4.4 / RFC 4210 §5.3.22.
 func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
@@ -1251,9 +1252,9 @@ func TestHandleCMP_PhasedWorkflow_DefersIssuance(t *testing.T) {
 		"phased IR must receive an IP (waiting) response")
 
 	storedTx, found := store.Peek(hex.EncodeToString(txID))
-	require.True(t, found, "phased workflow must persist a PENDING transaction row")
-	assert.Equal(t, models.CMPTransactionStatePending, storedTx.State,
-		"phased transaction must be PENDING (not ISSUED) until approved")
+	require.True(t, found, "phased workflow must persist a AwaitingApproval transaction row")
+	assert.Equal(t, models.CMPTransactionStateAwaitingApproval, storedTx.State,
+		"phased transaction must be AwaitingApproval (not AwaitingCertConf) until approved")
 	assert.Nil(t, storedTx.Certificate, "no certificate is issued before approval")
 	assert.NotNil(t, storedTx.CSR, "the CSR must be stored so approval can issue later")
 
@@ -1268,19 +1269,19 @@ func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T
 	router, store, svc := newOptionsRouter(t, models.CMPEnrollmentSettings{Workflow: models.CMPWorkflowPhased})
 	txID := randomTxID(t)
 
-	// Park a PENDING transaction via the phased IR path.
+	// Park a AwaitingApproval transaction via the phased IR path.
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "phased-poll-device", TransactionID: txID})
 	require.Equal(t, http.StatusOK, postCMP(t, router, "test-dms", irDER).Code)
 	if tx, ok := store.Peek(hex.EncodeToString(txID)); ok {
-		require.Equal(t, models.CMPTransactionStatePending, tx.State)
+		require.Equal(t, models.CMPTransactionStateAwaitingApproval, tx.State)
 	}
 
-	// pollReq while still PENDING → pollRep.
+	// pollReq while still AwaitingApproval → pollRep.
 	pollDER := buildTestPollReq(t, txID, 0)
 	resp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, resp.Code)
 	assert.Equal(t, corecmp.BodyTagPollRep, parseResponseBodyTag(t, resp.Body.Bytes()),
-		"pollReq on a PENDING (awaiting-approval) transaction must return pollRep")
+		"pollReq on a AwaitingApproval (awaiting-approval) transaction must return pollRep")
 
 	svc.AssertExpectations(t)
 }
@@ -1290,24 +1291,24 @@ func TestHandleCMP_PhasedWorkflow_PollReqWhilePendingReturnsPollRep(t *testing.T
 // body rather than crashing the handler.
 //
 // Regression test: handleCertConf used to read tx.Certificate.Raw without
-// checking it, and tx.Certificate is nil while State == PENDING. Because the EE
-// chooses its own transactionID, an ir that parks a PENDING row (phased-approval
+// checking it, and tx.Certificate is nil while State == AwaitingApproval. Because the EE
+// chooses its own transactionID, an ir that parks a AwaitingApproval row (phased-approval
 // workflow here) followed by a certConf for the same transactionID reached that
 // dereference and panicked — every intervening check passes trivially, since a
-// PENDING row's SentNonce and CertSerialNumber are still empty.
+// AwaitingApproval row's SentNonce and CertSerialNumber are still empty.
 func TestHandleCMP_CertConf_WhilePendingIsRejected(t *testing.T) {
 	router, store, _ := newOptionsRouter(t, models.CMPEnrollmentSettings{Workflow: models.CMPWorkflowPhased})
 	txID := randomTxID(t)
 
-	// Park a PENDING transaction via the phased IR path.
+	// Park a AwaitingApproval transaction via the phased IR path.
 	irDER, _, _ := buildTestIR(t, testIROptions{CN: "pending-certconf-device", TransactionID: txID})
 	require.Equal(t, http.StatusOK, postCMP(t, router, "test-dms", irDER).Code)
 	tx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "phased ir must park a transaction")
-	require.Equal(t, models.CMPTransactionStatePending, tx.State)
-	require.Nil(t, tx.Certificate, "a PENDING transaction must not carry a certificate")
+	require.Equal(t, models.CMPTransactionStateAwaitingApproval, tx.State)
+	require.Nil(t, tx.Certificate, "a AwaitingApproval transaction must not carry a certificate")
 
-	// certConf for that PENDING transaction. The cert bytes are arbitrary: the
+	// certConf for that AwaitingApproval transaction. The cert bytes are arbitrary: the
 	// point is that the server has nothing to compare them against yet. An empty
 	// recipNonce is what a real client would send here, since no ip/cp with a
 	// senderNonce was ever returned.
@@ -1326,7 +1327,7 @@ func TestHandleCMP_CertConf_WhilePendingIsRejected(t *testing.T) {
 	// The transaction must be left untouched for the pending approval to complete.
 	after, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
-	assert.Equal(t, models.CMPTransactionStatePending, after.State,
+	assert.Equal(t, models.CMPTransactionStateAwaitingApproval, after.State,
 		"a rejected certConf must not advance the transaction state")
 }
 
@@ -1460,4 +1461,31 @@ func TestHandleCMP_RejectsOversizedBody(t *testing.T) {
 		"an oversized request body must be rejected")
 
 	svc.AssertNotCalled(t, "LWCGetEnrollmentOptions", mock.Anything, mock.Anything)
+}
+
+// TestHandleCMP_WFX_EnrollFailureReportsIssueFailed guards the unified state
+// vocabulary on the failure path: an unclassified CA failure on a direct
+// enrollment is reported as IssueFailed (the CA failed to issue), not as
+// Rejected, and reaches the job the Received transition created even though no
+// transaction row was ever written.
+func TestHandleCMP_WFX_EnrollFailureReportsIssueFailed(t *testing.T) {
+	svc := &cmpmock.MockLightweightCMPService{}
+	svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+		Return(resolvedOpts(models.CMPEnrollmentSettings{AcceptImplicit: false}), nil)
+	svc.On("LWCEnroll", mock.Anything, mock.AnythingOfType("*x509.CertificateRequest"), "test-dms", mock.Anything).
+		Return((*x509.Certificate)(nil), errors.New("CA unavailable"))
+
+	reporter := &captureWFXReporter{}
+	router, _ := newTestRouterWithStoreAndWFX(svc, reporter)
+
+	irDER, _, _ := buildTestIR(t, testIROptions{CN: "device-ca-down", TransactionID: randomTxID(t)})
+	resp := postCMP(t, router, "test-dms", irDER)
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	failed, ok := reporter.TransitionByState(cmpwfx.CMPStateIssueFailed)
+	require.True(t, ok, "a CA failure must be reported to WFX as IssueFailed")
+	assert.Equal(t, "device-ca-down", failed.SubjectCommonName,
+		"the failure must be routed to the device's job even though no row exists")
+	_, rejected := reporter.TransitionByState(cmpwfx.CMPStateRejected)
+	assert.False(t, rejected, "an issuance failure must not also be reported as Rejected")
 }

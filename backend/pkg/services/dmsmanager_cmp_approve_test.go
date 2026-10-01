@@ -49,7 +49,7 @@ func (f fakeDMSRepo) Insert(ctx context.Context, dms *models.DMS) (*models.DMS, 
 }
 func (f fakeDMSRepo) Delete(ctx context.Context, ID string) error { return nil }
 
-// approvalCapturingCMPTxRepo serves one PENDING transaction and records the
+// approvalCapturingCMPTxRepo serves one AwaitingApproval transaction and records the
 // expiry ApproveCMPTransaction persists via UpdateState.
 type approvalCapturingCMPTxRepo struct {
 	noopCMPTxRepo
@@ -64,10 +64,10 @@ func (r *approvalCapturingCMPTxRepo) SelectIncludingExpired(ctx context.Context,
 	return models.CMPTransaction{}, false, nil
 }
 
-// ClaimPending mirrors the real PENDING → APPROVING atomic claim for this
+// ClaimPending mirrors the real AwaitingApproval → APPROVING atomic claim for this
 // fixture's single transaction row (see storage.CMPTransactionRepo.ClaimPending).
 func (r *approvalCapturingCMPTxRepo) ClaimPending(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
-	if transactionID != r.tx.TransactionID || r.tx.State != models.CMPTransactionStatePending {
+	if transactionID != r.tx.TransactionID || r.tx.State != models.CMPTransactionStateAwaitingApproval {
 		return models.CMPTransaction{}, false, nil
 	}
 	r.tx.State = models.CMPTransactionStateApproving
@@ -102,7 +102,7 @@ func newApproveTestSubject(t *testing.T, confirmationTimeout time.Duration) (*DM
 			DMSID:             "dms-A",
 			RequestType:       "ir",
 			SubjectCommonName: "phased-device",
-			State:             models.CMPTransactionStatePending,
+			State:             models.CMPTransactionStateAwaitingApproval,
 			CSR:               (*models.X509CertificateRequest)(makeTestCSR(t, "phased-device")),
 			CreatedAt:         time.Now(),
 			ExpiresAt:         time.Now().Add(time.Hour),
@@ -139,7 +139,7 @@ func TestApproveCMPTransaction_FloorsDeliveryWindow(t *testing.T) {
 		TransactionID: "aabbccdd00112233",
 	})
 	require.NoError(t, err)
-	require.Equal(t, models.CMPTransactionStateIssued, updated.State)
+	require.Equal(t, models.CMPTransactionStateAwaitingCertConf, updated.State)
 
 	minExpected := before.Add(cmpApprovalMinDeliveryWindow)
 	require.False(t, txRepo.capturedExpiry.Before(minExpected.Add(-2*time.Second)),
@@ -183,7 +183,11 @@ func TestApproveCMPTransaction_EmitsPrincipalsInWFXStatusContext(t *testing.T) {
 		TransactionID: "aabbccdd00112233",
 	})
 	require.NoError(t, err)
-	require.Len(t, reporter.transitions, 2)
+	// The admin's approval walks Approving → Responded → AwaitingCertConf.
+	require.Len(t, reporter.transitions, 3)
+	require.Equal(t, cmpwfx.CMPStateApproving, reporter.transitions[0].State)
+	require.Equal(t, cmpwfx.CMPStateResponded, reporter.transitions[1].State)
+	require.Equal(t, cmpwfx.CMPStateAwaitingCertConf, reporter.transitions[2].State)
 	for _, transition := range reporter.transitions {
 		require.Equal(t, principals, transition.Principals)
 	}
@@ -202,7 +206,11 @@ func TestRejectCMPTransaction_EmitsPrincipalsInWFXStatusContext(t *testing.T) {
 		Reason:        "policy denied",
 	})
 	require.NoError(t, err)
-	require.Len(t, reporter.transitions, 1)
-	require.Equal(t, cmpwfx.CMPStateRejected, reporter.transitions[0].State)
-	require.Equal(t, principals, reporter.transitions[0].Principals)
+	// Approving is the claim taken while the decision is applied.
+	require.Len(t, reporter.transitions, 2)
+	require.Equal(t, cmpwfx.CMPStateApproving, reporter.transitions[0].State)
+	require.Equal(t, cmpwfx.CMPStateRejected, reporter.transitions[1].State)
+	for _, transition := range reporter.transitions {
+		require.Equal(t, principals, transition.Principals)
+	}
 }

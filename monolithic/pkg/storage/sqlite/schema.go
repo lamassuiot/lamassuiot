@@ -197,8 +197,10 @@ func initializeSchema(db *gorm.DB) error {
 		)`,
 
 		// CMP transactions table - stores CMP enrollment transaction lifecycle.
-		// States: PENDING → ISSUED → CONFIRMED → REVOKED (or ISSUE_FAILED).
-		// Terminal states (CONFIRMED, REVOKED) are retained for audit.
+		// States (models.CMPTransactionState, shared with the WFX workflow):
+		// AwaitingApproval → Approving → AwaitingCertConf → Confirmed /
+		// LogicallyComplete → Revoked (or Rejected / IssueFailed / Expired).
+		// Confirmed, LogicallyComplete and Revoked are retained for audit.
 		`CREATE TABLE IF NOT EXISTS cmp_transactions (
 			transaction_id TEXT NOT NULL,
 			dms_id TEXT NOT NULL,
@@ -209,7 +211,7 @@ func initializeSchema(db *gorm.DB) error {
 			superseded_cert_serial TEXT NOT NULL DEFAULT '',
 			reg_token TEXT NOT NULL DEFAULT '',
 			popo_challenge TEXT NOT NULL DEFAULT '',
-			state TEXT NOT NULL DEFAULT 'ISSUED',
+			state TEXT NOT NULL DEFAULT 'AwaitingCertConf',
 			error_message TEXT NOT NULL DEFAULT '',
 			csr TEXT NOT NULL DEFAULT '',
 			is_reenrollment BOOLEAN NOT NULL DEFAULT 0,
@@ -222,7 +224,7 @@ func initializeSchema(db *gorm.DB) error {
 			PRIMARY KEY (transaction_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS cmp_transactions_state_created_idx ON cmp_transactions (state, created_at)`,
-		`CREATE INDEX IF NOT EXISTS cmp_transactions_cert_serial_idx ON cmp_transactions (cert_serial_number) WHERE cert_serial_number != '' AND state = 'CONFIRMED'`,
+		`CREATE INDEX IF NOT EXISTS cmp_transactions_cert_serial_idx ON cmp_transactions (cert_serial_number) WHERE cert_serial_number != '' AND state IN ('Confirmed', 'LogicallyComplete', 'AwaitingCertConf', 'Revoking')`,
 		`CREATE INDEX IF NOT EXISTS cmp_transactions_state_idx ON cmp_transactions (state)`,
 	}
 

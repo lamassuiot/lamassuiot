@@ -33,17 +33,25 @@ const (
 	defaultHTTPTimeout = 10 * time.Second
 )
 
-type CMPState string
+// CMPState is the WFX-side name of a CMP transaction state. It is the same
+// type as the persisted transaction state: one vocabulary for both.
+type CMPState = models.CMPTransactionState
 
 const (
-	CMPStateReceived          CMPState = "Received"
-	CMPStateValidated         CMPState = "Validated"
-	CMPStateAwaitingApproval  CMPState = "AwaitingApproval"
-	CMPStateResponded         CMPState = "Responded"
-	CMPStateAwaitingCertConf  CMPState = "AwaitingCertConf"
-	CMPStateLogicallyComplete CMPState = "LogicallyComplete"
-	CMPStateConfirmed         CMPState = "Confirmed"
-	CMPStateRejected          CMPState = "Rejected"
+	CMPStateReceived            = models.CMPTransactionStateReceived
+	CMPStateValidated           = models.CMPTransactionStateValidated
+	CMPStateAwaitingPoPResponse = models.CMPTransactionStateAwaitingPoPResponse
+	CMPStateAwaitingApproval    = models.CMPTransactionStateAwaitingApproval
+	CMPStateApproving           = models.CMPTransactionStateApproving
+	CMPStateResponded           = models.CMPTransactionStateResponded
+	CMPStateAwaitingCertConf    = models.CMPTransactionStateAwaitingCertConf
+	CMPStateLogicallyComplete   = models.CMPTransactionStateLogicallyComplete
+	CMPStateConfirmed           = models.CMPTransactionStateConfirmed
+	CMPStateRevoking            = models.CMPTransactionStateRevoking
+	CMPStateRevoked             = models.CMPTransactionStateRevoked
+	CMPStateRejected            = models.CMPTransactionStateRejected
+	CMPStateIssueFailed         = models.CMPTransactionStateIssueFailed
+	CMPStateExpired             = models.CMPTransactionStateExpired
 )
 
 // CMP transaction actors. WFX's own Eligible enum only distinguishes CLIENT
@@ -273,7 +281,7 @@ func (r *cmpReporter) ensureWorkflow(ctx context.Context, name string) error {
 		r.ensuredWorkflows[name] = struct{}{}
 		return nil
 	default:
-		return fmt.Errorf("create WFX workflow %q failed: HTTP %d", name, createResp.StatusCode())
+		return fmt.Errorf("create WFX workflow %q failed: HTTP %d: %s", name, createResp.StatusCode(), strings.TrimSpace(string(createResp.Body)))
 	}
 }
 
@@ -384,54 +392,103 @@ func cmpWorkflowForName(name string) wfxapi.Workflow {
 }
 
 // cmpEdge builds a transition. Every CMP transition is performed by the backend
-// (WFX-eligible); the logical actor (device/PKI/admin) is carried in the
-// Description so the management UI can label the edge.
-func cmpEdge(from, to CMPState, actor string) wfxapi.Transition {
+// (WFX-eligible); the logical actor(s) (device/PKI/admin) are carried in the
+// Description so the management UI can label the edge. A transition that more
+// than one actor can trigger lists them all, comma-separated.
+func cmpEdge(from, to CMPState, actors ...string) wfxapi.Transition {
 	return wfxapi.Transition{
 		From:        string(from),
 		To:          string(to),
 		Eligible:    wfxapi.WFX,
-		Description: actor,
+		Description: strings.Join(actors, ", "),
 	}
 }
 
 // commonCMPStates are the states shared by the direct and phased workflows.
+// Received comes first: it is the workflow's initial state.
 func commonCMPStates() []wfxapi.State {
 	return []wfxapi.State{
 		{Name: string(CMPStateReceived), Description: "CMP request accepted and PKIMessage decoded by Lamassu"},
 		{Name: string(CMPStateValidated), Description: "Request protection and enrollment request validated"},
+		{Name: string(CMPStateAwaitingPoPResponse), Description: "Proof-of-possession challenge sent; waiting for the end entity's popdecr"},
 		{Name: string(CMPStateResponded), Description: "Certificate issued and IP or CP response emitted by Lamassu"},
-		{Name: string(CMPStateAwaitingCertConf), Description: "Explicit certConf still pending"},
+		{Name: string(CMPStateAwaitingCertConf), Description: "Certificate issued; explicit certConf still pending"},
 		{Name: string(CMPStateLogicallyComplete), Description: "Implicit confirmation granted"},
 		{Name: string(CMPStateConfirmed), Description: "certConf validated and pkiConf returned"},
-		{Name: string(CMPStateRejected), Description: "Transaction rejected or failed"},
+		{Name: string(CMPStateRevoking), Description: "Certificate revocation in progress (retried until the CA confirms it)"},
+		{Name: string(CMPStateRevoked), Description: "Certificate revoked"},
+		{Name: string(CMPStateRejected), Description: "Request rejected by validation, policy or an administrator"},
+		{Name: string(CMPStateIssueFailed), Description: "The CA failed to issue the certificate"},
+		{Name: string(CMPStateExpired), Description: "Approval or proof-of-possession window elapsed with no action"},
 	}
+}
+
+// completedCMPStates are the states where the enrollment succeeded. They are
+// not terminal: the certificate can still be revoked afterwards.
+func completedCMPStates() []string {
+	return []string{string(CMPStateLogicallyComplete), string(CMPStateConfirmed)}
 }
 
 // terminalCMPStates are the end states shared by every CMP workflow.
 func terminalCMPStates() []string {
-	return []string{string(CMPStateLogicallyComplete), string(CMPStateConfirmed), string(CMPStateRejected)}
+	return []string{string(CMPStateRevoked), string(CMPStateRejected), string(CMPStateIssueFailed), string(CMPStateExpired)}
 }
 
 // assembleCMPWorkflow builds a workflow from the parts that vary between
 // variants — the active-state list, any states beyond the common set, and the
-// transition list — sharing the common states, terminal states, and group
-// scaffolding. The transition list is kept explicit per variant so the
-// state machine stays auditable against the RFC.
+// transition list — sharing the common states and group scaffolding. The
+// transition list is kept explicit per variant so the state machine stays
+// auditable against the RFC.
 func assembleCMPWorkflow(name, description string, activeStates []string, extraStates []wfxapi.State, transitions []wfxapi.Transition) wfxapi.Workflow {
 	return wfxapi.Workflow{
 		Name:        name,
 		Description: description,
-		Groups:      cmpGroups(activeStates, terminalCMPStates()),
+		Groups:      cmpGroups(activeStates, completedCMPStates(), terminalCMPStates()),
 		States:      append(commonCMPStates(), extraStates...),
 		Transitions: transitions,
 	}
 }
 
-func cmpGroups(active, terminal []string) []wfxapi.Group {
+func cmpGroups(active, completed, terminal []string) []wfxapi.Group {
 	return []wfxapi.Group{
 		{Name: "ACTIVE", Description: "CMP transactions still in-flight on the server side", States: active},
+		{Name: "COMPLETED", Description: "CMP transactions whose enrollment succeeded; the certificate may still be revoked", States: completed},
 		{Name: "TERMINAL", Description: "CMP transactions that reached a terminal outcome", States: terminal},
+	}
+}
+
+// postIssuanceCMPTransitions are the transitions shared by every workflow from
+// the moment the certificate is issued: confirmation (explicit or implicit),
+// the confirmation-timeout revocation, and revocation of a confirmed
+// certificate.
+func postIssuanceCMPTransitions() []wfxapi.Transition {
+	return []wfxapi.Transition{
+		cmpEdge(CMPStateResponded, CMPStateAwaitingCertConf, CMPActorPKI),
+		cmpEdge(CMPStateResponded, CMPStateLogicallyComplete, CMPActorPKI),
+		cmpEdge(CMPStateAwaitingCertConf, CMPStateConfirmed, CMPActorDevice),
+		cmpEdge(CMPStateAwaitingCertConf, CMPStateRejected, CMPActorPKI),
+		// The monitor claims an unconfirmed certificate (Revoking) and revokes it
+		// at the CA (Revoked). A failed CA call leaves the transaction in Revoking
+		// and is retried on the next tick: WFX rejects cyclic workflows, so there
+		// is deliberately no edge back to AwaitingCertConf.
+		cmpEdge(CMPStateAwaitingCertConf, CMPStateRevoking, CMPActorPKI),
+		cmpEdge(CMPStateRevoking, CMPStateRevoked, CMPActorPKI),
+		// Revocation requested through CMP rr or the API.
+		cmpEdge(CMPStateAwaitingCertConf, CMPStateRevoked, CMPActorDevice, CMPActorAdmin),
+		cmpEdge(CMPStateConfirmed, CMPStateRevoked, CMPActorDevice, CMPActorAdmin),
+		cmpEdge(CMPStateLogicallyComplete, CMPStateRevoked, CMPActorDevice, CMPActorAdmin),
+	}
+}
+
+// popCMPTransitions are the challengeResp proof-of-possession transitions: the
+// server parks the request until the end entity answers the challenge.
+func popCMPTransitions() []wfxapi.Transition {
+	return []wfxapi.Transition{
+		cmpEdge(CMPStateValidated, CMPStateAwaitingPoPResponse, CMPActorPKI),
+		cmpEdge(CMPStateAwaitingPoPResponse, CMPStateResponded, CMPActorDevice),
+		cmpEdge(CMPStateAwaitingPoPResponse, CMPStateRejected, CMPActorPKI),
+		cmpEdge(CMPStateAwaitingPoPResponse, CMPStateIssueFailed, CMPActorPKI),
+		cmpEdge(CMPStateAwaitingPoPResponse, CMPStateExpired, CMPActorPKI),
 	}
 }
 
@@ -440,18 +497,19 @@ func cmpGroups(active, terminal []string) []wfxapi.Group {
 func directCMPWorkflow(name string) wfxapi.Workflow {
 	return assembleCMPWorkflow(name,
 		"Lamassu CMP enrollment transaction lifecycle (direct, synchronous issuance)",
-		[]string{string(CMPStateReceived), string(CMPStateValidated), string(CMPStateResponded), string(CMPStateAwaitingCertConf)},
+		[]string{string(CMPStateReceived), string(CMPStateValidated), string(CMPStateAwaitingPoPResponse), string(CMPStateResponded), string(CMPStateAwaitingCertConf), string(CMPStateRevoking)},
 		nil,
-		[]wfxapi.Transition{
-			cmpEdge(CMPStateReceived, CMPStateValidated, CMPActorPKI),
-			cmpEdge(CMPStateReceived, CMPStateRejected, CMPActorPKI),
-			cmpEdge(CMPStateValidated, CMPStateResponded, CMPActorPKI),
-			cmpEdge(CMPStateValidated, CMPStateRejected, CMPActorPKI),
-			cmpEdge(CMPStateResponded, CMPStateAwaitingCertConf, CMPActorPKI),
-			cmpEdge(CMPStateResponded, CMPStateLogicallyComplete, CMPActorPKI),
-			cmpEdge(CMPStateAwaitingCertConf, CMPStateConfirmed, CMPActorDevice),
-			cmpEdge(CMPStateAwaitingCertConf, CMPStateRejected, CMPActorPKI),
-		},
+		concatTransitions(
+			[]wfxapi.Transition{
+				cmpEdge(CMPStateReceived, CMPStateValidated, CMPActorPKI),
+				cmpEdge(CMPStateReceived, CMPStateRejected, CMPActorPKI),
+				cmpEdge(CMPStateValidated, CMPStateResponded, CMPActorPKI),
+				cmpEdge(CMPStateValidated, CMPStateRejected, CMPActorPKI),
+				cmpEdge(CMPStateValidated, CMPStateIssueFailed, CMPActorPKI),
+			},
+			popCMPTransitions(),
+			postIssuanceCMPTransitions(),
+		),
 	)
 }
 
@@ -462,23 +520,40 @@ func directCMPWorkflow(name string) wfxapi.Workflow {
 func phasedCMPWorkflow(name string) wfxapi.Workflow {
 	return assembleCMPWorkflow(name,
 		"Lamassu CMP enrollment transaction lifecycle (phased, admin-approved issuance)",
-		[]string{string(CMPStateReceived), string(CMPStateValidated), string(CMPStateAwaitingApproval), string(CMPStateResponded), string(CMPStateAwaitingCertConf)},
-		[]wfxapi.State{{Name: string(CMPStateAwaitingApproval), Description: "Awaiting administrator approval before issuance"}},
-		[]wfxapi.Transition{
-			cmpEdge(CMPStateReceived, CMPStateValidated, CMPActorPKI),
-			cmpEdge(CMPStateReceived, CMPStateRejected, CMPActorPKI),
-			cmpEdge(CMPStateValidated, CMPStateAwaitingApproval, CMPActorPKI),
-			cmpEdge(CMPStateValidated, CMPStateRejected, CMPActorPKI),
-			// The admin-only gate: only an administrator can approve or reject a
-			// parked request.
-			cmpEdge(CMPStateAwaitingApproval, CMPStateResponded, CMPActorAdmin),
-			cmpEdge(CMPStateAwaitingApproval, CMPStateRejected, CMPActorAdmin),
-			cmpEdge(CMPStateResponded, CMPStateAwaitingCertConf, CMPActorPKI),
-			cmpEdge(CMPStateResponded, CMPStateLogicallyComplete, CMPActorPKI),
-			cmpEdge(CMPStateAwaitingCertConf, CMPStateConfirmed, CMPActorDevice),
-			cmpEdge(CMPStateAwaitingCertConf, CMPStateRejected, CMPActorPKI),
+		[]string{string(CMPStateReceived), string(CMPStateValidated), string(CMPStateAwaitingPoPResponse), string(CMPStateAwaitingApproval), string(CMPStateApproving), string(CMPStateResponded), string(CMPStateAwaitingCertConf), string(CMPStateRevoking)},
+		[]wfxapi.State{
+			{Name: string(CMPStateAwaitingApproval), Description: "Awaiting administrator approval before issuance"},
+			{Name: string(CMPStateApproving), Description: "Administrator decision being applied (approval or rejection in progress)"},
 		},
+		concatTransitions(
+			[]wfxapi.Transition{
+				cmpEdge(CMPStateReceived, CMPStateValidated, CMPActorPKI),
+				cmpEdge(CMPStateReceived, CMPStateRejected, CMPActorPKI),
+				cmpEdge(CMPStateValidated, CMPStateAwaitingApproval, CMPActorPKI),
+				cmpEdge(CMPStateValidated, CMPStateRejected, CMPActorPKI),
+				// The admin-only gate: only an administrator can approve or reject a
+				// parked request. Approving is the transient claim taken while the
+				// decision is applied; the sweep recovers a claim that never finished.
+				cmpEdge(CMPStateAwaitingApproval, CMPStateApproving, CMPActorAdmin),
+				cmpEdge(CMPStateAwaitingApproval, CMPStateRejected, CMPActorAdmin),
+				cmpEdge(CMPStateAwaitingApproval, CMPStateExpired, CMPActorPKI),
+				cmpEdge(CMPStateApproving, CMPStateResponded, CMPActorAdmin),
+				cmpEdge(CMPStateApproving, CMPStateRejected, CMPActorAdmin),
+				cmpEdge(CMPStateApproving, CMPStateIssueFailed, CMPActorPKI),
+				cmpEdge(CMPStateApproving, CMPStateExpired, CMPActorPKI),
+			},
+			popCMPTransitions(),
+			postIssuanceCMPTransitions(),
+		),
 	)
+}
+
+func concatTransitions(parts ...[]wfxapi.Transition) []wfxapi.Transition {
+	var out []wfxapi.Transition
+	for _, p := range parts {
+		out = append(out, p...)
+	}
+	return out
 }
 
 func buildJobDefinition(transition CMPTransition) map[string]any {

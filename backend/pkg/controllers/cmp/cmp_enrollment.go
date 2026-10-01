@@ -610,7 +610,7 @@ type issueParams struct {
 }
 
 // issueAndStore is the shared enrollment pipeline: build CSR, check duplicate
-// transactionID, call the CA, persist the ISSUED row for lost-response
+// transactionID, call the CA, persist the issued row for lost-response
 // recovery, and respond with the cert.
 func (r *cmpHttpRoutes) issueAndStore(
 	ctx *gin.Context,
@@ -672,7 +672,7 @@ func (r *cmpHttpRoutes) issueAndStore(
 	}
 
 	// The unconfirmed-key-update check below, the issuance that follows it, and
-	// the ISSUED row that records it form one read-decide-write sequence. Checking
+	// the AwaitingCertConf row that records it form one read-decide-write sequence. Checking
 	// without holding a lock is check-then-act: two concurrent kur messages
 	// protected by the same certificate could both observe "no update in
 	// progress", both issue, and both leave an unconfirmed pending update —
@@ -733,10 +733,10 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 	}
 
 	// Phased (admin-gated) workflow: do NOT issue now. Park the request in a
-	// PENDING row carrying the synthesized CSR and reply with a "waiting"
+	// AwaitingApproval row carrying the synthesized CSR and reply with a "waiting"
 	// response (RFC 9483 §4.4 / RFC 4210 §5.3.22). An administrator later
 	// approves the transaction, which issues the cert and flips the row to
-	// ISSUED; the EE retrieves it via pollReq.
+	// AwaitingCertConf; the EE retrieves it via pollReq.
 	// RFC011: resolve the effective workflow for THIS operation, applying its
 	// policy_overrides.workflow on top of the DMS-general Workflow.
 	if enrollOpts.EffectiveWorkflow(op) == models.CMPWorkflowPhased {
@@ -785,12 +785,19 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 		case isRevokedCertError(err):
 			failBit = corecmp.PKIFailureInfoCertRevoked
 		}
-		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), err.Error(), dmsID, failBit)
+		// An unclassified failure is the CA failing to issue (IssueFailed); the
+		// classified ones are the request being refused on policy or trust
+		// grounds (Rejected).
+		outcome := cmpwfx.CMPStateRejected
+		if failBit == corecmp.PKIFailureInfoSystemFailure {
+			outcome = cmpwfx.CMPStateIssueFailed
+		}
+		r.rejectWithErrorAs(ctx, header, outcome, corecmp.PKIStatus(2), err.Error(), dmsID, failBit)
 		return
 	}
 	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
 
-	// Persist ISSUED row for lost-response recovery via pollReq.
+	// Persist the issued row for lost-response recovery via pollReq.
 	senderNonce, nonceErr := corecmp.NewNonce()
 	if nonceErr != nil {
 		lFunc.Errorf("nonce generation: %v", nonceErr)
@@ -804,21 +811,18 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 	header.ResponseSenderNonce = senderNonce
 	// When implicit confirmation is granted, RFC 4210 §5.2.8 considers the
 	// transaction successfully completed at IP delivery — no certConf will
-	// follow. Persist the row directly as CONFIRMED so the confirmation
+	// follow. Persist the row directly as LogicallyComplete so the confirmation
 	// monitor does not revoke the cert at expires_at. The previous behaviour
-	// was to insert ISSUED with a 5-minute window and never transition it,
-	// which silently revoked every implicit-confirm enrollment.
-	//
-	// ConfirmedAt is set to EXACTLY CreatedAt (same time.Time value) — that
-	// equality is the marker handleCertConf uses to distinguish a row that was
-	// implicitly confirmed at issuance (a follow-up certConf is answered with
+	// was to insert it awaiting certConf with a 5-minute window and never
+	// transition it, which silently revoked every implicit-confirm enrollment.
+	// handleCertConf tells such a row (a follow-up certConf is answered with
 	// pkiConf) from one confirmed by an earlier certConf (a duplicate, answered
-	// with error/certConfirmed).
+	// with error/certConfirmed) by its state.
 	now := time.Now()
-	initialState := models.CMPTransactionStateIssued
+	initialState := models.CMPTransactionStateAwaitingCertConf
 	var confirmedAt time.Time
 	if implicitConfirm {
-		initialState = models.CMPTransactionStateConfirmed
+		initialState = models.CMPTransactionStateLogicallyComplete
 		confirmedAt = now
 	}
 	if storeErr := r.store.Insert(issuanceCtx, models.CMPTransaction{
@@ -853,7 +857,7 @@ func (r *cmpHttpRoutes) issueAndStoreLocked(
 			return
 		}
 		lFunc.Errorf("store transaction: %v", storeErr)
-		lFunc.Warnf("failed to persist ISSUED row (cert delivered inline): %v", storeErr)
+		lFunc.Warnf("failed to persist issued row (cert delivered inline): %v", storeErr)
 	}
 
 	// Implicit confirmation: RFC 4210 §5.2.8 treats the transaction as complete
@@ -1267,15 +1271,15 @@ func (r *cmpHttpRoutes) handleKGAEnrollment(
 	// is never stored, so handlePoll must refuse to "recover" this response rather
 	// than hand back a certificate without its key.
 	//
-	// ConfirmedAt == CreatedAt exactly (one clock read) is the marker
-	// handleCertConf uses to tell an implicitly-confirmed row from one confirmed
-	// by an earlier certConf — see issueAndStore.
+	// An implicitly confirmed row is persisted as LogicallyComplete, which is
+	// how handleCertConf tells it from one confirmed by an earlier certConf —
+	// see issueAndStore.
 	certSerial := hex.EncodeToString(cert.SerialNumber.Bytes())
 	now := time.Now()
-	initialState := models.CMPTransactionStateIssued
+	initialState := models.CMPTransactionStateAwaitingCertConf
 	var confirmedAt time.Time
 	if implicitConfirm {
-		initialState = models.CMPTransactionStateConfirmed
+		initialState = models.CMPTransactionStateLogicallyComplete
 		confirmedAt = now
 	}
 	if storeErr := r.store.Insert(issuanceCtx, models.CMPTransaction{
@@ -1405,7 +1409,7 @@ func selfSignedCSR(cn string, key crypto.Signer) (*x509.CertificateRequest, erro
 }
 
 // deferForApproval implements the phased-workflow enrollment path: it persists
-// the request as a PENDING transaction (storing the synthesized CSR so the
+// the request as a AwaitingApproval transaction (storing the synthesized CSR so the
 // approval step can issue later) and returns a CMP "waiting" response. The EE
 // then polls with pollReq until an administrator approves the transaction and
 // the cert becomes available.
@@ -1429,7 +1433,7 @@ func (r *cmpHttpRoutes) deferForApproval(
 	if storeErr := r.store.Insert(storeCtx, models.CMPTransaction{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
-		State:             models.CMPTransactionStatePending,
+		State:             models.CMPTransactionStateAwaitingApproval,
 		CSR:               (*models.X509CertificateRequest)(csr),
 		IsReenrollment:    params.isReenrollment,
 		RequestType:       cmpTagToString(params.requestTag),
@@ -1443,10 +1447,10 @@ func (r *cmpHttpRoutes) deferForApproval(
 		RegToken:             req.RegToken,
 		// Security-audit metadata resolved back in handleEnrollment before the
 		// phased-workflow detour. UpdateState (used when ApproveCMPTransaction
-		// later flips this row PENDING → ISSUED) only touches state/certificate/
+		// later flips this row AwaitingApproval → AwaitingCertConf) only touches state/certificate/
 		// error_message/expires_at/cert_serial_number, so these columns are
 		// NOT overwritten on approval — the value recorded here is the one that
-		// survives to the final ISSUED row.
+		// survives to the final issued row.
 		POPOMethod:                  params.popoMethod,
 		ChallengeType:               params.challengeType,
 		AuthenticatorControlPresent: params.authenticatorControlPresent,
@@ -1464,7 +1468,7 @@ func (r *cmpHttpRoutes) deferForApproval(
 			r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "transactionID already in use", dmsID, corecmp.PKIFailureInfoTransactionIDInUse)
 			return
 		}
-		lFunc.Errorf("store PENDING transaction: %v", storeErr)
+		lFunc.Errorf("store AwaitingApproval transaction: %v", storeErr)
 		r.rejectWithError(ctx, header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}

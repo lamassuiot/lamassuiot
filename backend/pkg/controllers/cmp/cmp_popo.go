@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/cms"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -39,14 +40,14 @@ import (
 //     key, and sends it back as popdecc (RFC 4210bis Challenge, the deprecated
 //     `challenge` OCTET STRING variant — AES-256-CBC under a key derived from
 //     RSA/ECDH — rather than the newer CMS `encryptedRand`);
-//  2. parks the request as a PENDING transaction carrying the synthesized CSR
+//  2. parks the request as an AwaitingPoPResponse transaction carrying the synthesized CSR
 //     and the expected decrypted value, exactly like the phased-workflow
 //     admin-approval path parks a request pending a human decision
 //     (cmp_enrollment.go's deferForApproval);
 //  3. resumes the normal issuance pipeline once the EE proves it decrypted the
 //     challenge correctly by replying with popdecr.
 
-// popoChallengeWindow bounds how long a PENDING challengeResp row waits for
+// popoChallengeWindow bounds how long an AwaitingPoPResponse challengeResp row waits for
 // popdecr before it is eligible for cleanup by the same sweep that expires
 // ordinary in-flight transactions. A live round trip, not a human decision —
 // reuses the certConf window rather than the (much longer) approval window.
@@ -267,7 +268,7 @@ func (r *cmpHttpRoutes) buildPOPOChallengeEntry(ctx context.Context, lFunc *logr
 }
 
 // handlePOPOChallenge sends popdecc for an ir/cr whose inner POPO named
-// subsequentMessage(challengeResp), and parks the request PENDING awaiting
+// subsequentMessage(challengeResp), and parks the request AwaitingPoPResponse awaiting
 // popdecr. Called from handleEnrollment after every issuance-independent
 // validation (regToken, CertTemplate policy, alt CertReq, ...) has already
 // passed — the same point issueAndStore would otherwise be invoked from.
@@ -325,7 +326,7 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 	if storeErr := r.store.Insert(ctx.Request.Context(), models.CMPTransaction{
 		TransactionID:     txHex,
 		DMSID:             dmsID,
-		State:             models.CMPTransactionStatePending,
+		State:             models.CMPTransactionStateAwaitingPoPResponse,
 		CSR:               (*models.X509CertificateRequest)(csr),
 		RequestType:       cmpTagToString(params.requestTag),
 		SubjectCommonName: csr.Subject.CommonName,
@@ -336,8 +337,8 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 		// authModeAtEnrollment were already resolved by handleEnrollment
 		// (popoMethod is "challenge_response" and challengeType reflects the
 		// pvno-driven choice made in buildPOPOChallengeEntry above). Persisted
-		// on this PENDING row so handlePOPODecKeyResp can carry them into the
-		// final ISSUED row when it resumes issuance below.
+		// on this AwaitingPoPResponse row so handlePOPODecKeyResp can carry them into the
+		// final issued row when it resumes issuance below.
 		POPOMethod:                  params.popoMethod,
 		ChallengeType:               params.challengeType,
 		AuthenticatorControlPresent: params.authenticatorControlPresent,
@@ -358,9 +359,20 @@ func (r *cmpHttpRoutes) handlePOPOChallenge(ctx *gin.Context, lFunc *logrus.Entr
 		// -srvcert-pinning client still accepts the sender. See
 		// sendKARIProtectedResponse.
 		r.sendKARIProtectedResponse(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, dmsID, originator)
-		return
+	} else {
+		r.sendRawBody(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, dmsID)
 	}
-	r.sendRawBody(ctx, lFunc, *header, corecmp.BodyTagPopDecc, contentDER, dmsID)
+	r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+		TransactionID:     txHex,
+		DMSID:             dmsID,
+		RequestType:       cmpTagToString(params.requestTag),
+		SubjectCommonName: csr.Subject.CommonName,
+		State:             cmpwfx.CMPStateAwaitingPoPResponse,
+		Metadata: map[string]any{
+			"popoMethod":    params.popoMethod,
+			"challengeType": params.challengeType,
+		},
+	})
 }
 
 // decodePOPODecKeyRespContent parses a popdecr body — POPODecKeyRespContent
@@ -379,10 +391,10 @@ func decodePOPODecKeyRespContent(bodyBytes []byte) (*big.Int, error) {
 }
 
 // handlePOPODecKeyResp processes a popdecr (6) body: it validates the EE's
-// decrypted challenge against the PENDING transaction parked by
+// decrypted challenge against the AwaitingPoPResponse transaction parked by
 // handlePOPOChallenge and, on success, resumes the normal enrollment pipeline
 // from the synthesized CSR stored at challenge time — exactly as
-// ApproveCMPTransaction resumes a phased-workflow PENDING row, just triggered
+// ApproveCMPTransaction resumes a phased-workflow AwaitingApproval row, just triggered
 // by a proof-of-possession round trip instead of an administrator.
 func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings, signerCert *x509.Certificate) {
 	submitted, err := decodePOPODecKeyRespContent(body.Bytes)
@@ -393,7 +405,7 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 	}
 
 	txHex := hex.EncodeToString(header.TransactionID)
-	// SelectAndDelete atomically consumes the PENDING row so a replayed
+	// SelectAndDelete atomically consumes the AwaitingPoPResponse row so a replayed
 	// popdecr (or one racing a second, legitimate attempt) cannot resume
 	// issuance twice, and so the transactionID is free for issueAndStore's own
 	// duplicate check and Insert below.
@@ -403,7 +415,7 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error", dmsID, corecmp.PKIFailureInfoSystemFailure)
 		return
 	}
-	if !ok || tx.State != models.CMPTransactionStatePending || tx.PopoChallenge == "" || tx.CSR == nil {
+	if !ok || tx.State != models.CMPTransactionStateAwaitingPoPResponse || tx.PopoChallenge == "" || tx.CSR == nil {
 		lFunc.Warnf("popdecr: unknown or non-challenge transactionID %s", txHex)
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "unknown transactionID", dmsID, corecmp.PKIFailureInfoBadRequest)
 		return
@@ -412,6 +424,17 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 	expected, parsed := new(big.Int).SetString(tx.PopoChallenge, 16)
 	if !parsed || submitted.Cmp(expected) != 0 {
 		lFunc.Warnf("popdecr: challenge mismatch for tx %s", txHex)
+		// The row was consumed above, so rejectWithError can no longer find the
+		// device CN: report the outcome here so the WFX job leaves
+		// AwaitingPoPResponse.
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     txHex,
+			DMSID:             dmsID,
+			RequestType:       tx.RequestType,
+			SubjectCommonName: tx.SubjectCommonName,
+			State:             cmpwfx.CMPStateRejected,
+			Reason:            "proof of possession verification failed: challenge response mismatch",
+		})
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 			"proof of possession verification failed: challenge response mismatch", dmsID, corecmp.PKIFailureInfoBadPOP)
 		return
@@ -437,7 +460,7 @@ func (r *cmpHttpRoutes) handlePOPODecKeyResp(ctx *gin.Context, lFunc *logrus.Ent
 		respTag:    pollRespTagFor(tx),
 		wfxJobID:   tx.WFXJobID,
 		presetCSR:  csr,
-		// Security-audit metadata carries over from the PENDING row parked by
+		// Security-audit metadata carries over from the AwaitingPoPResponse row parked by
 		// handlePOPOChallenge — it was resolved before the popdecc round trip
 		// and does not change across it.
 		popoMethod:                  tx.POPOMethod,

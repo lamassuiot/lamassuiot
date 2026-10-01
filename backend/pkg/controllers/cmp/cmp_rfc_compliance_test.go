@@ -1049,10 +1049,10 @@ func TestFailInfo_AllErrorResponsesCarryFailInfo(t *testing.T) {
 // "dropped" between the initial issuance and the EE's recovery pollReq.
 // They verify:
 //
-//   1. The IR (pvno=3) is accepted and an ISSUED row is persisted.
+//   1. The IR (pvno=3) is accepted and an AwaitingCertConf row is persisted.
 //   2. The pollReq (pvno=3) re-delivers the cert under pvno=3, NOT pvno=2.
 //   3. The senderNonce on the redelivered IP equals the one persisted on
-//      the original ISSUED row, so the subsequent certConf round-trip can
+//      the original AwaitingCertConf row, so the subsequent certConf round-trip can
 //      match recipNonce against the stored sentNonce.
 //   4. certConf (pvno=3) completes the transaction with pkiConf (pvno=3).
 // ---------------------------------------------------------------------------
@@ -1107,7 +1107,7 @@ func parseResponseSenderNonce(t *testing.T, responseDER []byte) []byte {
 //  2. EE → pollReq (pvno=3, same txID) → server redelivers cert in IP
 //     (pvno=3, with the same senderNonce as the original IP).
 //  3. EE → certConf (pvno=3, recipNonce = stored sentNonce) → server
-//     replies pkiConf (pvno=3) and transitions tx to CONFIRMED.
+//     replies pkiConf (pvno=3) and transitions tx to Confirmed.
 //
 // RFC 9810 §7 line 3754 anchors the pvno-echo requirement; this test
 // exercises it across every step of the drop-recover flow.
@@ -1133,12 +1133,12 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()),
 		"IP response under cmp2021 IR MUST carry pvno=3 (RFC 9810 §7)")
 
-	// The ISSUED row must exist with a persisted sentNonce — that nonce is
+	// The AwaitingCertConf row must exist with a persisted sentNonce — that nonce is
 	// what the pollReq-recovery branch will need to echo on the redelivered
 	// IP so the subsequent certConf can match recipNonce against it.
 	storedTx, ok := store.Peek(hex.EncodeToString(txID))
-	require.True(t, ok, "IR must persist the ISSUED row for pollReq recovery")
-	require.Equal(t, models.CMPTransactionStateIssued, storedTx.State)
+	require.True(t, ok, "IR must persist the AwaitingCertConf row for pollReq recovery")
+	require.Equal(t, models.CMPTransactionStateAwaitingCertConf, storedTx.State)
 	persistedSentNonce, err := hex.DecodeString(storedTx.SentNonce)
 	require.NoError(t, err)
 	require.Len(t, persistedSentNonce, 16, "stored sentNonce must be 128 bits")
@@ -1148,7 +1148,7 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 
 	// Step 2: pollReq with pvno=3 referencing the same transactionID. The
 	// server must redeliver the cert in an IP body — NOT a pollRep —
-	// because the row is ISSUED, not PENDING.
+	// because the row is AwaitingCertConf, not AwaitingApproval.
 	pollHeader := buildHeaderDERCustom(t, headerOpts{
 		PVNO:          intPtr(corecmp.PVNOCMP2021),
 		TransactionID: txID,
@@ -1158,7 +1158,7 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	pollResp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, pollResp.Code)
 	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
-		"ISSUED-state pollReq must deliver the cert via IP, not pollRep")
+		"AwaitingCertConf-state pollReq must deliver the cert via IP, not pollRep")
 	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
 		"pollReq under cmp2021 MUST receive a cmp2021 response (RFC 9810 §7)")
 
@@ -1171,10 +1171,10 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 		"pollReq redelivery MUST echo the originally-persisted sentNonce — "+
 			"otherwise certConf recipNonce will mismatch")
 
-	// Tx is still ISSUED — pollReq does not consume it.
+	// Tx is still AwaitingCertConf — pollReq does not consume it.
 	storedAfterPoll, ok := store.Peek(hex.EncodeToString(txID))
-	require.True(t, ok, "pollReq delivery must not delete the ISSUED row")
-	assert.Equal(t, models.CMPTransactionStateIssued, storedAfterPoll.State,
+	require.True(t, ok, "pollReq delivery must not delete the AwaitingCertConf row")
+	assert.Equal(t, models.CMPTransactionStateAwaitingCertConf, storedAfterPoll.State,
 		"pollReq must not transition tx state in explicit-confirm mode")
 
 	// Step 3: certConf with pvno=3, recipNonce = the persisted sentNonce.
@@ -1192,11 +1192,11 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, confResp.Body.Bytes()),
 		"pkiConf MUST carry pvno=3 to match the cmp2021 transaction")
 
-	// Tx is now CONFIRMED.
+	// Tx is now Confirmed.
 	finalTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
 	assert.Equal(t, models.CMPTransactionStateConfirmed, finalTx.State,
-		"successful certConf must transition tx to CONFIRMED")
+		"successful certConf must transition tx to Confirmed")
 
 	svc.AssertExpectations(t)
 }
@@ -1205,7 +1205,7 @@ func TestCMPv3_DropAndPoll_ExplicitConfirm(t *testing.T) {
 // the DMS accepts implicit confirmation and the EE includes the
 // id-it-implicitConfirm OID. In implicit mode no certConf round-trip is
 // expected; the pollReq-redelivered IP is the terminal message and the
-// server transitions the tx to CONFIRMED on delivery (RFC 4210 §5.2.8).
+// server transitions the tx to Confirmed on delivery (RFC 4210 §5.2.8).
 func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 	issuedCert, _ := buildSelfSignedCert(t, "v3-drop-poll-implicit")
 
@@ -1226,18 +1226,18 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, irResp.Body.Bytes()))
 	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, irResp.Body.Bytes()))
 
-	// Row is born CONFIRMED in implicit-confirm mode — RFC 4210 §5.2.8 says
-	// the transaction is complete upon IP delivery. The row persists in
-	// CONFIRMED so a lost-IP pollReq can still recover the cert (see the
+	// Row is born LogicallyComplete in implicit-confirm mode — RFC 4210 §5.2.8
+	// says the transaction is complete upon IP delivery. The row persists in
+	// LogicallyComplete so a lost-IP pollReq can still recover the cert (see the
 	// pollReq case below), and the confirmation monitor never touches it.
 	stored, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok, "implicit-confirm IR must persist a row for pollReq recovery")
-	require.Equal(t, models.CMPTransactionStateConfirmed, stored.State,
+	require.Equal(t, models.CMPTransactionStateLogicallyComplete, stored.State,
 		"implicit-confirm row is finalised at IP delivery, not at pollReq")
 
 	// Step 2: pollReq with pvno=3 + implicitConfirm (same as IR). The
 	// server redelivers the cert and, because the DMS grants implicit
-	// confirmation, transitions the row to CONFIRMED right away.
+	// confirmation, transitions the row to LogicallyComplete right away.
 	pollHeader := buildHeaderDERCustom(t, headerOpts{
 		PVNO:                intPtr(corecmp.PVNOCMP2021),
 		TransactionID:       txID,
@@ -1248,16 +1248,16 @@ func TestCMPv3_DropAndPoll_ImplicitConfirm(t *testing.T) {
 	pollResp := postCMP(t, router, "test-dms", pollDER)
 	require.Equal(t, http.StatusOK, pollResp.Code)
 	require.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, pollResp.Body.Bytes()),
-		"implicit-confirm pollReq against ISSUED row must deliver the cert via IP")
+		"implicit-confirm pollReq against AwaitingCertConf row must deliver the cert via IP")
 	assert.Equal(t, corecmp.PVNOCMP2021, parseResponsePVNO(t, pollResp.Body.Bytes()),
 		"redelivered IP MUST carry pvno=3 to match the cmp2021 transaction")
 
-	// Row stays CONFIRMED — already finalised at IR time. pollReq just
+	// Row stays LogicallyComplete — already finalised at IR time. pollReq just
 	// re-delivered the cert; it never demotes nor re-runs the finalisation.
 	finalTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
-	assert.Equal(t, models.CMPTransactionStateConfirmed, finalTx.State,
-		"implicit-confirm row must stay CONFIRMED across pollReq replays")
+	assert.Equal(t, models.CMPTransactionStateLogicallyComplete, finalTx.State,
+		"implicit-confirm row must stay LogicallyComplete across pollReq replays")
 
 	svc.AssertExpectations(t)
 }

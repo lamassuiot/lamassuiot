@@ -25,7 +25,7 @@ import (
 )
 
 // cmpCertConfDefaultTTL is the fallback certConf window applied to a phased
-// transaction once it is approved (moves PENDING → ISSUED) when the DMS does
+// transaction once it is approved (moves AwaitingApproval → AwaitingCertConf) when the DMS does
 // not configure ConfirmationTimeout. Mirrors the controller's cmpTxTTL — the
 // post-approval row behaves like any other issued-awaiting-confirmation row.
 const cmpCertConfDefaultTTL = 5 * time.Minute
@@ -74,11 +74,12 @@ func (svc DMSManagerServiceBackend) GetCMPTransactionsByDMS(ctx context.Context,
 	return svc.cmptxStorage.SelectAllByDMS(ctx, input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters)
 }
 
-// ApproveCMPTransaction releases a PENDING phased-workflow transaction: it
-// issues the certificate from the stored CSR, flips the row to ISSUED (so the
-// EE can fetch it via pollReq), and mirrors the AwaitingApproval → Responded →
-// AwaitingCertConf transitions into WFX. On issuance failure the row is moved
-// to ISSUE_FAILED so pollReq can surface the reason.
+// ApproveCMPTransaction releases an AwaitingApproval phased-workflow
+// transaction: it issues the certificate from the stored CSR, flips the row to
+// AwaitingCertConf (so the EE can fetch it via pollReq), and mirrors the
+// AwaitingApproval → Approving → Responded → AwaitingCertConf transitions into
+// WFX. On issuance failure the row is moved to IssueFailed so pollReq can
+// surface the reason.
 func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, input services.ApproveCMPTransactionInput) (*models.CMPTransaction, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -111,7 +112,7 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 		return nil, errs.ErrCMPTransactionNotPending
 	}
 
-	// Atomically claim the row (PENDING → APPROVING) before doing anything
+	// Atomically claim the row (AwaitingApproval → Approving) before doing anything
 	// else. This is the sole guard against concurrent Approve/Reject calls
 	// (double-click, client retry, or a race between the two, or with the
 	// confirmation monitor's approval-timeout sweep) issuing the same CSR
@@ -125,10 +126,11 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 		return nil, err
 	}
 	if !claimed {
-		lFunc.Warnf("ApproveCMPTransaction: tx %s is no longer PENDING (state=%s) or has expired; refusing to approve", tx.TransactionID, tx.State)
+		lFunc.Warnf("ApproveCMPTransaction: tx %s is no longer AwaitingApproval (state=%s) or has expired; refusing to approve", tx.TransactionID, tx.State)
 		return nil, errs.ErrCMPTransactionNotPending
 	}
 	tx = claimedTx
+	svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateApproving, "", "")
 
 	csr := (*x509.CertificateRequest)(tx.CSR)
 	// Mark the context as pre-authenticated: the original IR/KUR was already
@@ -163,13 +165,13 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 		// schedule.
 		updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, models.CMPTransactionStateIssueFailed, nil, err.Error(), tx.ExpiresAt)
 		if updErr != nil {
-			lFunc.Warnf("ApproveCMPTransaction: failed to mark tx %s ISSUE_FAILED: %s", tx.TransactionID, updErr)
+			lFunc.Warnf("ApproveCMPTransaction: failed to mark tx %s IssueFailed: %s", tx.TransactionID, updErr)
 		} else if !updated {
 			// Row vanished between approval and persistence — likely swept by
 			// DeleteExpired. Audit signal only; we cannot recover further here.
-			lFunc.Warnf("ApproveCMPTransaction: no live row to mark ISSUE_FAILED for tx %s (already expired/deleted)", tx.TransactionID)
+			lFunc.Warnf("ApproveCMPTransaction: no live row to mark IssueFailed for tx %s (already expired/deleted)", tx.TransactionID)
 		}
-		svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateRejected, "", err.Error())
+		svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateIssueFailed, "", err.Error())
 		return nil, err
 	}
 
@@ -189,9 +191,9 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 	issuedExpiry := time.Now().Add(confTimeout)
 
 	certSerial := helpers.SerialNumberToHexString(cert.SerialNumber)
-	updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, models.CMPTransactionStateIssued, (*models.X509Certificate)(cert), "", issuedExpiry)
+	updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, models.CMPTransactionStateAwaitingCertConf, (*models.X509Certificate)(cert), "", issuedExpiry)
 	if updErr != nil {
-		lFunc.Errorf("ApproveCMPTransaction: failed to mark tx %s ISSUED: %s", tx.TransactionID, updErr)
+		lFunc.Errorf("ApproveCMPTransaction: failed to mark tx %s AwaitingCertConf: %s", tx.TransactionID, updErr)
 		return nil, updErr
 	}
 	if !updated {
@@ -199,12 +201,12 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 		// was already expired or removed. The cert is orphaned in Lamassu's
 		// view; surface it as an error so the caller (admin tooling) can
 		// reconcile rather than silently dropping the issuance.
-		lFunc.Errorf("ApproveCMPTransaction: tx %s row missing/expired when persisting ISSUED state — cert %s is now orphaned", tx.TransactionID, certSerial)
+		lFunc.Errorf("ApproveCMPTransaction: tx %s row missing/expired when persisting AwaitingCertConf state — cert %s is now orphaned", tx.TransactionID, certSerial)
 		return nil, fmt.Errorf("CMP transaction %s no longer exists after issuance (cert %s orphaned; investigate cleanup vs approval timing)", tx.TransactionID, certSerial)
 	}
 	lFunc.Infof("ApproveCMPTransaction: tx %s approved, certificate %s issued", tx.TransactionID, certSerial)
 
-	// Mirror the admin-gated issuance into WFX: AwaitingApproval → Responded
+	// Mirror the admin-gated issuance into WFX: Approving → Responded
 	// (admin) then Responded → AwaitingCertConf (server now awaits the EE's
 	// certConf, retrieved alongside the cert via pollReq).
 	svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateResponded, certSerial, "")
@@ -212,15 +214,15 @@ func (svc DMSManagerServiceBackend) ApproveCMPTransaction(ctx context.Context, i
 
 	// Reflect the issued outcome on the returned row in-memory; these are the
 	// only fields UpdateState changed.
-	tx.State = models.CMPTransactionStateIssued
+	tx.State = models.CMPTransactionStateAwaitingCertConf
 	tx.Certificate = (*models.X509Certificate)(cert)
 	tx.CertSerialNumber = certSerial
 	tx.ExpiresAt = issuedExpiry
 	return &tx, nil
 }
 
-// RejectCMPTransaction denies a PENDING phased-workflow CMP transaction
-// without issuing a certificate: the row moves to ISSUE_FAILED carrying the
+// RejectCMPTransaction denies an AwaitingApproval phased-workflow CMP transaction
+// without issuing a certificate: the row moves to Rejected carrying the
 // administrator's reason, which pollReq later surfaces as an error PKIMessage
 // to the EE. Mirrors ApproveCMPTransaction's validation, scoping, and WFX
 // emission semantics.
@@ -251,7 +253,7 @@ func (svc DMSManagerServiceBackend) RejectCMPTransaction(ctx context.Context, in
 		return nil, errs.ErrCMPTransactionNotFound
 	}
 
-	// Atomically claim the row (PENDING → APPROVING) — see the identical
+	// Atomically claim the row (AwaitingApproval → Approving) — see the identical
 	// comment in ApproveCMPTransaction. This is what prevents a reject from
 	// racing (and clobbering) a concurrent approve that already issued a
 	// certificate for this transaction.
@@ -261,33 +263,34 @@ func (svc DMSManagerServiceBackend) RejectCMPTransaction(ctx context.Context, in
 		return nil, err
 	}
 	if !claimed {
-		lFunc.Warnf("RejectCMPTransaction: tx %s is no longer PENDING (state=%s) or has expired; refusing to reject", tx.TransactionID, tx.State)
+		lFunc.Warnf("RejectCMPTransaction: tx %s is no longer AwaitingApproval (state=%s) or has expired; refusing to reject", tx.TransactionID, tx.State)
 		return nil, errs.ErrCMPTransactionNotPending
 	}
 	tx = claimedTx
+	svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateApproving, "", "")
 
 	reason := input.Reason
 	if reason == "" {
 		reason = "transaction rejected by administrator"
 	}
 
-	// Keep the existing PENDING TTL on the ISSUE_FAILED row so the operator
+	// Keep the existing approval TTL on the Rejected row so the operator
 	// keeps seeing it until DeleteExpired sweeps it on the same schedule a
 	// timed-out approval would have followed.
-	updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, models.CMPTransactionStateIssueFailed, nil, reason, tx.ExpiresAt)
+	updated, updErr := svc.cmptxStorage.UpdateState(ctx, tx.TransactionID, models.CMPTransactionStateRejected, nil, reason, tx.ExpiresAt)
 	if updErr != nil {
-		lFunc.Errorf("RejectCMPTransaction: failed to mark tx %s ISSUE_FAILED: %s", tx.TransactionID, updErr)
+		lFunc.Errorf("RejectCMPTransaction: failed to mark tx %s Rejected: %s", tx.TransactionID, updErr)
 		return nil, updErr
 	}
 	if !updated {
-		lFunc.Errorf("RejectCMPTransaction: tx %s row missing/expired when persisting ISSUE_FAILED state", tx.TransactionID)
+		lFunc.Errorf("RejectCMPTransaction: tx %s row missing/expired when persisting Rejected state", tx.TransactionID)
 		return nil, errs.ErrCMPTransactionNotPending
 	}
 	lFunc.Infof("RejectCMPTransaction: tx %s rejected (%s)", tx.TransactionID, reason)
 
 	svc.emitApprovalTransition(ctx, lFunc, tx, cmpwfx.CMPStateRejected, "", reason)
 
-	tx.State = models.CMPTransactionStateIssueFailed
+	tx.State = models.CMPTransactionStateRejected
 	tx.ErrorMessage = reason
 	return &tx, nil
 }
@@ -625,7 +628,7 @@ func (svc DMSManagerServiceBackend) LWCValidateKGARecipient(ctx context.Context,
 //     enrollment operations → ErrCMPCertSuperseded (PKIFailureInfo certRevoked).
 //     Detected by: signer serial present in the identity-slot history at a
 //     non-active version AND the transaction that issued the currently active
-//     cert being a CONFIRMED re-enrollment.
+//     cert being a confirmed re-enrollment.
 //
 //   - Anything else — a foreign certificate, or a cert superseded by a plain
 //     replaceable re-enrollment (which Lamassu policy deliberately keeps
@@ -650,7 +653,7 @@ func (svc DMSManagerServiceBackend) classifySupersededSigner(ctx context.Context
 		lFunc.Warnf("could not classify superseded signer %s (lookup of active cert %s failed): %s", signerSN, activeSN, err)
 		return errs.ErrCMPSignerNotActive
 	}
-	if ok && tx.IsReenrollment && tx.State == models.CMPTransactionStateConfirmed {
+	if ok && tx.IsReenrollment && tx.State.IsConfirmed() {
 		lFunc.Warnf("signer cert %s was superseded by confirmed key-update tx %s (active cert %s)", signerSN, tx.TransactionID, activeSN)
 		return errs.ErrCMPCertSuperseded
 	}
@@ -1218,7 +1221,7 @@ func (svc DMSManagerServiceBackend) LWCReenroll(ctx context.Context, csr *x509.C
 		// RFC 9483 §4.1.3 binding: the signer proves possession of the certificate
 		// being updated. Usually that is the device's active identity cert. When it
 		// is a different certificate, distinguish the supersession cases:
-		//   - superseded by a CONFIRMED key-update → the cert can no longer
+		//   - superseded by a confirmed key-update → the cert can no longer
 		//     authenticate operations (certRevoked); reject.
 		//   - a foreign certificate (not in this device's history) → not authorized
 		//     to update it; reject (badRequest).

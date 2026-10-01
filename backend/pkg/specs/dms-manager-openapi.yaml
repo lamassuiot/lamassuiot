@@ -264,7 +264,7 @@ paths:
       tags: [CMP]
       summary: Approve a pending CMP transaction
       description: |
-        Approves a PENDING phased-workflow CMP transaction, issuing the certificate
+        Approves an AwaitingApproval phased-workflow CMP transaction, issuing the certificate
         so the end entity can retrieve it via a subsequent pollReq. Only meaningful
         for DMSs whose cmp_settings.enrollment_settings.workflow is "phased".
       operationId: approveCmpTransaction
@@ -291,8 +291,8 @@ paths:
       tags: [CMP]
       summary: Reject a pending CMP transaction
       description: |
-        Denies a PENDING phased-workflow CMP transaction. The transaction
-        transitions to ISSUE_FAILED carrying the given reason; the end entity
+        Denies an AwaitingApproval phased-workflow CMP transaction. The transaction
+        transitions to Rejected carrying the given reason; the end entity
         learns of the rejection on its next pollReq. The request body is optional.
       operationId: rejectCmpTransaction
       x-authz:
@@ -917,7 +917,7 @@ components:
               example: 1w
               description: |
                 Positive Lamassu duration for a phased-workflow transaction to remain
-                PENDING for administrator approval. Zero or a negative value uses the
+                AwaitingApproval for administrator approval. Zero or a negative value uses the
                 runtime default of 1w. Only meaningful when workflow is phased.
             protection_certificate:
               type: string
@@ -1031,7 +1031,18 @@ components:
           type: string
         state:
           type: string
-          enum: [PENDING, ISSUED, ISSUE_FAILED, CONFIRMED, REVOKED]
+          enum:
+            - AwaitingPoPResponse
+            - AwaitingApproval
+            - Approving
+            - AwaitingCertConf
+            - LogicallyComplete
+            - Confirmed
+            - Revoking
+            - Revoked
+            - Rejected
+            - IssueFailed
+            - Expired
         is_reenrollment:
           type: boolean
           description: True for a kur (key update) transaction, false for ir/cr/p10cr.
@@ -1053,7 +1064,7 @@ components:
           format: date-time
         error_message:
           type: string
-          description: CA failure or administrator rejection reason, present when state is ISSUE_FAILED.
+          description: CA failure or administrator rejection reason, present when state is Rejected, IssueFailed or Expired.
         certificate_serial_number:
           type: string
         has_certificate:

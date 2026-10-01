@@ -24,15 +24,15 @@ type cmpTransactionRow struct {
 	TransactionID        string `gorm:"primaryKey;column:transaction_id"`
 	DMSID                string `gorm:"column:dms_id;not null"`
 	CertSerialNumber     string `gorm:"column:cert_serial_number;not null;default:''"`
-	Certificate          string `gorm:"column:certificate"`                                // base64-PEM text; empty for PENDING rows
+	Certificate          string `gorm:"column:certificate"`                                // base64-PEM text; empty until the cert is issued
 	SentNonce            string `gorm:"column:sent_nonce;not null;default:''"`             // hex-encoded bytes
 	ReceivedNonce        string `gorm:"column:received_nonce;not null;default:''"`         // hex-encoded request senderNonce
 	SupersededCertSerial string `gorm:"column:superseded_cert_serial;not null;default:''"` // kur: hex serial of the cert being updated
 	RegToken             string `gorm:"column:reg_token;not null;default:''"`              // RFC 4211 §6.1 id-regCtrl-regToken, one-time use
 	PopoChallenge        string `gorm:"column:popo_challenge;not null;default:''"`         // challengeResp POP: hex expected Rand.int
-	State                string `gorm:"column:state;not null;default:ISSUED"`
+	State                string `gorm:"column:state;not null;default:AwaitingCertConf"`
 	ErrorMessage         string `gorm:"column:error_message;not null;default:''"`
-	CSR                  string `gorm:"column:csr"` // base64-PEM text; empty for ISSUED rows
+	CSR                  string `gorm:"column:csr"` // base64-PEM text; empty once the cert is issued
 	IsReenrollment       bool   `gorm:"column:is_reenrollment;not null;default:false"`
 	CentralKeyGeneration bool   `gorm:"column:central_key_generation;not null;default:false"` // RFC 9483 §4.1.6 CKG: response not replayable
 	RequestType          string `gorm:"column:request_type;not null;default:''"`
@@ -102,6 +102,25 @@ type cmpRegTokenClaimRow struct {
 
 func (cmpRegTokenClaimRow) TableName() string { return "cmp_reg_token_claims" }
 
+// inFlightStates are the states where the transaction is waiting on someone
+// and therefore subject to ExpiresAt-based staleness.
+var inFlightStates = []string{
+	string(models.CMPTransactionStateAwaitingPoPResponse),
+	string(models.CMPTransactionStateAwaitingApproval),
+	string(models.CMPTransactionStateAwaitingCertConf),
+}
+
+// retainedStates are the states always visible regardless of ExpiresAt
+// (see models.CMPTransactionState.IsRetained).
+var retainedStates = []string{
+	string(models.CMPTransactionStateConfirmed),
+	string(models.CMPTransactionStateLogicallyComplete),
+	string(models.CMPTransactionStateRevoked),
+	string(models.CMPTransactionStateRejected),
+	string(models.CMPTransactionStateIssueFailed),
+	string(models.CMPTransactionStateExpired),
+}
+
 // PostgresCMPTransactionStorage implements storage.CMPTransactionRepo using Postgres.
 type PostgresCMPTransactionStorage struct {
 	db      *gorm.DB
@@ -126,8 +145,9 @@ func NewCMPTransactionRepository(logger *logrus.Entry, db *gorm.DB) (storage.CMP
 }
 
 // Exists reports whether an active (non-expired, non-terminal) transaction
-// with the given hex transactionID is present. Terminal states (CONFIRMED,
-// REVOKED) are excluded so a transactionID can be reused after completion.
+// with the given hex transactionID is present. Retained states (Confirmed,
+// LogicallyComplete, Revoked, ...) are excluded so a transactionID can be
+// reused after completion.
 //
 // The expires_at comparison uses the database-side clock (NOW()) rather than
 // the application clock, so multiple concurrent requests see a consistent
@@ -136,10 +156,9 @@ func (s *PostgresCMPTransactionStorage) Exists(ctx context.Context, transactionI
 	var count int64
 	result := s.db.WithContext(ctx).
 		Model(&cmpTransactionRow{}).
-		Where("transaction_id = ? AND expires_at > "+nowExpr(s.db)+" AND state IN (?,?)",
+		Where("transaction_id = ? AND expires_at > "+nowExpr(s.db)+" AND state IN ?",
 			transactionID,
-			string(models.CMPTransactionStatePending),
-			string(models.CMPTransactionStateIssued),
+			inFlightStates,
 		).
 		Count(&count)
 	if result.Error != nil {
@@ -149,7 +168,7 @@ func (s *PostgresCMPTransactionStorage) Exists(ctx context.Context, transactionI
 	return count > 0, nil
 }
 
-// HasUnconfirmedReenrollment reports whether an active (ISSUED, non-expired)
+// HasUnconfirmedReenrollment reports whether an active (AwaitingCertConf, non-expired)
 // re-enrollment transaction is updating the certificate with the given hex
 // serial under the DMS. Scoped to the superseded certificate — not the device
 // CN — because one subject may hold several certificates over time; only the
@@ -168,7 +187,7 @@ func (s *PostgresCMPTransactionStorage) HasUnconfirmedReenrollment(ctx context.C
 			dmsID,
 			supersededCertSerial,
 			true,
-			string(models.CMPTransactionStateIssued),
+			string(models.CMPTransactionStateAwaitingCertConf),
 		).
 		Count(&count)
 	if result.Error != nil {
@@ -181,7 +200,7 @@ func (s *PostgresCMPTransactionStorage) HasUnconfirmedReenrollment(ctx context.C
 // HasAbandonedReenrollment reports whether a re-enrollment (kur) transaction
 // updating the certificate with the given hex serial (SupersededCertSerial)
 // under the DMS was abandoned — issued but never confirmed and rolled back to
-// REVOKED on confirmation timeout. It is the post-timeout counterpart of
+// Revoked on confirmation timeout. It is the post-timeout counterpart of
 // HasUnconfirmedReenrollment. See the CMPTransactionRepo interface doc.
 func (s *PostgresCMPTransactionStorage) HasAbandonedReenrollment(ctx context.Context, dmsID, supersededCertSerial string) (bool, error) {
 	if supersededCertSerial == "" {
@@ -289,13 +308,14 @@ func nowExpr(db *gorm.DB) string {
 // so the controller can respond with PKIFailureInfo transactionIdInUse (21).
 //
 // The caller chooses the initial state by setting tx.State. Sync issuance sets
-// ISSUED with Certificate populated; async issuance sets PENDING with CSR + the
+// AwaitingCertConf (or LogicallyComplete) with Certificate populated; phased
+// issuance sets AwaitingApproval with CSR + the
 // IsReenrollment flag so the worker can later finish issuance.
 func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx models.CMPTransaction) error {
 	state := tx.State
 	if state == "" {
 		// Backward-compatible default for callers that didn't yet set State.
-		state = models.CMPTransactionStateIssued
+		state = models.CMPTransactionStateAwaitingCertConf
 	}
 	row := cmpTransactionRow{
 		TransactionID:               tx.TransactionID,
@@ -341,16 +361,14 @@ func (s *PostgresCMPTransactionStorage) Insert(ctx context.Context, tx models.CM
 }
 
 // Select reads a transaction by ID without modifying it. For in-flight states
-// (PENDING, ISSUED) also checks expires_at; terminal states (CONFIRMED,
-// REVOKED, ISSUE_FAILED) are always visible regardless of expiry.
+// (see inFlightStates) also checks expires_at; retained states (Confirmed,
+// Revoked, IssueFailed, ...) are always visible regardless of expiry.
 func (s *PostgresCMPTransactionStorage) Select(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
 	var row cmpTransactionRow
 	result := s.db.WithContext(ctx).
-		Where("transaction_id = ? AND (state IN (?,?,?) OR expires_at > "+nowExpr(s.db)+")",
+		Where("transaction_id = ? AND (state IN ? OR expires_at > "+nowExpr(s.db)+")",
 			transactionID,
-			string(models.CMPTransactionStateConfirmed),
-			string(models.CMPTransactionStateRevoked),
-			string(models.CMPTransactionStateIssueFailed),
+			retainedStates,
 		).
 		First(&row)
 	if result.Error != nil {
@@ -414,8 +432,8 @@ func (s *PostgresCMPTransactionStorage) SelectAndDelete(ctx context.Context, tra
 	return rowToDomain(row), true, nil
 }
 
-// ClaimPending atomically transitions a transaction from PENDING to APPROVING,
-// conditioned on the row still being PENDING and not expired, mirroring
+// ClaimPending atomically transitions a transaction from AwaitingApproval to Approving,
+// conditioned on the row still being AwaitingApproval and not expired, mirroring
 // Confirm's conditional-update approach so admin approval/rejection gets the
 // same concurrency guarantee certConf already has: only one of several
 // concurrent callers observes RowsAffected > 0, so only one ever proceeds to
@@ -432,7 +450,7 @@ func (s *PostgresCMPTransactionStorage) ClaimPending(ctx context.Context, transa
 			  RETURNING *`,
 				string(models.CMPTransactionStateApproving),
 				transactionID,
-				string(models.CMPTransactionStatePending),
+				string(models.CMPTransactionStateAwaitingApproval),
 			).
 			Scan(&row)
 		if result.Error != nil {
@@ -453,7 +471,7 @@ func (s *PostgresCMPTransactionStorage) ClaimPending(ctx context.Context, transa
 		txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			var current cmpTransactionRow
 			err := tx.Where("transaction_id = ? AND state = ? AND expires_at > "+nowExpr(s.db),
-				transactionID, string(models.CMPTransactionStatePending)).
+				transactionID, string(models.CMPTransactionStateAwaitingApproval)).
 				First(&current).Error
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -565,8 +583,8 @@ func (t *deviceLockTable) acquire(key string) func() {
 //
 // The query is keyed solely by transaction_id — staleness is NOT filtered
 // here because two distinct callers need to write past-expiry rows:
-//   - the confirmation monitor transitions expired PENDING rows to
-//     ISSUE_FAILED so they remain auditable;
+//   - the confirmation monitor transitions expired AwaitingApproval /
+//     AwaitingPoPResponse rows to Expired so they remain auditable;
 //   - the admin approval path may race the monitor by a few ms across the
 //     original expires_at boundary; rejecting in that window would orphan
 //     a cert issued at the CA.
@@ -586,8 +604,8 @@ func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transac
 		// Keep the denormalized lookup column in sync with the certificate being
 		// stored (see cmpTransactionRow.CertSerialNumber). Without this, a
 		// phased-approval transaction (ApproveCMPTransaction, the only caller
-		// that moves a row from PENDING to ISSUED with a freshly issued cert)
-		// leaves cert_serial_number at its PENDING-time empty value forever:
+		// that moves a row from AwaitingApproval to AwaitingCertConf with a freshly issued cert)
+		// leaves cert_serial_number at its awaiting-approval empty value forever:
 		// the in-memory struct returned to the approval caller looks correct,
 		// but every later DB read (certConf, revocation-by-serial, the
 		// confirmation monitor) sees "". A later LWCConfirmReenrollment lookup
@@ -606,7 +624,7 @@ func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transac
 	return result.RowsAffected > 0, nil
 }
 
-// SelectPending returns up to `limit` PENDING transactions whose ExpiresAt is
+// SelectPending returns up to `limit` AwaitingApproval transactions whose ExpiresAt is
 // still in the future, oldest first. Used by the async-issuance worker as its
 // work-queue cursor. On Postgres the query uses SELECT FOR UPDATE SKIP LOCKED
 // so multiple workers can claim disjoint rows in parallel without blocking
@@ -614,7 +632,7 @@ func (s *PostgresCMPTransactionStorage) UpdateState(ctx context.Context, transac
 // (monolithic deployments run a single writer, so the contention is irrelevant).
 func (s *PostgresCMPTransactionStorage) SelectPending(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	return s.selectLockedBatch(ctx, "select-pending",
-		"state = ? AND expires_at > "+nowExpr(s.db), string(models.CMPTransactionStatePending),
+		"state = ? AND expires_at > "+nowExpr(s.db), string(models.CMPTransactionStateAwaitingApproval),
 		"created_at ASC", limit, 16)
 }
 
@@ -652,18 +670,23 @@ func (s *PostgresCMPTransactionStorage) selectLockedBatch(ctx context.Context, l
 	return out, nil
 }
 
-// DeleteExpired removes ISSUE_FAILED transactions whose expires_at is in the
-// past. PENDING is intentionally NOT swept here — the confirmation monitor
-// transitions expired PENDING rows to ISSUE_FAILED (with a fresh retention
-// TTL) so the rejection is auditable and a later pollReq can surface the
-// reason to the EE. ISSUED rows are NOT deleted either — they represent a
-// cert that was actually issued at the CA, and the confirmation monitor
-// revokes them. Terminal states (CONFIRMED, REVOKED) are never deleted by
-// this method.
+// DeleteExpired removes Rejected, IssueFailed and Expired transactions whose
+// expires_at is in the past. In-flight rows are intentionally NOT swept here —
+// the confirmation monitor transitions expired AwaitingApproval /
+// AwaitingPoPResponse rows to Expired (with a fresh retention TTL) so the
+// outcome is auditable and a later pollReq can surface the reason to the EE.
+// AwaitingCertConf rows are NOT deleted either — they represent a cert that
+// was actually issued at the CA, and the confirmation monitor revokes them.
+// Confirmed, LogicallyComplete and Revoked rows are never deleted by this
+// method.
 func (s *PostgresCMPTransactionStorage) DeleteExpired(ctx context.Context) error {
 	result := s.db.WithContext(ctx).
-		Where("expires_at < "+nowExpr(s.db)+" AND state = ?",
-			string(models.CMPTransactionStateIssueFailed),
+		Where("expires_at < "+nowExpr(s.db)+" AND state IN ?",
+			[]string{
+				string(models.CMPTransactionStateRejected),
+				string(models.CMPTransactionStateIssueFailed),
+				string(models.CMPTransactionStateExpired),
+			},
 		).
 		Delete(&cmpTransactionRow{})
 	if result.Error != nil {
@@ -676,20 +699,22 @@ func (s *PostgresCMPTransactionStorage) DeleteExpired(ctx context.Context) error
 	return nil
 }
 
-// Confirm atomically transitions a transaction from ISSUED to CONFIRMED and
-// returns the prior state in the same DB round-trip. The prior state lets the
-// caller distinguish:
+// Confirm atomically transitions a transaction from AwaitingCertConf to the
+// given confirmed state (Confirmed for an explicit certConf, LogicallyComplete
+// for implicit confirmation) and returns the prior state in the same DB
+// round-trip. The prior state lets the caller distinguish:
 //
-//   - prior == ISSUED, updated == true   → transition succeeded
-//   - prior == REVOKED, updated == false → cert already revoked by the
+//   - prior == AwaitingCertConf, updated == true → transition succeeded
+//   - prior == Revoked, updated == false → cert already revoked by the
 //     confirmation monitor (race we must surface, not swallow)
-//   - prior == CONFIRMED, updated == false → idempotent replay of a certConf
+//   - prior == Confirmed/LogicallyComplete, updated == false → idempotent
+//     replay of a certConf
 //   - prior == "" (zero), updated == false → row not found at all
 //
 // Implementation: a CTE captures the row state pre-update under FOR UPDATE so
 // the read/update pair is atomic, then the UPDATE conditionally fires only
-// when the state is still ISSUED. Both branches return one row to Scan.
-func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transactionID string) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
+// when the state is still AwaitingCertConf. Both branches return one row to Scan.
+func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transactionID string, to models.CMPTransactionState) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
 	type confirmRow struct {
 		cmpTransactionRow
 		PriorState string `gorm:"column:prior_state"`
@@ -722,9 +747,9 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 				   FROM prior p
 				   LEFT JOIN updated u ON true`,
 				transactionID,
-				string(models.CMPTransactionStateConfirmed),
+				string(to),
 				transactionID,
-				string(models.CMPTransactionStateIssued),
+				string(models.CMPTransactionStateAwaitingCertConf),
 			).
 			Scan(&row)
 
@@ -760,18 +785,18 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 				return err
 			}
 			prior = models.CMPTransactionState(current.State)
-			if current.State != string(models.CMPTransactionStateIssued) {
+			if current.State != string(models.CMPTransactionStateAwaitingCertConf) {
 				return nil
 			}
 			updates := map[string]interface{}{
-				"state":        string(models.CMPTransactionStateConfirmed),
+				"state":        string(to),
 				"confirmed_at": time.Now(),
 			}
 			if err := tx.Model(&current).Updates(updates).Error; err != nil {
 				return err
 			}
 			dataRow = current
-			dataRow.State = string(models.CMPTransactionStateConfirmed)
+			dataRow.State = string(to)
 			updated = true
 			return nil
 		})
@@ -786,31 +811,36 @@ func (s *PostgresCMPTransactionStorage) Confirm(ctx context.Context, transaction
 	}
 }
 
-// SelectExpiredPending returns up to `limit` PENDING transactions whose
-// expires_at has already passed, oldest first. The CMP confirmation
-// monitor uses this to find phased-workflow requests an administrator
-// never acted on. Symmetric to SelectExpiredIssued: same SKIP LOCKED
+// SelectExpiredPending returns up to `limit` AwaitingApproval, Approving or
+// AwaitingPoPResponse transactions whose expires_at has already passed, oldest
+// first. The CMP confirmation monitor uses this to find phased-workflow
+// requests an administrator never acted on and proof-of-possession challenges
+// the EE never answered. Symmetric to SelectExpiredIssued: same SKIP LOCKED
 // behaviour on Postgres/MySQL so two replicas don't double-process.
 func (s *PostgresCMPTransactionStorage) SelectExpiredPending(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
-	// APPROVING rows are included alongside PENDING: APPROVING marks a row an
-	// administrator started resolving (ClaimPending) but never finished —
+	// Approving rows are included alongside AwaitingApproval: Approving marks a
+	// row an administrator started resolving (ClaimPending) but never finished —
 	// normally a sub-second window, but a process crash between the claim
-	// and the final ISSUED/ISSUE_FAILED write would otherwise strand the row
-	// outside every sweep forever (its state is no longer PENDING). Folding
-	// it into this same query means a stuck claim is recovered exactly like
-	// an unresolved PENDING row once its ExpiresAt passes.
+	// and the final state write would otherwise strand the row
+	// outside every sweep forever (its state is no longer AwaitingApproval).
+	// Folding it into this same query means a stuck claim is recovered exactly
+	// like an unresolved AwaitingApproval row once its ExpiresAt passes.
 	return s.selectLockedBatch(ctx, "select-expired-pending",
 		"state IN ? AND expires_at <= "+nowExpr(s.db),
-		[]string{string(models.CMPTransactionStatePending), string(models.CMPTransactionStateApproving)},
+		[]string{
+			string(models.CMPTransactionStateAwaitingPoPResponse),
+			string(models.CMPTransactionStateAwaitingApproval),
+			string(models.CMPTransactionStateApproving),
+		},
 		"expires_at ASC", limit, 100)
 }
 
-// SelectExpiredIssued returns up to `limit` ISSUED transactions whose
+// SelectExpiredIssued returns up to `limit` AwaitingCertConf transactions whose
 // expires_at has already passed, oldest first. These are enrollments that
 // were issued at the CA but never confirmed by the EE within the DMS
 // confirmation window. The confirmation monitor uses this to drive
 // revocation: each cert is revoked at the CA and then the row itself is
-// transitioned to REVOKED via MarkRevokedByTransactionID for audit.
+// transitioned to Revoked via MarkRevokedByTransactionID for audit.
 func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context, limit int) ([]models.CMPTransaction, error) {
 	// FOR UPDATE SKIP LOCKED ensures two backend replicas running the
 	// confirmation monitor concurrently each pick a disjoint set of rows
@@ -818,22 +848,24 @@ func (s *PostgresCMPTransactionStorage) SelectExpiredIssued(ctx context.Context,
 	// (audit finding S4). SelectPending uses the same pattern; the omission
 	// here was the bug.
 	//
-	// REVOKING rows are included alongside ISSUED: REVOKING marks a row the
-	// monitor started revoking (ClaimIssuedForRevocation) but never
+	// Revoking rows are included alongside AwaitingCertConf: Revoking marks a
+	// row the monitor started revoking (ClaimIssuedForRevocation) but never
 	// finished — normally sub-second, but a process crash between the claim
 	// and the final CA call/state write would otherwise strand the row
-	// outside every sweep forever (its state is no longer ISSUED).
+	// outside every sweep forever (its state is no longer AwaitingCertConf).
 	return s.selectLockedBatch(ctx, "select-expired-issued",
 		"state IN ? AND expires_at <= "+nowExpr(s.db),
-		[]string{string(models.CMPTransactionStateIssued), string(models.CMPTransactionStateRevoking)},
+		[]string{string(models.CMPTransactionStateAwaitingCertConf), string(models.CMPTransactionStateRevoking)},
 		"expires_at ASC", limit, 100)
 }
 
-// ClaimIssuedForRevocation atomically transitions a transaction from ISSUED
-// to REVOKING, conditioned on the row still being ISSUED, mirroring
-// ClaimPending's conditional-update approach. Only one of ClaimIssuedForRevocation
-// (this method) and Confirm (ISSUED → CONFIRMED) can ever observe
-// RowsAffected > 0 for a given row, since both require state=ISSUED under the
+// ClaimIssuedForRevocation atomically transitions a transaction from
+// AwaitingCertConf to Revoking, conditioned on the row still being
+// AwaitingCertConf — or already Revoking, so a row left there by a failed or
+// interrupted attempt is re-claimed and retried — mirroring ClaimPending's conditional-update approach. Only
+// one of ClaimIssuedForRevocation (this method) and Confirm (AwaitingCertConf →
+// Confirmed/LogicallyComplete) can ever observe
+// RowsAffected > 0 for a given row, since both require state=AwaitingCertConf under the
 // same row-level locking a plain UPDATE already provides — that is what
 // closes the confirmation-monitor-vs-certConf race (see the interface doc).
 func (s *PostgresCMPTransactionStorage) ClaimIssuedForRevocation(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
@@ -844,11 +876,12 @@ func (s *PostgresCMPTransactionStorage) ClaimIssuedForRevocation(ctx context.Con
 			Raw(
 				`UPDATE cmp_transactions
 				    SET state = ?
-				  WHERE transaction_id = ? AND state = ?
+				  WHERE transaction_id = ? AND state IN (?, ?)
 			  RETURNING *`,
 				string(models.CMPTransactionStateRevoking),
 				transactionID,
-				string(models.CMPTransactionStateIssued),
+				string(models.CMPTransactionStateAwaitingCertConf),
+				string(models.CMPTransactionStateRevoking),
 			).
 			Scan(&row)
 		if result.Error != nil {
@@ -865,8 +898,11 @@ func (s *PostgresCMPTransactionStorage) ClaimIssuedForRevocation(ctx context.Con
 		var claimed bool
 		txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			var current cmpTransactionRow
-			err := tx.Where("transaction_id = ? AND state = ?",
-				transactionID, string(models.CMPTransactionStateIssued)).
+			err := tx.Where("transaction_id = ? AND state IN ?",
+				transactionID, []string{
+					string(models.CMPTransactionStateAwaitingCertConf),
+					string(models.CMPTransactionStateRevoking),
+				}).
 				First(&current).Error
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -891,9 +927,9 @@ func (s *PostgresCMPTransactionStorage) ClaimIssuedForRevocation(ctx context.Con
 }
 
 // MarkRevokedByTransactionID transitions the row identified by transactionID
-// to REVOKED unconditionally — unlike MarkRevokedByCertSerial (which only
-// touches CONFIRMED rows) and UpdateState (which only touches non-expired
-// rows), this method targets expired ISSUED rows so the confirmation
+// to Revoked unconditionally — unlike MarkRevokedByCertSerial (which only
+// touches confirmed or unconfirmed-issued rows) and UpdateState (which only
+// touches non-expired rows), this method targets expired AwaitingCertConf rows so the confirmation
 // monitor can finalise them after revoking the cert at the CA.
 func (s *PostgresCMPTransactionStorage) MarkRevokedByTransactionID(ctx context.Context, transactionID string) error {
 	result := s.db.WithContext(ctx).
@@ -907,19 +943,25 @@ func (s *PostgresCMPTransactionStorage) MarkRevokedByTransactionID(ctx context.C
 	return nil
 }
 
-// MarkRevokedByCertSerial transitions any CONFIRMED transaction with the given
-// certificate serial number to REVOKED. No-op if no matching row exists.
+// MarkRevokedByCertSerial transitions any Confirmed, LogicallyComplete,
+// AwaitingCertConf or Revoking transaction with the given certificate serial
+// number to Revoked. No-op if no matching row exists.
 func (s *PostgresCMPTransactionStorage) MarkRevokedByCertSerial(ctx context.Context, certSerialNumber string) error {
 	result := s.db.WithContext(ctx).
 		Model(&cmpTransactionRow{}).
-		Where("cert_serial_number = ? AND state = ?", certSerialNumber, string(models.CMPTransactionStateConfirmed)).
+		Where("cert_serial_number = ? AND state IN ?", certSerialNumber, []string{
+			string(models.CMPTransactionStateConfirmed),
+			string(models.CMPTransactionStateLogicallyComplete),
+			string(models.CMPTransactionStateAwaitingCertConf),
+			string(models.CMPTransactionStateRevoking),
+		}).
 		Update("state", string(models.CMPTransactionStateRevoked))
 	if result.Error != nil {
 		s.logger.Errorf("cmp_transactions: mark-revoked serial=%s: %v", certSerialNumber, result.Error)
 		return result.Error
 	}
 	if result.RowsAffected > 0 {
-		s.logger.Infof("cmp_transactions: marked %d transaction(s) as REVOKED for serial %s", result.RowsAffected, certSerialNumber)
+		s.logger.Infof("cmp_transactions: marked %d transaction(s) as Revoked for serial %s", result.RowsAffected, certSerialNumber)
 	}
 	return nil
 }

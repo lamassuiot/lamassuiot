@@ -8,29 +8,45 @@
 -- cmp_transactions stores server-side state for every CMP enrollment
 -- transaction (RFC 4210 §5.1.1 / RFC 9483).
 --
+-- The state column uses the same vocabulary as the WFX workflow that mirrors
+-- each transaction (models.CMPTransactionState). Persisted states:
+--
 -- Lifecycle:
---   PENDING (cert not yet issued, async mode)
---     │ async worker calls LWCEnroll/LWCReenroll
+--   AwaitingPoPResponse (challengeResp popdecc sent, popdecr pending)
+--   AwaitingApproval    (cert not yet issued, phased workflow)
+--     │ admin claims the row
 --     ▼
---   ISSUED  (cert issued, awaiting certConf)
---     │ certConf received
---     ▼
---   CONFIRMED → (optionally) REVOKED
+--   Approving           (transient claim)
+--     │ cert issued                       │ CA error
+--     ▼                                   ▼
+--   AwaitingCertConf    (cert issued)     IssueFailed
+--     │ certConf received  │ implicit confirmation granted at issuance
+--     ▼                    ▼
+--   Confirmed            LogicallyComplete
+--     └───────────┬────────┘
+--                 ▼
+--   (optionally) Revoked   -- also reached from AwaitingCertConf via Revoking
+--                             when certConf never arrives
 --
---   PENDING → ISSUE_FAILED  (async worker error)
+--   Rejected (admin rejection) and Expired (approval/PoP window elapsed) are
+--   also persisted so a late pollReq can report the outcome.
 --
--- Terminal states (CONFIRMED, REVOKED, ISSUE_FAILED) are retained for audit.
--- Only in-flight states (PENDING, ISSUED) are subject to TTL expiry.
+-- Confirmed, LogicallyComplete and Revoked are retained for audit. Rejected,
+-- IssueFailed and Expired are retained for a TTL window. Only in-flight states
+-- (AwaitingPoPResponse, AwaitingApproval, AwaitingCertConf) are subject to
+-- TTL expiry.
 CREATE TABLE cmp_transactions (
     -- hex-encoded bytes of the PKIHeader transactionID field
     transaction_id         TEXT        NOT NULL,
     -- DMS identifier this transaction belongs to (from the URL path param)
     dms_id                 TEXT        NOT NULL,
-    -- state machine: PENDING | ISSUED | ISSUE_FAILED | CONFIRMED | REVOKED
-    state                  TEXT        NOT NULL DEFAULT 'ISSUED',
-    -- issued certificate stored as base64-encoded PEM; empty while PENDING
+    -- state machine: AwaitingPoPResponse | AwaitingApproval | Approving |
+    -- AwaitingCertConf | LogicallyComplete | Confirmed | Revoking | Revoked |
+    -- Rejected | IssueFailed | Expired
+    state                  TEXT        NOT NULL DEFAULT 'AwaitingCertConf',
+    -- issued certificate stored as base64-encoded PEM; empty until the cert is issued
     certificate            TEXT        NOT NULL DEFAULT '',
-    -- CSR stored as base64-encoded PEM; empty for ISSUED rows
+    -- CSR stored as base64-encoded PEM; empty once the cert is issued
     csr                    TEXT        NOT NULL DEFAULT '',
     -- senderNonce placed in the server response; hex-encoded, client echoes as recipNonce
     sent_nonce             TEXT        NOT NULL DEFAULT '',
@@ -42,7 +58,7 @@ CREATE TABLE cmp_transactions (
     cert_serial_number     TEXT        NOT NULL DEFAULT '',
     -- for key-update (kur) transactions, the hex serial of the certificate
     -- being updated (the request's protection cert). While the transaction is
-    -- ISSUED-but-unconfirmed, RFC 9483 §4.1.3 forbids further operations with
+    -- AwaitingCertConf, RFC 9483 §4.1.3 forbids further operations with
     -- that certificate (second kur, new enrollments, revocation), so the
     -- enrollment/revocation paths key their pending-update check on this
     -- column. Empty for ir/cr transactions.
@@ -51,7 +67,7 @@ CREATE TABLE cmp_transactions (
     expires_at             TIMESTAMPTZ NOT NULL,
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
     confirmed_at           TIMESTAMPTZ,
-    -- human-readable error from the async worker on ISSUE_FAILED
+    -- human-readable error from the async worker on Rejected, IssueFailed or Expired
     error_message          TEXT        NOT NULL DEFAULT '',
     -- true when the transaction was started by a KUR (key update / re-enroll)
     is_reenrollment        BOOL        NOT NULL DEFAULT FALSE,
@@ -67,7 +83,7 @@ CREATE TABLE cmp_transactions (
     reg_token              TEXT        NOT NULL DEFAULT '',
     -- hex-encoded expected Rand.int value for an ir/cr transaction awaiting a
     -- challengeResp proof-of-possession round trip (RFC 4210bis §5.2.8.3): the
-    -- row is inserted PENDING (with the synthesized CSR, as the phased-workflow
+    -- row is inserted AwaitingPoPResponse (with the synthesized CSR, as the phased-workflow
     -- approval flow already does) when popdecc is sent, and popdecr compares the
     -- EE's decrypted value against this column before resuming issuance. Empty
     -- for every other transaction.
@@ -113,20 +129,21 @@ CREATE TABLE cmp_transactions (
 CREATE INDEX cmp_transactions_expires_at_idx
     ON cmp_transactions (expires_at);
 
--- Async worker poll: find PENDING rows oldest-first
+-- Async worker poll: find AwaitingApproval rows oldest-first
 CREATE INDEX cmp_transactions_state_created_idx
     ON cmp_transactions (state, created_at)
-    WHERE state = 'PENDING';
+    WHERE state = 'AwaitingApproval';
 
 -- MarkRevokedByCertSerial's narrow revocation lookup by cert serial.
 CREATE INDEX cmp_transactions_cert_serial_idx
     ON cmp_transactions (cert_serial_number)
-    WHERE cert_serial_number != '' AND state = 'CONFIRMED';
+    WHERE cert_serial_number != ''
+      AND state IN ('Confirmed', 'LogicallyComplete', 'AwaitingCertConf', 'Revoking');
 
 -- SelectByCertSerial looks up the transaction for a certificate serial
 -- "regardless of state or expiry" (its own doc comment) — e.g. it must find a
--- REVOKED or PENDING row just as well as a CONFIRMED one, so it cannot use the
--- CONFIRMED-only index above.
+-- Revoked or AwaitingApproval row just as well as a Confirmed one, so it cannot
+-- use the partial index above.
 CREATE INDEX cmp_transactions_cert_serial_any_state_idx
     ON cmp_transactions (cert_serial_number)
     WHERE cert_serial_number != '';

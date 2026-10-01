@@ -44,7 +44,7 @@ const cmpTxTTL = 5 * time.Minute
 // the whole body has already been read into memory.
 const cmpMaxRequestBodyBytes = 1 << 20 // 1 MiB
 
-// cmpApprovalTTL is how long a phased-workflow transaction waits in PENDING for
+// cmpApprovalTTL is how long a phased-workflow transaction waits in AwaitingApproval for
 // an administrator to approve issuance before it is swept by DeleteExpired.
 // It is far longer than the certConf window (cmpTxTTL) because approval is a
 // human action, not an automated device round-trip — a 5-minute window would
@@ -59,6 +59,11 @@ type cmpCtxKey string
 // request so reportCMPState can route every transition to the right workflow.
 const cmpWorkflowCtxKey cmpCtxKey = "cmp-workflow-name"
 
+// cmpDeviceCNCtxKey carries the device CommonName resolved at the top of
+// HandleCMP, so a rejection raised before any transaction row exists can still
+// be routed to the WFX job the Received transition created for that device.
+const cmpDeviceCNCtxKey cmpCtxKey = "cmp-device-cn"
+
 // confirmationTimeoutOrDefault returns the configured DMS confirmation timeout
 // when positive, falling back to cmpTxTTL otherwise. RFC 4210 §5.2.8 specifies
 // that the server controls how long it waits for certConf; the per-DMS setting
@@ -72,7 +77,7 @@ func confirmationTimeoutOrDefault(t models.TimeDuration) time.Duration {
 
 // approvalTimeoutOrDefault returns the configured DMS approval timeout when
 // positive, falling back to cmpApprovalTTL otherwise. Used only on the phased
-// workflow PENDING insertion.
+// workflow AwaitingApproval insertion.
 func approvalTimeoutOrDefault(t models.TimeDuration) time.Duration {
 	if d := time.Duration(t); d > 0 {
 		return d
@@ -236,6 +241,7 @@ func (r *cmpHttpRoutes) HandleCMP(ctx *gin.Context) {
 	// the Emit call drops the transition silently when CN is empty, which
 	// is the right behaviour for malformed bodies that we'll reject below.
 	deviceCN := r.resolveDeviceCN(ctx.Request.Context(), body, txHex)
+	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), cmpDeviceCNCtxKey, deviceCN))
 
 	// Fetch DMS enrollment options so we can make per-request decisions
 	// (request-protection enforcement, implicit-confirm mode, workflow
@@ -616,9 +622,26 @@ func (r *cmpHttpRoutes) handleRevoke(ctx *gin.Context, lFunc *logrus.Entry, head
 		return
 	}
 
-	// Transition the CMP transaction to REVOKED for audit visibility.
+	// Capture the enrollment transaction before it is flipped so the matching
+	// WFX job can be moved to Revoked below.
+	enrolled, enrolledFound, _ := r.store.SelectByCertSerial(ctx.Request.Context(), serialHex)
+
+	// Transition the CMP transaction to Revoked for audit visibility.
 	if markErr := r.store.MarkRevokedByCertSerial(ctx.Request.Context(), serialHex); markErr != nil {
 		lFunc.Warnf("rr: failed to mark transaction as revoked: %v", markErr)
+	} else if enrolledFound && !revive && (enrolled.State.IsConfirmed() ||
+		enrolled.State == models.CMPTransactionStateAwaitingCertConf ||
+		enrolled.State == models.CMPTransactionStateRevoking) {
+		r.reportCMPState(ctx.Request.Context(), lFunc, cmpwfx.CMPTransition{
+			TransactionID:     enrolled.TransactionID,
+			DMSID:             enrolled.DMSID,
+			RequestType:       enrolled.RequestType,
+			SubjectCommonName: enrolled.SubjectCommonName,
+			CertSerialNumber:  enrolled.CertSerialNumber,
+			State:             cmpwfx.CMPStateRevoked,
+			Reason:            fmt.Sprintf("certificate %s revoked via CMP rr", serialHex),
+			Metadata:          map[string]any{"revocationSource": "cmp-rr", "reason": reason},
+		})
 	}
 
 	// Record THIS rr's transactionID so the pre-check above rejects a replay of
@@ -812,18 +835,20 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	}
 
 	// There is nothing to confirm until a certificate actually exists.
-	// tx.Certificate is nil while State == PENDING (see models.CMPTransaction),
-	// and PENDING rows are reachable today: deferForApproval parks one for the
-	// phased-approval window and handlePOPOChallenge parks one awaiting popdecr.
-	// Because the EE chooses its own transactionID, an ir/cr that parks a PENDING
-	// row followed by a certConf for the same ID would otherwise dereference a nil
-	// Certificate below — every check in between passes trivially, since a PENDING
-	// row's SentNonce and CertSerialNumber are still empty. Reject explicitly
-	// instead; the EE's correct next message for a PENDING transaction is pollReq.
+	// tx.Certificate is nil while State is AwaitingApproval or AwaitingPoPResponse
+	// (see models.CMPTransaction), and those rows are reachable today:
+	// deferForApproval parks one for the phased-approval window and
+	// handlePOPOChallenge parks one awaiting popdecr. Because the EE chooses its
+	// own transactionID, an ir/cr that parks such a row followed by a certConf for
+	// the same ID would otherwise dereference a nil Certificate below — every
+	// check in between passes trivially, since the row's SentNonce and
+	// CertSerialNumber are still empty. Reject explicitly instead; the EE's
+	// correct next message for an AwaitingApproval transaction is pollReq.
 	//
 	// Keyed on Certificate == nil rather than on a State allow-list on purpose:
 	// that is exactly the dereference precondition, and it leaves every state that
-	// does carry a certificate (ISSUED, CONFIRMED, REVOKED) to the existing
+	// does carry a certificate (AwaitingCertConf, LogicallyComplete, Confirmed,
+	// Revoked) to the existing
 	// Confirm() handling below, which distinguishes duplicate-certConf and
 	// revoked-before-confirmation with their own specific failInfo bits.
 	if tx.Certificate == nil {
@@ -927,8 +952,8 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 		lFunc.Debugf("certConf: entry %d certReqId=%d hash OK", i, s.CertReqID)
 	}
 
-	lFunc.Infof("certConf verified, transitioning to CONFIRMED")
-	_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex)
+	lFunc.Infof("certConf verified, transitioning to Confirmed")
+	_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex, models.CMPTransactionStateConfirmed)
 	if confirmErr != nil {
 		lFunc.Errorf("certConf: confirm storage error: %v", confirmErr)
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error: storage", dmsID, corecmp.PKIFailureInfoSystemFailure)
@@ -936,33 +961,26 @@ func (r *cmpHttpRoutes) handleCertConf(ctx *gin.Context, lFunc *logrus.Entry, he
 	}
 	if !updated {
 		switch prior {
-		case models.CMPTransactionStateRevoked:
+		case models.CMPTransactionStateRevoked, models.CMPTransactionStateRevoking:
 			// Race we MUST surface (audit S1): between this handler's Select
 			// and Confirm, the confirmation monitor revoked the cert at the
 			// CA. The EE believes enrollment succeeded but the cert is gone.
 			// Reject so the EE re-enrolls instead of acting on a dead cert.
-			lFunc.Warnf("certConf: tx %s already REVOKED — race with confirmation monitor", txHex)
+			lFunc.Warnf("certConf: tx %s already Revoked — race with confirmation monitor", txHex)
 			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 				"certificate was revoked before confirmation was processed", dmsID, corecmp.PKIFailureInfoBadRequest)
 			return
+		case models.CMPTransactionStateLogicallyComplete:
+			// Confirmed implicitly at issuance (RFC 4210 §5.2.8). An EE MAY still
+			// send certConf even when implicitConfirm was granted; that
+			// confirmation is answered with a normal pkiConf.
+			lFunc.Infof("certConf: tx %s was implicitly confirmed at issuance — acknowledging with pkiConf", txHex)
 		case models.CMPTransactionStateConfirmed:
-			// The transaction is already CONFIRMED. Two distinct cases:
-			//
-			//   - Confirmed implicitly at issuance (RFC 4210 §5.2.8): marked by
-			//     ConfirmedAt == CreatedAt exactly (issueAndStore stamps both
-			//     from one clock read). An EE MAY still send certConf even when
-			//     implicitConfirm was granted; that first confirmation is
-			//     answered with a normal pkiConf.
-			//   - Confirmed by an earlier certConf (Confirm() stamped a later
-			//     ConfirmedAt): this one is a duplicate. RFC 9483 §4.1.1 /
-			//     RFC 4210 §5.3.18 answer it with an error carrying failInfo
-			//     certConfirmed (11) — the EE still learns the certificate is
-			//     confirmed, so a client retrying a lost pkiConf isn't left blind.
-			if tx.ConfirmedAt.Equal(tx.CreatedAt) {
-				lFunc.Infof("certConf: tx %s was implicitly confirmed at issuance — acknowledging with pkiConf", txHex)
-				break
-			}
-			lFunc.Infof("certConf: tx %s already CONFIRMED — replying error(certConfirmed)", txHex)
+			// Already confirmed by an earlier certConf: this one is a duplicate.
+			// RFC 9483 §4.1.1 / RFC 4210 §5.3.18 answer it with an error carrying
+			// failInfo certConfirmed (11) — the EE still learns the certificate is
+			// confirmed, so a client retrying a lost pkiConf isn't left blind.
+			lFunc.Infof("certConf: tx %s already Confirmed — replying error(certConfirmed)", txHex)
 			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 				"certificate confirmation was already received for this transaction",
 				dmsID, corecmp.PKIFailureInfoCertConfirmed)
@@ -1030,15 +1048,19 @@ const (
 // certReqId — certReqId is just echoed back) and chooses a response based on
 // the row's state:
 //
-//   - PENDING       → pollRep(checkAfter)         (phased approval / popo challenge)
-//   - ISSUED        → ip/cp(cert)                 (deliver the cert; non-destructive)
-//   - ISSUE_FAILED  → error PKIMessage(reason)
+//   - AwaitingApproval / AwaitingPoPResponse → pollRep(checkAfter)
+//     (phased approval / popo challenge)
+//   - AwaitingCertConf → ip/cp(cert)           (deliver the cert; non-destructive)
+//   - LogicallyComplete / Confirmed → ip/cp(cert) (lost-response recovery)
+//   - Rejected / IssueFailed / Expired → error PKIMessage(reason)
+//   - Revoked       → error PKIMessage(certRevoked)
 //   - not found     → error PKIMessage("unknown transactionID")
 //
-// PENDING is a live state, not a dead path: deferForApproval parks a row for the
-// phased-approval window and handlePOPOChallenge parks one awaiting popdecr.
+// AwaitingApproval and AwaitingPoPResponse are live states: deferForApproval
+// parks a row for the phased-approval window and handlePOPOChallenge parks one
+// awaiting popdecr.
 //
-// In the current sync-only mode, an ISSUED row is always present after the
+// In the current sync-only mode, an AwaitingCertConf row is always present after the
 // initial ip(cert), letting an EE recover when the original response was lost
 // in transit (per RFC 4210 §5.3.22).
 func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header corecmp.RequestPKIHeader, body asn1.RawValue, dmsID string, enrollOpts *models.CMPEnrollmentSettings) {
@@ -1069,7 +1091,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 	//
 	// The check is deliberately conditional on the EE having SENT a recipNonce,
 	// which is weaker than certConf's. pollReq's whole reason for existing on an
-	// ISSUED row is lost-response recovery (see the ResponseSenderNonce comment
+	// AwaitingCertConf row is lost-response recovery (see the ResponseSenderNonce comment
 	// below): an EE whose ip/cp never arrived has no senderNonce to echo and
 	// cannot supply one. Demanding a recipNonce here would reject precisely the
 	// case this path was built to serve. A WRONG nonce is still a mismatched or
@@ -1101,9 +1123,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 	}
 
 	switch tx.State {
-	case models.CMPTransactionStatePending:
-		// Dead path in sync-only mode (no PENDING rows are created), but kept
-		// for forward-compatibility if async issuance is reintroduced.
+	case models.CMPTransactionStateAwaitingApproval, models.CMPTransactionStateAwaitingPoPResponse:
 		checkAfter := defaultPollIntervalSeconds
 		repDER, err := corecmp.MarshalPollRepBody(certReqID, checkAfter)
 		if err != nil {
@@ -1111,7 +1131,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build pollRep", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
-		lFunc.Infof("pollReq: tx %s still PENDING, replying pollRep(checkAfter=%ds)", txHex, checkAfter)
+		lFunc.Infof("pollReq: tx %s still %s, replying pollRep(checkAfter=%ds)", txHex, tx.State, checkAfter)
 		responseDER := r.sendRawBody(ctx, lFunc, header, corecmp.BodyTagPollRep, repDER, dmsID)
 		if len(responseDER) == 0 {
 			return
@@ -1121,7 +1141,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			DMSID:             dmsID,
 			RequestType:       tx.RequestType,
 			SubjectCommonName: tx.SubjectCommonName,
-			State:             cmpwfx.CMPStateAwaitingApproval,
+			State:             tx.State,
 			Metadata: withCMPMessageB64(map[string]any{
 				"certReqId":    certReqID,
 				"responseType": "pollRep",
@@ -1129,10 +1149,10 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			}, cmpMetadataResponseB64, responseDER),
 		})
 
-	case models.CMPTransactionStateIssued:
+	case models.CMPTransactionStateAwaitingCertConf:
 		// Determine whether implicit confirm applies for this pollReq delivery.
 		// When implicit, no certConf will follow and the row is transitioned to
-		// CONFIRMED below. When explicit, the row stays in ISSUED awaiting certConf.
+		// LogicallyComplete below. When explicit, the row stays in AwaitingCertConf.
 		implicitConfirm := r.isImplicitConfirm(ctx.Request.Context(), header, dmsID)
 		header.ResponseImplicitConfirm = implicitConfirm
 
@@ -1168,7 +1188,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			return
 		}
 
-		// When implicit confirm, transition the transaction to CONFIRMED —
+		// When implicit confirm, transition the transaction to LogicallyComplete —
 		// no certConf message will arrive to do it later.
 		// RFC 4210 §5.2.8: once the server grants implicit confirmation the
 		// transaction is complete upon cert delivery.
@@ -1178,22 +1198,22 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// silently dropping that race lets the EE walk away with a cert that
 		// Lamassu and the CA both consider invalid (audit S2).
 		if implicitConfirm {
-			_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex)
+			_, prior, updated, confirmErr := r.store.Confirm(ctx.Request.Context(), txHex, models.CMPTransactionStateLogicallyComplete)
 			if confirmErr != nil {
 				lFunc.Errorf("pollReq: confirm storage error: %v", confirmErr)
 				r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "internal error: storage", dmsID, corecmp.PKIFailureInfoSystemFailure)
 				return
 			}
 			if !updated {
-				if prior == models.CMPTransactionStateRevoked {
-					lFunc.Warnf("pollReq: tx %s already REVOKED — race with confirmation monitor", txHex)
+				if prior == models.CMPTransactionStateRevoked || prior == models.CMPTransactionStateRevoking {
+					lFunc.Warnf("pollReq: tx %s already Revoked — race with confirmation monitor", txHex)
 					r.rejectWithError(ctx, &header, corecmp.PKIStatus(2),
 						"certificate was revoked before implicit confirmation could be processed", dmsID, corecmp.PKIFailureInfoBadRequest)
 					return
 				}
-				// prior == CONFIRMED is fine (idempotent pollReq replay); any
+				// prior == LogicallyComplete is fine (idempotent pollReq replay); any
 				// other state should be impossible here because we entered
-				// this branch via tx.State == ISSUED above.
+				// this branch via tx.State == AwaitingCertConf above.
 				lFunc.Debugf("pollReq: tx %s already in state %q (idempotent replay)", txHex, prior)
 			}
 			// Commit the deferred key-update on the real transition, mirroring
@@ -1207,7 +1227,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			}
 		}
 
-		lFunc.Infof("pollReq: tx %s ISSUED, delivering cert via %s (implicitConfirm=%v)", txHex, cmpTagToString(respTag), implicitConfirm)
+		lFunc.Infof("pollReq: tx %s AwaitingCertConf, delivering cert via %s (implicitConfirm=%v)", txHex, cmpTagToString(respTag), implicitConfirm)
 		responseDER := r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
 		if len(responseDER) == 0 {
 			return
@@ -1231,11 +1251,11 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			}, cmpMetadataResponseB64, responseDER),
 		})
 
-	case models.CMPTransactionStateConfirmed:
+	case models.CMPTransactionStateLogicallyComplete, models.CMPTransactionStateConfirmed:
 		// Lost-response recovery for implicit-confirm enrollments: the IR
-		// already drove the row to CONFIRMED at IP delivery (RFC 4210 §5.2.8),
-		// but the EE never received the IP. The pollReq retries; we re-deliver
-		// the cert and leave the row in CONFIRMED. No certConf will follow and
+		// already drove the row to LogicallyComplete at IP delivery (RFC 4210
+		// §5.2.8), but the EE never received the IP. The pollReq retries; we
+		// re-deliver the cert and leave the row as it is. No certConf will follow and
 		// no nonce echo is needed.
 		respTag := pollRespTagFor(tx)
 		var txCertRaw []byte
@@ -1244,14 +1264,14 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		}
 		certRepDER, err := corecmp.MarshalCertRepBody(respTag, certReqID, txCertRaw)
 		if err != nil {
-			lFunc.Errorf("pollReq: build cert rep body for CONFIRMED row: %v", err)
+			lFunc.Errorf("pollReq: build cert rep body for %s row: %v", tx.State, err)
 			r.rejectWithError(ctx, &header, corecmp.PKIStatus(2), "cannot build response", dmsID, corecmp.PKIFailureInfoSystemFailure)
 			return
 		}
 		// Echo the implicit-confirm OID so the EE sees the same negotiation it
 		// originally received on the lost IP — keeps the protocol view consistent.
 		header.ResponseImplicitConfirm = true
-		lFunc.Infof("pollReq: tx %s CONFIRMED (implicit), re-delivering cert via %s", txHex, cmpTagToString(respTag))
+		lFunc.Infof("pollReq: tx %s %s, re-delivering cert via %s", txHex, tx.State, cmpTagToString(respTag))
 		responseDER := r.sendRawBody(ctx, lFunc, header, respTag, certRepDER, dmsID)
 		if len(responseDER) == 0 {
 			return
@@ -1271,12 +1291,12 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 			}, cmpMetadataResponseB64, responseDER),
 		})
 
-	case models.CMPTransactionStateIssueFailed:
+	case models.CMPTransactionStateRejected, models.CMPTransactionStateIssueFailed, models.CMPTransactionStateExpired:
 		reason := tx.ErrorMessage
 		if reason == "" {
 			reason = "issuance failed"
 		}
-		lFunc.Warnf("pollReq: tx %s ISSUE_FAILED, returning CMP error: %s", txHex, reason)
+		lFunc.Warnf("pollReq: tx %s %s, returning CMP error: %s", txHex, tx.State, reason)
 		// CA-layer issuance failure surfaced via pollReq — same rationale as
 		// the inline enroll-error path above (systemFailure until structured
 		// service-layer error categories exist).
@@ -1289,7 +1309,7 @@ func (r *cmpHttpRoutes) handlePoll(ctx *gin.Context, lFunc *logrus.Entry, header
 		// precisely what happened — falling through to the generic
 		// unknown-state systemFailure reads as a server bug and gives the
 		// operator nothing to act on.
-		lFunc.Warnf("pollReq: tx %s REVOKED, returning CMP error", txHex)
+		lFunc.Warnf("pollReq: tx %s Revoked, returning CMP error", txHex)
 		r.rejectWithError(ctx, &header, corecmp.PKIStatus(corecmp.PKIStatusRejection),
 			"certificate for this transaction has been revoked (confirmation window elapsed or revoked via API); start a new enrollment", dmsID, corecmp.PKIFailureInfoCertRevoked)
 
@@ -1441,6 +1461,27 @@ func (r *cmpHttpRoutes) rejectRequest(ctx *gin.Context, lFunc *logrus.Entry, hea
 }
 
 func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *corecmp.RequestPKIHeader, status corecmp.PKIStatus, reason string, aps string, failInfoBits ...int) {
+	r.rejectWithErrorAs(ctx, header, cmpwfx.CMPStateRejected, status, reason, aps, failInfoBits...)
+}
+
+// canReportRejection reports whether the workflow allows a transaction whose
+// persisted row is in `state` to move to a rejection state (Rejected,
+// IssueFailed). A row that already reached an outcome, or one in a transient
+// claim, would only make WFX refuse the invalid transition. "" means no row
+// exists yet (the request was refused before one was written).
+func canReportRejection(state models.CMPTransactionState) bool {
+	switch state {
+	case "", models.CMPTransactionStateAwaitingPoPResponse,
+		models.CMPTransactionStateAwaitingApproval,
+		models.CMPTransactionStateAwaitingCertConf:
+		return true
+	}
+	return false
+}
+
+// rejectWithErrorAs is rejectWithError with an explicit WFX outcome state:
+// IssueFailed when the CA failed to issue, Rejected for everything else.
+func (r *cmpHttpRoutes) rejectWithErrorAs(ctx *gin.Context, header *corecmp.RequestPKIHeader, wfxState cmpwfx.CMPState, status corecmp.PKIStatus, reason string, aps string, failInfoBits ...int) {
 	r.logCMPFailure(header, status, reason, aps, failInfoBits...)
 	errBody, err := corecmp.MarshalErrorBody(status, reason, failInfoBits...)
 	if err != nil {
@@ -1456,23 +1497,30 @@ func (r *cmpHttpRoutes) rejectWithError(ctx *gin.Context, header *corecmp.Reques
 		// before enrollment failed, so clear it here to avoid leaking it into
 		// the error response generalInfo.
 		h.ResponseImplicitConfirm = false
-		// Best-effort CN lookup: if a transaction row already exists for
-		// this txID we can route the Rejected transition to the matching
-		// WFX job. For brand-new requests rejected before the row is
-		// written there is no CN to find — Emit drops it silently, which
-		// is the correct behaviour (no useful WFX job to attach to).
+		// CN lookup: prefer the persisted transaction row; for requests rejected
+		// before the row is written fall back to the CN resolved from the request
+		// at the top of HandleCMP, which is the same CN the Received transition
+		// used to create the WFX job. With neither there is no WFX job to attach
+		// to — Emit drops the transition silently, which is the correct behaviour.
 		txHex := hex.EncodeToString(header.TransactionID)
 		var deviceCN string
+		var rowState models.CMPTransactionState
 		if tx, ok, err := r.store.Select(ctx.Request.Context(), txHex); err == nil && ok {
 			deviceCN = tx.SubjectCommonName
+			rowState = tx.State
 		}
-		r.reportCMPState(ctx.Request.Context(), r.logger, cmpwfx.CMPTransition{
-			TransactionID:     txHex,
-			DMSID:             aps,
-			SubjectCommonName: deviceCN,
-			State:             cmpwfx.CMPStateRejected,
-			Reason:            reason,
-		})
+		if deviceCN == "" {
+			deviceCN, _ = ctx.Request.Context().Value(cmpDeviceCNCtxKey).(string)
+		}
+		if canReportRejection(rowState) {
+			r.reportCMPState(ctx.Request.Context(), r.logger, cmpwfx.CMPTransition{
+				TransactionID:     txHex,
+				DMSID:             aps,
+				SubjectCommonName: deviceCN,
+				State:             wfxState,
+				Reason:            reason,
+			})
+		}
 	}
 	r.sendRawBody(ctx, r.logger, h, corecmp.BodyTagError, errBody, aps)
 }

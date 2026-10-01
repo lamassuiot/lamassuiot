@@ -1,6 +1,7 @@
 package cmp
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	cmpwfx "github.com/lamassuiot/lamassuiot/backend/v3/pkg/integrations/wfx"
 	corecmp "github.com/lamassuiot/lamassuiot/core/v3/pkg/cmp"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -405,6 +407,57 @@ func TestHandleCMP_RR_TrustedRA_RevokesOtherCert(t *testing.T) {
 		"RA-initiated revocation must be accepted and answered with rp")
 
 	svc.AssertExpectations(t)
+}
+
+// TestHandleCMP_RR_RevokesEnrollmentTransaction verifies the rr path keeps the
+// transaction and its WFX job in step with the certificate: whatever state the
+// enrollment is in (awaiting certConf, confirmed, ...), revoking its
+// certificate moves the row to Revoked and pushes Revoked to WFX.
+func TestHandleCMP_RR_RevokesEnrollmentTransaction(t *testing.T) {
+	for _, from := range []models.CMPTransactionState{
+		models.CMPTransactionStateAwaitingCertConf,
+		models.CMPTransactionStateLogicallyComplete,
+		models.CMPTransactionStateConfirmed,
+	} {
+		t.Run(string(from), func(t *testing.T) {
+			raCert, raKey := buildRACert(t, "trusted-ra")
+			targetSerial := big.NewInt(0x99)
+
+			svc := &cmpmock.MockLightweightCMPService{}
+			svc.On("LWCGetEnrollmentOptions", mock.Anything, "test-dms").
+				Return(resolvedOpts(models.CMPEnrollmentSettings{}), nil)
+			svc.On("LWCRevokeCertificate", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+			reporter := &captureWFXReporter{}
+			router, store := newTestRouterWithStoreAndWFX(svc, reporter)
+
+			enrollTxID := hex.EncodeToString(randomTxID(t))
+			require.NoError(t, store.Insert(context.Background(), models.CMPTransaction{
+				TransactionID:     enrollTxID,
+				DMSID:             "test-dms",
+				CertSerialNumber:  hex.EncodeToString(targetSerial.Bytes()),
+				SubjectCommonName: "device-revoked",
+				State:             from,
+				ExpiresAt:         time.Now().Add(5 * time.Minute),
+				CreatedAt:         time.Now(),
+			}))
+
+			rrDER := buildTestRRWithIssuer(t, pkix.Name{CommonName: "Some Issuing CA"}, targetSerial)
+			resp := postCMP(t, router, "test-dms", signCMPMessage(t, rrDER, raCert, raKey))
+			require.Equal(t, http.StatusOK, resp.Code)
+			require.Equal(t, corecmp.BodyTagRP, parseCMPResponseTag(t, resp.Body.Bytes()))
+
+			tx, found, err := store.Select(context.Background(), enrollTxID)
+			require.NoError(t, err)
+			require.True(t, found)
+			assert.Equal(t, models.CMPTransactionStateRevoked, tx.State)
+
+			revoked, ok := reporter.TransitionByState(cmpwfx.CMPStateRevoked)
+			require.True(t, ok, "the WFX job must reach Revoked")
+			assert.Equal(t, enrollTxID, revoked.TransactionID)
+			assert.Equal(t, "device-revoked", revoked.SubjectCommonName)
+		})
+	}
 }
 
 // TestHandleCMP_RR_NonRASigner_StillMatched verifies the RA bypass does NOT

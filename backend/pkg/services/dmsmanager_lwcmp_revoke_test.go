@@ -72,7 +72,7 @@ func (noopCMPTxRepo) WithDeviceLock(ctx context.Context, deviceID string, fn fun
 func (noopCMPTxRepo) ClaimIssuedForRevocation(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error) {
 	return models.CMPTransaction{}, false, nil
 }
-func (noopCMPTxRepo) Confirm(ctx context.Context, transactionID string) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
+func (noopCMPTxRepo) Confirm(ctx context.Context, transactionID string, to models.CMPTransactionState) (models.CMPTransaction, models.CMPTransactionState, bool, error) {
 	return models.CMPTransaction{}, "", false, nil
 }
 func (noopCMPTxRepo) UpdateState(ctx context.Context, transactionID string, state models.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error) {

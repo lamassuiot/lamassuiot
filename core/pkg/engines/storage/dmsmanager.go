@@ -14,19 +14,21 @@ import (
 //
 // Transactions progress through the following states:
 //
-//	PENDING → ISSUED → CONFIRMED → (optionally) REVOKED
-//	                → ISSUE_FAILED
+//	AwaitingApproval → Approving → AwaitingCertConf → Confirmed → (optionally) Revoked
+//	                            → IssueFailed        → LogicallyComplete (implicit)
 //
-// Terminal states (CONFIRMED, REVOKED, ISSUE_FAILED) are retained indefinitely
-// for audit visibility; only in-flight states (PENDING, ISSUED) are subject to
-// TTL-based expiration.
+// The state names are shared with the WFX workflow that mirrors each
+// transaction. Confirmed, LogicallyComplete and Revoked rows are retained
+// indefinitely for audit visibility; Rejected, IssueFailed and Expired rows are
+// retained for a TTL window; only in-flight states (AwaitingPoPResponse,
+// AwaitingApproval, AwaitingCertConf) are subject to TTL-based expiration.
 type CMPTransactionRepo interface {
 	// Exists reports whether an active (non-expired, non-terminal) transaction
 	// with the given hex transactionID is present. It is a read-only check
 	// used to reject replayed requests before any enrollment side-effects occur.
 	Exists(ctx context.Context, transactionID string) (bool, error)
 
-	// HasUnconfirmedReenrollment reports whether an active (ISSUED, non-expired)
+	// HasUnconfirmedReenrollment reports whether an active (AwaitingCertConf, non-expired)
 	// re-enrollment (kur) transaction exists that is updating the certificate
 	// with the given hex serial number (SupersededCertSerial) under the DMS.
 	// Used to reject further operations with that certificate — a second KUR,
@@ -35,15 +37,15 @@ type CMPTransactionRepo interface {
 	// device CN because multiple certificates can legitimately share a subject
 	// (one CN may be re-enrolled repeatedly); it is the *certificate under
 	// update* that is locked, not the whole identity. Returns false once the
-	// prior transaction has been confirmed (CONFIRMED), rolled back on timeout
-	// (REVOKED), or has otherwise expired.
+	// prior transaction has been confirmed (Confirmed), rolled back on timeout
+	// (Revoked), or has otherwise expired.
 	HasUnconfirmedReenrollment(ctx context.Context, dmsID, supersededCertSerial string) (bool, error)
 
 	// HasAbandonedReenrollment reports whether a re-enrollment (kur)
 	// transaction that was updating the certificate with the given hex serial
 	// number (SupersededCertSerial) under the DMS was abandoned: issued but
 	// never confirmed and then rolled back on confirmation timeout (state
-	// REVOKED). It is the post-timeout counterpart of HasUnconfirmedReenrollment
+	// Revoked). It is the post-timeout counterpart of HasUnconfirmedReenrollment
 	// (which covers the still-pending window). The ir/cr enrollment path uses it
 	// to force a device that abandoned a key-update to recover via a new kur
 	// rather than an initialization/certification request (RFC 9483 §4.1.3,
@@ -55,7 +57,7 @@ type CMPTransactionRepo interface {
 	// CMPTransaction.RegToken field). regToken is intended for one-time use —
 	// once a request presenting a given value has been accepted, any later
 	// request presenting the same value must be rejected — so the check spans
-	// every state (including REVOKED/CONFIRMED), not just active rows. Returns
+	// every state (including Revoked/Confirmed), not just active rows. Returns
 	// false when regToken is empty.
 	HasSeenRegToken(ctx context.Context, dmsID, regToken string) (bool, error)
 
@@ -97,20 +99,20 @@ type CMPTransactionRepo interface {
 	// Confirm in new code paths.
 	SelectAndDelete(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error)
 
-	// ClaimPending atomically transitions a transaction from PENDING to the
-	// transient APPROVING state, conditioned on the row still being PENDING
-	// and not yet expired, and returns the claimed row. This is the
+	// ClaimPending atomically transitions a transaction from AwaitingApproval
+	// to the transient Approving state, conditioned on the row still being
+	// AwaitingApproval and not yet expired, and returns the claimed row. This is the
 	// concurrency primitive behind admin approval/rejection of a
 	// phased-workflow transaction (see ApproveCMPTransaction /
 	// RejectCMPTransaction): only one of several concurrent callers (a
 	// double-clicked approve, a client retry, or a race between approve and
 	// reject) can win the claim, so exactly one certificate is ever issued
-	// for a given PENDING row. A caller that fails to claim (returns false)
+	// for a given AwaitingApproval row. A caller that fails to claim (returns false)
 	// MUST treat the transaction as no longer actionable rather than
 	// retrying the underlying CA operation.
 	//
 	// Returns (row, true, nil) when the claim succeeded, (zero, false, nil)
-	// when the row does not exist, is not PENDING, or has expired, and
+	// when the row does not exist, is not AwaitingApproval, or has expired, and
 	// (zero, false, err) on a DB error.
 	ClaimPending(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error)
 
@@ -126,31 +128,34 @@ type CMPTransactionRepo interface {
 	// error, or a lock-acquisition error.
 	WithDeviceLock(ctx context.Context, deviceID string, fn func(ctx context.Context) error) error
 
-	// Confirm atomically transitions a transaction from ISSUED to CONFIRMED,
-	// recording the confirmation timestamp. The returned priorState is the
-	// state the row was in BEFORE the update was attempted (or empty when no
-	// row exists), letting callers distinguish:
-	//   - (row, ISSUED, true,  nil) → transition succeeded
-	//   - (zero, REVOKED,  false, nil) → row was already revoked (race with
-	//                                    the confirmation monitor; the cert
-	//                                    is no longer valid on the wire)
-	//   - (zero, CONFIRMED,false, nil) → row was already confirmed (idempotent
-	//                                    replay of certConf is allowed)
+	// Confirm atomically transitions a transaction from AwaitingCertConf to
+	// `to` — Confirmed for an explicit certConf, LogicallyComplete for implicit
+	// confirmation — recording the confirmation timestamp. The returned
+	// priorState is the state the row was in BEFORE the update was attempted
+	// (or empty when no row exists), letting callers distinguish:
+	//   - (row, AwaitingCertConf, true,  nil) → transition succeeded
+	//   - (zero, Revoked, false, nil) → row was already revoked (race with
+	//                                   the confirmation monitor; the cert
+	//                                   is no longer valid on the wire)
+	//   - (zero, Confirmed/LogicallyComplete, false, nil) → row was already
+	//                                   confirmed (idempotent replay of
+	//                                   certConf is allowed)
 	//   - (zero, "",       false, nil) → row not found
 	//   - (zero, "",       false, err) → DB error
 	// This signature is what the CMP controller uses to close the
 	// handleCertConf-vs-confirmation-monitor split-brain race described in the
 	// audit (cmp.go: handleCertConf, handlePoll implicit-confirm).
-	Confirm(ctx context.Context, transactionID string) (models.CMPTransaction, models.CMPTransactionState, bool, error)
+	Confirm(ctx context.Context, transactionID string, to models.CMPTransactionState) (models.CMPTransaction, models.CMPTransactionState, bool, error)
 
-	// UpdateState transitions a transaction's State (and, when ISSUED, its
+	// UpdateState transitions a transaction's State (and, when issuing, its
 	// certificate) atomically, and re-bases ExpiresAt to the supplied
-	// deadline. errorMessage is recorded on ISSUE_FAILED transitions.
+	// deadline. errorMessage is recorded on Rejected, IssueFailed and Expired
+	// transitions.
 	//
 	// The update is keyed only by transactionID — staleness is NOT filtered
 	// here because two callers explicitly need to write past-expiry rows:
-	// the confirmation monitor transitions expired PENDING rows to
-	// ISSUE_FAILED for audit, and the admin approval path can race the
+	// the confirmation monitor transitions expired AwaitingApproval /
+	// AwaitingPoPResponse rows to Expired for audit, and the admin approval path can race the
 	// monitor by a few ms across the original deadline (rejecting would
 	// orphan an already-issued cert). Service-layer callers that need a
 	// staleness precondition MUST enforce it before calling UpdateState.
@@ -159,9 +164,10 @@ type CMPTransactionRepo interface {
 	// exists with the given transactionID, (false, err) on any DB error.
 	UpdateState(ctx context.Context, transactionID string, state models.CMPTransactionState, cert *models.X509Certificate, errorMessage string, expiresAt time.Time) (bool, error)
 
-	// MarkRevokedByCertSerial transitions any CONFIRMED transaction with the
-	// given certificate serial number to REVOKED. This is called after a
-	// successful CMP revocation request so the UI can show the full lifecycle.
+	// MarkRevokedByCertSerial transitions any Confirmed, LogicallyComplete,
+	// AwaitingCertConf or Revoking transaction with the given certificate
+	// serial number to Revoked. This is called after a successful CMP
+	// revocation request so the UI can show the full lifecycle.
 	// No-op if no matching transaction is found.
 	MarkRevokedByCertSerial(ctx context.Context, certSerialNumber string) error
 
@@ -175,8 +181,9 @@ type CMPTransactionRepo interface {
 	// Returns (zero, false, nil) when no transaction references the serial.
 	SelectByCertSerial(ctx context.Context, certSerialNumber string) (models.CMPTransaction, bool, error)
 
-	// SelectExpiredIssued returns up to `limit` transactions in ISSUED or
-	// REVOKING state whose ExpiresAt is in the past, oldest first (REVOKING
+	// SelectExpiredIssued returns up to `limit` transactions in
+	// AwaitingCertConf or Revoking state whose ExpiresAt is in the past,
+	// oldest first (Revoking
 	// rows are included so a monitor crash between ClaimIssuedForRevocation
 	// and the final CA call/state write doesn't strand a row outside every
 	// sweep). The CMP confirmation monitor uses this to find certificates
@@ -187,51 +194,54 @@ type CMPTransactionRepo interface {
 	SelectExpiredIssued(ctx context.Context, limit int) ([]models.CMPTransaction, error)
 
 	// ClaimIssuedForRevocation atomically transitions a transaction from
-	// ISSUED to the transient REVOKING state, conditioned on the row still
-	// being ISSUED, and returns the claimed row. This is the concurrency
+	// AwaitingCertConf to the transient Revoking state, conditioned on the row
+	// still being AwaitingCertConf (or already Revoking, to re-claim a row left
+	// by a failed or interrupted attempt), and returns the claimed row. This is the concurrency
 	// primitive behind the confirmation-timeout monitor's revocation of an
 	// expired, unconfirmed transaction: it closes the race where a
 	// legitimate certConf (or implicit-confirm pollReq, both of which use
-	// Confirm — ISSUED → CONFIRMED) arrives at the same moment the monitor
-	// decides the row timed out. Confirm and ClaimIssuedForRevocation both
-	// require state=ISSUED, so only one side of that race can ever win; the
+	// Confirm — AwaitingCertConf → Confirmed/LogicallyComplete) arrives at
+	// the same moment the monitor decides the row timed out. Confirm and
+	// ClaimIssuedForRevocation both require state=AwaitingCertConf, so only one side of that race can ever win; the
 	// loser (here, the monitor) MUST skip revoking the certificate rather
 	// than proceeding — the row is no longer eligible.
 	//
 	// Returns (row, true, nil) when the claim succeeded, (zero, false, nil)
-	// when the row does not exist or is not ISSUED, and (zero, false, err)
+	// when the row does not exist or is not AwaitingCertConf, and (zero, false, err)
 	// on a DB error.
 	ClaimIssuedForRevocation(ctx context.Context, transactionID string) (models.CMPTransaction, bool, error)
 
 	// MarkRevokedByTransactionID transitions a transaction (in any state) to
-	// REVOKED, keyed by its hex transactionID. Used by the confirmation
+	// Revoked, keyed by its hex transactionID. Used by the confirmation
 	// monitor after it revokes the underlying certificate at the CA, so the
-	// row persists in REVOKED state for audit. No-op if the row is not found.
+	// row persists in Revoked state for audit. No-op if the row is not found.
 	MarkRevokedByTransactionID(ctx context.Context, transactionID string) error
 
-	// SelectPending returns up to `limit` PENDING transactions whose ExpiresAt
+	// SelectPending returns up to `limit` AwaitingApproval transactions whose ExpiresAt
 	// is in the future, oldest first. The async worker uses this to find rows
 	// it must process. Returns an empty slice when no work is queued.
 	SelectPending(ctx context.Context, limit int) ([]models.CMPTransaction, error)
 
-	// SelectExpiredPending returns up to `limit` PENDING or APPROVING
-	// transactions whose ExpiresAt has already elapsed, oldest first. The
-	// CMP confirmation monitor uses this to find phased-workflow requests an
-	// administrator never acted on (PENDING) or started acting on but never
-	// finished, e.g. a crash between ClaimPending and the final state write
-	// (APPROVING); those rows are transitioned to ISSUE_FAILED with a reason
+	// SelectExpiredPending returns up to `limit` AwaitingApproval, Approving
+	// or AwaitingPoPResponse transactions whose ExpiresAt has already elapsed,
+	// oldest first. The CMP confirmation monitor uses this to find
+	// phased-workflow requests an administrator never acted on
+	// (AwaitingApproval), started acting on but never finished, e.g. a crash
+	// between ClaimPending and the final state write (Approving), or
+	// proof-of-possession challenges the EE never answered
+	// (AwaitingPoPResponse); those rows are transitioned to Expired with a reason
 	// via UpdateState so pollReq can surface the cause to the EE and the
 	// operator retains an audit trail.
 	SelectExpiredPending(ctx context.Context, limit int) ([]models.CMPTransaction, error)
 
-	// DeleteExpired removes ISSUE_FAILED transactions whose ExpiresAt is in
-	// the past — that is, rows that have already been transitioned to a
-	// non-fatal failure state and have outlived their retention window.
-	// PENDING rows are intentionally NOT deleted here: when their approval
-	// window elapses they are transitioned to ISSUE_FAILED (with a fresh
-	// retention TTL) by the confirmation monitor so the rejection is visible
-	// to operators and to subsequent pollReqs. Terminal states (CONFIRMED,
-	// REVOKED) and live ISSUED rows are likewise untouched.
+	// DeleteExpired removes Rejected, IssueFailed and Expired transactions
+	// whose ExpiresAt is in the past — that is, rows that have already been
+	// transitioned to a failure state and have outlived their retention window.
+	// In-flight rows are intentionally NOT deleted here: when their approval or
+	// PoP window elapses they are transitioned to Expired (with a fresh
+	// retention TTL) by the confirmation monitor so the outcome is visible
+	// to operators and to subsequent pollReqs. Confirmed, LogicallyComplete and
+	// Revoked rows and live AwaitingCertConf rows are likewise untouched.
 	// Should be called periodically by a background goroutine.
 	DeleteExpired(ctx context.Context) error
 
@@ -242,7 +252,7 @@ type CMPTransactionRepo interface {
 	// exhaustiveRun is true the repo iterates all pages internally and only
 	// returns once every matching row has been delivered.
 	//
-	// This method returns ALL states (including terminal CONFIRMED/REVOKED)
+	// This method returns ALL states (including terminal Confirmed/Revoked)
 	// so the management UI can display both active and completed transactions.
 	SelectAllByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.CMPTransaction), queryParams *resources.QueryParameters) (string, error)
 }

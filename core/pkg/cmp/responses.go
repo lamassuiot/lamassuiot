@@ -230,7 +230,7 @@ func MarshalPKIConfBody() ([]byte, error) {
 //
 // The EE recognises this as "issuance deferred" and is expected to switch to
 // the pollReq flow: it sends pollReq carrying the same certReqId, the server
-// replies with pollRep(checkAfter) while still PENDING, and finally returns a
+// replies with pollRep(checkAfter) while still AwaitingApproval, and finally returns a
 // fresh ip body with the cert once the worker has populated it.
 func MarshalCertRepWaitingBody(certReqID int) ([]byte, error) {
 	certResp := ServerCertResponse{

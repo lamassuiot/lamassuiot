@@ -242,8 +242,8 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 		"challengeResp POPO must be answered with popdecc")
 
 	tx, ok := store.Peek(hex.EncodeToString(txID))
-	require.True(t, ok, "a PENDING row must be parked awaiting popdecr")
-	assert.Equal(t, models.CMPTransactionStatePending, tx.State)
+	require.True(t, ok, "an AwaitingPoPResponse row must be parked awaiting popdecr")
+	assert.Equal(t, models.CMPTransactionStateAwaitingPoPResponse, tx.State)
 	require.NotEmpty(t, tx.PopoChallenge)
 	assert.Equal(t, string(models.CMPPOPOMethodChallengeResponse), tx.POPOMethod)
 	// buildTestPKIHeaderDER sends pvno cmp2000, so the deprecated `challenge`
@@ -271,13 +271,13 @@ func TestHandleCMP_ChallengeRespPOPO_RSA_FullRoundTrip(t *testing.T) {
 	assert.Equal(t, corecmp.BodyTagIP, parseCMPResponseTag(t, popdecrResp.Body.Bytes()),
 		"a correct popdecr must resume issuance and yield ip")
 
-	// The security-audit metadata recorded on the PENDING row must survive
-	// the resume-from-popdecr transition into the final ISSUED row (see
+	// The security-audit metadata recorded on the AwaitingPoPResponse row must survive
+	// the resume-from-popdecr transition into the final AwaitingCertConf row (see
 	// handlePOPODecKeyResp, which threads tx.POPOMethod/ChallengeType into
 	// the resumed issueAndStore call).
 	finalTx, ok := store.Peek(hex.EncodeToString(txID))
 	require.True(t, ok)
-	assert.Equal(t, models.CMPTransactionStateIssued, finalTx.State, "buildTestIRWithIndirectPOPO does not request implicit confirm, so the resumed row stays ISSUED awaiting certConf")
+	assert.Equal(t, models.CMPTransactionStateAwaitingCertConf, finalTx.State, "buildTestIRWithIndirectPOPO does not request implicit confirm, so the resumed row stays AwaitingCertConf awaiting certConf")
 	assert.Equal(t, string(models.CMPPOPOMethodChallengeResponse), finalTx.POPOMethod)
 	assert.Equal(t, cmpChallengeTypeLegacy, finalTx.ChallengeType)
 
