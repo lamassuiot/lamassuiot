@@ -985,6 +985,13 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 					Protocol: models.CMP,
 					CMP: &models.CMPSettings{
 						EnrollmentSettings: models.CMPEnrollmentSettings{
+							AuthOptionsMTLS: models.AuthOptionsClientCertificate{
+								ValidationCAs: []string{
+									importedCAID,
+								},
+								ChainLevelValidation: 1,
+								AllowExpired:         false,
+							},
 							CommonEnrollmentSettings: models.CommonEnrollmentSettings{
 								EnrollmentCA: generatedCAID,
 								DeviceProvisionProfile: models.DeviceProvisionProfile{
