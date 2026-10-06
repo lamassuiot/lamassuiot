@@ -101,6 +101,8 @@ func TestCertificateCreateOpenAPIContractRejectsDrift(t *testing.T) {
 	spec := `openapi: 3.0.3
 servers:
   - url: /api/ca/v1
+security:
+  - BearerAuth: []
 paths:
   /certificates:
     parameters: []
@@ -207,6 +209,8 @@ func TestContractRequiresEveryOpenAPIOperationAndRegisteredRoute(t *testing.T) {
 	spec := `openapi: 3.0.3
 servers:
   - url: /api/ca/v1
+security:
+  - BearerAuth: []
 paths:
   /certificates:
     post:
@@ -339,6 +343,8 @@ func TestProtectedPermissionRejectsAnonymousOpenAPISecurity(t *testing.T) {
 	spec := `openapi: 3.0.3
 servers:
   - url: /api/ca/v1
+security:
+  - BearerAuth: []
 paths:
   /certificates:
     post:
@@ -351,7 +357,7 @@ paths:
 `
 	err := contract.ValidateOpenAPI(strings.NewReader(spec))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "protected operation POST /api/ca/v1/certificates must not declare security: []")
+	assert.Contains(t, err.Error(), "protected operation POST /api/ca/v1/certificates must require authentication without anonymous alternatives")
 }
 
 func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testing.T) {
@@ -376,4 +382,47 @@ func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testin
 		})
 	}
 	assert.Panics(t, func() { HandlerAuthorization("typo") })
+}
+
+func TestProtectedPermissionResolvesOpenAPISecurity(t *testing.T) {
+	router := testRouterWithAuthzInputs()
+	contract := NewContractRouter(router.Group("/api/ca/v1"))
+	contract.Handle(http.MethodPost, "/certificates", certificateMiddleware(t, &fakeEngine{}).Global("create"), func(*gin.Context) {})
+	for _, test := range []struct {
+		name, document, operation string
+		allowed                   bool
+	}{
+		{name: "no security declared"},
+		{name: "empty document security", document: "[]"},
+		{name: "anonymous document option", document: "[{}]"},
+		{name: "optional document authentication", document: "[{BearerAuth: []}, {}]"},
+		{name: "inherited authentication", document: "[{BearerAuth: []}]", allowed: true},
+		{name: "operation authentication", operation: "[{BearerAuth: []}]", allowed: true},
+		{name: "operation overrides anonymous document", document: "[{}]", operation: "[{BearerAuth: []}]", allowed: true},
+		{name: "operation overrides empty document", document: "[]", operation: "[{BearerAuth: []}]", allowed: true},
+		{name: "operation overrides different scheme", document: "[{ApiKeyAuth: []}]", operation: "[{BearerAuth: []}]", allowed: true},
+		{name: "empty operation removes inherited authentication", document: "[{BearerAuth: []}]", operation: "[]"},
+		{name: "anonymous operation overrides authentication", document: "[{BearerAuth: []}]", operation: "[{}]"},
+		{name: "optional operation authentication", document: "[{BearerAuth: []}]", operation: "[{BearerAuth: []}, {}]"},
+		{name: "anonymous alternative first", operation: "[{}, {BearerAuth: []}]"},
+		{name: "authenticated alternatives", document: "[{BearerAuth: []}, {ApiKeyAuth: []}]", allowed: true},
+		{name: "combined authenticated requirements", operation: "[{BearerAuth: [], ApiKeyAuth: []}]", allowed: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spec := "openapi: 3.0.3\nservers: [{url: /api/ca/v1}]\n"
+			if test.document != "" {
+				spec += "security: " + test.document + "\n"
+			}
+			spec += "paths:\n  /certificates:\n    post:\n      x-authz: {namespace: pki, schema_name: ca, entity_type: certificate, action: create}\n"
+			if test.operation != "" {
+				spec += "      security: " + test.operation + "\n"
+			}
+			err := contract.ValidateOpenAPI(strings.NewReader(spec))
+			if test.allowed {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "protected operation POST /api/ca/v1/certificates must require authentication without anonymous alternatives")
+			}
+		})
+	}
 }
