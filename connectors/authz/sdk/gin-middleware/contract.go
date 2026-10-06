@@ -219,7 +219,8 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		Servers []struct {
 			URL string `yaml:"url"`
 		} `yaml:"servers"`
-		Paths map[string]map[string]yaml.Node `yaml:"paths"`
+		Paths    map[string]map[string]yaml.Node `yaml:"paths"`
+		Security []map[string][]string           `yaml:"security"`
 	}
 	decoder := yaml.NewDecoder(input)
 	if err := decoder.Decode(&doc); err != nil {
@@ -275,8 +276,20 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 			if op.Security == nil || len(*op.Security) != 0 {
 				return fmt.Errorf("public operation %s %s must explicitly declare security: []", route.Method, route.Path)
 			}
-		} else if route.Authz.Check != "est" && route.Authz.Check != "envoy" && route.Authz.Check != "evaluation" && op.Security != nil && len(*op.Security) == 0 {
-			return fmt.Errorf("protected operation %s %s must not declare security: []", route.Method, route.Path)
+		} else if route.Authz.Check != "est" && route.Authz.Check != "envoy" && route.Authz.Check != "evaluation" {
+			// Operation security replaces document defaults. Requirements are OR
+			// alternatives, so even one empty object permits anonymous access.
+			security := doc.Security
+			if op.Security != nil {
+				security = *op.Security
+			}
+			anonymous := len(security) == 0
+			for _, requirement := range security {
+				anonymous = anonymous || len(requirement) == 0
+			}
+			if anonymous {
+				return fmt.Errorf("protected operation %s %s must require authentication without anonymous alternatives", route.Method, route.Path)
+			}
 		}
 	}
 	// Check the reverse direction too: documented operations must not escape coverage.

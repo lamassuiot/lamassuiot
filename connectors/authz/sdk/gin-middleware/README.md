@@ -70,7 +70,9 @@ For list operations, replace `action: create` with `check: filter`.
 
 Public operations declare `x-authz: {check: public}` and `security: []`.
 The checker rejects public operations inheriting authentication, and protected
-operations explicitly declaring anonymous access. VA's server prefix is
+operations whose effective security permits anonymous access. Protected operations
+inherit document-level security unless the operation overrides it; missing security,
+empty arrays and any empty-object alternative are rejected. VA's server prefix is
 `/api/va`: public paths are `/ocsp` and `/crl/{ca-ski}`, while role paths include
 `/v1/roles/{ca-ski}`.
 
