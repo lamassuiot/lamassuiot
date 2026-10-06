@@ -1,7 +1,13 @@
 openapi: 3.0.3
 info:
   title: Lamassu Authorization Service
-  description: Authorization service managing principals, policies, and access control decisions.
+  description: |
+    Authorization service managing principals, policies, and access control decisions.
+    x-trust-boundary records intended callers: internal-gateway for Envoy and
+    internal-service for evaluation APIs. Trust boundaries currently equal public
+    caller access; no caller authentication or network restriction is enforced by
+    this declaration. Enforcement may be added in the future. Handlers still
+    evaluate submitted credentials and policies.
   version: 1.0.0
   contact:
     name: Lamassu IoT
@@ -22,6 +28,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Authorize a principal against a resource and action
       operationId: Authorize
@@ -44,6 +51,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Get a filter expression for list operations
       operationId: GetFilter
@@ -66,6 +74,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Resolve principal from request context then authorize
       operationId: MatchAndAuthorize
@@ -88,6 +97,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Resolve principal from request context then return a filter expression
       operationId: MatchAndGetFilter
@@ -110,6 +120,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Check HTTP request authorization (ext_authz compatible)
       operationId: CheckHTTP
@@ -128,6 +139,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Resolve principal then check HTTP request authorization
       operationId: MatchAndCheckHTTP
@@ -146,6 +158,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Get global capabilities for a principal
       operationId: GetGlobalCapabilities
@@ -168,6 +181,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Resolve principal then get global capabilities
       operationId: MatchAndGetGlobalCapabilities
@@ -190,6 +204,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Get capabilities for a principal on a specific entity
       operationId: GetEntityCapabilities
@@ -212,6 +227,7 @@ paths:
     post:
       x-authz:
         check: evaluation
+      x-trust-boundary: internal-service
       security: []
       summary: Resolve principal then get entity capabilities
       operationId: MatchAndGetEntityCapabilities
@@ -591,6 +607,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -603,6 +620,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -615,6 +633,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -627,6 +646,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -639,6 +659,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -651,6 +672,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -663,6 +685,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -675,6 +698,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -687,6 +711,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -706,6 +731,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -718,6 +744,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -730,6 +757,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -742,6 +770,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -754,6 +783,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -766,6 +796,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -778,6 +809,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -790,6 +822,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':
@@ -802,6 +835,7 @@ paths:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy
+      x-trust-boundary: internal-gateway
       security: []
       responses:
         '200':

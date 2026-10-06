@@ -45,16 +45,16 @@ func registerAuthzRoutes(router *gin.RouterGroup, authzEngine core.AuthzEngine, 
 	bindings := middleware.MustNewAuthzMiddleware(authzEngine, schemas, "authz", "public", "principal_policy", logger)
 	contract := middleware.NewContractRouter(router.Group("/v1"))
 	// SDK evaluation calls carry credentials in their body; controllers evaluate them.
-	contract.Handle(http.MethodPost, "/authz/authorize", middleware.HandlerAuthorization("evaluation"), authzCtrl.Authorize)
-	contract.Handle(http.MethodPost, "/authz/filter", middleware.HandlerAuthorization("evaluation"), authzCtrl.GetFilter)
-	contract.Handle(http.MethodPost, "/authz/match/authorize", middleware.HandlerAuthorization("evaluation"), authzCtrl.MatchAndAuthorize)
-	contract.Handle(http.MethodPost, "/authz/match/filter", middleware.HandlerAuthorization("evaluation"), authzCtrl.MatchAndGetFilter)
-	contract.Handle(http.MethodPost, "/authz/http/check", middleware.HandlerAuthorization("evaluation"), authzCtrl.CheckHTTP)
-	contract.Handle(http.MethodPost, "/authz/match/http/check", middleware.HandlerAuthorization("evaluation"), authzCtrl.MatchAndCheckHTTP)
-	contract.Handle(http.MethodPost, "/authz/capabilities/global", middleware.HandlerAuthorization("evaluation"), capabilitiesCtrl.GetGlobalCapabilities)
-	contract.Handle(http.MethodPost, "/authz/match/capabilities/global", middleware.HandlerAuthorization("evaluation"), capabilitiesCtrl.MatchAndGetGlobalCapabilities)
-	contract.Handle(http.MethodPost, "/authz/capabilities/entity", middleware.HandlerAuthorization("evaluation"), capabilitiesCtrl.GetEntityCapabilities)
-	contract.Handle(http.MethodPost, "/authz/match/capabilities/entity", middleware.HandlerAuthorization("evaluation"), capabilitiesCtrl.MatchAndGetEntityCapabilities)
+	contract.Handle(http.MethodPost, "/authz/authorize", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.Authorize)
+	contract.Handle(http.MethodPost, "/authz/filter", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.GetFilter)
+	contract.Handle(http.MethodPost, "/authz/match/authorize", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.MatchAndAuthorize)
+	contract.Handle(http.MethodPost, "/authz/match/filter", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.MatchAndGetFilter)
+	contract.Handle(http.MethodPost, "/authz/http/check", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.CheckHTTP)
+	contract.Handle(http.MethodPost, "/authz/match/http/check", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.MatchAndCheckHTTP)
+	contract.Handle(http.MethodPost, "/authz/capabilities/global", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.GetGlobalCapabilities)
+	contract.Handle(http.MethodPost, "/authz/match/capabilities/global", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.MatchAndGetGlobalCapabilities)
+	contract.Handle(http.MethodPost, "/authz/capabilities/entity", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.GetEntityCapabilities)
+	contract.Handle(http.MethodPost, "/authz/match/capabilities/entity", middleware.HandlerAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.MatchAndGetEntityCapabilities)
 	contract.Handle(http.MethodGet, "/principals", principals.List(), principalCtrl.ListPrincipals)
 	contract.Handle(http.MethodPost, "/principals", principals.Global("create"), principalCtrl.CreatePrincipal)
 	contract.Handle(http.MethodGet, "/principals/:id", principals.Resource("read", map[string]string{"id": "id"}), principalCtrl.GetPrincipal)
@@ -74,7 +74,7 @@ func registerAuthzRoutes(router *gin.RouterGroup, authzEngine core.AuthzEngine, 
 	// Gin.Any includes CONNECT; record each method so coverage cannot skip it.
 	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodHead, http.MethodOptions, http.MethodDelete, http.MethodConnect, http.MethodTrace} {
 		for _, path := range []string{"/ext_authz/check", "/ext_authz/check/*original_url"} {
-			contract.Handle(method, path, middleware.HandlerAuthorization("envoy"), extAuthzCtrl.Check)
+			contract.Handle(method, path, middleware.HandlerAuthorization("envoy").WithTrustBoundary("internal-gateway"), extAuthzCtrl.Check)
 		}
 	}
 	return contract

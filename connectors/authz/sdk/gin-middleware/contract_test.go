@@ -242,6 +242,47 @@ paths:
 	assert.Contains(t, err.Error(), "GET /api/ca/v1/untracked")
 }
 
+func TestContractGroupsAndVerbHelpersRecordIntoOneContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	certs := certificateMiddleware(t, &fakeEngine{authorized: true})
+	snKey := map[string]string{"serial_number": "sn"}
+	handler := func(*gin.Context) {}
+
+	contract := NewContractRouter(router.Group("/api/ca"))
+	contract.GET("/health", Public(), handler)
+	v1 := contract.Group("/v1")
+	v1.GET("/certificates", certs.List(), handler)
+	v1.POST("/certificates", certs.Global("create"), handler)
+	v1.PUT("/certificates/:sn/status", certs.Resource("status-update", snKey), handler)
+	v1.PATCH("/certificates/:sn/metadata", certs.Resource("metadata-update", snKey), handler)
+	v1.DELETE("/certificates/:sn", certs.Resource("delete", snKey), handler)
+
+	// The root sees sub-router routes; each router validates only its own group.
+	declared := map[string]bool{}
+	for _, route := range contract.Declarations() {
+		declared[route.Method+" "+route.Path] = true
+	}
+	assert.Equal(t, map[string]bool{
+		"GET /api/ca/health":                         true,
+		"GET /api/ca/v1/certificates":                true,
+		"POST /api/ca/v1/certificates":               true,
+		"PUT /api/ca/v1/certificates/:sn/status":     true,
+		"PATCH /api/ca/v1/certificates/:sn/metadata": true,
+		"DELETE /api/ca/v1/certificates/:sn":         true,
+	}, declared)
+	assert.Len(t, v1.Declarations(), len(contract.Declarations()))
+	require.NoError(t, contract.ValidateRoutes(router.Routes()))
+	require.NoError(t, v1.ValidateRoutes(router.Routes()))
+
+	router.GET("/api/ca/v1/untracked", handler)
+	for _, validator := range []*ContractRouter{contract, v1} {
+		err := validator.ValidateRoutes(router.Routes())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "GET /api/ca/v1/untracked")
+	}
+}
+
 func TestCustomResourcePermissionChecksCompositeKeysBeforeAuthorization(t *testing.T) {
 	for _, test := range []struct {
 		name           string
@@ -367,8 +408,17 @@ func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testin
 			router := gin.New()
 			contract := NewContractRouter(router.Group("/protocol"))
 			called := false
-			contract.Handle(http.MethodConnect, "/check/*original_url", HandlerAuthorization(kind), func(c *gin.Context) { called = true; c.Status(204) })
+			permission := HandlerAuthorization(kind)
+			boundary := ""
+			if kind != "est" {
+				boundary = "internal-service"
+				permission = permission.WithTrustBoundary(boundary)
+			}
+			contract.Handle(http.MethodConnect, "/check/*original_url", permission, func(c *gin.Context) { called = true; c.Status(204) })
 			spec := "openapi: 3.0.3\nservers: [{url: /protocol}]\npaths:\n  /check/{original_url}:\n    x-connect:\n      x-authz: {check: " + kind + "}\n      security: []\n"
+			if boundary != "" {
+				spec += "      x-trust-boundary: " + boundary + "\n"
+			}
 			require.NoError(t, contract.ValidateOpenAPI(strings.NewReader(spec)))
 			require.NoError(t, contract.ValidateRoutes(router.Routes()))
 			response := httptest.NewRecorder()
@@ -425,4 +475,48 @@ func TestProtectedPermissionResolvesOpenAPISecurity(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTrustBoundaryIsPublicUntilEnforcementIsConfigured(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	contract := NewContractRouter(router.Group("/boundary"))
+	permission := Public().WithTrustBoundary("internal-gateway")
+	contract.Handle(http.MethodGet, "/check", permission, func(c *gin.Context) { c.Status(204) })
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/boundary/check", nil))
+	require.Equal(t, 204, response.Code, "trust boundaries currently do not authenticate callers")
+	require.Equal(t, "internal-gateway", contract.Declarations()[0].TrustBoundary)
+	spec := `openapi: 3.0.3
+servers: [{url: /boundary}]
+security: [{BearerAuth: []}]
+paths:
+  /check:
+    get:
+      x-authz: {check: public}
+      x-trust-boundary: internal-gateway
+      security: []
+`
+	require.NoError(t, contract.ValidateOpenAPI(strings.NewReader(spec)))
+	for _, test := range []struct{ name, old, replacement, error string }{
+		{"missing boundary", "      x-trust-boundary: internal-gateway", "", "trust boundary mismatch"},
+		{"different boundary", "internal-gateway", "internal-service", "trust boundary mismatch"},
+		{"inherited authentication", "      security: []", "", "while enforcement is not configured"},
+		{"claimed authentication", "security: []", "security: [{BearerAuth: []}]", "while enforcement is not configured"},
+		{"implicit anonymous access", "security: []", "security: [{}]", "must explicitly declare security: []"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(strings.Replace(spec, test.old, test.replacement, 1))), test.error)
+		})
+	}
+	assert.Panics(t, func() { Public().WithTrustBoundary("typo") })
+	assert.Panics(t, func() { certificateMiddleware(t, &fakeEngine{}).Global("create").WithTrustBoundary("internal-service") })
+	for _, kind := range []string{"envoy", "evaluation"} {
+		assert.Panics(t, func() {
+			contract.Handle(http.MethodPost, "/missing-"+kind, HandlerAuthorization(kind), func(*gin.Context) {})
+		})
+	}
+	plain := NewContractRouter(gin.New().Group("/boundary"))
+	plain.Handle(http.MethodGet, "/check", Public(), func(*gin.Context) {})
+	require.ErrorContains(t, plain.ValidateOpenAPI(strings.NewReader(spec)), "trust boundary mismatch")
 }

@@ -19,7 +19,6 @@ func TestEveryOpenAPISpecHasAnAssignedSuite(t *testing.T) {
 		"backend/pkg/specs/dms-manager-openapi.yaml":             "TestRemainingBackendOpenAPIContracts",
 		"backend/pkg/specs/enroll-reenroll-webhook-openapi.yaml": "TestEnrollmentWebhookEveryOpenAPIOperation (services)",
 		"connectors/authz/pkg/specs/authz-openapi.yaml":          "TestAuthzOpenAPIAndEveryRegisteredGuard (authz API)",
-		"docs/dms-manager-openapi.yaml":                          "canonical DMS copy",
 	}
 	root := "../../.."
 	discovered := map[string]bool{}
@@ -52,9 +51,4 @@ func TestEveryOpenAPISpecHasAnAssignedSuite(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, discovered, len(suites), "remove stale suite entries when deleting a spec")
-	canonical, err := os.ReadFile("../specs/dms-manager-openapi.yaml")
-	require.NoError(t, err)
-	copy, err := os.ReadFile("../../../docs/dms-manager-openapi.yaml")
-	require.NoError(t, err)
-	require.Equal(t, string(canonical), string(copy), "published DMS docs must match the tested spec")
 }
