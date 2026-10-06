@@ -22,13 +22,16 @@ certificate := middleware.MustNewAuthzMiddleware(
     engine, schemas, "pki", "ca", "certificate", logger,
 )
 contract := middleware.NewContractRouter(group)
-contract.Handle(http.MethodPost, "/certificates",
-    certificate.Global("create"), createHandler)
-contract.Handle(http.MethodGet, "/certificates/:sn",
+rv1 := contract.Group("/v1")
+rv1.POST("/certificates", certificate.Global("create"), createHandler)
+rv1.GET("/certificates/:sn",
     certificate.Resource("read", map[string]string{"serial_number": "sn"}), getHandler)
-contract.Handle(http.MethodGet, "/certificates",
-    certificate.List(), listHandler)
+rv1.GET("/certificates", certificate.List(), listHandler)
 ```
+
+`GET`, `POST`, `PUT`, `PATCH` and `DELETE` are shorthands for `Handle`. A router
+returned by `Group` records into the same contract, so the root router sees every
+route, while `ValidateRoutes` on a sub-router checks only its own group.
 
 `PKISchemas` embeds the canonical `connectors/authz/pki.json` and loads it through
 the existing schema registry. `AuthzSchemas` embeds `authz.json` for the Authz
@@ -45,7 +48,8 @@ namespaces. Permissions fail during route construction, before serving requests:
   VA uses it for OCSP/CRL; EST uses it for CA certificates.
 - `HandlerAuthorization("est" | "envoy" | "evaluation")` records checks performed
   inside the handler or service and adds no domain guard. Those declarations
-  need dedicated protocol tests. Authz evaluation calls carry credentials in
+  need dedicated protocol tests. Envoy and evaluation registrations also require
+  an explicit trust boundary (see below). Authz evaluation calls carry credentials in
   their JSON body; the SDK does not add an Authorization header. Schema
   introspection retains its existing public access.
 - `List` requires atomic `read` and attaches the existing authorization filter
@@ -131,6 +135,37 @@ The client sets JSON Content-Type and closes response bodies.
 `TestEveryOpenAPISpecHasAnAssignedSuite` inventories the repository's OpenAPI
 files, including documentation links. Adding a spec without assigning its test
 suite fails. The DMS documentation copy must match its canonical tested spec.
+
+## Trust boundaries
+
+Envoy routes declare `internal-gateway`; Authz evaluation routes declare
+`internal-service`. The boundary is separate from the handler's authorization
+behavior:
+
+```go
+permission := middleware.HandlerAuthorization("envoy").WithTrustBoundary("internal-gateway")
+contract.Handle(http.MethodGet, "/ext_authz/check", permission, checkHandler)
+```
+
+```yaml
+x-authz:
+  check: envoy
+x-trust-boundary: internal-gateway
+security: []
+```
+
+**A trust boundary currently equals public caller access.** It records intended
+callers but does not restrict requests, authenticate Envoy/services, or validate
+that forwarded credentials came from a trusted gateway. Anyone who can reach the
+endpoint can call it. The handler still evaluates the submitted authorization
+question; public caller access does not mean an allow decision.
+
+This may change in the future: caller authentication or another restriction can
+be added through `WithTrustBoundary`. No enforcement is configured today.
+Contract tests verify matching boundary names in code and OpenAPI and require
+explicit `security: []` so documentation reflects the current public access.
+They do not prove network isolation or gateway identity. Ordinary anonymous
+endpoints, such as CRL retrieval, remain `Public()` without a boundary.
 
 ## Scope
 

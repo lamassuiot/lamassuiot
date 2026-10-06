@@ -27,9 +27,24 @@ type Declaration struct {
 // Permission couples validated metadata with the middleware that enforces it.
 // Its fields are private so callers cannot attach different metadata and middleware.
 type Permission struct {
-	declaration Declaration
-	handler     gin.HandlerFunc
-	pathParams  []string
+	declaration   Declaration
+	handler       gin.HandlerFunc
+	pathParams    []string
+	trustBoundary string
+}
+
+// WithTrustBoundary records an intended caller boundary. Today it is equivalent
+// to public access: it adds no caller authentication or network restriction.
+// Enforcement may be introduced here in the future.
+func (p Permission) WithTrustBoundary(name string) Permission {
+	if name != "internal-gateway" && name != "internal-service" {
+		panic("unknown trust boundary: " + name)
+	}
+	if p.declaration.Check != "envoy" && p.declaration.Check != "evaluation" && p.declaration.Check != "public" {
+		panic("trust boundary currently requires public caller access")
+	}
+	p.trustBoundary = name
+	return p
 }
 
 // Public records an intentionally anonymous endpoint without calling authz.
@@ -141,24 +156,54 @@ func (m *AuthzMiddleware) List() Permission {
 }
 
 type RouteDeclaration struct {
-	Method, Path string
-	Authz        Declaration
+	Method, Path  string
+	Authz         Declaration
+	TrustBoundary string
 }
 
 // ContractRouter registers and records a permission together. ValidateRoutes
 // detects ordinary Gin registrations that bypass this contract within its group.
 type ContractRouter struct {
-	group  *gin.RouterGroup
-	routes []RouteDeclaration
+	group *gin.RouterGroup
+	// Shared with sub-routers so the root sees every route of the contract.
+	routes *[]RouteDeclaration
 }
 
 func NewContractRouter(group *gin.RouterGroup) *ContractRouter {
-	return &ContractRouter{group: group}
+	return &ContractRouter{group: group, routes: &[]RouteDeclaration{}}
+}
+
+// Group mirrors gin.RouterGroup.Group; its routes are recorded in the same contract.
+func (r *ContractRouter) Group(relativePath string) *ContractRouter {
+	return &ContractRouter{group: r.group.Group(relativePath), routes: r.routes}
+}
+
+func (r *ContractRouter) GET(relativePath string, permission Permission, handlers ...gin.HandlerFunc) {
+	r.Handle(http.MethodGet, relativePath, permission, handlers...)
+}
+
+func (r *ContractRouter) POST(relativePath string, permission Permission, handlers ...gin.HandlerFunc) {
+	r.Handle(http.MethodPost, relativePath, permission, handlers...)
+}
+
+func (r *ContractRouter) PUT(relativePath string, permission Permission, handlers ...gin.HandlerFunc) {
+	r.Handle(http.MethodPut, relativePath, permission, handlers...)
+}
+
+func (r *ContractRouter) PATCH(relativePath string, permission Permission, handlers ...gin.HandlerFunc) {
+	r.Handle(http.MethodPatch, relativePath, permission, handlers...)
+}
+
+func (r *ContractRouter) DELETE(relativePath string, permission Permission, handlers ...gin.HandlerFunc) {
+	r.Handle(http.MethodDelete, relativePath, permission, handlers...)
 }
 
 func (r *ContractRouter) Handle(method, relativePath string, permission Permission, handlers ...gin.HandlerFunc) {
 	if permission.handler == nil || len(handlers) == 0 {
 		panic("contract route requires a validated permission and endpoint handler")
+	}
+	if (permission.declaration.Check == "envoy" || permission.declaration.Check == "evaluation") && permission.trustBoundary == "" {
+		panic("handler authorization requires an explicit trust boundary")
 	}
 	params := map[string]bool{}
 	for _, segment := range strings.Split(path.Join(r.group.BasePath(), relativePath), "/") {
@@ -176,22 +221,27 @@ func (r *ContractRouter) Handle(method, relativePath string, permission Permissi
 	if strings.HasSuffix(relativePath, "/") && fullPath != "/" {
 		fullPath += "/"
 	}
-	r.routes = append(r.routes, RouteDeclaration{Method: method, Path: fullPath, Authz: permission.declaration})
+	*r.routes = append(*r.routes, RouteDeclaration{Method: method, Path: fullPath, Authz: permission.declaration, TrustBoundary: permission.trustBoundary})
 }
 
 func (r *ContractRouter) Declarations() []RouteDeclaration {
-	return append([]RouteDeclaration{}, r.routes...)
+	return append([]RouteDeclaration{}, *r.routes...)
 }
 
 // ValidateRoutes checks every actual Gin route in this group against the contract.
 func (r *ContractRouter) ValidateRoutes(actual gin.RoutesInfo) error {
-	declared := map[string]bool{}
-	for _, route := range r.routes {
-		declared[route.Method+" "+route.Path] = true
-	}
 	base := strings.TrimRight(r.group.BasePath(), "/")
+	inGroup := func(routePath string) bool {
+		return routePath == base || strings.HasPrefix(routePath, base+"/")
+	}
+	declared := map[string]bool{}
+	for _, route := range *r.routes {
+		if inGroup(route.Path) {
+			declared[route.Method+" "+route.Path] = true
+		}
+	}
 	for _, route := range actual {
-		if route.Path != base && !strings.HasPrefix(route.Path, base+"/") {
+		if !inGroup(route.Path) {
 			continue
 		}
 		key := route.Method + " " + route.Path
@@ -237,7 +287,7 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		return fmt.Errorf("contract PoC requires a static root-relative OpenAPI server")
 	}
 	covered := map[string]bool{}
-	for _, route := range r.routes {
+	for _, route := range *r.routes {
 		if prefix != "" && !strings.HasPrefix(route.Path, prefix+"/") && route.Path != prefix {
 			return fmt.Errorf("route %s %s does not match OpenAPI server %s", route.Method, route.Path, prefix)
 		}
@@ -260,8 +310,9 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 			return fmt.Errorf("OpenAPI operation missing for %s %s", route.Method, route.Path)
 		}
 		var op struct {
-			Authz    *Declaration           `yaml:"x-authz"`
-			Security *[]map[string][]string `yaml:"security"`
+			Authz         *Declaration           `yaml:"x-authz"`
+			Security      *[]map[string][]string `yaml:"security"`
+			TrustBoundary string                 `yaml:"x-trust-boundary"`
 		}
 		if err := node.Decode(&op); err != nil {
 			return fmt.Errorf("invalid OpenAPI operation %s %s: %w", route.Method, route.Path, err)
@@ -272,11 +323,18 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		if *op.Authz != route.Authz {
 			return fmt.Errorf("authz contract mismatch for %s %s: middleware=%+v; OpenAPI=%+v", route.Method, route.Path, route.Authz, *op.Authz)
 		}
-		if route.Authz.Check == "public" {
+		if op.TrustBoundary != route.TrustBoundary {
+			return fmt.Errorf("trust boundary mismatch for %s %s: middleware=%q; OpenAPI=%q", route.Method, route.Path, route.TrustBoundary, op.TrustBoundary)
+		}
+		if route.TrustBoundary != "" {
+			if op.Security == nil || len(*op.Security) != 0 {
+				return fmt.Errorf("trust boundary operation %s %s must explicitly declare security: [] while enforcement is not configured", route.Method, route.Path)
+			}
+		} else if route.Authz.Check == "public" {
 			if op.Security == nil || len(*op.Security) != 0 {
 				return fmt.Errorf("public operation %s %s must explicitly declare security: []", route.Method, route.Path)
 			}
-		} else if route.Authz.Check != "est" && route.Authz.Check != "envoy" && route.Authz.Check != "evaluation" {
+		} else if route.Authz.Check != "est" {
 			// Operation security replaces document defaults. Requirements are OR
 			// alternatives, so even one empty object permits anonymous access.
 			security := doc.Security

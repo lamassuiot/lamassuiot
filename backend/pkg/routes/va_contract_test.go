@@ -18,6 +18,7 @@ import (
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,8 @@ func TestVAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	client := config.AuthzClient{HTTPClient: cconfig.HTTPClient{HTTPConnection: cconfig.HTTPConnection{Protocol: "http", BasePath: "/api/authz", BasicConnection: cconfig.BasicConnection{Hostname: "localhost", Port: 8080}}}}
-	contract := newValidationRoutes(logrus.NewEntry(logrus.New()), router.Group("/api/va"), nil, nil, client)
+	logger := logrus.NewEntry(logrus.New())
+	contract := registerVARoutes(logger, router.Group("/api/va"), nil, nil, newRemoteAuthzEngine(client, models.VASource, logger))
 	require.NotEmpty(t, contract.Declarations())
 	require.NoError(t, contract.ValidateRoutes(router.Routes()))
 	assert.Equal(t, len(router.Routes()), len(contract.Declarations()))

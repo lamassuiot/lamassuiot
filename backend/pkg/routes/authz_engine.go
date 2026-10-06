@@ -2,9 +2,12 @@ package routes
 
 import (
 	"fmt"
+	"sync"
 
+	authzschemas "github.com/lamassuiot/authz"
 	authzcore "github.com/lamassuiot/authz/pkg/core"
 	authzSdk "github.com/lamassuiot/authz/sdk"
+	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/sirupsen/logrus"
 )
@@ -23,4 +26,16 @@ func newRemoteAuthzEngine(authzConf config.AuthzClient, source string, logger *l
 		return nil // unreachable; Fatalf exits
 	}
 	return authzSdk.NewRemoteEngine(client)
+}
+
+// The embedded PKI schemas are parsed once and shared by every service layer.
+var pkiSchemas = sync.OnceValues(authzschemas.PKISchemas)
+
+// pkiAuthz builds a middleware for a "pki" entity, rejecting unknown entities at startup.
+func pkiAuthz(engine authzcore.AuthzEngine, schemaName, entityType string, logger *logrus.Entry) *middleware.AuthzMiddleware {
+	schemas, err := pkiSchemas()
+	if err != nil {
+		panic(err)
+	}
+	return middleware.MustNewAuthzMiddleware(engine, schemas, "pki", schemaName, entityType, logger)
 }
