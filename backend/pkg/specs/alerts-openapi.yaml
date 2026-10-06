@@ -30,6 +30,8 @@ paths:
       summary: Get the latest event per event type
       operationId: getLatestEvents
       x-authz:
+        namespace: pki
+        schema_name: alerts
         entity_type: event
         check: filter
       parameters:
@@ -110,6 +112,8 @@ paths:
       summary: List subscriptions for a user
       operationId: getUserSubscriptions
       x-authz:
+        namespace: pki
+        schema_name: alerts
         entity_type: subscription
         check: filter
       parameters:
@@ -142,6 +146,8 @@ paths:
       summary: Subscribe user to an event type
       operationId: subscribeUser
       x-authz:
+        namespace: pki
+        schema_name: alerts
         entity_type: subscription
         action: create
       parameters:
@@ -180,6 +186,8 @@ paths:
       summary: Unsubscribe user from an existing subscription
       operationId: unsubscribeUser
       x-authz:
+        namespace: pki
+        schema_name: alerts
         entity_type: subscription
         action: delete
       parameters:

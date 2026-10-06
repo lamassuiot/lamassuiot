@@ -4,6 +4,8 @@ info:
   version: 1.0.0
   description: |
     Device Management Service (DMS) API for managing registration authorities and EST enrollment flows.
+
+    [View Enrollment and Re-enrollment Webhook API](./index.html#enroll-reenroll-webhook)
   contact:
     name: Lamassu IoT
     url: https://github.com/lamassuiot/lamassuiot
@@ -13,10 +15,10 @@ info:
 
 externalDocs:
   description: Enrollment and Re-enrollment Webhook Authentication API
-  url: ./enroll-reenroll-webhook-openapi.yaml
+  url: ./index.html#enroll-reenroll-webhook
 
 servers:
-  - url: /api/dmsmanager/v1
+  - url: /api/dmsmanager
     description: DMS Manager API
 
 tags:
@@ -34,6 +36,11 @@ paths:
         Retrieve statistics about DMS instances. Supports filtering to get statistics
         for a specific subset of DMS instances based on fields like name, metadata, etc.
       operationId: getDmsStats
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        check: filter
       parameters:
         - $ref: '#/components/parameters/Filter'
       responses:
@@ -51,6 +58,11 @@ paths:
       tags: [DMS]
       summary: List DMS instances
       operationId: getDmsList
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        check: filter
       parameters:
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/Bookmark'
@@ -69,6 +81,11 @@ paths:
       tags: [DMS]
       summary: Create DMS
       operationId: createDms
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        action: create
       requestBody:
         required: true
         content:
@@ -90,6 +107,11 @@ paths:
       tags: [DMS]
       summary: Get DMS by ID
       operationId: getDmsById
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        action: read
       parameters:
         - $ref: '#/components/parameters/DmsId'
       responses:
@@ -105,6 +127,11 @@ paths:
       tags: [DMS]
       summary: Update DMS
       operationId: updateDms
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        action: update
       parameters:
         - $ref: '#/components/parameters/DmsId'
       requestBody:
@@ -127,6 +154,11 @@ paths:
       tags: [DMS]
       summary: Delete DMS
       operationId: deleteDms
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        action: delete
       parameters:
         - $ref: '#/components/parameters/DmsId'
       responses:
@@ -139,6 +171,11 @@ paths:
       tags: [DMS]
       summary: Update DMS metadata
       operationId: updateDmsMetadata
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        action: update
       parameters:
         - $ref: '#/components/parameters/DmsId'
       requestBody:
@@ -161,6 +198,11 @@ paths:
       tags: [DMS]
       summary: Patch DMS metadata
       operationId: patchDmsMetadata
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        action: update
       parameters:
         - $ref: '#/components/parameters/DmsId'
       requestBody:
@@ -185,6 +227,11 @@ paths:
       tags: [DMS]
       summary: Bind an identity certificate to a device
       operationId: bindIdentityToDevice
+      x-authz:
+        namespace: pki
+        schema_name: dmsmanager
+        entity_type: dms
+        action: bind-identity
       requestBody:
         required: true
         content:
@@ -206,6 +253,8 @@ paths:
       tags: [EST]
       summary: Retrieve CA certificates for EST enrollment
       operationId: estCacerts
+      x-authz:
+        check: public
       security: []
       responses:
         '200':
@@ -222,6 +271,8 @@ paths:
       tags: [EST]
       summary: Retrieve CA certificates for a specific EST authentication profile
       operationId: estApsCacerts
+      x-authz:
+        check: public
       parameters:
         - $ref: '#/components/parameters/Aps'
       security: []
@@ -240,6 +291,8 @@ paths:
       tags: [EST]
       summary: EST simple enroll
       operationId: estSimpleEnroll
+      x-authz:
+        check: est
       security:
         - ClientCertificate: []
       requestBody:
@@ -264,6 +317,8 @@ paths:
       tags: [EST]
       summary: EST simple enroll for authentication profile
       operationId: estApsSimpleEnroll
+      x-authz:
+        check: est
       parameters:
         - $ref: '#/components/parameters/Aps'
       security:
@@ -290,6 +345,8 @@ paths:
       tags: [EST]
       summary: EST simple reenroll
       operationId: estSimpleReenroll
+      x-authz:
+        check: est
       security:
         - ClientCertificate: []
       requestBody:
@@ -314,6 +371,8 @@ paths:
       tags: [EST]
       summary: EST simple reenroll for authentication profile
       operationId: estApsSimpleReenroll
+      x-authz:
+        check: est
       parameters:
         - $ref: '#/components/parameters/Aps'
       security:
@@ -340,6 +399,8 @@ paths:
       tags: [EST]
       summary: EST server key generation enrollment
       operationId: estServerKeyGen
+      x-authz:
+        check: est
       security:
         - ClientCertificate: []
       requestBody:
@@ -364,6 +425,8 @@ paths:
       tags: [EST]
       summary: EST server key generation for authentication profile
       operationId: estApsServerKeyGen
+      x-authz:
+        check: est
       parameters:
         - $ref: '#/components/parameters/Aps'
       security:

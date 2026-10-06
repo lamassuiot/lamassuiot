@@ -1,9 +1,12 @@
 package routes
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	authzschemas "github.com/lamassuiot/authz"
+	authzcore "github.com/lamassuiot/authz/pkg/core"
 	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
@@ -14,9 +17,16 @@ import (
 )
 
 func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService, authzConf config.AuthzClient, logger *logrus.Entry) {
-	routes := controllers.NewKMSHttpRoutes(svc)
+	newKMSHTTPLayer(parentRouterGroup, svc, authzConf, logger)
+}
 
-	remoteEngine := newRemoteAuthzEngine(authzConf, models.KMSSource, logger)
+func newKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService, authzConf config.AuthzClient, logger *logrus.Entry) *middleware.ContractRouter {
+	return registerKMSRoutes(parentRouterGroup, svc, newRemoteAuthzEngine(authzConf, models.KMSSource, logger), logger)
+}
+
+// Production and tests share the URI/alias resolver and route declarations.
+func registerKMSRoutes(parentRouterGroup *gin.RouterGroup, svc services.KMSService, engine authzcore.AuthzEngine, logger *logrus.Entry) *middleware.ContractRouter {
+	routes := controllers.NewKMSHttpRoutes(svc)
 
 	// A key is identified by (key_id, engine_id), so the authz entity key can only be built
 	// from a PKCS#11 URI, which carries the engine in token-id, or from an alias, which is
@@ -54,23 +64,29 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 		}
 	}
 
-	kmsAuthzMw := middleware.NewCompositeAuthzMiddleware(remoteEngine, "pki", "kms", "kms_key", []string{"key_id", "engine_id"}, logger)
+	schemas, err := authzschemas.PKISchemas()
+	if err != nil {
+		panic(err)
+	}
+	kmsAuthzMw := middleware.MustNewAuthzMiddleware(engine, schemas, "pki", "kms", "kms_key", logger)
 
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")
+	contract := middleware.NewContractRouter(rv1)
 
-	rv1.GET("/stats", kmsAuthzMw.AuthListCheck(), routes.GetStats)
-	rv1.GET("/engines", kmsAuthzMw.AuthListCheck(), routes.GetCryptoEngineProvider)
+	contract.Handle(http.MethodGet, "/stats", kmsAuthzMw.List(), routes.GetStats)
+	contract.Handle(http.MethodGet, "/engines", kmsAuthzMw.List(), routes.GetCryptoEngineProvider)
 
-	rv1.GET("/keys", kmsAuthzMw.AuthListCheck(), routes.GetKeys)
-	rv1.GET("/keys/:id", kmsAuthzMw.AuthzCheckCustom("read", keyIDExtractor), routes.GetKeyByID)
-	rv1.POST("/keys", kmsAuthzMw.AuthzCheck("create"), routes.CreateKey)
-	rv1.POST("/keys/import", kmsAuthzMw.AuthzCheck("create"), routes.ImportKey)
-	rv1.PUT("/keys/:id/alias", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyAliases)
-	rv1.PUT("/keys/:id/name", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyName)
-	rv1.PUT("/keys/:id/tags", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyTags)
-	rv1.PUT("/keys/:id/metadata", kmsAuthzMw.AuthzCheckCustom("update", keyIDExtractor), routes.UpdateKeyMetadata)
-	rv1.DELETE("/keys/:id", kmsAuthzMw.AuthzCheckCustom("delete", keyIDExtractor), routes.DeleteKeyByID)
-	rv1.POST("/keys/:id/sign", kmsAuthzMw.AuthzCheckCustom("sign", keyIDExtractor), routes.SignMessage)
-	rv1.POST("/keys/:id/verify", kmsAuthzMw.AuthzCheckCustom("read", keyIDExtractor), routes.VerifySignature)
+	contract.Handle(http.MethodGet, "/keys", kmsAuthzMw.List(), routes.GetKeys)
+	contract.Handle(http.MethodGet, "/keys/:id", kmsAuthzMw.ResourceCustom("read", "id", keyIDExtractor), routes.GetKeyByID)
+	contract.Handle(http.MethodPost, "/keys", kmsAuthzMw.Global("create"), routes.CreateKey)
+	contract.Handle(http.MethodPost, "/keys/import", kmsAuthzMw.Global("create"), routes.ImportKey)
+	contract.Handle(http.MethodPut, "/keys/:id/alias", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyAliases)
+	contract.Handle(http.MethodPut, "/keys/:id/name", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyName)
+	contract.Handle(http.MethodPut, "/keys/:id/tags", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyTags)
+	contract.Handle(http.MethodPut, "/keys/:id/metadata", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyMetadata)
+	contract.Handle(http.MethodDelete, "/keys/:id", kmsAuthzMw.ResourceCustom("delete", "id", keyIDExtractor), routes.DeleteKeyByID)
+	contract.Handle(http.MethodPost, "/keys/:id/sign", kmsAuthzMw.ResourceCustom("sign", "id", keyIDExtractor), routes.SignMessage)
+	contract.Handle(http.MethodPost, "/keys/:id/verify", kmsAuthzMw.ResourceCustom("read", "id", keyIDExtractor), routes.VerifySignature)
+	return contract
 }
