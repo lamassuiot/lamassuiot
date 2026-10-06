@@ -7,6 +7,10 @@ import (
 
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // noMatchError is returned when auth material matches no active principals.
@@ -51,14 +55,27 @@ func NewIdentityResolver(match principalMatcher, grants engine.GrantStore, polic
 
 // loadGrantedPolicies fetches each policy referenced by grants and registers it in registry.
 func (r *IdentityResolver) loadGrantedPolicies(ctx context.Context, registry *engine.PolicyRegistry, grants []models.PrincipalPolicy) error {
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.policy.load",
+		trace.WithAttributes(attribute.Int("authz.grant_count", len(grants))),
+	)
+	loaded := 0
+	defer func() {
+		span.SetAttributes(attribute.Int("authz.policy_loaded_count", loaded))
+		span.End()
+	}()
 	for _, g := range grants {
 		policy, err := r.policies.GetPolicy(ctx, g.PolicyID)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("load policy %s: %w", g.PolicyID, err)
 		}
 		if err := registry.AddPolicy(policy); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("register policy %s: %w", g.PolicyID, err)
 		}
+		loaded++
 	}
 	return nil
 }
@@ -67,10 +84,19 @@ func (r *IdentityResolver) loadGrantedPolicies(ctx context.Context, registry *en
 // and returns a populated PolicyRegistry ready for Engine.Authorize or Engine.GetListFilter.
 // Returns ErrNoMatch (check with errors.Is) when no principals matched.
 func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}, authType string) (*engine.PolicyRegistry, []string, error) {
-	principalIDs, err := r.match.MatchPrincipals(ctx, authMaterial, authType)
+	matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
+		trace.WithAttributes(attribute.String("authz.auth_type", authType)),
+	)
+	principalIDs, err := r.match.MatchPrincipals(matchCtx, authMaterial, authType)
+	matchSpan.SetAttributes(attribute.Int("authz.matched_count", len(principalIDs)))
 	if err != nil {
+		matchSpan.RecordError(err)
+		matchSpan.SetStatus(codes.Error, err.Error())
+		matchSpan.End()
 		return nil, nil, fmt.Errorf("match principals: %w", err)
 	}
+	matchSpan.End()
+
 	if len(principalIDs) == 0 {
 		return nil, nil, ErrNoMatch
 	}
@@ -94,16 +120,38 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.SubjectPolicySet, []string, error) {
 	var subjects []engine.ResolvedSubject
 	if matcher, ok := r.match.(subjectMatcher); ok {
-		matchedSubjects, err := matcher.MatchSubjects(ctx, authMaterial, authType)
+		matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
+			trace.WithAttributes(
+				attribute.String("authz.auth_type", authType),
+				attribute.String("authz.match_mode", "subject"),
+			),
+		)
+		matchedSubjects, err := matcher.MatchSubjects(matchCtx, authMaterial, authType)
+		matchSpan.SetAttributes(attribute.Int("authz.matched_count", len(matchedSubjects)))
 		if err != nil {
+			matchSpan.RecordError(err)
+			matchSpan.SetStatus(codes.Error, err.Error())
+			matchSpan.End()
 			return nil, nil, fmt.Errorf("match subjects: %w", err)
 		}
+		matchSpan.End()
 		subjects = matchedSubjects
 	} else {
-		principalIDs, err := r.match.MatchPrincipals(ctx, authMaterial, authType)
+		matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
+			trace.WithAttributes(
+				attribute.String("authz.auth_type", authType),
+				attribute.String("authz.match_mode", "principal"),
+			),
+		)
+		principalIDs, err := r.match.MatchPrincipals(matchCtx, authMaterial, authType)
+		matchSpan.SetAttributes(attribute.Int("authz.matched_count", len(principalIDs)))
 		if err != nil {
+			matchSpan.RecordError(err)
+			matchSpan.SetStatus(codes.Error, err.Error())
+			matchSpan.End()
 			return nil, nil, fmt.Errorf("match principals: %w", err)
 		}
+		matchSpan.End()
 		subjects = make([]engine.ResolvedSubject, 0, len(principalIDs))
 		for _, principalID := range principalIDs {
 			subjects = append(subjects, engine.ResolvedSubject{
@@ -142,17 +190,32 @@ func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial int
 
 // GetPoliciesForPrincipal loads policies for a single known principal ID and returns
 // a populated PolicyRegistry. Used by the by-ID authorization path.
-func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principalID string) (*engine.PolicyRegistry, error) {
-	grants, _, err := r.grants.ListForPrincipal(ctx, principalID, nil)
+func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principalID string) (reg *engine.PolicyRegistry, err error) {
+	ctx, span := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.policy.load_for_principal",
+		trace.WithAttributes(attribute.String("authz.principal_id", principalID)),
+	)
+	defer func() {
+		if reg != nil {
+			span.SetAttributes(attribute.Int("authz.policy_count", len(reg.GetAll())))
+		}
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	var grants []models.PrincipalPolicy
+	grants, _, err = r.grants.ListForPrincipal(ctx, principalID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get policies for principal %s: %w", principalID, err)
 	}
 
-	registry := engine.NewPolicyRegistry()
-	if err := r.loadGrantedPolicies(ctx, registry, grants); err != nil {
+	reg = engine.NewPolicyRegistry()
+	if err = r.loadGrantedPolicies(ctx, reg, grants); err != nil {
 		return nil, err
 	}
-	return registry, nil
+	return reg, nil
 }
 
 // MatchPrincipals delegates to the underlying MatchService. Useful for callers that need

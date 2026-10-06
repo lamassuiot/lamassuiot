@@ -12,6 +12,16 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
 
+// SystemPolicyPrefix marks policies managed by Lamassu itself. They are only
+// created by the preload at startup and cannot be created, updated or deleted
+// through the API.
+const SystemPolicyPrefix = "lamassu."
+
+// IsSystemPolicy reports whether policyID belongs to a system-managed policy.
+func IsSystemPolicy(policyID string) bool {
+	return strings.HasPrefix(policyID, SystemPolicyPrefix)
+}
+
 // PolicyManager manages policy storage and retrieval via a PolicyStore.
 type PolicyManager struct {
 	store store.PolicyStore
@@ -37,6 +47,9 @@ func (pm *PolicyManager) GetPolicy(ctx context.Context, policyID string) (*model
 }
 
 func (pm *PolicyManager) UpdatePolicy(ctx context.Context, policy *models.Policy) error {
+	if IsSystemPolicy(policy.ID) {
+		return fmt.Errorf("system-managed policy %q cannot be updated", policy.ID)
+	}
 	if err := engine.ValidatePolicyStruct(policy); err != nil {
 		return fmt.Errorf("invalid policy: %w", err)
 	}
@@ -44,7 +57,7 @@ func (pm *PolicyManager) UpdatePolicy(ctx context.Context, policy *models.Policy
 }
 
 func (pm *PolicyManager) DeletePolicy(ctx context.Context, policyID string) error {
-	if strings.HasPrefix(policyID, "lamassu.") {
+	if IsSystemPolicy(policyID) {
 		return fmt.Errorf("system-managed policy %q cannot be deleted", policyID)
 	}
 	return pm.store.Delete(ctx, policyID)

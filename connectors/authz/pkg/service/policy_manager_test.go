@@ -54,6 +54,37 @@ func TestPolicyManager_UpdatePolicy_RejectsRepeatedVertexPath(t *testing.T) {
 	}
 }
 
+func TestPolicyManager_UpdatePolicy_RejectsSystemManagedPolicy(t *testing.T) {
+	manager := NewPolicyManager(store.NewInMemoryPolicyStore())
+
+	policy := &models.Policy{
+		ID:   "lamassu.system",
+		Name: "System Policy",
+		Rules: []*models.Rule{
+			{
+				Namespace:  "iot",
+				SchemaName: "public",
+				EntityType: "organization",
+				Actions:    []string{"read"},
+			},
+		},
+	}
+
+	if err := manager.CreatePolicy(context.Background(), policy); err != nil {
+		t.Fatalf("failed to create system policy: %v", err)
+	}
+
+	policy.Name = "Renamed"
+	err := manager.UpdatePolicy(context.Background(), policy)
+	if err == nil {
+		t.Fatalf("expected update of system-managed policy to fail")
+	}
+
+	if !strings.Contains(err.Error(), "cannot be updated") {
+		t.Fatalf("expected system-managed error, got: %v", err)
+	}
+}
+
 func TestPolicyManager_SearchPolicies(t *testing.T) {
 	manager := NewPolicyManager(store.NewInMemoryPolicyStore())
 

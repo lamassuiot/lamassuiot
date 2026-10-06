@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"path/filepath"
 	"strings"
 
@@ -87,12 +86,12 @@ func NewMatchService(store engine.PrincipalStore, matchers map[string]engine.Pri
 // DefaultMatchService returns a MatchService wired with the standard OIDC and X.509 matchers.
 // When enableJWTValidation is false, OIDC tokens are parsed without signature verification
 // (intended for development/testing environments where no JWKS endpoint is available).
-func DefaultMatchService(store engine.PrincipalStore, jwkURL string, enableJWTValidation bool) *MatchService {
+func DefaultMatchService(store engine.PrincipalStore, jwkURL string, enableJWTValidation bool) (*MatchService, error) {
 	var oidcMatcher OIDCMatcher
 	if enableJWTValidation {
 		k, err := keyfunc.NewDefaultCtx(context.Background(), []string{jwkURL})
 		if err != nil {
-			log.Fatalf("Failed to create a keyfunc.Keyfunc from the server's URL. Error: %s", err)
+			return nil, fmt.Errorf("failed to create JWKS keyfunc from %s: %w", jwkURL, err)
 		}
 		oidcMatcher = OIDCMatcher{jwkKeySet: k.Keyfunc}
 	} else {
@@ -102,7 +101,7 @@ func DefaultMatchService(store engine.PrincipalStore, jwkURL string, enableJWTVa
 	return NewMatchService(store, map[string]engine.PrincipalMatcher{
 		"oidc": oidcMatcher,
 		"x509": X509Matcher{},
-	})
+	}), nil
 }
 
 // MatchPrincipals loads active principals of authType from the store and returns those
