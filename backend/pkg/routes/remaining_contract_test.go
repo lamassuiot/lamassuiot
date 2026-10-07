@@ -97,7 +97,7 @@ func TestDMSAllESTOperationsUseProtocolAuthorization(t *testing.T) {
 	router := gin.New()
 	svc := new(smock.MockESTService)
 	contract := middleware.NewContractRouter(router.Group("/api/dmsmanager"))
-	registerESTContract(logrus.NewEntry(logrus.New()), contract, svc)
+	registerESTRoutes(logrus.NewEntry(logrus.New()), contract, svc)
 	require.Len(t, contract.Declarations(), 8)
 	for _, route := range contract.Declarations() {
 		t.Run(route.Method+" "+route.Path, func(t *testing.T) {

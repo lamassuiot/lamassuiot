@@ -24,6 +24,24 @@ type Declaration struct {
 	Check      string `yaml:"check,omitempty" json:"check,omitempty"`
 }
 
+// Declaration.Check values for permissions that are not a single domain action.
+const (
+	checkFilter     = "filter"
+	checkPublic     = "public"
+	checkEST        = "est"
+	checkEnvoy      = "envoy"
+	checkEvaluation = "evaluation"
+)
+
+// handlerChecks are the protocol checks performed by the endpoint itself. The value
+// says whether the route must also record a trust boundary: Envoy and evaluation
+// callers are anonymous at the HTTP layer, EST clients authenticate with certificates.
+var handlerChecks = map[string]bool{
+	checkEST:        false,
+	checkEnvoy:      true,
+	checkEvaluation: true,
+}
+
 // Permission couples validated metadata with the middleware that enforces it.
 // Its fields are private so callers cannot attach different metadata and middleware.
 type Permission struct {
@@ -40,7 +58,7 @@ func (p Permission) WithTrustBoundary(name string) Permission {
 	if name != "internal-gateway" && name != "internal-service" {
 		panic("unknown trust boundary: " + name)
 	}
-	if p.declaration.Check != "envoy" && p.declaration.Check != "evaluation" && p.declaration.Check != "public" {
+	if p.declaration.Check != checkPublic && !handlerChecks[p.declaration.Check] {
 		panic("trust boundary currently requires public caller access")
 	}
 	p.trustBoundary = name
@@ -49,13 +67,13 @@ func (p Permission) WithTrustBoundary(name string) Permission {
 
 // Public records an intentionally anonymous endpoint without calling authz.
 func Public() Permission {
-	return Permission{declaration: Declaration{Check: "public"}, handler: func(c *gin.Context) { c.Next() }}
+	return Permission{declaration: Declaration{Check: checkPublic}, handler: func(c *gin.Context) { c.Next() }}
 }
 
 // HandlerAuthorization records protocol checks performed by the endpoint/service.
 // It deliberately adds no domain guard: EST, Envoy and evaluation APIs handle their own credentials.
 func HandlerAuthorization(kind string) Permission {
-	if kind != "est" && kind != "envoy" && kind != "evaluation" {
+	if _, known := handlerChecks[kind]; !known {
 		panic("unknown handler authorization kind: " + kind)
 	}
 	return Permission{declaration: Declaration{Check: kind}, handler: func(c *gin.Context) { c.Next() }}
@@ -152,7 +170,7 @@ func (m *AuthzMiddleware) List() Permission {
 	if m.definition == nil || !m.definition.IsAtomicAction("read") {
 		panic("authz list filter requires a schema with an atomic read action")
 	}
-	return Permission{declaration: Declaration{Namespace: m.namespace, SchemaName: m.schemaName, EntityType: m.entityType, Check: "filter"}, handler: m.AuthListCheck()}
+	return Permission{declaration: Declaration{Namespace: m.namespace, SchemaName: m.schemaName, EntityType: m.entityType, Check: checkFilter}, handler: m.AuthListCheck()}
 }
 
 type RouteDeclaration struct {
@@ -202,13 +220,15 @@ func (r *ContractRouter) Handle(method, relativePath string, permission Permissi
 	if permission.handler == nil || len(handlers) == 0 {
 		panic("contract route requires a validated permission and endpoint handler")
 	}
-	if (permission.declaration.Check == "envoy" || permission.declaration.Check == "evaluation") && permission.trustBoundary == "" {
+	if handlerChecks[permission.declaration.Check] && permission.trustBoundary == "" {
 		panic("handler authorization requires an explicit trust boundary")
 	}
+	fullPath := joinPaths(r.group.BasePath(), relativePath)
 	params := map[string]bool{}
-	for _, segment := range strings.Split(path.Join(r.group.BasePath(), relativePath), "/") {
-		if strings.HasPrefix(segment, ":") {
-			params[strings.TrimPrefix(segment, ":")] = true
+	for _, segment := range strings.Split(fullPath, "/") {
+		// Named (:id) and catch-all (*path) segments are both Gin path parameters.
+		if strings.HasPrefix(segment, ":") || strings.HasPrefix(segment, "*") {
+			params[segment[1:]] = true
 		}
 	}
 	for _, param := range permission.pathParams {
@@ -217,11 +237,20 @@ func (r *ContractRouter) Handle(method, relativePath string, permission Permissi
 		}
 	}
 	r.group.Handle(method, relativePath, append([]gin.HandlerFunc{permission.handler}, handlers...)...)
-	fullPath := path.Join(r.group.BasePath(), relativePath)
-	if strings.HasSuffix(relativePath, "/") && fullPath != "/" {
-		fullPath += "/"
-	}
 	*r.routes = append(*r.routes, RouteDeclaration{Method: method, Path: fullPath, Authz: permission.declaration, TrustBoundary: permission.trustBoundary})
+}
+
+// joinPaths mirrors Gin's own joinPaths so the recorded path is the registered one:
+// an empty relative path keeps the base unchanged, including a trailing slash.
+func joinPaths(absolutePath, relativePath string) string {
+	if relativePath == "" {
+		return absolutePath
+	}
+	finalPath := path.Join(absolutePath, relativePath)
+	if strings.HasSuffix(relativePath, "/") && !strings.HasSuffix(finalPath, "/") {
+		return finalPath + "/"
+	}
+	return finalPath
 }
 
 func (r *ContractRouter) Declarations() []RouteDeclaration {
@@ -269,8 +298,11 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		Servers []struct {
 			URL string `yaml:"url"`
 		} `yaml:"servers"`
-		Paths    map[string]map[string]yaml.Node `yaml:"paths"`
-		Security []map[string][]string           `yaml:"security"`
+		Paths      map[string]map[string]yaml.Node `yaml:"paths"`
+		Security   []map[string][]string           `yaml:"security"`
+		Components struct {
+			SecuritySchemes map[string]yaml.Node `yaml:"securitySchemes"`
+		} `yaml:"components"`
 	}
 	decoder := yaml.NewDecoder(input)
 	if err := decoder.Decode(&doc); err != nil {
@@ -278,6 +310,20 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 	}
 	if !strings.HasPrefix(doc.Version, "3.") {
 		return fmt.Errorf("expected an OpenAPI 3 document")
+	}
+	// A requirement naming an undefined scheme documents no usable authentication.
+	undefinedScheme := func(security []map[string][]string) string {
+		for _, requirement := range security {
+			for name := range requirement {
+				if _, defined := doc.Components.SecuritySchemes[name]; !defined {
+					return name
+				}
+			}
+		}
+		return ""
+	}
+	if name := undefinedScheme(doc.Security); name != "" {
+		return fmt.Errorf("OpenAPI security scheme %q is not defined in components.securitySchemes", name)
 	}
 	prefix := ""
 	if len(doc.Servers) > 0 {
@@ -292,6 +338,10 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 			return fmt.Errorf("route %s %s does not match OpenAPI server %s", route.Method, route.Path, prefix)
 		}
 		relativePath := strings.TrimPrefix(route.Path, prefix)
+		// A route at the server URL itself is the OpenAPI root path.
+		if relativePath == "" {
+			relativePath = "/"
+		}
 		segments := strings.Split(relativePath, "/")
 		for i, segment := range segments {
 			if strings.HasPrefix(segment, ":") || strings.HasPrefix(segment, "*") {
@@ -317,6 +367,11 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		if err := node.Decode(&op); err != nil {
 			return fmt.Errorf("invalid OpenAPI operation %s %s: %w", route.Method, route.Path, err)
 		}
+		if op.Security != nil {
+			if name := undefinedScheme(*op.Security); name != "" {
+				return fmt.Errorf("OpenAPI security scheme %q for %s %s is not defined in components.securitySchemes", name, route.Method, route.Path)
+			}
+		}
 		if op.Authz == nil {
 			return fmt.Errorf("OpenAPI x-authz missing for %s %s", route.Method, route.Path)
 		}
@@ -330,11 +385,11 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 			if op.Security == nil || len(*op.Security) != 0 {
 				return fmt.Errorf("trust boundary operation %s %s must explicitly declare security: [] while enforcement is not configured", route.Method, route.Path)
 			}
-		} else if route.Authz.Check == "public" {
+		} else if route.Authz.Check == checkPublic {
 			if op.Security == nil || len(*op.Security) != 0 {
 				return fmt.Errorf("public operation %s %s must explicitly declare security: []", route.Method, route.Path)
 			}
-		} else if route.Authz.Check != "est" {
+		} else if _, handlerChecked := handlerChecks[route.Authz.Check]; !handlerChecked {
 			// Operation security replaces document defaults. Requirements are OR
 			// alternatives, so even one empty object permits anonymous access.
 			security := doc.Security
