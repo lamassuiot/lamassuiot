@@ -101,6 +101,9 @@ func TestCertificateCreateOpenAPIContractRejectsDrift(t *testing.T) {
 	spec := `openapi: 3.0.3
 servers:
   - url: /api/ca/v1
+components:
+  securitySchemes:
+    BearerAuth: {type: http, scheme: bearer}
 security:
   - BearerAuth: []
 paths:
@@ -209,6 +212,9 @@ func TestContractRequiresEveryOpenAPIOperationAndRegisteredRoute(t *testing.T) {
 	spec := `openapi: 3.0.3
 servers:
   - url: /api/ca/v1
+components:
+  securitySchemes:
+    BearerAuth: {type: http, scheme: bearer}
 security:
   - BearerAuth: []
 paths:
@@ -359,6 +365,9 @@ func TestPublicPermissionWorksWithoutAuthenticationAndRequiresExplicitOpenAPISec
 	spec := `openapi: 3.0.3
 servers:
   - url: /api/va
+components:
+  securitySchemes:
+    BearerAuth: {type: http, scheme: bearer}
 security:
   - BearerAuth: []
 paths:
@@ -384,6 +393,9 @@ func TestProtectedPermissionRejectsAnonymousOpenAPISecurity(t *testing.T) {
 	spec := `openapi: 3.0.3
 servers:
   - url: /api/ca/v1
+components:
+  securitySchemes:
+    BearerAuth: {type: http, scheme: bearer}
 security:
   - BearerAuth: []
 paths:
@@ -403,14 +415,15 @@ paths:
 
 func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, kind := range []string{"est", "envoy", "evaluation"} {
+	// Every registered handler check must validate as a protocol route.
+	for kind := range handlerChecks {
 		t.Run(kind, func(t *testing.T) {
 			router := gin.New()
 			contract := NewContractRouter(router.Group("/protocol"))
 			called := false
 			permission := HandlerAuthorization(kind)
 			boundary := ""
-			if kind != "est" {
+			if handlerChecks[kind] {
 				boundary = "internal-service"
 				permission = permission.WithTrustBoundary(boundary)
 			}
@@ -459,7 +472,8 @@ func TestProtectedPermissionResolvesOpenAPISecurity(t *testing.T) {
 		{name: "combined authenticated requirements", operation: "[{BearerAuth: [], ApiKeyAuth: []}]", allowed: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			spec := "openapi: 3.0.3\nservers: [{url: /api/ca/v1}]\n"
+			spec := "openapi: 3.0.3\nservers: [{url: /api/ca/v1}]\n" +
+				"components: {securitySchemes: {BearerAuth: {type: http, scheme: bearer}, ApiKeyAuth: {type: apiKey, in: header, name: X-API-Key}}}\n"
 			if test.document != "" {
 				spec += "security: " + test.document + "\n"
 			}
@@ -477,6 +491,35 @@ func TestProtectedPermissionResolvesOpenAPISecurity(t *testing.T) {
 	}
 }
 
+func TestOpenAPISecurityMustReferenceDefinedSchemes(t *testing.T) {
+	router := testRouterWithAuthzInputs()
+	contract := NewContractRouter(router.Group("/api/ca/v1"))
+	contract.Handle(http.MethodPost, "/certificates", certificateMiddleware(t, &fakeEngine{}).Global("create"), func(*gin.Context) {})
+	for _, test := range []struct {
+		name, components, document, operation, message string
+	}{
+		{name: "operation typo", components: "{BearerAuth: {type: http, scheme: bearer}}", operation: "[{BearerAuht: []}]", message: `scheme "BearerAuht" for POST /api/ca/v1/certificates`},
+		{name: "inherited undefined scheme", components: "{ApiKeyAuth: {type: apiKey, in: header, name: X-API-Key}}", document: "[{BearerAuth: []}]", message: `scheme "BearerAuth" is not defined`},
+		{name: "no components", document: "[{BearerAuth: []}]", message: `scheme "BearerAuth" is not defined`},
+		{name: "one undefined scheme in a combined requirement", components: "{BearerAuth: {type: http, scheme: bearer}}", operation: "[{BearerAuth: [], ApiKeyAuth: []}]", message: `scheme "ApiKeyAuth"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spec := "openapi: 3.0.3\nservers: [{url: /api/ca/v1}]\n"
+			if test.components != "" {
+				spec += "components: {securitySchemes: " + test.components + "}\n"
+			}
+			if test.document != "" {
+				spec += "security: " + test.document + "\n"
+			}
+			spec += "paths:\n  /certificates:\n    post:\n      x-authz: {namespace: pki, schema_name: ca, entity_type: certificate, action: create}\n"
+			if test.operation != "" {
+				spec += "      security: " + test.operation + "\n"
+			}
+			require.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(spec)), test.message)
+		})
+	}
+}
+
 func TestTrustBoundaryIsPublicUntilEnforcementIsConfigured(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -489,6 +532,7 @@ func TestTrustBoundaryIsPublicUntilEnforcementIsConfigured(t *testing.T) {
 	require.Equal(t, "internal-gateway", contract.Declarations()[0].TrustBoundary)
 	spec := `openapi: 3.0.3
 servers: [{url: /boundary}]
+components: {securitySchemes: {BearerAuth: {type: http, scheme: bearer}}}
 security: [{BearerAuth: []}]
 paths:
   /check:
@@ -511,7 +555,10 @@ paths:
 	}
 	assert.Panics(t, func() { Public().WithTrustBoundary("typo") })
 	assert.Panics(t, func() { certificateMiddleware(t, &fakeEngine{}).Global("create").WithTrustBoundary("internal-service") })
-	for _, kind := range []string{"envoy", "evaluation"} {
+	for kind, requiresBoundary := range handlerChecks {
+		if !requiresBoundary {
+			continue
+		}
 		assert.Panics(t, func() {
 			contract.Handle(http.MethodPost, "/missing-"+kind, HandlerAuthorization(kind), func(*gin.Context) {})
 		})
@@ -519,4 +566,61 @@ paths:
 	plain := NewContractRouter(gin.New().Group("/boundary"))
 	plain.Handle(http.MethodGet, "/check", Public(), func(*gin.Context) {})
 	require.ErrorContains(t, plain.ValidateOpenAPI(strings.NewReader(spec)), "trust boundary mismatch")
+}
+
+func TestContractBindsResourcesToCatchAllParameters(t *testing.T) {
+	router := testRouterWithAuthzInputs()
+	engine := &recordingCreateEngine{fakeEngine: fakeEngine{authorized: true}}
+	schemas, err := authzschemas.PKISchemas()
+	require.NoError(t, err)
+	mw := MustNewAuthzMiddleware(engine, schemas, "pki", "kms", "kms_key", testLogger())
+	contract := NewContractRouter(router.Group("/api/kms/v1"))
+	key := map[string]string{"key_id": "key-1", "engine_id": "engine-2"}
+	permission := mw.ResourceCustom("read", "uri", func(c *gin.Context) map[string]string {
+		assert.Equal(t, "/pkcs11/token/key-1", c.Param("uri"))
+		return key
+	})
+	require.NotPanics(t, func() {
+		contract.GET("/keys/*uri", permission, func(c *gin.Context) { c.Status(http.StatusOK) })
+	})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/kms/v1/keys/pkcs11/token/key-1", nil))
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, key, engine.entityKey)
+	assert.Panics(t, func() {
+		contract.GET("/aliases/*alias", mw.ResourceCustom("read", "uri", func(*gin.Context) map[string]string { return key }), func(*gin.Context) {})
+	})
+}
+
+func TestContractRecordsTheExactPathGinRegisters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := func(*gin.Context) {}
+	for _, test := range []struct{ base, relative, expected string }{
+		{base: "/api/", relative: "", expected: "/api/"},
+		{base: "/api", relative: "", expected: "/api"},
+		{base: "/api", relative: "/", expected: "/api/"},
+		{base: "/api/", relative: "/items/", expected: "/api/items/"},
+		{base: "/api", relative: "items", expected: "/api/items"},
+		{base: "/", relative: "", expected: "/"},
+	} {
+		t.Run(test.base+"+"+test.relative, func(t *testing.T) {
+			router := gin.New()
+			contract := NewContractRouter(router.Group(test.base))
+			contract.GET(test.relative, Public(), handler)
+			require.Len(t, router.Routes(), 1)
+			assert.Equal(t, test.expected, router.Routes()[0].Path)
+			assert.Equal(t, test.expected, contract.Declarations()[0].Path)
+			require.NoError(t, contract.ValidateRoutes(router.Routes()))
+		})
+	}
+}
+
+func TestOpenAPIRootPathMatchesARouteAtTheServerURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	contract := NewContractRouter(gin.New().Group("/api/va"))
+	contract.GET("", Public(), func(*gin.Context) {})
+	spec := "openapi: 3.0.3\nservers: [{url: /api/va}]\npaths:\n  /:\n    get:\n      x-authz: {check: public}\n      security: []\n"
+	require.NoError(t, contract.ValidateOpenAPI(strings.NewReader(spec)))
+	undocumented := strings.Replace(spec, "  /:\n", "  /other:\n", 1)
+	require.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(undocumented)), "OpenAPI operation missing for GET /api/va")
 }
