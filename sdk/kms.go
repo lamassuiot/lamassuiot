@@ -114,7 +114,7 @@ func (cli *httpKMSClient) UpdateKeyMetadata(ctx context.Context, input services.
 }
 
 func (cli *httpKMSClient) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (*models.Key, error) {
-	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/aliases", resources.UpdateKeyAliasesBody{
+	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/alias", resources.UpdateKeyAliasesBody{
 		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
