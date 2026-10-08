@@ -280,6 +280,22 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
+	// Reject duplicate IDs before importing or binding any private key.
+	caID := input.ID
+	if caID == "" {
+		caID = uuid.NewV7().String()
+	}
+
+	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
+	if err != nil {
+		lFunc.Errorf("could not check if CA %s exists: %s", caID, err)
+		return nil, err
+	}
+	if exists {
+		lFunc.Errorf("cannot import duplicate CA. CA with ID '%s' already exists", caID)
+		return nil, errs.ErrCAAlreadyExists
+	}
+
 	caCert := input.CACertificate
 	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
 
@@ -338,11 +354,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
-	caID := input.ID
-	if caID == "" {
-		caID = uuid.NewV7().String()
-	}
-
 	issuerMeta := models.IssuerCAMetadata{
 		ID:    caID,
 		SN:    caCertSN,
@@ -350,6 +361,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	level := 0
 
+	// Preserve the imported certificate's AKI; the parent's AKI identifies
+	// the parent's issuer, not the issuer of this certificate.
 	akid := hex.EncodeToString(caCertX509.AuthorityKeyId)
 
 	isSelfSigned := false
@@ -397,7 +410,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		parentCA := findParentCAInArray(input.CACertificate, candidateParentCAs)
 		if parentCA != nil {
 			lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
-			akid = parentCA.Certificate.AuthorityKeyID
 			// When verification is successful, update the level and metadata
 			level = parentCA.Level + 1
 			issuerMeta = models.IssuerCAMetadata{
@@ -422,7 +434,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			parentCA = findParentCAInArray(input.CACertificate, candidateParentCAs)
 			if parentCA != nil {
 				lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
-				akid = parentCA.Certificate.AuthorityKeyID
 				// When verification is successful, update the level and metadata
 				level = parentCA.Level + 1
 				issuerMeta = models.IssuerCAMetadata{

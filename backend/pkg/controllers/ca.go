@@ -194,6 +194,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrCAAlreadyExists:
+			ctx.JSON(409, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}

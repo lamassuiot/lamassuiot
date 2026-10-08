@@ -201,6 +201,9 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		404: {
 			errs.ErrIssuanceProfileNotFound,
 		},
+		409: {
+			errs.ErrCAAlreadyExists,
+		},
 	})
 	if err != nil {
 		return nil, err
