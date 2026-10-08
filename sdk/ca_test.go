@@ -118,7 +118,7 @@ func TestGetCertificateKeyUsesExistingHTTPEndpoints(t *testing.T) {
 				}
 				return certificateKeyResponse(t, 404, map[string]string{"err": errs.ErrKeyNotFound.Error()}), nil
 			})}, "https://kms.example")
-			resolved, err := NewHttpCAClient(&http.Client{}, "https://ca.example", kmsClient).GetCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: cert, EngineID: key.EngineID})
+			resolved, err := services.ResolveCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: cert, EngineID: key.EngineID}, kmsClient)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -136,15 +136,6 @@ func TestGetCertificateKeyUsesExistingHTTPEndpoints(t *testing.T) {
 				t.Fatalf("expected %d requests, got %v", expectedCalls, paths)
 			}
 		})
-	}
-}
-
-func TestGetCertificateKeyRequiresKMSClient(t *testing.T) {
-	cert, _, _ := certificateKeyFixture(t)
-	client := NewHttpCAClient(&http.Client{}, "https://ca.example")
-	_, err := client.GetCertificateKey(context.Background(), services.GetCertificateKeyInput{Certificate: cert})
-	if err == nil || !strings.Contains(err.Error(), "KMS client is required") {
-		t.Fatalf("expected a missing KMS client error, got %v", err)
 	}
 }
 
@@ -166,7 +157,7 @@ func TestGetCertificateKeyHandlesHTTPAmbiguity(t *testing.T) {
 				lookupCalls++
 				return certificateKeyResponse(t, 400, map[string]string{"err": errs.ErrKeyEngineRequired.Error()}), nil
 			})}, "https://kms.example")
-			resolved, err := NewHttpCAClient(&http.Client{}, "https://ca.example", kmsClient).GetCertificateKey(context.Background(), services.GetCertificateKeyInput{Certificate: cert})
+			resolved, err := services.ResolveCertificateKey(context.Background(), services.GetCertificateKeyInput{Certificate: cert}, kmsClient)
 			if ambiguous {
 				if !errors.Is(err, errs.ErrKeyEngineRequired) || resolved != nil {
 					t.Fatalf("expected ambiguous engine, got %v, %v", resolved, err)
@@ -190,7 +181,7 @@ func TestGetCertificateKeyDoesNotMaskHTTPFailures(t *testing.T) {
 				calls++
 				return certificateKeyResponse(t, status, map[string]string{"err": "KMS unavailable"}), nil
 			})}, "https://kms.example")
-			_, err := NewHttpCAClient(&http.Client{}, "https://ca.example", kmsClient).GetCertificateKey(context.Background(), services.GetCertificateKeyInput{Certificate: cert, EngineID: key.EngineID})
+			_, err := services.ResolveCertificateKey(context.Background(), services.GetCertificateKeyInput{Certificate: cert, EngineID: key.EngineID}, kmsClient)
 			if err == nil || !strings.Contains(err.Error(), "KMS unavailable") {
 				t.Fatalf("expected HTTP failure, got %v", err)
 			}

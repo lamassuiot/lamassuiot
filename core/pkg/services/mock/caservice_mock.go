@@ -203,9 +203,3 @@ func (m *MockCAService) DeleteIssuanceProfile(ctx context.Context, input service
 	args := m.Called(ctx, input)
 	return args.Error(0)
 }
-
-func (m *MockCAService) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
-	args := m.Called(ctx, input)
-	key, _ := args.Get(0).(*models.Key)
-	return key, args.Error(1)
-}

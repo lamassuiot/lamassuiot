@@ -242,7 +242,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, err
 	}
 
-	crlSigner := NewCertificateSigner(ctx, &crlCA.Certificate, svc.caSDK, svc.kmsService)
+	crlSigner := NewCertificateSigner(ctx, &crlCA.Certificate, svc.kmsService)
 	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
 	extensions := []pkix.Extension{}

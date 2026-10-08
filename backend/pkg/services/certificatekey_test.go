@@ -294,7 +294,7 @@ func TestGetCertificateKey(t *testing.T) {
 				kms.key.KeyID = "provider-assigned-id"
 				kms.key.PKCS11URI = buildPKCS11ID(kms.key.EngineID, kms.key.KeyID, "private")
 			}
-			resolved, err := (&CAServiceBackend{kmsService: kms}).GetCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert), EngineID: tc.engine})
+			resolved, err := coreservices.ResolveCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert), EngineID: tc.engine}, kms)
 			require.NoError(t, err)
 			require.Equal(t, kms.key.KeyID, resolved.KeyID)
 			if tc.arbitraryID {
@@ -306,7 +306,7 @@ func TestGetCertificateKey(t *testing.T) {
 			if tc.noSKI {
 				return // x509.CreateRevocationList requires an issuer SKI.
 			}
-			signer := NewCertificateSigner(context.Background(), &models.Certificate{Certificate: (*models.X509Certificate)(cert), EngineID: tc.engine}, &CAServiceBackend{kmsService: kms}, kms)
+			signer := NewCertificateSigner(context.Background(), &models.Certificate{Certificate: (*models.X509Certificate)(cert), EngineID: tc.engine}, kms)
 			der, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{Number: big.NewInt(1), ThisUpdate: time.Now(), NextUpdate: time.Now().Add(time.Hour)}, cert, signer)
 			require.NoError(t, err)
 			crl, err := x509.ParseRevocationList(der)
@@ -352,7 +352,7 @@ func TestGetCertificateKeyRejectsInvalidCandidates(t *testing.T) {
 			if name == "wrong public key" || name == "malformed public key" {
 				kms.lookupOverride = func(string) (*models.Key, error) { return &kms.key, nil }
 			}
-			resolved, err := (&CAServiceBackend{kmsService: kms}).GetCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert), EngineID: engine})
+			resolved, err := coreservices.ResolveCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert), EngineID: engine}, kms)
 			require.Nil(t, resolved)
 			if name == "ambiguous keys" {
 				require.ErrorContains(t, err, "multiple private keys")
@@ -374,7 +374,7 @@ func TestGetCertificateKeySkipsWrongSKICandidate(t *testing.T) {
 		}
 		return &kms.key, nil
 	}
-	resolved, err := (&CAServiceBackend{kmsService: kms}).GetCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert), EngineID: kms.key.EngineID})
+	resolved, err := coreservices.ResolveCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert), EngineID: kms.key.EngineID}, kms)
 	require.NoError(t, err)
 	require.Equal(t, kms.key.KeyID, resolved.KeyID)
 	require.Len(t, kms.lookups, 2)
@@ -392,7 +392,7 @@ func TestGetCertificateKeyPropagatesKMSErrors(t *testing.T) {
 				kms.lookupErr = errs.ErrKeyNotFound
 				kms.listErr = expected
 			}
-			_, err := (&CAServiceBackend{kmsService: kms}).GetCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert)})
+			_, err := coreservices.ResolveCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert)}, kms)
 			require.ErrorIs(t, err, expected)
 			if stage == "lookup" {
 				require.Len(t, kms.lookups, 1)
@@ -401,7 +401,7 @@ func TestGetCertificateKeyPropagatesKMSErrors(t *testing.T) {
 		})
 	}
 	kms := newCertificateKeyKMS(t)
-	_, err := (&CAServiceBackend{kmsService: kms}).GetCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{})
+	_, err := coreservices.ResolveCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{}, kms)
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 }
 
