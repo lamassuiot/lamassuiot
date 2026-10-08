@@ -124,7 +124,8 @@ func RunPostgresDocker(pkiSchema map[string]string, exposeAsStandardPort bool) (
 	// retry until db server is ready
 	err = dockerHost.Retry(context.Background(), 30*time.Second, func() error {
 		gdb, err = gorm.Open(postgres.Open(conStr), &gorm.Config{
-			Logger: gormLogger.Discard,
+			Logger:         gormLogger.Discard,
+			TranslateError: true,
 		})
 		if err != nil {
 			return err
