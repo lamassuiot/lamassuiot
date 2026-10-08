@@ -244,9 +244,3 @@ func (mw CAOTelTracer) DeleteIssuanceProfile(ctx context.Context, input services
 
 	return mw.next.DeleteIssuanceProfile(ctx, input)
 }
-
-func (mw CAOTelTracer) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
-	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
-	defer span.End()
-	return mw.next.GetCertificateKey(ctx, input)
-}
