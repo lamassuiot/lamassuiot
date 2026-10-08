@@ -32,6 +32,13 @@ func createCAHandler(ctx context.Context, event *event.Event, crlSvc services.CR
 		return err
 	}
 
+	// A CA imported without its private key cannot sign a CRL, so creating a
+	// role (and its initial CRL) for it would fail on every retry.
+	if ca.Certificate.Type == models.CertificateTypeImportedWithoutKey {
+		lMessaging.Infof("skipping CRL role initialization for keyless CA %s", ca.ID)
+		return nil
+	}
+
 	_, err = crlSvc.InitCRLRole(ctx, ca.Certificate.SubjectKeyID)
 
 	if err != nil {
