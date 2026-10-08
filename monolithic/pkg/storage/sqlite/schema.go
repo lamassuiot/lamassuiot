@@ -47,6 +47,8 @@ func initializeSchema(db *gorm.DB) error {
 			PRIMARY KEY (serial_number, id),
 			FOREIGN KEY (serial_number) REFERENCES certificates (serial_number) ON DELETE CASCADE
 		)`,
+		// Also upgrade existing databases. Duplicate IDs require explicit cleanup.
+		`CREATE UNIQUE INDEX IF NOT EXISTS ca_certificates_id_unique ON ca_certificates (id)`,
 
 		// Certificates table - Final state after migrations:
 		// - 20241215165048_add_key_id.sql: Added key_id column (later renamed to subject_key_id)

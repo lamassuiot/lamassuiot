@@ -268,17 +268,44 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.
 }
 
 func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	var err error
-
 	// Validate IssuanceProfileID exists if provided (required for ImportedWithKey type)
 	if input.ProfileID != "" {
-		_, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		_, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
 			ProfileID: input.ProfileID,
 		})
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if input.ID == "" {
+		input.ID = goid.NewV4UUID().String()
+	}
+
+	var ca *models.CACertificate
+	err := svc.caStorage.WithIDLock(ctx, input.ID, func(repo storage.CACertificatesRepo) error {
+		var err error
+		ca, err = svc.importCA(ctx, input, repo)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ca, nil
+}
+
+func (svc *CAServiceBackend) importCA(ctx context.Context, input services.ImportCAInput, caStorage storage.CACertificatesRepo) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	caID := input.ID
+	// The ID guard must cover both this check and all subsequent KMS calls.
+	exists, _, err := caStorage.SelectExistsByID(ctx, caID)
+	if err != nil {
+		lFunc.Errorf("could not check if CA %s exists: %s", caID, err)
+		return nil, err
+	}
+	if exists {
+		lFunc.Errorf("cannot import duplicate CA. CA with ID '%s' already exists", caID)
+		return nil, errs.ErrCAAlreadyExists
 	}
 
 	caCert := input.CACertificate
@@ -339,11 +366,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
-	caID := input.ID
-	if caID == "" {
-		caID = goid.NewV4UUID().String()
-	}
-
 	issuerMeta := models.IssuerCAMetadata{
 		ID:    caID,
 		SN:    caCertSN,
@@ -351,6 +373,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	level := 0
 
+	// Preserve the imported certificate's AKI; the parent's AKI identifies
+	// the parent's issuer, not the issuer of this certificate.
 	akid := hex.EncodeToString(caCertX509.AuthorityKeyId)
 
 	isSelfSigned := false
@@ -368,11 +392,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			for _, parentCA := range parentCAs {
 				p := x509.Certificate(*parentCA.Certificate.Certificate)
 				c := x509.Certificate(*ca)
-				err = c.CheckSignatureFrom(&p)
+				signatureErr := c.CheckSignatureFrom(&p)
 
-				if err != nil {
+				if signatureErr != nil {
 					if akid != "" {
-						lFunc.Warnf("possible parent CA detected, but failed cryptographic validation: %s", err)
+						lFunc.Warnf("possible parent CA detected, but failed cryptographic validation: %s", signatureErr)
 					}
 					continue // Skip if verification fails
 				}
@@ -387,7 +411,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 		// 1st Attempt: Check if the CA is signed by a parent CA using Authority Key Identifier (AKID)
 		lFunc.Debugf("checking if CA %s is signed by a parent CA using AKID", input.CACertificate.Subject.CommonName)
-		svc.caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
+		_, err = caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
 			storage.StorageListRequest[models.CACertificate]{
 				ExhaustiveRun: true,
 				ApplyFunc: func(c models.CACertificate) {
@@ -395,10 +419,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				},
 			})
 
+		if err != nil {
+			return nil, err
+		}
+
 		parentCA := findParentCAInArray(input.CACertificate, candidateParentCAs)
 		if parentCA != nil {
 			lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
-			akid = parentCA.Certificate.AuthorityKeyID
 			// When verification is successful, update the level and metadata
 			level = parentCA.Level + 1
 			issuerMeta = models.IssuerCAMetadata{
@@ -411,7 +438,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 			// 2nd Attempt: Find all CAs based on the Issuer Subject of the certificate being imported
 			candidateParentCAs = []models.CACertificate{}
-			svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+			_, err = caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
 				ExhaustiveRun: true,
 				ApplyFunc: func(c models.CACertificate) {
 					if chelpers.PkixNameEqual(c.Certificate.Certificate.Subject, input.CACertificate.Issuer) {
@@ -420,10 +447,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				},
 			})
 
+			if err != nil {
+				return nil, err
+			}
+
 			parentCA = findParentCAInArray(input.CACertificate, candidateParentCAs)
 			if parentCA != nil {
 				lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
-				akid = parentCA.Certificate.AuthorityKeyID
 				// When verification is successful, update the level and metadata
 				level = parentCA.Level + 1
 				issuerMeta = models.IssuerCAMetadata{
@@ -496,7 +526,10 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 
 	lFunc.Debugf("insert CA %s in storage engine", caID)
-	cert, err := svc.caStorage.Insert(ctx, ca)
+	cert, err := caStorage.Insert(ctx, ca)
+	if err != nil {
+		return nil, err
+	}
 
 	// Flag to check if it's the first iteration
 	firstIteration := true
@@ -508,9 +541,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 		// In the future if we plan to support Cross Signed certs, it is important not fetching just by AKI,
 		// since two cross signed certs (using the same SKI) are signed by different AKIs. Hence, we select by AKI AND Issuer DSN
-		svc.caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
+		var updateErr error
+		_, err = caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
 			ExhaustiveRun: true,
 			ApplyFunc: func(child models.CACertificate) {
+				if updateErr != nil {
+					return
+				}
 				childCertX509 := (*x509.Certificate)(child.Certificate.Certificate)
 				isSelfSignedChild := false
 				if err := childCertX509.CheckSignatureFrom(childCertX509); err != nil {
@@ -523,11 +560,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 					if firstIteration { //Check also with crypto validation to ensure child is actually signed by parent?
 						p := x509.Certificate(*parent.Certificate.Certificate)
 						c := x509.Certificate(*child.Certificate.Certificate)
-						err = c.CheckSignatureFrom(&p)
+						signatureErr := c.CheckSignatureFrom(&p)
 
-						if err != nil {
+						if signatureErr != nil {
 							if child.Certificate.AuthorityKeyID != "" {
-								lFunc.Warnf("possible child CA detected, but failed cryptographic validation: %s", err)
+								lFunc.Warnf("possible child CA detected, but failed cryptographic validation: %s", signatureErr)
 							}
 							return // if verification fails, "tentative" parent CA did not sign the certificate being imported. skip update
 						}
@@ -540,17 +577,26 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 					child.Certificate.IssuerCAMetadata.SN = parent.Certificate.SerialNumber
 
 					// Update the level in DB
-					svc.caStorage.Update(ctx, &child)
+					_, updateErr = caStorage.Update(ctx, &child)
+					if updateErr != nil {
+						return
+					}
 
 					// Enqueue child for further processing
 					queue = append(queue, child)
 				}
 			},
 		})
+		if err != nil {
+			return nil, err
+		}
+		if updateErr != nil {
+			return nil, updateErr
+		}
 		firstIteration = false
 	}
 
-	return cert, err
+	return cert, nil
 }
 
 // resolveCAIssuanceProfile resolves the CA issuance profile with the following priority:

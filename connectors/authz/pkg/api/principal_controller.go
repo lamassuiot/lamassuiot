@@ -20,16 +20,6 @@ func NewPrincipalController(manager service.PrincipalService) *PrincipalControll
 }
 
 // CreatePrincipal godoc
-// @Summary Create principal
-// @Description Create a new principal
-// @Tags principals
-// @Accept json
-// @Produce json
-// @Param request body dto.CreatePrincipalRequest true "Principal data"
-// @Success 201 {object} dto.PrincipalResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals [post]
 func (ctrl *PrincipalController) CreatePrincipal(c *gin.Context) {
 	var req dto.CreatePrincipalRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -65,15 +55,6 @@ func (ctrl *PrincipalController) CreatePrincipal(c *gin.Context) {
 }
 
 // GetPrincipal godoc
-// @Summary Get principal
-// @Description Get a principal by ID
-// @Tags principals
-// @Produce json
-// @Param id path string true "Principal ID"
-// @Success 200 {object} dto.PrincipalResponse
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals/{id} [get]
 func (ctrl *PrincipalController) GetPrincipal(c *gin.Context) {
 	id := c.Param("id")
 
@@ -90,19 +71,6 @@ func (ctrl *PrincipalController) GetPrincipal(c *gin.Context) {
 }
 
 // ListPrincipals godoc
-// @Summary List principals
-// @Description Get all principals
-// @Tags principals
-// @Produce json
-// @Param filter query string false "Filter expression (e.g. active[eq]true, name[ct]foo)"
-// @Param sort_by query string false "Field to sort by"
-// @Param sort_mode query string false "Sort direction: asc or desc"
-// @Param page_size query int false "Page size"
-// @Param bookmark query string false "Pagination bookmark"
-// @Success 200 {object} dto.ListPrincipalsResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals [get]
 func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
 	queryParams, err := controllers.FilterQuery(c.Request, PrincipalFilterableFields)
 	if err != nil {
@@ -136,18 +104,6 @@ func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
 }
 
 // UpdatePrincipal godoc
-// @Summary Update principal
-// @Description Update a principal
-// @Tags principals
-// @Accept json
-// @Produce json
-// @Param id path string true "Principal ID"
-// @Param request body dto.UpdatePrincipalRequest true "Update data"
-// @Success 200 {object} dto.PrincipalResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals/{id] [put]
 func (ctrl *PrincipalController) UpdatePrincipal(c *gin.Context) {
 	id := c.Param("id")
 
@@ -194,14 +150,6 @@ func (ctrl *PrincipalController) UpdatePrincipal(c *gin.Context) {
 }
 
 // DeletePrincipal godoc
-// @Summary Delete principal
-// @Description Delete a principal
-// @Tags principals
-// @Param id path string true "Principal ID"
-// @Success 200 {object} "OK"
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals/{id} [delete]
 func (ctrl *PrincipalController) DeletePrincipal(c *gin.Context) {
 	id := c.Param("id")
 
@@ -217,18 +165,6 @@ func (ctrl *PrincipalController) DeletePrincipal(c *gin.Context) {
 }
 
 // GrantPolicy godoc
-// @Summary Grant policy to principal
-// @Description Assign a policy to a principal
-// @Tags principals
-// @Accept json
-// @Produce json
-// @Param id path string true "Principal ID"
-// @Param request body dto.GrantPolicyRequest true "Policy grant data"
-// @Success 200 {object} dto.SuccessResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals/{id}/policies [post]
 func (ctrl *PrincipalController) GrantPolicy(c *gin.Context) {
 	id := c.Param("id")
 
@@ -252,15 +188,6 @@ func (ctrl *PrincipalController) GrantPolicy(c *gin.Context) {
 }
 
 // RevokePolicy godoc
-// @Summary Revoke policy from principal
-// @Description Remove a policy from a principal
-// @Tags principals
-// @Param id path string true "Principal ID"
-// @Param policyId path string true "Policy ID"
-// @Success 200 {object} "OK"
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals/{id}/policies/{policyId} [delete]
 func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 	principalID := c.Param("id")
 	policyID := c.Param("policyId")
@@ -277,20 +204,6 @@ func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 }
 
 // GetPrincipalPolicies godoc
-// @Summary Get principal policies
-// @Description Get all policies assigned to a principal
-// @Tags principals
-// @Produce json
-// @Param id path string true "Principal ID"
-// @Param filter query string false "Filter expression"
-// @Param sort_by query string false "Field to sort by"
-// @Param sort_mode query string false "Sort direction: asc or desc"
-// @Param page_size query int false "Page size"
-// @Param bookmark query string false "Pagination bookmark"
-// @Success 200 {object} dto.ListPrincipalPoliciesResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/principals/{id}/policies [get]
 func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 	id := c.Param("id")
 

@@ -56,6 +56,10 @@ type mockCACertStorage struct {
 	listErr error // optional error returned by SelectByType
 }
 
+func (m *mockCACertStorage) WithIDLock(_ context.Context, _ string, fn func(storage.CACertificatesRepo) error) error {
+	return fn(m)
+}
+
 func (m *mockCACertStorage) SelectByType(_ context.Context, caType models.CertificateType, req storage.StorageListRequest[models.CACertificate]) (string, error) {
 	if m.listErr != nil {
 		return "", m.listErr
