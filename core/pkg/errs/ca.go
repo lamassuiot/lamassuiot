@@ -30,6 +30,8 @@ var (
 
 	//KMS
 	ErrKeyNotFound error = errors.New("key not found")
+	// ImportCA was scoped to an engine, but the CA's key is held by a different one.
+	ErrCAKeyInOtherEngine error = errors.New("the CA key is not in the requested engine but exists in another one")
 	// A key is identified by (key_id, engine_id), so a keyID held by more than one engine
 	// does not address a single key.
 	ErrKeyEngineRequired error = errors.New("keyID is held by several engines: identify the key by its pkcs11 URI or one of its aliases")

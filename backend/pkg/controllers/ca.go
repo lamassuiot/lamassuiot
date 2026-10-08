@@ -190,7 +190,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAValidCertAndPrivKey:
+		case errs.ErrCAValidCertAndPrivKey, errs.ErrCAKeyInOtherEngine, errs.ErrKeyEngineRequired:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
