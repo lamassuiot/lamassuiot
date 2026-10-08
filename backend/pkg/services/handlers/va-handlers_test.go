@@ -52,10 +52,11 @@ func TestVAEventHandlerInitializesCARoles(t *testing.T) {
 		name      string
 		eventType models.EventType
 		caType    models.CertificateType
+		skipped   bool
 	}{
 		{name: "created CA", eventType: models.EventCreateCAKey, caType: models.CertificateTypeManaged},
 		{name: "imported CA with key", eventType: models.EventImportCAKey, caType: models.CertificateTypeImportedWithKey},
-		{name: "imported CA without key", eventType: models.EventImportCAKey, caType: models.CertificateTypeImportedWithoutKey},
+		{name: "imported CA without key", eventType: models.EventImportCAKey, caType: models.CertificateTypeImportedWithoutKey, skipped: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &vaRoleInitializer{}
@@ -67,6 +68,11 @@ func TestVAEventHandlerInitializesCARoles(t *testing.T) {
 				},
 			}
 			require.NoError(t, handler.HandleMessage(vaEventMessage(t, tc.eventType, ca)))
+			if tc.skipped {
+				// Keyless CAs cannot sign a CRL, so no role must be created.
+				require.Empty(t, svc.initializedSKIs)
+				return
+			}
 			// The role belongs to the imported CA's own key, not its issuer's key.
 			require.Equal(t, []string{ca.Certificate.SubjectKeyID}, svc.initializedSKIs)
 		})
