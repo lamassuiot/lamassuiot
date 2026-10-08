@@ -169,9 +169,14 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CARequestID:   requestBody.CARequestID,
 	})
 	if err != nil {
-		if errors.Is(err, errs.ErrCAValidCertAndPrivKey) {
+		switch {
+		case errors.Is(err, errs.ErrCAValidCertAndPrivKey):
 			ctx.JSON(http.StatusBadRequest, gin.H{"err": errs.ErrCAValidCertAndPrivKey.Error()})
-		} else {
+		case errors.Is(err, errs.ErrCAKeyInOtherEngine):
+			ctx.JSON(http.StatusBadRequest, gin.H{"err": errs.ErrCAKeyInOtherEngine.Error()})
+		case errors.Is(err, errs.ErrKeyEngineRequired):
+			ctx.JSON(http.StatusBadRequest, gin.H{"err": errs.ErrKeyEngineRequired.Error()})
+		default:
 			writeCACreationError(ctx, err)
 		}
 		return
