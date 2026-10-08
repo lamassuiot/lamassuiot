@@ -410,7 +410,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 
 	return &CATestServer{
 		Service:   *svc,
-		HttpCASDK: sdk.NewHttpCAClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpCASDK: sdk.NewHttpCAClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port), kmsTestServer.HttpKMSSDK),
 		BeforeEach: func() error {
 			return nil
 		},

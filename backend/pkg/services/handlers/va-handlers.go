@@ -18,6 +18,7 @@ func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.
 		Logger: l,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
 			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
+			string(models.EventImportCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, svc, l) },
 		},
 	}

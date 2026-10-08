@@ -30,6 +30,16 @@ func NewKMSCryptoSigner(ctx context.Context, kms models.Key, kmsSDK services.KMS
 	}
 }
 
+func kmsKeyIdentifier(key *models.Key) string {
+	if key.PKCS11URI != "" {
+		return key.PKCS11URI
+	}
+	if key.EngineID != "" {
+		return buildPKCS11ID(key.EngineID, key.KeyID, "private")
+	}
+	return key.KeyID
+}
+
 func (s *kmsCryptoSigner) Public() crypto.PublicKey {
 	b, err := base64.StdEncoding.DecodeString(s.key.PublicKey)
 	if err != nil {
@@ -109,7 +119,7 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 
 	// Sign the digest using the KMS service
 	response, err := s.sdk.SignMessage(s.ctx, services.SignMessageInput{
-		Identifier:  s.key.KeyID,
+		Identifier:  kmsKeyIdentifier(&s.key),
 		Algorithm:   signAlg,
 		Message:     digest,
 		MessageType: models.Hashed,

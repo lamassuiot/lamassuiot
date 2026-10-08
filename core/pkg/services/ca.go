@@ -1,10 +1,18 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/pem"
+	"errors"
+	"fmt"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 )
@@ -30,6 +38,9 @@ type CAService interface {
 	SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error)
 	CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error)
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
+
+	// GetCertificateKey composes KMS lookups; it has no HTTP endpoint.
+	GetCertificateKey(ctx context.Context, input GetCertificateKeyInput) (*models.Key, error)
 
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
 	GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error)
@@ -322,4 +333,101 @@ type GetIssuanceProfileByIDInput struct {
 
 type DeleteIssuanceProfileInput struct {
 	ProfileID string `validate:"required"`
+}
+
+// GetCertificateKeyInput identifies a certificate's private key. EngineID, when
+// supplied, restricts every lookup and candidate to that engine.
+type GetCertificateKeyInput struct {
+	Certificate *models.X509Certificate `validate:"required"`
+	EngineID    string
+}
+
+// ResolveCertificateKey is the shared implementation of CAService.GetCertificateKey
+// for the backend and SDK. It resolves the certificate's private key without assuming its
+// SKI is the KMS key ID. All candidates must match the certificate's public key
+// and, when provided, its engine. No certificate or KMS metadata is modified.
+func ResolveCertificateKey(ctx context.Context, input GetCertificateKeyInput, kms KMSService) (*models.Key, error) {
+	if input.Certificate == nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+	x509Cert := (*x509.Certificate)(input.Certificate)
+	publicKeyDER, err := x509.MarshalPKIXPublicKey(x509Cert.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Lamassu engines use the SHA-256 digest of the PKIX public key as KeyID.
+	digest := sha256.Sum256(publicKeyDER)
+	digestID := hex.EncodeToString(digest[:])
+	ids := []string{hex.EncodeToString(x509Cert.SubjectKeyId)}
+	if ids[0] == "" {
+		ids = []string{digestID}
+	} else if ids[0] != digestID {
+		ids = append(ids, digestID)
+	}
+	var validationErr error
+	valid := func(key *models.Key) bool {
+		if key == nil || !key.HasPrivateKey || (input.EngineID != "" && key.EngineID != input.EngineID) {
+			return false
+		}
+		encoded, err := base64.StdEncoding.DecodeString(key.PublicKey)
+		block, _ := pem.Decode(encoded)
+		// Equal PKIX DER guarantees the candidate contains the certificate's key.
+		if err != nil || block == nil || !bytes.Equal(publicKeyDER, block.Bytes) {
+			validationErr = errs.ErrCAValidCertAndPrivKey
+			return false
+		}
+		return true
+	}
+
+	// Prefer SKI, then the public-key digest used by Lamassu's crypto engines.
+	for _, id := range ids {
+		identifier := id
+		if input.EngineID != "" {
+			identifier = fmt.Sprintf("pkcs11:token-id=%s;id=%s;type=private", input.EngineID, id)
+		}
+		key, err := kms.GetKey(ctx, GetKeyInput{Identifier: identifier})
+		if err != nil {
+			if errors.Is(err, errs.ErrKeyNotFound) || errors.Is(err, errs.ErrKeyEngineRequired) {
+				continue
+			}
+			return nil, err
+		}
+		if valid(key) {
+			return key, nil
+		}
+	}
+
+	// Other providers can assign unrelated IDs. Search existing public-key data
+	// instead of renaming the key or persisting another certificate field.
+	filters := []resources.FilterOption{{Field: "public_key", FilterOperation: resources.StringEqual,
+		Value: base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyDER}))}}
+	if input.EngineID != "" {
+		filters = append(filters, resources.FilterOption{Field: "engine_id", FilterOperation: resources.StringEqual, Value: input.EngineID})
+	}
+	var matches []models.Key
+	_, err = kms.GetKeys(ctx, GetKeysInput{ListInput: resources.ListInput[models.Key]{
+		ExhaustiveRun: true, QueryParameters: &resources.QueryParameters{Filters: filters},
+		ApplyFunc: func(key models.Key) {
+			if valid(&key) {
+				matches = append(matches, key)
+			}
+		},
+	}})
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 1 {
+		return &matches[0], nil
+	}
+	if len(matches) > 1 {
+		if input.EngineID == "" {
+			return nil, errs.ErrKeyEngineRequired
+		}
+		return nil, fmt.Errorf("multiple private keys match certificate in engine %s", input.EngineID)
+	}
+	if validationErr != nil {
+		return nil, validationErr
+	}
+	return nil, errs.ErrKeyNotFound
 }

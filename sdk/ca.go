@@ -23,14 +23,29 @@ type CAClient services.CAService
 type httpCAClient struct {
 	httpClient *http.Client
 	baseUrl    string
+	kmsClient  services.KMSService
 }
 
-func NewHttpCAClient(client *http.Client, url string) services.CAService {
-	baseURL := url
+// NewHttpCAClient optionally accepts the KMS client used by GetCertificateKey.
+func NewHttpCAClient(client *http.Client, url string, kmsClient ...services.KMSService) services.CAService {
+	var kms services.KMSService
+	if len(kmsClient) > 0 {
+		kms = kmsClient[0]
+	}
 	return &httpCAClient{
 		httpClient: client,
-		baseUrl:    baseURL,
+		baseUrl:    url,
+		kmsClient:  kms,
 	}
+}
+
+// GetCertificateKey resolves the key locally using the injected KMS client's
+// existing GetKey and GetKeys HTTP endpoints.
+func (cli *httpCAClient) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
+	if cli.kmsClient == nil {
+		return nil, fmt.Errorf("KMS client is required to resolve certificate keys")
+	}
+	return services.ResolveCertificateKey(ctx, input, cli.kmsClient)
 }
 
 func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
