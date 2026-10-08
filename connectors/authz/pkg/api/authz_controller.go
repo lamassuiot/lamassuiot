@@ -30,16 +30,6 @@ func NewAuthzController(eng *engine.Engine, resolver *service.IdentityResolver, 
 }
 
 // Authorize godoc
-// @Summary Check authorization
-// @Description Check if a user can perform an action on an entity
-// @Tags authorization
-// @Accept json
-// @Produce json
-// @Param request body dto.AuthorizeRequest true "Authorization request"
-// @Success 200 {object} dto.AuthorizeResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/authz/authorize [post]
 func (ctrl *AuthzController) Authorize(c *gin.Context) {
 	var req dto.AuthorizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -87,16 +77,6 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 }
 
 // GetFilter godoc
-// @Summary Get list filter
-// @Description Get SQL filter for listing entities
-// @Tags authorization
-// @Accept json
-// @Produce json
-// @Param request body dto.GetFilterRequest true "Filter request"
-// @Success 200 {object} dto.GetFilterResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/authz/filter [post]
 func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 	var req dto.GetFilterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -133,17 +113,6 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 }
 
 // MatchAndAuthorize godoc
-// @Summary Check authorization with principal matching
-// @Description Match principals from auth material and check if they can perform an action on an entity
-// @Tags authorization
-// @Accept json
-// @Produce json
-// @Param request body dto.MatchAndAuthorizeRequest true "Match and authorization request"
-// @Success 200 {object} dto.MatchAndAuthorizeResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 401 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/authz/match/authorize [post]
 func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 	var req dto.MatchAndAuthorizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -202,16 +171,6 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 }
 
 // CheckHTTP checks an HTTP route for a known principal and explicit subject attributes.
-// @Summary Check HTTP authorization
-// @Description Check whether a known principal can access an HTTP route. Subject attributes must be supplied explicitly for this debug path.
-// @Tags authorization
-// @Accept json
-// @Produce json
-// @Param request body dto.HTTPAuthzCheckRequest true "HTTP authorization check request"
-// @Success 200 {object} dto.HTTPAuthzCheckResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/authz/http/check [post]
 func (ctrl *AuthzController) CheckHTTP(c *gin.Context) {
 	var req dto.HTTPAuthzCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -253,17 +212,6 @@ func (ctrl *AuthzController) CheckHTTP(c *gin.Context) {
 }
 
 // MatchAndCheckHTTP resolves a credential, derives subject attributes, and checks an HTTP route.
-// @Summary Check HTTP authorization with principal matching
-// @Description Resolve principals from auth material and check whether one matched subject can access an HTTP route.
-// @Tags authorization
-// @Accept json
-// @Produce json
-// @Param request body dto.MatchHTTPAuthzCheckRequest true "HTTP authorization check request"
-// @Success 200 {object} dto.HTTPAuthzCheckResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 401 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/authz/match/http/check [post]
 func (ctrl *AuthzController) MatchAndCheckHTTP(c *gin.Context) {
 	var req dto.MatchHTTPAuthzCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -304,17 +252,6 @@ func (ctrl *AuthzController) MatchAndCheckHTTP(c *gin.Context) {
 }
 
 // MatchAndGetFilter godoc
-// @Summary Get list filter with principal matching
-// @Description Match principals from auth material and get SQL filter for listing entities
-// @Tags authorization
-// @Accept json
-// @Produce json
-// @Param request body dto.MatchAndGetFilterRequest true "Match and filter request"
-// @Success 200 {object} dto.MatchAndGetFilterResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 401 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/authz/match/filter [post]
 func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 	var req dto.MatchAndGetFilterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

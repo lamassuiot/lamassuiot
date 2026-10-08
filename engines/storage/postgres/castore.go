@@ -2,8 +2,13 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/binary"
+	"errors"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -16,6 +21,21 @@ const caJoinCaCertificatesAndCertificates = "JOIN certificates ON ca_certificate
 type PostgresCAStore struct {
 	db      *gorm.DB
 	querier *DBQuerier[models.CACertificate]
+}
+
+func (db *PostgresCAStore) WithIDLock(ctx context.Context, id string, fn func(storage.CACertificatesRepo) error) error {
+	// The stable namespace/hash lets different service instances coordinate.
+	// READ COMMITTED ensures a waiter sees the preceding import after it commits.
+	hash := sha256.Sum256([]byte("lamassu:ca:id:" + id))
+	lockID := int64(binary.BigEndian.Uint64(hash[:8]))
+	return db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", lockID).Error; err != nil {
+			return err
+		}
+		querier := *db.querier
+		querier.DB = tx
+		return fn(&PostgresCAStore{db: tx, querier: &querier})
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 }
 
 func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
@@ -160,7 +180,11 @@ func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (boo
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	ca, err := db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return nil, errs.ErrCAAlreadyExists
+	}
+	return ca, err
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
