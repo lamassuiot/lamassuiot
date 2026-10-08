@@ -164,6 +164,12 @@ func (*certificateKeyCARepo) SelectByIssuerAndAuthorityKeyID(context.Context, mo
 	return "", nil
 }
 
+// WithIDLock mirrors storage.CACertificatesRepo.WithIDLock: the in-memory repo
+// has no transactions, so the callback just runs against the repo itself.
+func (repo *certificateKeyCARepo) WithIDLock(_ context.Context, _ string, fn func(storage.CACertificatesRepo) error) error {
+	return fn(repo)
+}
+
 type certificateKeyCertRepo struct{ storage.CertificatesRepo }
 
 func (*certificateKeyCertRepo) Insert(_ context.Context, cert *models.Certificate) (*models.Certificate, error) {
