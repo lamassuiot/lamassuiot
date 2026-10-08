@@ -311,6 +311,20 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	} else {
 		//search in KMS if key exists for the CA being imported
 		key, err = services.ResolveCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: input.CACertificate, EngineID: input.EngineID}, svc.kmsService)
+		if errors.Is(err, errs.ErrKeyNotFound) && input.EngineID != "" {
+			// Do not silently downgrade to a keyless import if the key lives in another engine.
+			other, otherErr := services.ResolveCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: input.CACertificate}, svc.kmsService)
+			switch {
+			case otherErr == nil:
+				lFunc.Errorf("key for CA %s exists in engine %s, not in requested engine %s", caCertSN, other.EngineID, input.EngineID)
+				return nil, errs.ErrCAKeyInOtherEngine
+			case errors.Is(otherErr, errs.ErrKeyEngineRequired):
+				lFunc.Errorf("key for CA %s exists in several engines, none of them the requested engine %s", caCertSN, input.EngineID)
+				return nil, errs.ErrCAKeyInOtherEngine
+			case !errors.Is(otherErr, errs.ErrKeyNotFound):
+				return nil, otherErr
+			}
+		}
 		if err != nil {
 			if !errors.Is(err, errs.ErrKeyNotFound) {
 				return nil, err

@@ -435,3 +435,13 @@ func TestImportCAFindsExistingKey(t *testing.T) {
 		})
 	}
 }
+
+func TestImportCARejectsKeyInAnotherEngine(t *testing.T) {
+	kms := newCertificateKeyKMS(t)
+	cert := certificateKeyTestCertificate(t, kms, []byte{1})
+	svc, repo, _ := certificateKeyTestCAService(t, kms)
+	_, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{ID: "other-engine-ca", CACertificate: (*models.X509Certificate)(cert), EngineID: "another-engine"})
+	require.ErrorIs(t, err, errs.ErrCAKeyInOtherEngine)
+	require.Nil(t, repo.ca)
+	require.Empty(t, kms.bindings)
+}
