@@ -40,20 +40,6 @@ func NewCapabilitiesController(
 
 // GetGlobalCapabilities returns all global actions granted to a known principal, grouped by
 // entity type.  Atomic actions are never included.
-//
-// @Summary      Get global capabilities for a principal
-// @Description  Returns all global actions (create, list, …) the principal is granted, keyed
-//
-// by entity type.  Atomic actions are excluded.
-//
-// @Tags         capabilities
-// @Accept       json
-// @Produce      json
-// @Param        request body     dto.GetGlobalCapabilitiesRequest true "Principal ID"
-// @Success      200 {object}    dto.GlobalCapabilitiesResponse
-// @Failure      400 {object}    dto.ErrorResponse
-// @Failure      500 {object}    dto.ErrorResponse
-// @Router       /api/v1/authz/capabilities/global [post]
 func (c *CapabilitiesController) GetGlobalCapabilities(ctx *gin.Context) {
 	var req dto.GetGlobalCapabilitiesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -80,18 +66,6 @@ func (c *CapabilitiesController) GetGlobalCapabilities(ctx *gin.Context) {
 
 // MatchAndGetGlobalCapabilities matches principals from auth material and returns their
 // combined global capabilities (OR logic across matched principals).
-//
-// @Summary      Match principal and get global capabilities
-// @Description  Matches auth material to principals, then returns merged global capabilities.
-// @Tags         capabilities
-// @Accept       json
-// @Produce      json
-// @Param        request body     dto.MatchAndGetGlobalCapabilitiesRequest true "Auth material"
-// @Success      200 {object}    dto.GlobalCapabilitiesResponse
-// @Failure      400 {object}    dto.ErrorResponse
-// @Failure      401 {object}    dto.ErrorResponse
-// @Failure      500 {object}    dto.ErrorResponse
-// @Router       /api/v1/authz/match/capabilities/global [post]
 func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context) {
 	var req dto.MatchAndGetGlobalCapabilitiesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -134,21 +108,6 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 
 // GetEntityCapabilities returns the atomic actions granted to a known principal on one or
 // more entity instances in a single call.  Global actions are never included.
-//
-// @Summary      Get entity capabilities for a principal (batch)
-// @Description  Evaluates a list of entity queries for a known principal and returns the
-//
-//	atomic actions granted on each entity.  Results are in the same order as
-//	the input queries.  Global actions are excluded.
-//
-// @Tags         capabilities
-// @Accept       json
-// @Produce      json
-// @Param        request body     dto.GetEntityCapabilitiesRequest true "Principal + queries"
-// @Success      200 {object}    dto.EntityCapabilitiesResponse
-// @Failure      400 {object}    dto.ErrorResponse
-// @Failure      500 {object}    dto.ErrorResponse
-// @Router       /api/v1/authz/capabilities/entity [post]
 func (c *CapabilitiesController) GetEntityCapabilities(ctx *gin.Context) {
 	var req dto.GetEntityCapabilitiesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -180,21 +139,6 @@ func (c *CapabilitiesController) GetEntityCapabilities(ctx *gin.Context) {
 
 // MatchAndGetEntityCapabilities matches principals from auth material and returns the union
 // of atomic actions for each queried entity across all matched principals (OR logic).
-//
-// @Summary      Match principal and get entity capabilities (batch)
-// @Description  Matches auth material to principals, then returns merged atomic actions for
-//
-//	each entity in the batch.  Global actions are excluded.
-//
-// @Tags         capabilities
-// @Accept       json
-// @Produce      json
-// @Param        request body     dto.MatchAndGetEntityCapabilitiesRequest true "Auth + queries"
-// @Success      200 {object}    dto.EntityCapabilitiesResponse
-// @Failure      400 {object}    dto.ErrorResponse
-// @Failure      401 {object}    dto.ErrorResponse
-// @Failure      500 {object}    dto.ErrorResponse
-// @Router       /api/v1/authz/match/capabilities/entity [post]
 func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context) {
 	var req dto.MatchAndGetEntityCapabilitiesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {

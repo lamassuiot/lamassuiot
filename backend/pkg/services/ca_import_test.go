@@ -12,6 +12,7 @@ import (
 	"io"
 	"math/big"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,13 +28,28 @@ import (
 // child discovery matches both issuer subject and stored AKI, as the SQL store does.
 type importCARepo struct {
 	storage.CACertificatesRepo
-	cas         map[string]models.CACertificate
-	lookupErr   error
-	insertCalls int
+	mu           sync.Mutex
+	cas          map[string]models.CACertificate
+	lookupErr    error
+	insertErr    error
+	insertCalls  int
+	childQueries int
+}
+
+func (repo *importCARepo) WithIDLock(ctx context.Context, _ string, fn func(storage.CACertificatesRepo) error) error {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fn(repo)
 }
 
 func (repo *importCARepo) Insert(_ context.Context, ca *models.CACertificate) (*models.CACertificate, error) {
 	repo.insertCalls++
+	if repo.insertErr != nil {
+		return nil, repo.insertErr
+	}
 	repo.cas[ca.ID] = *ca
 	return ca, nil
 }
@@ -70,6 +86,7 @@ func (repo *importCARepo) SelectBySubjectAndSubjectKeyID(ctx context.Context, su
 }
 
 func (repo *importCARepo) SelectByIssuerAndAuthorityKeyID(ctx context.Context, issuer models.Subject, aki string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
+	repo.childQueries++
 	return repo.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{ApplyFunc: func(ca models.CACertificate) {
 		if reflect.DeepEqual(ca.Certificate.Issuer, issuer) && ca.Certificate.AuthorityKeyID == aki {
 			req.ApplyFunc(ca)
@@ -259,4 +276,21 @@ func TestImportCAGeneratesUniqueIDs(t *testing.T) {
 	}
 	require.NotEqual(t, ids[0], ids[1])
 	require.Len(t, repo.cas, 2)
+}
+
+func TestImportCAStopsOnInsertFailureAndAllowsRetry(t *testing.T) {
+	svc, repo := newImportCAService(t)
+	repo.insertErr = errors.New("insert failed")
+	input := coreservices.ImportCAInput{
+		ID: "retry-ca", CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]),
+	}
+	ca, err := svc.ImportCA(context.Background(), input)
+	require.ErrorIs(t, err, repo.insertErr)
+	require.Nil(t, ca)
+	require.Empty(t, repo.cas)
+	require.Zero(t, repo.childQueries, "a failed insert must not trigger reparenting")
+	repo.insertErr = nil
+	ca, err = svc.ImportCA(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, input.ID, ca.ID)
 }
