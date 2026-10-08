@@ -21,16 +21,6 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 	}
 }
 
-// @Summary Create CA
-// @Description Create CA
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.CreateCABody true "CA Info"
-// @Success 201 {object} models.CACertificate
-// @Failure 400 {string} string "Struct Validation error || CA type inconsistent || Issuance expiration greater than CA expiration || Incompatible expiration time ref"
-// @Failure 500
-// @Router /cas [post]
 func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	var requestBody resources.CreateCABody
 	if err := ctx.BindJSON(&requestBody); err != nil {
@@ -140,16 +130,6 @@ func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 	ctx.JSON(200, stats)
 }
 
-// @Summary Import CA
-// @Description Import CA
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.ImportCABody true "CA Info"
-// @Success 201 {object} models.CACertificate
-// @Failure 400 {string} string "Struct Validation error || CA type inconsistent || Issuance expiration greater than CA expiration || Incompatible expiration time ref || CA and the provided key dont match"
-// @Failure 500
-// @Router /cas/import [post]
 func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	var requestBody resources.ImportCABody
 	if err := ctx.BindJSON(&requestBody); err != nil {
@@ -205,17 +185,6 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	ctx.JSON(201, ca)
 }
 
-// @Summary Update CA Metadata
-// @Description Update CA Metadata
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.UpdateCAMetadataBody true "Update CA Metadata Info"
-// @Success 200 {object} models.CACertificate
-// @Failure 404 {string} string "CA not found"
-// @Failure 400 {string} string "Struct Validation error"
-// @Failure 500
-// @Router /cas/{id}/metadata [put]
 func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	var requestBody resources.UpdateCAMetadataBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
@@ -297,14 +266,6 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 	})
 }
 
-// @Summary Get All CAs
-// @Description Get All CAs
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Success 200 {array} models.CACertificate
-// @Failure 500
-// @Router /cas [get]
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	queryParams, err := FilterQuery(ctx.Request, resources.CAFilterableFields)
 	if err != nil {
@@ -339,16 +300,6 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	})
 }
 
-// @Summary Get CA By ID
-// @Description Get CA By ID
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Success 200 {object} models.CACertificate
-// @Failure 404 {string} string "CA not found"
-// @Failure 400 {string} string "Struct Validation error"
-// @Failure 500
-// @Router /cas/{id} [get]
 func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -380,16 +331,6 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
-// @Summary Delete CA
-// @Description Delete CA
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Success 201
-// @Failure 404 {string} string "CA not found"
-// @Failure 400 {string} string "Struct Validation error || CA Status inconsistent"
-// @Failure 500
-// @Router /cas/{id} [delete]
 func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 
 	type uriParams struct {
@@ -558,16 +499,6 @@ func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
-// @Summary Get Certificate by Serial Number
-// @Description Get Certificate by Serial Number
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Success 200 {object} models.Certificate
-// @Failure 404 {string} string "Certificate not found"
-// @Failure 400 {string} string "Struct Validation error"
-// @Failure 500
-// @Router /cas/{id}/certificates/{sn} [get]
 func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
@@ -598,15 +529,6 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	ctx.JSON(200, cert)
 }
 
-// @Summary Get Certificates
-// @Description Update CA Metadata
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.UpdateCAMetadataBody true "Update CA Metadata Info"
-// @Success 200 {array} models.Certificate
-// @Failure 500
-// @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 	if err != nil {
@@ -687,16 +609,6 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 	})
 }
 
-// @Summary Get Certificates by CA
-// @Description Get Certificates by CA
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Success 200 {array} models.Certificate
-// @Failure 404 {string} string "CA not found"
-// @Failure 400 {string} string "Struct Validation error"
-// @Failure 500
-// @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 	if err != nil {
@@ -747,17 +659,6 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	})
 }
 
-// @Summary Sign Certificate
-// @Description Sign Certificate
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.SignCertificateBody true "Sign Certificate Info"
-// @Success 200 {object} models.Certificate
-// @Failure 404 {string} string "CA not found"
-// @Failure 400 {string} string "Struct Validation error || CA Status inconsistent"
-// @Failure 500
-// @Router /cas/{id}/certificates/sign [post]
 func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -799,17 +700,6 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	ctx.JSON(201, ca)
 }
 
-// @Summary Create Certificate
-// @Description Generate a new key pair (or reuse an existing KMS key) and issue a certificate signed by the specified CA.
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.CreateCertificateBody true "Create Certificate Info"
-// @Success 201 {object} models.Certificate
-// @Failure 400 {string} string "Invalid key spec || Struct Validation error || CA Status inconsistent"
-// @Failure 404 {string} string "CA not found || Key not found || Issuance profile not found"
-// @Failure 500
-// @Router /certificates [post]
 func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 	var requestBody resources.CreateCertificateBody
 	if err := ctx.ShouldBindJSON(&requestBody); err != nil {
@@ -1046,17 +936,6 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 	})
 }
 
-// @Summary Update Certificate Status
-// @Description Update Certificate Status
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.UpdateCertificateStatusBody true "Update Certificate status"
-// @Success 200 {object} models.Certificate
-// @Failure 404 {string} string "Certificate not found"
-// @Failure 400 {string} string "Struct Validation error || New status transition not allowed for certificate"
-// @Failure 500
-// @Router /certificates/{sn}/status [put]
 func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
@@ -1135,16 +1014,6 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 	ctx.JSON(200, cert)
 }
 
-// @Summary Delete Certificate
-// @Description Delete Certificate by Serial Number (only when issuer CA no longer exists)
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Success 204
-// @Failure 404 {string} string "Certificate not found"
-// @Failure 400 {string} string "Struct Validation error || Issuer CA still exists"
-// @Failure 500
-// @Router /certificates/{sn} [delete]
 func (r *caHttpRoutes) DeleteCertificate(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`

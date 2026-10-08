@@ -27,6 +27,10 @@ type CertificatesRepo interface {
 }
 
 type CACertificatesRepo interface {
+	// WithIDLock serializes operations on an ID. Use the supplied repository
+	// inside the callback; PostgreSQL binds it to the lock-owning transaction.
+	WithIDLock(ctx context.Context, id string, fn func(CACertificatesRepo) error) error
+
 	SelectByType(ctx context.Context, CAType models.CertificateType, req StorageListRequest[models.CACertificate]) (string, error)
 	Count(ctx context.Context) (int, error)
 	CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error)

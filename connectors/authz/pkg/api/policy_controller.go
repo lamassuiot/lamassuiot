@@ -24,17 +24,6 @@ func NewPolicyController(policyManager service.PolicyService, principalManager s
 }
 
 // CreatePolicy godoc
-// @Summary Create a new policy
-// @Description Creates a new authorization policy
-// @Tags policies
-// @Accept json
-// @Produce json
-// @Param request body dto.CreatePolicyRequest true "Policy creation request"
-// @Success 201 {object} dto.PolicyResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 409 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/policies [post]
 func (ctrl *PolicyController) CreatePolicy(c *gin.Context) {
 	var req dto.CreatePolicyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -71,15 +60,6 @@ func (ctrl *PolicyController) CreatePolicy(c *gin.Context) {
 }
 
 // GetPolicy godoc
-// @Summary Get a policy by ID
-// @Description Retrieves a policy by its unique ID
-// @Tags policies
-// @Produce json
-// @Param id path string true "Policy ID"
-// @Success 200 {object} dto.PolicyResponse
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/policies/{id} [get]
 func (ctrl *PolicyController) GetPolicy(c *gin.Context) {
 	policyID := c.Param("id")
 
@@ -96,14 +76,6 @@ func (ctrl *PolicyController) GetPolicy(c *gin.Context) {
 }
 
 // SearchPolicies godoc
-// @Summary Search policies
-// @Description Searches policies by ID, Name, or Description (case-insensitive). Returns all policies when query is empty.
-// @Tags policies
-// @Produce json
-// @Param query query string false "Search query"
-// @Success 200 {object} dto.PolicyListResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/policies/search [get]
 func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
 	query := c.Query("query")
 
@@ -117,19 +89,6 @@ func (ctrl *PolicyController) SearchPolicies(c *gin.Context) {
 }
 
 // ListPolicies godoc
-// @Summary List all policies
-// @Description Retrieves all policies
-// @Tags policies
-// @Produce json
-// @Param filter query string false "Filter expression (e.g. name[ct]foo)"
-// @Param sort_by query string false "Field to sort by"
-// @Param sort_mode query string false "Sort direction: asc or desc"
-// @Param page_size query int false "Page size"
-// @Param bookmark query string false "Pagination bookmark"
-// @Success 200 {object} dto.PolicyListResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/policies [get]
 func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
 	queryParams, err := controllers.FilterQuery(c.Request, PolicyFilterableFields)
 	if err != nil {
@@ -150,19 +109,6 @@ func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
 }
 
 // UpdatePolicy godoc
-// @Summary Update a policy
-// @Description Updates an existing policy
-// @Tags policies
-// @Accept json
-// @Produce json
-// @Param id path string true "Policy ID"
-// @Param request body dto.UpdatePolicyRequest true "Policy update request"
-// @Success 200 {object} dto.PolicyResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 403 {object} dto.ErrorResponse
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/policies/{id} [put]
 func (ctrl *PolicyController) UpdatePolicy(c *gin.Context) {
 	policyID := c.Param("id")
 
@@ -199,15 +145,6 @@ func (ctrl *PolicyController) UpdatePolicy(c *gin.Context) {
 }
 
 // DeletePolicy godoc
-// @Summary Delete a policy
-// @Description Deletes a policy by ID
-// @Tags policies
-// @Param id path string true "Policy ID"
-// @Success 200 {object} "OK"
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 409 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/policies/{id} [delete]
 func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 	policyID := c.Param("id")
 
@@ -248,15 +185,6 @@ func (ctrl *PolicyController) DeletePolicy(c *gin.Context) {
 }
 
 // GetPolicyStats godoc
-// @Summary Get policy statistics
-// @Description Retrieves statistics about a policy
-// @Tags policies
-// @Produce json
-// @Param id path string true "Policy ID"
-// @Success 200 {object} dto.PolicyStatsResponse
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/policies/{id}/stats [get]
 func (ctrl *PolicyController) GetPolicyStats(c *gin.Context) {
 	policyID := c.Param("id")
 	ctx := c.Request.Context()
