@@ -39,9 +39,6 @@ type CAService interface {
 	CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error)
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
 
-	// GetCertificateKey composes KMS lookups; it has no HTTP endpoint.
-	GetCertificateKey(ctx context.Context, input GetCertificateKeyInput) (*models.Key, error)
-
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
 	GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error)
 	GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error)
@@ -342,10 +339,15 @@ type GetCertificateKeyInput struct {
 	EngineID    string
 }
 
-// ResolveCertificateKey is the shared implementation of CAService.GetCertificateKey
-// for the backend and SDK. It resolves the certificate's private key without assuming its
-// SKI is the KMS key ID. All candidates must match the certificate's public key
-// and, when provided, its engine. No certificate or KMS metadata is modified.
+// ResolveCertificateKey resolves a certificate's private key in the KMS without
+// assuming its SKI is the KMS key ID. It is a helper meant for anything holding a
+// KMSService (backend services, connectors, ...); it is not part of CAService.
+//
+// Every candidate must match the certificate's public key and, when provided, its
+// engine. Contract on KMSService: keys must carry a base64-encoded PEM "PUBLIC KEY"
+// (PKIX) whose DER equals the certificate's public key; a candidate that does not is
+// rejected with errs.ErrCAValidCertAndPrivKey. No certificate or KMS metadata is
+// modified.
 func ResolveCertificateKey(ctx context.Context, input GetCertificateKeyInput, kms KMSService) (*models.Key, error) {
 	if input.Certificate == nil {
 		return nil, errs.ErrValidateBadRequest

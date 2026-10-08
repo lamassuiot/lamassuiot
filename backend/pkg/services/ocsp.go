@@ -71,7 +71,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 	}
 
 	// make a response to return
-	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(ca.Certificate.Certificate), rtemplate, NewCertificateSigner(ctx, &ca.Certificate, svc.caSDK, svc.kmsService))
+	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(ca.Certificate.Certificate), rtemplate, NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService))
 	if err != nil {
 		return nil, err
 	}

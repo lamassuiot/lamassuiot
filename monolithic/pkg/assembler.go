@@ -162,7 +162,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		caSDKBuilder := func(serviceID, src string) services.CAService {
 			cli := buildLocalClient(serviceID, src, "LMS SDK - CA Client", caConn)
 			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
-			return sdk.NewHttpCAClient(cli, baseURL(caConn), kmsSDKBuilder(serviceID, src))
+			return sdk.NewHttpCAClient(cli, baseURL(caConn))
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{

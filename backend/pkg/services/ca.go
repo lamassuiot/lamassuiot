@@ -73,10 +73,6 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 	return svc, nil
 }
 
-func (svc *CAServiceBackend) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
-	return services.ResolveCertificateKey(ctx, input, svc.kmsService)
-}
-
 func (svc *CAServiceBackend) Close() {
 	//no op
 }
@@ -314,7 +310,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	} else {
 		//search in KMS if key exists for the CA being imported
-		key, err = svc.service.GetCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: input.CACertificate, EngineID: input.EngineID})
+		key, err = services.ResolveCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: input.CACertificate, EngineID: input.EngineID}, svc.kmsService)
 		if err != nil {
 			if !errors.Is(err, errs.ErrKeyNotFound) {
 				return nil, err
@@ -1294,7 +1290,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	lFunc.Debugf("reissuing CA certificate for %s", input.CAID)
 
 	//Create a Certificate Signer for the existing CA
-	signer := NewCertificateSigner(ctx, &ca.Certificate, svc.service, svc.kmsService)
+	signer := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 
 	// Calculate validity duration from current certificate
 	currentCert := (*x509.Certificate)(ca.Certificate.Certificate)
@@ -1519,7 +1515,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
 
-	caCertSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.service, svc.kmsService)
+	caCertSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 
 	var profile *models.IssuanceProfile
 
@@ -1702,7 +1698,7 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 		return nil, errs.ErrCANotFound
 	}
 
-	certSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.service, svc.kmsService)
+	certSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 
 	lFunc.Debugf("sign signature with %s Certificate", ca.Certificate.SerialNumber)
 

@@ -359,7 +359,3 @@ func (mw CAEventPublisher) DeleteIssuanceProfile(ctx context.Context, input serv
 	}()
 	return mw.Next.DeleteIssuanceProfile(ctx, input)
 }
-
-func (mw CAEventPublisher) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
-	return mw.Next.GetCertificateKey(ctx, input)
-}
