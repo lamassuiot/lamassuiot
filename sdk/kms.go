@@ -43,6 +43,7 @@ func (cli *httpKMSClient) GetKeys(ctx context.Context, input services.GetKeysInp
 func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	response, err := cli.get[models.Key](ctx, "/v1/keys/"+input.Identifier, nil, map[int][]error{
 		404: {errs.ErrKeyNotFound},
+		400: {errs.ErrKeyEngineRequired, errs.ErrValidateBadRequest},
 	})
 	if err != nil {
 		return nil, err
