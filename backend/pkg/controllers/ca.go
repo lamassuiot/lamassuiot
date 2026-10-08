@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -19,6 +21,27 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 	return &caHttpRoutes{
 		svc: svc,
 	}
+}
+
+func writeCACreationError(ctx *gin.Context, err error) {
+	status := http.StatusInternalServerError
+	for _, response := range []struct {
+		err    error
+		status int
+	}{
+		{errs.ErrCAAlreadyExists, http.StatusConflict},
+		{errs.ErrIssuanceProfileNotFound, http.StatusNotFound},
+		{errs.ErrValidateBadRequest, http.StatusBadRequest},
+		{errs.ErrCAType, http.StatusBadRequest},
+		{errs.ErrCAIssuanceExpiration, http.StatusBadRequest},
+		{errs.ErrCAIncompatibleValidity, http.StatusBadRequest},
+	} {
+		if errors.Is(err, response.err) {
+			status, err = response.status, response.err
+			break
+		}
+	}
+	ctx.JSON(status, gin.H{"err": err.Error()})
 }
 
 func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
@@ -41,22 +64,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		CAIssuanceProfile:   requestBody.CAIssuanceProfile,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAType:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIssuanceExpiration:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIncompatibleValidity:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrIssuanceProfileNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrCAAlreadyExists:
-			ctx.JSON(409, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		writeCACreationError(ctx, err)
 		return
 	}
 	ctx.JSON(201, ca)
@@ -161,25 +169,11 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CARequestID:   requestBody.CARequestID,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAType:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIssuanceExpiration:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIncompatibleValidity:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAValidCertAndPrivKey:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrIssuanceProfileNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrCAAlreadyExists:
-			ctx.JSON(409, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
+		if errors.Is(err, errs.ErrCAValidCertAndPrivKey) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"err": errs.ErrCAValidCertAndPrivKey.Error()})
+		} else {
+			writeCACreationError(ctx, err)
 		}
-
 		return
 	}
 	ctx.JSON(201, ca)
