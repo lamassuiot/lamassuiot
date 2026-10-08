@@ -36,6 +36,7 @@ type certificateKeyKMS struct {
 	privateKey                    *ecdsa.PrivateKey
 	key                           models.Key
 	importEngine                  string
+	imports                       int
 	lookups, signatures, bindings []string
 	unavailable                   bool
 	lookupErr, listErr            error
@@ -61,6 +62,7 @@ func newCertificateKeyKMS(t *testing.T) *certificateKeyKMS {
 
 func (kms *certificateKeyKMS) ImportKey(_ context.Context, input coreservices.ImportKeyInput) (*models.Key, error) {
 	kms.importEngine = input.EngineID
+	kms.imports++
 	return &kms.key, nil
 }
 
@@ -413,6 +415,7 @@ func TestImportCARejectsMismatchedKey(t *testing.T) {
 	require.ErrorIs(t, err, errs.ErrCAValidCertAndPrivKey)
 	require.Nil(t, repo.ca)
 	require.Empty(t, kms.bindings)
+	require.Zero(t, kms.imports, "a mismatched key must be rejected before it is stored in the KMS")
 }
 
 func TestImportCAFindsExistingKey(t *testing.T) {

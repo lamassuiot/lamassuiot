@@ -300,6 +300,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		importType = models.CertificateTypeImportedWithKey
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, importType)
 
+		// Validate before ImportKey: a mismatch must not leave an orphaned key in the KMS.
+		if signer, ok := input.Key.(crypto.Signer); ok {
+			if err := validatePublicKeyMatch(caCertX509.PublicKey, signer.Public()); err != nil {
+				lFunc.Errorf("CA certificate %s does not match the provided private key: %s", caCertSN, err)
+				return nil, errs.ErrCAValidCertAndPrivKey
+			}
+		}
+
 		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
 			PrivateKey: input.Key,
 			EngineID:   input.EngineID,
