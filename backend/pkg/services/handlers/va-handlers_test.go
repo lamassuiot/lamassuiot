@@ -9,6 +9,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -19,6 +20,18 @@ type vaRoleInitializer struct {
 	services.CRLService
 	initializedSKIs []string
 	err             error
+	existingRoles   map[string]bool
+	getErr          error
+}
+
+func (svc *vaRoleInitializer) GetVARole(_ context.Context, input services.GetVARoleInput) (*models.VARole, error) {
+	if svc.getErr != nil {
+		return nil, svc.getErr
+	}
+	if svc.existingRoles[input.CASubjectKeyID] {
+		return &models.VARole{CASubjectKeyID: input.CASubjectKeyID}, nil
+	}
+	return nil, errs.ErrVARoleNotFound
 }
 
 func (svc *vaRoleInitializer) InitCRLRole(_ context.Context, ski string) (*models.VARole, error) {
@@ -95,4 +108,29 @@ func TestVAImportEventRejectsInvalidCABody(t *testing.T) {
 	err := handler.HandleMessage(vaEventMessage(t, models.EventImportCAKey, "invalid CA payload"))
 	require.ErrorContains(t, err, "could not decode cloud event")
 	require.Empty(t, svc.initializedSKIs)
+}
+
+func TestVAImportEventSkipsExistingRole(t *testing.T) {
+	svc := &vaRoleInitializer{existingRoles: map[string]bool{"imported-ski": true}}
+	handler := NewVAEventHandler(vaTestLogger(), svc)
+	ca := models.CACertificate{ID: "imported-ca", Certificate: models.Certificate{SubjectKeyID: "imported-ski"}}
+	require.NoError(t, handler.HandleMessage(vaEventMessage(t, models.EventImportCAKey, ca)))
+	require.Empty(t, svc.initializedSKIs)
+}
+
+func TestVAImportEventReturnsRoleLookupError(t *testing.T) {
+	svc := &vaRoleInitializer{getErr: errors.New("VA storage unavailable")}
+	handler := NewVAEventHandler(vaTestLogger(), svc)
+	ca := models.CACertificate{ID: "imported-ca", Certificate: models.Certificate{SubjectKeyID: "imported-ski"}}
+	err := handler.HandleMessage(vaEventMessage(t, models.EventImportCAKey, ca))
+	require.ErrorContains(t, err, "could not check existing CRL role")
+	require.Empty(t, svc.initializedSKIs)
+}
+
+func TestVAImportEventIgnoresRoleCreatedConcurrently(t *testing.T) {
+	svc := &vaRoleInitializer{err: errs.ErrVARoleAlreadyExists}
+	handler := NewVAEventHandler(vaTestLogger(), svc)
+	ca := models.CACertificate{ID: "imported-ca", Certificate: models.Certificate{SubjectKeyID: "imported-ski"}}
+	require.NoError(t, handler.HandleMessage(vaEventMessage(t, models.EventImportCAKey, ca)))
+	require.Equal(t, []string{"imported-ski"}, svc.initializedSKIs)
 }
