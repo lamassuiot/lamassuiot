@@ -52,11 +52,6 @@ func main() {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
 
-	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.VASource), "X-Principal-ID", "admin-mode"),
-		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
-	)
-
 	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "VA", "LMS SDK - KMS Client")
 	kmsHttpCli, err := sdk.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
 	if err != nil {
@@ -66,6 +61,12 @@ func main() {
 	kmsSDK := sdk.NewHttpKMSClient(
 		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.VASource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
+	)
+
+	caSDK := sdk.NewHttpCAClient(
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.VASource), "X-Principal-ID", "admin-mode"),
+		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
+		kmsSDK,
 	)
 
 	_, _, _, err = lamassu.AssembleVAServiceWithHTTPServer(*conf, caSDK, kmsSDK, models.APIServiceInfo{
