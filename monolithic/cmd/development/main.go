@@ -703,7 +703,9 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 	pkiDB.Config["schema"] = "ca"
 
 	return &authzconfig.AuthzConfig{
-		Logs: cconfig.Logging{Level: cconfig.Debug},
+		// Development/testing has no JWKS endpoint, so OIDC signatures are not verified.
+		DisableJWTValidation: true,
+		Logs:                 cconfig.Logging{Level: cconfig.Debug},
 		Server: cconfig.HttpServer{
 			LogLevel:      cconfig.Debug,
 			Port:          0,
