@@ -129,7 +129,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateDMSBody'
+              $ref: '#/components/schemas/UpdateDMSBody'
       responses:
         '200':
           description: Updated DMS
@@ -479,6 +479,17 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
+    UpdateDMSBody:
+      type: object
+      description: The DMS ID is taken from the URL path; any `id` in the body is ignored.
+      properties:
+        name:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        settings:
+          $ref: '#/components/schemas/DMSSettings'
     CreateDMSBody:
       type: object
       properties:

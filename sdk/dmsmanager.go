@@ -46,7 +46,11 @@ func (cli *dmsManagerClient) CreateDMS(ctx context.Context, input services.Creat
 }
 
 func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.UpdateDMSInput) (*models.DMS, error) {
-	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.DMS.ID, input.DMS, map[int][]error{})
+	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID, resources.UpdateDMSBody{
+		Name:     input.Name,
+		Metadata: input.Metadata,
+		Settings: input.Settings,
+	}, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
