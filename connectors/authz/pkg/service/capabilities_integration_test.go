@@ -27,7 +27,7 @@ func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	principalManager, err := NewPrincipalManager(db, "", false)
+	principalManager, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Build an in-memory policy registry (no blob store needed for this test).
@@ -98,7 +98,7 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	principalManager, err := NewPrincipalManager(db, "", false)
+	principalManager, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Policy: grants read+delete on org-1.
@@ -170,7 +170,7 @@ func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
 	ctx := context.Background()
 
 	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
-	principalManager, err := NewPrincipalManager(db, "", false)
+	principalManager, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	principal1 := &models.Principal{
@@ -226,7 +226,7 @@ func TestPrincipalManager_MatchSubjects_StaticAndOIDCDerivedAttributes(t *testin
 	ctx := context.Background()
 
 	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
-	principalManager, err := NewPrincipalManager(db, "", false)
+	principalManager, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	principal := &models.Principal{
@@ -272,7 +272,7 @@ func TestPrincipalManager_MatchSubjects_StaticAndX509DerivedAttributes(t *testin
 	ctx := context.Background()
 
 	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
-	principalManager, err := NewPrincipalManager(db, "", false)
+	principalManager, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	caCert, leafCert, _ := createTestCAAndLeafCerts(t)

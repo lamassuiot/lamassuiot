@@ -144,7 +144,7 @@ func TestPrincipalManager_CreatePrincipal(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Test creating a principal
@@ -171,7 +171,7 @@ func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	principal := &models.Principal{
@@ -197,7 +197,7 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Create a principal
@@ -231,7 +231,7 @@ func TestPrincipalManager_RevokePolicy(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Create principal and grant policy
@@ -260,7 +260,7 @@ func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Create principal
@@ -287,7 +287,7 @@ func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Create multiple principals
@@ -322,7 +322,7 @@ func TestPrincipalManager_DeletePrincipal(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Create principal and grant policies
@@ -355,7 +355,7 @@ func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Create principal
@@ -390,7 +390,7 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 
 	db := setupDBWithAuthzMigrations(t, "../../examples/iot/migrations.sql")
 
-	pm, err := NewPrincipalManager(db, "", false)
+	pm, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	// Create active principals
