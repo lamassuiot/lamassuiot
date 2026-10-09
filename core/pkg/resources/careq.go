@@ -93,7 +93,7 @@ type UpdateCAProfileBody struct {
 }
 
 type UpdateCertificateMetadataBody struct {
-	Patches []models.PatchOperation `validate:"required"`
+	Patches []models.PatchOperation `json:"patches" validate:"required"`
 }
 
 type GetCertificatesByExpirationDateQueryParams struct {

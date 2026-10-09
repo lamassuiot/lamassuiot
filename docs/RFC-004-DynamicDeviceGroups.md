@@ -308,7 +308,7 @@ In backend/pkg/controllers/devmanager.go (devManagerHttpRoutes struct), add meth
 - GetDeviceGroupStats(ctx *gin.Context): bind URI param :group_id
 
 Follow the error handling patterns used in existing methods (400 for validation, 404 for not found, 500 for others).
-Use FilterQuery(ctx.Request, resources.DeviceFilterableFields) for query parameter parsing.
+Use FilterQuery(ctx, ctx.Request, resources.DeviceFilterableFields) for query parameter parsing.
 ```
 
 #### Step 3.3: Routes

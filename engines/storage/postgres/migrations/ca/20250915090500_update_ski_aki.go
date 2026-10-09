@@ -46,7 +46,7 @@ func upUpdateSkiAki(ctx context.Context, tx *sql.Tx) error {
 		}
 
 		// 3. Get SKI (or generate from public key)
-		ski, err := helpers.GetSubjectKeyID(logger, cert)
+		ski, err := helpers.GetSubjectKeyID(ctx, logger, cert)
 		if err != nil {
 			logger.Errorf("could not get Subject Key Identifier for certificate: %s: %s", r["serial_number"], err)
 			continue

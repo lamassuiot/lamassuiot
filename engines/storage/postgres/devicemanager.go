@@ -12,8 +12,9 @@ import (
 
 type PostgresDeviceManagerStore struct {
 	db               *gorm.DB
-	querier          *postgresDBQuerier[models.Device]
+	querier          *DBQuerier[models.Device]
 	deviceGroupsRepo storage.DeviceGroupsRepo
+	deviceEventsRepo storage.DeviceEventsRepo
 }
 
 func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceManagerRepo, error) {
@@ -28,10 +29,16 @@ func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.Devi
 		return nil, err
 	}
 
+	deviceEventsRepo, err := NewDeviceEventsRepository(logger, db)
+	if err != nil {
+		return nil, err
+	}
+
 	return &PostgresDeviceManagerStore{
 		db:               db,
 		querier:          querier,
 		deviceGroupsRepo: deviceGroupsRepo,
+		deviceEventsRepo: deviceEventsRepo,
 	}, nil
 }
 
@@ -40,16 +47,16 @@ func (db *PostgresDeviceManagerStore) Count(ctx context.Context, queryParams *re
 	if queryParams != nil {
 		filters = queryParams.Filters
 	}
-	return db.querier.CountFiltered(ctx, filters, []gormExtraOps{})
+	return db.querier.CountFiltered(ctx, filters, []GormExtraOps{})
 }
 
 func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	return db.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(ctx, queryParams, []GormExtraOps{}, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := []gormExtraOps{
-		{query: "dms_owner = ?", additionalWhere: []any{dmsID}},
+	opts := []GormExtraOps{
+		{Query: "dms_owner = ?", AdditionalWhere: []any{dmsID}},
 	}
 	return db.querier.SelectAll(ctx, queryParams, opts, exhaustiveRun, applyFunc)
 }
@@ -72,4 +79,8 @@ func (db *PostgresDeviceManagerStore) Delete(ctx context.Context, ID string) err
 
 func (db *PostgresDeviceManagerStore) DeviceGroups() storage.DeviceGroupsRepo {
 	return db.deviceGroupsRepo
+}
+
+func (db *PostgresDeviceManagerStore) DeviceEvents() storage.DeviceEventsRepo {
+	return db.deviceEventsRepo
 }

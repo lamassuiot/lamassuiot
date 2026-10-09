@@ -1,0 +1,16 @@
+{
+  "id": "lamassu.4cb612a7-be35-474a-a092-94582a7fde0e",
+  "name": "Job Manager - Device SBI Workflow Observer",
+  "description": "Read-only device SBI Job Manager HTTP access for workflows.",
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": [
+        "sbi-health-read",
+        "sbi-version-read",
+        "sbi-workflow-list",
+        "sbi-workflow-read"
+      ]
+    }
+  ]
+}

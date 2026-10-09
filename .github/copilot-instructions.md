@@ -68,7 +68,7 @@ go run ./monolithic/cmd/development/main.go -awsiot -awsiot-keyid=XXX -awsiot-ke
 go run ./monolithic/cmd/development/main.go -inmemory-eventbus
 
 # Available flags: -standard-docker-ports, -disable-monitor, -disable-eventbus, 
-#                  -sqlite, -disable-ui, -use-aws-eventbus
+#                  -disable-ui, -use-aws-eventbus
 ```
 Access at `http://localhost:8080` or `https://localhost:8443`
 

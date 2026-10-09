@@ -1,0 +1,116 @@
+[
+  {
+    "entity_type": "organization",
+    "table_name": "organizations",
+    "schema_name": "public",
+    "primary_key": "id",
+    "relations": [
+      {
+        "name": "owner",
+        "target_entity": "user",
+        "foreign_key": "owner_id"
+      }
+    ],
+    "atomic_actions": [
+      "read",
+      "delete"
+    ],
+    "global_actions": [
+      "write",
+      "list"
+    ]
+  },
+  {
+    "entity_type": "building",
+    "table_name": "buildings",
+    "schema_name": "public",
+    "primary_key": "id",
+    "relations": [
+      {
+        "name": "My Org",
+        "target_entity": "organization",
+        "foreign_key": "organization_id"
+      },
+      {
+        "name": "manager",
+        "target_entity": "user",
+        "foreign_key": "manager_id"
+      }
+    ],
+    "atomic_actions": [
+      "read",
+      "delete"
+    ],
+    "global_actions": [
+      "write",
+      "list"
+    ]
+  },
+  {
+    "entity_type": "gateway",
+    "table_name": "iot_gateways",
+    "schema_name": "public",
+    "primary_key": "id",
+    "relations": [
+      {
+        "name": "building",
+        "target_entity": "building",
+        "foreign_key": "building_id"
+      }
+    ],
+    "atomic_actions": [
+      "read",
+      "control",
+      "delete"
+    ],
+    "global_actions": [
+      "write",
+      "list"
+    ]
+  },
+  {
+    "entity_type": "device",
+    "table_name": "iot_devices",
+    "schema_name": "public",
+    "primary_key": "device_id",
+    "relations": [
+      {
+        "name": "gateway",
+        "target_entity": "gateway",
+        "foreign_key": "gateway_id"
+      },
+      {
+        "name": "assigned_technician",
+        "target_entity": "user",
+        "foreign_key": "assigned_technician_id"
+      }
+    ],
+    "atomic_actions": [
+      "read",
+      "control",
+      "delete"
+    ],
+    "global_actions": [
+      "write",
+      "list"
+    ],
+    "filterable": [
+      { "column": "status", "type": "string" },
+      { "column": "active", "type": "bool" },
+      { "column": "tenant_id", "type": "string" }
+    ]
+  },
+  {
+    "entity_type": "user",
+    "table_name": "users",
+    "schema_name": "public",
+    "primary_key": "id",
+    "relations": [],
+    "atomic_actions": [
+      "read"
+    ],
+    "global_actions": [
+      "list"
+    ]
+  }
+]

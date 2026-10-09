@@ -1,0 +1,66 @@
+[
+  {
+    "id": "policy-control-cascade",
+    "name": "Control Cascade Policy",
+    "description": "Grants control action cascading from org-1 through organization -> building -> gateway -> device",
+    "rules": [
+      {
+        "namespace": "iot",
+        "schema_name": "public",
+        "entity_type": "organization",
+        "actions": [
+          "read",
+          "write",
+          "delete"
+        ],
+        "direct_grants": [
+          "org-1"
+        ],
+        "relations": [
+          {
+            "to": {
+              "schema_name": "public",
+              "entity_type": "building"
+            },
+            "via": "organization_id",
+            "actions": [
+              "read",
+              "write",
+              "delete"
+            ],
+            "relations": [
+              {
+                "to": {
+                  "schema_name": "public",
+                  "entity_type": "gateway"
+                },
+                "via": "building_id",
+                "actions": [
+                  "read",
+                  "write",
+                  "control",
+                  "delete"
+                ],
+                "relations": [
+                  {
+                    "to": {
+                      "schema_name": "public",
+                      "entity_type": "device"
+                    },
+                    "via": "gateway_id",
+                    "actions": [
+                      "read",
+                      "write",
+                      "control",
+                      "delete"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -15,15 +15,24 @@ type httpAlertsClient struct {
 	baseUrl    string
 }
 
-func (cli *httpAlertsClient) GetLatestEventsPerEventType(ctx context.Context, input *services.GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error) {
+func (cli *httpAlertsClient) GetLatestEventsPerEventType(ctx context.Context, input *services.GetLatestEventsPerEventTypeInput) (string, error) {
 	url := cli.baseUrl + "/v1/events/latest"
-	results := make([]*models.AlertLatestEvent, 0)
-	_, err := IterGet[models.AlertLatestEvent, *resources.GetItemsResponse[models.AlertLatestEvent]](ctx, cli.httpClient, url, true, nil,
-		func(ale models.AlertLatestEvent) {
-			results = append(results, &ale)
-		}, map[int][]error{})
+	if input == nil {
+		input = &services.GetLatestEventsPerEventTypeInput{}
+	}
+	if input.ApplyFunc == nil {
+		input.ApplyFunc = func(models.AlertLatestEvent) {}
+	}
 
-	return results, err
+	return IterGet[models.AlertLatestEvent, *resources.GetAlertsResponse](
+		ctx,
+		cli.httpClient,
+		url,
+		input.ExhaustiveRun,
+		input.QueryParameters,
+		input.ApplyFunc,
+		map[int][]error{},
+	)
 }
 
 func (cli *httpAlertsClient) GetUserSubscriptions(ctx context.Context, input *services.GetUserSubscriptionsInput) ([]*models.Subscription, error) {

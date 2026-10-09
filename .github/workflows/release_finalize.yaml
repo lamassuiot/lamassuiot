@@ -1,8 +1,7 @@
 # .github/workflows/release_finalize.yml
 name: Finalize Release
 
-permissions:
-  contents: read
+permissions: {}
 
 on:
   push:
@@ -18,13 +17,15 @@ jobs:
   extract_version:
     name: Extract Version from Commit Message
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       release_version: ${{ steps.extract.outputs.release_version }}
       major_version: ${{ steps.extract.outputs.major_version }}
       release_version_with_v: ${{ steps.extract.outputs.release_version_with_v }}
       is_release_commit: ${{ steps.extract.outputs.is_release_commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Extract version from commit message
         id: extract
@@ -62,13 +63,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: main
           token: ${{ github.token }}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: "^1.26.2"
 
@@ -89,8 +90,10 @@ jobs:
     name: Setup Release Variables
     needs: [extract_version, bump_versions]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: main
 
@@ -116,6 +119,7 @@ jobs:
             "engines/fs-storage/s3"
             "backend"
             "connectors/awsiot"
+            "connectors/authz"
             "monolithic"
           )
 
@@ -147,7 +151,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: main
 
@@ -170,7 +174,7 @@ jobs:
         module: ${{ fromJson(needs.finalize.outputs.json_modules) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: main
 
@@ -182,7 +186,7 @@ jobs:
           git push origin ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
 
       - name: Checkout code to tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
 
@@ -191,15 +195,16 @@ jobs:
     needs: [create_module_release, finalize]
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
       - name: Checkout code to tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ needs.finalize.outputs.release_version_with_v }}
 
       - name: Create Github Release
-        uses: actions/create-release@v1
+        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
         id: create_release
         with:
           draft: false
@@ -211,7 +216,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: "^1.26.2"
 
@@ -223,8 +228,15 @@ jobs:
           go work vendor
           zip -r vendor.zip vendor
 
+      - name: Generate and publish source SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: lamassuiot-${{ needs.finalize.outputs.release_version_with_v }}.source.sbom.spdx.json
+
       - name: Upload vendor dependencies
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
@@ -242,7 +254,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: v${{ needs.finalize.outputs.major_version }}
           token: ${{ secrets.PAT_RELEASER }}
@@ -270,6 +282,7 @@ jobs:
             va,
             alerts,
             aws-connector,
+            authz,
             lamassu-db-migration,
             ca-to-kms-migration,
           ]
@@ -278,23 +291,34 @@ jobs:
     environment: release
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ needs.finalize.outputs.release_version_with_v }}
           fetch-tags: true
       - run: |
           echo "SHA1VER=$(git rev-parse HEAD)" >> $GITHUB_ENV
       - name: Login to Github Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Enable ARM64 emulation for Dockerfiles that need to execute target-architecture
+      # binaries during the build. Go services may cross-compile natively via BUILDPLATFORM.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Build ${{ matrix.service }} DEV docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ci/${{ matrix.service }}.dockerfile
+          platforms: linux/amd64,linux/arm64
           build-args: |
             BASE_IMAGE=alpine:3.14
             SHA1VER=${{ env.SHA1VER }}
@@ -303,3 +327,4 @@ jobs:
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.finalize.outputs.release_version }}
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:latest
           push: true
+          sbom: true

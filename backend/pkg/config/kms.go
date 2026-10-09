@@ -6,10 +6,12 @@ import (
 
 type KMSConfig struct {
 	OtelConfig         cconfig.OTELConfig             `mapstructure:"otel"`
+	OpenAPI            cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs               cconfig.Logging                `mapstructure:"logs"`
 	Server             cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus  cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	AuthzClient        AuthzClient                    `mapstructure:"authz_client"`
 	CryptoEngineConfig CryptoEngines                  `mapstructure:"crypto_engines"`
 }
 

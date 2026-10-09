@@ -121,19 +121,32 @@ func newMockKMSStorage() *mockKMSStorage {
 	return &mockKMSStorage{existing: map[string]*models.Key{}}
 }
 
-func (m *mockKMSStorage) SelectExistsByKeyID(_ context.Context, id string) (bool, *models.Key, error) {
+// kmsKeyIndex mirrors the (key_id, engine_id) identity of a stored key.
+func kmsKeyIndex(keyID, engineID string) string { return keyID + "@" + engineID }
+
+func (m *mockKMSStorage) SelectExistsByKeyID(_ context.Context, keyID, engineID string) (bool, *models.Key, error) {
 	if m.existsErr != nil {
 		return false, nil, m.existsErr
 	}
-	k, ok := m.existing[id]
+	k, ok := m.existing[kmsKeyIndex(keyID, engineID)]
 	return ok, k, nil
+}
+
+func (m *mockKMSStorage) SelectByKeyID(_ context.Context, keyID string) ([]*models.Key, error) {
+	var copies []*models.Key
+	for _, k := range m.existing {
+		if k.KeyID == keyID {
+			copies = append(copies, k)
+		}
+	}
+	return copies, nil
 }
 
 func (m *mockKMSStorage) Insert(_ context.Context, key *models.Key) (*models.Key, error) {
 	if m.insertErr != nil {
 		return nil, m.insertErr
 	}
-	m.existing[key.KeyID] = key
+	m.existing[kmsKeyIndex(key.KeyID, key.EngineID)] = key
 	m.inserted = append(m.inserted, key)
 	return key, nil
 }
@@ -154,7 +167,7 @@ func (m *mockKMSStorage) SelectExistsByAlias(_ context.Context, _ string) (bool,
 func (m *mockKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key, error) {
 	return key, nil
 }
-func (m *mockKMSStorage) Delete(_ context.Context, _ string) error { return nil }
+func (m *mockKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
 
 // controlledKMSStorage wraps mockKMSStorage but fails Insert after failAfter successful calls.
 type controlledKMSStorage struct {
@@ -163,8 +176,12 @@ type controlledKMSStorage struct {
 	insertions int
 }
 
-func (c *controlledKMSStorage) SelectExistsByKeyID(ctx context.Context, id string) (bool, *models.Key, error) {
-	return c.inner.SelectExistsByKeyID(ctx, id)
+func (c *controlledKMSStorage) SelectExistsByKeyID(ctx context.Context, keyID, engineID string) (bool, *models.Key, error) {
+	return c.inner.SelectExistsByKeyID(ctx, keyID, engineID)
+}
+
+func (c *controlledKMSStorage) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
+	return c.inner.SelectByKeyID(ctx, keyID)
 }
 func (c *controlledKMSStorage) Insert(ctx context.Context, key *models.Key) (*models.Key, error) {
 	c.insertions++
@@ -189,7 +206,7 @@ func (c *controlledKMSStorage) SelectExistsByAlias(_ context.Context, _ string) 
 func (c *controlledKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key, error) {
 	return key, nil
 }
-func (c *controlledKMSStorage) Delete(_ context.Context, _ string) error { return nil }
+func (c *controlledKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -595,7 +612,7 @@ func TestRunMigration_InsertsNewKey(t *testing.T) {
 func TestRunMigration_SkipsExistingKey(t *testing.T) {
 	entry := newKeyEntryFromRSA(t, "engine-a", "serial-1", "MyCA")
 	kms := newMockKMSStorage()
-	kms.existing[entry.keyID] = &models.Key{KeyID: entry.keyID}
+	kms.existing[kmsKeyIndex(entry.keyID, entry.engineID)] = &models.Key{KeyID: entry.keyID, EngineID: entry.engineID}
 
 	ins, skip, fail := runMigration(context.Background(), silentLogger(), kms, map[string]*keyEntry{entry.keyID: entry}, false)
 
@@ -648,7 +665,7 @@ func TestRunMigration_DryRun_DoesNotInsert(t *testing.T) {
 func TestRunMigration_DryRun_SkipsExistingKey(t *testing.T) {
 	entry := newKeyEntryFromRSA(t, "engine-a", "serial-1", "MyCA")
 	kms := newMockKMSStorage()
-	kms.existing[entry.keyID] = &models.Key{KeyID: entry.keyID}
+	kms.existing[kmsKeyIndex(entry.keyID, entry.engineID)] = &models.Key{KeyID: entry.keyID, EngineID: entry.engineID}
 
 	ins, skip, fail := runMigration(context.Background(), silentLogger(), kms, map[string]*keyEntry{entry.keyID: entry}, true)
 
@@ -663,7 +680,7 @@ func TestRunMigration_Mixed_NewExistingFailed(t *testing.T) {
 	failEntry := newKeyEntryFromRSA(t, "engine-a", "fail-sn", "FailCA")
 
 	inner := newMockKMSStorage()
-	inner.existing[existingEntry.keyID] = &models.Key{KeyID: existingEntry.keyID}
+	inner.existing[kmsKeyIndex(existingEntry.keyID, existingEntry.engineID)] = &models.Key{KeyID: existingEntry.keyID, EngineID: existingEntry.engineID}
 
 	kms := &controlledKMSStorage{inner: inner, failAfter: 1}
 

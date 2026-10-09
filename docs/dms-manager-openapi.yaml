@@ -11,6 +11,10 @@ info:
     name: Mozilla Public License 2.0
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
+externalDocs:
+  description: Enrollment and Re-enrollment Webhook Authentication API
+  url: ./enroll-reenroll-webhook-openapi.yaml
+
 servers:
   - url: /api/dmsmanager/v1
     description: DMS Manager API

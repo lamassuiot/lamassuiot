@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -12,22 +13,23 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/fatih/color"
+	authzconfig "github.com/lamassuiot/authz/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
-	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/storage/sqlite"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	mobycontainer "github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	mobyclient "github.com/moby/moby/client"
+	"github.com/ory/dockertest/v4"
 )
 
 const readyToPKI = ` 
@@ -78,11 +80,12 @@ const lamassuLogo = `
 type CryptoEngineOption string
 
 const (
-	AwsSecretsManager CryptoEngineOption = "aws-secrets"
-	AwsKms            CryptoEngineOption = "aws-kms"
-	Vault             CryptoEngineOption = "vault"
-	Pkcs11            CryptoEngineOption = "pkcs11"
-	Filesystem        CryptoEngineOption = "filesystem"
+	AwsSecretsManager    CryptoEngineOption = "aws-secrets"
+	AwsKms               CryptoEngineOption = "aws-kms"
+	Vault                CryptoEngineOption = "vault"
+	Pkcs11               CryptoEngineOption = "pkcs11"
+	Filesystem           CryptoEngineOption = "filesystem"
+	AzureKeyVaultSecrets CryptoEngineOption = "azure-keyvault-secrets"
 )
 
 func main() {
@@ -96,14 +99,22 @@ func main() {
 	awsIoTManagerST := flag.String("awsiot-sessiontoken", "", "AWS IoT Manager SessionToken")
 	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
-	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem']")
+	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem', 'azure-keyvault-secrets']")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
+	disableSSE := flag.Bool("disable-sse", false, "disable SSE streaming on device events endpoint")
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
-	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
+	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no RabbitMQ required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
-	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
+	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
+	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
+	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json", "path to PKI schema JSON file for authz service")
+	authzSchema := flag.String("authz-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json", "path to Authz schema JSON file for authz service")
+	authzHTTPSchemas := flag.String("authz-http-schemas", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json", "comma-separated list of HTTP schema JSON file paths for Envoy ext_authz (e.g. ./connectors/authz/examples/wfx/http-schema.json)")
+	authzProxyPrefixes := flag.String("authz-proxy-prefixes", "/api/wfx/nbi/,/api/wfx/sbi/", "comma-separated gateway path prefixes protected by monolithic ext_authz checks")
+	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
+	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -125,11 +136,12 @@ func main() {
 
 	// By default, all crypto engines are enabled
 	cryptoengineOptionsMap := map[CryptoEngineOption]struct{}{
-		AwsSecretsManager: {},
-		AwsKms:            {},
-		Vault:             {},
-		Pkcs11:            {},
-		Filesystem:        {},
+		AwsSecretsManager:    {},
+		AwsKms:               {},
+		Vault:                {},
+		Pkcs11:               {},
+		Filesystem:           {},
+		AzureKeyVaultSecrets: {},
 	}
 
 	if (*cryptoengineOptions) != "" {
@@ -143,14 +155,17 @@ func main() {
 	cleanup := func() {
 		fmt.Println("========== CLEANING UP ==========")
 
-		cli, err := docker.NewClientFromEnv()
+		cli, err := mobyclient.New(mobyclient.FromEnv)
 		if err != nil {
 			fmt.Println("could not create docker client: ", err)
 			return
 		}
+		defer cli.Close()
+
+		ctx := context.Background()
 
 		// List all containers (running or not)
-		containers, err := cli.ListContainers(docker.ListContainersOptions{
+		result, err := cli.ContainerList(ctx, mobyclient.ContainerListOptions{
 			All: true,
 		})
 		if err != nil {
@@ -161,28 +176,27 @@ func main() {
 		targetLabel := "group"
 		targetValue := "lamassuiot-monolithic"
 
-		for _, container := range containers {
-			labels := container.Labels
+		for _, c := range result.Items {
+			labels := c.Labels
 			if val, ok := labels[targetLabel]; ok && val == targetValue {
-				log.Printf("Found container %s with label %s=%s", container.ID, targetLabel, targetValue)
+				log.Printf("Found container %s with label %s=%s", c.ID, targetLabel, targetValue)
 
 				// Stop the container
-				err := cli.StopContainer(container.ID, 10)
+				_, err := cli.ContainerStop(ctx, c.ID, mobyclient.ContainerStopOptions{})
 				if err != nil {
-					log.Printf("Error stopping container %s: %v", container.ID, err)
+					log.Printf("Error stopping container %s: %v", c.ID, err)
 				} else {
-					log.Printf("Stopped container %s", container.ID)
+					log.Printf("Stopped container %s", c.ID)
 				}
 
 				// Remove the container
-				err = cli.RemoveContainer(docker.RemoveContainerOptions{
-					ID:    container.ID,
+				_, err = cli.ContainerRemove(ctx, c.ID, mobyclient.ContainerRemoveOptions{
 					Force: true,
 				})
 				if err != nil {
-					log.Printf("Error removing container %s: %v", container.ID, err)
+					log.Printf("Error removing container %s: %v", c.ID, err)
 				} else {
-					log.Printf("Removed container %s", container.ID)
+					log.Printf("Removed container %s", c.ID)
 				}
 			}
 		}
@@ -217,9 +231,6 @@ func main() {
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 
 	// Register monolithic-specific engines
-	if *useSqlite {
-		sqlite.Register()
-	}
 	if *useInMemoryEventbus {
 		inmemory.Register()
 	}
@@ -228,32 +239,21 @@ func main() {
 	var storageConfig cconfig.PluggableStorageEngine
 	var err error
 
-	if *useSqlite {
-		fmt.Println(">> using SQLite ...")
-		sqlite.Register()
-		storageConfig = cconfig.PluggableStorageEngine{
-			LogLevel: cconfig.Info,
-			Provider: cconfig.SQLite,
-			Config: map[string]interface{}{
-				"path": "file::memory:?cache=shared",
-			},
-		}
-	} else {
-		fmt.Println(">> launching docker: Postgres ...")
-		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
-		backend, err := posgresSubsystem.Run(*standardDockerPorts)
-		if err != nil {
-			log.Fatalf("could not launch Postgres: %s", err)
-		}
-
-		storageConfig = backend.Config.(cconfig.PluggableStorageEngine)
-
-		fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Config["port"].(int))
-		fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Config["username"].(string))
-		fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
+	fmt.Println(">> launching docker: Postgres ...")
+	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
+	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "authz"})
+	backend, err := posgresSubsystem.Run(*standardDockerPorts)
+	if err != nil {
+		log.Fatalf("could not launch Postgres: %s", err)
 	}
 
+	storageConfig = backend.Config.(cconfig.PluggableStorageEngine)
+
+	fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Config["port"].(int))
+	fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Config["username"].(string))
+	fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
+
+	storageConfig.LogLevel = cconfig.Trace
 	fmt.Println("Crypto Engines")
 
 	var vaultCryptoEngine cconfig.CryptoEngineConfig
@@ -302,6 +302,17 @@ func main() {
 
 	}
 
+	var azureBaseCryptoEngine cconfig.CryptoEngineConfig
+	if _, ok := cryptoengineOptionsMap[AzureKeyVaultSecrets]; ok {
+		fmt.Println(">> launching docker: Azure (Key Vault) ...")
+		azureSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Azure).Run(*standardDockerPorts)
+		if err != nil {
+			log.Fatalf("could not launch Azure Key Vault: %s", err)
+		}
+
+		azureBaseCryptoEngine = azureSubsystem.Config.(cconfig.CryptoEngineConfig)
+	}
+
 	fmt.Println("Async Messaging Engine")
 	adminPort := 0
 	eventBus := cconfig.EventBusEngine{
@@ -314,7 +325,7 @@ func main() {
 	dlqEventBus := eventBus
 
 	if !*disableEventbus && *useInMemoryEventbus {
-		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
+		fmt.Println(">> using in-memory eventbus (no RabbitMQ required) ...")
 		eventBus = cconfig.EventBusEngine{
 			LogLevel: cconfig.Trace,
 			Enabled:  true,
@@ -360,6 +371,8 @@ func main() {
 	}
 
 	var uiPort int
+	var wfxNorthPort int
+	var wfxSouthPort int
 	fmt.Printf(">> UI Enabled : %v\n", !*disableUI)
 
 	cloudConnectors := "[]"
@@ -368,16 +381,17 @@ func main() {
 	}
 
 	if !*disableUI {
-		containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
-			Tag:        "latest",                        // version
-			Env:        []string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors},
-			Labels: map[string]string{
+		containerCleanup, container, _, err := dockerrunner.RunDocker(
+			"ghcr.io/lamassuiot/lamassu-ui",
+			dockertest.WithTag("latest"),
+			dockertest.WithEnv([]string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors}),
+			dockertest.WithLabels(map[string]string{
 				"group": "lamassuiot-monolithic",
-			},
-		}, func(hc *docker.HostConfig) {
-			hc.AutoRemove = true
-		})
+			}),
+			dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
+				hc.AutoRemove = true
+			}),
+		)
 
 		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
 
@@ -385,6 +399,55 @@ func main() {
 			containerCleanup()
 			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
 		}
+	}
+
+	if !*disableWFX {
+		fmt.Println(">> launching docker: wfx ...")
+		pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
+		pgUser := storageConfig.Config["username"].(string)
+		pgPassword := string(storageConfig.Config["password"].(cconfig.Password))
+
+		wfxCleanup, wfxContainer, _, err := dockerrunner.RunDocker("ghcr.io/siemens/wfx",
+			dockertest.WithTag("latest"),
+			dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
+				cfg.ExposedPorts = network.PortSet{
+					network.MustParsePort("9080/tcp"): struct{}{},
+					network.MustParsePort("9081/tcp"): struct{}{},
+				}
+			}),
+			dockertest.WithEnv([]string{
+				"PGHOST=host.docker.internal",
+				"PGPORT=" + pgPort,
+				"PGUSER=" + pgUser,
+				"PGPASSWORD=" + pgPassword,
+				"PGDATABASE=wfx",
+				"WFX_STORAGE=postgres",
+				"WFX_CLIENT_HOST=0.0.0.0",
+				"WFX_CLIENT_PORT=9080",
+				"WFX_MGMT_HOST=0.0.0.0",
+				"WFX_MGMT_PORT=9081",
+				"WFX_LOG_FORMAT=json",
+				"WFX_LOG_LEVEL=debug",
+			}),
+			dockertest.WithLabels(map[string]string{
+				"group": "lamassuiot-monolithic",
+			}),
+			dockertest.WithHostConfig(func(hc *mobycontainer.HostConfig) {
+				hc.AutoRemove = true
+				hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+			}),
+		)
+		if err != nil {
+			if wfxCleanup != nil {
+				wfxCleanup()
+			}
+			log.Fatalf("could not launch wfx: %s", err)
+		}
+
+		wfxNorthPort, _ = strconv.Atoi(wfxContainer.GetPort("9081/tcp"))
+		wfxSouthPort, _ = strconv.Atoi(wfxContainer.GetPort("9080/tcp"))
+		fmt.Printf(" \t-- wfx north port: %d\n", wfxNorthPort)
+		fmt.Printf(" \t-- wfx south port: %d\n", wfxSouthPort)
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
@@ -442,6 +505,17 @@ func main() {
 		cryptoEngines = append(cryptoEngines, pkcs11Cfg)
 	}
 
+	if _, ok := cryptoengineOptionsMap[AzureKeyVaultSecrets]; ok {
+		azureSecretsEngine := cconfig.CryptoEngineConfig{
+			ID:       "azure-keyvault-secrets-1",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AzureKeyVaultSecretsProvider,
+			Config:   azureBaseCryptoEngine.Config,
+		}
+		cryptoEnginesConfig.DefaultEngine = azureSecretsEngine.ID
+		cryptoEngines = append(cryptoEngines, azureSecretsEngine)
+	}
+
 	cryptoEnginesConfig.CryptoEngines = cryptoEngines
 
 	pluglableStorageConfig := &storageConfig
@@ -454,6 +528,8 @@ func main() {
 		},
 		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		UIPort:                uiPort,
+		WfxNorthPort:          wfxNorthPort,
+		WfxSouthPort:          wfxSouthPort,
 		VAStorageDir:          "/tmp/lamassuiot/va",
 		SubscriberEventBus:    eventBus,
 		SubscriberDLQEventBus: dlqEventBus,
@@ -469,6 +545,9 @@ func main() {
 		},
 		Storage:            *pluglableStorageConfig,
 		PopulateSampleData: *sampleData,
+		SSEEnabled:         !*disableSSE,
+		AuthzProxyPrefixes: splitCommaSeparated(*authzProxyPrefixes),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -497,28 +576,19 @@ func main() {
 		},
 	}
 
-	time.Sleep(3 * time.Second)
-	kmsSDK := sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/kms", conf.GatewayPortHttps))
-	engines, err := kmsSDK.GetCryptoEngineProvider(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("==================== Available Crypto Engines ==========================")
-	for _, engine := range engines {
-		fmt.Println(engine.ID)
-	}
-	fmt.Println("========================================================================")
+	http.DefaultClient = sdk.HttpClientWithCustomHeaders(http.DefaultClient, "X-Principal-ID", "admin-mode")
 
 	// Populate sample data if enabled
 	if *sampleData {
 		logger := chelpers.SetupLogger(cconfig.Info, "SampleData", "Populator")
 		// Use the internal HTTP ports since services are behind the gateway
 		// We'll construct URLs using the gateway
+		kmsServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/kms", conf.GatewayPortHttp)
 		caServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/ca", conf.GatewayPortHttp)
+		dmsServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/dmsmanager", conf.GatewayPortHttp)
 		deviceServiceURL := fmt.Sprintf("http://127.0.0.1:%d/api/devmanager", conf.GatewayPortHttp)
 
-		err := sampledata.PopulateSampleData(context.Background(), logger, caServiceURL, deviceServiceURL)
+		err := sampledata.PopulateSampleData(context.Background(), logger, kmsServiceURL, caServiceURL, dmsServiceURL, deviceServiceURL)
 		if err != nil {
 			fmt.Printf("Warning: Failed to populate sample data: %v\n", err)
 		}
@@ -539,7 +609,7 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	opts := make(map[CryptoEngineOption]struct{})
 	for _, opt := range strings.Split(options, ",") {
 		switch CryptoEngineOption(opt) {
-		case AwsSecretsManager, AwsKms, Vault, Pkcs11, Filesystem:
+		case AwsSecretsManager, AwsKms, Vault, Pkcs11, Filesystem, AzureKeyVaultSecrets:
 			opts[CryptoEngineOption(opt)] = struct{}{}
 		default:
 			return nil, fmt.Errorf("invalid crypto engine option: %s", opt)
@@ -564,4 +634,82 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 		dst[k] = v
 	}
 	return dst
+}
+
+func splitCommaSeparated(value string) []string {
+	out := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string) *authzconfig.AuthzConfig {
+	if !enabled {
+		return nil
+	}
+
+	// Silently ignore preload dir if it doesn't exist
+	if preloadDir != "" {
+		if _, err := os.Stat(preloadDir); os.IsNotExist(err) {
+			fmt.Printf(">> authz: preload directory %q not found, skipping preload\n", preloadDir)
+			preloadDir = ""
+		}
+	}
+
+	var bootstrap []authzconfig.BootstrapEntry
+	if bootstrapJSON != "" {
+		if err := json.Unmarshal([]byte(bootstrapJSON), &bootstrap); err != nil {
+			fmt.Printf(">> authz: invalid --authz-bootstrap JSON: %v\n", err)
+			bootstrap = nil
+		} else {
+			fmt.Printf(">> authz: loaded %d bootstrap entries from flag\n", len(bootstrap))
+		}
+	}
+
+	// The monolithic Postgres container uses a single database ("pki") with per-service
+	// PostgreSQL schemas inside it. Clone the shared credentials and inject the correct
+	// database + schema for each authz connection.
+	authzDB := storageConfig
+	authzDB.Config = deepCopy(storageConfig.Config)
+	authzDB.Config["database"] = "pki"
+	authzDB.Config["schema"] = "authz"
+
+	pkiDB := storageConfig
+	pkiDB.Config = deepCopy(storageConfig.Config)
+	pkiDB.Config["database"] = "pki"
+	pkiDB.Config["schema"] = "ca"
+
+	return &authzconfig.AuthzConfig{
+		Logs: cconfig.Logging{Level: cconfig.Debug},
+		Server: cconfig.HttpServer{
+			LogLevel:      cconfig.Debug,
+			Port:          0,
+			ListenAddress: "0.0.0.0",
+			Protocol:      cconfig.HTTP,
+		},
+		AuthzDB: authzDB,
+		Schemas: map[string]string{
+			"authz": authzSchema,
+			"pki":   pkiSchema,
+		},
+		Credentials: map[string]cconfig.PluggableStorageEngine{
+			"authz": authzDB,
+			"pki":   pkiDB,
+		},
+		HTTPSchemas: func() []string {
+			var out []string
+			for _, p := range strings.Split(httpSchemas, ",") {
+				if p = strings.TrimSpace(p); p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
+		}(),
+		PublisherEventBus: publisherEventBus,
+		PreloadDir:        preloadDir,
+		Bootstrap:         bootstrap,
+	}
 }

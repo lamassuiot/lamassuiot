@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -20,7 +21,7 @@ func TestGetSubjectKeyID_WithSKIDPresent(t *testing.T) {
 		SubjectKeyId: skid,
 		Subject:      pkixNameWithCN("test-cn"),
 	}
-	result, err := GetSubjectKeyID(logger, cert)
+	result, err := GetSubjectKeyID(context.Background(), logger, cert)
 	require.NoError(t, err)
 	assert.Equal(t, hex.EncodeToString(skid), result)
 }
@@ -34,7 +35,7 @@ func TestGetSubjectKeyID_WithoutSKID_GeneratesFromPublicKey(t *testing.T) {
 		Subject:      pkixNameWithCN("test-cn"),
 		PublicKey:    &rsa.PublicKey{N: big.NewInt(12345), E: 65537},
 	}
-	result, err := GetSubjectKeyID(logger, cert)
+	result, err := GetSubjectKeyID(context.Background(), logger, cert)
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
 }
@@ -47,7 +48,7 @@ func TestGetSubjectKeyID_WithoutSKIDAndPublicKey(t *testing.T) {
 		Subject:      pkixNameWithCN("test-cn"),
 		PublicKey:    nil,
 	}
-	result, err := GetSubjectKeyID(logger, cert)
+	result, err := GetSubjectKeyID(context.Background(), logger, cert)
 	require.Error(t, err)
 	assert.Empty(t, result)
 }

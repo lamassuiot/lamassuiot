@@ -1,0 +1,30 @@
+{
+  "id": "lamassu.7df018c1-3140-4a35-9067-2e7d6cec3ed2",
+  "name": "Job Manager - Mgmt NBI Admin",
+  "description": "Full management NBI Job Manager HTTP access for managing workflows and jobs.",
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": [
+        "nbi-health-read",
+        "nbi-version-read",
+        "nbi-workflow-list",
+        "nbi-workflow-create",
+        "nbi-workflow-read",
+        "nbi-workflow-delete",
+        "nbi-job-list",
+        "nbi-job-create",
+        "nbi-job-events",
+        "nbi-job-status-read",
+        "nbi-job-status-update",
+        "nbi-job-definition-read",
+        "nbi-job-definition-update",
+        "nbi-job-tags-read",
+        "nbi-job-tags-add",
+        "nbi-job-tags-delete",
+        "nbi-job-read",
+        "nbi-job-delete"
+      ]
+    }
+  ]
+}

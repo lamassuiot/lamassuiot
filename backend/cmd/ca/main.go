@@ -53,7 +53,7 @@ func main() {
 	}
 
 	kmsSDK := sdk.NewHttpKMSClient(
-		sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.DeviceManagerSource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.DeviceManagerSource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
 	)
 

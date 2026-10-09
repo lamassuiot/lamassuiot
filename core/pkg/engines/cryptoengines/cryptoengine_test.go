@@ -21,11 +21,11 @@ func (m *mockCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return models.CryptoEngineInfo{}
 }
 
-func (m *mockCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (m *mockCryptoEngine) GetPrivateKeyByID(ctx context.Context, keyID string) (crypto.Signer, error) {
 	return nil, nil
 }
 
-func (m *mockCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+func (m *mockCryptoEngine) ListPrivateKeyIDs(ctx context.Context) ([]string, error) {
 	return nil, nil
 }
 
@@ -39,19 +39,19 @@ func (m *mockCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elli
 	return "", key, err
 }
 
-func (m *mockCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", key, nil
 }
 
-func (m *mockCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", key, nil
 }
 
-func (m *mockCryptoEngine) DeleteKey(keyID string) error {
+func (m *mockCryptoEngine) DeleteKey(ctx context.Context, keyID string) error {
 	return nil
 }
 
-func (m *mockCryptoEngine) RenameKey(keyID string, newKeyID string) error {
+func (m *mockCryptoEngine) RenameKey(ctx context.Context, keyID string, newKeyID string) error {
 	return nil
 }
 

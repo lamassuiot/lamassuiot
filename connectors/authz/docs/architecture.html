@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Authz Connector — Architecture</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --border: #2a2d3e;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #7c3aed;
+
+    --c-entry:   #7c3aed;
+    --c-config:  #0ea5e9;
+    --c-api:     #3b82f6;
+    --c-dto:     #6366f1;
+    --c-iface:   #06b6d4;
+    --c-service: #10b981;
+    --c-engine:  #f59e0b;
+    --c-data:    #ef4444;
+    --c-sdk:     #a78bfa;
+    --c-test:    #64748b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── layout ── */
+  .shell { display: flex; height: 100vh; overflow: hidden; }
+
+  nav {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 0;
+  }
+
+  nav h2 {
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 16px 10px;
+  }
+
+  nav a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    transition: all .15s;
+  }
+
+  nav a:hover { color: var(--text); background: rgba(255,255,255,.04); }
+  nav a.active { color: var(--text); border-left-color: var(--accent); background: rgba(124,58,237,.1); }
+
+  nav .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  main { flex: 1; overflow-y: auto; padding: 32px 36px; }
+
+  /* ── header ── */
+  header { margin-bottom: 40px; }
+  header h1 { font-size: 26px; font-weight: 700; }
+  header p  { color: var(--muted); margin-top: 6px; font-size: 14px; line-height: 1.6; max-width: 720px; }
+
+  /* ── section ── */
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  section > h2 {
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  section > h2::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── diagram ── */
+  .diagram-wrap { width: 100%; overflow-x: auto; margin-bottom: 52px; }
+
+  svg.arch { display: block; min-width: 900px; }
+
+  /* ── file grid ── */
+  .file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+
+  .file-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .file-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+
+  .file-card:hover {
+    border-color: var(--hover-color, var(--accent));
+    box-shadow: 0 0 0 1px var(--hover-color, var(--accent))22;
+  }
+
+  .file-card .path {
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    word-break: break-all;
+  }
+
+  .file-card .name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .file-card .desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.55;
+    margin-bottom: 10px;
+  }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .tag {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(255,255,255,.07);
+    color: var(--muted);
+    font-family: monospace;
+  }
+
+  /* ── detail panel ── */
+  .detail-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.65);
+    z-index: 100;
+    display: none;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 24px;
+  }
+  .detail-overlay.open { display: flex; }
+
+  .detail-panel {
+    width: 520px;
+    max-height: calc(100vh - 48px);
+    background: #1e2235;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow-y: auto;
+    padding: 28px;
+    position: relative;
+  }
+
+  .detail-panel .close-btn {
+    position: absolute; top: 16px; right: 16px;
+    background: none; border: none;
+    color: var(--muted); font-size: 20px;
+    cursor: pointer; line-height: 1;
+  }
+  .detail-panel .close-btn:hover { color: var(--text); }
+
+  .detail-panel .dp-path {
+    font-family: monospace; font-size: 11px;
+    color: var(--muted); margin-bottom: 8px;
+  }
+
+  .detail-panel h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+
+  .detail-panel .dp-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 14px;
+    font-weight: 600;
+    letter-spacing: .05em;
+  }
+
+  .detail-panel .dp-section { margin-bottom: 18px; }
+  .detail-panel .dp-section h4 {
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .detail-panel .dp-section p,
+  .detail-panel .dp-section li {
+    font-size: 13px; line-height: 1.6; color: #c8d3e0;
+  }
+
+  .detail-panel .dp-section ul { padding-left: 16px; }
+  .detail-panel .dp-section li { margin-bottom: 3px; }
+
+  .detail-panel code {
+    font-family: monospace; font-size: 11px;
+    background: rgba(255,255,255,.07);
+    padding: 1px 5px; border-radius: 3px;
+    color: #93c5fd;
+  }
+
+  /* ── flow diagram container ── */
+  .flow-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+  }
+
+  .flow-box h3 { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+
+  .flow-steps { display: flex; flex-direction: column; gap: 0; }
+
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .flow-step:last-child { border-bottom: none; }
+
+  .flow-num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .flow-step p { color: var(--muted); }
+  .flow-step strong { color: var(--text); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ─── NAV ─── -->
+<nav>
+  <h2>Layers</h2>
+  <a href="#s-entry"   class="active"><span class="dot" style="background:var(--c-entry)"></span>Entry Point</a>
+  <a href="#s-config"        ><span class="dot" style="background:var(--c-config)"></span>Configuration</a>
+  <a href="#s-api"           ><span class="dot" style="background:var(--c-api)"></span>HTTP API</a>
+  <a href="#s-dto"           ><span class="dot" style="background:var(--c-dto)"></span>DTO</a>
+  <a href="#s-iface"         ><span class="dot" style="background:var(--c-iface)"></span>Interface / Models</a>
+  <a href="#s-service"       ><span class="dot" style="background:var(--c-service)"></span>Service Layer</a>
+  <a href="#s-engine"        ><span class="dot" style="background:var(--c-engine)"></span>Engine Layer</a>
+  <a href="#s-data"          ><span class="dot" style="background:var(--c-data)"></span>Data Access</a>
+  <a href="#s-sdk"           ><span class="dot" style="background:var(--c-sdk)"></span>SDK</a>
+  <a href="#s-test"          ><span class="dot" style="background:var(--c-test)"></span>Test Support</a>
+  <a href="#s-flows"         ><span class="dot" style="background:#475569"></span>Data Flows</a>
+
+  <h2 style="margin-top:24px">Go Module</h2>
+  <a href="#" style="font-family:monospace;font-size:11px">github.com/lamassuiot/authz</a>
+</nav>
+
+<!-- ─── MAIN ─── -->
+<main id="main">
+
+<header>
+  <h1>Authz Connector — Architecture</h1>
+  <p>Fine-grained, policy-driven authorization engine for the Lamassu IoT platform. Supports OIDC and X.509 principal matching, entity-relationship-based SQL filter generation, capability queries, and both embedded and remote deployment modes.</p>
+</header>
+
+<!-- DIAGRAM -->
+<div class="diagram-wrap">
+<svg class="arch" viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg" style="font-family:'Segoe UI',system-ui,sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3a3f5c"/>
+    </marker>
+    <marker id="arr-sdk" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa44"/>
+    </marker>
+  </defs>
+
+  <!-- bg panels -->
+  <!-- entry -->
+  <rect x="10" y="10" width="940" height="52" rx="8" fill="#7c3aed18" stroke="#7c3aed55" stroke-width="1"/>
+  <!-- config -->
+  <rect x="10" y="72" width="940" height="52" rx="8" fill="#0ea5e918" stroke="#0ea5e955" stroke-width="1"/>
+  <!-- http api -->
+  <rect x="10" y="134" width="940" height="76" rx="8" fill="#3b82f618" stroke="#3b82f655" stroke-width="1"/>
+  <!-- iface + models -->
+  <rect x="10" y="220" width="940" height="52" rx="8" fill="#06b6d418" stroke="#06b6d455" stroke-width="1"/>
+  <!-- service -->
+  <rect x="10" y="282" width="940" height="52" rx="8" fill="#10b98118" stroke="#10b98155" stroke-width="1"/>
+  <!-- engine -->
+  <rect x="10" y="344" width="940" height="76" rx="8" fill="#f59e0b18" stroke="#f59e0b55" stroke-width="1"/>
+  <!-- data -->
+  <rect x="10" y="430" width="940" height="52" rx="8" fill="#ef444418" stroke="#ef444455" stroke-width="1"/>
+  <!-- sdk -->
+  <rect x="10" y="492" width="940" height="52" rx="8" fill="#a78bfa18" stroke="#a78bfa55" stroke-width="1"/>
+  <!-- test -->
+  <rect x="10" y="554" width="940" height="52" rx="8" fill="#64748b18" stroke="#64748b55" stroke-width="1"/>
+
+  <!-- layer labels -->
+  <text x="24" y="41" fill="#7c3aed" font-size="10" font-weight="700" letter-spacing=".08em">ENTRY POINT</text>
+  <text x="24" y="103" fill="#0ea5e9" font-size="10" font-weight="700" letter-spacing=".08em">CONFIGURATION</text>
+  <text x="24" y="165" fill="#3b82f6" font-size="10" font-weight="700" letter-spacing=".08em">HTTP API</text>
+  <text x="24" y="251" fill="#06b6d4" font-size="10" font-weight="700" letter-spacing=".08em">INTERFACE / MODELS</text>
+  <text x="24" y="313" fill="#10b981" font-size="10" font-weight="700" letter-spacing=".08em">SERVICE LAYER</text>
+  <text x="24" y="375" fill="#f59e0b" font-size="10" font-weight="700" letter-spacing=".08em">ENGINE LAYER</text>
+  <text x="24" y="461" fill="#ef4444" font-size="10" font-weight="700" letter-spacing=".08em">DATA ACCESS</text>
+  <text x="24" y="523" fill="#a78bfa" font-size="10" font-weight="700" letter-spacing=".08em">SDK</text>
+  <text x="24" y="585" fill="#64748b" font-size="10" font-weight="700" letter-spacing=".08em">TEST SUPPORT</text>
+
+  <!-- ── ENTRY ── cmd/main.go -->
+  <rect x="380" y="20" width="200" height="32" rx="6" fill="#7c3aed" opacity=".85"/>
+  <text x="480" y="40" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">cmd/main.go</text>
+
+  <!-- ── CONFIG ── -->
+  <rect x="270" y="82" width="180" height="32" rx="6" fill="#0ea5e9" opacity=".75"/>
+  <text x="360" y="102" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/config/app_config.go</text>
+  <rect x="470" y="82" width="170" height="32" rx="6" fill="#0ea5e9" opacity=".55"/>
+  <text x="555" y="102" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/config/server.go</text>
+
+  <!-- ── HTTP API ── -->
+  <rect x="130" y="144" width="120" height="28" rx="5" fill="#3b82f6" opacity=".8"/>
+  <text x="190" y="162" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">assembler.go</text>
+
+  <rect x="258" y="144" width="100" height="28" rx="5" fill="#3b82f6" opacity=".8"/>
+  <text x="308" y="162" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">routes.go</text>
+
+  <rect x="366" y="144" width="120" height="28" rx="5" fill="#3b82f6" opacity=".8"/>
+  <text x="426" y="162" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">authz_controller.go</text>
+
+  <rect x="494" y="144" width="132" height="28" rx="5" fill="#3b82f6" opacity=".75"/>
+  <text x="560" y="162" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">capabilities_ctrl.go</text>
+
+  <rect x="634" y="144" width="120" height="28" rx="5" fill="#3b82f6" opacity=".7"/>
+  <text x="694" y="162" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">principal_ctrl.go</text>
+
+  <rect x="762" y="144" width="90" height="28" rx="5" fill="#3b82f6" opacity=".65"/>
+  <text x="807" y="162" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">policy_ctrl.go</text>
+
+  <!-- second row of API -->
+  <rect x="762" y="177" width="90" height="28" rx="5" fill="#3b82f6" opacity=".55"/>
+  <text x="807" y="195" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">schema_ctrl.go</text>
+
+  <rect x="634" y="177" width="120" height="28" rx="5" fill="#6366f1" opacity=".7"/>
+  <text x="694" y="195" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">log_formatter.go</text>
+
+  <rect x="130" y="177" width="120" height="28" rx="5" fill="#6366f1" opacity=".7"/>
+  <text x="190" y="195" text-anchor="middle" fill="#fff" font-size="10" font-weight="600">dto/ (8 files)</text>
+
+  <!-- ── INTERFACE / MODELS ── -->
+  <rect x="220" y="230" width="140" height="32" rx="6" fill="#06b6d4" opacity=".8"/>
+  <text x="290" y="250" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/core/engine.go</text>
+
+  <rect x="380" y="230" width="170" height="32" rx="6" fill="#06b6d4" opacity=".7"/>
+  <text x="465" y="250" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/models/policy.go</text>
+
+  <rect x="568" y="230" width="185" height="32" rx="6" fill="#06b6d4" opacity=".6"/>
+  <text x="660" y="250" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/models/principal.go</text>
+
+  <!-- ── SERVICE ── -->
+  <rect x="130" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".8"/>
+  <text x="189" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">authz.go</text>
+
+  <rect x="256" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".75"/>
+  <text x="315" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">identity.go</text>
+
+  <rect x="382" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".7"/>
+  <text x="441" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">principal.go</text>
+
+  <rect x="508" y="292" width="118" height="32" rx="6" fill="#10b981" opacity=".65"/>
+  <text x="567" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">policy.go</text>
+
+  <rect x="634" y="292" width="135" height="32" rx="6" fill="#10b981" opacity=".6"/>
+  <text x="701" y="312" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">capabilities.go</text>
+
+  <!-- ── ENGINE ── -->
+  <rect x="130" y="354" width="100" height="28" rx="5" fill="#f59e0b" opacity=".85"/>
+  <text x="180" y="372" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="700">engine.go</text>
+
+  <rect x="238" y="354" width="115" height="28" rx="5" fill="#f59e0b" opacity=".8"/>
+  <text x="295" y="372" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="700">capabilities.go</text>
+
+  <rect x="361" y="354" width="90" height="28" rx="5" fill="#f59e0b" opacity=".75"/>
+  <text x="406" y="372" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="700">filter.go</text>
+
+  <rect x="459" y="354" width="90" height="28" rx="5" fill="#f59e0b" opacity=".7"/>
+  <text x="504" y="372" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="700">graph.go</text>
+
+  <rect x="557" y="354" width="100" height="28" rx="5" fill="#f59e0b" opacity=".65"/>
+  <text x="607" y="372" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="700">schema.go</text>
+
+  <rect x="665" y="354" width="90" height="28" rx="5" fill="#f59e0b" opacity=".6"/>
+  <text x="710" y="372" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="700">policy.go</text>
+
+  <rect x="763" y="354" width="80" height="28" rx="5" fill="#f59e0b" opacity=".55"/>
+  <text x="803" y="372" text-anchor="middle" fill="#1a1a1a" font-size="10" font-weight="700">ports.go</text>
+
+  <!-- engine second row -->
+  <rect x="238" y="388" width="140" height="26" rx="5" fill="#f59e0b" opacity=".4"/>
+  <text x="308" y="405" text-anchor="middle" fill="#d97706" font-size="10" font-weight="600">FilterResult · FilterGenerator</text>
+
+  <rect x="459" y="388" width="190" height="26" rx="5" fill="#f59e0b" opacity=".4"/>
+  <text x="554" y="405" text-anchor="middle" fill="#d97706" font-size="10" font-weight="600">AuthorizationGraph · GraphNode · GraphEdge</text>
+
+  <!-- ── DATA ACCESS ── -->
+  <rect x="220" y="440" width="180" height="32" rx="6" fill="#ef4444" opacity=".75"/>
+  <text x="310" y="460" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/store/gorm.go</text>
+
+  <rect x="415" y="440" width="195" height="32" rx="6" fill="#ef4444" opacity=".65"/>
+  <text x="512" y="460" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/store/matcher.go</text>
+
+  <!-- ── SDK ── -->
+  <rect x="130" y="502" width="130" height="32" rx="6" fill="#a78bfa" opacity=".8"/>
+  <text x="195" y="522" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">sdk/sdk.go</text>
+
+  <rect x="278" y="502" width="150" height="32" rx="6" fill="#a78bfa" opacity=".75"/>
+  <text x="353" y="522" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">sdk/remote_engine.go</text>
+
+  <rect x="446" y="502" width="135" height="32" rx="6" fill="#a78bfa" opacity=".65"/>
+  <text x="513" y="522" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">sdk/context.go</text>
+
+  <rect x="599" y="502" width="200" height="32" rx="6" fill="#a78bfa" opacity=".7"/>
+  <text x="699" y="522" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">sdk/gin-middleware/middleware.go</text>
+
+  <!-- ── TEST ── -->
+  <rect x="350" y="564" width="200" height="32" rx="6" fill="#64748b" opacity=".7"/>
+  <text x="450" y="584" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">pkg/testutil/postgres.go</text>
+
+  <!-- ── ARROWS: top-down main flow ── -->
+  <!-- main → assembler -->
+  <line x1="450" y1="52" x2="190" y2="82" stroke="#7c3aed66" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- main → app_config -->
+  <line x1="460" y1="52" x2="370" y2="82" stroke="#7c3aed66" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- assembler → routes -->
+  <line x1="250" y1="158" x2="258" y2="158" stroke="#3b82f666" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- assembler → iface -->
+  <line x1="190" y1="210" x2="290" y2="230" stroke="#3b82f644" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- controllers → service -->
+  <line x1="426" y1="172" x2="260" y2="292" stroke="#3b82f644" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- service → engine -->
+  <line x1="200" y1="324" x2="180" y2="354" stroke="#10b98166" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- identity_resolver → data access -->
+  <line x1="370" y1="324" x2="325" y2="440" stroke="#10b98144" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- engine → filter -->
+  <line x1="230" y1="368" x2="361" y2="368" stroke="#f59e0b66" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- filter → graph -->
+  <line x1="451" y1="368" x2="459" y2="368" stroke="#f59e0b44" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- engine → data (for DB queries) -->
+  <line x1="180" y1="382" x2="270" y2="440" stroke="#ef444444" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+
+  <!-- matcher → data -->
+  <line x1="547" y1="382" x2="495" y2="440" stroke="#ef444444" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+
+  <!-- sdk → core -->
+  <line x1="353" y1="502" x2="350" y2="262" stroke="#a78bfa33" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arr-sdk)"/>
+
+  <!-- middleware → core -->
+  <line x1="699" y1="502" x2="450" y2="262" stroke="#a78bfa33" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arr-sdk)"/>
+</svg>
+</div>
+
+<!-- ── ENTRY POINT ── -->
+<section id="s-entry">
+  <h2>Entry Point</h2>
+  <div class="file-grid">
+    <div class="file-card" style="--hover-color:var(--c-entry)" onclick="showDetail('main')">
+      <div class="file-card::before" style="background:var(--c-entry)"></div>
+      <div class="path">cmd/main.go</div>
+      <div class="name">Service Entry Point</div>
+      <div class="desc">Loads YAML configuration, maps it to the API config structure, and starts the assembler + HTTP server. Blocks on a channel to keep the process alive.</div>
+      <div class="tags"><span class="tag">main</span><span class="tag">LoadAppConfig</span><span class="tag">AssembleAuthzServiceWithHTTPServer</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONFIG ── -->
+<section id="s-config">
+  <h2>Configuration</h2>
+  <div class="file-grid">
+    <div class="file-card" style="--hover-color:var(--c-config)" onclick="showDetail('app_config')">
+      <div class="path">pkg/config/app_config.go</div>
+      <div class="name">YAML Application Config</div>
+      <div class="desc">Parses the YAML file that controls debug mode, log file path, schema-to-path mappings, and per-schema PostgreSQL credentials. This is the primary runtime configuration source.</div>
+      <div class="tags"><span class="tag">AppConfig</span><span class="tag">DBCredentials</span><span class="tag">LoadAppConfig</span></div>
+    </div>
+    <div class="file-card" style="--hover-color:var(--c-config)" onclick="showDetail('server_config')">
+      <div class="path">pkg/config/server.go</div>
+      <div class="name">Environment Variable Config</div>
+      <div class="desc">Alternative configuration loader using environment variables (PORT, SCHEMA_PATH, LOG_LEVEL, etc.). Intended for lightweight standalone deployments without a YAML file.</div>
+      <div class="tags"><span class="tag">ServerConfig</span><span class="tag">LoadServerConfig</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HTTP API ── -->
+<section id="s-api">
+  <h2>HTTP API</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-api)" onclick="showDetail('assembler')">
+      <div class="path">pkg/api/assembler.go</div>
+      <div class="name">Service Assembler</div>
+      <div class="desc">Wires every dependency: SQLite DB for principals, PostgreSQL DBs for entity data, blob policy store, engine, resolvers. Configures loggers with optional file output and JSON formatting, then starts the HTTP server.</div>
+      <div class="tags"><span class="tag">Config</span><span class="tag">AssembleAuthzServiceWithHTTPServer</span><span class="tag">AssembleAuthzService</span><span class="tag">GormLogger</span><span class="tag">addFileOutput</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-api)" onclick="showDetail('routes')">
+      <div class="path">pkg/api/routes.go</div>
+      <div class="name">Route Registration</div>
+      <div class="desc">Registers all REST endpoints under /v1. Groups routes by resource: authz (authorize, filter, match, capabilities), principals (CRUD + policy grants), policies (CRUD + search + stats), and schemas (introspection).</div>
+      <div class="tags"><span class="tag">NewAuthzRoutes</span><span class="tag">gin.RouterGroup</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-api)" onclick="showDetail('authz_ctrl')">
+      <div class="path">pkg/api/authz_controller.go</div>
+      <div class="name">Authorization Controller</div>
+      <div class="desc">Four HTTP handlers for the core authorization operations: direct-principal checks, SQL filter generation, and the matched-principal variants that resolve auth material on the fly. Validates namespace/schema/entity consistency before every call.</div>
+      <div class="tags"><span class="tag">AuthzController</span><span class="tag">Authorize</span><span class="tag">GetFilter</span><span class="tag">MatchAndAuthorize</span><span class="tag">MatchAndGetFilter</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-api)" onclick="showDetail('capabilities_ctrl')">
+      <div class="path">pkg/api/capabilities_controller.go</div>
+      <div class="name">Capabilities Controller</div>
+      <div class="desc">Exposes capability queries: which global actions a principal has per entity type, and which atomic actions they have on concrete entity instances (batch). Supports both direct principal ID and auth-material-based resolution. OR-merges results across multiple matched principals.</div>
+      <div class="tags"><span class="tag">CapabilitiesController</span><span class="tag">GetGlobalCapabilities</span><span class="tag">GetEntityCapabilities</span><span class="tag">MatchAndGet*</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-api)" onclick="showDetail('principal_ctrl')">
+      <div class="path">pkg/api/principal_controller.go</div>
+      <div class="name">Principal Controller</div>
+      <div class="desc">Full CRUD for principals (identities that hold policies). Also handles policy assignment: grant and revoke individual policies, list a principal's current policies. Maps between domain models and HTTP DTOs.</div>
+      <div class="tags"><span class="tag">PrincipalController</span><span class="tag">CreatePrincipal</span><span class="tag">GrantPolicy</span><span class="tag">RevokePolicy</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-api)" onclick="showDetail('policy_ctrl')">
+      <div class="path">pkg/api/policy_controller.go</div>
+      <div class="name">Policy Controller</div>
+      <div class="desc">Full CRUD for authorization policies backed by blob storage. Includes free-text search across policy names/descriptions, usage statistics (rule count, principal count), and a guard that prevents deleting policies still assigned to principals.</div>
+      <div class="tags"><span class="tag">PolicyController</span><span class="tag">CreatePolicy</span><span class="tag">SearchPolicies</span><span class="tag">GetPolicyStats</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-api)" onclick="showDetail('schema_ctrl')">
+      <div class="path">pkg/api/schema_controller.go</div>
+      <div class="name">Schema Controller</div>
+      <div class="desc">Read-only endpoint that returns all registered entity schemas grouped by config-schema name. Used by clients to discover which entity types exist, their actions, primary keys, and filterable fields without reading JSON files directly.</div>
+      <div class="tags"><span class="tag">SchemaController</span><span class="tag">GET /v1/schemas</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-dto)" onclick="showDetail('log_formatter')">
+      <div class="path">pkg/api/log_formatter.go</div>
+      <div class="name">Ordered JSON Log Formatter</div>
+      <div class="desc">Custom logrus Formatter that emits one JSON object per line with a stable, readable field order. Fixed prefix: time, level, msg. Then declared authz fields (service, subsystem, trace-id, principal_id, namespace, action, allowed, reason…). Remaining fields appended alphabetically.</div>
+      <div class="tags"><span class="tag">OrderedJSONFormatter</span><span class="tag">authzFieldOrder</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── DTO ── -->
+<section id="s-dto">
+  <h2>DTO — Data Transfer Objects</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-dto)" onclick="showDetail('dto_authz')">
+      <div class="path">pkg/api/dto/authz_dto.go</div>
+      <div class="name">Authorization DTOs</div>
+      <div class="desc">Request/response shapes for all four authorization endpoints: AuthorizeRequest/Response, GetFilterRequest/Response, MatchAndAuthorizeRequest/Response, MatchAndGetFilterRequest/Response.</div>
+      <div class="tags"><span class="tag">AuthorizeRequest</span><span class="tag">GetFilterRequest</span><span class="tag">MatchAndAuthorizeResponse</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-dto)" onclick="showDetail('dto_capabilities')">
+      <div class="path">pkg/api/dto/capabilities_dto.go</div>
+      <div class="name">Capabilities DTOs</div>
+      <div class="desc">Shapes for global and entity capability queries. Supports batch entity queries (EntityCapabilityQuery slice) and responses carrying per-entity action lists and optional error fields.</div>
+      <div class="tags"><span class="tag">EntityCapabilityQuery</span><span class="tag">GlobalCapabilitiesResponse</span><span class="tag">EntityCapabilitiesResultDTO</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-dto)" onclick="showDetail('dto_principal')">
+      <div class="path">pkg/api/dto/principal_dto.go</div>
+      <div class="name">Principal DTOs</div>
+      <div class="desc">Shapes for principal CRUD and policy grant/revoke operations. Includes CreatePrincipalRequest (with AuthConfig map), PrincipalResponse, GrantPolicyRequest, and PrincipalPolicyResponse.</div>
+      <div class="tags"><span class="tag">CreatePrincipalRequest</span><span class="tag">PrincipalResponse</span><span class="tag">GrantPolicyRequest</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-dto)" onclick="showDetail('dto_flex')">
+      <div class="path">pkg/api/dto/flex_entity_key.go</div>
+      <div class="name">FlexEntityKey</div>
+      <div class="desc">Custom JSON type that accepts either a plain string (auto-resolved to the schema's single PK column) or an object map (for composite PKs). Eliminates the need for separate DTO variants for different key shapes.</div>
+      <div class="tags"><span class="tag">FlexEntityKey</span><span class="tag">IsString</span><span class="tag">Map</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── INTERFACE / MODELS ── -->
+<section id="s-iface">
+  <h2>Interface &amp; Models</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-iface)" onclick="showDetail('core_engine')">
+      <div class="path">pkg/core/engine.go</div>
+      <div class="name">AuthzEngine Interface</div>
+      <div class="desc">The single authorization contract shared by the local implementation (AuthzImplementation), the remote HTTP client (RemoteEngine), and the gin middleware. Four methods with context propagation: Authorize, GetFilter, MatchAndAuthorize, MatchAndGetFilter.</div>
+      <div class="tags"><span class="tag">AuthzEngine</span><span class="tag">context.Context</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-iface)" onclick="showDetail('model_policy')">
+      <div class="path">pkg/models/policy.go</div>
+      <div class="name">Policy Model</div>
+      <div class="desc">Defines the full policy structure: Policy → Rules → Relations/DirectGrants/ColumnFilters. Rules encode who can do what on which entity type, via direct ID grants, cascading foreign-key relations, or attribute-based column filters. Custom JSON marshaling for the polymorphic "to" field in RelationRule.</div>
+      <div class="tags"><span class="tag">Policy</span><span class="tag">Rule</span><span class="tag">RelationRule</span><span class="tag">ColumnFilter</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-iface)" onclick="showDetail('model_principal')">
+      <div class="path">pkg/models/principal.go</div>
+      <div class="name">Principal Model</div>
+      <div class="desc">Defines Principal (an identity: OIDC user or X.509 certificate) and the PrincipalPolicy join table. AuthConfig is a flexible JSONB map storing auth-type-specific claim conditions. Backed by GORM with SQLite/PostgreSQL support.</div>
+      <div class="tags"><span class="tag">Principal</span><span class="tag">PrincipalPolicy</span><span class="tag">AuthConfig</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── SERVICE ── -->
+<section id="s-service">
+  <h2>Service Layer</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('service')">
+      <div class="path">pkg/service/authz.go</div>
+      <div class="name">AuthzImplementation (Service)</div>
+      <div class="desc">Implements core.AuthzEngine. Adds the principal-resolution layer on top of the Engine: given a principal ID or auth material, loads the appropriate PolicyRegistry via IdentityResolver, then delegates to Engine. Logs the final authorization decision with structured fields and the request trace-ID.</div>
+      <div class="tags"><span class="tag">AuthzImplementation</span><span class="tag">NewAuthzService</span><span class="tag">WithServiceLogger</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('identity_resolver')">
+      <div class="path">pkg/service/identity.go</div>
+      <div class="name">Identity Resolver</div>
+      <div class="desc">Single entry point for "auth material → policies" resolution. Calls MatchService to find matching active principals, then loads all their granted policies into a PolicyRegistry. Returns ErrNoMatch when nothing matches, allowing callers to distinguish 401 from 403. Uses local private interfaces (principalMatcher, policyLoader) to avoid circular imports.</div>
+      <div class="tags"><span class="tag">IdentityResolver</span><span class="tag">Resolve</span><span class="tag">GetPoliciesForPrincipal</span><span class="tag">ErrNoMatch</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('principal_manager')">
+      <div class="path">pkg/service/principal.go</div>
+      <div class="name">Principal Manager</div>
+      <div class="desc">Façade over GormPrincipalStore (pkg/store) and MatchService. Provides all principal CRUD and policy grant/revoke operations. Also exposes NewIdentityResolver() to wire a resolver using this manager's store as the GrantStore.</div>
+      <div class="tags"><span class="tag">PrincipalManager</span><span class="tag">GrantPolicy</span><span class="tag">RevokePolicy</span><span class="tag">NewIdentityResolver</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('policy_manager')">
+      <div class="path">pkg/service/policy.go</div>
+      <div class="name">Policy Manager</div>
+      <div class="desc">Manages policies via gocloud.dev blob storage, enabling swappable backends (filesystem, GCS, S3, in-memory). Supports CRUD, free-text search, and statistics. Calls engine.ValidatePolicyStruct for storage-time validation.</div>
+      <div class="tags"><span class="tag">PolicyManager</span><span class="tag">PolicyStats</span><span class="tag">blob.Bucket</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-service)" onclick="showDetail('service_capabilities')">
+      <div class="path">pkg/service/capabilities.go</div>
+      <div class="name">Principal Capability Helpers</div>
+      <div class="desc">Package-level functions that bridge Engine capability methods with the service layer. Loads the principal's PolicyRegistry once via PrincipalManager/PolicyManager, then delegates to engine.GetGlobalCapabilities or engine.GetEntityCapabilitiesBatch. Moved here from pkg/engine to break the circular dependency that would arise if Engine held references to service-layer managers.</div>
+      <div class="tags"><span class="tag">GetPrincipalPolicies</span><span class="tag">GetGlobalCapabilitiesForPrincipal</span><span class="tag">GetEntityCapabilitiesForPrincipal</span><span class="tag">GetEntityCapabilitiesBatchForPrincipal</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── ENGINE ── -->
+<section id="s-engine">
+  <h2>Engine Layer</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('engine')">
+      <div class="path">pkg/engine/engine.go</div>
+      <div class="name">Authorization Engine</div>
+      <div class="desc">The core decision maker. Validates namespace/schema/entity, classifies actions as global (no DB query) or atomic (SQL existence check), builds SQL filters via FilterGenerator, and executes against the appropriate PostgreSQL database. Accepts a logrus.Entry via functional option; uses helpers.ConfigureLogger(ctx) to attach the request trace-ID to every log line.</div>
+      <div class="tags"><span class="tag">Engine</span><span class="tag">Authorize</span><span class="tag">GetListFilter</span><span class="tag">EngineOption</span><span class="tag">WithLogger</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('capabilities')">
+      <div class="path">pkg/engine/capabilities.go</div>
+      <div class="name">Capability Evaluator</div>
+      <div class="desc">Pure engine methods for computing what a principal CAN do given an already-loaded PolicyRegistry. GetGlobalCapabilities scans all schemas for granted global actions without DB queries. GetEntityCapabilities probes each atomic action on a concrete entity. The ForPrincipal variants (which need PrincipalManager/PolicyManager) live in pkg/service/capabilities.go to avoid circular imports.</div>
+      <div class="tags"><span class="tag">GlobalCapabilities</span><span class="tag">EntityCapabilities</span><span class="tag">GetEntityCapabilitiesBatch</span><span class="tag">MergeGlobalCapabilities</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('filter')">
+      <div class="path">pkg/engine/filter.go</div>
+      <div class="name">SQL Filter Generator</div>
+      <div class="desc">Translates policy rules into SQL JOINs and WHERE conditions. Handles three access patterns: direct ID grants (IN clause), cascading FK relations (JOIN chain computed via AuthorizationGraph path-finding), and attribute-based column filters. Produces both list filters (open-ended) and check filters (entity-key-bounded existence queries).</div>
+      <div class="tags"><span class="tag">FilterGenerator</span><span class="tag">FilterResult</span><span class="tag">GenerateListFilter</span><span class="tag">GenerateCheckFilter</span><span class="tag">buildPathFilter</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('graph')">
+      <div class="path">pkg/engine/graph.go</div>
+      <div class="name">Authorization Graph</div>
+      <div class="desc">Builds a directed entity-relationship graph from policy rules and schema relation configs. Edges represent foreign-key relationships between entity types. DFS path-finding discovers cascading access paths (e.g. user → organization → device), which FilterGenerator converts into JOIN chains.</div>
+      <div class="tags"><span class="tag">AuthorizationGraph</span><span class="tag">GraphNode</span><span class="tag">GraphEdge</span><span class="tag">FindPathsBetween</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('schema')">
+      <div class="path">pkg/engine/schema.go</div>
+      <div class="name">Schema Registry</div>
+      <div class="desc">Loads entity schemas from JSON files. Each SchemaDefinition describes a database table: its qualified name, primary key columns, foreign-key relations to other entity types, which actions are "atomic" (need DB check) vs "global" (no DB check), and which columns can be used in attribute filters. Supports multi-schema environments.</div>
+      <div class="tags"><span class="tag">SchemaRegistry</span><span class="tag">SchemaDefinition</span><span class="tag">FilterableField</span><span class="tag">RelationConfig</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('policy_reg')">
+      <div class="path">pkg/engine/policy.go</div>
+      <div class="name">Policy Registry &amp; Validation</div>
+      <div class="desc">In-memory registry of all policies active for a request. Validates policy structure (rule fields, relation cycles, column filter types), provides schema-matching helpers (wildcards, namespace checks), and exposes rule iteration for engine and filter generator. A new PolicyRegistry is built per-request from blob storage.</div>
+      <div class="tags"><span class="tag">PolicyRegistry</span><span class="tag">AddPolicy</span><span class="tag">GetRules</span><span class="tag">ruleMatchesSchema</span><span class="tag">wildcardMatches</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-engine)" onclick="showDetail('ports')">
+      <div class="path">pkg/engine/ports.go</div>
+      <div class="name">Ports (Dependency Interfaces)</div>
+      <div class="desc">Defines the three hexagonal ports: PrincipalStore (CRUD + type-filtered list), GrantStore (policy assignment operations), and PrincipalMatcher (pure stateless matching, no DB). Implementations live in separate files (principal_store_gorm.go, principal_matcher.go), allowing easy substitution.</div>
+      <div class="tags"><span class="tag">PrincipalStore</span><span class="tag">GrantStore</span><span class="tag">PrincipalMatcher</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── DATA ACCESS ── -->
+<section id="s-data">
+  <h2>Data Access</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-data)" onclick="showDetail('gorm_store')">
+      <div class="path">pkg/store/gorm.go</div>
+      <div class="name">GORM Principal Store</div>
+      <div class="desc">Implements both PrincipalStore and GrantStore ports (defined in pkg/engine/ports.go) using GORM. Persists Principal records and the principal_policies join table to SQLite (development) or PostgreSQL (production). Handles AutoMigration, index creation, and all context-aware CRUD operations including batch grant/revoke. Satisfies engine interfaces via Go structural typing — no import of pkg/engine needed.</div>
+      <div class="tags"><span class="tag">GormPrincipalStore</span><span class="tag">AutoMigrate</span><span class="tag">ListByType</span><span class="tag">Grant / Revoke</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-data)" onclick="showDetail('matcher')">
+      <div class="path">pkg/store/matcher.go</div>
+      <div class="name">Principal Matcher</div>
+      <div class="desc">Two stateless PrincipalMatcher implementations. OIDCMatcher filters principals by JWT claim conditions (equals, contains, regex). X509Matcher filters by certificate attributes (serial, CN, CA fingerprint, authority key ID). MatchService coordinates both, loading principals by auth type and dispatching to the appropriate matcher. Imports pkg/engine only for the PrincipalStore and PrincipalMatcher interface types.</div>
+      <div class="tags"><span class="tag">OIDCMatcher</span><span class="tag">X509Matcher</span><span class="tag">MatchService</span><span class="tag">DefaultMatchService</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── SDK ── -->
+<section id="s-sdk">
+  <h2>SDK</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-sdk)" onclick="showDetail('sdk_client')">
+      <div class="path">sdk/sdk.go</div>
+      <div class="name">HTTP Client SDK</div>
+      <div class="desc">Type-safe Go client for consuming the authz REST API from external services. Wraps all four service areas (Authz, Principals, Policies, Schemas) with configurable TLS, timeouts, and custom headers. Returns structured APIError with HTTP status codes for caller-side error handling.</div>
+      <div class="tags"><span class="tag">Client</span><span class="tag">ClientConfig</span><span class="tag">AuthzService</span><span class="tag">APIError</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-sdk)" onclick="showDetail('remote_engine')">
+      <div class="path">sdk/remote_engine.go</div>
+      <div class="name">Remote Engine</div>
+      <div class="desc">Implements core.AuthzEngine over HTTP using the SDK client. Allows external services to use the gin middleware with a remote authz server instead of embedding the engine locally. Forwards the caller's context to propagate trace IDs across service boundaries.</div>
+      <div class="tags"><span class="tag">RemoteEngine</span><span class="tag">NewRemoteEngine</span><span class="tag">core.AuthzEngine</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-sdk)" onclick="showDetail('sdk_ctx')">
+      <div class="path">sdk/context.go</div>
+      <div class="name">SDK Context Keys</div>
+      <div class="desc">Defines the shared context key constant AuthzQueryKey used to pass the generated SQL WHERE clause from the middleware into the downstream Gin handler, enabling list endpoints to apply authorization filters transparently.</div>
+      <div class="tags"><span class="tag">AuthzQueryKey = "authz-query"</span></div>
+    </div>
+
+    <div class="file-card" style="--hover-color:var(--c-sdk)" onclick="showDetail('middleware')">
+      <div class="path">sdk/gin-middleware/middleware.go</div>
+      <div class="name">Gin Authorization Middleware</div>
+      <div class="desc">Drop-in Gin middleware for authorization checks. Works with both local (AuthzImplementation) and remote (RemoteEngine) engines via the AuthzEngine interface. AuthzCheck gates individual resource endpoints; AuthListCheck injects the SQL filter for list endpoints. Supports simple and composite primary keys. Extracts auth type and credential from Gin context keys set by upstream authentication middleware.</div>
+      <div class="tags"><span class="tag">AuthzMiddleware</span><span class="tag">AuthzCheck</span><span class="tag">AuthListCheck</span><span class="tag">NewSimpleAuthzMiddleware</span><span class="tag">NewCompositeAuthzMiddleware</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── TEST ── -->
+<section id="s-test">
+  <h2>Test Support</h2>
+  <div class="file-grid">
+
+    <div class="file-card" style="--hover-color:var(--c-test)" onclick="showDetail('testutil')">
+      <div class="path">pkg/testutil/postgres.go</div>
+      <div class="name">PostgreSQL Test Container</div>
+      <div class="desc">Starts an ephemeral Docker PostgreSQL container for integration tests. Runs a SQL migration file on startup, retries connection with backoff, returns a ready GORM DB and a Cleanup() function. Used by engine, capabilities, and capabilities integration tests to test against real SQL without mocks.</div>
+      <div class="tags"><span class="tag">PostgresContainer</span><span class="tag">RunPostgresWithMigration</span><span class="tag">Cleanup</span><span class="tag">ory/dockertest</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── DATA FLOWS ── -->
+<section id="s-flows">
+  <h2>Data Flows</h2>
+
+  <div class="flow-box">
+    <h3>1 — Authorization Check (Direct Principal)</h3>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-num">1</div><div><strong>authz_controller.go</strong> — receives POST /v1/authz/authorize, binds JSON, validates namespace/schema/entity.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div><strong>pkg/service/identity.go</strong> → <strong>pkg/store/gorm.go</strong> — loads all grants for the given principal ID from SQLite.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/service/identity.go</strong> → <strong>pkg/service/policy.go</strong> — fetches each policy JSON blob from the blob store, builds a PolicyRegistry.</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div><strong>pkg/engine/engine.go Authorize()</strong> — classifies action: global (return immediately based on rule match) or atomic (continue to filter).</div></div>
+      <div class="flow-step"><div class="flow-num">5</div><div><strong>pkg/engine/filter.go GenerateCheckFilter()</strong> → <strong>pkg/engine/graph.go</strong> — finds cascading access paths, builds JOIN + WHERE conditions.</div></div>
+      <div class="flow-step"><div class="flow-num">6</div><div><strong>pkg/engine/engine.go</strong> — executes <code>SELECT 1 FROM table WHERE … LIMIT 1</code> against the entity's PostgreSQL DB. Returns allowed=true if rows &gt; 0.</div></div>
+      <div class="flow-step"><div class="flow-num">7</div><div><strong>pkg/service/authz.go</strong> — logs the final decision with trace-ID (from context) at Info level.</div></div>
+    </div>
+  </div>
+
+  <div class="flow-box">
+    <h3>2 — Match &amp; Authorize (Auth Material)</h3>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-num">1</div><div><strong>gin-middleware/middleware.go AuthzCheck()</strong> — extracts auth type and credential from Gin context (set by upstream auth middleware).</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div><strong>pkg/service/authz.go MatchAndAuthorize()</strong> → <strong>pkg/service/identity.go Resolve()</strong> — dispatches to MatchService.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/store/matcher.go MatchService</strong> — loads all active principals of the given type from SQLite, feeds to OIDCMatcher or X509Matcher.</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div><strong>OIDCMatcher / X509Matcher</strong> — pure in-memory filtering: checks JWT claims or certificate attributes against each principal's AuthConfig. Returns matching principal IDs.</div></div>
+      <div class="flow-step"><div class="flow-num">5</div><div>For each matched principal: load grants → load policy blobs → merge into one PolicyRegistry.</div></div>
+      <div class="flow-step"><div class="flow-num">6</div><div><strong>engine.go</strong> — proceeds as in Flow 1, steps 4–6.</div></div>
+    </div>
+  </div>
+
+  <div class="flow-box">
+    <h3>3 — List Filter Generation</h3>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-num">1</div><div>Caller (middleware or controller) invokes <code>MatchAndGetFilter()</code> or <code>GetFilter()</code>.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div>Principal resolution proceeds identically to flows above → PolicyRegistry ready.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/engine/engine.go GetListFilter()</strong> → <strong>pkg/engine/filter.go GenerateListFilter()</strong> — for each rule: build IN-clause (direct grants), JOIN chains (cascading relations), or column conditions (attribute filters).</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div>Returns a <strong>FilterResult</strong> with SQL joins and WHERE conditions. Full SQL is logged at Trace level; shape (count) at Debug.</div></div>
+      <div class="flow-step"><div class="flow-num">5</div><div>Middleware stores the WHERE clause in the Gin context under <code>authz_query</code>. The downstream handler appends it to its GORM query before execution.</div></div>
+    </div>
+  </div>
+
+  <div class="flow-box">
+    <h3>4 — Capability Query</h3>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-num">1</div><div><strong>capabilities_controller.go</strong> — receives a batch of entity queries with a principal ID.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div><strong>pkg/service/capabilities.go GetPrincipalPolicies()</strong> — loads policies exactly once for the principal via PrincipalManager + PolicyManager.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div><strong>pkg/engine/capabilities.go GetEntityCapabilitiesBatch()</strong> — for each query, calls <code>GetEntityCapabilities()</code> which probes each atomic action via a separate <code>Authorize()</code> call.</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div><strong>pkg/engine/capabilities.go GetGlobalCapabilities()</strong> — scans all schema global actions against all policy rules; no DB query needed.</div></div>
+      <div class="flow-step"><div class="flow-num">5</div><div>Results returned as a list aligned to the input query order. For auth-material variants, results are OR-merged across all matched principals.</div></div>
+    </div>
+  </div>
+
+</section>
+
+</main>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="detail-overlay" id="overlay" onclick="closeDetail(event)">
+<div class="detail-panel" id="detail-panel">
+  <button class="close-btn" onclick="hideDetail()">×</button>
+  <div id="detail-content"></div>
+</div>
+</div>
+
+<script>
+const details = {
+  main: {
+    path: 'cmd/main.go',
+    name: 'Service Entry Point',
+    layer: 'Entry Point', color: '#7c3aed',
+    purpose: 'Executable entry point for the standalone authz service. Parses a -config flag (default config.yaml), an optional -preload flag for a policy directory, maps AppConfig to api.Config, calls AssembleAuthzServiceWithHTTPServer, then blocks forever.',
+    types: [],
+    functions: ['main()'],
+    deps: ['pkg/api (assembler)', 'pkg/config (LoadAppConfig)'],
+    dependents: ['—']
+  },
+  app_config: {
+    path: 'pkg/config/app_config.go',
+    name: 'YAML Application Config',
+    layer: 'Configuration', color: '#0ea5e9',
+    purpose: 'Defines the YAML-backed configuration struct and its loader. Controls debug mode, optional log file path, a map of config-schema-name → JSON schema file path, and per-schema PostgreSQL credentials.',
+    types: ['AppConfig', 'DBCredentials'],
+    functions: ['LoadAppConfig(path string) (*AppConfig, error)'],
+    deps: ['gopkg.in/yaml.v3'],
+    dependents: ['cmd/main.go']
+  },
+  server_config: {
+    path: 'pkg/config/server.go',
+    name: 'Environment Variable Config',
+    layer: 'Configuration', color: '#0ea5e9',
+    purpose: 'Alternative configuration loader using environment variables. Designed for simple standalone deployments. Covers host, port, schema path, policy paths, CORS flag, and log level. Not currently used by the YAML-based main entry point.',
+    types: ['ServerConfig'],
+    functions: ['LoadServerConfig()', 'getEnv(key, default string) string'],
+    deps: ['os'],
+    dependents: ['(standalone alt. deployment)']
+  },
+  assembler: {
+    path: 'pkg/api/assembler.go',
+    name: 'Service Assembler',
+    layer: 'HTTP API', color: '#3b82f6',
+    purpose: 'Assembles all runtime dependencies in the correct order. Creates SQLite DB (WAL mode, foreign keys enabled, single-writer connection pool) for principal management; PostgreSQL DBs for entity authorization; blob bucket for policies. Configures structured JSON logging with optional file output via io.MultiWriter. Applies addFileOutput to every logger so all subsystems write to the same file.',
+    types: ['Config', 'CredentialConfig', 'GormLogger'],
+    functions: ['AssembleAuthzServiceWithHTTPServer(cfg Config) (int, error)', 'AssembleAuthzService(cfg Config, fw io.Writer) (*service.PrincipalManager, *engine.Engine, *service.PolicyManager, *service.IdentityResolver, error)', 'CreateSQLiteDBConnection', 'CreatePostgresDBConnection', 'CreateBucketStore', 'preloadPolicies', 'openLogFile', 'addFileOutput'],
+    deps: ['pkg/engine', 'pkg/service', 'GORM', 'gocloud.dev/blob', 'logrus', 'lamassu helpers/routes'],
+    dependents: ['cmd/main.go']
+  },
+  routes: {
+    path: 'pkg/api/routes.go',
+    name: 'Route Registration',
+    layer: 'HTTP API', color: '#3b82f6',
+    purpose: 'Single function that registers every HTTP endpoint on a gin.RouterGroup. Constructs all controllers, instantiates the AuthzService (passing the logger for structured decision logs), and sets up the authz middleware instances. Endpoint groups: /v1/authz, /v1/principals, /v1/policies, /v1/schemas.',
+    types: [],
+    functions: ['NewAuthzRoutes(router, principalManager, engine, policyManager, resolver, logger)'],
+    deps: ['all controllers', 'pkg/service.NewAuthzService', 'sdk/gin-middleware'],
+    dependents: ['pkg/api/assembler.go']
+  },
+  authz_ctrl: {
+    path: 'pkg/api/authz_controller.go',
+    name: 'Authorization Controller',
+    layer: 'HTTP API', color: '#3b82f6',
+    purpose: 'Four Gin handlers for the primary authorization operations. Every handler validates that the entity type actually belongs to the stated namespace before proceeding. resolveEntityKey auto-maps a plain string to the schema\'s single PK column, removing the need for callers to know column names.',
+    types: ['AuthzController'],
+    functions: ['Authorize', 'GetFilter', 'MatchAndAuthorize', 'MatchAndGetFilter', 'validateEntityNamespace', 'resolveEntityKey'],
+    deps: ['pkg/engine', 'pkg/service (IdentityResolver, ErrNoMatch)', 'pkg/api/dto'],
+    dependents: ['pkg/api/routes.go']
+  },
+  capabilities_ctrl: {
+    path: 'pkg/api/capabilities_controller.go',
+    name: 'Capabilities Controller',
+    layer: 'HTTP API', color: '#3b82f6',
+    purpose: 'Exposes "what can this principal do?" queries. Global capabilities return a map of entity-type → []action for all entity types. Entity capabilities evaluate a batch of concrete entities and return the atomic actions permitted on each. Auth-material variants match principals first, then OR-merge results across all matched principals.',
+    types: ['CapabilitiesController'],
+    functions: ['GetGlobalCapabilities', 'MatchAndGetGlobalCapabilities', 'GetEntityCapabilities', 'MatchAndGetEntityCapabilities', 'dtoQueriesToEngine', 'engineResultsToDTO'],
+    deps: ['pkg/engine (Engine, capability types)', 'pkg/service (capabilities helpers, IdentityResolver)', 'pkg/api/dto'],
+    dependents: ['pkg/api/routes.go']
+  },
+  principal_ctrl: {
+    path: 'pkg/api/principal_controller.go',
+    name: 'Principal Controller',
+    layer: 'HTTP API', color: '#3b82f6',
+    purpose: 'Standard CRUD for principals. Notably, GrantPolicy and RevokePolicy manage the many-to-many relationship between principals and policies, recording who granted the policy and when.',
+    types: ['PrincipalController'],
+    functions: ['CreatePrincipal', 'GetPrincipal', 'ListPrincipals', 'UpdatePrincipal', 'DeletePrincipal', 'SetPrincipalActive', 'GrantPolicy', 'RevokePolicy', 'GetPrincipalPolicies'],
+    deps: ['pkg/service (PrincipalManager)', 'pkg/api/dto'],
+    dependents: ['pkg/api/routes.go']
+  },
+  policy_ctrl: {
+    path: 'pkg/api/policy_controller.go',
+    name: 'Policy Controller',
+    layer: 'HTTP API', color: '#3b82f6',
+    purpose: 'CRUD for policies stored in a blob bucket. DeletePolicy checks whether any principal still holds the policy and refuses deletion if so, preventing orphaned grants. SearchPolicies performs substring matching across ID, name, and description.',
+    types: ['PolicyController'],
+    functions: ['CreatePolicy', 'GetPolicy', 'ListPolicies', 'SearchPolicies', 'UpdatePolicy', 'DeletePolicy', 'GetPolicyStats'],
+    deps: ['pkg/service (PolicyManager, PrincipalManager)', 'pkg/api/dto'],
+    dependents: ['pkg/api/routes.go']
+  },
+  schema_ctrl: {
+    path: 'pkg/api/schema_controller.go',
+    name: 'Schema Controller',
+    layer: 'HTTP API', color: '#3b82f6',
+    purpose: 'Single GET endpoint for schema introspection. Returns all registered SchemaDefinitions grouped by config-schema name. Useful for admin tooling to discover entity types without reading raw JSON files.',
+    types: ['SchemaController'],
+    functions: ['GetSchemas → GET /v1/schemas'],
+    deps: ['pkg/engine (Engine.GetSchemas, SchemaDefinition)'],
+    dependents: ['pkg/api/routes.go']
+  },
+  log_formatter: {
+    path: 'pkg/api/log_formatter.go',
+    name: 'Ordered JSON Log Formatter',
+    layer: 'HTTP API', color: '#6366f1',
+    purpose: 'Custom logrus.Formatter implementation that outputs one JSON line per entry with a declared, stable field order. Prefix always: time → level → msg. Then authzFieldOrder fields (service, subsystem, trace-id, span-id, auth context, principal_id, namespace, schema, entity_type, action, allowed, reason, counts, SQL detail, error). Remaining unknown fields appended alphabetically. Makes logs machine-readable and human-scannable simultaneously.',
+    types: ['OrderedJSONFormatter'],
+    functions: ['Format(entry *logrus.Entry) ([]byte, error)'],
+    deps: ['encoding/json', 'sort', 'logrus'],
+    dependents: ['pkg/api/assembler.go (used in addFileOutput)']
+  },
+  dto_authz: {
+    path: 'pkg/api/dto/authz_dto.go',
+    name: 'Authorization DTOs',
+    layer: 'DTO', color: '#6366f1',
+    purpose: 'JSON request/response shapes for the four authorization endpoints. AuthorizeRequest carries principalID, namespace, schemaName, entityType, action, and a FlexEntityKey. Response includes the allowed bool and echoes the request fields for auditability.',
+    types: ['AuthorizeRequest', 'AuthorizeResponse', 'GetFilterRequest', 'GetFilterResponse', 'MatchAndAuthorizeRequest', 'MatchAndAuthorizeResponse', 'MatchAndGetFilterRequest', 'MatchAndGetFilterResponse'],
+    functions: [],
+    deps: ['dto/flex_entity_key.go'],
+    dependents: ['authz_controller.go', 'sdk/sdk.go', 'sdk/remote_engine.go']
+  },
+  dto_capabilities: {
+    path: 'pkg/api/dto/capabilities_dto.go',
+    name: 'Capabilities DTOs',
+    layer: 'DTO', color: '#6366f1',
+    purpose: 'Shapes for capability query endpoints. EntityCapabilityQuery describes one entity to evaluate; EntityCapabilitiesResultDTO carries the actions list and an optional error string (so one batch entry failure does not abort the whole response).',
+    types: ['EntityCapabilityQuery', 'GetGlobalCapabilitiesRequest', 'GlobalCapabilitiesResponse', 'GetEntityCapabilitiesRequest', 'EntityCapabilitiesResponse', 'EntityCapabilitiesResultDTO'],
+    functions: [],
+    deps: ['dto/flex_entity_key.go'],
+    dependents: ['capabilities_controller.go', 'sdk/sdk.go']
+  },
+  dto_principal: {
+    path: 'pkg/api/dto/principal_dto.go',
+    name: 'Principal DTOs',
+    layer: 'DTO', color: '#6366f1',
+    purpose: 'Shapes for principal CRUD. AuthConfig is accepted as a free-form JSON object to support both OIDC claim conditions and X.509 matching attributes without requiring separate DTO types per auth type.',
+    types: ['CreatePrincipalRequest', 'UpdatePrincipalRequest', 'PrincipalResponse', 'GrantPolicyRequest', 'PrincipalPolicyResponse'],
+    functions: [],
+    deps: [],
+    dependents: ['principal_controller.go', 'sdk/sdk.go']
+  },
+  dto_flex: {
+    path: 'pkg/api/dto/flex_entity_key.go',
+    name: 'FlexEntityKey',
+    layer: 'DTO', color: '#6366f1',
+    purpose: 'Polymorphic JSON type. Unmarshals from either a JSON string ("device-123") or a JSON object ({"device_id":"123","tenant_id":"t1"}). Controllers use IsString()/Map() to branch. When it\'s a string, resolveEntityKey auto-looks up the schema\'s single PK column name.',
+    types: ['FlexEntityKey'],
+    functions: ['NewFlexEntityKeyFromMap', 'IsString', 'IsEmpty', 'Str', 'Map', 'UnmarshalJSON', 'MarshalJSON'],
+    deps: ['encoding/json'],
+    dependents: ['all dto files', 'authz_controller.go', 'capabilities_controller.go', 'sdk/sdk.go']
+  },
+  core_engine: {
+    path: 'pkg/core/engine.go',
+    name: 'AuthzEngine Interface',
+    layer: 'Interface / Models', color: '#06b6d4',
+    purpose: 'The single authorization contract. All four methods accept ctx context.Context as first parameter, enabling trace/request ID propagation via helpers.ConfigureLogger. The interface is intentionally small: only the four operations that external consumers need.',
+    types: ['AuthzEngine interface'],
+    functions: ['Authorize(ctx, principalID, namespace, schemaName, action, entityType, entityKey)', 'GetFilter(ctx, principalID, namespace, schemaName, entityType)', 'MatchAndAuthorize(ctx, authType, authMaterial, namespace, schemaName, action, entityType, entityKey)', 'MatchAndGetFilter(ctx, authType, authMaterial, namespace, schemaName, entityType)'],
+    deps: ['context'],
+    dependents: ['pkg/service/authz.go (implements AuthzEngine)', 'sdk/remote_engine.go (implements AuthzEngine)', 'sdk/gin-middleware/middleware.go (uses AuthzEngine)']
+  },
+  model_policy: {
+    path: 'pkg/models/policy.go',
+    name: 'Policy Model',
+    layer: 'Interface / Models', color: '#06b6d4',
+    purpose: 'Core policy data structure. A Policy has Rules; each Rule specifies a namespace, schema name, entity type (wildcards supported), and one or more of: DirectGrants (list of entity IDs), Relations (cascading FK rules), ColumnFilters (attribute conditions). Custom JSON marshaling handles the polymorphic RelationRule "to" field which can be a string or object.',
+    types: ['Policy', 'Rule', 'RelationRule', 'ColumnFilter', 'RelationTarget'],
+    functions: ['QualifiedEntityType', 'GetSchemaAndEntity', 'HasAction', 'UnmarshalJSON (RelationRule)'],
+    deps: ['encoding/json'],
+    dependents: ['pkg/engine/policy.go', 'pkg/engine/filter.go', 'pkg/api/dto/policy_dto.go']
+  },
+  model_principal: {
+    path: 'pkg/models/principal.go',
+    name: 'Principal Model',
+    layer: 'Interface / Models', color: '#06b6d4',
+    purpose: 'Principal represents an authenticated identity with an auth type (oidc or x509) and a flexible AuthConfig JSONB map containing matching conditions. PrincipalPolicy is the join table recording which policy was granted, by whom, and when. Implements driver.Valuer and sql.Scanner for JSONB serialization.',
+    types: ['Principal', 'PrincipalPolicy', 'AuthConfig'],
+    functions: ['(AuthConfig).Value()', '(AuthConfig).Scan()', 'TableName()'],
+    deps: ['database/sql', 'GORM'],
+    dependents: ['pkg/store/gorm.go (principals table)', 'pkg/store/matcher.go (auth matching)']
+  },
+  service: {
+    path: 'pkg/service/authz.go',
+    name: 'AuthzImplementation (Service)',
+    layer: 'Service Layer', color: '#10b981',
+    purpose: 'Thin orchestration layer implementing core.AuthzEngine. Its only job is: (1) resolve the caller\'s identity to a PolicyRegistry via IdentityResolver, (2) delegate the actual decision to Engine, (3) log the result with request context. Each method calls helpers.ConfigureLogger(ctx, s.logger) to attach the OTel trace-ID to the decision log entry.',
+    types: ['AuthzImplementation', 'ServiceOption'],
+    functions: ['NewAuthzService', 'WithServiceLogger', 'Authorize', 'GetFilter', 'MatchAndAuthorize', 'MatchAndGetFilter'],
+    deps: ['pkg/engine (Engine)', 'pkg/service/identity.go (IdentityResolver)', 'pkg/core', 'logrus helpers'],
+    dependents: ['pkg/api/routes.go (instantiated)', 'sdk/gin-middleware (via AuthzEngine interface)']
+  },
+  identity_resolver: {
+    path: 'pkg/service/identity.go',
+    name: 'Identity Resolver',
+    layer: 'Service Layer', color: '#10b981',
+    purpose: 'Collapses the "match auth material → load policies" pattern into one place. Resolve() returns ErrNoMatch (check with errors.Is) when no principal matched, allowing the caller to distinguish 401 from 403. GetPoliciesForPrincipal() skips matching for known principal IDs. Uses local private interfaces (principalMatcher, policyLoader) to avoid circular imports.',
+    types: ['IdentityResolver'],
+    functions: ['NewIdentityResolver', 'Resolve', 'GetPoliciesForPrincipal', 'MatchPrincipals'],
+    deps: ['pkg/store (MatchService via principalMatcher interface)', 'pkg/engine (GrantStore, PolicyRegistry)'],
+    dependents: ['pkg/service/authz.go', 'pkg/api/authz_controller.go', 'pkg/api/capabilities_controller.go']
+  },
+  principal_manager: {
+    path: 'pkg/service/principal.go',
+    name: 'Principal Manager',
+    layer: 'Service Layer', color: '#10b981',
+    purpose: 'Façade over GormPrincipalStore (pkg/store) and MatchService. Provides all principal CRUD and policy grant/revoke operations. NewIdentityResolver() is a convenience factory that wires a resolver using this manager\'s own store, ensuring principal loads and grant lookups share the same DB connection.',
+    types: ['PrincipalManager'],
+    functions: ['NewPrincipalManager', 'CreatePrincipal', 'GetPrincipal', 'GetPrincipalWithPolicies', 'ListPrincipals', 'UpdatePrincipal', 'DeletePrincipal', 'SetPrincipalActive', 'GrantPolicy', 'RevokePolicy', 'GrantPolicies', 'RevokePolicies', 'HasPolicy', 'GetPrincipalPolicies', 'GetPolicyPrincipals', 'MatchPrincipals', 'NewIdentityResolver'],
+    deps: ['pkg/store (GormPrincipalStore, MatchService)'],
+    dependents: ['pkg/api/assembler.go', 'pkg/api/routes.go', 'all controllers', 'pkg/service/capabilities.go']
+  },
+  policy_manager: {
+    path: 'pkg/service/policy.go',
+    name: 'Policy Manager',
+    layer: 'Service Layer', color: '#10b981',
+    purpose: 'Policies stored as JSON blobs in a gocloud.dev/blob bucket, making the store pluggable (filesystem, GCS, S3). Calls engine.ValidatePolicyStruct for storage-time validation. GetPolicyStats computes counts and sizes — suitable for admin UIs, not hot paths.',
+    types: ['PolicyManager', 'PolicyStats'],
+    functions: ['NewPolicyManager', 'CreatePolicy', 'GetPolicy', 'UpdatePolicy', 'DeletePolicy', 'ListPolicies', 'SearchPolicies', 'GetPolicyStats'],
+    deps: ['gocloud.dev/blob', 'pkg/models/policy.go', 'pkg/engine (ValidatePolicyStruct)', 'encoding/json'],
+    dependents: ['pkg/api/assembler.go', 'pkg/service/identity.go', 'pkg/api/policy_controller.go', 'pkg/service/capabilities.go']
+  },
+  service_capabilities: {
+    path: 'pkg/service/capabilities.go',
+    name: 'Principal Capability Helpers',
+    layer: 'Service Layer', color: '#10b981',
+    purpose: 'Package-level functions that bridge the Engine capability methods with PrincipalManager and PolicyManager. Each function loads the principal\'s PolicyRegistry once, then calls the corresponding pure engine method. Separated from pkg/engine/capabilities.go to avoid a circular dependency: Engine would need to import service-layer managers if these lived in the engine package.',
+    types: [],
+    functions: ['GetPrincipalPolicies(ctx, engine, pm, polm, principalID)', 'GetGlobalCapabilitiesForPrincipal(ctx, engine, pm, polm, principalID)', 'GetEntityCapabilitiesForPrincipal(ctx, engine, pm, polm, principalID, ...)', 'GetEntityCapabilitiesBatchForPrincipal(ctx, engine, pm, polm, principalID, queries)'],
+    deps: ['pkg/engine (Engine, PolicyRegistry, GlobalCapabilities, EntityCapabilities)', 'pkg/service/principal.go', 'pkg/service/policy.go'],
+    dependents: ['pkg/api/capabilities_controller.go']
+  },
+  engine: {
+    path: 'pkg/engine/engine.go',
+    name: 'Authorization Engine',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'The decision core. Holds one *gorm.DB per config-schema name for multi-tenant authorization. Classifies each action as global (granted if any matching rule exists, no DB query) or atomic (requires SQL existence check). For atomic actions, builds filter conditions via FilterGenerator then executes SELECT 1 FROM table WHERE … LIMIT 1. Exposes Logger() accessor so pkg/service/capabilities.go can share the same logrus.Entry.',
+    types: ['Engine', 'EngineOption'],
+    functions: ['NewEngine(dbs, schemaPaths, ...EngineOption)', 'WithLogger(l *logrus.Entry)', 'Logger() *logrus.Entry', 'Authorize(ctx, policies, namespace, schemaName, action, entityType, entityKey)', 'GetListFilter(ctx, policies, namespace, schemaName, entityType)', 'GetSchemas()'],
+    deps: ['pkg/engine/schema.go', 'pkg/engine/policy.go', 'pkg/engine/filter.go', 'GORM', 'logrus helpers'],
+    dependents: ['pkg/service/authz.go', 'pkg/service/capabilities.go', 'pkg/engine/capabilities.go', 'all API controllers']
+  },
+  capabilities: {
+    path: 'pkg/engine/capabilities.go',
+    name: 'Capability Evaluator',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'Pure engine methods that answer "what can this principal do?" given an already-loaded PolicyRegistry. GetGlobalCapabilities scans every schema without DB queries. GetEntityCapabilities makes one Authorize() call per atomic action. The ForPrincipal variants (which load policies from PrincipalManager/PolicyManager) were moved to pkg/service/capabilities.go to avoid circular imports.',
+    types: ['GlobalCapabilities (map[string][]string)', 'EntityCapabilities', 'EntityCapabilityQuery', 'EntityCapabilitiesResult'],
+    functions: ['GetGlobalCapabilities(ctx, policies)', 'GetEntityCapabilities(ctx, policies, namespace, schemaName, entityType, entityKey)', 'GetEntityCapabilitiesBatch(ctx, policies, queries)', 'MergeGlobalCapabilities(dst, src)'],
+    deps: ['pkg/engine/engine.go', 'pkg/engine/schema.go', 'pkg/engine/policy.go'],
+    dependents: ['pkg/service/capabilities.go (ForPrincipal helpers)', 'pkg/api/capabilities_controller.go (via service helpers)']
+  },
+  filter: {
+    path: 'pkg/engine/filter.go',
+    name: 'SQL Filter Generator',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'The most complex file. Converts policy rules into SQL. Three access strategies: (1) Direct grants → IN clause with entity IDs. (2) Cascading relations → JOIN chain derived from AuthorizationGraph path-finding, enabling "user has access to device because user → organization → device". (3) Column filters → attribute conditions (column operator value). GenerateCheckFilter adds an entity-key equality condition on top of any list filter. Wildcard rules generate broader filters (1=1 for all-access).',
+    types: ['FilterGenerator', 'FilterResult'],
+    functions: ['NewFilterGenerator', 'GenerateListFilter(action, schemaName, entityType)', 'GenerateCheckFilter(action, schemaName, entityType, entityKey)', 'buildCascadingAccess', 'buildCascadingAccessWildcard', 'buildCascadingAccessByColumnFilter', 'buildPathFilter', 'buildPathFilterWildcard', 'buildPathFilterByColumnFilter'],
+    deps: ['pkg/engine/schema.go', 'pkg/engine/policy.go', 'pkg/engine/graph.go', 'pkg/models/policy.go'],
+    dependents: ['pkg/engine/engine.go (Authorize, GetListFilter)']
+  },
+  graph: {
+    path: 'pkg/engine/graph.go',
+    name: 'Authorization Graph',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'Entity-relationship graph used by FilterGenerator. BuildFromPoliciesAndSchemas constructs directed edges: policy relation rules add "access edges" (principal can access device via organization); schema relation configs add "FK edges" (device.organization_id → organizations.id). FindPathsBetween uses DFS to discover all paths between two entity types, enabling multi-hop JOIN chains.',
+    types: ['AuthorizationGraph', 'GraphNode', 'GraphEdge'],
+    functions: ['BuildFromPoliciesAndSchemas(schemas, policies)', 'FindPathsBetween(from, to)', 'FindPathsToUser(from)', 'addRuleEdges', 'addRelationEdges', 'dfs (private)'],
+    deps: ['pkg/engine/schema.go', 'pkg/engine/policy.go'],
+    dependents: ['pkg/engine/filter.go']
+  },
+  schema: {
+    path: 'pkg/engine/schema.go',
+    name: 'Schema Registry',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'Loads and validates entity schemas from JSON files. Each schema file can define multiple entity types; multiple files can be loaded under different config-schema names (e.g., "iot", "pki"). SchemaDefinition carries the SQL table name, primary key columns, relation configs (FK → parent entity), atomic vs. global action lists, and filterable column specs. Used pervasively by engine, filter, graph, and controllers.',
+    types: ['SchemaRegistry', 'SchemaDefinition', 'FilterableField', 'RelationConfig'],
+    functions: ['NewSchemaRegistry', 'Load(path, configSchemaName)', 'Get(entityType)', 'GetBySchemaEntity(schemaName, entityType)', 'GetAll()', 'QualifiedTableName', 'NamespacedType', 'IsGlobalAction', 'HasAction', 'ValidateEntityKey'],
+    deps: ['encoding/json', 'os'],
+    dependents: ['pkg/engine/engine.go', 'pkg/engine/filter.go', 'pkg/engine/graph.go', 'pkg/engine/capabilities.go', 'pkg/api/authz_controller.go']
+  },
+  policy_reg: {
+    path: 'pkg/engine/policy.go',
+    name: 'Policy Registry & Validation',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'In-memory registry built fresh per request. AddPolicy validates the full rule structure before registering. ValidatePolicyStruct is exported so pkg/service/policy.go can reuse it for storage-time validation. Provides GetRules() for engine iteration and ruleMatchesSchema() / wildcardMatches() helpers for namespace-aware rule filtering.',
+    types: ['PolicyRegistry'],
+    functions: ['NewPolicyRegistry', 'AddPolicy', 'GetRules', 'ValidatePolicyStruct (exported)', 'ruleMatchesSchema', 'concretizeRuleForSchema', 'wildcardMatches'],
+    deps: ['pkg/models/policy.go', 'encoding/json'],
+    dependents: ['pkg/engine/engine.go', 'pkg/engine/filter.go', 'pkg/engine/graph.go', 'pkg/engine/capabilities.go', 'pkg/service/identity.go', 'pkg/service/policy.go (ValidatePolicyStruct)']
+  },
+  ports: {
+    path: 'pkg/engine/ports.go',
+    name: 'Ports (Dependency Interfaces)',
+    layer: 'Engine Layer', color: '#f59e0b',
+    purpose: 'Hexagonal architecture ports. PrincipalStore: full CRUD plus ListByType (loads only principals of a given auth type, minimizing data read during matching). GrantStore: join-table operations with batch grant/revoke, usage counts. PrincipalMatcher: pure stateless matching — receives pre-loaded principals and auth material, returns matching IDs. pkg/store satisfies PrincipalStore+GrantStore via Go structural typing (gorm.go does not import this package directly).',
+    types: ['PrincipalStore', 'GrantStore', 'PrincipalMatcher'],
+    functions: ['(all interface method signatures)'],
+    deps: ['context', 'pkg/models'],
+    dependents: ['pkg/store/gorm.go (satisfies PrincipalStore+GrantStore via duck typing)', 'pkg/store/matcher.go (imports for type references)', 'pkg/service/identity.go (uses GrantStore)']
+  },
+  gorm_store: {
+    path: 'pkg/store/gorm.go',
+    name: 'GORM Principal Store',
+    layer: 'Data Access', color: '#ef4444',
+    purpose: 'Implements PrincipalStore and GrantStore (pkg/engine/ports.go) using GORM — satisfies the interfaces via Go structural typing without importing pkg/engine. On first use, AutoMigrates the principals table and principal_policies join table. All methods are context-aware. ListByType is the hot path for matching: loads only active principals of one auth type.',
+    types: ['GormPrincipalStore'],
+    functions: ['NewGormPrincipalStore', 'Create', 'Get', 'GetWithPolicies', 'List', 'Update', 'Delete', 'SetActive', 'ListByType', 'Grant', 'Revoke', 'GrantBatch', 'RevokeBatch', 'Has', 'ListForPrincipal', 'ListForPolicy', 'CountForPrincipal', 'CountForPolicy'],
+    deps: ['GORM', 'pkg/models/principal.go'],
+    dependents: ['pkg/service/principal.go (wraps)', 'pkg/service/identity.go (via GrantStore port)']
+  },
+  matcher: {
+    path: 'pkg/store/matcher.go',
+    name: 'Principal Matcher',
+    layer: 'Data Access', color: '#ef4444',
+    purpose: 'Two zero-field stateless matchers. OIDCMatcher evaluates JWT claim conditions (equals, contains, regex operators) against each principal\'s AuthConfig. X509Matcher checks parsed X.509 certificates by serial number, common name, CA fingerprint (SHA-256), or authority key ID. MatchService coordinates both. Imports pkg/engine only for the PrincipalStore and PrincipalMatcher interface types — no concrete engine dependencies.',
+    types: ['OIDCMatcher', 'X509Matcher', 'MatchService'],
+    functions: ['DefaultMatchService(store engine.PrincipalStore)', 'MatchPrincipals(ctx, authMaterial, authType)', '(OIDCMatcher).Match', '(X509Matcher).Match'],
+    deps: ['pkg/models/principal.go', 'pkg/engine (PrincipalStore, PrincipalMatcher interfaces)', 'golang-jwt/jwt', 'crypto/x509', 'encoding/json'],
+    dependents: ['pkg/service/principal.go (holds MatchService)']
+  },
+  sdk_client: {
+    path: 'sdk/sdk.go',
+    name: 'HTTP Client SDK',
+    layer: 'SDK', color: '#a78bfa',
+    purpose: 'Type-safe Go client for the authz REST API. Exposes four service clients (AuthzService, PrincipalService, PolicyService, SchemaService) built on a shared HTTP base. Supports TLS configuration, request timeouts, and custom headers (e.g. for service-to-service auth tokens). Returns structured APIError with HTTP status codes so callers can distinguish 401/403/404 from 500.',
+    types: ['Client', 'ClientConfig', 'APIError', 'AuthzService', 'PrincipalService', 'PolicyService', 'SchemaService'],
+    functions: ['NewClient', 'WithHeader', 'do (internal HTTP helper)'],
+    deps: ['pkg/api/dto', 'net/http', 'crypto/tls', 'encoding/json'],
+    dependents: ['sdk/remote_engine.go']
+  },
+  remote_engine: {
+    path: 'sdk/remote_engine.go',
+    name: 'Remote Engine',
+    layer: 'SDK', color: '#a78bfa',
+    purpose: 'HTTP implementation of core.AuthzEngine. Allows services that cannot or should not embed the full engine (no direct DB access, different process) to use the same gin middleware as services with a local engine. Forwards the caller\'s context to propagate distributed trace IDs across service boundaries via the HTTP client.',
+    types: ['RemoteEngine'],
+    functions: ['NewRemoteEngine(client *Client) core.AuthzEngine', 'Authorize', 'GetFilter', 'MatchAndAuthorize', 'MatchAndGetFilter'],
+    deps: ['sdk/sdk.go', 'pkg/core (AuthzEngine)', 'pkg/api/dto'],
+    dependents: ['sdk/gin-middleware/middleware.go (indirectly, via AuthzEngine interface)']
+  },
+  sdk_ctx: {
+    path: 'sdk/context.go',
+    name: 'SDK Context Keys',
+    layer: 'SDK', color: '#a78bfa',
+    purpose: 'Defines the shared constant AuthzQueryKey = "authz-query". The middleware writes the generated SQL WHERE clause to the Gin context under this key; downstream handlers read it to append to their list queries. Centralizing the key prevents string literal duplication across the middleware and all consuming handlers.',
+    types: [],
+    functions: [],
+    deps: [],
+    dependents: ['sdk/gin-middleware/middleware.go', 'all handlers using list authorization']
+  },
+  middleware: {
+    path: 'sdk/gin-middleware/middleware.go',
+    name: 'Gin Authorization Middleware',
+    layer: 'SDK', color: '#a78bfa',
+    purpose: 'Drop-in Gin middleware. AuthzCheck is used as a per-route gate: it extracts auth credentials from the Gin context (set by upstream JWT/mTLS middleware), calls engine.MatchAndAuthorize, and aborts with 403 if denied. AuthListCheck generates a SQL WHERE clause and injects it into the Gin context for the downstream handler. Supports simple (single-column "id") and composite PK schemas via constructor choice. Works identically with local AuthzImplementation or remote RemoteEngine.',
+    types: ['AuthzMiddleware'],
+    functions: ['NewSimpleAuthzMiddleware', 'NewCompositeAuthzMiddleware', 'AuthzCheck(action) gin.HandlerFunc', 'AuthzCheckCustom(action, keyFunc) gin.HandlerFunc', 'AuthzCheckCustomField(action, paramFields) gin.HandlerFunc', 'AuthListCheck() gin.HandlerFunc', 'extractAuthInputs'],
+    deps: ['pkg/core (AuthzEngine)', 'gin-gonic', 'logrus'],
+    dependents: ['any Gin service using lamassu authorization']
+  },
+  testutil: {
+    path: 'pkg/testutil/postgres.go',
+    name: 'PostgreSQL Test Container',
+    layer: 'Test Support', color: '#64748b',
+    purpose: 'Starts an ephemeral Docker PostgreSQL container using ory/dockertest. Executes a SQL migration file and retries connection with exponential backoff. Returns a ready GORM DB and a Cleanup() function that kills and removes the container. Used by engine, capabilities, and integration tests to verify authorization decisions against real SQL without mocks — critical for catching filter generation bugs that mocks would miss.',
+    types: ['PostgresContainer'],
+    functions: ['RunPostgresWithMigration(migrationPath string) (*PostgresContainer, error)', '(c).Cleanup()', '(c).DSN()'],
+    deps: ['ory/dockertest', 'GORM', 'postgres driver'],
+    dependents: ['pkg/engine/*_test.go', 'pkg/service/capabilities_test.go', 'pkg/service/capabilities_integration_test.go']
+  }
+};
+
+function showDetail(id) {
+  const d = details[id];
+  if (!d) return;
+
+  const content = `
+    <div class="dp-path">${d.path}</div>
+    <h3>${d.name}</h3>
+    <span class="dp-badge" style="background:${d.color}22;color:${d.color}">${d.layer}</span>
+
+    <div class="dp-section">
+      <h4>Purpose</h4>
+      <p>${d.purpose}</p>
+    </div>
+
+    ${d.types.length ? `
+    <div class="dp-section">
+      <h4>Key Types</h4>
+      <ul>${d.types.map(t => `<li><code>${t}</code></li>`).join('')}</ul>
+    </div>` : ''}
+
+    ${d.functions.length ? `
+    <div class="dp-section">
+      <h4>Key Functions / Methods</h4>
+      <ul>${d.functions.map(f => `<li><code>${f}</code></li>`).join('')}</ul>
+    </div>` : ''}
+
+    <div class="dp-section">
+      <h4>Depends On</h4>
+      <ul>${d.deps.map(x => `<li>${x}</li>`).join('')}</ul>
+    </div>
+
+    <div class="dp-section">
+      <h4>Used By</h4>
+      <ul>${d.dependents.map(x => `<li>${x}</li>`).join('')}</ul>
+    </div>
+  `;
+
+  document.getElementById('detail-content').innerHTML = content;
+  document.getElementById('overlay').classList.add('open');
+}
+
+function hideDetail() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+function closeDetail(e) {
+  if (e.target === document.getElementById('overlay')) hideDetail();
+}
+
+// nav active state on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('nav a[href^="#"]');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector(`nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { root: document.getElementById('main'), threshold: 0.3 });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

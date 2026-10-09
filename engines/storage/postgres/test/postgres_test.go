@@ -16,17 +16,17 @@ func TestEmptyDumpImport(t *testing.T) {
 
 	defer suite.cleanupDocker()
 
-	// Check CA DB is empty
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, "ca", cfg.Port)
+	// Check CA schema is empty
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, "pki", cfg.Port, "ca")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("could not connect to Postgres: %s", err)
 	}
 
 	var count int64
-	err = db.Table("information_schema.tables").Where("table_schema = ?", "public").Count(&count).Error
+	err = db.Raw("SELECT COUNT(*) FROM pg_tables WHERE schemaname = ?", "ca").Scan(&count).Error
 	if err != nil {
-		t.Fatalf("could not query information_schema.tables: %s", err)
+		t.Fatalf("could not query pg_tables: %s", err)
 	}
 
 	if count > 0 {
@@ -49,17 +49,17 @@ func TestDumpImport(t *testing.T) {
 
 	defer pCleanup()
 
-	// Check CA DB is empty
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, "ca", cfg.Port)
+	// Check CA schema has tables
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, "pki", cfg.Port, "ca")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("could not connect to Postgres: %s", err)
 	}
 
 	var count int64
-	err = db.Table("information_schema.tables").Where("table_schema = ?", "public").Count(&count).Error
+	err = db.Raw("SELECT COUNT(*) FROM pg_tables WHERE schemaname = ?", "ca").Scan(&count).Error
 	if err != nil {
-		t.Fatalf("could not query information_schema.tables: %s", err)
+		t.Fatalf("could not query pg_tables: %s", err)
 	}
 
 	if count != 2 {
@@ -67,9 +67,9 @@ func TestDumpImport(t *testing.T) {
 	}
 
 	var tables []string
-	err = db.Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error
+	err = db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = ?", "ca").Pluck("tablename", &tables).Error
 	if err != nil {
-		t.Fatalf("could not query information_schema.tables: %s", err)
+		t.Fatalf("could not query pg_tables: %s", err)
 	}
 
 	expectedTables := []string{"certificates", "ca_certificates"}
@@ -103,9 +103,9 @@ func TestBeforeSuite(t *testing.T) {
 	}{Name: "test"})
 
 	var tables []string
-	err := db.Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error
+	err := db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = ?", "ca").Pluck("tablename", &tables).Error
 	if err != nil {
-		t.Fatalf("could not query information_schema.tables: %s", err)
+		t.Fatalf("could not query pg_tables: %s", err)
 	}
 	assert.Equal(t, 1, len(tables))
 
@@ -116,9 +116,9 @@ func TestBeforeSuite(t *testing.T) {
 	suite.BeforeEach()
 
 	tables = []string{}
-	err = db.Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error
+	err = db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = ?", "ca").Pluck("tablename", &tables).Error
 	if err != nil {
-		t.Fatalf("could not query information_schema.tables: %s", err)
+		t.Fatalf("could not query pg_tables: %s", err)
 	}
 	assert.Equal(t, 1, len(tables))
 

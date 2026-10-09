@@ -6,11 +6,13 @@ import (
 
 type CAConfig struct {
 	OtelConfig               cconfig.OTELConfig             `mapstructure:"otel"`
+	OpenAPI                  cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs                     cconfig.Logging                `mapstructure:"logs"`
 	Server                   cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus        cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	Storage                  cconfig.PluggableStorageEngine `mapstructure:"storage"`
 	KMSClient                KMSClient                      `mapstructure:"kms_client"`
+	AuthzClient              AuthzClient                    `mapstructure:"authz_client"`
 	CertificateMonitoringJob cconfig.MonitoringJob          `mapstructure:"certificate_monitoring_job"`
 	VAServerDomains          []string                       `mapstructure:"va_server_domains"`
 	AllowCascadeDelete       bool                           `mapstructure:"allow_cascade_delete"`
