@@ -4,8 +4,6 @@ import "errors"
 
 var (
 	ErrCryptoEngineNotFound error = errors.New("crypto engine not found")
-	// The key type or size is not supported by the selected crypto engine.
-	ErrCryptoEngineKeySpecNotSupported error = errors.New("key spec not supported by crypto engine")
 
 	ErrCANotFound             error = errors.New("CA not found")
 	ErrCAAlreadyExists        error = errors.New("CA already exists")
