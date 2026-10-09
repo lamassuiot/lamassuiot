@@ -13,7 +13,6 @@ require (
 	github.com/lamassuiot/lamassuiot/backend/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/connectors/awsiot/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/core/v3 v3.8.1
-	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/sdk/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.8.1
@@ -36,7 +35,6 @@ require (
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.8.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
@@ -151,6 +149,7 @@ require (
 	github.com/kaptinlin/jsonpointer v0.4.19 // indirect
 	github.com/kaptinlin/jsonschema v0.7.10 // indirect
 	github.com/kaptinlin/messageformat-go v0.6.0 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 v3.8.1 // indirect
 	github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 v3.8.1 // indirect
 	github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3 v3.8.1 // indirect
@@ -160,7 +159,7 @@ require (
 	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 v3.8.1 // indirect
 	github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3 v3.8.1 // indirect
 	github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3 v3.8.1 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.8.1 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/mattn/go-sqlite3 v1.14.44 // indirect
@@ -175,6 +174,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runc v1.3.6 // indirect
+	github.com/ory/dockertest/v3 v3.12.0 // indirect
 	github.com/paulmach/orb v0.13.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
