@@ -104,7 +104,7 @@ func main() {
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	disableSSE := flag.Bool("disable-sse", false, "disable SSE streaming on device events endpoint")
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
-	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
+	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no RabbitMQ required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
 	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
