@@ -70,11 +70,12 @@ func Public() Permission {
 	return Permission{declaration: Declaration{Check: checkPublic}, handler: func(c *gin.Context) { c.Next() }}
 }
 
-// HandlerAuthorization records protocol checks performed by the endpoint/service.
+// DelegatedAuthorization records that authorization is delegated to the endpoint/service itself
+// (protocol checks).
 // It deliberately adds no domain guard: EST, Envoy and evaluation APIs handle their own credentials.
-func HandlerAuthorization(kind string) Permission {
+func DelegatedAuthorization(kind string) Permission {
 	if _, known := handlerChecks[kind]; !known {
-		panic("unknown handler authorization kind: " + kind)
+		panic("unknown delegated authorization kind:" + kind)
 	}
 	return Permission{declaration: Declaration{Check: kind}, handler: func(c *gin.Context) { c.Next() }}
 }
@@ -226,7 +227,7 @@ func (r *ContractRouter) Handle(method, relativePath string, permission Permissi
 		panic("contract route requires a validated permission and endpoint handler")
 	}
 	if handlerChecks[permission.declaration.Check] && permission.trustBoundary == "" {
-		panic("handler authorization requires an explicit trust boundary")
+		panic("delegated authorization requires an explicit trust boundary")
 	}
 	fullPath := joinPaths(r.group.BasePath(), relativePath)
 	params := map[string]bool{}

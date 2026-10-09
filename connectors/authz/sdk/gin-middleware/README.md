@@ -48,7 +48,7 @@ namespaces. Permissions fail during route construction, before serving requests:
   KMS uses this for PKCS#11 URIs and aliases, preserving resolver failures.
 - `Public()` explicitly records anonymous access without invoking authorization.
   VA uses it for OCSP/CRL; EST uses it for CA certificates.
-- `HandlerAuthorization("est" | "envoy" | "evaluation")` records checks performed
+- `DelegatedAuthorization("est" | "envoy" | "evaluation")` records checks performed
   inside the handler or service and adds no domain guard. Those declarations
   need dedicated protocol tests. Envoy and evaluation registrations also require
   an explicit trust boundary (see below). Authz evaluation calls carry credentials in
@@ -147,7 +147,7 @@ Envoy routes declare `internal-gateway`; Authz evaluation routes declare
 behavior:
 
 ```go
-permission := middleware.HandlerAuthorization("envoy").WithTrustBoundary("internal-gateway")
+permission := middleware.DelegatedAuthorization("envoy").WithTrustBoundary("internal-gateway")
 contract.Handle(http.MethodGet, "/ext_authz/check", permission, checkHandler)
 ```
 
