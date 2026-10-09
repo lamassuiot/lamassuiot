@@ -704,8 +704,8 @@ func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableSt
 
 	return &authzconfig.AuthzConfig{
 		// Development/testing has no JWKS endpoint, so OIDC signatures are not verified.
-		DisableJWTValidation: true,
-		Logs:                 cconfig.Logging{Level: cconfig.Debug},
+		InsecureSkipJWTVerify: true,
+		Logs:                  cconfig.Logging{Level: cconfig.Debug},
 		Server: cconfig.HttpServer{
 			LogLevel:      cconfig.Debug,
 			Port:          0,

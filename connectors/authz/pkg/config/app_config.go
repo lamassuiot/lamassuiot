@@ -36,10 +36,11 @@ type AuthzConfig struct {
 	Bootstrap []BootstrapEntry `mapstructure:"bootstrap"`
 	// URL to fetch JSON Web Key Sets for verifying JWT tokens.
 	JWKSURL string `mapstructure:"jwks_url"`
-	// DisableJWTValidation skips OIDC signature verification. Unset means
-	// validation is enabled (secure by default) and jwks_url is required; set it
-	// only for development/testing environments that have no JWKS endpoint.
-	DisableJWTValidation bool `mapstructure:"disable_jwt_validation"`
+	// InsecureSkipJWTVerify skips OIDC token signature verification, like
+	// tls.Config.InsecureSkipVerify. Unset means signatures are verified against
+	// jwks_url, which is then required. Use it only for development/testing
+	// environments that have no JWKS endpoint.
+	InsecureSkipJWTVerify bool `mapstructure:"insecure_skip_jwt_verify"`
 	// HTTPSchemas is a list of file paths to HTTP schema JSON files.
 	// Each file contains an array of HTTPSchemaDefinition objects that describe
 	// REST API routes for use with the Envoy ext_authz endpoint.
