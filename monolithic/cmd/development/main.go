@@ -22,7 +22,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
-	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/storage/sqlite"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
@@ -105,10 +104,9 @@ func main() {
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	disableSSE := flag.Bool("disable-sse", false, "disable SSE streaming on device events endpoint")
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
-	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no Docker required)")
+	useInMemoryEventbus := flag.Bool("inmemory-eventbus", false, "use in-memory eventbus (no RabbitMQ required)")
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
 	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
-	useSqlite := flag.Bool("sqlite", false, "use sqlite storage engine")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
 	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
 	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json", "path to PKI schema JSON file for authz service")
@@ -233,9 +231,6 @@ func main() {
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 
 	// Register monolithic-specific engines
-	if *useSqlite {
-		sqlite.Register()
-	}
 	if *useInMemoryEventbus {
 		inmemory.Register()
 	}
@@ -244,31 +239,19 @@ func main() {
 	var storageConfig cconfig.PluggableStorageEngine
 	var err error
 
-	if *useSqlite {
-		fmt.Println(">> using SQLite ...")
-		sqlite.Register()
-		storageConfig = cconfig.PluggableStorageEngine{
-			LogLevel: cconfig.Info,
-			Provider: cconfig.SQLite,
-			Config: map[string]interface{}{
-				"path": "file::memory:?cache=shared",
-			},
-		}
-	} else {
-		fmt.Println(">> launching docker: Postgres ...")
-		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "authz"})
-		backend, err := posgresSubsystem.Run(*standardDockerPorts)
-		if err != nil {
-			log.Fatalf("could not launch Postgres: %s", err)
-		}
-
-		storageConfig = backend.Config.(cconfig.PluggableStorageEngine)
-
-		fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Config["port"].(int))
-		fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Config["username"].(string))
-		fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
+	fmt.Println(">> launching docker: Postgres ...")
+	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
+	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms", "authz"})
+	backend, err := posgresSubsystem.Run(*standardDockerPorts)
+	if err != nil {
+		log.Fatalf("could not launch Postgres: %s", err)
 	}
+
+	storageConfig = backend.Config.(cconfig.PluggableStorageEngine)
+
+	fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Config["port"].(int))
+	fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Config["username"].(string))
+	fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Config["password"].(cconfig.Password))
 
 	storageConfig.LogLevel = cconfig.Trace
 	fmt.Println("Crypto Engines")
@@ -342,7 +325,7 @@ func main() {
 	dlqEventBus := eventBus
 
 	if !*disableEventbus && *useInMemoryEventbus {
-		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
+		fmt.Println(">> using in-memory eventbus (no RabbitMQ required) ...")
 		eventBus = cconfig.EventBusEngine{
 			LogLevel: cconfig.Trace,
 			Enabled:  true,
@@ -419,9 +402,6 @@ func main() {
 	}
 
 	if !*disableWFX {
-		if storageConfig.Provider != cconfig.Postgres {
-			log.Fatalf("wfx requires Postgres storage; rerun without -sqlite or with -disable-wfx")
-		}
 		fmt.Println(">> launching docker: wfx ...")
 		pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
 		pgUser := storageConfig.Config["username"].(string)
@@ -567,7 +547,7 @@ func main() {
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
 		AuthzProxyPrefixes: splitCommaSeparated(*authzProxyPrefixes),
-		AuthzConfig:        buildAuthzConfig(*enableAuthz, *useSqlite, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -666,8 +646,8 @@ func splitCommaSeparated(value string) []string {
 	return out
 }
 
-func buildAuthzConfig(enabled, useSqlite bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string) *authzconfig.AuthzConfig {
-	if !enabled || useSqlite {
+func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string) *authzconfig.AuthzConfig {
+	if !enabled {
 		return nil
 	}
 
