@@ -191,7 +191,7 @@ func TestEnrollReenroll(t *testing.T) {
 
 			r := gin.Default()
 			baseGrp := r.Group(("/"))
-			registerESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
+			RegisterESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
 
 			req, _ := http.NewRequest(http.MethodPost, tt.url, bytes.NewBufferString(tt.body))
 			if tt.accept != "" {
@@ -307,7 +307,7 @@ func TestServerKeyGen(t *testing.T) {
 
 			r := gin.Default()
 			baseGrp := r.Group(("/"))
-			registerESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
+			RegisterESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
 
 			req, _ := http.NewRequest(http.MethodPost, tt.url, bytes.NewBufferString(tt.body))
 			if tt.accept != "" {
@@ -393,7 +393,7 @@ func TestCACerts(t *testing.T) {
 
 			r := gin.Default()
 			baseGrp := r.Group(("/"))
-			registerESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
+			RegisterESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
 
 			req, _ := http.NewRequest(http.MethodGet, tt.url, nil)
 			if tt.accept != "" {
