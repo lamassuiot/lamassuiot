@@ -129,14 +129,17 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody models.DMS
+	var requestBody resources.UpdateDMSBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	ca, err := r.svc.UpdateDMS(ctx.Request.Context(), services.UpdateDMSInput{
-		DMS: requestBody,
+	dms, err := r.svc.UpdateDMS(ctx.Request.Context(), services.UpdateDMSInput{
+		ID:       params.ID,
+		Name:     requestBody.Name,
+		Metadata: requestBody.Metadata,
+		Settings: requestBody.Settings,
 	})
 	if err != nil {
 		switch {
@@ -148,7 +151,7 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(200, ca)
+	ctx.JSON(200, dms)
 }
 
 func (r *dmsManagerHttpRoutes) UpdateDMSMetadata(ctx *gin.Context) {
