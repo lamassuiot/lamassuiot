@@ -520,11 +520,6 @@ func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
 	return nil
 }
 
-func isSQLite(tx *gorm.DB) bool {
-	// Check if the dialector name contains "sqlite"
-	return strings.Contains(strings.ToLower(tx.Dialector.Name()), "sqlite")
-}
-
 // splitNonEmpty splits a comma-separated string and returns only non-empty trimmed values.
 func splitNonEmpty(s string) []string {
 	parts := strings.Split(s, ",")
@@ -542,39 +537,28 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		filter.Field = strings.ReplaceAll(filter.Field, ".", "_")
 	}
 
-	// SQLite doesn't support ILIKE, use LIKE instead (case insensitivity is set via PRAGMA)
-	ilike := "ILIKE"
-	notIlike := "NOT ILIKE"
-	if isSQLite(tx) {
-		ilike = "LIKE"
-		notIlike = "NOT LIKE"
-	}
-
 	switch filter.FilterOperation {
 	case resources.StringEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.StringEqualIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, ilike), filter.Value)
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), filter.Value)
 	case resources.StringNotEqual:
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
 	case resources.StringNotEqualIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, notIlike), filter.Value)
+		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), filter.Value)
 	case resources.StringContains:
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringContainsIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, ilike), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringArrayContains:
-		if isSQLite(tx) {
-			return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, ilike), "%\""+filter.Value+"\"%")
-		}
 		// Arrays serialized into text columns need a cast before using the JSON containment operator.
 		return tx.Where(fmt.Sprintf("%s::jsonb @> ?::jsonb", filter.Field), fmt.Sprintf(`["%s"]`, filter.Value))
 	case resources.StringArrayContainsIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s::text %s ?", filter.Field, ilike), "%\""+filter.Value+"\"%")
+		return tx.Where(fmt.Sprintf("%s::text ILIKE ?", filter.Field), "%\""+filter.Value+"\"%")
 	case resources.StringNotContains:
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringNotContainsIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s %s ?", filter.Field, notIlike), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringIn:
 		values := splitNonEmpty(filter.Value)
 		if len(values) == 0 {
