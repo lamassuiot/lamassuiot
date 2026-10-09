@@ -252,6 +252,10 @@ func TestUpdateDMSIgnoresBodyID(t *testing.T) {
 		}
 	}
 
+	dmsABefore, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-a: %s", err)
+	}
 	dmsBBefore, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-b"})
 	if err != nil {
 		t.Fatalf("could not get DMS dms-b: %s", err)
@@ -276,6 +280,7 @@ func TestUpdateDMSIgnoresBodyID(t *testing.T) {
 		t.Fatalf("could not get DMS dms-a: %s", err)
 	}
 	assert.Equal(t, "hijacked", dmsA.Name, "the DMS in the URL must be the one updated")
+	assert.Equal(t, dmsABefore.CreationDate, dmsA.CreationDate, "server-managed fields in the body must be ignored")
 
 	dmsBAfter, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-b"})
 	if err != nil {
