@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -181,6 +182,12 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CARequestID:   requestBody.CARequestID,
 	})
 	if err != nil {
+		// The engine errors reach here wrapped by the service, so they need errors.Is.
+		if errors.Is(err, errs.ErrCryptoEngineNotFound) || errors.Is(err, errs.ErrCryptoEngineKeySpecNotSupported) {
+			ctx.JSON(400, gin.H{"err": err.Error()})
+			return
+		}
+
 		switch err {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
@@ -190,7 +197,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAValidCertAndPrivKey:
+		case errs.ErrCAValidCertAndPrivKey, errs.ErrCAKeyInOtherEngine, errs.ErrKeyEngineRequired:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})

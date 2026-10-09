@@ -40,7 +40,8 @@ func BeforeSuite(schemaNames []string, exposeAsStandardPort bool) (config.Postgr
 			schemaName,
 		)
 		db, _ := gorm.Open(postgres.Open(conStr), &gorm.Config{
-			Logger: gormLogger.Discard,
+			Logger:         gormLogger.Discard,
+			TranslateError: true,
 		})
 
 		// Set search_path for each connection

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/rsa"
@@ -299,38 +300,43 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		importType = models.CertificateTypeImportedWithKey
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, importType)
 
-		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
-			PrivateKey: input.Key,
-		})
-		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
-			return nil, fmt.Errorf("could not import key: %w", err)
-		}
-
-		if key.KeyID != skid {
-			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-				ID: key.KeyID,
-				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-					ResourceType: "certificate",
-					ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
-				}).Build(),
-			})
-			if err != nil {
-				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
-				return nil, fmt.Errorf("could not rename imported key: %w", err)
+		// Validate before ImportKey: a mismatch must not leave an orphaned key in the KMS.
+		if signer, ok := input.Key.(crypto.Signer); ok {
+			if err := validatePublicKeyMatch(caCertX509.PublicKey, signer.Public()); err != nil {
+				lFunc.Errorf("CA certificate %s does not match the provided private key: %s", caCertSN, err)
+				return nil, errs.ErrCAValidCertAndPrivKey
 			}
 		}
 
+		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
+			PrivateKey: input.Key,
+			EngineID:   input.EngineID,
+		})
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 	} else {
 		//search in KMS if key exists for the CA being imported
-		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
-			Identifier: skid,
-		})
+		key, err = services.ResolveCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: input.CACertificate, EngineID: input.EngineID}, svc.kmsService)
+		if errors.Is(err, errs.ErrKeyNotFound) && input.EngineID != "" {
+			// Do not silently downgrade to a keyless import if the key lives in another engine.
+			other, otherErr := services.ResolveCertificateKey(ctx, services.GetCertificateKeyInput{Certificate: input.CACertificate}, svc.kmsService)
+			switch {
+			case otherErr == nil:
+				lFunc.Errorf("key for CA %s exists in engine %s, not in requested engine %s", caCertSN, other.EngineID, input.EngineID)
+				return nil, errs.ErrCAKeyInOtherEngine
+			case errors.Is(otherErr, errs.ErrKeyEngineRequired):
+				lFunc.Errorf("key for CA %s exists in several engines, none of them the requested engine %s", caCertSN, input.EngineID)
+				return nil, errs.ErrCAKeyInOtherEngine
+			case !errors.Is(otherErr, errs.ErrKeyNotFound):
+				return nil, otherErr
+			}
+		}
 		if err != nil {
+			if !errors.Is(err, errs.ErrKeyNotFound) {
+				return nil, err
+			}
 			lFunc.Infof("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
 			importType = models.CertificateTypeImportedWithoutKey
 		} else {
@@ -454,9 +460,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	engineID := ""
 	if key != nil {
+		if err := validatePublicKeyMatch(caCertX509.PublicKey, NewKMSCryptoSigner(ctx, *key, svc.kmsService).Public()); err != nil {
+			lFunc.Errorf("CA certificate does not match KMS key %s: %s", key.KeyID, err)
+			return nil, errs.ErrCAValidCertAndPrivKey
+		}
 		engineID = key.EngineID
 		key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: key.KeyID,
+			ID: kmsKeyIdentifier(key),
 			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
 				ResourceType: "certificate",
 				ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
@@ -778,7 +788,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	}
 
 	key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key.KeyID,
+		ID: kmsKeyIdentifier(key),
 		Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
 			ResourceType: "certificate",
 			ResourceID:   helpers.SerialNumberToHexString(ca.SerialNumber),
@@ -1254,7 +1264,7 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 
 	// Delete the copy held by this CA's engine, not every engine's copy of the same keyID.
 	err = svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{
-		Identifier: buildPKCS11ID(ca.Certificate.EngineID, keyID, "private"),
+		Identifier: models.BuildPKCS11ID(ca.Certificate.EngineID, keyID, "private"),
 	})
 	if err != nil {
 		lFunc.Warnf("could not delete private key for CA %s from crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
@@ -2234,4 +2244,19 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 	}
 
 	return cert, nil
+}
+
+func validatePublicKeyMatch(certificateKey, kmsKey crypto.PublicKey) error {
+	certificatePublicKey, err := x509.MarshalPKIXPublicKey(certificateKey)
+	if err != nil {
+		return err
+	}
+	kmsPublicKey, err := x509.MarshalPKIXPublicKey(kmsKey)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(certificatePublicKey, kmsPublicKey) {
+		return fmt.Errorf("KMS key does not match certificate public key")
+	}
+	return nil
 }
