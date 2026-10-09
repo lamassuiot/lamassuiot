@@ -325,7 +325,7 @@ func main() {
 	dlqEventBus := eventBus
 
 	if !*disableEventbus && *useInMemoryEventbus {
-		fmt.Println(">> using in-memory eventbus (no Docker required) ...")
+		fmt.Println(">> using in-memory eventbus (no RabbitMQ required) ...")
 		eventBus = cconfig.EventBusEngine{
 			LogLevel: cconfig.Trace,
 			Enabled:  true,
