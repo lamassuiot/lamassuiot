@@ -1029,7 +1029,10 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 	dms.Metadata[AWSIoTMetadataKey(svc.ConnectorID)] = updatedJitpConf
 
 	_, err = svc.DmsSDK.UpdateDMS(ctx, services.UpdateDMSInput{
-		DMS: *dms,
+		ID:       dms.ID,
+		Name:     dms.Name,
+		Metadata: dms.Metadata,
+		Settings: dms.Settings,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while updating DMS metadata: %s", err)

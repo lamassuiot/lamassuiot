@@ -127,21 +127,20 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
-	lFunc.Debugf("checking if DMS '%s' exists", input.DMS.ID)
-	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.DMS.ID)
+
+	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{ID: input.ID})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.DMS.ID, err)
 		return nil, err
-	} else if !exists {
-		lFunc.Errorf("DMS '%s' does not exist in storage engine", input.DMS.ID)
-		return nil, errs.ErrDMSNotFound
 	}
 
-	dms.Metadata = input.DMS.Metadata
-	dms.Name = input.DMS.Name
-	dms.Settings = input.DMS.Settings
+	// nil means "not provided": keep the stored metadata. An empty map clears it.
+	if input.Metadata != nil {
+		dms.Metadata = input.Metadata
+	}
+	dms.Name = input.Name
+	dms.Settings = input.Settings
 
-	lFunc.Debugf("updating DMS %s", input.DMS.ID)
+	lFunc.Debugf("updating DMS %s", input.ID)
 	return svc.dmsStorage.Update(ctx, dms)
 }
 
