@@ -12,7 +12,7 @@ import (
 
 type PostgresDMSManagerStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.DMS]
+	querier *DBQuerier[models.DMS]
 }
 
 func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DMSRepo, error) {
@@ -28,7 +28,7 @@ func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DMSRepo
 }
 
 func (db *PostgresDMSManagerStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
+	return db.querier.Count(ctx, []GormExtraOps{})
 }
 
 func (db *PostgresDMSManagerStore) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
@@ -36,11 +36,11 @@ func (db *PostgresDMSManagerStore) CountWithFilters(ctx context.Context, queryPa
 		return db.Count(ctx)
 	}
 
-	return db.querier.CountFiltered(ctx, queryParams.Filters, []gormExtraOps{})
+	return db.querier.CountFiltered(ctx, queryParams.Filters, []GormExtraOps{})
 }
 
 func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	return db.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(ctx, queryParams, []GormExtraOps{}, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresDMSManagerStore) SelectExists(ctx context.Context, ID string) (bool, *models.DMS, error) {

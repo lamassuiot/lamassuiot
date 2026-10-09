@@ -1,0 +1,4 @@
+# Override the root-level "testdata" gitignore rule so that test fixture files
+# inside this module are committed and available in CI.
+!**/testdata/
+!**/testdata/**

@@ -18,10 +18,10 @@ import (
 )
 
 func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	ctx := context.Background()
 
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err, "could not create DMS Manager test server")
 
 	// Create CA with specific validity period
@@ -211,10 +211,10 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 }
 
 func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	ctx := context.Background()
 
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err, "could not create DMS Manager test server")
 
 	// Create CA
@@ -304,10 +304,10 @@ func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
 }
 
 func TestBindIdentityToDevice_MultipleBindings_TracksLatestExpiration(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	ctx := context.Background()
 
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err, "could not create DMS Manager test server")
 
 	// Create CA

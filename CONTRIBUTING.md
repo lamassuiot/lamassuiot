@@ -171,3 +171,10 @@ Signed-off-by: Your Name <your.email@example.com>
 ```
 
 This line certifies that you wrote the code or otherwise have the right to submit it under the open source license indicated in the repository.
+
+## Dependency Review
+
+Every pull request runs a required dependency review. Changes that
+introduce dependencies with a known high or critical severity vulnerability are
+blocked until the dependency is removed, upgraded, or an approved exception is
+recorded.

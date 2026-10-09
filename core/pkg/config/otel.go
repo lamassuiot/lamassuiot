@@ -19,6 +19,7 @@ type OTELTracesConfig struct {
 	Hostname string `mapstructure:"hostname"`
 	Port     int    `mapstructure:"port"`
 	Scheme   string `mapstructure:"scheme"`
+	BasePath string `mapstructure:"base_path"`
 }
 
 type OTELLoggingConfig struct {

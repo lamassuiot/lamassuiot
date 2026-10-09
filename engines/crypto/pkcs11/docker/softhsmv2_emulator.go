@@ -1,14 +1,16 @@
 package docker
 
 import (
+	"context"
 	"fmt"
+	"net/netip"
 	"strconv"
 
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
 	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/moby/moby/api/types/network"
+	"github.com/ory/dockertest/v4"
 )
 
 func RunSoftHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func() error, func() error, pconfig.PKCS11Config, error) {
@@ -17,31 +19,28 @@ func RunSoftHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func
 	pin := "0123"
 	sopin := "9876"
 	proto := "tcp"
-	containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "ghcr.io/lamassuiot/softhsm", // image
-		Tag:        "latest",                     // version
-		Env: []string{
+	runOpts := []dockertest.RunOption{
+		dockertest.WithTag("latest"),
+		dockertest.WithEnv([]string{
 			fmt.Sprintf("SLOT=%s", slot),
 			fmt.Sprintf("LABEL=%s", label),
 			fmt.Sprintf("PIN=%s", pin),
 			fmt.Sprintf("SO_PIN=%s", sopin),
 			fmt.Sprintf("CONNECTION_PROTOCOL=%s", proto),
-		},
-		Labels: map[string]string{
+		}),
+		dockertest.WithLabels(map[string]string{
 			"group": "lamassuiot-monolithic",
-		},
-	}, func(hc *docker.HostConfig) {
-		if exposeAsStandardPort {
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"5657/tcp": {
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "5657", // random port
-					},
-				},
-			}
-		}
-	})
+		}),
+	}
+	if exposeAsStandardPort {
+		runOpts = append(runOpts, dockertest.WithPortBindings(network.PortMap{
+			network.MustParsePort("5657/tcp"): []network.PortBinding{
+				{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "5657"},
+			},
+		}))
+	}
+
+	containerCleanup, container, _, err := dockerrunner.RunDocker("ghcr.io/lamassuiot/softhsm", runOpts...)
 	if err != nil {
 		return nil, nil, pconfig.PKCS11Config{}, err
 	}
@@ -53,7 +52,7 @@ func RunSoftHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func
 		return nil, nil, pconfig.PKCS11Config{}, err
 	}
 
-	container.Exec([]string{"sh", "-c", "apt install -y opensc"}, dockertest.ExecOptions{})
+	container.Exec(context.Background(), []string{"sh", "-c", "apt install -y opensc"})
 
 	return func() error {
 			beforeEachCleanup(container)
@@ -72,6 +71,6 @@ func RunSoftHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func
 		}, nil
 }
 
-func beforeEachCleanup(container *dockertest.Resource) {
-	container.Exec([]string{"sh", "-c", `MODULE_PATH=/usr/local/lib/softhsm/libsofthsm2.so OBJECT_TYPES="cert privkey pubkey data" && for TYPE in $OBJECT_TYPES; do   pkcs11-tool --module "$MODULE_PATH" --list-objects --type $TYPE | grep "ID:" | awk '{print $2}' | while read ID; do     pkcs11-tool --module "$MODULE_PATH" --delete-object --type $TYPE --id $ID;   done; done`}, dockertest.ExecOptions{})
+func beforeEachCleanup(container dockertest.ClosableResource) {
+	container.Exec(context.Background(), []string{"sh", "-c", `MODULE_PATH=/usr/local/lib/softhsm/libsofthsm2.so OBJECT_TYPES="cert privkey pubkey data" && for TYPE in $OBJECT_TYPES; do   pkcs11-tool --module "$MODULE_PATH" --list-objects --type $TYPE | grep "ID:" | awk '{print $2}' | while read ID; do     pkcs11-tool --module "$MODULE_PATH" --delete-object --type $TYPE --id $ID;   done; done`})
 }

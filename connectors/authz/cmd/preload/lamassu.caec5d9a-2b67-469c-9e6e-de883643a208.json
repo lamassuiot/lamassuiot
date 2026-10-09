@@ -1,0 +1,20 @@
+{
+  "id": "lamassu.caec5d9a-2b67-469c-9e6e-de883643a208",
+  "name": "VA - Reader",
+  "description": "Read-only access to Validation Authority resources",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "va",
+      "entity_type": "va_role",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

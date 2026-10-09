@@ -10,7 +10,7 @@ import (
 )
 
 func TestUpdateKeyTags(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -33,7 +33,7 @@ func TestUpdateKeyTags(t *testing.T) {
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"production", "critical", "us-east-1"},
 				})
 			},
@@ -78,13 +78,13 @@ func TestUpdateKeyTags(t *testing.T) {
 				}
 				// Add initial tags
 				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"development", "temporary"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"production", "permanent", "critical"},
 				})
 			},
@@ -134,13 +134,13 @@ func TestUpdateKeyTags(t *testing.T) {
 				}
 				// Add initial tags
 				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"tag1", "tag2", "tag3"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{},
 				})
 			},
@@ -166,7 +166,7 @@ func TestUpdateKeyTags(t *testing.T) {
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"important"},
 				})
 			},
@@ -197,7 +197,7 @@ func TestUpdateKeyTags(t *testing.T) {
 				}
 				// First update
 				key, err = svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"tag1"},
 				})
 				if err != nil {
@@ -205,13 +205,13 @@ func TestUpdateKeyTags(t *testing.T) {
 				}
 				// Second update
 				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"tag1", "tag2"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				return kmsSDK.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"final-tag"},
 				})
 			},
@@ -242,7 +242,7 @@ func TestUpdateKeyTags(t *testing.T) {
 				}
 				// Add an alias
 				return svc.UpdateKeyAliases(context.Background(), services.UpdateKeyAliasesInput{
-					ID:      key.KeyID,
+					ID:      key.PKCS11URI,
 					Patches: []models.PatchOperation{{Op: models.PatchAdd, Path: "/-", Value: "my-test-alias"}},
 				})
 			},
@@ -336,7 +336,7 @@ func TestUpdateKeyTags(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -356,7 +356,7 @@ func TestUpdateKeyTags(t *testing.T) {
 }
 
 func TestGetKeyWithTags(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -381,13 +381,13 @@ func TestGetKeyWithTags(t *testing.T) {
 				}
 				// Add tags
 				return svc.UpdateKeyTags(context.Background(), services.UpdateKeyTagsInput{
-					ID:   key.KeyID,
+					ID:   key.PKCS11URI,
 					Tags: []string{"test-tag-1", "test-tag-2", "test-tag-3"},
 				})
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				return kmsSDK.GetKey(context.Background(), services.GetKeyInput{
-					Identifier: key.KeyID,
+					Identifier: key.PKCS11URI,
 				})
 			},
 			resultCheck: func(retrievedKey *models.Key, err error) error {
@@ -427,7 +427,7 @@ func TestGetKeyWithTags(t *testing.T) {
 			},
 			run: func(kmsSDK services.KMSService, key *models.Key) (*models.Key, error) {
 				return kmsSDK.GetKey(context.Background(), services.GetKeyInput{
-					Identifier: key.KeyID,
+					Identifier: key.PKCS11URI,
 				})
 			},
 			resultCheck: func(retrievedKey *models.Key, err error) error {
@@ -447,7 +447,7 @@ func TestGetKeyWithTags(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}

@@ -1,7 +1,6 @@
 name: GO Unit Testing
 
-permissions:
-  contents: read
+permissions: {}
 
 on:
   pull_request:
@@ -33,6 +32,8 @@ jobs:
             tag: crypto-filesystem
           - path: engines/crypto/vaultkv2
             tag: crypto-vaultkv2
+          - path: engines/crypto/azure
+            tag: crypto-azure
           - path: engines/eventbus/amqp
             tag: eventbus-amqp
           - path: engines/eventbus/aws
@@ -41,19 +42,23 @@ jobs:
             tag: storage-postgres
           - path: connectors/awsiot
             tag: connector-awsiot
+          - path: connectors/authz
+            tag: connector-authz
           - path: monolithic
             tag: monolithic
           
     name: ${{ matrix.module.path }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ github.head_ref }}
  
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '^1.26.2' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
@@ -69,7 +74,7 @@ jobs:
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: ${{ github.event.pull_request.base.sha }}
@@ -79,27 +84,22 @@ jobs:
   test-pkcs11:
     name: engines/crypto/pkcs11
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
  
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '^1.26.2' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
       
       - name: Install PKCS11 Proxy Dependencies
         run: |
-          sudo apt-get install -y libseccomp-dev #Required for building pkcs11-proxy
-          git clone https://github.com/SUNET/pkcs11-proxy
-          cd pkcs11-proxy
-          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 . 
-          make
-          sudo make install 
-          sudo cp pkcs11-daemon /usr/local/bin/
-          ls /usr/local/lib/libpkcs11-proxy.so
- 
+          wget https://github.com/Nitrokey/nethsm-pkcs11/releases/download/v2.2.0/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
+          printf '%s  %s\n' '0d32cce121e9ff6d7616f4c95d58355b0a821d7d4af20451cea8efec96e77bd1' 'nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so' | sha256sum --check --strict -
       - name: Install Dependencies
         working-directory: engines/crypto/pkcs11
         run: go work sync
@@ -108,12 +108,12 @@ jobs:
         id: run
         working-directory: engines/crypto/pkcs11
         env:
-          PKCS11_MODULE_PATH: /usr/local/lib/libpkcs11-proxy.so
+          PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: ${{ github.event.pull_request.base.sha }}
@@ -146,14 +146,16 @@ jobs:
             name: Alerts
     name: ${{ matrix.module.name }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ github.head_ref }}
  
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '^1.26.2'
           cache-dependency-path: "**/*.sum"
@@ -169,7 +171,7 @@ jobs:
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: ${{ github.event.pull_request.base.sha }}
@@ -180,14 +182,16 @@ jobs:
   test-backend-rest:
     name: backend (excluding assemblers/tests)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ github.head_ref }}
  
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '^1.26.2'
           cache-dependency-path: "**/*.sum"
@@ -203,7 +207,7 @@ jobs:
           go run gotest.tools/gotestsum@latest --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: ${{ github.event.pull_request.base.sha }}

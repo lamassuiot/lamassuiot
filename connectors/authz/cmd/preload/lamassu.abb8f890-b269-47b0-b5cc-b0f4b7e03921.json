@@ -1,0 +1,59 @@
+{
+  "id": "lamassu.abb8f890-b269-47b0-b5cc-b0f4b7e03921",
+  "name": "Auditor",
+  "description": "Read-only PKI access plus AuthZ policy visibility",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "*",
+      "entity_type": "*",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schema_name": "public",
+      "entity_type": "principal",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schema_name": "public",
+      "entity_type": "policy",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schema_name": "public",
+      "entity_type": "principal_policy",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

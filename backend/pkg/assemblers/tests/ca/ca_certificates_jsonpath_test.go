@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -20,18 +19,14 @@ type jsonPathTestCase struct {
 }
 
 func TestGetCertificatesFilterByMetadataJsonPath(t *testing.T) {
-	// Setup server once for all tests
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
-	// Ensure clean DB and init CA
-	if err := serverTest.BeforeEach(); err != nil {
-		t.Fatalf("failed running BeforeEach: %s", err)
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
+
+	// Ensure clean DB and init CA
 	_, err = initCA(caTest.Service)
 	if err != nil {
 		t.Fatalf("failed to init CA: %s", err)

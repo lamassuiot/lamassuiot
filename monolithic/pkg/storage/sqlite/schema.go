@@ -1,8 +1,29 @@
 package sqlite
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	"gorm.io/gorm"
 )
+
+// kmsKeysTableDDL is shared with upgradeKMSKeysPrimaryKey so the created table and the
+// rebuilt one cannot drift apart.
+const kmsKeysTableDDL = `CREATE TABLE IF NOT EXISTS kms_keys (
+	key_id TEXT NOT NULL,
+	metadata TEXT NULL,
+	name TEXT NOT NULL,
+	algorithm TEXT NOT NULL,
+	size INTEGER NOT NULL,
+	public_key TEXT NOT NULL,
+	creation_ts DATETIME NULL,
+	engine_id TEXT NOT NULL,
+	aliases TEXT DEFAULT '[]',
+	has_private_key INTEGER DEFAULT 1,
+	tags TEXT DEFAULT '[]',
+	PRIMARY KEY (key_id, engine_id)
+)`
 
 // initializeSchema creates all tables in their final state based on the Postgres schema
 // This bypasses migrations and creates tables directly in SQLite-compatible SQL
@@ -112,9 +133,25 @@ func initializeSchema(db *gorm.DB) error {
 			dms_owner TEXT NULL,
 			identity_slot TEXT NULL,
 			extra_slots TEXT NULL,
-			events TEXT NULL,
 			PRIMARY KEY (id)
 		)`,
+
+		// Device events table - Final state (no migrations).
+		// FK cascade mirrors the Postgres migration so deleting a device removes its events.
+		`CREATE TABLE IF NOT EXISTS device_events (
+			id TEXT NOT NULL,
+			device_id TEXT NOT NULL,
+			event_ts DATETIME NOT NULL,
+			event_type TEXT NOT NULL,
+			description TEXT NULL,
+			source TEXT NULL,
+			structured_fields TEXT NULL,
+			PRIMARY KEY (id),
+			FOREIGN KEY (device_id) REFERENCES devices (id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_device_events_device_id_event_ts ON device_events (device_id, event_ts DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_device_events_event_ts ON device_events (event_ts DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_device_events_event_type ON device_events (event_type)`,
 
 		// DMS table - Final state (no migrations)
 		`CREATE TABLE IF NOT EXISTS dms (
@@ -164,20 +201,8 @@ func initializeSchema(db *gorm.DB) error {
 		// - 20251031174938_key.sql: Added engine_id, key_id, aliases, has_private_key, tags;
 		//                           changed primary key from id to key_id; dropped status column;
 		//                           changed metadata to jsonb
-		`CREATE TABLE IF NOT EXISTS kms_keys (
-			key_id TEXT NOT NULL,
-			metadata TEXT NULL,
-			name TEXT NOT NULL,
-			algorithm TEXT NOT NULL,
-			size INTEGER NOT NULL,
-			public_key TEXT NOT NULL,
-			creation_ts DATETIME NULL,
-			engine_id TEXT NULL,
-			aliases TEXT DEFAULT '[]',
-			has_private_key INTEGER DEFAULT 1,
-			tags TEXT DEFAULT '[]',
-			PRIMARY KEY (key_id)
-		)`,
+		// - 20260909084500_kms_key_composite_pk.sql: primary key is (key_id, engine_id)
+		kmsKeysTableDDL,
 	}
 
 	for _, stmt := range statements {
@@ -186,5 +211,70 @@ func initializeSchema(db *gorm.DB) error {
 		}
 	}
 
-	return nil
+	return upgradeKMSKeysPrimaryKey(db)
+}
+
+// upgradeKMSKeysPrimaryKey rebuilds kms_keys when an existing database still carries the
+// old single-column primary key. The statements above only create missing tables, and
+// SQLite cannot alter a primary key in place, so without this an existing monolithic
+// database would keep rejecting the same key held by two engines.
+func upgradeKMSKeysPrimaryKey(db *gorm.DB) error {
+	var currentSchema string
+	if err := db.Raw("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'kms_keys'").Scan(&currentSchema).Error; err != nil {
+		return err
+	}
+
+	if currentSchema == "" || strings.Contains(currentSchema, "PRIMARY KEY (key_id, engine_id)") {
+		return nil
+	}
+
+	var orphans int64
+	if err := db.Raw("SELECT count(*) FROM kms_keys WHERE engine_id IS NULL OR engine_id = ''").Scan(&orphans).Error; err != nil {
+		return err
+	}
+
+	if orphans > 0 {
+		return fmt.Errorf("cannot promote (key_id, engine_id) to primary key: %d kms_keys row(s) have no engine_id; backfill them before starting", orphans)
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, stmt := range []string{
+			`ALTER TABLE kms_keys RENAME TO kms_keys_old`,
+			kmsKeysTableDDL,
+			`INSERT INTO kms_keys (key_id, metadata, name, algorithm, size, public_key, creation_ts, engine_id, aliases, has_private_key, tags)
+				SELECT key_id, metadata, name, algorithm, size, public_key, creation_ts, engine_id, aliases, has_private_key, tags FROM kms_keys_old`,
+			`DROP TABLE kms_keys_old`,
+		} {
+			if err := tx.Exec(stmt).Error; err != nil {
+				return err
+			}
+		}
+
+		return dropAliasesShadowedByKeyIDs(tx)
+	})
+}
+
+// dropAliasesShadowedByKeyIDs mirrors 20260909084500_kms_key_composite_pk.sql: identifiers
+// now resolve as a key_id before an alias, so an alias equal to any key_id would silently
+// start addressing that other key. Earlier versions did not reject such aliases, so they
+// are dropped rather than left to redirect requests.
+func dropAliasesShadowedByKeyIDs(tx *gorm.DB) error {
+	var shadowed []string
+	if err := tx.Raw(`SELECT a.value || ' (on key ' || k.key_id || ' in engine ' || k.engine_id || ')'
+		FROM kms_keys AS k, json_each(k.aliases) AS a
+		WHERE a.value IN (SELECT key_id FROM kms_keys)`).Scan(&shadowed).Error; err != nil {
+		return err
+	}
+
+	if len(shadowed) == 0 {
+		return nil
+	}
+
+	tx.Logger.Warn(context.Background(), "removing aliases that match an existing key_id: %s", strings.Join(shadowed, ", "))
+
+	return tx.Exec(`UPDATE kms_keys SET aliases = (
+			SELECT json_group_array(value) FROM json_each(kms_keys.aliases)
+			WHERE value NOT IN (SELECT key_id FROM kms_keys)
+		)
+		WHERE EXISTS (SELECT 1 FROM json_each(kms_keys.aliases) WHERE value IN (SELECT key_id FROM kms_keys))`).Error
 }

@@ -20,7 +20,7 @@ jobs:
       GO111MODULE: on
     steps:
       - name: Checkout Source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Run Gosec Security Scanner
         uses: securego/gosec@6fbd381238e97e1d1f3358f0d6d65de78dcf9245 # v2.20.0
         with:
@@ -28,7 +28,7 @@ jobs:
           args: '-no-fail -fmt sarif -out results.sarif -exclude G104,G601 ./...'
       - name: Upload SARIF file
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+        uses: github/codeql-action/upload-sarif@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3.37.0
         with:
           # Path to SARIF file relative to the root of the repository
           sarif_file: results.sarif

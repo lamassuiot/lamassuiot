@@ -21,7 +21,7 @@ import (
 )
 
 func TestBindIDEvent(t *testing.T) {
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, true)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}

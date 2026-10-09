@@ -53,7 +53,7 @@ func main() {
 	}
 
 	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.VASource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.VASource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
 
@@ -64,7 +64,7 @@ func main() {
 	}
 
 	kmsSDK := sdk.NewHttpKMSClient(
-		sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.VASource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.VASource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
 	)
 

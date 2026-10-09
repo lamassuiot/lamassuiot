@@ -1,0 +1,46 @@
+{
+  "id": "lamassu.3aa4c081-4f5f-40a2-9238-1846d960c17c",
+  "name": "Certificate - Reader",
+  "description": "Read-only access to CA and certificate resources",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "ca",
+      "entity_type": "ca_certificate",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "ca",
+      "entity_type": "certificate",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "ca",
+      "entity_type": "issuance_profile",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

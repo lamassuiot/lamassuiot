@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -32,9 +34,9 @@ const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
 func TestCreateCA(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -1044,12 +1046,16 @@ func TestCreateCA(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+				t.Fatalf("BeforeEach failed: %s", err)
 			}
 
 			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
 			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
@@ -1060,9 +1066,8 @@ func TestCreateCA(t *testing.T) {
 }
 
 func TestDeleteCAAndIssuedCertificates(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -1278,7 +1283,7 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -1298,14 +1303,11 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 }
 
 func TestGetCertificatesByCaAndStatus(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
-
-	t.Parallel()
 
 	var testcases = []struct {
 		name        string
@@ -1430,7 +1432,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			//
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -1455,9 +1457,8 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 }
 
 func TestSignCertificate(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -2421,7 +2422,7 @@ func TestSignCertificate(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			//
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -2462,9 +2463,8 @@ func TestSignCertificate(t *testing.T) {
 }
 
 func TestImportCertificate(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -2738,7 +2738,7 @@ func TestImportCertificate(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			//
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -2752,9 +2752,8 @@ func TestImportCertificate(t *testing.T) {
 }
 
 func TestRevokeCA(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -2850,7 +2849,7 @@ func TestRevokeCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -2887,9 +2886,8 @@ func TestRevokeCA(t *testing.T) {
 }
 
 func TestUpdateCAMetadata(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -2963,11 +2961,7 @@ func TestUpdateCAMetadata(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -2992,9 +2986,8 @@ func TestUpdateCAMetadata(t *testing.T) {
 }
 
 func TestGetCAsByCommonName(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -3035,7 +3028,7 @@ func TestGetCAsByCommonName(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -3061,9 +3054,8 @@ func TestGetCAsByCommonName(t *testing.T) {
 }
 
 func TestUpdateCertificateMetadata(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -3121,7 +3113,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 
 				ud := make(map[string]interface{})
 				ud["userName"] = "anonymous"
-				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+				_, err := caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: "dadaafgsdtw",
 					Patches: chelpers.NewPatchBuilder().
 						Add(chelpers.JSONPointerBuilder(), ud).
@@ -3148,7 +3140,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 
 				ud := make(map[string]interface{})
 				ud["userName"] = "anonymous"
-				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+				_, err := caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: "dadaafgsdtw",
 					Patches:      nil,
 				})
@@ -3173,7 +3165,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -3198,9 +3190,8 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 	}
 }
 func TestUpdateCAStatus(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -3238,6 +3229,11 @@ func TestUpdateCAStatus(t *testing.T) {
 
 				//Wait for the CA to expire
 				time.Sleep(time.Second * 5)
+
+				// Run the monitoring job once to detect the expired CA and update its DB status
+				lMonitor := chelpers.SetupLogger(cconfig.Info, "CA", "Monitor")
+				jobs.NewCryptoMonitor(svc, lMonitor).Run()
+
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
@@ -3334,11 +3330,7 @@ func TestUpdateCAStatus(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -3363,9 +3355,8 @@ func TestUpdateCAStatus(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -3398,11 +3389,7 @@ func TestGetStats(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -3427,9 +3414,8 @@ func TestGetStats(t *testing.T) {
 }
 
 func TestGetCertificates(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -3555,10 +3541,7 @@ func TestGetCertificates(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -3583,9 +3566,8 @@ func TestGetCertificates(t *testing.T) {
 }
 
 func TestGetCertificatesByCA(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -3822,11 +3804,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -3851,9 +3829,8 @@ func TestGetCertificatesByCA(t *testing.T) {
 }
 
 func TestImportCA(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithVault().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -4453,7 +4430,7 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -4479,9 +4456,8 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 }
 
 func TestDeleteCA(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -4521,7 +4497,7 @@ func TestDeleteCA(t *testing.T) {
 			name: "Err/CAExistCore",
 			before: func(svc services.CAService) error {
 
-				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				_, err := svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
 					CAID:             DefaultCAID,
 					Status:           models.StatusRevoked,
 					RevocationReason: models.RevocationReason(1),
@@ -4552,7 +4528,7 @@ func TestDeleteCA(t *testing.T) {
 			name: "Err/CAStatusActive",
 			before: func(svc services.CAService) error {
 
-				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				_, err := svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
 					CAID:             DefaultCAID,
 					Status:           models.StatusActive,
 					RevocationReason: models.RevocationReason(1),
@@ -4805,8 +4781,7 @@ func TestDeleteCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -4831,16 +4806,11 @@ func TestDeleteCA(t *testing.T) {
 }
 
 func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
-	// Test with cascade delete disabled by configuration
+	// Only the "disabled" case needs a separate server; the global serverTest already
+	// has cascade delete enabled, so we reuse it for the "enabled" case.
 	serverTestDisabled, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(false).Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server with cascade delete disabled: %s", err)
-	}
-
-	// Test with cascade delete enabled by configuration
-	serverTestEnabled, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server with cascade delete enabled: %s", err)
 	}
 
 	var testcases = []struct {
@@ -4856,7 +4826,7 @@ func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
 		},
 		{
 			name:        "OK/CascadeDeleteEnabledByConfig",
-			server:      serverTestEnabled,
+			server:      serverTest,
 			expectError: false,
 		},
 	}
@@ -4959,9 +4929,8 @@ func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
 // - Test scenarios where private key deletion fails but CA deletion still succeeds
 // - Verify that the correct key ID is passed to the crypto engine
 func TestDeleteCAPrivateKeyDeletion(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	t.Run("ManagedCA_PrivateKeyDeleted", func(t *testing.T) {
@@ -5067,14 +5036,12 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *tests.TestServer, caTy
 }
 
 func TestDeleteCAPrivateKeyDeletionWithCascade(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	t.Run("CascadeDelete_WithPrivateKeyDeletion", func(t *testing.T) {
-		err = serverTest.BeforeEach()
-		if err != nil {
+		if err := serverTest.BeforeEach(); err != nil {
 			t.Fatalf("failed running 'BeforeEach' cleanup func: %s", err)
 		}
 
@@ -5156,9 +5123,8 @@ func verifyCADeleted(t *testing.T, caTest *tests.CATestServer, caID string, caDe
 }
 
 func TestGetCAs(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -5315,8 +5281,7 @@ func TestGetCAs(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -5341,9 +5306,8 @@ func TestGetCAs(t *testing.T) {
 }
 
 func TestGetStatsByCAID(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -5464,7 +5428,7 @@ func TestGetStatsByCAID(t *testing.T) {
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -5514,9 +5478,8 @@ func TestGetStatsByCAID(t *testing.T) {
 }
 
 func TestGetCertificatesByExpirationDate(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -5699,8 +5662,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -5725,9 +5687,8 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 }
 
 func TestSignatureVerify(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -5854,10 +5815,7 @@ func TestSignatureVerify(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -5881,9 +5839,8 @@ func TestSignatureVerify(t *testing.T) {
 	}
 }
 func TestHierarchyCryptoEngines(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -5984,11 +5941,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -6012,9 +5965,8 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 }
 func TestHierarchy(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -6433,7 +6385,7 @@ func TestHierarchy(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -6458,10 +6410,16 @@ func TestHierarchy(t *testing.T) {
 }
 
 func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
+
+	// Start the monitoring scheduler only for this test, reusing the existing service.
+	lMonitor := chelpers.SetupLogger(cconfig.Info, "CA", "Monitor")
+	monitorJob := jobs.NewCryptoMonitor(serverTest.CA.Service, lMonitor)
+	scheduler := jobs.NewJobScheduler(lMonitor, "1s", monitorJob)
+	scheduler.Start()
+	t.Cleanup(scheduler.Stop)
 
 	type delta struct {
 		name string
@@ -6500,6 +6458,10 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
+			if err := serverTest.BeforeEach(); err != nil {
+				t.Fatalf("BeforeEach failed: %s", err)
+			}
+
 			maxDeltaDur := time.Second
 			caDeltas := []models.MonitoringExpirationDelta{}
 			for _, delta := range tc.deltas {

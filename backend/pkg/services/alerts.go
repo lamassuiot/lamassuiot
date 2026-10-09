@@ -98,16 +98,29 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *service
 	return nil
 }
 
-func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context, input *services.GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error) {
+func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context, input *services.GetLatestEventsPerEventTypeInput) (string, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	events, err := svc.eventStorage.GetLatestEvents(ctx)
-	if err != nil {
-		lFunc.Errorf("got unexpected error while reading events: %s", err)
-		return nil, err
+	if input == nil {
+		input = &services.GetLatestEventsPerEventTypeInput{}
 	}
 
-	return events, nil
+	applyFunc := input.ApplyFunc
+	if applyFunc == nil {
+		applyFunc = func(models.AlertLatestEvent) {}
+	}
+
+	nextBookmark, err := svc.eventStorage.GetLatestEvents(ctx, storage.StorageListRequest[models.AlertLatestEvent]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     applyFunc,
+		QueryParams:   input.QueryParameters,
+	})
+	if err != nil {
+		lFunc.Errorf("got unexpected error while reading events: %s", err)
+		return "", err
+	}
+
+	return nextBookmark, nil
 }
 
 func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input *services.GetUserSubscriptionsInput) ([]*models.Subscription, error) {
