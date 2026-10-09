@@ -93,16 +93,9 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
 	var elem models.Key
-	query := db.querier.Table(kmsTableName).WithContext(ctx)
-	// The monolithic deployment runs this repository on SQLite, which has neither jsonb nor
-	// the containment operator.
-	if isSQLite(db.querier.DB) {
-		query = query.Where("EXISTS (SELECT 1 FROM json_each(aliases) WHERE value = ?)", alias)
-	} else {
-		query = query.Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias))
-	}
-
-	tx := query.Limit(1).Find(&elem)
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).
+		Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).
+		Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
