@@ -71,8 +71,8 @@ func registerAuthzRoutes(router *gin.RouterGroup, authzEngine core.AuthzEngine, 
 	contract.Handle(http.MethodGet, "/policies/search", policies.List(), policyCtrl.SearchPolicies)
 	contract.Handle(http.MethodGet, "/policies/:id/stats", policies.Resource("read", map[string]string{"id": "id"}), policyCtrl.GetPolicyStats)
 	contract.Handle(http.MethodGet, "/schemas", middleware.Public(), schemaCtrl.GetSchemas)
-	// Gin.Any includes CONNECT; record each method so coverage cannot skip it.
-	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodHead, http.MethodOptions, http.MethodDelete, http.MethodConnect, http.MethodTrace} {
+	// Envoy forwards the original method; record each one so coverage cannot skip it.
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodHead, http.MethodOptions, http.MethodDelete, http.MethodTrace} {
 		for _, path := range []string{"/ext_authz/check", "/ext_authz/check/*original_url"} {
 			contract.Handle(method, path, middleware.HandlerAuthorization("envoy").WithTrustBoundary("internal-gateway"), extAuthzCtrl.Check)
 		}

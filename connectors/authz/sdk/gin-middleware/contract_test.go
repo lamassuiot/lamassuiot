@@ -442,21 +442,21 @@ func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testin
 				boundary = "internal-service"
 				permission = permission.WithTrustBoundary(boundary)
 			}
-			contract.Handle(http.MethodConnect, "/check/*original_url", permission, func(c *gin.Context) { called = true; c.Status(204) })
-			spec := "openapi: 3.0.3\nservers: [{url: /protocol}]\npaths:\n  /check/{original_url}:\n    x-connect:\n      x-authz: {check: " + kind + "}\n      security: []\n"
+			contract.Handle(http.MethodPost, "/check/*original_url", permission, func(c *gin.Context) { called = true; c.Status(204) })
+			spec := "openapi: 3.0.3\nservers: [{url: /protocol}]\npaths:\n  /check/{original_url}:\n    post:\n      x-authz: {check: " + kind + "}\n      security: []\n"
 			if boundary != "" {
 				spec += "      x-trust-boundary: " + boundary + "\n"
 			}
 			require.NoError(t, contract.ValidateOpenAPI(strings.NewReader(spec)))
 			require.NoError(t, contract.ValidateRoutes(router.Routes()))
 			response := httptest.NewRecorder()
-			router.ServeHTTP(response, httptest.NewRequest(http.MethodConnect, "/protocol/check/a/b", nil))
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/protocol/check/a/b", nil))
 			assert.Equal(t, 204, response.Code)
 			assert.True(t, called)
 			wrong := strings.Replace(spec, "check: "+kind, "check: public", 1)
 			assert.Error(t, contract.ValidateOpenAPI(strings.NewReader(wrong)))
-			extra := spec + "  /uncovered:\n    x-connect:\n      responses: {}\n"
-			assert.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(extra)), "CONNECT /protocol/uncovered")
+			extra := spec + "  /uncovered:\n    post:\n      responses: {}\n"
+			assert.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(extra)), "POST /protocol/uncovered")
 		})
 	}
 	assert.Panics(t, func() { HandlerAuthorization("typo") })

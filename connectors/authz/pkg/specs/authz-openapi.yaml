@@ -702,19 +702,6 @@ paths:
           description: Request denied or credentials missing
         '500':
           description: Authorization evaluation failed
-    x-connect:
-      summary: Evaluate Envoy forwarded credentials and HTTP policies
-      x-authz:
-        check: envoy
-      x-trust-boundary: internal-gateway
-      security: []
-      responses:
-        '200':
-          description: Request authorized
-        '403':
-          description: Request denied or credentials missing
-        '500':
-          description: Authorization evaluation failed
     trace:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
@@ -814,19 +801,6 @@ paths:
         '500':
           description: Authorization evaluation failed
     delete:
-      summary: Evaluate Envoy forwarded credentials and HTTP policies
-      x-authz:
-        check: envoy
-      x-trust-boundary: internal-gateway
-      security: []
-      responses:
-        '200':
-          description: Request authorized
-        '403':
-          description: Request denied or credentials missing
-        '500':
-          description: Authorization evaluation failed
-    x-connect:
       summary: Evaluate Envoy forwarded credentials and HTTP policies
       x-authz:
         check: envoy

@@ -356,10 +356,6 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		relativePath = strings.Join(segments, "/")
 		covered[strings.ToLower(route.Method)+" "+relativePath] = true
 		methodKey := strings.ToLower(route.Method)
-		// CONNECT is supported by Gin.Any but is an OpenAPI vendor extension.
-		if methodKey == "connect" {
-			methodKey = "x-connect"
-		}
 		node, exists := doc.Paths[relativePath][methodKey]
 		if !exists {
 			return fmt.Errorf("OpenAPI operation missing for %s %s", route.Method, route.Path)
@@ -413,10 +409,9 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 	// Check the reverse direction too: documented operations must not escape coverage.
 	missing := []string{}
 	for routePath, item := range doc.Paths {
-		for _, method := range []string{"get", "put", "post", "delete", "options", "head", "patch", "trace", "x-connect"} {
-			actualMethod := strings.TrimPrefix(method, "x-")
-			if _, exists := item[method]; exists && !covered[actualMethod+" "+routePath] {
-				missing = append(missing, strings.ToUpper(actualMethod)+" "+prefix+routePath)
+		for _, method := range []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"} {
+			if _, exists := item[method]; exists && !covered[method+" "+routePath] {
+				missing = append(missing, strings.ToUpper(method)+" "+prefix+routePath)
 			}
 		}
 	}

@@ -58,7 +58,7 @@ func TestAuthzOpenAPIAndEveryRegisteredGuard(t *testing.T) {
 			eng, err := authzengine.NewEngine(nil, nil)
 			require.NoError(t, err)
 			contract := registerAuthzRoutes(router.Group("/api/authz"), engine, nil, eng, nil, nil, logrus.NewEntry(logrus.New()))
-			require.Len(t, contract.Declarations(), 44)
+			require.Len(t, contract.Declarations(), 42)
 			require.NoError(t, contract.ValidateRoutes(router.Routes()))
 			spec, err := os.ReadFile("../specs/authz-openapi.yaml")
 			require.NoError(t, err)
