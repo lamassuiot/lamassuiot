@@ -275,6 +275,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		corsConfig.AllowHeaders = []string{"*"}
 
 		engine := gin.New()
+		engine.UseRawPath = true
 		engine.Use(
 			gin.Recovery(),
 			cors.New(corsConfig),

@@ -54,7 +54,7 @@ func newCertificateKeyKMS(t *testing.T) *certificateKeyKMS {
 	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	require.NoError(t, err)
 	return &certificateKeyKMS{privateKey: key, key: models.Key{
-		KeyID: id, EngineID: "filesystem-test-1", PKCS11URI: buildPKCS11ID("filesystem-test-1", id, "private"),
+		KeyID: id, EngineID: "filesystem-test-1", PKCS11URI: models.BuildPKCS11ID("filesystem-test-1", id, "private"),
 		Algorithm: "ECDSA", Size: 256, HasPrivateKey: true,
 		PublicKey: base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})),
 	}}
@@ -255,7 +255,7 @@ func TestImportCAResolvesDifferentSKIAndGeneratesCRL(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, crl.CheckSignatureFrom(cert))
-	require.Equal(t, []string{buildPKCS11ID(kms.key.EngineID, ca.Certificate.SubjectKeyID, "private"), kms.key.PKCS11URI}, kms.lookups)
+	require.Equal(t, []string{models.BuildPKCS11ID(kms.key.EngineID, ca.Certificate.SubjectKeyID, "private"), kms.key.PKCS11URI}, kms.lookups)
 	require.Equal(t, []string{kms.key.PKCS11URI}, kms.signatures)
 }
 
@@ -300,7 +300,7 @@ func TestGetCertificateKey(t *testing.T) {
 			}
 			if tc.arbitraryID {
 				kms.key.KeyID = "provider-assigned-id"
-				kms.key.PKCS11URI = buildPKCS11ID(kms.key.EngineID, kms.key.KeyID, "private")
+				kms.key.PKCS11URI = models.BuildPKCS11ID(kms.key.EngineID, kms.key.KeyID, "private")
 			}
 			resolved, err := coreservices.ResolveCertificateKey(context.Background(), coreservices.GetCertificateKeyInput{Certificate: (*models.X509Certificate)(cert), EngineID: tc.engine}, kms)
 			require.NoError(t, err)
@@ -377,7 +377,7 @@ func TestGetCertificateKeySkipsWrongSKICandidate(t *testing.T) {
 	wrong := newCertificateKeyKMS(t)
 	cert := certificateKeyTestCertificate(t, kms, []byte{1})
 	kms.lookupOverride = func(identifier string) (*models.Key, error) {
-		if identifier == buildPKCS11ID(kms.key.EngineID, "01", "private") {
+		if identifier == models.BuildPKCS11ID(kms.key.EngineID, "01", "private") {
 			return &wrong.key, nil
 		}
 		return &kms.key, nil
