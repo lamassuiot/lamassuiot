@@ -40,7 +40,7 @@ func InitializeStorage(ctx context.Context, conf authzconfig.AuthzConfig) error 
 		return fmt.Errorf("failed to create policy store: %w", err)
 	}
 
-	principalManager, err := service.NewPrincipalManager(authzDB, conf.JWKSURL, conf.EnableJWTValidation)
+	principalManager, err := service.NewPrincipalManager(authzDB, conf.JWKSURL, !conf.DisableJWTValidation)
 	if err != nil {
 		return err
 	}

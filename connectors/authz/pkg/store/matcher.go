@@ -89,6 +89,9 @@ func NewMatchService(store engine.PrincipalStore, matchers map[string]engine.Pri
 func DefaultMatchService(store engine.PrincipalStore, jwkURL string, enableJWTValidation bool) (*MatchService, error) {
 	var oidcMatcher OIDCMatcher
 	if enableJWTValidation {
+		if jwkURL == "" {
+			return nil, fmt.Errorf("jwks_url is required when JWT validation is enabled; set it or disable enable_jwt_validation for development")
+		}
 		k, err := keyfunc.NewDefaultCtx(context.Background(), []string{jwkURL})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWKS keyfunc from %s: %w", jwkURL, err)

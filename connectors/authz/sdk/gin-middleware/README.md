@@ -1,9 +1,11 @@
 # Authorization contracts
 
-The contract router covers all 136 registered routes across CA (34), KMS (13),
-VA (5), Device Manager (19), Alerts (4), DMS Manager/EST (17) and Authz (44).
-Authz includes 18 Envoy routes: nine methods on each of two paths. CONNECT is
-recorded using `x-connect`, since OpenAPI 3 has no standard CONNECT operation.
+The contract router covers all 134 registered routes across CA (34), KMS (13),
+VA (5), Device Manager (19), Alerts (4), DMS Manager/EST (17) and Authz (42).
+Authz includes 16 Envoy routes: eight methods on each of two paths. CONNECT is
+intentionally not registered: it is a proxy tunnelling method, Envoy does not
+forward it to ext_authz unless CONNECT is explicitly enabled, and OpenAPI 3 has
+no standard CONNECT operation. A CONNECT request to these paths returns 404.
 The external enrollment webhook has two outbound operations (POST and PUT),
 tested through its real HTTP client against a local callback server.
 
