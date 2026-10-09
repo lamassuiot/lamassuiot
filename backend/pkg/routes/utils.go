@@ -39,6 +39,8 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	corsConfig.AllowHeaders = []string{"*"}
 
 	router := gin.New()
+	// Key identifiers are PKCS#11 URIs that may carry escaped reserved characters (e.g. %2F).
+	router.UseRawPath = true
 	router.Use(
 		cors.New(corsConfig),
 		otelgin.Middleware("gin-server"),

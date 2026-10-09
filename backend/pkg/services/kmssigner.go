@@ -35,7 +35,7 @@ func kmsKeyIdentifier(key *models.Key) string {
 		return key.PKCS11URI
 	}
 	if key.EngineID != "" {
-		return buildPKCS11ID(key.EngineID, key.KeyID, "private")
+		return models.BuildPKCS11ID(key.EngineID, key.KeyID, "private")
 	}
 	return key.KeyID
 }

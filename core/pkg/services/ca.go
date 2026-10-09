@@ -386,7 +386,7 @@ func ResolveCertificateKey(ctx context.Context, input GetCertificateKeyInput, km
 	for _, id := range ids {
 		identifier := id
 		if input.EngineID != "" {
-			identifier = fmt.Sprintf("pkcs11:token-id=%s;id=%s;type=private", input.EngineID, id)
+			identifier = models.BuildPKCS11ID(input.EngineID, id, "private")
 		}
 		key, err := kms.GetKey(ctx, GetKeyInput{Identifier: identifier})
 		if err != nil {

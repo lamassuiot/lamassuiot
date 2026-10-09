@@ -131,11 +131,6 @@ func parsePKCS11ID(id string) (engineID, keyID, keyType string, err error) {
 	return engineID, keyID, keyType, nil
 }
 
-// Helper to build pkcs11 id format
-func buildPKCS11ID(engineID, keyID, keyType string) string {
-	return "pkcs11:token-id=" + engineID + ";id=" + keyID + ";type=" + keyType
-}
-
 func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool, err error) {
 	switch inputAlgorithm {
 	case "RSASSA_PKCS1_V1_5_SHA_256":
@@ -500,7 +495,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 	}
 
 	kmsKey := models.Key{
-		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
+		PKCS11URI:     models.BuildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
 		EngineID:      engineID,
 		Name:          input.Name,
@@ -607,7 +602,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	kmsKey := models.Key{
-		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
+		PKCS11URI:     models.BuildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
 		EngineID:      engineID,
 		Name:          input.Name,
