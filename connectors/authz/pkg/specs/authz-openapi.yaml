@@ -8,6 +8,14 @@ info:
     caller access; no caller authentication or network restriction is enforced by
     this declaration. Enforcement may be added in the future. Handlers still
     evaluate submitted credentials and policies.
+
+    WARNING: the guard middleware treats the request header
+    "X-Principal-ID: admin-mode" as an unauthenticated administrative bypass that
+    skips every guard, regardless of the bearerAuth requirement declared below.
+    Any caller able to send it can manage principals and policies (and, through
+    policies, downstream PKI permissions). The header MUST be stripped at the
+    trust boundary (gateway/Envoy) before requests reach this service, and the
+    service must not be reachable except through that boundary.
   version: 1.0.0
   contact:
     name: Lamassu IoT
