@@ -429,7 +429,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
-		return nil, fmt.Errorf("crypto engine not found")
+		return nil, errs.ErrCryptoEngineNotFound
 	}
 
 	engineInstance := *engine
@@ -541,7 +541,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
-		return nil, fmt.Errorf("crypto engine not found")
+		return nil, errs.ErrCryptoEngineNotFound
 	}
 
 	engineInstance := *engine
@@ -631,12 +631,12 @@ func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size 
 			if slices.Contains(spec.Sizes, size) {
 				return nil
 			} else {
-				return fmt.Errorf("key size %d is not supported for key type %s in engine %s", size, keyType, engineConfig.Provider)
+				return fmt.Errorf("%w: key size %d is not supported for key type %s in engine %s", errs.ErrCryptoEngineKeySpecNotSupported, size, keyType, engineConfig.Provider)
 			}
 		}
 	}
 
-	return fmt.Errorf("key type %s is not supported in engine %s", keyType, engineConfig.Provider)
+	return fmt.Errorf("%w: key type %s is not supported in engine %s", errs.ErrCryptoEngineKeySpecNotSupported, keyType, engineConfig.Provider)
 }
 
 func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {

@@ -301,6 +301,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
 			PrivateKey: input.Key,
+			EngineID:   input.EngineID,
 		})
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
