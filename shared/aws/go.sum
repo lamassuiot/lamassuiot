@@ -60,7 +60,6 @@ github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
 github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
 github.com/go-sql-driver/mysql v1.9.3 h1:U/N249h2WzJ3Ukj8SowVFjdtZKfu9vlLZxjPXV1aweo=
 github.com/go-sql-driver/mysql v1.9.3/go.mod h1:qn46aNg1333BRMNU69Lq93t8du/dwxI64Gl8i5p1WMU=
-github.com/go-sql-driver/mysql v1.10.0 h1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=
 github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=
 github.com/go-viper/mapstructure/v2 v2.5.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
@@ -77,7 +76,6 @@ github.com/lamassuiot/lamassuiot/core/v3 v3.8.0 h1:Z/ugg4ln8k/i7EOYpnewJ/ThkmbJq
 github.com/lamassuiot/lamassuiot/core/v3 v3.8.0/go.mod h1:YWSu0pbJjZe0suqFgV2ussMc6UhXZ87VQ3znGwkOD44=
 github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0 h1:vVM3iC8NUgX9cjU3S4noLNFKdKTdzQtaXfHejLBlF9Y=
 github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0/go.mod h1:tQZ+QocrAkJ5suUVdp/pLfITnOCIfyebsqWfhwuYgKc=
-github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0 h1:vVM3iC8NUgX9cjU3S4noLNFKdKTdzQtaXfHejLBlF9Y=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=

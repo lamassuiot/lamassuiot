@@ -3,11 +3,11 @@ module github.com/lamassuiot/lamassuiot/shared/aws/v3
 go 1.26.2
 
 require (
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.1
 	github.com/aws/aws-sdk-go-v2 v1.41.11
 	github.com/aws/aws-sdk-go-v2/config v1.32.22
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.21
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.1
-	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.1
 	github.com/ory/dockertest/v3 v3.12.0
 )

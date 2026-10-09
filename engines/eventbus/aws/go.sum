@@ -75,7 +75,6 @@ github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
 github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
 github.com/go-sql-driver/mysql v1.9.3 h1:U/N249h2WzJ3Ukj8SowVFjdtZKfu9vlLZxjPXV1aweo=
 github.com/go-sql-driver/mysql v1.9.3/go.mod h1:qn46aNg1333BRMNU69Lq93t8du/dwxI64Gl8i5p1WMU=
-github.com/go-sql-driver/mysql v1.10.0 h1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=
 github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=
 github.com/go-viper/mapstructure/v2 v2.5.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
@@ -102,8 +101,6 @@ github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.0 h1:SROgBI7xvMk3ztJw9Kbyc2H
 github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.0/go.mod h1:ghV8u5id89ot2LkJhTnaEuwK6EeV3CW/SKI+B6zQiXE=
 github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0 h1:vVM3iC8NUgX9cjU3S4noLNFKdKTdzQtaXfHejLBlF9Y=
 github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0/go.mod h1:tQZ+QocrAkJ5suUVdp/pLfITnOCIfyebsqWfhwuYgKc=
-github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.0 h1:SROgBI7xvMk3ztJw9Kbyc2HTQGmLgV23L7fDWleJS2o=
-github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0 h1:vVM3iC8NUgX9cjU3S4noLNFKdKTdzQtaXfHejLBlF9Y=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/lithammer/shortuuid/v3 v3.0.7 h1:trX0KTHy4Pbwo/6ia8fscyHoGA+mf1jWbPJVuvyJQQ8=
@@ -185,7 +182,6 @@ go.opentelemetry.io/otel/log v0.19.0 h1:KUZs/GOsw79TBBMfDWsXS+KZ4g2Ckzksd1ymzsIE
 go.opentelemetry.io/otel/log v0.19.0/go.mod h1:5DQYeGmxVIr4n0/BcJvF4upsraHjg6vudJJpnkL6Ipk=
 go.opentelemetry.io/otel/log/logtest v0.19.0 h1:HdSsl4ndTK15LtJGLWBfMsSlLrCgSeE3VMzwOrLYiYs=
 go.opentelemetry.io/otel/log/logtest v0.19.0/go.mod h1:c1sH1nOHTwfMCWhhQTdWGqxgDjZhtkbkzAqGGyj0Ijs=
-go.opentelemetry.io/otel/log/logtest v0.19.0 h1:HdSsl4ndTK15LtJGLWBfMsSlLrCgSeE3VMzwOrLYiYs=
 go.opentelemetry.io/otel/metric v1.43.0 h1:d7638QeInOnuwOONPp4JAOGfbCEpYb+K6DVWvdxGzgM=
 go.opentelemetry.io/otel/metric v1.43.0/go.mod h1:RDnPtIxvqlgO8GRW18W6Z/4P462ldprJtfxHxyKd2PY=
 go.opentelemetry.io/otel/sdk v1.43.0 h1:pi5mE86i5rTeLXqoF/hhiBtUNcrAGHLKQdhg4h4V9Dg=
