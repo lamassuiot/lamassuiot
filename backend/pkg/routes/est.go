@@ -25,12 +25,12 @@ func registerESTRoutes(logger *logrus.Entry, contract *middleware.ContractRouter
 	est.GET("/cacerts", middleware.Public(), routes.GetCACerts)
 	est.GET("/:aps/cacerts", middleware.Public(), routes.GetCACerts)
 
-	est.POST("/simpleenroll", middleware.HandlerAuthorization("est"), routes.EnrollReenroll)
-	est.POST("/:aps/simpleenroll", middleware.HandlerAuthorization("est"), routes.EnrollReenroll)
+	est.POST("/simpleenroll", middleware.DelegatedAuthorization("est"), routes.EnrollReenroll)
+	est.POST("/:aps/simpleenroll", middleware.DelegatedAuthorization("est"), routes.EnrollReenroll)
 
-	est.POST("/simplereenroll", middleware.HandlerAuthorization("est"), routes.EnrollReenroll)
-	est.POST("/:aps/simplereenroll", middleware.HandlerAuthorization("est"), routes.EnrollReenroll)
+	est.POST("/simplereenroll", middleware.DelegatedAuthorization("est"), routes.EnrollReenroll)
+	est.POST("/:aps/simplereenroll", middleware.DelegatedAuthorization("est"), routes.EnrollReenroll)
 
-	est.POST("/serverkeygen", middleware.HandlerAuthorization("est"), routes.ServerKeyGen)
-	est.POST("/:aps/serverkeygen", middleware.HandlerAuthorization("est"), routes.ServerKeyGen)
+	est.POST("/serverkeygen", middleware.DelegatedAuthorization("est"), routes.ServerKeyGen)
+	est.POST("/:aps/serverkeygen", middleware.DelegatedAuthorization("est"), routes.ServerKeyGen)
 }

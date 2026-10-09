@@ -428,7 +428,7 @@ paths:
 	assert.Contains(t, err.Error(), "protected operation POST /api/ca/v1/certificates must require authentication without anonymous alternatives")
 }
 
-func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testing.T) {
+func TestDelegatedAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	// Every registered handler check must validate as a protocol route.
 	for kind := range handlerChecks {
@@ -436,7 +436,7 @@ func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testin
 			router := gin.New()
 			contract := NewContractRouter(router.Group("/protocol"))
 			called := false
-			permission := HandlerAuthorization(kind)
+			permission := DelegatedAuthorization(kind)
 			boundary := ""
 			if handlerChecks[kind] {
 				boundary = "internal-service"
@@ -459,7 +459,7 @@ func TestHandlerAuthorizationContractSupportsProtocolRoutesAndCatchAll(t *testin
 			assert.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(extra)), "POST /protocol/uncovered")
 		})
 	}
-	assert.Panics(t, func() { HandlerAuthorization("typo") })
+	assert.Panics(t, func() { DelegatedAuthorization("typo") })
 }
 
 func TestProtectedPermissionResolvesOpenAPISecurity(t *testing.T) {
@@ -575,7 +575,7 @@ paths:
 			continue
 		}
 		assert.Panics(t, func() {
-			contract.Handle(http.MethodPost, "/missing-"+kind, HandlerAuthorization(kind), func(*gin.Context) {})
+			contract.Handle(http.MethodPost, "/missing-"+kind, DelegatedAuthorization(kind), func(*gin.Context) {})
 		})
 	}
 	plain := NewContractRouter(gin.New().Group("/boundary"))
