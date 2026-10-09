@@ -137,7 +137,10 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		return nil, errs.ErrDMSNotFound
 	}
 
-	dms.Metadata = input.Metadata
+	// nil means "not provided": keep the stored metadata. An empty map clears it.
+	if input.Metadata != nil {
+		dms.Metadata = input.Metadata
+	}
 	dms.Name = input.Name
 	dms.Settings = input.Settings
 

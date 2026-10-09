@@ -333,6 +333,48 @@ func TestUpdateDMSRejectsIncompleteBody(t *testing.T) {
 	}
 }
 
+func TestUpdateDMSMetadataSemantics(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "dms-a", Name: "original", Metadata: map[string]any{"k": "v"}}); err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+
+	put := func(body string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("could not build request: %s", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := tests.NewTestHTTPClientInsecure().Do(req)
+		if err != nil {
+			t.Fatalf("PUT failed: %s", err)
+		}
+		res.Body.Close()
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	}
+
+	put(`{"name":"renamed","settings":{}}`)
+	dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+	assert.Equal(t, "renamed", dms.Name)
+	assert.Equal(t, map[string]any{"k": "v"}, dms.Metadata, "omitted metadata must keep the stored one")
+
+	put(`{"name":"renamed","settings":{},"metadata":{}}`)
+	dms, err = dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+	assert.Empty(t, dms.Metadata, "an empty metadata object must clear it")
+}
+
 func TestGetMissingDMSShouldFail(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {

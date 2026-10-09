@@ -482,8 +482,9 @@ components:
     UpdateDMSBody:
       type: object
       description: |
-        Full replacement of the DMS. The DMS ID is taken from the URL path; any `id` in the
-        body is ignored. An omitted `metadata` clears the DMS metadata.
+        Full replacement of the DMS name and settings. The DMS ID is taken from the URL path;
+        any `id` in the body is ignored. An omitted `metadata` keeps the stored metadata;
+        send an empty object (`{}`) to clear it.
       required: [name, settings]
       properties:
         name:
