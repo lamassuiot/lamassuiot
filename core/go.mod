@@ -13,7 +13,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.45.0
-	go.opentelemetry.io/otel/log v0.19.0
+	go.opentelemetry.io/otel/log v0.21.0
 	go.opentelemetry.io/otel/trace v1.45.0
 	gocloud.dev v0.45.0
 	golang.org/x/crypto v0.55.0
@@ -63,7 +63,7 @@ require (
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/contrib/bridges/otellogrus v0.19.0
+	go.opentelemetry.io/contrib/bridges/otellogrus v0.20.0
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.45.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
