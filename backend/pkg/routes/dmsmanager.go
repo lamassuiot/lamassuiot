@@ -22,7 +22,7 @@ func registerDMSManagerRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, sv
 	idKey := map[string]string{"id": "id"}
 
 	contract := middleware.NewContractRouter(httpGrp)
-	RegisterESTRoutes(logger, contract, svc)
+	registerESTRoutes(logger, contract, svc)
 
 	rv1 := contract.Group("/v1")
 
