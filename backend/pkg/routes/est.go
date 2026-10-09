@@ -7,8 +7,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// RegisterESTRoutes mounts the EST endpoints (RFC 7030) under /.well-known/est on the given
+// contract router. It is backed by any services.ESTService, so it can be reused by other
+// modules (e.g. an EST proxy) besides the DMS Manager.
+//
 // Enrollment policy is evaluated by ESTService using the selected authentication profile.
-func registerESTRoutes(logger *logrus.Entry, contract *middleware.ContractRouter, svc services.ESTService) {
+func RegisterESTRoutes(logger *logrus.Entry, contract *middleware.ContractRouter, svc services.ESTService) {
 	routes := controllers.NewESTHttpRoutes(logger, svc)
 
 	est := contract.Group("/.well-known/est")
