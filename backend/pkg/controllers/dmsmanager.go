@@ -132,7 +132,7 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		ID:       params.ID,
 		Name:     requestBody.Name,
 		Metadata: requestBody.Metadata,
-		Settings: requestBody.Settings,
+		Settings: *requestBody.Settings,
 	})
 	if err != nil {
 		ctx.JSON(500, gin.H{"err": err.Error()})

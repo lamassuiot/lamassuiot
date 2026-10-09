@@ -49,7 +49,7 @@ func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.Updat
 	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID, resources.UpdateDMSBody{
 		Name:     input.Name,
 		Metadata: input.Metadata,
-		Settings: input.Settings,
+		Settings: &input.Settings,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

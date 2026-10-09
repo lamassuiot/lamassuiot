@@ -257,7 +257,7 @@ func TestUpdateDMSIgnoresBodyID(t *testing.T) {
 		t.Fatalf("could not get DMS dms-b: %s", err)
 	}
 
-	body := `{"id":"dms-b","name":"hijacked","creation_ts":"2001-01-01T00:00:00Z"}`
+	body := `{"id":"dms-b","name":"hijacked","settings":{},"creation_ts":"2001-01-01T00:00:00Z"}`
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("could not build request: %s", err)
@@ -283,6 +283,49 @@ func TestUpdateDMSIgnoresBodyID(t *testing.T) {
 	}
 	assert.Equal(t, dmsBBefore, dmsBAfter, "the DMS in the body must not be touched")
 	assert.Equal(t, dmsBBefore.CreationDate, dmsBAfter.CreationDate)
+}
+
+func TestUpdateDMSRejectsIncompleteBody(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "dms-a", Name: "original"}); err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+	before, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+
+	for name, body := range map[string]string{
+		"empty body":       `{}`,
+		"missing settings": `{"name":"renamed"}`,
+		"missing name":     `{"settings":{}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+			if err != nil {
+				t.Fatalf("could not build request: %s", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			res, err := tests.NewTestHTTPClientInsecure().Do(req)
+			if err != nil {
+				t.Fatalf("PUT failed: %s", err)
+			}
+			res.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+
+			after, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+			if err != nil {
+				t.Fatalf("could not get DMS: %s", err)
+			}
+			assert.Equal(t, before, after, "a rejected update must not modify the DMS")
+		})
+	}
 }
 
 func TestGetMissingDMSShouldFail(t *testing.T) {
