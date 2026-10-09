@@ -7,9 +7,9 @@ require (
 	github.com/ThreeDotsLabs/watermill-aws v1.0.2
 	github.com/aws/aws-sdk-go-v2 v1.41.11
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.16
-	github.com/aws/aws-sdk-go-v2/service/sts v1.43.1
-	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
-	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.0
+	github.com/aws/aws-sdk-go-v2/service/sts v1.42.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.1
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.1
 	github.com/sirupsen/logrus v1.9.4
 )
 
@@ -56,13 +56,12 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0 // indirect
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect

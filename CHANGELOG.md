@@ -1,1516 +1,3216 @@
 
-<a name="3.8.0"></a>
-## [3.8.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.7.0...3.8.0) (2026-06-09)
+<a name="3.8.1"></a>
+## [3.8.1](https://github.com/lamassuiot/lamassuiot/compare/v3.8.0...v3.8.1) (2026-09-17)
+
+
+
+### Bug Fixes
+
+
+* Update header pattern to fully support conventional commits (#663)
+
+
 
 ### Chores
 
-* Chore: release: prepare release 3.8.0 ([#658](https://github.com/lamassuiot/lamassuiot/issues/658))
-* Chore: enhance DEV release workflow with tag validation ([#648](https://github.com/lamassuiot/lamassuiot/issues/648))
-* Chore: update Go version from 1.24.x to 1.26.2 across all modules ([#607](https://github.com/lamassuiot/lamassuiot/issues/607))
+
+* Bump the go_modules group across 11 directories with 1 update (#651)
+
+* Bump the go_modules group across 12 directories with 1 update (#671)
+
+* Bump the go_modules group across 13 directories with 1 update (#683)
+
+* Bump the go_modules group across 12 directories with 2 updates (#695)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.1 in /monolithic (#713)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/fs-storage/localfs (#714)
+
+* Bump github.com/rabbitmq/amqp091-go from 1.11.0 to 1.13.0 in /backend (#715)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /backend (#716)
+
+* Bump github.com/rabbitmq/amqp091-go from 1.11.0 to 1.13.0 in /monolithic (#722)
+
+* Bump github.com/rabbitmq/amqp091-go from 1.11.0 to 1.13.0 in /engines/eventbus/amqp (#723)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /sdk (#724)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/crypto/pkcs11 (#726)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/crypto/filesystem (#727)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/crypto/aws (#728)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /core (#729)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /connectors/awsiot (#730)
+
+* Bump github.com/rabbitmq/amqp091-go from 1.11.0 to 1.13.0 in /connectors/awsiot (#731)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/storage/postgres (#732)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/fs-storage/s3 (#733)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/crypto/vaultkv2 (#734)
+
+* Bump google.golang.org/grpc from 1.80.0 to 1.83.2 in /engines/crypto/software (#735)
+
+* Bump google.golang.org/grpc from 1.83.1 to 1.83.2 in /monolithic (#736)
+
+* Bump golang.org/x/net (#737)
+
+
+
+### Other
+
+
+* Fix gosec SARIF upload permissions (#725)
+
+* Migrate release changelog workflow to git-cliff (#739)
+
+
+<a name="3.8.0"></a>
+## [3.8.0](https://github.com/lamassuiot/lamassuiot/compare/v3.7.0...v3.8.0) (2026-06-09)
+
+
 
 ### Features
 
-* Feat: add CA-to-KMS key migration tool ([#614](https://github.com/lamassuiot/lamassuiot/issues/614))
-* Feat: add X.509 certificate extensions support and enhance filtering capabilities ([#407](https://github.com/lamassuiot/lamassuiot/issues/407))
-* Feat: improveJSONPath filtering tests for device groups in device manager ([#404](https://github.com/lamassuiot/lamassuiot/issues/404))
-* Feat: add OTEL-logrus bridge, and bump dependencies ([#400](https://github.com/lamassuiot/lamassuiot/issues/400))
-* Feat: chnage Device Group migration ID to prevent disordered migrations from release 3.7 ([#401](https://github.com/lamassuiot/lamassuiot/issues/401))
-* Feat: implement CreateCertificate endpoint and associated logic ([#396](https://github.com/lamassuiot/lamassuiot/issues/396))
-* Feat: add support for 384-bit ECDSA keys in AWS Secrets Manager and Vault engines ([#391](https://github.com/lamassuiot/lamassuiot/issues/391))
-* Feat: add kms stats endpoint and make all the stats operations filtered ([#387](https://github.com/lamassuiot/lamassuiot/issues/387))
 
-### Fix
+* Add dynamic device groups support (#380)
 
-* Fix: migrate legacy certificate type values in certificates table ([#645](https://github.com/lamassuiot/lamassuiot/issues/645))
-* Fix: improve future-dated certificate validation logic ([#642](https://github.com/lamassuiot/lamassuiot/issues/642))
-* Fix: update workflow permissions ([#622](https://github.com/lamassuiot/lamassuiot/issues/622))
-* Fix: add grace period to delta monitoring test to prevent race condition ([#606](https://github.com/lamassuiot/lamassuiot/issues/606))
-* Fix: Support full client certificate chain extraction and validation ([#406](https://github.com/lamassuiot/lamassuiot/issues/406))
-* Fix: upgrade Lamassu modules versions to latest release ([#389](https://github.com/lamassuiot/lamassuiot/issues/389))
+* Add kms stats endpoint and make all the stats operations filtered (#387)
 
-### Refactor
+* Add support for 384-bit ECDSA keys in AWS Secrets Manager and Vault engines (#391)
 
-* Refactor: Ensure correct context propagation in event publishing and fix CRL service assembly bugs ([#402](https://github.com/lamassuiot/lamassuiot/issues/402))
+* Implement CreateCertificate endpoint and associated logic (#396)
+
+* Feat ca: enhance CN preservation logic in issuance profile application (#392)
+
+* Chnage Device Group migration ID to prevent disordered migrations from release 3.7 (#401)
+
+* Add OTEL-logrus bridge, and bump dependencies (#400)
+
+* ImproveJSONPath filtering tests for device groups in device manager (#404)
+
+* Add X.509 certificate extensions support and enhance filtering capabilities (#407)
+
+* Add CA-to-KMS key migration tool (#614)
+
+* Combined Client Certificate + Webhook auth for EST enrollment (#616)
+
+* Support external webhook auth in reenrollment (#643)
+
+* Add specific auth config for DMS reenroll (#654)
+
+
+
+### Bug Fixes
+
+
+* Upgrade Lamassu modules versions to latest release (#389)
+
+* Support full client certificate chain extraction and validation (#406)
+
+* Add grace period to delta monitoring test to prevent race condition (#606)
+
+* Rename external_webhook JSON field to external_webhook_settings (#618)
+
+* Update workflow permissions (#622)
+
+* Improve future-dated certificate validation logic (#642)
+
+* Propagate logging fields from enrollment helper functions (#646)
+
+* Bump Codecov action to v7 (#657)
+
+* Skip go mod tidy in bump-version when tags don't exist yet
+
+
 
 ### Security Fixes
 
-* Security: Update dependencies in go.mod and go.sum ([#398](https://github.com/lamassuiot/lamassuiot/issues/398))
+
+* Update dependencies in go.mod and go.sum (#398)
 
 
-<a name="shared/http/v3.7.0"></a>
-## [shared/http/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.7.0...shared/http/v3.7.0) (2026-01-29)
-
-
-<a name="engines/storage/postgres/v3.7.0"></a>
-## [engines/storage/postgres/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.7.0...engines/storage/postgres/v3.7.0) (2026-01-29)
-
-
-<a name="engines/fs-storage/localfs/v3.7.0"></a>
-## [engines/fs-storage/localfs/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.7.0...engines/fs-storage/localfs/v3.7.0) (2026-01-29)
-
-
-<a name="shared/aws/v3.7.0"></a>
-## [shared/aws/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.7.0...shared/aws/v3.7.0) (2026-01-29)
-
-
-<a name="engines/crypto/pkcs11/v3.7.0"></a>
-## [engines/crypto/pkcs11/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.7.0...engines/crypto/pkcs11/v3.7.0) (2026-01-29)
-
-
-<a name="backend/v3.7.0"></a>
-## [backend/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.7.0...backend/v3.7.0) (2026-01-29)
-
-
-<a name="engines/fs-storage/s3/v3.7.0"></a>
-## [engines/fs-storage/s3/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.7.0...engines/fs-storage/s3/v3.7.0) (2026-01-29)
-
-
-<a name="connectors/awsiot/v3.7.0"></a>
-## [connectors/awsiot/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.7.0...connectors/awsiot/v3.7.0) (2026-01-29)
-
-
-<a name="engines/eventbus/aws/v3.7.0"></a>
-## [engines/eventbus/aws/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.7.0...engines/eventbus/aws/v3.7.0) (2026-01-29)
-
-
-<a name="sdk/v3.7.0"></a>
-## [sdk/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.7.0...sdk/v3.7.0) (2026-01-29)
-
-
-<a name="core/v3.7.0"></a>
-## [core/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.7.0...core/v3.7.0) (2026-01-29)
-
-
-<a name="engines/crypto/vaultkv2/v3.7.0"></a>
-## [engines/crypto/vaultkv2/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.7.0...engines/crypto/vaultkv2/v3.7.0) (2026-01-29)
-
-
-<a name="engines/crypto/software/v3.7.0"></a>
-## [engines/crypto/software/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.7.0...engines/crypto/software/v3.7.0) (2026-01-29)
-
-
-<a name="shared/subsystems/v3.7.0"></a>
-## [shared/subsystems/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.7.0...shared/subsystems/v3.7.0) (2026-01-29)
-
-
-<a name="monolithic/v3.7.0"></a>
-## [monolithic/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.7.0...monolithic/v3.7.0) (2026-01-29)
-
-
-<a name="engines/eventbus/amqp/v3.7.0"></a>
-## [engines/eventbus/amqp/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.7.0...engines/eventbus/amqp/v3.7.0) (2026-01-29)
-
-
-<a name="engines/crypto/filesystem/v3.7.0"></a>
-## [engines/crypto/filesystem/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.7.0...engines/crypto/filesystem/v3.7.0) (2026-01-29)
-
-
-<a name="engines/crypto/aws/v3.7.0"></a>
-## [engines/crypto/aws/v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/v3.7.0...engines/crypto/aws/v3.7.0) (2026-01-29)
-
-
-<a name="v3.7.0"></a>
-## [v3.7.0](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.6.3...v3.7.0) (2026-01-29)
-
-### Bug Fixes
-
-* Fix: update service name to lamassu-db-migration in docker image work… ([#385](https://github.com/lamassuiot/lamassuiot/issues/385))
-* Fix: ca:  Root CA Extended Key Usages ([#370](https://github.com/lamassuiot/lamassuiot/issues/370))
 
 ### Chores
 
-* Chore: release: prepare release 3.7.0 ([#386](https://github.com/lamassuiot/lamassuiot/issues/386))
-* Chore: release: prepare release 3.7.0 ([#384](https://github.com/lamassuiot/lamassuiot/issues/384))
-* Chore: Add JSON Patch support documentation (RFC 6902) ([#379](https://github.com/lamassuiot/lamassuiot/issues/379))
-* Chore: openapi -  standardize authentication schemes  ([#372](https://github.com/lamassuiot/lamassuiot/issues/372))
-* Chore: Go dependency cleanup ([#364](https://github.com/lamassuiot/lamassuiot/issues/364))
-* Chore: Add OpenAPI specifications for all APIs ([#363](https://github.com/lamassuiot/lamassuiot/issues/363))
 
-### Features
+* Bump go.opentelemetry.io/otel/sdk from 1.40.0 to 1.43.0 in /engines/storage/postgres (#594)
 
-* Feat: add lamassu-db-migration Dockerfile and update references in workflows and README ([#383](https://github.com/lamassuiot/lamassuiot/issues/383))
-* Feat: support sort using jsonpath expressions ([#381](https://github.com/lamassuiot/lamassuiot/issues/381))
-* Feat: migrate metadata columns to JSONB and add JSONPath filtering ([#378](https://github.com/lamassuiot/lamassuiot/issues/378))
-* Feat: Implement CA reissuance functionality ([#357](https://github.com/lamassuiot/lamassuiot/issues/357))
-* Feat: add expiration date info for device identity slots ([#377](https://github.com/lamassuiot/lamassuiot/issues/377))
-* Feat: implement device filtering statistics functionality ([#376](https://github.com/lamassuiot/lamassuiot/issues/376))
-* Feat: enable Docker-less local development via SQLite storage and In-Memory bus ([#374](https://github.com/lamassuiot/lamassuiot/issues/374))
-* Feat: add CA issuance profile support for CreateCA functionality ([#371](https://github.com/lamassuiot/lamassuiot/issues/371))
+* Bump go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp from 1.38.0 to 1.43.0 in /monolithic (#593)
+
+* Update Go version from 1.24.x to 1.26.2 across all modules (#607)
+
+* Enhance DEV release workflow with tag validation (#648)
+
+* Release: prepare release 3.8.0 (#658)
+
+* Release: prepare release 3.8.0 (#660)
+
+* Release: prepare release 3.8.0
+
+* Bump module versions to v3.8.0
+
+
 
 ### Refactor
 
-* Refactor: Isolate backend assembler tests for better coverage and optimize CI timeouts ([#365](https://github.com/lamassuiot/lamassuiot/issues/365))
-* Refactor: CA Service to External KMS ([#350](https://github.com/lamassuiot/lamassuiot/issues/350))
 
+* Ensure correct context propagation in event publishing and fix CRL service assembly bugs (#402)
 
-<a name="engines/fs-storage/localfs/v3.6.3"></a>
-## [engines/fs-storage/localfs/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.6.3...engines/fs-storage/localfs/v3.6.3) (2025-11-17)
 
 
-<a name="sdk/v3.6.3"></a>
-## [sdk/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.6.3...sdk/v3.6.3) (2025-11-17)
+### Other
 
 
-<a name="shared/subsystems/v3.6.3"></a>
-## [shared/subsystems/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.6.3...shared/subsystems/v3.6.3) (2025-11-17)
+* Add DeepWiki badge to README (#394)
 
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
 
-<a name="engines/crypto/software/v3.6.3"></a>
-## [engines/crypto/software/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.6.3...engines/crypto/software/v3.6.3) (2025-11-17)
+* Potential fix for code scanning alert no. 345: Workflow does not contain permissions (#397)
 
+Signed-off-by: Juanjo Rodriguez <jjrodrig@gmail.com>
+Co-authored-by: Copilot Autofix powered by AI <62310815+github-advanced-security[bot]@users.noreply.github.com>
 
-<a name="engines/storage/postgres/v3.6.3"></a>
-## [engines/storage/postgres/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.6.3...engines/storage/postgres/v3.6.3) (2025-11-17)
+* Add `in` and `in_ic` filter operators for string and enum fields (#395)
 
+* Update dependencies in go.mod and go.sum (#613)
 
-<a name="shared/aws/v3.6.3"></a>
-## [shared/aws/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/core/v3.6.3...shared/aws/v3.6.3) (2025-11-17)
+* Migrate legacy certificate type values in certificates table (#645)
 
+* Fix release workflow token/permissions for Bump Module Versions job (#659)
 
-<a name="core/v3.6.3"></a>
-## [core/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.6.3...core/v3.6.3) (2025-11-17)
 
+<a name="3.7.0"></a>
+## [3.7.0](https://github.com/lamassuiot/lamassuiot/compare/v3.6.3...v3.7.0) (2026-01-29)
 
-<a name="engines/crypto/aws/v3.6.3"></a>
-## [engines/crypto/aws/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.6.3...engines/crypto/aws/v3.6.3) (2025-11-17)
 
-
-<a name="engines/eventbus/aws/v3.6.3"></a>
-## [engines/eventbus/aws/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.6.3...engines/eventbus/aws/v3.6.3) (2025-11-17)
-
-
-<a name="engines/crypto/vaultkv2/v3.6.3"></a>
-## [engines/crypto/vaultkv2/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.6.3...engines/crypto/vaultkv2/v3.6.3) (2025-11-17)
-
-
-<a name="shared/http/v3.6.3"></a>
-## [shared/http/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.6.3...shared/http/v3.6.3) (2025-11-17)
-
-
-<a name="engines/crypto/pkcs11/v3.6.3"></a>
-## [engines/crypto/pkcs11/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.6.3...engines/crypto/pkcs11/v3.6.3) (2025-11-17)
-
-
-<a name="engines/eventbus/amqp/v3.6.3"></a>
-## [engines/eventbus/amqp/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.6.3...engines/eventbus/amqp/v3.6.3) (2025-11-17)
-
-
-<a name="engines/crypto/filesystem/v3.6.3"></a>
-## [engines/crypto/filesystem/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.6.3...engines/crypto/filesystem/v3.6.3) (2025-11-17)
-
-
-<a name="monolithic/v3.6.3"></a>
-## [monolithic/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.6.3...monolithic/v3.6.3) (2025-11-17)
-
-
-<a name="connectors/awsiot/v3.6.3"></a>
-## [connectors/awsiot/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.6.3...connectors/awsiot/v3.6.3) (2025-11-17)
-
-
-<a name="engines/fs-storage/s3/v3.6.3"></a>
-## [engines/fs-storage/s3/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.6.3...engines/fs-storage/s3/v3.6.3) (2025-11-17)
-
-
-<a name="backend/v3.6.3"></a>
-## [backend/v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/v3.6.3...backend/v3.6.3) (2025-11-17)
-
-
-<a name="v3.6.3"></a>
-## [v3.6.3](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.6.2...v3.6.3) (2025-11-17)
-
-### Bug Fixes
-
-* Fix: VA ski encoding in crl dp ([#358](https://github.com/lamassuiot/lamassuiot/issues/358))
-* Fix: ca: remove sensitive info in audit events ([#356](https://github.com/lamassuiot/lamassuiot/issues/356))
-
-### Chores
-
-* Chore: release: prepare release 3.6.3 ([#359](https://github.com/lamassuiot/lamassuiot/issues/359))
-
-
-<a name="engines/storage/postgres/v3.6.2"></a>
-## [engines/storage/postgres/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.6.2...engines/storage/postgres/v3.6.2) (2025-11-11)
-
-
-<a name="shared/aws/v3.6.2"></a>
-## [shared/aws/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.6.2...shared/aws/v3.6.2) (2025-11-11)
-
-
-<a name="connectors/awsiot/v3.6.2"></a>
-## [connectors/awsiot/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.6.2...connectors/awsiot/v3.6.2) (2025-11-11)
-
-
-<a name="engines/fs-storage/s3/v3.6.2"></a>
-## [engines/fs-storage/s3/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.6.2...engines/fs-storage/s3/v3.6.2) (2025-11-11)
-
-
-<a name="monolithic/v3.6.2"></a>
-## [monolithic/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.6.2...monolithic/v3.6.2) (2025-11-11)
-
-
-<a name="engines/eventbus/aws/v3.6.2"></a>
-## [engines/eventbus/aws/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.6.2...engines/eventbus/aws/v3.6.2) (2025-11-11)
-
-
-<a name="shared/subsystems/v3.6.2"></a>
-## [shared/subsystems/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.6.2...shared/subsystems/v3.6.2) (2025-11-11)
-
-
-<a name="engines/crypto/pkcs11/v3.6.2"></a>
-## [engines/crypto/pkcs11/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.6.2...engines/crypto/pkcs11/v3.6.2) (2025-11-11)
-
-
-<a name="engines/crypto/software/v3.6.2"></a>
-## [engines/crypto/software/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.6.2...engines/crypto/software/v3.6.2) (2025-11-11)
-
-
-<a name="engines/crypto/filesystem/v3.6.2"></a>
-## [engines/crypto/filesystem/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.6.2...engines/crypto/filesystem/v3.6.2) (2025-11-11)
-
-
-<a name="engines/crypto/aws/v3.6.2"></a>
-## [engines/crypto/aws/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.6.2...engines/crypto/aws/v3.6.2) (2025-11-11)
-
-
-<a name="engines/fs-storage/localfs/v3.6.2"></a>
-## [engines/fs-storage/localfs/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.6.2...engines/fs-storage/localfs/v3.6.2) (2025-11-11)
-
-
-<a name="backend/v3.6.2"></a>
-## [backend/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.6.2...backend/v3.6.2) (2025-11-11)
-
-
-<a name="engines/crypto/vaultkv2/v3.6.2"></a>
-## [engines/crypto/vaultkv2/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.6.2...engines/crypto/vaultkv2/v3.6.2) (2025-11-11)
-
-
-<a name="shared/http/v3.6.2"></a>
-## [shared/http/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.6.2...shared/http/v3.6.2) (2025-11-11)
-
-
-<a name="sdk/v3.6.2"></a>
-## [sdk/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.6.2...sdk/v3.6.2) (2025-11-11)
-
-
-<a name="engines/eventbus/amqp/v3.6.2"></a>
-## [engines/eventbus/amqp/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/core/v3.6.2...engines/eventbus/amqp/v3.6.2) (2025-11-11)
-
-
-<a name="core/v3.6.2"></a>
-## [core/v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/v3.6.2...core/v3.6.2) (2025-11-11)
-
-
-<a name="v3.6.2"></a>
-## [v3.6.2](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.6.1...v3.6.2) (2025-11-11)
-
-### Bug Fixes
-
-* Fix: VA: service returns 500 HTTP code for unknown SKIs ([#352](https://github.com/lamassuiot/lamassuiot/issues/352))
-* Fix: fixing keysize for aws-based cryptoengines([#353](https://github.com/lamassuiot/lamassuiot/issues/353))
-* Fix: AWS Connector: incorrect IoT metadata key in error messages ([#340](https://github.com/lamassuiot/lamassuiot/issues/340))
-* Fix: CA: add issuance profile validation for CA operations ([#339](https://github.com/lamassuiot/lamassuiot/issues/339))
-* Fix: improve AWS KMS key and alias retrieval with pagination support ([#336](https://github.com/lamassuiot/lamassuiot/issues/336))
-* Fix: VA: Use certificate’s actual revocation timestamp in CRL calculation ([#333](https://github.com/lamassuiot/lamassuiot/issues/333))
-
-### Chores
-
-* Chore: release: prepare release 3.6.2 ([#355](https://github.com/lamassuiot/lamassuiot/issues/355))
-* Chore: release: prepare release 3.6.2 ([#354](https://github.com/lamassuiot/lamassuiot/issues/354))
-* Chore: Adjust test timeout in CI workflow ([#348](https://github.com/lamassuiot/lamassuiot/issues/348))
 
 ### Features
 
-* Feat: add independent database migration tool ([#337](https://github.com/lamassuiot/lamassuiot/issues/337))
+
+* Add CA issuance profile support for CreateCA functionality (#371)
+
+* Enable Docker-less local development via SQLite storage and In-Memory bus (#374)
+
+* Implement device filtering statistics functionality (#376)
+
+* Add expiration date info for device identity slots (#377)
+
+* Implement CA reissuance functionality (#357)
+
+* Migrate metadata columns to JSONB and add JSONPath filtering (#378)
+
+* Support sort using jsonpath expressions (#381)
+
+* Transform identity slot into jsonb and make it filterable (#382)
+
+* Add lamassu-db-migration Dockerfile and update references in workflows and README (#383)
 
 
-<a name="monolithic/v3.6.1"></a>
-## [monolithic/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.6.1...monolithic/v3.6.1) (2025-10-10)
-
-
-<a name="engines/crypto/vaultkv2/v3.6.1"></a>
-## [engines/crypto/vaultkv2/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.6.1...engines/crypto/vaultkv2/v3.6.1) (2025-10-10)
-
-
-<a name="engines/crypto/pkcs11/v3.6.1"></a>
-## [engines/crypto/pkcs11/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.6.1...engines/crypto/pkcs11/v3.6.1) (2025-10-10)
-
-
-<a name="engines/eventbus/amqp/v3.6.1"></a>
-## [engines/eventbus/amqp/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.6.1...engines/eventbus/amqp/v3.6.1) (2025-10-10)
-
-
-<a name="shared/subsystems/v3.6.1"></a>
-## [shared/subsystems/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.6.1...shared/subsystems/v3.6.1) (2025-10-10)
-
-
-<a name="engines/crypto/filesystem/v3.6.1"></a>
-## [engines/crypto/filesystem/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.6.1...engines/crypto/filesystem/v3.6.1) (2025-10-10)
-
-
-<a name="engines/eventbus/aws/v3.6.1"></a>
-## [engines/eventbus/aws/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.6.1...engines/eventbus/aws/v3.6.1) (2025-10-10)
-
-
-<a name="shared/aws/v3.6.1"></a>
-## [shared/aws/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/core/v3.6.1...shared/aws/v3.6.1) (2025-10-10)
-
-
-<a name="core/v3.6.1"></a>
-## [core/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.6.1...core/v3.6.1) (2025-10-10)
-
-
-<a name="sdk/v3.6.1"></a>
-## [sdk/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.6.1...sdk/v3.6.1) (2025-10-10)
-
-
-<a name="engines/fs-storage/s3/v3.6.1"></a>
-## [engines/fs-storage/s3/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.6.1...engines/fs-storage/s3/v3.6.1) (2025-10-10)
-
-
-<a name="engines/crypto/aws/v3.6.1"></a>
-## [engines/crypto/aws/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.6.1...engines/crypto/aws/v3.6.1) (2025-10-10)
-
-
-<a name="connectors/awsiot/v3.6.1"></a>
-## [connectors/awsiot/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.6.1...connectors/awsiot/v3.6.1) (2025-10-10)
-
-
-<a name="engines/crypto/software/v3.6.1"></a>
-## [engines/crypto/software/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.6.1...engines/crypto/software/v3.6.1) (2025-10-10)
-
-
-<a name="engines/storage/postgres/v3.6.1"></a>
-## [engines/storage/postgres/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.6.1...engines/storage/postgres/v3.6.1) (2025-10-10)
-
-
-<a name="backend/v3.6.1"></a>
-## [backend/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.6.1...backend/v3.6.1) (2025-10-10)
-
-
-<a name="engines/fs-storage/localfs/v3.6.1"></a>
-## [engines/fs-storage/localfs/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.6.1...engines/fs-storage/localfs/v3.6.1) (2025-10-10)
-
-
-<a name="shared/http/v3.6.1"></a>
-## [shared/http/v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/v3.6.1...shared/http/v3.6.1) (2025-10-10)
-
-
-<a name="v3.6.1"></a>
-## [v3.6.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.6.0...v3.6.1) (2025-10-10)
 
 ### Bug Fixes
 
-* Fix: remove key casting in kms module ([#331](https://github.com/lamassuiot/lamassuiot/issues/331))
+
+* Ca:  Root CA Extended Key Usages (#370)
+
+* Update service name to lamassu-db-migration in docker image work… (#385)
+
+
 
 ### Chores
 
-* Chore: release: prepare release 3.6.1 ([#332](https://github.com/lamassuiot/lamassuiot/issues/332))
+
+* Go dependency cleanup (#364)
+
+* Bump github.com/opencontainers/runc from 1.2.3 to 1.2.8 in /shared/subsystems (#368)
+
+* Bump github.com/eclipse/paho.mqtt.golang from 1.5.0 to 1.5.1 in /connectors/awsiot (#366)
+
+* Bump golang.org/x/crypto from 0.39.0 to 0.45.0 in /monolithic (#367)
+
+* Openapi -  standardize authentication schemes  (#372)
+
+* Add JSON Patch support documentation (RFC 6902) (#379)
+
+* Release: prepare release 3.7.0 (#384)
+
+* Release: prepare release 3.7.0 (#386)
 
 
-<a name="engines/storage/postgres/v3.6.0"></a>
-## [engines/storage/postgres/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.6.0...engines/storage/postgres/v3.6.0) (2025-10-09)
-
-
-<a name="engines/crypto/vaultkv2/v3.6.0"></a>
-## [engines/crypto/vaultkv2/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.6.0...engines/crypto/vaultkv2/v3.6.0) (2025-10-09)
-
-
-<a name="engines/fs-storage/s3/v3.6.0"></a>
-## [engines/fs-storage/s3/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.6.0...engines/fs-storage/s3/v3.6.0) (2025-10-09)
-
-
-<a name="engines/eventbus/amqp/v3.6.0"></a>
-## [engines/eventbus/amqp/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.6.0...engines/eventbus/amqp/v3.6.0) (2025-10-09)
-
-
-<a name="connectors/awsiot/v3.6.0"></a>
-## [connectors/awsiot/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.6.0...connectors/awsiot/v3.6.0) (2025-10-09)
-
-
-<a name="engines/crypto/aws/v3.6.0"></a>
-## [engines/crypto/aws/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.6.0...engines/crypto/aws/v3.6.0) (2025-10-09)
-
-
-<a name="engines/crypto/software/v3.6.0"></a>
-## [engines/crypto/software/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.6.0...engines/crypto/software/v3.6.0) (2025-10-09)
-
-
-<a name="engines/crypto/filesystem/v3.6.0"></a>
-## [engines/crypto/filesystem/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.6.0...engines/crypto/filesystem/v3.6.0) (2025-10-09)
-
-
-<a name="backend/v3.6.0"></a>
-## [backend/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.6.0...backend/v3.6.0) (2025-10-09)
-
-
-<a name="core/v3.6.0"></a>
-## [core/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.6.0...core/v3.6.0) (2025-10-09)
-
-
-<a name="monolithic/v3.6.0"></a>
-## [monolithic/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.6.0...monolithic/v3.6.0) (2025-10-09)
-
-
-<a name="shared/subsystems/v3.6.0"></a>
-## [shared/subsystems/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.6.0...shared/subsystems/v3.6.0) (2025-10-09)
-
-
-<a name="shared/http/v3.6.0"></a>
-## [shared/http/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.6.0...shared/http/v3.6.0) (2025-10-09)
-
-
-<a name="sdk/v3.6.0"></a>
-## [sdk/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.6.0...sdk/v3.6.0) (2025-10-09)
-
-
-<a name="engines/crypto/pkcs11/v3.6.0"></a>
-## [engines/crypto/pkcs11/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.6.0...engines/crypto/pkcs11/v3.6.0) (2025-10-09)
-
-
-<a name="engines/eventbus/aws/v3.6.0"></a>
-## [engines/eventbus/aws/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.6.0...engines/eventbus/aws/v3.6.0) (2025-10-09)
-
-
-<a name="engines/fs-storage/localfs/v3.6.0"></a>
-## [engines/fs-storage/localfs/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.6.0...engines/fs-storage/localfs/v3.6.0) (2025-10-09)
-
-
-<a name="shared/aws/v3.6.0"></a>
-## [shared/aws/v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/v3.6.0...shared/aws/v3.6.0) (2025-10-09)
-
-
-<a name="v3.6.0"></a>
-## [v3.6.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.5.2...v3.6.0) (2025-10-09)
-
-### Bug Fixes
-
-* Fix: DMS creation date filtering functionality ([#329](https://github.com/lamassuiot/lamassuiot/issues/329))
-* Fix: test configuration and database dependency issues ([#327](https://github.com/lamassuiot/lamassuiot/issues/327))
-* Fix: CA: add migration to remove hyphens from issuer_meta_serial_number fields ([#325](https://github.com/lamassuiot/lamassuiot/issues/325))
-* Fix: va: use CRL service interface ([#322](https://github.com/lamassuiot/lamassuiot/issues/322))
-
-### Chores
-
-* Chore: release: prepare release 3.6.0 ([#330](https://github.com/lamassuiot/lamassuiot/issues/330))
-* Chore: readme update ([#323](https://github.com/lamassuiot/lamassuiot/issues/323))
-
-### Features
-
-* Feat: CA: enhanced CA deletion with cascade operations and private key management ([#308](https://github.com/lamassuiot/lamassuiot/issues/308))
-* Feat: KMS Service v1 ([#267](https://github.com/lamassuiot/lamassuiot/issues/267))
-* Feat: add support to filter certs by subject_key_id ([#326](https://github.com/lamassuiot/lamassuiot/issues/326))
 
 ### Refactor
 
-* Refactor: streamline event bus handling and service middleware integration across multiple assemblers ([#324](https://github.com/lamassuiot/lamassuiot/issues/324))
+
+* Isolate backend assembler tests for better coverage and optimize CI timeouts (#365)
 
 
-<a name="shared/subsystems/v3.5.2"></a>
-## [shared/subsystems/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.5.2...shared/subsystems/v3.5.2) (2025-09-26)
+
+### Other
 
 
-<a name="engines/crypto/pkcs11/v3.5.2"></a>
-## [engines/crypto/pkcs11/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.5.2...engines/crypto/pkcs11/v3.5.2) (2025-09-26)
+* CA Service to External KMS (#350)
+
+* Add OpenAPI specifications for all APIs (#363)
+
+* Sync workspace deps (#369)
+
+* Feat/observability (#362)
 
 
-<a name="backend/v3.5.2"></a>
-## [backend/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.5.2...backend/v3.5.2) (2025-09-26)
+<a name="3.6.3"></a>
+## [3.6.3](https://github.com/lamassuiot/lamassuiot/compare/v3.6.2...v3.6.3) (2025-11-17)
 
 
-<a name="sdk/v3.5.2"></a>
-## [sdk/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.5.2...sdk/v3.5.2) (2025-09-26)
-
-
-<a name="engines/eventbus/aws/v3.5.2"></a>
-## [engines/eventbus/aws/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.5.2...engines/eventbus/aws/v3.5.2) (2025-09-26)
-
-
-<a name="engines/crypto/filesystem/v3.5.2"></a>
-## [engines/crypto/filesystem/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.5.2...engines/crypto/filesystem/v3.5.2) (2025-09-26)
-
-
-<a name="shared/http/v3.5.2"></a>
-## [shared/http/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.5.2...shared/http/v3.5.2) (2025-09-26)
-
-
-<a name="engines/crypto/vaultkv2/v3.5.2"></a>
-## [engines/crypto/vaultkv2/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.5.2...engines/crypto/vaultkv2/v3.5.2) (2025-09-26)
-
-
-<a name="shared/aws/v3.5.2"></a>
-## [shared/aws/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/core/v3.5.2...shared/aws/v3.5.2) (2025-09-26)
-
-
-<a name="core/v3.5.2"></a>
-## [core/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.5.2...core/v3.5.2) (2025-09-26)
-
-
-<a name="engines/fs-storage/localfs/v3.5.2"></a>
-## [engines/fs-storage/localfs/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.5.2...engines/fs-storage/localfs/v3.5.2) (2025-09-26)
-
-
-<a name="engines/fs-storage/s3/v3.5.2"></a>
-## [engines/fs-storage/s3/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.5.2...engines/fs-storage/s3/v3.5.2) (2025-09-26)
-
-
-<a name="monolithic/v3.5.2"></a>
-## [monolithic/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.5.2...monolithic/v3.5.2) (2025-09-26)
-
-
-<a name="engines/eventbus/amqp/v3.5.2"></a>
-## [engines/eventbus/amqp/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.5.2...engines/eventbus/amqp/v3.5.2) (2025-09-26)
-
-
-<a name="engines/crypto/software/v3.5.2"></a>
-## [engines/crypto/software/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.5.2...engines/crypto/software/v3.5.2) (2025-09-26)
-
-
-<a name="engines/storage/postgres/v3.5.2"></a>
-## [engines/storage/postgres/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.5.2...engines/storage/postgres/v3.5.2) (2025-09-26)
-
-
-<a name="engines/crypto/aws/v3.5.2"></a>
-## [engines/crypto/aws/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.5.2...engines/crypto/aws/v3.5.2) (2025-09-26)
-
-
-<a name="connectors/awsiot/v3.5.2"></a>
-## [connectors/awsiot/v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/v3.5.2...connectors/awsiot/v3.5.2) (2025-09-26)
-
-
-<a name="v3.5.2"></a>
-## [v3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.5.1...v3.5.2) (2025-09-26)
 
 ### Bug Fixes
 
-* Fix: fixed support for dedicated DLQ event bus configuration across services ([#319](https://github.com/lamassuiot/lamassuiot/issues/319))
-* Fix: ca: add migration for profile_id with null in validity_time column in ca_certificates table ([#316](https://github.com/lamassuiot/lamassuiot/issues/316))
-* Fix: devicemanager: normalize device certificate serial numbers ([#317](https://github.com/lamassuiot/lamassuiot/issues/317))
+
+* Ca: remove sensitive info in audit events (#356)
+
+* VA ski encoding in crl dp (#358)
+
+
 
 ### Chores
 
-* Chore: release: prepare release 3.5.2 ([#320](https://github.com/lamassuiot/lamassuiot/issues/320))
+
+* Release: prepare release 3.6.3 (#359)
+
+
+<a name="3.6.2"></a>
+## [3.6.2](https://github.com/lamassuiot/lamassuiot/compare/v3.6.1...v3.6.2) (2025-11-11)
+
+
 
 ### Features
 
-* Feat: make issuance profile optional at the certificate sign operation ([#318](https://github.com/lamassuiot/lamassuiot/issues/318))
+
+* Add independent database migration tool (#337)
 
 
-<a name="engines/storage/postgres/v3.5.1"></a>
-## [engines/storage/postgres/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.5.1...engines/storage/postgres/v3.5.1) (2025-09-24)
-
-
-<a name="engines/crypto/aws/v3.5.1"></a>
-## [engines/crypto/aws/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.5.1...engines/crypto/aws/v3.5.1) (2025-09-24)
-
-
-<a name="engines/crypto/software/v3.5.1"></a>
-## [engines/crypto/software/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.5.1...engines/crypto/software/v3.5.1) (2025-09-24)
-
-
-<a name="connectors/awsiot/v3.5.1"></a>
-## [connectors/awsiot/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.5.1...connectors/awsiot/v3.5.1) (2025-09-24)
-
-
-<a name="shared/aws/v3.5.1"></a>
-## [shared/aws/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.5.1...shared/aws/v3.5.1) (2025-09-24)
-
-
-<a name="engines/crypto/vaultkv2/v3.5.1"></a>
-## [engines/crypto/vaultkv2/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.5.1...engines/crypto/vaultkv2/v3.5.1) (2025-09-24)
-
-
-<a name="engines/eventbus/aws/v3.5.1"></a>
-## [engines/eventbus/aws/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/core/v3.5.1...engines/eventbus/aws/v3.5.1) (2025-09-24)
-
-
-<a name="core/v3.5.1"></a>
-## [core/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.5.1...core/v3.5.1) (2025-09-24)
-
-
-<a name="engines/crypto/filesystem/v3.5.1"></a>
-## [engines/crypto/filesystem/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.5.1...engines/crypto/filesystem/v3.5.1) (2025-09-24)
-
-
-<a name="engines/eventbus/amqp/v3.5.1"></a>
-## [engines/eventbus/amqp/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.5.1...engines/eventbus/amqp/v3.5.1) (2025-09-24)
-
-
-<a name="engines/crypto/pkcs11/v3.5.1"></a>
-## [engines/crypto/pkcs11/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.5.1...engines/crypto/pkcs11/v3.5.1) (2025-09-24)
-
-
-<a name="engines/fs-storage/localfs/v3.5.1"></a>
-## [engines/fs-storage/localfs/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.5.1...engines/fs-storage/localfs/v3.5.1) (2025-09-24)
-
-
-<a name="sdk/v3.5.1"></a>
-## [sdk/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.5.1...sdk/v3.5.1) (2025-09-24)
-
-
-<a name="backend/v3.5.1"></a>
-## [backend/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.5.1...backend/v3.5.1) (2025-09-24)
-
-
-<a name="shared/subsystems/v3.5.1"></a>
-## [shared/subsystems/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.5.1...shared/subsystems/v3.5.1) (2025-09-24)
-
-
-<a name="engines/fs-storage/s3/v3.5.1"></a>
-## [engines/fs-storage/s3/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.5.1...engines/fs-storage/s3/v3.5.1) (2025-09-24)
-
-
-<a name="monolithic/v3.5.1"></a>
-## [monolithic/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.5.1...monolithic/v3.5.1) (2025-09-24)
-
-
-<a name="shared/http/v3.5.1"></a>
-## [shared/http/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/v3.5.1...shared/http/v3.5.1) (2025-09-24)
-
-
-<a name="v3.5.1"></a>
-## [v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.5.0...v3.5.1) (2025-09-24)
 
 ### Bug Fixes
 
-* Fix: all: add correct source in cloud events ([#311](https://github.com/lamassuiot/lamassuiot/issues/311))
-* Fix: add missing engines to release finalization workflow ([#312](https://github.com/lamassuiot/lamassuiot/issues/312))
-* Fix: monolithic: deploy v4 ui in monolithic with correct port mapping ([#310](https://github.com/lamassuiot/lamassuiot/issues/310))
-* Fix: ca: import ca without key when profileid not supplied ([#309](https://github.com/lamassuiot/lamassuiot/issues/309))
 
-### Chores
+* VA: Use certificate’s actual revocation timestamp in CRL calculation (#333)
 
-* Chore: release: prepare release 3.5.1 ([#313](https://github.com/lamassuiot/lamassuiot/issues/313))
+* Improve AWS KMS key and alias retrieval with pagination support (#336)
 
+* CA: add issuance profile validation for CA operations (#339)
 
-<a name="engines/eventbus/aws/v3.5.0"></a>
-## [engines/eventbus/aws/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.5.0...engines/eventbus/aws/v3.5.0) (2025-09-23)
+* AWS Connector: incorrect IoT metadata key in error messages (#340)
 
+* Fixing keysize for aws-based cryptoengines(#353)
 
-<a name="engines/storage/sqlite/v3.5.0"></a>
-## [engines/storage/sqlite/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.5.0...engines/storage/sqlite/v3.5.0) (2025-09-23)
+* VA: service returns 500 HTTP code for unknown SKIs (#352)
 
 
-<a name="shared/http/v3.5.0"></a>
-## [shared/http/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.5.0...shared/http/v3.5.0) (2025-09-23)
-
-
-<a name="engines/storage/couchdb/v3.5.0"></a>
-## [engines/storage/couchdb/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.5.0...engines/storage/couchdb/v3.5.0) (2025-09-23)
-
-
-<a name="backend/v3.5.0"></a>
-## [backend/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.5.0...backend/v3.5.0) (2025-09-23)
-
-
-<a name="shared/aws/v3.5.0"></a>
-## [shared/aws/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.5.0...shared/aws/v3.5.0) (2025-09-23)
-
-
-<a name="shared/subsystems/v3.5.0"></a>
-## [shared/subsystems/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.5.0...shared/subsystems/v3.5.0) (2025-09-23)
-
-
-<a name="engines/crypto/filesystem/v3.5.0"></a>
-## [engines/crypto/filesystem/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.5.0...engines/crypto/filesystem/v3.5.0) (2025-09-23)
-
-
-<a name="sdk/v3.5.0"></a>
-## [sdk/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.5.0...sdk/v3.5.0) (2025-09-23)
-
-
-<a name="engines/crypto/pkcs11/v3.5.0"></a>
-## [engines/crypto/pkcs11/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.5.0...engines/crypto/pkcs11/v3.5.0) (2025-09-23)
-
-
-<a name="engines/crypto/aws/v3.5.0"></a>
-## [engines/crypto/aws/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.5.0...engines/crypto/aws/v3.5.0) (2025-09-23)
-
-
-<a name="engines/crypto/vaultkv2/v3.5.0"></a>
-## [engines/crypto/vaultkv2/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.5.0...engines/crypto/vaultkv2/v3.5.0) (2025-09-23)
-
-
-<a name="monolithic/v3.5.0"></a>
-## [monolithic/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.5.0...monolithic/v3.5.0) (2025-09-23)
-
-
-<a name="engines/eventbus/amqp/v3.5.0"></a>
-## [engines/eventbus/amqp/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.5.0...engines/eventbus/amqp/v3.5.0) (2025-09-23)
-
-
-<a name="connectors/awsiot/v3.5.0"></a>
-## [connectors/awsiot/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.5.0...connectors/awsiot/v3.5.0) (2025-09-23)
-
-
-<a name="engines/eventbus/channel/v3.5.0"></a>
-## [engines/eventbus/channel/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.5.0...engines/eventbus/channel/v3.5.0) (2025-09-23)
-
-
-<a name="engines/storage/postgres/v3.5.0"></a>
-## [engines/storage/postgres/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.5.0...engines/storage/postgres/v3.5.0) (2025-09-23)
-
-
-<a name="core/v3.5.0"></a>
-## [core/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/v3.5.0...core/v3.5.0) (2025-09-23)
-
-
-<a name="v3.5.0"></a>
-## [v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.4.0...v3.5.0) (2025-09-23)
-
-### Bug Fixes
-
-* Fix: ca: SKI and AKI extracrted from certificates (if any) ([#295](https://github.com/lamassuiot/lamassuiot/issues/295))
-* Fix: add dlq to event bus after 3 retries ([#302](https://github.com/lamassuiot/lamassuiot/issues/302))
-* Fix: allow signing certs expiring after ca ([#299](https://github.com/lamassuiot/lamassuiot/issues/299))
-* Fix: middleware: missing DeleteDevice operation
-* Fix: ca: fix crl urls in generated certificates to include hex encoded with colons ([#279](https://github.com/lamassuiot/lamassuiot/issues/279))
-* Fix: no tmp_dir for fileblob persistence ([#277](https://github.com/lamassuiot/lamassuiot/issues/277))
-* Fix: CRL Initialization on event ([#273](https://github.com/lamassuiot/lamassuiot/issues/273))
-* Fix: update bookmark encoding to use URL-safe base64 encoding ([#272](https://github.com/lamassuiot/lamassuiot/issues/272))
-
-### Chores
-
-* Chore: release: prepare release 3.5.0 ([#307](https://github.com/lamassuiot/lamassuiot/issues/307))
-* Chore: fix release notes in open-pr-release workflow
-* Chore: refactoring release process ([#304](https://github.com/lamassuiot/lamassuiot/issues/304))
-* Chore: update CONTRIBUTING.md to clarify setup instructions ([#296](https://github.com/lamassuiot/lamassuiot/issues/296))
-* Chore: fix linting and typo issues ([#287](https://github.com/lamassuiot/lamassuiot/issues/287))
-* Chore: monolithic: add labels and standard ports in docker containers ([#281](https://github.com/lamassuiot/lamassuiot/issues/281))
-* Chore: Bump dependencies ([#278](https://github.com/lamassuiot/lamassuiot/issues/278))
-
-### Features
-
-* Feat: add DELETE certificate endpoint for orphaned certificate cleanup with issuer CA validation ([#301](https://github.com/lamassuiot/lamassuiot/issues/301))
-* Feat: add support for filtering CAs based on profile_id ([#303](https://github.com/lamassuiot/lamassuiot/issues/303))
-* Feat: all: add audit events ([#291](https://github.com/lamassuiot/lamassuiot/issues/291))
-* Feat: va: add support for CRL certificate reactivation from hold  ([#297](https://github.com/lamassuiot/lamassuiot/issues/297))
-* Feat: add support for deleting devices in decommissioned state ([#294](https://github.com/lamassuiot/lamassuiot/issues/294))
-* Feat: ca: avoid redundancy on issuance profiles generation ([#292](https://github.com/lamassuiot/lamassuiot/issues/292))
-* Feat: ca: default issuance profiles for CAs and integrate in dms EST processes ([#290](https://github.com/lamassuiot/lamassuiot/issues/290))
-* Feat: CA: Add Full CRUD Support for Issuance Profiles in CA Service ([#286](https://github.com/lamassuiot/lamassuiot/issues/286))
-* Feat: add PATCH method to metadata endpoints ([#284](https://github.com/lamassuiot/lamassuiot/issues/284))
-* Feat: DMS: implement update metadata endpoint ([#283](https://github.com/lamassuiot/lamassuiot/issues/283))
-* Feat: va: Remove get roles ([#280](https://github.com/lamassuiot/lamassuiot/issues/280))
-* Feat: DMS: add certificate Issuance Profile support ([#276](https://github.com/lamassuiot/lamassuiot/issues/276))
-* Feat: refactor by adding InitCRLRole method to CRLService and its implementations ([#271](https://github.com/lamassuiot/lamassuiot/issues/271))
-* Feat: add case-insensitive filtering support ([#270](https://github.com/lamassuiot/lamassuiot/issues/270))
-* Feat: DMS Manager: add option to toggle CSR signature verification during Enrollment/Reenrollment ([#268](https://github.com/lamassuiot/lamassuiot/issues/268))
-
-### Refactor
-
-* Refactor: CA: homogenize certificate SN format ([#289](https://github.com/lamassuiot/lamassuiot/issues/289))
 
 ### Tests
 
-* Test: middleware: add DeleteDevice case to event publisher ([#298](https://github.com/lamassuiot/lamassuiot/issues/298))
+
+* Enabling manual triggering of the workflow (#347)
 
 
-<a name="engines/eventbus/aws/v3.4.0"></a>
-## [engines/eventbus/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.4.0...engines/eventbus/aws/v3.4.0) (2025-06-04)
+
+### Chores
 
 
-<a name="engines/crypto/vaultkv2/v3.4.0"></a>
-## [engines/crypto/vaultkv2/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.4.0...engines/crypto/vaultkv2/v3.4.0) (2025-06-04)
+* Adjust test timeout in CI workflow (#348)
+
+* Release: prepare release 3.6.2 (#354)
+
+* Release: prepare release 3.6.2 (#355)
 
 
-<a name="shared/subsystems/v3.4.0"></a>
-## [shared/subsystems/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.4.0...shared/subsystems/v3.4.0) (2025-06-04)
+<a name="3.6.1"></a>
+## [3.6.1](https://github.com/lamassuiot/lamassuiot/compare/v3.6.0...v3.6.1) (2025-10-10)
 
 
-<a name="engines/storage/couchdb/v3.4.0"></a>
-## [engines/storage/couchdb/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.4.0...engines/storage/couchdb/v3.4.0) (2025-06-04)
-
-
-<a name="engines/storage/sqlite/v3.4.0"></a>
-## [engines/storage/sqlite/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.4.0...engines/storage/sqlite/v3.4.0) (2025-06-04)
-
-
-<a name="backend/v3.4.0"></a>
-## [backend/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.4.0...backend/v3.4.0) (2025-06-04)
-
-
-<a name="shared/aws/v3.4.0"></a>
-## [shared/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.4.0...shared/aws/v3.4.0) (2025-06-04)
-
-
-<a name="connectors/awsiot/v3.4.0"></a>
-## [connectors/awsiot/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.4.0...connectors/awsiot/v3.4.0) (2025-06-04)
-
-
-<a name="engines/crypto/pkcs11/v3.4.0"></a>
-## [engines/crypto/pkcs11/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.4.0...engines/crypto/pkcs11/v3.4.0) (2025-06-04)
-
-
-<a name="engines/storage/postgres/v3.4.0"></a>
-## [engines/storage/postgres/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.4.0...engines/storage/postgres/v3.4.0) (2025-06-04)
-
-
-<a name="engines/crypto/filesystem/v3.4.0"></a>
-## [engines/crypto/filesystem/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.4.0...engines/crypto/filesystem/v3.4.0) (2025-06-04)
-
-
-<a name="engines/crypto/aws/v3.4.0"></a>
-## [engines/crypto/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.4.0...engines/crypto/aws/v3.4.0) (2025-06-04)
-
-
-<a name="monolithic/v3.4.0"></a>
-## [monolithic/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.4.0...monolithic/v3.4.0) (2025-06-04)
-
-
-<a name="engines/eventbus/amqp/v3.4.0"></a>
-## [engines/eventbus/amqp/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.4.0...engines/eventbus/amqp/v3.4.0) (2025-06-04)
-
-
-<a name="shared/http/v3.4.0"></a>
-## [shared/http/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.4.0...shared/http/v3.4.0) (2025-06-04)
-
-
-<a name="engines/eventbus/channel/v3.4.0"></a>
-## [engines/eventbus/channel/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.4.0...engines/eventbus/channel/v3.4.0) (2025-06-04)
-
-
-<a name="core/v3.4.0"></a>
-## [core/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.4.0...core/v3.4.0) (2025-06-04)
-
-
-<a name="sdk/v3.4.0"></a>
-## [sdk/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/v3.4.0...sdk/v3.4.0) (2025-06-04)
-
-
-<a name="v3.4.0"></a>
-## [v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.3.0...v3.4.0) (2025-06-04)
 
 ### Bug Fixes
 
-* Fix: CA:  fix filtering CAs by CN ([#265](https://github.com/lamassuiot/lamassuiot/issues/265))
-* Fix: CA: discard aws reserved kms aliases ([#266](https://github.com/lamassuiot/lamassuiot/issues/266))
-* Fix: DMS Manager: ReEnroll - Add a check to validate the presence of a CommonName in the CSR ([#251](https://github.com/lamassuiot/lamassuiot/issues/251))
-* Fix: DMS Manager: add a null check when decommissioning a device wihtout identity ([#250](https://github.com/lamassuiot/lamassuiot/issues/250))
-* Fix: monolithic ui port now being served correctly ([#240](https://github.com/lamassuiot/lamassuiot/issues/240))
+
+* Remove key casting in kms module (#331)
+
+
+
+### Chores
+
+
+* Release: prepare release 3.6.1 (#332)
+
+
+<a name="3.6.0"></a>
+## [3.6.0](https://github.com/lamassuiot/lamassuiot/compare/v3.5.2...v3.6.0) (2025-10-09)
+
+
+
+### Features
+
+
+* Add support to filter certs by subject_key_id (#326)
+
+* KMS Service v1 (#267)
+
+* CA: enhanced CA deletion with cascade operations and private key management (#308)
+
+
+
+### Bug Fixes
+
+
+* Va: use CRL service interface (#322)
+
+* CA: add migration to remove hyphens from issuer_meta_serial_number fields (#325)
+
+* Test configuration and database dependency issues (#327)
+
+* DMS creation date filtering functionality (#329)
+
+
+
+### Chores
+
+
+* Readme update (#323)
+
+* Release: prepare release 3.6.0 (#330)
+
+
+
+### Refactor
+
+
+* Streamline event bus handling and service middleware integration across multiple assemblers (#324)
+
+
+<a name="3.5.2"></a>
+## [3.5.2](https://github.com/lamassuiot/lamassuiot/compare/v3.5.1...v3.5.2) (2025-09-26)
+
+
+
+### Features
+
+
+* Make issuance profile optional at the certificate sign operation (#318)
+
+
+
+### Bug Fixes
+
+
+* Devicemanager: normalize device certificate serial numbers (#317)
+
+* Ca: add migration for profile_id with null in validity_time column in ca_certificates table (#316)
+
+* Fixed support for dedicated DLQ event bus configuration across services (#319)
+
+
+
+### Chores
+
+
+* Release: prepare release 3.5.2 (#320)
+
+
+<a name="3.5.1"></a>
+## [3.5.1](https://github.com/lamassuiot/lamassuiot/compare/v3.5.0...v3.5.1) (2025-09-24)
+
+
+
+### Bug Fixes
+
+
+* Ca: import ca without key when profileid not supplied (#309)
+
+* Monolithic: deploy v4 ui in monolithic with correct port mapping (#310)
+
+* Add missing engines to release finalization workflow (#312)
+
+* All: add correct source in cloud events (#311)
+
+
+
+### Chores
+
+
+* Release: prepare release 3.5.1 (#313)
+
+
+<a name="3.5.0"></a>
+## [3.5.0](https://github.com/lamassuiot/lamassuiot/compare/v3.4.0...v3.5.0) (2025-09-23)
+
+
+
+### Features
+
+
+* DMS Manager: add option to toggle CSR signature verification during Enrollment/Reenrollment (#268)
+
+* Add case-insensitive filtering support (#270)
+
+* Refactor by adding InitCRLRole method to CRLService and its implementations (#271)
+
+* DMS: add certificate Issuance Profile support (#276)
+
+* Va: Remove get roles (#280)
+
+* DMS: implement update metadata endpoint (#283)
+
+* Add PATCH method to metadata endpoints (#284)
+
+* Ca: default issuance profiles for CAs and integrate in dms EST processes (#290)
+
+* Ca: avoid redundancy on issuance profiles generation (#292)
+
+* Add support for deleting devices in decommissioned state (#294)
+
+* Va: add support for CRL certificate reactivation from hold  (#297)
+
+* All: add audit events (#291)
+
+* Add support for filtering CAs based on profile_id (#303)
+
+* Add DELETE certificate endpoint for orphaned certificate cleanup with issuer CA validation (#301)
+
+
+
+### Bug Fixes
+
+
+* Update bookmark encoding to use URL-safe base64 encoding (#272)
+
+* Add the pending signing algorithms (#275)
+
+* No tmp_dir for fileblob persistence (#277)
+
+* Ca: fix crl urls in generated certificates to include hex encoded with colons (#279)
+
+* Middleware: missing DeleteDevice operation
+
+* Allow signing certs expiring after ca (#299)
+
+* Add dlq to event bus after 3 retries (#302)
+
+* Ca: SKI and AKI extracrted from certificates (if any) (#295)
+
+
+
+### Tests
+
+
+* Middleware: add DeleteDevice case to event publisher (#298)
+
+
+
+### Chores
+
+
+* Bump dependencies (#278)
+
+* Monolithic: add labels and standard ports in docker containers (#281)
+
+* Fix linting and typo issues (#287)
+
+* Update CONTRIBUTING.md to clarify setup instructions (#296)
+
+* Refactoring release process (#304)
+
+* Fix release notes in open-pr-release workflow
+
+* Release: prepare release 3.5.0 (#307)
+
+
+
+### Refactor
+
+
+* CA: homogenize certificate SN format (#289)
+
+
+
+### Other
+
+
+* CRL Initialization on event (#273)
+
+* Update dev-release.yaml
+
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* CA: Add Full CRUD Support for Issuance Profiles in CA Service (#286)
+
+
+<a name="3.4.0"></a>
+## [3.4.0](https://github.com/lamassuiot/lamassuiot/compare/v3.3.0...v3.4.0) (2025-06-04)
+
+
+
+### Features
+
+
+* Enhance event filters to use full event data for processing (#242)
+
+* VA: assemble service conditionally based on config (#244)
+
+* CA: refactor crypto engine keys migration (#246)
+
+* CA: implement AWS KMS import keys (#245)
+
+* DMS Manager: add DMS delete operation (#252)
+
+
+
+### Bug Fixes
+
+
+* Monolithic ui port now being served correctly (#240)
+
+* DMS Manager: add a null check when decommissioning a device wihtout identity (#250)
+
+* DMS Manager: ReEnroll - Add a check to validate the presence of a CommonName in the CSR (#251)
+
+* CA: discard aws reserved kms aliases (#266)
+
+* CA:  fix filtering CAs by CN (#265)
+
+
 
 ### Bump Versions
 
-* Bump: backend direct deps ([#264](https://github.com/lamassuiot/lamassuiot/issues/264))
-* Bump: go-jose to 4.0.5 ([#263](https://github.com/lamassuiot/lamassuiot/issues/263))
+
+* Go-jose to 4.0.5 (#263)
+
+* Backend direct deps (#264)
+
+
 
 ### Chores
 
-* Chore: bump x/net to 0.38.0 ([#262](https://github.com/lamassuiot/lamassuiot/issues/262))
-* Chore: bump go-playground/validator to v10.26.0 ([#261](https://github.com/lamassuiot/lamassuiot/issues/261))
-* Chore: bump aws sdk 1.36.3 ([#260](https://github.com/lamassuiot/lamassuiot/issues/260))
-* Chore: bump ory/dockertest 3.12.0 ([#259](https://github.com/lamassuiot/lamassuiot/issues/259))
-* Chore: Bump golang-jwt to 4.5.2 ([#258](https://github.com/lamassuiot/lamassuiot/issues/258))
-* Chore: bumping go version 1.24 ([#255](https://github.com/lamassuiot/lamassuiot/issues/255))
-* Chore: adjust monolithic monitoring job ([#239](https://github.com/lamassuiot/lamassuiot/issues/239))
+
+* Adjust monolithic monitoring job (#239)
+
+* Bumping go version 1.24 (#255)
+
+* Bump golang-jwt to 4.5.2 (#258)
+
+* Bump ory/dockertest 3.12.0 (#259)
+
+* Bump aws sdk 1.36.3 (#260)
+
+* Bump go-playground/validator to v10.26.0 (#261)
+
+* Bump x/net to 0.38.0 (#262)
+
+
+
+### Other
+
+
+* Bump x/crypto to v0.38.0 (#257)
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="3.3.0"></a>
+## [3.3.0](https://github.com/lamassuiot/lamassuiot/compare/v3.2.2...v3.3.0) (2025-03-18)
+
+
 
 ### Features
 
-* Feat: DMS Manager: add DMS delete operation ([#252](https://github.com/lamassuiot/lamassuiot/issues/252))
-* Feat: CA: implement AWS KMS import keys ([#245](https://github.com/lamassuiot/lamassuiot/issues/245))
-* Feat: CA: refactor crypto engine keys migration ([#246](https://github.com/lamassuiot/lamassuiot/issues/246))
-* Feat: VA: assemble service conditionally based on config ([#244](https://github.com/lamassuiot/lamassuiot/issues/244))
-* Feat: enhance event filters to use full event data for processing ([#242](https://github.com/lamassuiot/lamassuiot/issues/242))
+
+* Ca - Add multiple URLs to CRL and OCSP fields in certificates as well as accesing over http instead of https (#213)
+
+* Va - add Issuing Distribution Point extension to CRL (#214)
+
+* Implement JSONPath and JSONSchema filter options for alert subscriptions  (#217)
+
+* Aws-connector - report CA registration error in metadata (#218)
+
+* Add javascript filters support to subscription conditions (#221)
+
+* Add job for scheduled build of CAs CRLs (#216)
+
+* Change device and CA metadata handling by using JSONPatch expressions (#229)
+
+* Monolithic:lammassui-ui is launched with monolithic. disable-ui flag added to avoid (#232)
+
+* DMS Manager: add AWS ALB identity extractor (#237)
 
 
-<a name="engines/storage/sqlite/v3.3.0"></a>
-## [engines/storage/sqlite/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.3.0...engines/storage/sqlite/v3.3.0) (2025-03-18)
-
-
-<a name="connectors/awsiot/v3.3.0"></a>
-## [connectors/awsiot/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.3.0...connectors/awsiot/v3.3.0) (2025-03-18)
-
-
-<a name="monolithic/v3.3.0"></a>
-## [monolithic/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.3.0...monolithic/v3.3.0) (2025-03-18)
-
-
-<a name="backend/v3.3.0"></a>
-## [backend/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.3.0...backend/v3.3.0) (2025-03-18)
-
-
-<a name="shared/aws/v3.3.0"></a>
-## [shared/aws/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.3.0...shared/aws/v3.3.0) (2025-03-18)
-
-
-<a name="engines/crypto/aws/v3.3.0"></a>
-## [engines/crypto/aws/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.3.0...engines/crypto/aws/v3.3.0) (2025-03-18)
-
-
-<a name="core/v3.3.0"></a>
-## [core/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.3.0...core/v3.3.0) (2025-03-18)
-
-
-<a name="engines/eventbus/channel/v3.3.0"></a>
-## [engines/eventbus/channel/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.3.0...engines/eventbus/channel/v3.3.0) (2025-03-18)
-
-
-<a name="engines/crypto/pkcs11/v3.3.0"></a>
-## [engines/crypto/pkcs11/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.3.0...engines/crypto/pkcs11/v3.3.0) (2025-03-18)
-
-
-<a name="engines/eventbus/aws/v3.3.0"></a>
-## [engines/eventbus/aws/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.3.0...engines/eventbus/aws/v3.3.0) (2025-03-18)
-
-
-<a name="engines/eventbus/amqp/v3.3.0"></a>
-## [engines/eventbus/amqp/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.3.0...engines/eventbus/amqp/v3.3.0) (2025-03-18)
-
-
-<a name="engines/storage/couchdb/v3.3.0"></a>
-## [engines/storage/couchdb/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.3.0...engines/storage/couchdb/v3.3.0) (2025-03-18)
-
-
-<a name="shared/http/v3.3.0"></a>
-## [shared/http/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.3.0...shared/http/v3.3.0) (2025-03-18)
-
-
-<a name="engines/storage/postgres/v3.3.0"></a>
-## [engines/storage/postgres/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.3.0...engines/storage/postgres/v3.3.0) (2025-03-18)
-
-
-<a name="sdk/v3.3.0"></a>
-## [sdk/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.3.0...sdk/v3.3.0) (2025-03-18)
-
-
-<a name="engines/crypto/filesystem/v3.3.0"></a>
-## [engines/crypto/filesystem/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.3.0...engines/crypto/filesystem/v3.3.0) (2025-03-18)
-
-
-<a name="shared/subsystems/v3.3.0"></a>
-## [shared/subsystems/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.3.0...shared/subsystems/v3.3.0) (2025-03-18)
-
-
-<a name="engines/crypto/vaultkv2/v3.3.0"></a>
-## [engines/crypto/vaultkv2/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/v3.3.0...engines/crypto/vaultkv2/v3.3.0) (2025-03-18)
-
-
-<a name="v3.3.0"></a>
-## [v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.2.2...v3.3.0) (2025-03-18)
 
 ### Bug Fixes
 
-* Fix: Monolithic: Enable MonitoringJob using negated value of disableMonitor flag ([#234](https://github.com/lamassuiot/lamassuiot/issues/234))
-* Fix: Improved gorm queries to reduce it and avoid recordNotFound errors ([#227](https://github.com/lamassuiot/lamassuiot/issues/227))
-* Fix: aws eventbus - ensure sns topic exists before subscribing to sns ([#215](https://github.com/lamassuiot/lamassuiot/issues/215))
+
+* Aws eventbus - ensure sns topic exists before subscribing to sns (#215)
+
+* Improved gorm queries to reduce it and avoid recordNotFound errors (#227)
+
+* Monolithic: Enable MonitoringJob using negated value of disableMonitor flag (#234)
+
+
 
 ### Chores
 
-* Chore: launch monolithic UI in a random docker port ([#238](https://github.com/lamassuiot/lamassuiot/issues/238))
-* Chore: update contributing guidelines ([#233](https://github.com/lamassuiot/lamassuiot/issues/233))
-* Chore: modularize engine registration with build tags to favour custom builds ([#222](https://github.com/lamassuiot/lamassuiot/issues/222))
-* Chore: show codecov flag for backend module ([#220](https://github.com/lamassuiot/lamassuiot/issues/220))
+
+* Show codecov flag for backend module (#220)
+
+* Modularize engine registration with build tags to favour custom builds (#222)
+
+* Update contributing guidelines (#233)
+
+* Launch monolithic UI in a random docker port (#238)
+
+
+
+### Other
+
+
+* Improved ImportCA to update level based on DSN and KID (#224)
+
+* Improved ImportCA to update level based on DSN and KID
+
+Signed-off-by: Cristobal Arellano <carellano@ikerlan.es>
+
+* Refactor x509utils and ca.go to use helper function for self-signed certificate check
+
+Signed-off-by: Cristobal Arellano <carellano@ikerlan.es>
+
+---------
+
+Signed-off-by: Cristobal Arellano <carellano@ikerlan.es>
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="3.2.2"></a>
+## [3.2.2](https://github.com/lamassuiot/lamassuiot/compare/v3.2.1...v3.2.2) (2025-01-25)
+
+
+
+### Chores
+
+
+* Rename ci-test worflow (#212)
+
+
+
+### Other
+
+
+* CA - fixed x509 key serialization (#211)
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="3.2.1"></a>
+## [3.2.1](https://github.com/lamassuiot/lamassuiot/compare/v3.2.0...v3.2.1) (2025-01-24)
+
+
+
+### Bug Fixes
+
+
+* Hotfix - remove unseting ENV variables befbore PKCS11 proxy connection
+
+
+
+### Refactor
+
+
+* Refactor GetKey for software-based engines (#210)
+
+* refactor GetKey for software-based engines
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* added GetKey specific tests
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+---------
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+
+
+### Other
+
+
+* Hotfixing ca service renaming
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Move aws connector structures and ID composition logic to connector implementation (#205)
+
+* Add aws-related metadata migration to new schema defined in #166 (#209)
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG.md
+
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="3.2.0"></a>
+## [3.2.0](https://github.com/lamassuiot/lamassuiot/compare/v3.1.0...v3.2.0) (2025-01-23)
+
+
 
 ### Features
 
-* Feat: DMS Manager: add AWS ALB identity extractor ([#237](https://github.com/lamassuiot/lamassuiot/issues/237))
-* Feat: Change device and CA metadata handling by using JSONPatch expressions ([#229](https://github.com/lamassuiot/lamassuiot/issues/229))
-* Feat: Add job for scheduled build of CAs CRLs ([#216](https://github.com/lamassuiot/lamassuiot/issues/216))
-* Feat: add javascript filters support to subscription conditions ([#221](https://github.com/lamassuiot/lamassuiot/issues/221))
-* Feat: aws-connector - report CA registration error in metadata ([#218](https://github.com/lamassuiot/lamassuiot/issues/218))
-* Feat: Implement JSONPath and JSONSchema filter options for alert subscriptions  ([#217](https://github.com/lamassuiot/lamassuiot/issues/217))
-* Feat: va - add Issuing Distribution Point extension to CRL ([#214](https://github.com/lamassuiot/lamassuiot/issues/214))
-* Feat: ca - Add multiple URLs to CRL and OCSP fields in certificates as well as accesing over http instead of https ([#213](https://github.com/lamassuiot/lamassuiot/issues/213))
 
+* Derive keyID from public key instead of random uuid (#194)
 
-<a name="connectors/awsiot/v3.2.2"></a>
-## [connectors/awsiot/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/core/v3.2.2...connectors/awsiot/v3.2.2) (2025-01-25)
+* Conditional revoke in reenroll for DMS
 
+* Dmsmamager - allow verifying enroll with external webhook invoke (#188)
 
-<a name="core/v3.2.2"></a>
-## [core/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.2...core/v3.2.2) (2025-01-25)
 
-
-<a name="engines/storage/couchdb/v3.2.2"></a>
-## [engines/storage/couchdb/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.2...engines/storage/couchdb/v3.2.2) (2025-01-25)
-
-
-<a name="backend/v3.2.2"></a>
-## [backend/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.2.2...backend/v3.2.2) (2025-01-25)
-
-
-<a name="engines/eventbus/channel/v3.2.2"></a>
-## [engines/eventbus/channel/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.2.2...engines/eventbus/channel/v3.2.2) (2025-01-25)
-
-
-<a name="engines/eventbus/aws/v3.2.2"></a>
-## [engines/eventbus/aws/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.2.2...engines/eventbus/aws/v3.2.2) (2025-01-25)
-
-
-<a name="monolithic/v3.2.2"></a>
-## [monolithic/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.2.2...monolithic/v3.2.2) (2025-01-25)
-
-
-<a name="engines/crypto/vaultkv2/v3.2.2"></a>
-## [engines/crypto/vaultkv2/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.2...engines/crypto/vaultkv2/v3.2.2) (2025-01-25)
-
-
-<a name="engines/crypto/filesystem/v3.2.2"></a>
-## [engines/crypto/filesystem/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.2...engines/crypto/filesystem/v3.2.2) (2025-01-25)
-
-
-<a name="engines/storage/sqlite/v3.2.2"></a>
-## [engines/storage/sqlite/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.2...engines/storage/sqlite/v3.2.2) (2025-01-25)
-
-
-<a name="shared/http/v3.2.2"></a>
-## [shared/http/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.2.2...shared/http/v3.2.2) (2025-01-25)
-
-
-<a name="shared/aws/v3.2.2"></a>
-## [shared/aws/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.2.2...shared/aws/v3.2.2) (2025-01-25)
-
-
-<a name="engines/eventbus/amqp/v3.2.2"></a>
-## [engines/eventbus/amqp/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.2.2...engines/eventbus/amqp/v3.2.2) (2025-01-25)
-
-
-<a name="engines/crypto/pkcs11/v3.2.2"></a>
-## [engines/crypto/pkcs11/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.2.2...engines/crypto/pkcs11/v3.2.2) (2025-01-25)
-
-
-<a name="sdk/v3.2.2"></a>
-## [sdk/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.2...sdk/v3.2.2) (2025-01-25)
-
-
-<a name="engines/storage/postgres/v3.2.2"></a>
-## [engines/storage/postgres/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.2.2...engines/storage/postgres/v3.2.2) (2025-01-25)
-
-
-<a name="engines/crypto/aws/v3.2.2"></a>
-## [engines/crypto/aws/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.2.2...engines/crypto/aws/v3.2.2) (2025-01-25)
-
-
-<a name="shared/subsystems/v3.2.2"></a>
-## [shared/subsystems/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/v3.2.2...shared/subsystems/v3.2.2) (2025-01-25)
-
-
-<a name="v3.2.2"></a>
-## [v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.2.1...v3.2.2) (2025-01-25)
-
-### Chores
-
-* Chore: rename ci-test worflow ([#212](https://github.com/lamassuiot/lamassuiot/issues/212))
-
-### Fix
-
-* Fix: CA - fixed x509 key serialization ([#211](https://github.com/lamassuiot/lamassuiot/issues/211))
-
-
-<a name="sdk/v3.2.1"></a>
-## [sdk/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.1...sdk/v3.2.1) (2025-01-24)
-
-
-<a name="engines/storage/couchdb/v3.2.1"></a>
-## [engines/storage/couchdb/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.2.1...engines/storage/couchdb/v3.2.1) (2025-01-24)
-
-
-<a name="engines/crypto/vaultkv2/v3.2.1"></a>
-## [engines/crypto/vaultkv2/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.1...engines/crypto/vaultkv2/v3.2.1) (2025-01-24)
-
-
-<a name="engines/storage/sqlite/v3.2.1"></a>
-## [engines/storage/sqlite/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.2.1...engines/storage/sqlite/v3.2.1) (2025-01-24)
-
-
-<a name="engines/eventbus/aws/v3.2.1"></a>
-## [engines/eventbus/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.1...engines/eventbus/aws/v3.2.1) (2025-01-24)
-
-
-<a name="engines/crypto/filesystem/v3.2.1"></a>
-## [engines/crypto/filesystem/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.1...engines/crypto/filesystem/v3.2.1) (2025-01-24)
-
-
-<a name="engines/storage/postgres/v3.2.1"></a>
-## [engines/storage/postgres/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.2.1...engines/storage/postgres/v3.2.1) (2025-01-24)
-
-
-<a name="monolithic/v3.2.1"></a>
-## [monolithic/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.2.1...monolithic/v3.2.1) (2025-01-24)
-
-
-<a name="engines/eventbus/amqp/v3.2.1"></a>
-## [engines/eventbus/amqp/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.2.1...engines/eventbus/amqp/v3.2.1) (2025-01-24)
-
-
-<a name="engines/crypto/pkcs11/v3.2.1"></a>
-## [engines/crypto/pkcs11/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.1...engines/crypto/pkcs11/v3.2.1) (2025-01-24)
-
-
-<a name="shared/http/v3.2.1"></a>
-## [shared/http/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.2.1...shared/http/v3.2.1) (2025-01-24)
-
-
-<a name="engines/crypto/aws/v3.2.1"></a>
-## [engines/crypto/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.2.1...engines/crypto/aws/v3.2.1) (2025-01-24)
-
-
-<a name="engines/eventbus/channel/v3.2.1"></a>
-## [engines/eventbus/channel/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.1...engines/eventbus/channel/v3.2.1) (2025-01-24)
-
-
-<a name="backend/v3.2.1"></a>
-## [backend/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.2.1...backend/v3.2.1) (2025-01-24)
-
-
-<a name="shared/subsystems/v3.2.1"></a>
-## [shared/subsystems/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/core/v3.2.1...shared/subsystems/v3.2.1) (2025-01-24)
-
-
-<a name="core/v3.2.1"></a>
-## [core/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.2.1...core/v3.2.1) (2025-01-24)
-
-
-<a name="shared/aws/v3.2.1"></a>
-## [shared/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.2.1...shared/aws/v3.2.1) (2025-01-24)
-
-
-<a name="connectors/awsiot/v3.2.1"></a>
-## [connectors/awsiot/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/v3.2.1...connectors/awsiot/v3.2.1) (2025-01-24)
-
-
-<a name="v3.2.1"></a>
-## [v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.2.0...v3.2.1) (2025-01-24)
 
 ### Bug Fixes
 
-* Fix: hotfix - remove unseting ENV variables befbore PKCS11 proxy connection
 
-### Refactor
+* Awsconnector - return error instead of exiting to provide error msg (#187)
 
-* Refactor: move aws connector structures and ID composition logic to connector implementation ([#205](https://github.com/lamassuiot/lamassuiot/issues/205))
+* Monolithic - instantiate filesystem crypto engine with correct conf (#186)
 
+* Add json serialization tags to CACertificate struct
 
-<a name="shared/subsystems/v3.2.0"></a>
-## [shared/subsystems/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.2.0...shared/subsystems/v3.2.0) (2025-01-23)
+* AWS Connector: use issuer metadata to refer caid (#204)
 
+* EST: add content length in cacerts download with PEM support (#207)
 
-<a name="shared/aws/v3.2.0"></a>
-## [shared/aws/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.2.0...shared/aws/v3.2.0) (2025-01-23)
 
-
-<a name="monolithic/v3.2.0"></a>
-## [monolithic/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.2.0...monolithic/v3.2.0) (2025-01-23)
-
-
-<a name="engines/crypto/vaultkv2/v3.2.0"></a>
-## [engines/crypto/vaultkv2/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.0...engines/crypto/vaultkv2/v3.2.0) (2025-01-23)
-
-
-<a name="engines/storage/postgres/v3.2.0"></a>
-## [engines/storage/postgres/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.0...engines/storage/postgres/v3.2.0) (2025-01-23)
-
-
-<a name="engines/storage/sqlite/v3.2.0"></a>
-## [engines/storage/sqlite/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.0...engines/storage/sqlite/v3.2.0) (2025-01-23)
-
-
-<a name="shared/http/v3.2.0"></a>
-## [shared/http/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.2.0...shared/http/v3.2.0) (2025-01-23)
-
-
-<a name="sdk/v3.2.0"></a>
-## [sdk/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.0...sdk/v3.2.0) (2025-01-23)
-
-
-<a name="engines/storage/couchdb/v3.2.0"></a>
-## [engines/storage/couchdb/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.2.0...engines/storage/couchdb/v3.2.0) (2025-01-23)
-
-
-<a name="engines/eventbus/channel/v3.2.0"></a>
-## [engines/eventbus/channel/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.0...engines/eventbus/channel/v3.2.0) (2025-01-23)
-
-
-<a name="engines/crypto/filesystem/v3.2.0"></a>
-## [engines/crypto/filesystem/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.2.0...engines/crypto/filesystem/v3.2.0) (2025-01-23)
-
-
-<a name="engines/crypto/pkcs11/v3.2.0"></a>
-## [engines/crypto/pkcs11/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.2.0...engines/crypto/pkcs11/v3.2.0) (2025-01-23)
-
-
-<a name="engines/eventbus/aws/v3.2.0"></a>
-## [engines/eventbus/aws/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.2.0...engines/eventbus/aws/v3.2.0) (2025-01-23)
-
-
-<a name="connectors/awsiot/v3.2.0"></a>
-## [connectors/awsiot/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.2.0...connectors/awsiot/v3.2.0) (2025-01-23)
-
-
-<a name="core/v3.2.0"></a>
-## [core/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.2.0...core/v3.2.0) (2025-01-23)
-
-
-<a name="engines/crypto/aws/v3.2.0"></a>
-## [engines/crypto/aws/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.2.0...engines/crypto/aws/v3.2.0) (2025-01-23)
-
-
-<a name="engines/eventbus/amqp/v3.2.0"></a>
-## [engines/eventbus/amqp/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.0...engines/eventbus/amqp/v3.2.0) (2025-01-23)
-
-
-<a name="backend/v3.2.0"></a>
-## [backend/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/v3.2.0...backend/v3.2.0) (2025-01-23)
-
-
-<a name="v3.2.0"></a>
-## [v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.1.0...v3.2.0) (2025-01-23)
-
-### Bug Fixes
-
-* Fix: EST: add content length in cacerts download with PEM support ([#207](https://github.com/lamassuiot/lamassuiot/issues/207))
-* Fix: AWS Connector: use issuer metadata to refer caid ([#204](https://github.com/lamassuiot/lamassuiot/issues/204))
-* Fix: add json serialization tags to CACertificate struct
-* Fix: monolithic - instantiate filesystem crypto engine with correct conf ([#186](https://github.com/lamassuiot/lamassuiot/issues/186))
-* Fix: awsconnector - return error instead of exiting to provide error msg ([#187](https://github.com/lamassuiot/lamassuiot/issues/187))
-
-### Chores
-
-* Chore: CA: reorder migration ca-csr-request ([#208](https://github.com/lamassuiot/lamassuiot/issues/208))
-* Chore: clean up codecov configuration ([#196](https://github.com/lamassuiot/lamassuiot/issues/196))
-* Chore: configure codecov flags for monorepo ([#192](https://github.com/lamassuiot/lamassuiot/issues/192))
-* Chore: simplify dependencies managment ([#183](https://github.com/lamassuiot/lamassuiot/issues/183))
-* Chore: simplify relese to just one. Remove releases per each module ([#184](https://github.com/lamassuiot/lamassuiot/issues/184))
-
-### Feat
-
-* Feat: CA - Adding first implementation for issuance profiles ([#206](https://github.com/lamassuiot/lamassuiot/issues/206))
-* Feat: create CAs from external signed CSRs ([#202](https://github.com/lamassuiot/lamassuiot/issues/202))
-* Feat: CA Service: Add Is CA indicator to certificate entity ([#201](https://github.com/lamassuiot/lamassuiot/issues/201))
-* Feat: dmsmamager - allow verifying enroll with external webhook invoke ([#188](https://github.com/lamassuiot/lamassuiot/issues/188))
-* Feat: conditional revoke in reenroll for DMS
-* Feat: derive keyID from public key instead of random uuid ([#194](https://github.com/lamassuiot/lamassuiot/issues/194))
-
-### Refactor
-
-* Refactor: ca postgres models
-
-### Test
-
-* Test: Add new tests to core module ([#193](https://github.com/lamassuiot/lamassuiot/issues/193))
-* Test: fix expiration date tests in TestGetCertificatesByExpirationDate ([#185](https://github.com/lamassuiot/lamassuiot/issues/185))
-
-
-<a name="monolithic/v3.1.0"></a>
-## [monolithic/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.1.0...monolithic/v3.1.0) (2024-12-03)
-
-
-<a name="backend/v3.1.0"></a>
-## [backend/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.1.0...backend/v3.1.0) (2024-12-03)
-
-
-<a name="sdk/v3.1.0"></a>
-## [sdk/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.1.0...sdk/v3.1.0) (2024-12-03)
-
-
-<a name="engines/crypto/aws/v3.1.0"></a>
-## [engines/crypto/aws/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.1.0...engines/crypto/aws/v3.1.0) (2024-12-03)
-
-
-<a name="engines/crypto/vaultkv2/v3.1.0"></a>
-## [engines/crypto/vaultkv2/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.1.0...engines/crypto/vaultkv2/v3.1.0) (2024-12-03)
-
-
-<a name="engines/storage/postgres/v3.1.0"></a>
-## [engines/storage/postgres/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.1.0...engines/storage/postgres/v3.1.0) (2024-12-03)
-
-
-<a name="engines/storage/couchdb/v3.1.0"></a>
-## [engines/storage/couchdb/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.1.0...engines/storage/couchdb/v3.1.0) (2024-12-03)
-
-
-<a name="engines/eventbus/channel/v3.1.0"></a>
-## [engines/eventbus/channel/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.1.0...engines/eventbus/channel/v3.1.0) (2024-12-03)
-
-
-<a name="engines/eventbus/aws/v3.1.0"></a>
-## [engines/eventbus/aws/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.1.0...engines/eventbus/aws/v3.1.0) (2024-12-03)
-
-
-<a name="shared/aws/v3.1.0"></a>
-## [shared/aws/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.1.0...shared/aws/v3.1.0) (2024-12-03)
-
-
-<a name="engines/crypto/pkcs11/v3.1.0"></a>
-## [engines/crypto/pkcs11/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.1.0...engines/crypto/pkcs11/v3.1.0) (2024-12-03)
-
-
-<a name="connectors/awsiot/v3.1.0"></a>
-## [connectors/awsiot/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.1.0...connectors/awsiot/v3.1.0) (2024-12-03)
-
-
-<a name="shared/subsystems/v3.1.0"></a>
-## [shared/subsystems/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.1.0...shared/subsystems/v3.1.0) (2024-12-03)
-
-
-<a name="engines/storage/sqlite/v3.1.0"></a>
-## [engines/storage/sqlite/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.1.0...engines/storage/sqlite/v3.1.0) (2024-12-03)
-
-
-<a name="shared/http/v3.1.0"></a>
-## [shared/http/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.1.0...shared/http/v3.1.0) (2024-12-03)
-
-
-<a name="engines/eventbus/amqp/v3.1.0"></a>
-## [engines/eventbus/amqp/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.1.0...engines/eventbus/amqp/v3.1.0) (2024-12-03)
-
-
-<a name="engines/crypto/filesystem/v3.1.0"></a>
-## [engines/crypto/filesystem/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.1.0...engines/crypto/filesystem/v3.1.0) (2024-12-03)
-
-
-<a name="core/v3.1.0"></a>
-## [core/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/v3.1.0...core/v3.1.0) (2024-12-03)
-
-
-<a name="v3.1.0"></a>
-## [v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/v3.0.0...v3.1.0) (2024-12-03)
-
-### Chores
-
-* Chore: remove duplicate tasks from release workflow
-* Chore: fix release workflow dependencies
-* Chore: fix release workflow
-* Chore: fix release workflow
-* Chore: multimodule release workflow ([#182](https://github.com/lamassuiot/lamassuiot/issues/182))
-* Chore: Removing replace from go workspaces ([#181](https://github.com/lamassuiot/lamassuiot/issues/181))
-
-
-<a name="v3.0.0"></a>
-## [v3.0.0](https://github.com/lamassuiot/lamassuiot/compare/v2.8.0...v3.0.0) (2024-11-26)
-
-### Bug Fixes
-
-* Fix: update module paths to place correct version suffix ([#179](https://github.com/lamassuiot/lamassuiot/issues/179))
-
-### Chores
-
-* Chore: fix awsconnector dockerfile
-* Chore: ci update dockerfiles and gh workflow ([#177](https://github.com/lamassuiot/lamassuiot/issues/177))
-
-### Refactor
-
-* Refactor: major refactor v3 pakage - structured code into go submodules([#176](https://github.com/lamassuiot/lamassuiot/issues/176))
-
-
-<a name="v2.8.0"></a>
-## [v2.8.0](https://github.com/lamassuiot/lamassuiot/compare/v2.7.0...v2.8.0) (2024-10-25)
-
-### Bug Fixes
-
-* Fix: Alerts: add missing SMTP config to service builder ([#168](https://github.com/lamassuiot/lamassuiot/issues/168))
-
-### Chores
-
-* Chore: move mapstructure unmantained depency to new ref
-
-### Features
-
-* Feat: DMS: Allow enrollment with expired certificates ([#171](https://github.com/lamassuiot/lamassuiot/issues/171))
-* Feat: AWS IoT Connector: Add additional info in CA registration mode + add SNI CA registration (without private key access) ([#166](https://github.com/lamassuiot/lamassuiot/issues/166))
-
-### Test
-
-* Test: Allow importing SQL dumps into DBs in docker-launched postgres container ([#170](https://github.com/lamassuiot/lamassuiot/issues/170))
-* Test: DMS Manager: add new test to the EST routes and controller ([#169](https://github.com/lamassuiot/lamassuiot/issues/169))
-
-
-<a name="v2.7.0"></a>
-## [v2.7.0](https://github.com/lamassuiot/lamassuiot/compare/v2.6.0...v2.7.0) (2024-10-02)
-
-### Chores
-
-* Chore: fix ci release workflow
-* Chore: Add dependant job in release workflow ([#167](https://github.com/lamassuiot/lamassuiot/issues/167))
-* Chore: Add changelog generation based on commits ([#158](https://github.com/lamassuiot/lamassuiot/issues/158))
-
-### Feat
-
-* Feat: AWS Connector: Improve event description in Device's Events on shadow update ([#157](https://github.com/lamassuiot/lamassuiot/issues/157))
-* Feat: DMS Manager Add support for EST ServerKeyGen ([#123](https://github.com/lamassuiot/lamassuiot/issues/123))
-* Feat: reduce erroneous event processing Intervals in eventbus([#165](https://github.com/lamassuiot/lamassuiot/issues/165))
-* Feat: allow multiple AWS Connectors in a single Lamassu Instance
-* Feat: Add support for Nginx client certificate identity extraction ([#161](https://github.com/lamassuiot/lamassuiot/issues/161))
-
-
-<a name="v2.6.0"></a>
-## [v2.6.0](https://github.com/lamassuiot/lamassuiot/compare/v2.5.3...v2.6.0) (2024-08-31)
-
-### Features
-
-* Feat: AWS Connector: Handle update certificate status & disconnect things from IoTCore on revoke ([#159](https://github.com/lamassuiot/lamassuiot/issues/159))
-
-
-<a name="v2.5.3"></a>
-## [v2.5.3](https://github.com/lamassuiot/lamassuiot/compare/v2.5.2...v2.5.3) (2024-07-16)
-
-
-<a name="v2.5.2"></a>
-## [v2.5.2](https://github.com/lamassuiot/lamassuiot/compare/v2.5.1...v2.5.2) (2024-06-21)
-
-### Chores
-
-* Chore: customize codecov integration ([#133](https://github.com/lamassuiot/lamassuiot/issues/133))
-* Chore: remove unused swagger support ([#118](https://github.com/lamassuiot/lamassuiot/issues/118))
-
-### Refactor
-
-* Refactor: Make event handlers first-class citizens in our code ([#121](https://github.com/lamassuiot/lamassuiot/issues/121))
 
 ### Tests
 
-* Test: Refactor to start event buses once during tests ([#141](https://github.com/lamassuiot/lamassuiot/issues/141))
-* Test: add mock based test to event publisher middelwares  ([#120](https://github.com/lamassuiot/lamassuiot/issues/120))
+
+* Fix expiration date tests in TestGetCertificatesByExpirationDate (#185)
 
 
-<a name="v2.5.1"></a>
-## [v2.5.1](https://github.com/lamassuiot/lamassuiot/compare/v2.5.0...v2.5.1) (2024-05-09)
 
-### Test
-
-* Test: config loader tests
+### Chores
 
 
-<a name="v2.5.0"></a>
-## [v2.5.0](https://github.com/lamassuiot/lamassuiot/compare/v2.4.6...v2.5.0) (2024-02-22)
+* Simplify relese to just one. Remove releases per each module (#184)
+
+* Simplify dependencies managment (#183)
+
+* Configure codecov flags for monorepo (#192)
+
+* Clean up codecov configuration (#196)
+
+* CA: reorder migration ca-csr-request (#208)
 
 
-<a name="v2.4.6"></a>
-## [v2.4.6](https://github.com/lamassuiot/lamassuiot/compare/v2.4.5...v2.4.6) (2024-02-13)
+
+### Refactor
 
 
-<a name="v2.4.5"></a>
-## [v2.4.5](https://github.com/lamassuiot/lamassuiot/compare/v2.4.4...v2.4.5) (2024-02-10)
+* Ca postgres models
 
 
-<a name="v2.4.4"></a>
-## [v2.4.4](https://github.com/lamassuiot/lamassuiot/compare/v2.4.3...v2.4.4) (2024-02-05)
+
+### Other
 
 
-<a name="v2.4.3"></a>
-## [v2.4.3](https://github.com/lamassuiot/lamassuiot/compare/v2.4.2...v2.4.3) (2024-01-31)
+* Add new tests to core module (#193)
+
+* Remove experimental engines (#195)
+
+* CA Service: Add Is CA indicator to certificate entity (#201)
+
+* Create CAs from external signed CSRs (#202)
+
+* CA - Adding first implementation for issuance profiles (#206)
+
+* Update CHANGELOG and RELEASE-NOTES
 
 
-<a name="v2.4.2"></a>
-## [v2.4.2](https://github.com/lamassuiot/lamassuiot/compare/v2.4.1...v2.4.2) (2024-01-30)
+<a name="3.1.0"></a>
+## [3.1.0](https://github.com/lamassuiot/lamassuiot/compare/v3.0.0...v3.1.0) (2024-12-03)
 
 
-<a name="v2.4.1"></a>
-## [v2.4.1](https://github.com/lamassuiot/lamassuiot/compare/v2.4.0...v2.4.1) (2023-12-22)
+
+### Bug Fixes
 
 
-<a name="v2.4.0"></a>
-## [v2.4.0](https://github.com/lamassuiot/lamassuiot/compare/v2.0.0...v2.4.0) (2023-12-20)
+* Fix monolithic cryptoengines spawn
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
 
 
-<a name="v2.0.0"></a>
-## [v2.0.0](https://github.com/lamassuiot/lamassuiot/compare/v1.1.0...v2.0.0) (2023-01-13)
+
+### Chores
 
 
-<a name="v1.1.0"></a>
-## v1.1.0 (2022-07-20)
+* Removing replace from go workspaces (#181)
 
-### Pull Requests
+* Multimodule release workflow (#182)
 
-* Merge pull request [#4](https://github.com/lamassuiot/lamassuiot/issues/4) from lamassuiot/release
-* Merge pull request [#1](https://github.com/lamassuiot/lamassuiot/issues/1) from lamassuiot/develop
+* Fix release workflow
+
+* Fix release workflow
+
+* Fix release workflow dependencies
+
+* Remove duplicate tasks from release workflow
+
+
+
+### Other
+
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="3.0.0"></a>
+## [3.0.0](https://github.com/lamassuiot/lamassuiot/compare/v2.8.0...v3.0.0) (2024-11-26)
+
+
+
+### Bug Fixes
+
+
+* Fix signature tests
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Update module paths to place correct version suffix (#179)
+
+
+
+### Chores
+
+
+* Ci update dockerfiles and gh workflow (#177)
+
+* Fix awsconnector dockerfile
+
+
+
+### Refactor
+
+
+* Major refactor v3 pakage - structured code into go submodules(#176)
+
+
+
+### Other
+
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="2.8.0"></a>
+## [2.8.0](https://github.com/lamassuiot/lamassuiot/compare/v2.7.0...v2.8.0) (2024-10-25)
+
+
+
+### Features
+
+
+* DMS: Allow enrollment with expired certificates (#171)
+
+
+
+### Bug Fixes
+
+
+* Alerts: add missing SMTP config to service builder (#168)
+
+
+
+### Tests
+
+
+* DMS Manager: add new test to the EST routes and controller (#169)
+
+
+
+### Chores
+
+
+* Move mapstructure unmantained depency to new ref
+
+
+
+### Other
+
+
+* Allow importing SQL dumps into DBs in docker-launched postgres container (#170)
+
+* AWS IoT Connector: Add additional info in CA registration mode + add SNI CA registration (without private key access) (#166)
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="2.7.0"></a>
+## [2.7.0](https://github.com/lamassuiot/lamassuiot/compare/v2.6.0...v2.7.0) (2024-10-02)
+
+
+
+### Features
+
+
+* Add support for Nginx client certificate identity extraction (#161)
+
+* Allow multiple AWS Connectors in a single Lamassu Instance
+
+* Reduce erroneous event processing Intervals in eventbus(#165)
+
+
+
+### Bug Fixes
+
+
+* Fix dev-release workflow
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Fix device manager: handle decomission correctly (#162)
+
+defer cert revocation to prevent race condition triggered by EventBus
+
+Signed-off-by: Haritz Saiz <hsaizsierra@gmail.com>
+Co-authored-by: Haritz Saiz <hsaizsierra@gmail.com>
+
+
+
+### Chores
+
+
+* Fix ci release workflow
+
+
+
+### Other
+
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* Update gosec.yml (#163)
+
+* Update gosec.yml
+
+Fix gosec Github Action in workflow
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* Update gosec.yml
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* Update gosec.yml
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+---------
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* DMS Manager Add support for EST ServerKeyGen (#123)
+
+* AWS Connector: Improve event description in Device's Events on shadow update (#157)
+
+* Add changelog generation based on commits (#158)
+
+* Actualizar main-release.yaml
+
+* Update CHANGELOG and RELEASE-NOTES
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* Add dependant job in release workflow (#167)
+
+* Merge branch 'main' of https://github.com/lamassuiot/lamassuiot
+
+* Update CHANGELOG and RELEASE-NOTES
+
+
+<a name="2.6.0"></a>
+## [2.6.0](https://github.com/lamassuiot/lamassuiot/compare/v2.5.3...v2.6.0) (2024-08-31)
+
+
+
+### Features
+
+
+* AWS Connector: Handle update certificate status & disconnect things from IoTCore on revoke (#159)
+
+
+
+### Other
+
+
+* Updatable CA issuance expiration
+
+* Missing bookmark filter separator (#147)
+
+* Adding new dev docker image builder workflow (#148)
+
+adding new dev docker image builder workflow
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Fix dev-release workflow (#149)
+
+fix dev-release workflow
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* Add  filters in bookmark when requestd with bookmark already containing filters (#150)
+
+* Revert "Bugfix: Add  filters in bookmark when requestd with bookmark already containing filters" (#151)
+
+Revert "Bugfix: Add  filters in bookmark when requestd with bookmark already …"
+
+This reverts commit 4017a0956bcdd38bd0b19ba67717e2856b75f946.
+
+* Bugfix/bookmark include filters (#152)
+
+* fix dev-release workflow
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* adding filters while looping get requests with bookmarks containing filters
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* fixing variable names
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* reseting bookmark by checking if at least one eleme is remaining tobe fetched
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* fixing pagination tests
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+---------
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Update device status when certifiate is updated to Active from Revoked status (#153)
+
+* Bump github.com/gin-contrib/cors from 1.4.0 to 1.6.0
+
+Bumps [github.com/gin-contrib/cors](https://github.com/gin-contrib/cors) from 1.4.0 to 1.6.0.
+- [Release notes](https://github.com/gin-contrib/cors/releases)
+- [Changelog](https://github.com/gin-contrib/cors/blob/master/.goreleaser.yaml)
+- [Commits](https://github.com/gin-contrib/cors/compare/v1.4.0...v1.6.0)
+
+---
+updated-dependencies:
+- dependency-name: github.com/gin-contrib/cors
+  dependency-type: direct:production
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+* Ensure preventive delta is triggered
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Add infra for mocked aws iot connector event handling tests (#154)
+
+* Add infra for mocked aws iot connector event handling tests
+---------
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+Co-authored-by: haritz <hsaizsierra@gmail.com>
+
+* Bump deps logrus, dockertest and testify
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Bump version of postgres driver
+
+
+<a name="2.5.3"></a>
+## [2.5.3](https://github.com/lamassuiot/lamassuiot/compare/v2.5.2...v2.5.3) (2024-07-16)
+
+
+
+### Other
+
+
+* Allow filtering CAs by CN (#142)
+
+allow filtering CAs by CN
+
+Signed-off-by: Haritz Saiz <hsaizsierra@gmail.com>
+
+* Monolithic Fix: renable pkcs11 cryptoengine if configured (#143)
+
+renable pkcs11 cryptoengine if configured~
+
+Signed-off-by: Haritz Saiz <hsaizsierra@gmail.com>
+
+* Fixing vault restart path check (#145)
+
+fixing vault restart path check
+
+Signed-off-by: Haritz Saiz <hsaizsierra@gmail.com>
+
+
+<a name="2.5.2"></a>
+## [2.5.2](https://github.com/lamassuiot/lamassuiot/compare/v2.5.1...v2.5.2) (2024-06-21)
+
+
+
+### Tests
+
+
+* Add mock based test to event publisher middelwares  (#120)
+
+* Refactor to start event buses once during tests (#141)
+
+
+
+### Chores
+
+
+* Remove unused swagger support (#118)
+
+* Customize codecov integration (#133)
+
+
+
+### Refactor
+
+
+* Make event handlers first-class citizens in our code (#121)
+
+
+
+### Other
+
+
+* Storage engine refactor - Decouple assemblers from storage engines (#115)
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add test to storage engine builder (#116)
+
+* Add test to storage engine builder
+* Add test to AWS SDK config loading
+
+* Fixes hardcoded queue name (#110)
+
+* Fixes hardcoded queue name
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Sets default queue name for backwards compatibility
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Fixes comma typo
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Uses Viper library option to set default values in configurations and adds the chance to set default values for all services configurations
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Fixes typo when loading config from standard path
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Use instances of the config struct to pass default values
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+---------
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+Co-authored-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add tests for cryptoengines based on support containers (#117)
+
+* Test - Add tests for cryptoengines based on support containers
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* changing AWS KMS-Signer wrapper that supports both PKCS1_V15 and PSS
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* simplify salt calculation for RSA-PSS signatures
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* simplifying AwsKms-Crypto.Signer wrapper
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* fixing RSA-PSS signature-verify
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Use same supporting container for each crypto engine test suite
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* removing unused code
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+---------
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+Co-authored-by: haritz <hsaizsierra@gmail.com>
+
+* Decouple crypto monitor logic from CA Service (#119)
+
+* Decouple crypto monitor logic from CA Service
+* Test: Fix importCA test failling due to expired hardcoded CA certificate
+
+---------
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Update DMS Update event key (#113)
+
+fixing actual usage of the update dms event
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Use golang build tags to customize build  (#124)
+
+chore: use golang build tags to customize build by excluding experimental features and remove incompatible functionallity on windows
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* No storage engine was registered as main is only executed on package load
+
+* Introduce SQLite Storage Engine and Customization Flags for Monolithic Lamassu IoT (#126)
+
+* hotfix: no storage engine was registered as main is only executed on package load
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* feat: add sqlite storage engine only intended for development
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* feat: Add flags to use sqlite storage engine and disable cryptomonitor
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add experimental tag to SQLite storage engine. As it is not intended for production usage
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add disable eventbus flag to monolithic launcher
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Change golang cryptoengine name to golangfs and set it as default
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* A bit of fun
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+---------
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Implementing storage interfaces for CouchDB (#73)
+
+Implemented all Repository interfaces using CouchDB
+- Added experimental tag to CouchDB storage files
+- Modified CouchDB implementation to handle the lack of counting support
+- Ensure that experimental features do not break the build in CI
+
+* Configuring codecov job for checking the difference in the test coverage (#129)
+
+Condifiguring codecov job
+
+Signed-off-by: mgalparsoro <95476185+mgalparsoro@users.noreply.github.com>
+
+* Create pull_request_template (#131)
+
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* Removing dot typo
+
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* Updating codecov github action (#132)
+
+* a change done in ci-test
+
+* delete workflow test coverage
+
+* Update ci-test.yaml
+
+Signed-off-by: mgalparsoro <95476185+mgalparsoro@users.noreply.github.com>
+
+* Update ci-test.yaml
+
+Signed-off-by: mgalparsoro <95476185+mgalparsoro@users.noreply.github.com>
+
+* Delete .github/workflows/main-push.yaml
+
+Signed-off-by: mgalparsoro <95476185+mgalparsoro@users.noreply.github.com>
+
+* Update ci-test.yaml
+
+Signed-off-by: mgalparsoro <95476185+mgalparsoro@users.noreply.github.com>
+
+---------
+
+Signed-off-by: mgalparsoro <95476185+mgalparsoro@users.noreply.github.com>
+
+* Update README.md
+
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* Update ci-test.yaml
+
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* Update ci-test.yaml
+
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+* Adding basic tests to EventBus (#135)
+
+* adding basic tests to EventBus
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* wait publishg with sleep
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* fixing RunAsync with error report
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* increase tests timeout from 10m to 15m
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+---------
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* CA testing: New tests (#134)
+
+adding tests to CA service
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* EST CACerts tests (#136)
+
+* Adding content-length to EST endpoints (#139)
+
+adding content-length to EST endpoints
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Check DMS ownership on enrollment (#130)
+
+check dms ownership on enrollment
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Pagination optimization(#138)
+
+* CA testing: New tests (#134)
+
+adding tests to CA service
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+
+* Optimization of the pagination and getAllDevices tested
+
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+
+* Testing getDeviceStats and getDevicesByDMS
+
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+
+* TestGetDeviceByID done
+
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+
+* more device manager and dms tests
+
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+
+---------
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+Signed-off-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+Co-authored-by: Haritz S. Sierra <hsaizsierra@gmail.com>
+
+
+<a name="2.5.1"></a>
+## [2.5.1](https://github.com/lamassuiot/lamassuiot/compare/v2.5.0...v2.5.1) (2024-05-09)
+
+
+
+### Removed
+
+
+* Remove go.work file
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+
+
+### Other
+
+
+* Adding monoitcally increasing CRL number as defined in RFC5280 + bump to go 1.22
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Using patch version in go version within go.mid
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Adding coverage report in PRs
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Adding go version bump action (#96)
+
+* Adding go version bump action
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Minor fix of job name id
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+---------
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Fix Go Bump action (#97)
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Fixing bump goversion workflow (#98)
+
+fixing bump goversion workflow
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Bumping go version to 1.22.1 (#99)
+
+Bump go version to 1.22.1
+
+Signed-off-by: Lamassu GH Action <lamassu-action@users.noreply.github.com>
+Co-authored-by: Lamassu GH Action <lamassu-action@users.noreply.github.com>
+
+* Bump github.com/cloudevents/sdk-go/v2 from 2.11.0 to 2.15.2
+
+Bumps [github.com/cloudevents/sdk-go/v2](https://github.com/cloudevents/sdk-go) from 2.11.0 to 2.15.2.
+- [Release notes](https://github.com/cloudevents/sdk-go/releases)
+- [Commits](https://github.com/cloudevents/sdk-go/compare/v2.11.0...v2.15.2)
+
+---
+updated-dependencies:
+- dependency-name: github.com/cloudevents/sdk-go/v2
+  dependency-type: direct:production
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+* Refactor EventBus with high-level functions (#102)
+
+* refactoring watermill with HighLevel funcs and MW
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* adjusting Watermill usage with middlewares
+
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+* SQS-SNS Event provider + adding event bus tests
+
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+* first working version with watermill and SQS-SNS
+
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+* refactored AWS SNS-SQS implementation into exchanges
+
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+* adding more tests for enrollment/reenrollment event generation
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* refactored logger to include better svc tracing + exposing handler func
+
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+* fixing for loop
+
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+* removing amqp creds leak in logging
+
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+---------
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+Signed-off-by: haritzsaiz <hsaizsierra@gmail.com>
+
+* Extends AWS Authentication methods (#103)
+
+* Adds option for temporary credentials in AWS connector
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Adds AWS authentication method with assume role
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Fixes assume role authentication
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Adds default authentication when authentication method is not detected
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Refactors to avoid duplicated code
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+---------
+
+Signed-off-by: Mikel Amuchastegui Zubizarreta <mamuchastegui@lksnext.com>
+
+* Minor code cleanup (#104)
+
+Code clean up
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Remove coverage in CI (#106)
+
+remove coverage
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Fix - Restore cron scheduller stop during test suite shutdown (#105)
+
+* Fix - Restore cron scheduller stop during test suite shutdown
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* fixing CA after suite
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Fix - Test shutdown process - Reorder services shutdown
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+---------
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+Co-authored-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Adding flexibility for creating SelfSigned CAs + Adding ARN to cert metadata (#84)
+
+* adding flexibility for creating SelfSigned CAs + adding ARN to cert metadata for registered certs
+
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+
+* fixing compilation issue
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+---------
+
+Signed-off-by: Manex Galparsoro <mgalparsoro@ikerlan.es>
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+Co-authored-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Create SECURITY.md
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* Minor code quaility refactor of assemblers module
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Code clean up at x509engines module
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Refactor - fix linter warnings
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Remove unused swagger dependecnies
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Refactoring logging system (#111)
+
+* adding request IDs to CAService
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* adding context to all services functions + adding contextual logger for all services functions + adding context to db ops
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* refactoring logger config names + adding caller ID to logs
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* fixing context in selectAll and helpers logging test
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* adding new gin middlewares + better tracing
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* fixing engine retrival log message + using correct logging variables for req-id
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* removing external gindump into managed functionality
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+---------
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+* Bump viper version to 1.18.2
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Config loader tests
+
+* Remove usage of experimental go features for slices package
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix null-loggers & remove global loggers (#114)
+
+removing global logers
+
+Signed-off-by: haritz <hsaizsierra@gmail.com>
+
+
+<a name="2.5.0"></a>
+## [2.5.0](https://github.com/lamassuiot/lamassuiot/compare/v2.4.6...v2.5.0) (2024-02-22)
+
+
+
+### Other
+
+
+* Adding threatsafe protection in msg handling for AWS IoT and Alerts (#92)
+
+
+<a name="2.4.6"></a>
+## [2.4.6](https://github.com/lamassuiot/lamassuiot/compare/v2.4.5...v2.4.6) (2024-02-13)
+
+
+
+### Other
+
+
+* Fix first event storage at eventstore. (#90)
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Standardize times in dockerfile to iso8601 and fixing debug pg time …deltas (#91)
+
+standarizing times in dockerfile to iso8601 and fixing debug pg time deltas
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+
+<a name="2.4.5"></a>
+## [2.4.5](https://github.com/lamassuiot/lamassuiot/compare/v2.4.4...v2.4.5) (2024-02-10)
+
+
+
+### Other
+
+
+* Fix DMS Reenroll: Return error if secondary CA validation also fails (#86)
+
+* return error if secondary validation is not valid
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* adding more EST-DMS tests
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* fixing err/prergistration err checking in enroll test
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* adding more tests + fixing coverage reported in CI
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* adding PEM accept tests
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* adding a cron stop mechanism + fix https insecure test client
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+---------
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Add Import CA hierarchy functionality (#88)
+
+adding import CA hierarchy test
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Prevent creating empty CA subject fields (#89)
+
+prevent using empty subject fields
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Reorder reenroll expiration check (#87)
+
+reorder reenroll expiration check
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+
+<a name="2.4.4"></a>
+## [2.4.4](https://github.com/lamassuiot/lamassuiot/compare/v2.4.3...v2.4.4) (2024-02-05)
+
+
+
+### Chores
+
+
+* Upgrade actions to node 20
+
+
+
+### Other
+
+
+* (ci) - Fix merge main into major release branch (#80)
+
+Fix merge main into major release branch (vx). Unshallow fetch required to merge
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Adding firsts EST enroll test + Dynamic coverage badge in README (#81)
+
+adding firsts EST enroll test + dynamic coverage badge in README
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Bump github.com/opencontainers/runc from 1.1.6 to 1.1.12
+
+Bumps [github.com/opencontainers/runc](https://github.com/opencontainers/runc) from 1.1.6 to 1.1.12.
+- [Release notes](https://github.com/opencontainers/runc/releases)
+- [Changelog](https://github.com/opencontainers/runc/blob/v1.1.12/CHANGELOG.md)
+- [Commits](https://github.com/opencontainers/runc/compare/v1.1.6...v1.1.12)
+
+---
+updated-dependencies:
+- dependency-name: github.com/opencontainers/runc
+  dependency-type: indirect
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+* Adding panic-safe message handling to Device Manager (#85)
+
+* adding panic-safe message handling
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* refactoring and cleaning code
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+---------
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+
+<a name="2.4.3"></a>
+## [2.4.3](https://github.com/lamassuiot/lamassuiot/compare/v2.4.2...v2.4.3) (2024-01-31)
+
+
+
+### Other
+
+
+* Prevent revoking non-active device certificate on ReEnroll (#79)
+
+prevent revoking non-active device cert
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Prevent Panic while handling a cloud event with null data (#78)
+
+fixing possible null data in cloud event that would cause panic
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+
+<a name="2.4.2"></a>
+## [2.4.2](https://github.com/lamassuiot/lamassuiot/compare/v2.4.1...v2.4.2) (2024-01-29)
+
+
+
+### Bug Fixes
+
+
+* Fix durationToString while using nanoseconds (#43)
+
+* Fixing watermill ack & correct certificate expiration
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Fixed missing function call naming refactor
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Simplify conditional branch and resolve minor lintter issues
+
+* Use correct syntax for vars
+
+
+
+### Other
+
+
+* (ci): add an automated workflow for release  (#42)
+
+* Compute version name for tag, release and branch
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Use personal tokens for mege
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* ci - Start release by freezing a release branch
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Remove .git from Dockerfiles
+
+Signed-off-by: Juanjo Rodriguez  <jjrodriguez@lksnext.com>
+
+---------
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+Co-authored-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Rename method to checkCertificateRevocation
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Add workflow for testing
+
+* Fix typo and apply gofmt simplify (#44)
+
+Add device id to the log
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* Pretty print test results
+
+* Reduce log level, skip unreliable tests and manage ignored errors in tests
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Launch tests on PR create or update
+
+* Proposal for removing support for test infrastructure deployment (#50)
+
+Remove support for test infraestructure deployment
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix dependabot security alerts upgrading dependencies (#51)
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Bump github.com/go-jose/go-jose/v3 from 3.0.0 to 3.0.1
+
+Bumps [github.com/go-jose/go-jose/v3](https://github.com/go-jose/go-jose) from 3.0.0 to 3.0.1.
+- [Release notes](https://github.com/go-jose/go-jose/releases)
+- [Changelog](https://github.com/go-jose/go-jose/blob/main/CHANGELOG.md)
+- [Commits](https://github.com/go-jose/go-jose/compare/v3.0.0...v3.0.1)
+
+---
+updated-dependencies:
+- dependency-name: github.com/go-jose/go-jose/v3
+  dependency-type: indirect
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+* SQL Injection  (#55)
+
+addjusting variable name and sql injection prevention
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Add Gosec to CI (#54)
+
+* Add Gosec to CI 
+* Exclude rule G104
+* Exclude rule G601
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* CI - Gosec - Add push on main branch event
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix unordered slices comparison
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add unit testing for helpers
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add test for messaging utils and disable unreliable test
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Remove unused funtion x509fingerprint
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Restric file permissions to owner
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add tests for file sourced certs and keys
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Tweaked postgres ops to improve performance
+
+Signed-off-by: Cristobal Arellano <carellano@ikerlan.es>
+
+* Adapt interfaces to improve consistency
+
+Signed-off-by: Cristobal Arellano <carellano@ikerlan.es>
+
+* Tweaked postgres ops to improve performance (#65)
+
+* Prevent "soft" SQL injections (#67)
+
+check if field is allowed to be used in query
+
+Signed-off-by: Cristobal Arellano <carellano@ikerlan.es>
+
+* Add unit tests to filesystem based crypto engine (#64)
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Tests - Add tests to X509Criptoengine (#68)
+
+* Add tests to x509engine
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix - Error validating signature using EC with hashed input
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+---------
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* E2E Usecase1 test. CSR signing with extensions and more key usages (#69)
+
+* adding usecase test 1 + csr signing with extensions and augmented keyusage
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* using https instead of http in OCSP and CRL variables
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* skipping usecase 1 test
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* generalizing extension generation test
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+---------
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Fix config AMQP tag typo (#71)
+
+fixed config tag typo
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Integration tests for Device Manager service
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Refactor - Move test server assembling logic to a common place
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Improve organization of BeforeEach and AfterSuite logic
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix typo in filename
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Adding existing logic to check for CA expiration deltas and fixed test typo (#74)
+
+adding existing logic to check for CA expiration deltas and fixed testfunc typo
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Removed as PrivateKey from models is not used
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix duration to string year and weeks and new tests
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Adding basic CAs in docker image + serializing error correctly in EST (#77)
+
+adding basic CAs in docker image + seralizing error correctly in EST
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Rename dms_id param within DeviceManager (#76)
+
+renaming dms_id param
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+
+<a name="2.4.1"></a>
+## [2.4.1](https://github.com/lamassuiot/lamassuiot/compare/v2.4.0...v2.4.1) (2023-12-21)
+
+
+
+### Bug Fixes
+
+
+* Reduce docker images surface (#36)
+
+* Fix(sonar) - Reduce ca image surface
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix(sonar) - Reduce ca image surface (#40)
+
+* Use versions computed externally
+
+* Use versions computed externally (#41)
+
+
+
+### Other
+
+
+* Replacing AsyncMessaging with watermill lib (#37)
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Refactoring dependecies system (#38)
+
+* deleting vendor folder and refactoring CI and dockerfiles
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* adding go package auto publish into branch w/ Github Action
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+---------
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Fixing if structure in github action
+
+* Regex for checking semver fix
+
+* Setenv replaced with secure commands
+
+* Removing changelog file as non exists
+
+* Changing env usage in action
+
+* Added missing refact
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* Added missing refact (#39)
+
+
+<a name="2.4.0"></a>
+## [2.4.0](https://github.com/lamassuiot/lamassuiot/compare/v0.0.6...v2.4.0) (2023-12-20)
+
+
+
+### Bug Fixes
+
+
+* Fixing image naming
+
+* Fixed vendor folder sync (#27)
+
+* Fixing github actions. Adapt to new naming convention (#28)
+
+fixing github actions
+
+* Remove code duplications (#33)
+
+
+
+### Other
+
+
+* Release 2.2 (#18)
+
+* Update Sign & Verify
+
+* Add Import CA Endpoint
+
+* Add the variable WithPrivatekey to the http payload of the CA
+
+* Update Verify and Enroll functions
+
+* Remove BD docker build
+
+Signed-off-by: Haritz S. Sierra <31985294+haritzsaiz@users.noreply.github.com>
+
+* Update Device Manager Unit Tests and add email template (#20)
+
+* Update Alerts, DevManager and OCSP Tests & add email.html template
+
+* Update Device Manager tests
+
+* Fix DMS enroll (#21)
+
+fixed enroll validation client cert
+
+* Relase candidate for 2.3 (#26)
+
+* pre cloudproxy integration with azure
+
+* Refactoring in progress
+
+* implemented iterateDeviceWithPredicate
+
+* core services refactored
+
+* Fixed Get Devices endpoint
+
+* added mail service
+
+* added new tests
+
+* Tests: Initial version
+
+* Revert "Tests: Initial version"
+
+This reverts commit 8cef5398ad44655cd283220a3d67b337dd1a1a14
+
+* Update tests
+
+* new alerts functionalities
+
+* Validation files added
+
+* Validation and logging
+
+* Update
+
+* Vault Service
+
+* Update Vault Service
+
+* local changes
+
+* alerts progress
+
+* alert - fix: empty user subs now returns empty list instead of err
+
+* refactored lamassu + alerts service
+
+* infra: fix tests file paths
+
+* infra: renamed 'dms enroller' refs to 'dms managwer'
+
+* infra: trigger on workflow file update
+
+* infra: fix test ca file paths
+
+* New Alerts service + general refactor
+
+Co-authored-by: Saiz Haritz <hsaiz@ikerlan.es>
+Co-authored-by: Hernandez Elena <Ehernandez@ikerlan.es>
+Co-authored-by: jporres <jporres@ikerlan.es>
+
+* infra: fx new db dockerfile name
+
+* infra - aws: fix corrupted npm sha ref
+
+* fix critical reenroll bug
+
+* ocsp + critical reenroll fix
+
+* remove redundant certificate validation
+
+* removed unused test app
+
+* change EC2 deployment script
+
+* fix aws cdk library integrity check
+
+* fix EC2 lamassu install script
+
+* bumping docker compose version installed on EC2
+
+* removed Jaeger/otel config
+
+* removed all otel references
+
+* Refactored services into one
+
+* testing new periodic certs checking system
+
+* fixed and rearchitected scan system
+
+* fixing ocsp key parsing format
+
+* Update EST Response
+
+* allow non TLS connections for AMQP, HTTP server and Vault
+
+* Develop (#6)
+
+* removed Jaeger/otel config
+
+* removed all otel references
+
+* Refactored services into one
+
+* testing new periodic certs checking system
+
+* fixed and rearchitected scan system
+
+* fixing ocsp key parsing format
+
+* Update EST Response
+
+* allow non TLS connections for AMQP, HTTP server and Vault
+
+Co-authored-by: Saiz Haritz <hsaiz@ikerlan.es>
+
+* fixed AMQP certificate load only in TLS mode
+
+* adding AMQP UserPass support
+
+* added support for HTTP or HTTPS for Lamassu Clients
+
+* Adding AMQP reconnection logic
+
+* Refactored logging system
+
+* fixed POSTGRES_USERNAME for CA + sqlite dependency
+
+* fixing type
+
+* limiting gopem RSA keysize
+
+* fixed service middleware autoref arquitectural problem
+
+* fixing DMS Authorization test
+
+* adding timestamp to logs + newVaultEngine autounseal optional + new ca scan optional
+
+* general fixes
+
+* Update alerts and AWSKMS
+
+* adding cloud hosted DMS
+
+* patch(json_path): fixed json path condition filtering
+
+Signed-off-by: Saiz Haritz <hsaiz@ikerlan.es>
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* patch(github actions): changed actions to use version instead of tag
+
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+
+* findus things
+
+* adding updated go mod files
+
+* Add DMS name to device & Update AWS Device Shadow
+
+* Add the AllowNewEnrollment functionality in the DMS and device manager, add the AllowExpiredRenewal functionality in the DMS and add the functionality to create a CA indicating a fixed date or duration.
+
+* Fix deviceManager, CA & DmsManager services tests
+
+* Update the SignCertificateRequest endpoint and add the AwsSecretManager implementation
+
+* Update Device Manager Reenroll function verify DMS Certificate with UpstreamCA
+
+* Update Reenroll function when cloud Dms is false
+
+* Migrate images from Dockerhub services to Github Registry
+
+* Update Github Workflows
+
+* Update DMS AMQP Middleware and Create Get Devices By DMS endpoint
+
+* Update tag generator
+
+* refactoring CA service
+
+* Fixing cross csr signature
+
+* adding vaultkv2 support. pending import methods
+
+* Update the issuance Expiration type of the databse when creating a CA
+
+* advanced logging
+
+* refactoring core svc to v3
+
+* refactoring to v3
+
+* cloud connector
+
+* adding vendor
+
+* Update EST Client: Add APS to reenroll endpoint & Add extra validation CAs to DMS Reenroll options
+
+* v3 dev
+
+* Integrate Lamassu CA V3 client
+
+* Update services to use the CA V3 client
+
+* adding ctx to CA calls to log req-id
+
+* merging V3 and V2
+
+* Add the cryptographic engine ID when creating/importing a CA
+
+* added psql bookmarking
+
+* postgres bookmark
+
+* Add client certificate verification recursion level in enrollment
+
+* Rename chain_validation_level and additional_validation_cas
+
+* Adding new ca features
+
+* update develop branch with v3 version
+
+* refactoring to constant events types and aws iot development
+
+* merging v3 with develop
+
+* untracking cmd/test
+
+* Feature/standard revoke reason (#24)
+
+* added revocation reason in OCSP and CRL. added new go type for config secrets. fixed v3 listing elements in controller
+
+* fixed bugs
+
+* Feature/postgres testing (#25)
+
+* added revocation reason in OCSP and CRL. added new go type for config secrets. fixed v3 listing elements in controller
+
+* fixed bugs
+
+* added basic testing infra
+
+* fixed enroll validation
+
+* fixed JITP and DevManager enroll
+
+* added device-manager main changes
+
+---------
+
+Signed-off-by: Saiz Haritz <hsaiz@ikerlan.es>
+Signed-off-by: Saiz Haritz <hsaizsierra@gmail.com>
+Co-authored-by: Saiz Haritz <hsaiz@ikerlan.es>
+Co-authored-by: Ubuntu <ubuntu@ubuntu2110.linuxvmimages.local>
+Co-authored-by: Hernandez Elena <Ehernandez@ikerlan.es>
+Co-authored-by: jporres <jporres@ikerlan.es>
+
+* Bugfix/fix ci releaseflow (#29)
+
+* fixing github actions
+
+* fixed ca dockerfile name
+
+* Bugfix/fix ci releaseflow (#30)
+
+* fixing github actions
+
+* fixed ca dockerfile name
+
+* fixed alerts and cloud proxy with latest go version
+
+* Disabled cross compilation cloud-proxy
+
+* Release 2.4.0 (#31)
+
+* first interface generic draft
+
+* Testing CA client
+
+* removed aws sdk v1 -> v2
+
+* update vendor
+
+* git commit with errors
+
+* mastests
+
+* added main refactor to v3 style
+
+* more tests
+
+* more tests
+
+* added new metadata keys for auto register
+
+* refactoring dms & device with enroll/reenroll support
+
+* ignoring cmd/test folder
+
+* updating automation structures
+
+* remooving unecessary code
+
+* Removing legacy code
+
+* firsr complete iot-automation
+
+* added CA filters
+
+* changing device ID slot to store SN not Certificate model
+
+* removed aws sdk v1
+
+* updating dependencies
+
+* refactoring alerts
+
+* Refactoring Annotation System
+
+* monolithic DEV version
+
+* updating vendor
+
+* fixing aws main
+
+* monolithic dev
+
+* monolithic dev
+
+* Fixinig bugs
+
+* tunning aws support
+
+* patching test cmd
+
+* fixing things
+
+* adding pkcs11 + fix new alerts dockerfile
+
+* CA hierarchy tests
+
+* storage list simplified query
+
+* some checks in the tests
+
+* testing the cryptoengines with hierarchies
+
+* fixing iter issue + ca revocation + device decommissioning + force updates w shadows
+
+* Fix typo in startup message
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* adding import certificate endpoint
+
+* solving the problem of parent ca
+
+* fixed aws reenroll sync cert
+
+* fixing amq cloud events
+
+* fixing kms + adding vault root token print in monolithic version
+
+* fixing parent engine
+
+* fixed KMS Signer auth while using localstack
+
+* fixed AWS ResolverV2 failure by bumping SDK version
+
+* renaming device status + rolling back EST
+
+* rolling back to gloablan sign EST
+
+* adding ocsp and crl validation with external CAs on Enroll/Renroll
+
+* fixed dms main logger + bind crt to device in dms
+
+* implementing client cert import
+
+* adding bind mode in http client + implementing import cert sdk call
+
+* fixed crypto engine problem
+
+* Developing import key vault functionality
+
+* Ensuring the import key functionality
+
+---------
+
+Signed-off-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+Co-authored-by: Juanjo Rodriguez <jjrodriguez@lksnext.com>
+
+* Removing cloud-proxy & adding aws-connector
+
+* Fix sonar - Remove this conditional structure or edit its code blocks so that they're not all the same. (#32)
+
+Fix sonar - conditioned result
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Fix sonar - Add cleanning steps to dockerfiles (#34)
+
+* fix(sonar): Clean apt cache
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* Add clean steps to ca dockerfile
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+---------
+
+Signed-off-by: Juan Jose Rodriguez <jjrodriguez@lksnext.com>
+
+* V2.4.0 (#35)
+
+
+<a name="0.0.6"></a>
+## [0.0.6](https://github.com/lamassuiot/lamassuiot/compare/v0.0.5...v0.0.6) (2023-01-13)
+
+
+
+### Other
+
+
+* Release 2.0.0 (#15)
+
+* pre cloudproxy integration with azure
+
+* Refactoring in progress
+
+* implemented iterateDeviceWithPredicate
+
+* core services refactored
+
+* Fixed Get Devices endpoint
+
+* added mail service
+
+* added new tests
+
+* Tests: Initial version
+
+* Revert "Tests: Initial version"
+
+This reverts commit 8cef5398ad44655cd283220a3d67b337dd1a1a14
+
+* Update tests
+
+* new alerts functionalities
+
+* Validation files added
+
+* Validation and logging
+
+* Update
+
+* Vault Service
+
+* Update Vault Service
+
+* local changes
+
+* alerts progress
+
+* alert - fix: empty user subs now returns empty list instead of err
+
+* refactored lamassu + alerts service
+
+* infra: fix tests file paths
+
+* infra: renamed 'dms enroller' refs to 'dms managwer'
+
+* infra: trigger on workflow file update
+
+* infra: fix test ca file paths
+
+* New Alerts service + general refactor
+
+Co-authored-by: Saiz Haritz <hsaiz@ikerlan.es>
+Co-authored-by: Hernandez Elena <Ehernandez@ikerlan.es>
+Co-authored-by: jporres <jporres@ikerlan.es>
+
+* infra: fx new db dockerfile name
+
+* infra - aws: fix corrupted npm sha ref
+
+* fix critical reenroll bug
+
+* ocsp + critical reenroll fix
+
+* remove redundant certificate validation
+
+* removed unused test app
+
+* change EC2 deployment script
+
+* fix aws cdk library integrity check
+
+* fix EC2 lamassu install script
+
+* bumping docker compose version installed on EC2
+
+* removed Jaeger/otel config
+
+* removed all otel references
+
+* Refactored services into one
+
+* testing new periodic certs checking system
+
+* fixed and rearchitected scan system
+
+* fixing ocsp key parsing format
+
+* Update EST Response
+
+* allow non TLS connections for AMQP, HTTP server and Vault
+
+* Develop (#6)
+
+* removed Jaeger/otel config
+
+* removed all otel references
+
+* Refactored services into one
+
+* testing new periodic certs checking system
+
+* fixed and rearchitected scan system
+
+* fixing ocsp key parsing format
+
+* Update EST Response
+
+* allow non TLS connections for AMQP, HTTP server and Vault
+
+Co-authored-by: Saiz Haritz <hsaiz@ikerlan.es>
+
+* fixed AMQP certificate load only in TLS mode
+
+* adding AMQP UserPass support
+
+* Develop (#7)
+
+* removed Jaeger/otel config
+
+* removed all otel references
+
+* Refactored services into one
+
+* testing new periodic certs checking system
+
+* fixed and rearchitected scan system
+
+* fixing ocsp key parsing format
+
+* Update EST Response
+
+* allow non TLS connections for AMQP, HTTP server and Vault
+
+* fixed AMQP certificate load only in TLS mode
+
+* adding AMQP UserPass support
+
+Co-authored-by: Saiz Haritz <hsaiz@ikerlan.es>
+
+* added support for HTTP or HTTPS for Lamassu Clients
+
+* Adding AMQP reconnection logic
+
+* Refactored logging system
+
+* fixed POSTGRES_USERNAME for CA + sqlite dependency
+
+* fixing type
+
+* limiting gopem RSA keysize
+
+* fixed service middleware autoref arquitectural problem
+
+* fixing DMS Authorization test
+
+* adding timestamp to logs + newVaultEngine autounseal optional + new ca scan optional
+
+* general fixes
+
+* Update alerts and AWSKMS
+
+* adding cloud hosted DMS
+
+Co-authored-by: Saiz Haritz <hsaiz@ikerlan.es>
+Co-authored-by: Ubuntu <ubuntu@ubuntu2110.linuxvmimages.local>
+Co-authored-by: Hernandez Elena <Ehernandez@ikerlan.es>
+Co-authored-by: jporres <jporres@ikerlan.es>
+
+
+<a name="0.0.5"></a>
+## 0.0.5 (2022-07-20)
+
+
+
+### Bug Fixes
+
+
+* Fixed ca + dev-manager tests
+
+* Fixed release cicd job syntax
+
+* Fix install steps
+
+* Fix install steps
+
+* Fix install steps
+
+* Fix potential EST enroll deserialization error
+
+* Fixed e2e tests
+
+* Fix e2e tests
+
+* Fix db artifacts location
+
+* Fixed certs and domians variables from e2e tests
+
+* Fix unclosed files issue
+
+* Fix clients specs
+
+* Fix est server enroll response
+
+* Fix potential typo
+
+* Fix curl enroll test sh command
+
+* Fix docker image typo
+
+* Fix ca unused import
+
+
+
+### Tests
+
+
+* Testing cicd
+
+* Testing runners
+
+* Testing with running server
+
+* Test monitoring stack
+
+* Testing concurrency
+
+* Testing go installation on ec2
+
+* Testing trivyscan
+
+* Testing trivyscan
+
+* Testing trivyscan
+
+* Testing trivyscan
+
+
+
+### Other
+
+
+* First commit merging individual repos
+
+* Removing cicd self hosted runners
+
+* Added missing runs-on
+
+* Fixed unit tests
+
+* Creating first release
+
+* Reorganized release jobs
+
+* Merge pull request #1 from lamassuiot/develop
+
+fix release cicd job syntax
+
+* Update release.yaml with correct reusable workflow syntax
+
+* Merge branch 'release' of https://github.com/lamassuiot/lamassuiot into release
+
+* Ocsp + various fixes
+
+* Merge branch 'develop' into release
+
+* Fast cicd for testing
+
+* Fast cicd for testing
+
+* Fast cicd for testing
+
+* Fast cicd for testing
+
+* Fast cicd for testing
+
+* Fast cicd for testing
+
+* Fast cicd for testing
+
+* Fast cicd for testing
+
+* Reorganized release jobs
+
+* Extracting IP from cdk deploy
+
+* Extracting IP from cdk deploy
+
+* Extracting IP from cdk deploy
+
+* Extracting IP from cdk deploy
+
+* Extracting IP from cdk deploy
+
+* Extracting IP from cdk deploy
+
+* Ssh test
+
+* Ssh test
+
+* Ssh test
+
+* Ssh test
+
+* Full cicd
+
+* Added dockerfile
+
+* Ocsp test + relase worflow
+
+* Update README.md
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Update release.yaml
+
+* Added teardown infra
+
+* New stage
+
+* New stage
+
+* New stage
+
+* New stage
+
+* New stage
+
+* New stage
+
+* New stage
+
+* New stage
+
+* Merge branch 'release' of https://github.com/lamassuiot/lamassuiot into release
+
+* Comment temporal steps
+
+* Revert to full cicd
+
+* Cicd
+
+* Adding full in-memory test
+
+* Added full server testing schema
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Refacotred logging system + removed manual span dev
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Added CA testing full server
+
+* Added OCSP and EST test to CICD
+
+* Reload profil.d script for go executable
+
+* Install go using user data
+
+* Install go using user data
+
+* Install go using user data
+
+* Install go using user data
+
+* Install go using user data
+
+* Install go using user data
+
+* Install go using user data
+
+* Install go using user data
+
+* Install go using user data
+
+* Added stats endpoint
+
+* Refactoring Structs
+
+* Pre 1.8
+
+* Update filters
+
+* Device-manager test
+
+* CA and DMS enroller tests
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Fix logo link
+
+* Add links to docs and lamassu-compose
+
+* Device-manager test
+
+* Resolved  conflicts
+
+* Filters Update
+
+* Update Test
+
+* CA Pagination
+
+* Update CA Test
+
+* Update Workflows
+
+* Update Device Manager Test
+
+* Update e2e Test
+
+* Update Est Test
+
+* Update Est Test
+
+* Remove coverage report from source
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Fixed Device Manager Tests
+
+* Fixed DMS Enroller Tests
+
+* Fixed OCSP Tests
+
+* Update release.yml
+
+* Update release.yml
+
+* Update release.yml
+
+* Update Go Version
+
+* DMS Enroller filter
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* DMS Pagination
+
+* Update DMS Test
+
+* Merge branch 'develop' into release
+
+* Update release.yml
+
+* Update release.yml
+
+* Update release.yml
+
+* Update Performance Test
+
+* Update release.yml
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Added master worflow
+
+* Merge branch 'develop' of https://github.com/lamassuiot/lamassuiot into develop
+
+* Merge branch 'develop' into release
+
+* First master release
+
+* Workflow rename
+
+* Workflow tags
+
+* Update lamassuiot
+
+* Merge branch 'develop' into release
+
+* Update Device manager
+
+* Merge branch 'develop' into release
+
+* Update go.mod
+
+* Merge branch 'develop' into release
+
+* Update CA main
+
+* Merge branch 'develop' into release
+
+* Merge branch 'release'
+
+* Renamed branch master -> main
+
+* Update device manager and swagger
+
+* Merge branch 'develop' into release
+
+* Update Device manager
+
+* Update Device manager
+
+* Merge branch 'release' of https://github.com/lamassuiot/lamassuiot into release
+
+* Update go.mod
+
+* Renamed expiration log
+
+* Added info endpoint
+
+* Merge pull request #4 from lamassuiot/release
+
+Release
+
 

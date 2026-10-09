@@ -1,0 +1,43 @@
+[changelog]
+header = ""
+body = """
+{% if version %}\
+<a name="{{ version | trim_start_matches(pat=\"v\") }}"></a>
+## {% if previous.version %}[{{ version | trim_start_matches(pat=\"v\") }}](https://github.com/lamassuiot/lamassuiot/compare/{{ previous.version }}...{{ version }}){% else %}{{ version | trim_start_matches(pat=\"v\") }}{% endif %} ({{ timestamp | date(format=\"%Y-%m-%d\") }})
+{% else %}\
+## Unreleased
+{% endif %}
+
+{% for entry in commits | commit_groups(groups=commit_parsers_groups) %}
+### {{ entry.group | striptags | trim | upper_first }}
+
+{% for commit in entry.commits %}
+* {{ commit.message | upper_first }}
+{% endfor %}
+
+{% endfor %}
+"""
+trim = true
+render_always = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+commit_preprocessors = [
+    { pattern = '\\((\\w+\\s)?#([0-9]+)\\)', replace = "([#${2}](https://github.com/lamassuiot/lamassuiot/issues/${2}))" },
+]
+commit_parsers = [
+    { message = "^feat", group = "Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^bump", group = "Bump Versions" },
+    { message = "^remove", group = "Removed" },
+    { message = "^security", group = "Security Fixes" },
+    { message = "^test", group = "Tests" },
+    { message = "^chore", group = "Chores" },
+    { message = "^refactor", group = "Refactor" },
+    { message = "^docs", group = "Documentation" },
+    { message = "^build", group = "Build" },
+    { message = ".*", group = "Other" },
+]
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"

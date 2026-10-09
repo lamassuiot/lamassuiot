@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.21
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.1
 	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.1
 	github.com/ory/dockertest/v3 v3.12.0
 )
 
@@ -40,7 +40,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect

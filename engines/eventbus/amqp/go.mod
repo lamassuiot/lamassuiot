@@ -5,8 +5,8 @@ go 1.26.2
 require (
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
-	github.com/lamassuiot/lamassuiot/core/v3 v3.8.0
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.0
+	github.com/lamassuiot/lamassuiot/core/v3 v3.8.1
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.8.1
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/sirupsen/logrus v1.9.4
 )
@@ -34,7 +34,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -57,7 +56,7 @@ require (
 	github.com/opencontainers/runc v1.3.6 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/rabbitmq/amqp091-go v1.11.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.13.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sony/gobreaker v1.0.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
