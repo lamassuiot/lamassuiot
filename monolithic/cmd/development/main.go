@@ -402,9 +402,6 @@ func main() {
 	}
 
 	if !*disableWFX {
-		if storageConfig.Provider != cconfig.Postgres {
-			log.Fatalf("wfx requires Postgres storage; rerun with -disable-wfx")
-		}
 		fmt.Println(">> launching docker: wfx ...")
 		pgPort := strconv.Itoa(storageConfig.Config["port"].(int))
 		pgUser := storageConfig.Config["username"].(string)
