@@ -183,6 +183,21 @@ func TestResourcePermissionRejectsInvalidBindingsBeforeServing(t *testing.T) {
 	assert.Empty(t, router.Routes(), "invalid declarations must fail before route registration")
 }
 
+func TestResourcePermissionRejectsDuplicateParamBindingsForCompositeKeys(t *testing.T) {
+	schemas, err := authzschemas.PKISchemas()
+	require.NoError(t, err)
+	mw := MustNewAuthzMiddleware(&fakeEngine{}, schemas, "pki", "kms", "kms_key", testLogger())
+	require.Len(t, mw.definition.PrimaryKeys, 2)
+	assert.PanicsWithValue(t,
+		fmt.Sprintf("authz path parameter %q is bound to both primary keys %q and %q", "id", mw.definition.PrimaryKeys[0], mw.definition.PrimaryKeys[1]),
+		func() {
+			mw.Resource("read", map[string]string{mw.definition.PrimaryKeys[0]: "id", mw.definition.PrimaryKeys[1]: "id"})
+		})
+	assert.NotPanics(t, func() {
+		mw.Resource("read", map[string]string{mw.definition.PrimaryKeys[0]: "key", mw.definition.PrimaryKeys[1]: "engine"})
+	})
+}
+
 func TestListPermissionPropagatesFilterAndRecordsItsContract(t *testing.T) {
 	router := testRouterWithAuthzInputs()
 	engine := &fakeEngine{filterSQL: "serial_number = 'cert-2'"}

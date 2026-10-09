@@ -117,11 +117,16 @@ func (m *AuthzMiddleware) Resource(action string, keyParams map[string]string) P
 	}
 	// Copy bindings so caller mutations cannot change the enforced resource key.
 	bindings := make(map[string]string, len(keyParams))
+	boundTo := make(map[string]string, len(keyParams))
 	for _, key := range m.definition.PrimaryKeys {
 		param := keyParams[key]
 		if param == "" || strings.ContainsAny(param, "/:*") {
 			panic(fmt.Sprintf("invalid authz path parameter for primary key %q", key))
 		}
+		if other, dup := boundTo[param]; dup {
+			panic(fmt.Sprintf("authz path parameter %q is bound to both primary keys %q and %q", param, other, key))
+		}
+		boundTo[param] = key
 		bindings[key] = param
 	}
 	handler := m.AuthzCheckCustom(action, func(c *gin.Context) map[string]string {
