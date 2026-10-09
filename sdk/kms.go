@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http"
+	"net/url"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -41,7 +42,7 @@ func (cli *httpKMSClient) GetKeys(ctx context.Context, input services.GetKeysInp
 }
 
 func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
-	response, err := cli.get[models.Key](ctx, "/v1/keys/"+input.Identifier, nil, map[int][]error{
+	response, err := cli.get[models.Key](ctx, "/v1/keys/"+url.PathEscape(input.Identifier), nil, map[int][]error{
 		404: {errs.ErrKeyNotFound},
 		400: {errs.ErrKeyEngineRequired, errs.ErrValidateBadRequest},
 	})
@@ -103,7 +104,7 @@ func (cli *httpKMSClient) ImportKey(ctx context.Context, input services.ImportKe
 }
 
 func (cli *httpKMSClient) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {
-	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/metadata", resources.UpdateKeyMetadataBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+url.PathEscape(input.ID)+"/metadata", resources.UpdateKeyMetadataBody{
 		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
@@ -114,7 +115,7 @@ func (cli *httpKMSClient) UpdateKeyMetadata(ctx context.Context, input services.
 }
 
 func (cli *httpKMSClient) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (*models.Key, error) {
-	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/alias", resources.UpdateKeyAliasesBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+url.PathEscape(input.ID)+"/alias", resources.UpdateKeyAliasesBody{
 		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
@@ -125,7 +126,7 @@ func (cli *httpKMSClient) UpdateKeyAliases(ctx context.Context, input services.U
 }
 
 func (cli *httpKMSClient) UpdateKeyName(ctx context.Context, input services.UpdateKeyNameInput) (*models.Key, error) {
-	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/name", resources.UpdateKeyNameBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+url.PathEscape(input.ID)+"/name", resources.UpdateKeyNameBody{
 		Name: input.Name,
 	}, map[int][]error{})
 	if err != nil {
@@ -136,7 +137,7 @@ func (cli *httpKMSClient) UpdateKeyName(ctx context.Context, input services.Upda
 }
 
 func (cli *httpKMSClient) UpdateKeyTags(ctx context.Context, input services.UpdateKeyTagsInput) (*models.Key, error) {
-	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/tags", resources.UpdateKeyTagsBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+url.PathEscape(input.ID)+"/tags", resources.UpdateKeyTagsBody{
 		Tags: input.Tags,
 	}, map[int][]error{})
 	if err != nil {
@@ -147,7 +148,7 @@ func (cli *httpKMSClient) UpdateKeyTags(ctx context.Context, input services.Upda
 }
 
 func (cli *httpKMSClient) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
-	err := cli.delete(ctx, "/v1/keys/"+input.Identifier, map[int][]error{})
+	err := cli.delete(ctx, "/v1/keys/"+url.PathEscape(input.Identifier), map[int][]error{})
 	if err != nil {
 		return err
 	}
@@ -156,7 +157,7 @@ func (cli *httpKMSClient) DeleteKeyByID(ctx context.Context, input services.GetK
 }
 
 func (cli *httpKMSClient) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
-	response, err := cli.post[*models.MessageSignature](ctx, "/v1/keys/"+input.Identifier+"/sign", resources.SignMessageBody{
+	response, err := cli.post[*models.MessageSignature](ctx, "/v1/keys/"+url.PathEscape(input.Identifier)+"/sign", resources.SignMessageBody{
 		Algorithm:   input.Algorithm,
 		Message:     input.Message,
 		MessageType: input.MessageType,
@@ -169,7 +170,7 @@ func (cli *httpKMSClient) SignMessage(ctx context.Context, input services.SignMe
 }
 
 func (cli *httpKMSClient) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
-	response, err := cli.post[*models.MessageValidation](ctx, "/v1/keys/"+input.Identifier+"/verify", resources.VerifySignBody{
+	response, err := cli.post[*models.MessageValidation](ctx, "/v1/keys/"+url.PathEscape(input.Identifier)+"/verify", resources.VerifySignBody{
 		Algorithm:   input.Algorithm,
 		Message:     input.Message,
 		Signature:   input.Signature,
