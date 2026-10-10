@@ -35,6 +35,8 @@ paths:
         When no filters are provided, returns statistics for all devices.
       operationId: getDeviceStats
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         check: filter
       parameters:
@@ -78,6 +80,8 @@ paths:
       summary: List devices
       operationId: getDevices
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         check: filter
       parameters:
@@ -99,6 +103,8 @@ paths:
       summary: Create device
       operationId: createDevice
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: create
       requestBody:
@@ -123,6 +129,8 @@ paths:
       summary: Get device by ID
       operationId: getDeviceById
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: read
       parameters:
@@ -142,6 +150,8 @@ paths:
       summary: Delete device
       operationId: deleteDevice
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: delete
       parameters:
@@ -157,6 +167,8 @@ paths:
       summary: Update identity slot
       operationId: updateDeviceIdentitySlot
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: provision
       parameters:
@@ -183,6 +195,8 @@ paths:
       summary: Update device metadata
       operationId: updateDeviceMetadata
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: metadata-update
       parameters:
@@ -208,6 +222,8 @@ paths:
       summary: Patch device metadata
       operationId: patchDeviceMetadata
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: metadata-update
       parameters:
@@ -240,6 +256,8 @@ paths:
         paginated JSON list.
       operationId: getDeviceEvents
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: read
       parameters:
@@ -278,6 +296,8 @@ paths:
       summary: Create a device event
       operationId: createDeviceEvent
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: metadata-update
       parameters:
@@ -305,6 +325,8 @@ paths:
       summary: Decommission device
       operationId: decommissionDevice
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         action: decommission
       parameters:
@@ -320,6 +342,8 @@ paths:
       summary: List devices managed by a DMS
       operationId: getDevicesByDMS
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         check: filter
       parameters:
@@ -353,6 +377,8 @@ paths:
         Device groups can be organized hierarchically with parent-child relationships.
       operationId: getDeviceGroups
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device_group
         check: filter
       parameters:
@@ -410,6 +436,8 @@ paths:
         Filter operands are returned as human-readable names (e.g., "contains", "eq").
       operationId: createDeviceGroup
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device_group
         action: create
       requestBody:
@@ -487,6 +515,8 @@ paths:
         Filter operands are returned as human-readable names (e.g., "contains", "eq").
       operationId: getDeviceGroupByID
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device_group
         action: read
       parameters:
@@ -517,6 +547,8 @@ paths:
 
       operationId: updateDeviceGroup
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device_group
         action: update
       parameters:
@@ -569,6 +601,8 @@ paths:
         If a group has children, consider reassigning or deleting them first.
       operationId: deleteDeviceGroup
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device_group
         action: delete
       parameters:
@@ -594,6 +628,8 @@ paths:
         Supports additional filtering, pagination, and sorting.
       operationId: getDevicesByGroup
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device
         check: filter
       parameters:
@@ -643,6 +679,8 @@ paths:
         Criteria are inherited from parent groups in the hierarchy.
       operationId: getDeviceGroupStats
       x-authz:
+        namespace: pki
+        schema_name: devicemanager
         entity_type: device_group
         action: read
       parameters:

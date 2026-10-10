@@ -89,6 +89,7 @@
       "status-update"
     ],
     "global_actions": [
+      "create",
       "import",
       "ui"
     ],

@@ -1,7 +1,21 @@
 openapi: 3.0.3
 info:
   title: Lamassu Authorization Service
-  description: Authorization service managing principals, policies, and access control decisions.
+  description: |
+    Authorization service managing principals, policies, and access control decisions.
+    x-trust-boundary records intended callers: internal-gateway for Envoy and
+    internal-service for evaluation APIs. Trust boundaries currently equal public
+    caller access; no caller authentication or network restriction is enforced by
+    this declaration. Enforcement may be added in the future. Handlers still
+    evaluate submitted credentials and policies.
+
+    WARNING: the guard middleware treats the request header
+    "X-Principal-ID: admin-mode" as an unauthenticated administrative bypass that
+    skips every guard, regardless of the bearerAuth requirement declared below.
+    Any caller able to send it can manage principals and policies (and, through
+    policies, downstream PKI permissions). The header MUST be stripped at the
+    trust boundary (gateway/Envoy) before requests reach this service, and the
+    service must not be reachable except through that boundary.
   version: 1.0.0
   contact:
     name: Lamassu IoT
@@ -14,9 +28,16 @@ servers:
   - url: /api/authz/v1
     description: Authz API v1
 
+security:
+  - bearerAuth: []
+
 paths:
   /authz/authorize:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Authorize a principal against a resource and action
       operationId: Authorize
       tags: [Authorization]
@@ -36,6 +57,10 @@ paths:
 
   /authz/filter:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Get a filter expression for list operations
       operationId: GetFilter
       tags: [Authorization]
@@ -55,6 +80,10 @@ paths:
 
   /authz/match/authorize:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Resolve principal from request context then authorize
       operationId: MatchAndAuthorize
       tags: [Authorization]
@@ -74,6 +103,10 @@ paths:
 
   /authz/match/filter:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Resolve principal from request context then return a filter expression
       operationId: MatchAndGetFilter
       tags: [Authorization]
@@ -93,6 +126,10 @@ paths:
 
   /authz/http/check:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Check HTTP request authorization (ext_authz compatible)
       operationId: CheckHTTP
       tags: [Authorization]
@@ -108,6 +145,10 @@ paths:
 
   /authz/match/http/check:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Resolve principal then check HTTP request authorization
       operationId: MatchAndCheckHTTP
       tags: [Authorization]
@@ -123,6 +164,10 @@ paths:
 
   /authz/capabilities/global:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Get global capabilities for a principal
       operationId: GetGlobalCapabilities
       tags: [Authorization]
@@ -142,6 +187,10 @@ paths:
 
   /authz/match/capabilities/global:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Resolve principal then get global capabilities
       operationId: MatchAndGetGlobalCapabilities
       tags: [Authorization]
@@ -161,6 +210,10 @@ paths:
 
   /authz/capabilities/entity:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Get capabilities for a principal on a specific entity
       operationId: GetEntityCapabilities
       tags: [Authorization]
@@ -180,6 +233,10 @@ paths:
 
   /authz/match/capabilities/entity:
     post:
+      x-authz:
+        check: evaluation
+      x-trust-boundary: internal-service
+      security: []
       summary: Resolve principal then get entity capabilities
       operationId: MatchAndGetEntityCapabilities
       tags: [Authorization]
@@ -199,6 +256,11 @@ paths:
 
   /principals:
     get:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal
+        check: filter
       summary: List principals
       operationId: ListPrincipals
       tags: [Principals]
@@ -212,6 +274,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/Principal'
     post:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal
+        action: create
       summary: Create a principal
       operationId: CreatePrincipal
       tags: [Principals]
@@ -231,6 +298,11 @@ paths:
 
   /principals/{id}:
     get:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal
+        action: read
       summary: Get a principal by ID
       operationId: GetPrincipal
       tags: [Principals]
@@ -248,6 +320,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Principal'
     put:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal
+        action: update
       summary: Update a principal
       operationId: UpdatePrincipal
       tags: [Principals]
@@ -271,6 +348,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Principal'
     delete:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal
+        action: delete
       summary: Delete a principal
       operationId: DeletePrincipal
       tags: [Principals]
@@ -286,6 +368,11 @@ paths:
 
   /principals/{id}/policies:
     get:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal_policy
+        action: read
       summary: Get policies granted to a principal
       operationId: GetPrincipalPolicies
       tags: [Principals]
@@ -305,6 +392,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/Policy'
     post:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal_policy
+        action: grant
       summary: Grant a policy to a principal
       operationId: GrantPolicy
       tags: [Principals]
@@ -326,6 +418,11 @@ paths:
 
   /principals/{id}/policies/{policyId}:
     delete:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: principal_policy
+        action: revoke
       summary: Revoke a policy from a principal
       operationId: RevokePolicy
       tags: [Principals]
@@ -346,6 +443,11 @@ paths:
 
   /policies:
     get:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: policy
+        check: filter
       summary: List policies
       operationId: ListPolicies
       tags: [Policies]
@@ -359,6 +461,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/Policy'
     post:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: policy
+        action: create
       summary: Create a policy
       operationId: CreatePolicy
       tags: [Policies]
@@ -378,6 +485,11 @@ paths:
 
   /policies/search:
     get:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: policy
+        check: filter
       summary: Search policies
       operationId: SearchPolicies
       tags: [Policies]
@@ -398,6 +510,11 @@ paths:
 
   /policies/{id}:
     get:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: policy
+        action: read
       summary: Get a policy by ID
       operationId: GetPolicy
       tags: [Policies]
@@ -415,6 +532,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
     put:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: policy
+        action: update
       summary: Update a policy
       operationId: UpdatePolicy
       tags: [Policies]
@@ -438,6 +560,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
     delete:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: policy
+        action: delete
       summary: Delete a policy
       operationId: DeletePolicy
       tags: [Policies]
@@ -453,6 +580,11 @@ paths:
 
   /policies/{id}/stats:
     get:
+      x-authz:
+        namespace: authz
+        schema_name: public
+        entity_type: policy
+        action: read
       summary: Get usage statistics for a policy
       operationId: GetPolicyStats
       tags: [Policies]
@@ -468,6 +600,9 @@ paths:
 
   /schemas:
     get:
+      x-authz:
+        check: public
+      security: []
       summary: List available authorization schemas
       operationId: GetSchemas
       tags: [Schemas]
@@ -475,7 +610,228 @@ paths:
         '200':
           description: Schema definitions
 
+  /ext_authz/check:
+    get:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    post:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    put:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    patch:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    head:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    options:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    delete:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    trace:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+  /ext_authz/check/{original_url}:
+    parameters:
+      - name: original_url
+        in: path
+        required: true
+        schema: {type: string}
+        description: Original request path (Gin catch-all; may contain slashes).
+    get:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    post:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    put:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    patch:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    head:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    options:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    delete:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+    trace:
+      summary: Evaluate Envoy forwarded credentials and HTTP policies
+      x-authz:
+        check: envoy
+      x-trust-boundary: internal-gateway
+      security: []
+      responses:
+        '200':
+          description: Request authorized
+        '403':
+          description: Request denied or credentials missing
+        '500':
+          description: Authorization evaluation failed
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
     AuthorizeRequest:
       type: object

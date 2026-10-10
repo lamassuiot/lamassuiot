@@ -1,7 +1,10 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	authzschemas "github.com/lamassuiot/authz"
 	"github.com/lamassuiot/authz/pkg/core"
 	"github.com/lamassuiot/authz/pkg/engine"
 	"github.com/lamassuiot/authz/pkg/service"
@@ -22,6 +25,10 @@ func NewAuthzRoutes(
 	resolver *service.IdentityResolver,
 	logger *logrus.Entry,
 ) {
+	registerAuthzRoutes(router, authzEngine, principalSvc, eng, policySvc, resolver, logger)
+}
+
+func registerAuthzRoutes(router *gin.RouterGroup, authzEngine core.AuthzEngine, principalSvc service.PrincipalService, eng *engine.Engine, policySvc service.PolicyService, resolver *service.IdentityResolver, logger *logrus.Entry) *middleware.ContractRouter {
 	authzCtrl := NewAuthzController(eng, resolver, logger)
 	principalCtrl := NewPrincipalController(principalSvc)
 	schemaCtrl := NewSchemaController(eng)
@@ -29,68 +36,46 @@ func NewAuthzRoutes(
 	capabilitiesCtrl := NewCapabilitiesController(eng, principalSvc, policySvc, resolver, logger)
 	extAuthzCtrl := NewExtAuthzController(eng, resolver, logger)
 
-	authzMwPrincipals := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "principal", logger)
-	authzMwPolicies := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "policy", logger)
-	authzMwPrincipalPolicies := middleware.NewSimpleAuthzMiddleware(authzEngine, "authz", "public", "principal_policy", logger)
-
-	v1 := router.Group("/v1")
-	{
-		// Authorization endpoints — open to any authenticated caller
-		authzGrp := v1.Group("/authz")
-		{
-			authzGrp.POST("/authorize", authzCtrl.Authorize)
-			authzGrp.POST("/filter", authzCtrl.GetFilter)
-			authzGrp.POST("/match/authorize", authzCtrl.MatchAndAuthorize)
-			authzGrp.POST("/match/filter", authzCtrl.MatchAndGetFilter)
-			authzGrp.POST("/http/check", authzCtrl.CheckHTTP)
-			authzGrp.POST("/match/http/check", authzCtrl.MatchAndCheckHTTP)
-
-			authzGrp.POST("/capabilities/global", capabilitiesCtrl.GetGlobalCapabilities)
-			authzGrp.POST("/match/capabilities/global", capabilitiesCtrl.MatchAndGetGlobalCapabilities)
-
-			authzGrp.POST("/capabilities/entity", capabilitiesCtrl.GetEntityCapabilities)
-			authzGrp.POST("/match/capabilities/entity", capabilitiesCtrl.MatchAndGetEntityCapabilities)
-		}
-
-		// Principal management — protected by authzMwPrincipals
-		principals := v1.Group("/principals")
-		{
-			principals.GET("", authzMwPrincipals.AuthListCheck(), principalCtrl.ListPrincipals)
-			principals.POST("", authzMwPrincipals.AuthzCheck("create"), principalCtrl.CreatePrincipal)
-			principals.GET("/:id", authzMwPrincipals.AuthzCheck("read"), principalCtrl.GetPrincipal)
-			principals.PUT("/:id", authzMwPrincipals.AuthzCheck("update"), principalCtrl.UpdatePrincipal)
-			principals.DELETE("/:id", authzMwPrincipals.AuthzCheck("delete"), principalCtrl.DeletePrincipal)
-
-			principals.GET("/:id/policies", authzMwPrincipalPolicies.AuthzCheck("read"), principalCtrl.GetPrincipalPolicies)
-			principals.POST("/:id/policies", authzMwPrincipalPolicies.AuthzCheck("grant"), principalCtrl.GrantPolicy)
-			principals.DELETE("/:id/policies/:policyId", authzMwPrincipalPolicies.AuthzCheckCustom("revoke", func(c *gin.Context) map[string]string {
-				return map[string]string{
-					"principal_id": c.Param("id"),
-					"policy_id":    c.Param("policyId"),
-				}
-			}), principalCtrl.RevokePolicy)
-		}
-
-		// Policy management — protected by authzMwPolicies
-		policies := v1.Group("/policies")
-		{
-			policies.GET("", authzMwPolicies.AuthListCheck(), policyCtrl.ListPolicies)
-			policies.POST("", authzMwPolicies.AuthzCheck("create"), policyCtrl.CreatePolicy)
-			policies.GET("/search", authzMwPolicies.AuthListCheck(), policyCtrl.SearchPolicies)
-			policies.GET("/:id", authzMwPolicies.AuthzCheck("read"), policyCtrl.GetPolicy)
-			policies.PUT("/:id", authzMwPolicies.AuthzCheck("update"), policyCtrl.UpdatePolicy)
-			policies.DELETE("/:id", authzMwPolicies.AuthzCheck("delete"), policyCtrl.DeletePolicy)
-			policies.GET("/:id/stats", authzMwPolicies.AuthzCheck("read"), policyCtrl.GetPolicyStats)
-		}
-
-		v1.GET("/schemas", schemaCtrl.GetSchemas)
-
-		// Envoy ext_authz check — no auth middleware; Envoy is the network edge.
-		// Credentials are forwarded as HTTP headers and evaluated inside the handler.
-		extAuthzGrp := v1.Group("/ext_authz")
-		{
-			extAuthzGrp.Any("/check", extAuthzCtrl.Check)
-			extAuthzGrp.Any("/check/*original_url", extAuthzCtrl.Check)
+	schemas, err := authzschemas.AuthzSchemas()
+	if err != nil {
+		panic(err)
+	}
+	principals := middleware.MustNewAuthzMiddleware(authzEngine, schemas, "authz", "public", "principal", logger)
+	policies := middleware.MustNewAuthzMiddleware(authzEngine, schemas, "authz", "public", "policy", logger)
+	bindings := middleware.MustNewAuthzMiddleware(authzEngine, schemas, "authz", "public", "principal_policy", logger)
+	contract := middleware.NewContractRouter(router.Group("/v1"))
+	// SDK evaluation calls carry credentials in their body; controllers evaluate them.
+	contract.Handle(http.MethodPost, "/authz/authorize", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.Authorize)
+	contract.Handle(http.MethodPost, "/authz/filter", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.GetFilter)
+	contract.Handle(http.MethodPost, "/authz/match/authorize", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.MatchAndAuthorize)
+	contract.Handle(http.MethodPost, "/authz/match/filter", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.MatchAndGetFilter)
+	contract.Handle(http.MethodPost, "/authz/http/check", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.CheckHTTP)
+	contract.Handle(http.MethodPost, "/authz/match/http/check", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), authzCtrl.MatchAndCheckHTTP)
+	contract.Handle(http.MethodPost, "/authz/capabilities/global", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.GetGlobalCapabilities)
+	contract.Handle(http.MethodPost, "/authz/match/capabilities/global", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.MatchAndGetGlobalCapabilities)
+	contract.Handle(http.MethodPost, "/authz/capabilities/entity", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.GetEntityCapabilities)
+	contract.Handle(http.MethodPost, "/authz/match/capabilities/entity", middleware.DelegatedAuthorization("evaluation").WithTrustBoundary("internal-service"), capabilitiesCtrl.MatchAndGetEntityCapabilities)
+	contract.Handle(http.MethodGet, "/principals", principals.List(), principalCtrl.ListPrincipals)
+	contract.Handle(http.MethodPost, "/principals", principals.Global("create"), principalCtrl.CreatePrincipal)
+	contract.Handle(http.MethodGet, "/principals/:id", principals.Resource("read", map[string]string{"id": "id"}), principalCtrl.GetPrincipal)
+	contract.Handle(http.MethodPut, "/principals/:id", principals.Resource("update", map[string]string{"id": "id"}), principalCtrl.UpdatePrincipal)
+	contract.Handle(http.MethodDelete, "/principals/:id", principals.Resource("delete", map[string]string{"id": "id"}), principalCtrl.DeletePrincipal)
+	contract.Handle(http.MethodGet, "/policies", policies.List(), policyCtrl.ListPolicies)
+	contract.Handle(http.MethodPost, "/policies", policies.Global("create"), policyCtrl.CreatePolicy)
+	contract.Handle(http.MethodGet, "/policies/:id", policies.Resource("read", map[string]string{"id": "id"}), policyCtrl.GetPolicy)
+	contract.Handle(http.MethodPut, "/policies/:id", policies.Resource("update", map[string]string{"id": "id"}), policyCtrl.UpdatePolicy)
+	contract.Handle(http.MethodDelete, "/policies/:id", policies.Resource("delete", map[string]string{"id": "id"}), policyCtrl.DeletePolicy)
+	contract.Handle(http.MethodGet, "/principals/:id/policies", bindings.Global("read"), principalCtrl.GetPrincipalPolicies)
+	contract.Handle(http.MethodPost, "/principals/:id/policies", bindings.Global("grant"), principalCtrl.GrantPolicy)
+	contract.Handle(http.MethodDelete, "/principals/:id/policies/:policyId", bindings.Global("revoke"), principalCtrl.RevokePolicy)
+	contract.Handle(http.MethodGet, "/policies/search", policies.List(), policyCtrl.SearchPolicies)
+	contract.Handle(http.MethodGet, "/policies/:id/stats", policies.Resource("read", map[string]string{"id": "id"}), policyCtrl.GetPolicyStats)
+	contract.Handle(http.MethodGet, "/schemas", middleware.Public(), schemaCtrl.GetSchemas)
+	// Envoy forwards the original method; record each one so coverage cannot skip it.
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodHead, http.MethodOptions, http.MethodDelete, http.MethodTrace} {
+		for _, path := range []string{"/ext_authz/check", "/ext_authz/check/*original_url"} {
+			contract.Handle(method, path, middleware.DelegatedAuthorization("envoy").WithTrustBoundary("internal-gateway"), extAuthzCtrl.Check)
 		}
 	}
+	return contract
 }
