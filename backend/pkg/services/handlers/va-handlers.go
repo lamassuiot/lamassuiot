@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -18,6 +20,7 @@ func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.
 		Logger: l,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
 			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
+			string(models.EventImportCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, svc, l) },
 		},
 	}
@@ -31,7 +34,33 @@ func createCAHandler(ctx context.Context, event *event.Event, crlSvc services.CR
 		return err
 	}
 
+	// A CA imported without its private key cannot sign a CRL, so creating a
+	// role (and its initial CRL) for it would fail on every retry.
+	if ca.Certificate.Type == models.CertificateTypeImportedWithoutKey {
+		lMessaging.Infof("skipping CRL role initialization for keyless CA %s", ca.ID)
+		return nil
+	}
+
+	// A role may already exist for this key (renewed CA sharing the key, or a
+	// role initialized manually). Keep it untouched, preserving its settings.
+	_, err = crlSvc.GetVARole(ctx, services.GetVARoleInput{CASubjectKeyID: ca.Certificate.SubjectKeyID})
+	if err == nil {
+		lMessaging.Infof("CRL role already exists for CA %s, skipping initialization", ca.ID)
+		return nil
+	}
+
+	if !errors.Is(err, errs.ErrVARoleNotFound) {
+		err = fmt.Errorf("could not check existing CRL role: %s", err)
+		lMessaging.Error(err)
+		return err
+	}
+
 	_, err = crlSvc.InitCRLRole(ctx, ca.Certificate.SubjectKeyID)
+	if errors.Is(err, errs.ErrVARoleAlreadyExists) {
+		// Lost a race against a concurrent event for the same key.
+		lMessaging.Infof("CRL role already exists for CA %s, skipping initialization", ca.ID)
+		return nil
+	}
 
 	if err != nil {
 		err = fmt.Errorf("could not initialize CRL role: %s", err)

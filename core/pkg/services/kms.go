@@ -50,7 +50,9 @@ type CreateKeyInput struct {
 	Metadata  map[string]any
 }
 
-// Identifier can be either KeyID, Alias, or PKCS11URI
+// Identifier can be either KeyID, Alias, or PKCS11URI. Callers prefer the PKCS11URI (when the
+// key carries one) because it is the only form that stays unambiguous when several engines
+// hold the same KeyID, so KMSService implementations MUST accept it.
 type SignMessageInput struct {
 	Identifier  string                 `validate:"required"`
 	Algorithm   string                 `validate:"required"`
@@ -74,6 +76,9 @@ type ImportKeyInput struct {
 	Metadata   map[string]any
 }
 
+// ID follows the same contract as GetKeyInput.Identifier: a PKCS11URI, an Alias or a KeyID.
+// Callers prefer the PKCS11URI (when the key carries one) because it is the only form that
+// stays unambiguous when several engines hold the same KeyID.
 type UpdateKeyMetadataInput struct {
 	ID      string                  `validate:"required"`
 	Patches []models.PatchOperation `validate:"required"`

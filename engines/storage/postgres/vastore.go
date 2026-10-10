@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -39,5 +41,10 @@ func (db *PostgresVAStore) Update(ctx context.Context, role *models.VARole) (*mo
 }
 
 func (db *PostgresVAStore) Insert(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Insert(ctx, role, role.CASubjectKeyID)
+	inserted, err := db.querier.Insert(ctx, role, role.CASubjectKeyID)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return nil, errs.ErrVARoleAlreadyExists
+	}
+
+	return inserted, err
 }

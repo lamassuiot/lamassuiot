@@ -25,13 +25,19 @@ type Key struct {
 	Metadata      map[string]any `json:"metadata" gorm:"serializer:json"`
 }
 
+// BuildPKCS11ID builds the PKCS#11 URI used to identify a key within a crypto engine:
+// pkcs11:token-id=<engineID>;id=<keyID>;type=<keyType>
+func BuildPKCS11ID(engineID, keyID, keyType string) string {
+	return "pkcs11:token-id=" + engineID + ";id=" + keyID + ";type=" + keyType
+}
+
 func (k *Key) AfterFind(tx *gorm.DB) (err error) {
 	keyType := "public"
 	if k.HasPrivateKey {
 		keyType = "private"
 	}
 
-	k.PKCS11URI = fmt.Sprintf("pkcs11:token-id=%s;id=%s;type=%s", k.EngineID, k.KeyID, keyType)
+	k.PKCS11URI = BuildPKCS11ID(k.EngineID, k.KeyID, keyType)
 	return nil
 }
 
