@@ -12,12 +12,12 @@ on:
         required: true
         type: choice
         options:
-          - golang:1.26.2-bookworm
+          - golang:1.26.8-bookworm
           - ghcr.io/lamassuiot/golang-pqc:latest
           - ghcr.io/lamassuiot/golang-pqc:go1.27
           - ghcr.io/lamassuiot/golang-pqc:go1.26
           - other
-        default: golang:1.26.2-bookworm
+        default: golang:1.26.8-bookworm
       other:
         description: "Only used when go = 'other'. Must be Debian/Ubuntu-based and provide apt-get (required by the ci/kms.dockerfile arm64 build)."
         type: string

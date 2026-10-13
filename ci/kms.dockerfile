@@ -1,4 +1,4 @@
-ARG BUILDER=golang:1.26.2-bookworm
+ARG BUILDER=golang:1.26.8-bookworm
 # Pinned to the runner platform: the binary is cross-compiled with an
 # installed arm64 toolchain instead of emulating the whole build with QEMU.
 FROM --platform=$BUILDPLATFORM ${BUILDER} AS builder

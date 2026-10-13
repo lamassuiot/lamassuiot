@@ -1,4 +1,4 @@
-ARG BUILDER=golang:1.26.2-bookworm
+ARG BUILDER=golang:1.26.8-bookworm
 # Pinned to the runner platform: Go cross-compiles the target architecture
 # natively instead of emulating the whole toolchain with QEMU.
 FROM --platform=$BUILDPLATFORM ${BUILDER} AS builder
