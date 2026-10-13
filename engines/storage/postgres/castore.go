@@ -21,7 +21,11 @@ type PostgresCAStore struct {
 }
 
 func (db *PostgresCAStore) WithIDLock(ctx context.Context, id string, fn func(storage.CACertificatesRepo) error) error {
-	return withScopedIDLock(ctx, db.querier, id, func(q *DBQuerier[models.CACertificate]) storage.CACertificatesRepo {
+	return db.WithLocks(ctx, []string{storage.IDLockKey(id)}, fn)
+}
+
+func (db *PostgresCAStore) WithLocks(ctx context.Context, keys []string, fn func(storage.CACertificatesRepo) error) error {
+	return withScopedLocks(ctx, db.querier, keys, func(q *DBQuerier[models.CACertificate]) storage.CACertificatesRepo {
 		return &PostgresCAStore{db: q.DB, querier: q}
 	}, fn)
 }

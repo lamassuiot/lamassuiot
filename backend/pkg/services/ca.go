@@ -281,8 +281,18 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		input.ID = uuid.NewV7().String()
 	}
 
+	// The ID key rejects duplicates. The subject keys serialize imports of
+	// certificates that may be parent and child: each one only finds the other
+	// after it commits, so both must not look for relatives concurrently.
+	cert := (*x509.Certificate)(input.CACertificate)
+	keys := []string{
+		storage.IDLockKey(input.ID),
+		storage.SubjectLockKey(cert.Subject.String()),
+		storage.SubjectLockKey(cert.Issuer.String()),
+	}
+
 	var ca *models.CACertificate
-	err := svc.caStorage.WithIDLock(ctx, input.ID, func(repo storage.CACertificatesRepo) error {
+	err := svc.caStorage.WithLocks(ctx, keys, func(repo storage.CACertificatesRepo) error {
 		var err error
 		ca, err = svc.importCA(ctx, input, repo)
 		return err
