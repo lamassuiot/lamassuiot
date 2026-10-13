@@ -94,7 +94,7 @@ jobs:
           echo "BUILDER=$BUILDER" >> $GITHUB_ENV
 
       - name: Login to Github Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -122,7 +122,7 @@ jobs:
       # Enable ARM64 emulation for Dockerfiles that need to execute target-architecture
       # binaries during the build. Go services may cross-compile natively via BUILDPLATFORM.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
 
