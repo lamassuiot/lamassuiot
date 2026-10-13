@@ -2,9 +2,6 @@ package postgres
 
 import (
 	"context"
-	"crypto/sha256"
-	"database/sql"
-	"encoding/binary"
 	"errors"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
@@ -24,18 +21,9 @@ type PostgresCAStore struct {
 }
 
 func (db *PostgresCAStore) WithIDLock(ctx context.Context, id string, fn func(storage.CACertificatesRepo) error) error {
-	// The stable namespace/hash lets different service instances coordinate.
-	// READ COMMITTED ensures a waiter sees the preceding import after it commits.
-	hash := sha256.Sum256([]byte("lamassu:ca:id:" + id))
-	lockID := int64(binary.BigEndian.Uint64(hash[:8]))
-	return db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", lockID).Error; err != nil {
-			return err
-		}
-		querier := *db.querier
-		querier.DB = tx
-		return fn(&PostgresCAStore{db: tx, querier: &querier})
-	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	return withScopedIDLock(ctx, db.querier, id, func(q *DBQuerier[models.CACertificate]) storage.CACertificatesRepo {
+		return &PostgresCAStore{db: q.DB, querier: q}
+	}, fn)
 }
 
 func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
