@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
 	smock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -190,7 +191,7 @@ func TestEnrollReenroll(t *testing.T) {
 
 			r := gin.Default()
 			baseGrp := r.Group(("/"))
-			NewESTHttpRoutes(nil, baseGrp, mockSvc)
+			registerESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
 
 			req, _ := http.NewRequest(http.MethodPost, tt.url, bytes.NewBufferString(tt.body))
 			if tt.accept != "" {
@@ -306,7 +307,7 @@ func TestServerKeyGen(t *testing.T) {
 
 			r := gin.Default()
 			baseGrp := r.Group(("/"))
-			NewESTHttpRoutes(nil, baseGrp, mockSvc)
+			registerESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
 
 			req, _ := http.NewRequest(http.MethodPost, tt.url, bytes.NewBufferString(tt.body))
 			if tt.accept != "" {
@@ -392,7 +393,7 @@ func TestCACerts(t *testing.T) {
 
 			r := gin.Default()
 			baseGrp := r.Group(("/"))
-			NewESTHttpRoutes(nil, baseGrp, mockSvc)
+			registerESTRoutes(nil, middleware.NewContractRouter(baseGrp), mockSvc)
 
 			req, _ := http.NewRequest(http.MethodGet, tt.url, nil)
 			if tt.accept != "" {

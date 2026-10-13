@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/authz/pkg/core"
+	authzengine "github.com/lamassuiot/authz/pkg/engine"
 	authzsdk "github.com/lamassuiot/authz/sdk"
 	lamassucore "github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -23,6 +24,7 @@ type AuthzMiddleware struct {
 	schemaName        string
 	namespace         string
 	logger            *logrus.Entry
+	definition        *authzengine.SchemaDefinition
 }
 
 // NewSimpleAuthzMiddleware creates middleware for entities whose primary key column is "id".
@@ -48,6 +50,9 @@ func NewCompositeAuthzMiddleware(engine core.AuthzEngine, namespace, schemaName,
 // to build the entity key map, giving callers full control over how the key is extracted
 // (URL path params, query params, headers, decoded body, etc.).
 func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gin.Context) map[string]string) gin.HandlerFunc {
+	if m.definition != nil && !m.definition.HasAction(action) {
+		panic(fmt.Sprintf("invalid authz declaration: %s.%s.%s action %q; atomic actions: %v; global actions: %v", m.namespace, m.schemaName, m.entityType, action, m.definition.AtomicActions, m.definition.GlobalActions))
+	}
 	return func(c *gin.Context) {
 		if c.GetHeader("X-Principal-ID") == "admin-mode" {
 			c.Next()
