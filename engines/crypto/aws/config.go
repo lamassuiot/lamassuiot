@@ -1,7 +1,7 @@
 package aws
 
 import (
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 )
 
 type AWSCryptoEngine struct {

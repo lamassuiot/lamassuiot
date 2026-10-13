@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

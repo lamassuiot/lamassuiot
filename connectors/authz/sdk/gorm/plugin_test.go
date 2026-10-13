@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	authzsdk "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

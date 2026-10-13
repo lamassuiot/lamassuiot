@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
 	"github.com/sirupsen/logrus"
 )
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 type AuditBody struct {

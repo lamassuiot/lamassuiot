@@ -1,6 +1,6 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+import cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 
 type VAconfig struct {
 	OtelConfig            cconfig.OTELConfig             `mapstructure:"otel"`

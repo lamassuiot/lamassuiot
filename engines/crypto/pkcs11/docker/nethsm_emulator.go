@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
-	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/config"
+	dockerrunner "github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v4"
 )
 

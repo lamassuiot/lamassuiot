@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 )
 
 // InitializeStorage applies migrations, preloads policies and seeds bootstrap

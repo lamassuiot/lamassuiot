@@ -1,6 +1,6 @@
 package azure
 
-import lazure "github.com/lamassuiot/lamassuiot/shared/azure/v3"
+import lazure "github.com/lamassuiot/lamassuiot/v4/shared/azure"
 
 type AzureCryptoEngine struct {
 	lazure.AzureSDKConfig `mapstructure:",squash"`

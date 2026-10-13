@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
 
 // PolicyRegistry manages all authorization policies

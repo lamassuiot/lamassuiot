@@ -3,7 +3,7 @@ package authz
 import (
 	_ "embed"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 )
 
 // Embed the canonical file rather than maintaining another middleware schema.

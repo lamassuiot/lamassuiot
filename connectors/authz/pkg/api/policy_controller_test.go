@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

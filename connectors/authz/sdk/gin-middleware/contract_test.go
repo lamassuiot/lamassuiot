@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	authzschemas "github.com/lamassuiot/lamassuiot/connectors/authz/v3"
-	authzsdk "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk"
+	authzschemas "github.com/lamassuiot/lamassuiot/v4/connectors/authz"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

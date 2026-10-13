@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
 )
 
 var serverTest *tests.TestServer

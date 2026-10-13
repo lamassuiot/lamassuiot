@@ -1,11 +1,11 @@
 package models
 
-import coremodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+import coremodels "github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 
 const AuthzSource = "service/authz"
 
 // OtelTracerName is the OTEL instrumentation scope name shared by all authz packages.
-const OtelTracerName = "github.com/lamassuiot/lamassuiot/connectors/authz/v3"
+const OtelTracerName = "github.com/lamassuiot/lamassuiot/v4/connectors/authz"
 
 const (
 	EventCreatePrincipalKey  coremodels.EventType = "authz.principal.create"

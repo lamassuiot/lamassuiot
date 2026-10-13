@@ -3,8 +3,8 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/engines/crypto/azure/v3"
-	azure_subsystem "github.com/lamassuiot/lamassuiot/engines/crypto/azure/v3/subsystem"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/azure"
+	azure_subsystem "github.com/lamassuiot/lamassuiot/v4/engines/crypto/azure/subsystem"
 	log "github.com/sirupsen/logrus"
 )
 

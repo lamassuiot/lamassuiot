@@ -3,7 +3,7 @@ package resources
 import (
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 type CreateDeviceBody struct {

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	dockerrunner "github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
 	"github.com/moby/moby/api/types/network"
 	"github.com/ory/dockertest/v4"
 )

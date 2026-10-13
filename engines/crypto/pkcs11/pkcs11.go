@@ -16,15 +16,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ThalesIgnite/crypto11"
+	"github.com/eclipse-keypont/crypto11"
 	"github.com/google/uuid"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/miekg/pkcs11"
 	"github.com/sirupsen/logrus"
 )

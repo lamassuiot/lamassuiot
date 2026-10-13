@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
+	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations"
 	"github.com/pressly/goose/v3"
 )
 

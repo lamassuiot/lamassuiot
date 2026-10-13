@@ -11,10 +11,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	core "github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	core "github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )

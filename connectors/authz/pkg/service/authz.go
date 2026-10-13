@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 

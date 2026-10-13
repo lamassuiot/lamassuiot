@@ -5,9 +5,9 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	lazure "github.com/lamassuiot/lamassuiot/shared/azure/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	lazure "github.com/lamassuiot/lamassuiot/v4/shared/azure"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

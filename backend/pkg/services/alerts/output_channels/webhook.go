@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	lconfig "github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	webhookclient "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers/webhook-client"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	lconfig "github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 

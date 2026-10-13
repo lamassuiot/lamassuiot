@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 // SystemPolicyPrefix marks policies managed by Lamassu itself. They are only

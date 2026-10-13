@@ -1,9 +1,9 @@
 package pkg
 
 import (
-	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 )
 
 type LamassuMonolithicAssembleMode string

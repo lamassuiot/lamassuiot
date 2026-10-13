@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services/eventhandling"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services/eventhandling"
 	"github.com/sirupsen/logrus"
 )
 
