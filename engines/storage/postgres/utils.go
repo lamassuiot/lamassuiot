@@ -2,9 +2,12 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
 	"embed"
 	"encoding"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -205,6 +208,35 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
 	}
+}
+
+// WithIDLock serializes operations on a row ID of this table, even across
+// service instances. fn receives a querier bound to the lock-owning
+// transaction; it must be used instead of the receiver inside the callback.
+// The lock is released on commit or rollback.
+func (db *DBQuerier[E]) WithIDLock(ctx context.Context, id string, fn func(*DBQuerier[E]) error) error {
+	// The table name in the namespace keeps equal IDs of different tables from
+	// contending. READ COMMITTED ensures a waiter sees the preceding writer
+	// after it commits.
+	hash := sha256.Sum256([]byte("lamassu:" + db.tableName + ":id:" + id))
+	lockID := int64(binary.BigEndian.Uint64(hash[:8]))
+	return db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", lockID).Error; err != nil {
+			return err
+		}
+		scoped := *db
+		scoped.DB = tx
+		return fn(&scoped)
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+}
+
+// withScopedIDLock is the store-side adapter of DBQuerier.WithIDLock: it
+// rebuilds the store (via scope) on top of the lock-owning querier and hands
+// it to fn, so a store's WithIDLock reduces to a single call.
+func withScopedIDLock[E any, R any](ctx context.Context, q *DBQuerier[E], id string, scope func(*DBQuerier[E]) R, fn func(R) error) error {
+	return q.WithIDLock(ctx, id, func(scoped *DBQuerier[E]) error {
+		return fn(scope(scoped))
+	})
 }
 
 type GormExtraOps struct {
