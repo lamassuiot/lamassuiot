@@ -28,7 +28,7 @@ jobs:
           args: '-no-fail -fmt sarif -out results.sarif -exclude G104,G601 ./...'
       - name: Upload SARIF file
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: github/codeql-action/upload-sarif@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3.37.0
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           # Path to SARIF file relative to the root of the repository
           sarif_file: results.sarif
