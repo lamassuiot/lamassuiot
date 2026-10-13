@@ -328,3 +328,32 @@ jobs:
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:latest
           push: true
           sbom: true
+
+  scan_docker_images:
+    name: Scan ${{ matrix.service }} release image
+    needs: [build_docker_image, finalize]
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          [
+            kms,
+            ca,
+            devmanager,
+            dmsmanager,
+            va,
+            alerts,
+            aws-connector,
+            authz,
+            lamassu-db-migration,
+            ca-to-kms-migration,
+          ]
+    uses: ./.github/workflows/trivy-image-scan.yml
+    with:
+      image-ref: ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.finalize.outputs.release_version }}
+      category: trivy-image-${{ matrix.service }}-release
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
