@@ -220,14 +220,19 @@ func (db *DBQuerier[E]) WithIDLock(ctx context.Context, id string, fn func(*DBQu
 }
 
 // WithLocks serializes operations that share at least one key, even across
-// service instances. fn receives a querier bound to the lock-owning
-// transaction; it must be used instead of the receiver inside the callback.
-// The locks are released on commit or rollback.
+// service instances; callers with disjoint key sets run in parallel. fn
+// receives a querier bound to the lock-owning transaction; it must be used
+// instead of the receiver inside the callback. The locks are released on
+// commit or rollback.
+//
+// Keys are acquired one by one in sorted order. Without a fixed order, {x, y}
+// and {y, x} could each hold one key while waiting for the other (deadlock);
+// with it, the second caller waits on the first shared key and never holds a
+// key the other needs.
 func (db *DBQuerier[E]) WithLocks(ctx context.Context, keys []string, fn func(*DBQuerier[E]) error) error {
-	// Acquiring in a fixed order lets overlapping key sets wait for each other
-	// without deadlocking. The table name in the namespace keeps equal keys of
-	// different tables from contending. READ COMMITTED ensures a waiter sees
-	// the preceding writer after it commits.
+	// Sorted and deduplicated, see above. The table name in the namespace keeps
+	// equal keys of different tables from contending. READ COMMITTED ensures a
+	// waiter sees the preceding writer after it commits.
 	keys = slices.Clone(keys)
 	slices.Sort(keys)
 	keys = slices.Compact(keys)
