@@ -34,6 +34,8 @@ paths:
       description: Retrieves statistics about keys including total count and distributions by engine and algorithm. Supports optional filtering.
       operationId: getKeyStats
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         check: filter
       parameters:
@@ -96,6 +98,8 @@ paths:
       description: Retrieves information about the configured crypto engine provider
       operationId: getCryptoEngineProvider
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         check: filter
       responses:
@@ -121,6 +125,8 @@ paths:
       description: Retrieves a paginated list of all keys with optional filtering
       operationId: getKeys
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         check: filter
       parameters:
@@ -167,6 +173,8 @@ paths:
       description: Creates a new cryptographic key with specified algorithm and size
       operationId: createKey
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: create
       requestBody:
@@ -203,6 +211,8 @@ paths:
       description: Imports an existing private key into the KMS
       operationId: importKey
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: create
       requestBody:
@@ -239,6 +249,8 @@ paths:
       description: Retrieves detailed information about a specific key
       operationId: getKeyById
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: read
       parameters:
@@ -281,6 +293,8 @@ paths:
       description: Deletes a key from the KMS
       operationId: deleteKeyById
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: delete
       parameters:
@@ -328,6 +342,8 @@ paths:
       description: Updates the aliases for a key using JSON Patch operations
       operationId: updateKeyAliases
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: update
       parameters:
@@ -377,6 +393,8 @@ paths:
       description: Updates the name of a key
       operationId: updateKeyName
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: update
       parameters:
@@ -426,6 +444,8 @@ paths:
       description: Updates the tags associated with a key
       operationId: updateKeyTags
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: update
       parameters:
@@ -475,6 +495,8 @@ paths:
       description: Updates the metadata of a key using JSON Patch operations
       operationId: updateKeyMetadata
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: update
       parameters:
@@ -524,6 +546,8 @@ paths:
       description: Signs a message using the specified key
       operationId: signMessage
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: sign
       parameters:
@@ -573,6 +597,8 @@ paths:
       description: Verifies a signature against a message using the specified key
       operationId: verifySignature
       x-authz:
+        namespace: pki
+        schema_name: kms
         entity_type: kms_key
         action: read
       parameters:

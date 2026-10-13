@@ -139,6 +139,11 @@ func (r *SchemaRegistry) Load(path string, configSchemaName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read schema file %s: %w", path, err)
 	}
+	return r.LoadJSON(data, configSchemaName)
+}
+
+// LoadJSON uses the same validation for embedded schemas and file-backed schemas.
+func (r *SchemaRegistry) LoadJSON(data []byte, configSchemaName string) error {
 
 	// Parse via intermediate type to handle primaryKey as string or []string
 	var raws []schemaJSON

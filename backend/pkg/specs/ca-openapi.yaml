@@ -34,6 +34,8 @@ paths:
       summary: List certificate authorities
       operationId: getCAs
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         check: filter
       parameters:
@@ -60,6 +62,8 @@ paths:
       summary: Create a new certificate authority
       operationId: createCA
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: create
       requestBody:
@@ -100,6 +104,8 @@ paths:
       summary: Import an existing certificate authority
       operationId: importCA
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: create
       requestBody:
@@ -140,6 +146,8 @@ paths:
       summary: Get CA by identifier
       operationId: getCAById
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: read
       parameters:
@@ -174,6 +182,8 @@ paths:
       summary: Delete CA by identifier
       operationId: deleteCA
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: delete
       parameters:
@@ -206,6 +216,8 @@ paths:
       summary: Get CAs by common name
       operationId: getCAsByCommonName
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         check: filter
       parameters:
@@ -246,6 +258,8 @@ paths:
       summary: Update CA metadata
       operationId: updateCAMetadata
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: metadata-update
       parameters:
@@ -286,6 +300,8 @@ paths:
       summary: Patch CA metadata
       operationId: patchCAMetadata
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: metadata-update
       parameters:
@@ -313,6 +329,8 @@ paths:
       summary: Update CA status
       operationId: updateCAStatus
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: status-update
       parameters:
@@ -340,6 +358,8 @@ paths:
       summary: Update CA issuance profile
       operationId: updateCAProfile
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: metadata-update
       parameters:
@@ -370,6 +390,8 @@ paths:
         The CA must be in a valid state (not expired or revoked).
       operationId: reissueCA
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: reissue
       parameters:
@@ -412,6 +434,8 @@ paths:
       summary: List certificates issued by a CA
       operationId: getCertificatesByCA
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         check: filter
       parameters:
@@ -438,6 +462,8 @@ paths:
       summary: List certificates issued by a CA filtered by status
       operationId: getCertificatesByCAAndStatus
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         check: filter
       parameters:
@@ -468,6 +494,8 @@ paths:
       summary: Sign a CSR with a CA
       operationId: signCertificate
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: sign
       parameters:
@@ -495,6 +523,8 @@ paths:
       summary: Sign arbitrary message with CA private key
       operationId: caSignatureSign
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: sign
       parameters:
@@ -522,6 +552,8 @@ paths:
       summary: Verify signature using CA public key
       operationId: caSignatureVerify
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: read
       parameters:
@@ -549,6 +581,8 @@ paths:
       summary: Get certificate by serial number for a CA
       operationId: getCertificateBySerial
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         action: read
       parameters:
@@ -571,6 +605,8 @@ paths:
       summary: List all certificates
       operationId: getCertificates
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         check: filter
       parameters:
@@ -595,6 +631,11 @@ paths:
         Issues a new certificate by generating a key pair inside the specified engine.
         The CA to sign the certificate is specified in the request body.
       operationId: createCertificate
+      x-authz:
+        namespace: pki
+        schema_name: ca
+        entity_type: certificate
+        action: create
       requestBody:
         required: true
         content:
@@ -618,6 +659,8 @@ paths:
       summary: List certificates filtered by status
       operationId: getCertificatesByStatus
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         check: filter
       parameters:
@@ -646,6 +689,8 @@ paths:
       summary: List certificates by expiration window
       operationId: getCertificatesByExpiration
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         check: filter
       parameters:
@@ -681,6 +726,8 @@ paths:
       summary: Get certificate by serial number
       operationId: getCertificate
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         action: read
       parameters:
@@ -700,6 +747,8 @@ paths:
       summary: Delete certificate by serial number
       operationId: deleteCertificate
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         action: delete
       parameters:
@@ -716,6 +765,8 @@ paths:
       summary: Update certificate status
       operationId: updateCertificateStatus
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         action: status-update
       parameters:
@@ -743,6 +794,8 @@ paths:
       summary: Update certificate metadata
       operationId: updateCertificateMetadata
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         action: metadata-update
       parameters:
@@ -768,6 +821,8 @@ paths:
       summary: Patch certificate metadata
       operationId: patchCertificateMetadata
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         action: metadata-update
       parameters:
@@ -795,6 +850,8 @@ paths:
       summary: Import an existing certificate
       operationId: importCertificate
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: certificate
         action: import
       requestBody:
@@ -819,6 +876,8 @@ paths:
       summary: Get CA and certificate statistics
       operationId: getStats
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         check: filter
       responses:
@@ -836,6 +895,8 @@ paths:
       summary: Get statistics for a CA
       operationId: getStatsByCA
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: ca_certificate
         action: read
       parameters:
@@ -855,6 +916,8 @@ paths:
       summary: List issuance profiles
       operationId: getIssuanceProfiles
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: issuance_profile
         check: filter
       parameters:
@@ -876,6 +939,8 @@ paths:
       summary: Create issuance profile
       operationId: createIssuanceProfile
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: issuance_profile
         action: create
       requestBody:
@@ -900,6 +965,8 @@ paths:
       summary: Get issuance profile
       operationId: getIssuanceProfile
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: issuance_profile
         action: read
       parameters:
@@ -918,6 +985,8 @@ paths:
       summary: Update issuance profile
       operationId: updateIssuanceProfile
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: issuance_profile
         action: update
       parameters:
@@ -943,6 +1012,8 @@ paths:
       summary: Delete issuance profile
       operationId: deleteIssuanceProfile
       x-authz:
+        namespace: pki
+        schema_name: ca
         entity_type: issuance_profile
         action: delete
       parameters:

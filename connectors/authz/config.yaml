@@ -3,6 +3,14 @@
 # Enable debug logging
 debug: true
 
+# JWT verification for OIDC principals. Verification is ON by default and needs
+# a JWKS endpoint. For production, set jwks_url and leave the skip flag false.
+# jwks_url: https://idp.example.com/.well-known/jwks.json
+#
+# DEVELOPMENT/TESTING ONLY: parse JWTs without checking the signature, so the
+# service can start without an IdP. Never enable this outside local development.
+insecure_skip_jwt_verify: true
+
 # Schema name -> path to the JSON schema file
 schemas:
   authz: /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json

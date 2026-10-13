@@ -137,3 +137,25 @@ func testLogger() *logrus.Entry {
 
 	return logrus.NewEntry(logger)
 }
+
+// Documents the admin-mode bypass: the header skips every guard (the engine is
+// never consulted), so it must be stripped at the trust boundary. If this test
+// starts failing, update the WARNING in pkg/specs/authz-openapi.yaml.
+func TestAdminModeHeaderBypassesGuardsWithoutCredentials(t *testing.T) {
+	router := testRouterWithAuthzInputs()
+	middleware := NewSimpleAuthzMiddleware(&fakeEngine{err: fmt.Errorf("engine must not be consulted")}, "pki", "devicemanager", "device", testLogger())
+	router.GET("/devices/:id", middleware.AuthzCheck("read"), func(c *gin.Context) { c.Status(http.StatusOK) })
+	router.GET("/devices", middleware.AuthListCheck(), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for _, path := range []string{"/devices/1", "/devices"} {
+		anonymous := httptest.NewRecorder()
+		router.ServeHTTP(anonymous, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.NotEqual(t, http.StatusOK, anonymous.Code, path)
+
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-Principal-ID", "admin-mode")
+		bypass := httptest.NewRecorder()
+		router.ServeHTTP(bypass, req)
+		assert.Equal(t, http.StatusOK, bypass.Code, path)
+	}
+}
