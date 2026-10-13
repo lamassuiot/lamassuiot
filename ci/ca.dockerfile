@@ -8,9 +8,9 @@ WORKDIR /app
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 ARG TARGETARCH
 
-# go.work/go.work.sum rarely change — keep as an early cache layer.
-COPY go.work go.work
-COPY go.work.sum go.work.sum
+# go.mod/go.sum rarely change — keep as an early cache layer.
+COPY go.mod go.mod
+COPY go.sum go.sum
 
 COPY core core
 COPY shared shared
@@ -20,14 +20,14 @@ COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
 
-RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
+RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go mod vendor
 
 # Build args are declared after vendoring so that a version-only change does
 # not bust the vendor cache layer.
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
-RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
+RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go mod vendor
 
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
     CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \

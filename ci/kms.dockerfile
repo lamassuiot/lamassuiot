@@ -10,9 +10,9 @@ ARG TARGETARCH
 # Re-declared so the toolchain install step can report the selected builder.
 ARG BUILDER
 
-# go.work/go.work.sum rarely change — keep as an early cache layer.
-COPY go.work go.work
-COPY go.work.sum go.work.sum
+# go.mod/go.sum rarely change — keep as an early cache layer.
+COPY go.mod go.mod
+COPY go.sum go.sum
 
 COPY core core
 COPY shared shared
@@ -22,7 +22,7 @@ COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
 
-RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
+RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go mod vendor
 
 # Build args are declared after vendoring so that a version-only change does
 # not bust the vendor cache layer.

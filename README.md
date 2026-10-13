@@ -55,15 +55,15 @@ There are 3 main repositories to consider when developing Lamassu
  git clone https://github.com/lamassuiot/lamassuiot.git
  cd lamassuiot
 
-# Synchronize go.work modules and tidy dependencies
- go work sync
- go mod tidy -e ./...
+# Download and tidy dependencies
+ go mod download
+ go mod tidy
 
 # Run the full test suite
  go test ./...
 ```
 
-> **Tip:** The repository uses a Go workspaces file (`go.work`) to orchestrate the multiple modules located under
+> **Tip:** The repository is a single Go module (`github.com/lamassuiot/lamassuiot/v4`) that covers
 > `backend`, `connectors`, `core`, `engines`, `sdk`, and `shared`.
 
 ### Running services locally - Development

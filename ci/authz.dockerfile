@@ -16,13 +16,13 @@ COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
 
-COPY go.work go.work
-COPY go.work.sum go.work.sum
+COPY go.mod go.mod
+COPY go.sum go.sum
 
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
-RUN go work vendor
+RUN go mod vendor
 
 ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \

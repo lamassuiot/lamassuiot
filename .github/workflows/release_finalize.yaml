@@ -56,39 +56,9 @@ jobs:
             exit 1
           fi
 
-  bump_versions:
-    name: Bump Module Versions
-    needs: extract_version
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: main
-          token: ${{ github.token }}
-
-      - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version: "^1.26.2"
-
-      - name: Bump versions in go.mod files
-        run: |
-          chmod +x scripts/bump-version.sh
-          ./scripts/bump-version.sh ${{ needs.extract_version.outputs.release_version }} --no-tidy
-
-      - name: Commit version bump
-        run: |
-          git config user.name "Lamassu IoT Bot"
-          git config user.email "lamassuiot@lamassu.io"
-          git add .
-          git commit -m "chore: bump module versions to v${{ needs.extract_version.outputs.release_version }}"
-          git push origin main
-
   finalize:
     name: Setup Release Variables
-    needs: [extract_version, bump_versions]
+    needs: extract_version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -97,51 +67,16 @@ jobs:
         with:
           ref: main
 
-      - name: Setup Modules Matrix
-        id: matrix
-        run: |
-          # Define MODULES as an array
-          MODULES=(
-            "core"
-            "sdk"
-            "shared/aws"
-            "shared/subsystems"
-            "shared/http"
-            "engines/crypto/aws"
-            "engines/crypto/filesystem"
-            "engines/crypto/software"
-            "engines/crypto/pkcs11"
-            "engines/crypto/vaultkv2"
-            "engines/eventbus/amqp"
-            "engines/eventbus/aws"
-            "engines/storage/postgres"
-            "engines/fs-storage/localfs"
-            "engines/fs-storage/s3"
-            "backend"
-            "connectors/awsiot"
-            "connectors/authz"
-            "monolithic"
-          )
-
-          # Convert the array into a JSON array
-          json_modules=$(printf '%s\n' "${MODULES[@]}" | jq -R -c . | jq -s -c .)
-          echo "json_modules=$json_modules"
-
-          # Set the JSON array as an output
-          echo "json_modules=$json_modules" >> $GITHUB_OUTPUT
-
       - name: Print Release Info
         run: |
           echo "MAJOR_VERSION          = ${{ needs.extract_version.outputs.major_version }}"
           echo "RELEASE_VERSION        = ${{ needs.extract_version.outputs.release_version }}"
           echo "RELEASE_VERSION_WITH_V = ${{ needs.extract_version.outputs.release_version_with_v }}"
-          echo "JSON_MODULES           = ${{ steps.matrix.outputs.json_modules }}"
 
     outputs:
       major_version: ${{ needs.extract_version.outputs.major_version }}
       release_version: ${{ needs.extract_version.outputs.release_version }}
       release_version_with_v: ${{ needs.extract_version.outputs.release_version_with_v }}
-      json_modules: ${{ steps.matrix.outputs.json_modules }}
 
   create_global_tag:
     name: Create Global Tag
@@ -162,37 +97,9 @@ jobs:
           git tag ${{ needs.finalize.outputs.release_version_with_v }} -m "Release ${{ needs.finalize.outputs.release_version_with_v }}"
           git push origin ${{ needs.finalize.outputs.release_version_with_v }}
 
-  create_module_release:
-    name: "Create Module release"
-    needs: [create_global_tag, finalize]
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: write
-    strategy:
-      matrix:
-        module: ${{ fromJson(needs.finalize.outputs.json_modules) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: main
-
-      - name: Create Tag
-        run: |
-          git config user.name "Lamassu IoT Bot"
-          git config user.email "lamassuiot@lamassu.io"
-          git tag ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }} -m "Release ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}"
-          git push origin ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
-
-      - name: Checkout code to tag
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
-
   create_global_release:
     name: Create Global Release
-    needs: [create_module_release, finalize]
+    needs: [create_global_tag, finalize]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -225,7 +132,7 @@ jobs:
           GOPROXY: direct
           GONOSUMDB: github.com/lamassuiot/lamassuiot
         run: |
-          go work vendor
+          go mod vendor
           zip -r vendor.zip vendor
 
       - name: Generate and publish source SBOM
