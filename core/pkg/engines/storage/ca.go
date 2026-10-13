@@ -39,9 +39,15 @@ type CACertificatesRepo interface {
 	// WithIDLock serializes operations on an ID. Use the supplied repository
 	// inside the callback; PostgreSQL binds it to the lock-owning transaction.
 	WithIDLock(ctx context.Context, id string, fn func(CACertificatesRepo) error) error
-	// WithLocks serializes operations that share at least one key. All keys
-	// are acquired together, so overlapping key sets cannot deadlock. Use the
-	// supplied repository inside the callback.
+	// WithLocks serializes operations that share at least one key: callers
+	// with disjoint key sets run in parallel. Keys are acquired in a fixed
+	// (sorted) order, so callers with overlapping sets wait for each other
+	// instead of deadlocking. Use the supplied repository inside the callback.
+	//
+	// Examples:
+	//   {id:root, subject:Root} and {id:child, subject:Root} exclude each other
+	//   (shared subject:Root); {id:ca1} and {id:ca2} run in parallel;
+	//   {x, y} and {y, x} do not deadlock, as both are acquired as x then y.
 	WithLocks(ctx context.Context, keys []string, fn func(CACertificatesRepo) error) error
 
 	SelectByType(ctx context.Context, CAType models.CertificateType, req StorageListRequest[models.CACertificate]) (string, error)
