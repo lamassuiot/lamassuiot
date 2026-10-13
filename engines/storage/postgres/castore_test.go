@@ -49,8 +49,8 @@ type failingImportCARepo struct {
 	err error
 }
 
-func (repo failingImportCARepo) WithIDLock(ctx context.Context, id string, fn func(storage.CACertificatesRepo) error) error {
-	return repo.CACertificatesRepo.WithIDLock(ctx, id, func(scoped storage.CACertificatesRepo) error {
+func (repo failingImportCARepo) WithLocks(ctx context.Context, keys []string, fn func(storage.CACertificatesRepo) error) error {
+	return repo.CACertificatesRepo.WithLocks(ctx, keys, func(scoped storage.CACertificatesRepo) error {
 		return fn(failingImportCARepo{CACertificatesRepo: scoped, err: repo.err})
 	})
 }
@@ -212,4 +212,111 @@ func TestImportCAIDGuardPostgres(t *testing.T) {
 		countRows("ca_certificates", 3)
 		countRows("certificates", 3)
 	})
+}
+
+// slowInsertRepo keeps every import's transaction open for a while after its
+// insert, which is what makes two concurrent imports overlap.
+type slowInsertRepo struct {
+	storage.CACertificatesRepo
+	delay time.Duration
+}
+
+func (repo slowInsertRepo) WithLocks(ctx context.Context, keys []string, fn func(storage.CACertificatesRepo) error) error {
+	return repo.CACertificatesRepo.WithLocks(ctx, keys, func(scoped storage.CACertificatesRepo) error {
+		return fn(slowInsertRepo{CACertificatesRepo: scoped, delay: repo.delay})
+	})
+}
+
+func (repo slowInsertRepo) Insert(ctx context.Context, ca *models.CACertificate) (*models.CACertificate, error) {
+	inserted, err := repo.CACertificatesRepo.Insert(ctx, ca)
+	time.Sleep(repo.delay)
+	return inserted, err
+}
+
+func postgresChain(t *testing.T) (root, child *x509.Certificate) {
+	t.Helper()
+	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	childKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	rootTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(100), Subject: pkix.Name{CommonName: "chain-root"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(2 * time.Hour),
+		SubjectKeyId: []byte{1}, IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+	}
+	rootDER, err := x509.CreateCertificate(rand.Reader, rootTemplate, rootTemplate, &rootKey.PublicKey, rootKey)
+	require.NoError(t, err)
+	root, err = x509.ParseCertificate(rootDER)
+	require.NoError(t, err)
+	childTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(101), Subject: pkix.Name{CommonName: "chain-child"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		SubjectKeyId: []byte{2}, IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+	}
+	childDER, err := x509.CreateCertificate(rand.Reader, childTemplate, root, &childKey.PublicKey, rootKey)
+	require.NoError(t, err)
+	child, err = x509.ParseCertificate(childDER)
+	require.NoError(t, err)
+	return root, child
+}
+
+// A parent and a child imported at the same time, under different IDs, must
+// end up linked whichever of them reaches the database first.
+func TestConcurrentParentAndChildImportAreLinkedPostgres(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		childFirst bool
+	}{{name: "parent first"}, {name: "child first", childFirst: true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, suite := postgrestest.BeforeSuite([]string{"ca"}, false)
+			t.Cleanup(suite.AfterSuite)
+			logger := logrus.New()
+			logger.SetOutput(io.Discard)
+			log := logrus.NewEntry(logger)
+			db := suite.DB["ca"]
+			pool, err := db.DB()
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, pool.Close()) })
+			NewMigrator(log, db).MigrateToLatest()
+			repo, err := NewCAPostgresRepository(log, db)
+			require.NoError(t, err)
+
+			kms := &guardedImportKMS{entered: make(chan struct{}), release: make(chan struct{})}
+			close(kms.release)
+			svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{
+				CAStorage: slowInsertRepo{CACertificatesRepo: repo, delay: 300 * time.Millisecond}, KMSService: kms, Logger: log,
+			})
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			rootCert, childCert := postgresChain(t)
+			imports := []services.ImportCAInput{
+				{ID: "root", CACertificate: (*models.X509Certificate)(rootCert)},
+				{ID: "child", CACertificate: (*models.X509Certificate)(childCert)},
+			}
+			if tc.childFirst {
+				imports[0], imports[1] = imports[1], imports[0]
+			}
+
+			results := make(chan error, 2)
+			for i, input := range imports {
+				go func() {
+					// Stagger the starts so the first import is inside its slow insert
+					// when the second begins.
+					time.Sleep(time.Duration(i) * 100 * time.Millisecond)
+					_, err := svc.ImportCA(ctx, input)
+					results <- err
+				}()
+			}
+			require.NoError(t, <-results)
+			require.NoError(t, <-results)
+
+			_, child, err := repo.SelectExistsByID(ctx, "child")
+			require.NoError(t, err)
+			require.NotNil(t, child)
+			require.Equal(t, "root", child.Certificate.IssuerCAMetadata.ID, "the child must be linked to its parent")
+			require.Equal(t, 1, child.Level)
+		})
+	}
 }

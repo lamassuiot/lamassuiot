@@ -36,7 +36,11 @@ type importCARepo struct {
 	childQueries int
 }
 
-func (repo *importCARepo) WithIDLock(ctx context.Context, _ string, fn func(storage.CACertificatesRepo) error) error {
+func (repo *importCARepo) WithIDLock(ctx context.Context, id string, fn func(storage.CACertificatesRepo) error) error {
+	return repo.WithLocks(ctx, []string{storage.IDLockKey(id)}, fn)
+}
+
+func (repo *importCARepo) WithLocks(ctx context.Context, _ []string, fn func(storage.CACertificatesRepo) error) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 	if err := ctx.Err(); err != nil {
