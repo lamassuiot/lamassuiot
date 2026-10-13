@@ -17,9 +17,28 @@ jobs:
     name: "Open PR with release notes and changelog"
     runs-on: ubuntu-latest
     steps:
+      - name: Create release bot token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: release-bot-token
+        with:
+          client-id: ${{ vars.LAMASSU_RELEASE_BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.LAMASSU_RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Get release bot app user ID
+        id: get-release-bot-user-id
+        run: echo "release-bot-user-id=$(gh api "/users/${{ steps.release-bot-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.release-bot-token.outputs.token }}
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
+          token: ${{ steps.release-bot-token.outputs.token }}
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Generate changelog
@@ -50,9 +69,13 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:
+          token: ${{ steps.release-bot-token.outputs.token }}
+          committer: ${{ steps.release-bot-token.outputs.app-slug }}[bot] <${{ steps.get-release-bot-user-id.outputs.release-bot-user-id }}+${{ steps.release-bot-token.outputs.app-slug }}[bot]@users.noreply.github.com>
+          author: ${{ steps.release-bot-token.outputs.app-slug }}[bot] <${{ steps.get-release-bot-user-id.outputs.release-bot-user-id }}+${{ steps.release-bot-token.outputs.app-slug }}[bot]@users.noreply.github.com>
           commit-message: "chore: release: prepare release ${{ github.event.inputs.release_version }}"
           branch: "release-${{ github.event.inputs.release_version }}"
           title: "chore: release: prepare release ${{ github.event.inputs.release_version }}"
+          signoff: true
           sign-commits: true
           body: |
             # Release ${{ github.event.inputs.release_version }}
