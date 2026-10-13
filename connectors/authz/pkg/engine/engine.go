@@ -69,7 +69,7 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	return e, nil
 }
 
-const engineTracer = "github.com/lamassuiot/authz/engine"
+const engineTracer = "github.com/lamassuiot/lamassuiot/connectors/authz/v3/engine"
 
 // Authorize checks if an action is allowed.
 // For atomic actions: checks against a specific entity key in the database.

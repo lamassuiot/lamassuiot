@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	authzschemas "github.com/lamassuiot/authz"
-	"github.com/lamassuiot/authz/pkg/core"
-	"github.com/lamassuiot/authz/pkg/engine"
-	"github.com/lamassuiot/authz/pkg/service"
-	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
+	authzschemas "github.com/lamassuiot/lamassuiot/connectors/authz/v3"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
+	middleware "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk/gin-middleware"
 	"github.com/sirupsen/logrus"
 )
 

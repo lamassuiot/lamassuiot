@@ -12,6 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/lamassuiot/lamassuiot/backend/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/connectors/awsiot/v3 v3.8.1
+	github.com/lamassuiot/lamassuiot/connectors/authz/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/core/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/sdk/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.8.1

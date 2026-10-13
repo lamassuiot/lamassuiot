@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	authzconfig "github.com/lamassuiot/authz/pkg/config"
-	"github.com/lamassuiot/authz/pkg/service"
-	"github.com/lamassuiot/authz/pkg/store"
+	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 )

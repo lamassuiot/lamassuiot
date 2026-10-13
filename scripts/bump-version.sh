@@ -40,6 +40,7 @@ MODULES=(
   "engines/fs-storage/s3"
   "backend"
   "connectors/awsiot"
+  "connectors/authz"
   "monolithic"
 )
 

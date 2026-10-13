@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lamassuiot/authz/pkg/models"
-	"github.com/lamassuiot/authz/pkg/testutil"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/testutil"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

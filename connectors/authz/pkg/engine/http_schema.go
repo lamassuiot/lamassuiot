@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
 )
 
 // HTTPMatchType describes how a route's path pattern is matched.

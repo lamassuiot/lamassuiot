@@ -3,8 +3,8 @@ package audit
 import (
 	"context"
 
-	authzmodels "github.com/lamassuiot/authz/pkg/models"
-	"github.com/lamassuiot/authz/pkg/service"
+	authzmodels "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	beventpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	baudit "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"

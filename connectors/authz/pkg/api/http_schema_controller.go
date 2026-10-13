@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
 )
 
 // HTTPSchemaController exposes HTTP schema introspection endpoints.

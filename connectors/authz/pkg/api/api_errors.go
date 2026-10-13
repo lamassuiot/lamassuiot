@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/authz/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 )
 

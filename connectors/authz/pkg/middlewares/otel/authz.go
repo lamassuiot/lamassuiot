@@ -3,8 +3,8 @@ package otelmw
 import (
 	"context"
 
-	"github.com/lamassuiot/authz/pkg/core"
-	"github.com/lamassuiot/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

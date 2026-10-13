@@ -2,8 +2,8 @@ package routes
 
 import (
 	"github.com/gin-gonic/gin"
-	authzcore "github.com/lamassuiot/authz/pkg/core"
-	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
+	authzcore "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
+	middleware "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
