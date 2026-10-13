@@ -14,7 +14,7 @@ info:
     url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
 servers:
-  - url: /api/va/v1
+  - url: /api/va
     description: VA API
 
 tags:
@@ -35,6 +35,8 @@ paths:
         Verifies the status of a certificate using OCSP request via HTTP GET method.
         The OCSP request should be base64 encoded and URL-safe.
       operationId: verifyOcspGet
+      x-authz:
+        check: public
       security: []
       parameters:
         - name: ocsp_request
@@ -75,6 +77,8 @@ paths:
         Verifies the status of a certificate using OCSP request via HTTP POST method.
         The OCSP request should be sent in the request body as binary data.
       operationId: verifyOcspPost
+      x-authz:
+        check: public
       security: []
       requestBody:
         required: true
@@ -115,6 +119,8 @@ paths:
         Retrieves the Certificate Revocation List (CRL) for a specific Certificate Authority
         identified by its Subject Key Identifier (SKI).
       operationId: getCrl
+      x-authz:
+        check: public
       security: []
       parameters:
         - name: ca-ski
@@ -162,6 +168,8 @@ paths:
         identified by its Subject Key Identifier (SKI).
       operationId: getVaRoleById
       x-authz:
+        namespace: pki
+        schema_name: va
         entity_type: va_role
         action: read
       parameters:
@@ -207,6 +215,8 @@ paths:
         This includes CRL generation settings and signing configuration.
       operationId: updateVaRole
       x-authz:
+        namespace: pki
+        schema_name: va
         entity_type: va_role
         action: update
       parameters:
