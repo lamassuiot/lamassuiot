@@ -1,4 +1,4 @@
-module github.com/lamassuiot/authz
+module github.com/lamassuiot/lamassuiot/connectors/authz/v3
 
 go 1.26.2
 

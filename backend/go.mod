@@ -11,6 +11,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/jakehl/goid v1.1.0
 	github.com/kaptinlin/jsonschema v0.7.10
+	github.com/lamassuiot/lamassuiot/connectors/authz/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/core/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 v3.8.1
 	github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 v3.8.1

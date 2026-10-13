@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	authzconfig "github.com/lamassuiot/authz/pkg/config"
-	authzmodels "github.com/lamassuiot/authz/pkg/models"
-	"github.com/lamassuiot/authz/pkg/service"
+	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
+	authzmodels "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
 	"github.com/sirupsen/logrus"
 )
 

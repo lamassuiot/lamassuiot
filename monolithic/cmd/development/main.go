@@ -15,7 +15,7 @@ import (
 	"syscall"
 
 	"github.com/fatih/color"
-	authzconfig "github.com/lamassuiot/authz/pkg/config"
+	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"

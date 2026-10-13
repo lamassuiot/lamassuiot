@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lamassuiot/authz/pkg/api/dto"
-	"github.com/lamassuiot/authz/pkg/core"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
 )
 
 // RemoteEngine implements core.AuthzEngine by forwarding requests to a remote authz service via HTTP

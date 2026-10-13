@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	authzschemas "github.com/lamassuiot/authz"
-	authzcore "github.com/lamassuiot/authz/pkg/core"
-	authzSdk "github.com/lamassuiot/authz/sdk"
-	middleware "github.com/lamassuiot/authz/sdk/gin-middleware"
+	authzschemas "github.com/lamassuiot/lamassuiot/connectors/authz/v3"
+	authzcore "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
+	authzSdk "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk"
+	middleware "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/sirupsen/logrus"
 )
