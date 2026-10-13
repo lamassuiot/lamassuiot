@@ -18,10 +18,10 @@ import (
 )
 
 // OIDCMatcher matches principals against JWT/OIDC auth material.
-// When skipValidation is true the token signature is not verified (dev/testing only).
+// When insecureSkipJWTVerify is true the token signature is not verified (dev/testing only).
 type OIDCMatcher struct {
-	jwkKeySet      jwt.Keyfunc
-	skipValidation bool
+	jwkKeySet             jwt.Keyfunc
+	insecureSkipJWTVerify bool
 }
 
 // X509Matcher matches principals against X.509 certificate auth material.
@@ -84,18 +84,21 @@ func NewMatchService(store engine.PrincipalStore, matchers map[string]engine.Pri
 }
 
 // DefaultMatchService returns a MatchService wired with the standard OIDC and X.509 matchers.
-// When enableJWTValidation is false, OIDC tokens are parsed without signature verification
+// When insecureSkipJWTVerify is true, OIDC tokens are parsed without signature verification
 // (intended for development/testing environments where no JWKS endpoint is available).
-func DefaultMatchService(store engine.PrincipalStore, jwkURL string, enableJWTValidation bool) (*MatchService, error) {
+func DefaultMatchService(store engine.PrincipalStore, jwkURL string, insecureSkipJWTVerify bool) (*MatchService, error) {
 	var oidcMatcher OIDCMatcher
-	if enableJWTValidation {
+	if !insecureSkipJWTVerify {
+		if jwkURL == "" {
+			return nil, fmt.Errorf("jwks_url is required to verify JWT signatures; set it, or set insecure_skip_jwt_verify: true for development/testing only")
+		}
 		k, err := keyfunc.NewDefaultCtx(context.Background(), []string{jwkURL})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWKS keyfunc from %s: %w", jwkURL, err)
 		}
 		oidcMatcher = OIDCMatcher{jwkKeySet: k.Keyfunc}
 	} else {
-		oidcMatcher = OIDCMatcher{skipValidation: true}
+		oidcMatcher = OIDCMatcher{insecureSkipJWTVerify: true}
 	}
 
 	return NewMatchService(store, map[string]engine.PrincipalMatcher{
@@ -220,7 +223,7 @@ func (m OIDCMatcher) extractOIDCClaims(authMaterial interface{}) (jwt.MapClaims,
 		v = strings.TrimPrefix(v, "Bearer ")
 		parser := jwt.NewParser()
 		var claims jwt.MapClaims
-		if m.skipValidation {
+		if m.insecureSkipJWTVerify {
 			if _, _, err := parser.ParseUnverified(v, &claims); err != nil {
 				return nil, fmt.Errorf("failed to parse JWT token: %w", err)
 			}

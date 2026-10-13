@@ -27,6 +27,7 @@
       "schema_name": "ca",
       "entity_type": "certificate",
       "actions": [
+        "create",
         "read",
         "delete",
         "import",

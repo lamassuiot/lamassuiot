@@ -288,7 +288,7 @@ func TestGetGlobalCapabilitiesForPrincipal(t *testing.T) {
 	db := setupDBWithAuthzMigrations(t, "testdata/init.sql")
 	eng := setupIoTEngine(t, db)
 
-	principalManager, err := NewPrincipalManager(db, "", false)
+	principalManager, err := NewPrincipalManager(db, "", true)
 	require.NoError(t, err)
 
 	policyManager := NewPolicyManager(store.NewInMemoryPolicyStore())

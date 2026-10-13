@@ -118,7 +118,7 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 		return nil, nil, nil, nil, fmt.Errorf("failed to create policy store: %w", err)
 	}
 
-	principalManager, err := service.NewPrincipalManager(authzDB, conf.JWKSURL, conf.EnableJWTValidation)
+	principalManager, err := service.NewPrincipalManager(authzDB, conf.JWKSURL, conf.InsecureSkipJWTVerify)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
