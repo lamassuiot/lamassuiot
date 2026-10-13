@@ -2,17 +2,22 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
 	"embed"
 	"encoding"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io/fs"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
@@ -54,7 +59,8 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, cfg.Port, schema)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: dbLogger,
+		Logger:         dbLogger,
+		TranslateError: true,
 	})
 
 	if err != nil {
@@ -204,6 +210,53 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
 	}
+}
+
+// WithIDLock serializes operations on a row ID of this table. It is the
+// single-key form of WithLocks, for tables whose operations only contend on
+// their own ID.
+func (db *DBQuerier[E]) WithIDLock(ctx context.Context, id string, fn func(*DBQuerier[E]) error) error {
+	return db.WithLocks(ctx, []string{storage.IDLockKey(id)}, fn)
+}
+
+// WithLocks serializes operations that share at least one key, even across
+// service instances; callers with disjoint key sets run in parallel. fn
+// receives a querier bound to the lock-owning transaction; it must be used
+// instead of the receiver inside the callback. The locks are released on
+// commit or rollback.
+//
+// Keys are acquired one by one in sorted order. Without a fixed order, {x, y}
+// and {y, x} could each hold one key while waiting for the other (deadlock);
+// with it, the second caller waits on the first shared key and never holds a
+// key the other needs.
+func (db *DBQuerier[E]) WithLocks(ctx context.Context, keys []string, fn func(*DBQuerier[E]) error) error {
+	// Sorted and deduplicated, see above. The table name in the namespace keeps
+	// equal keys of different tables from contending. READ COMMITTED ensures a
+	// waiter sees the preceding writer after it commits.
+	keys = slices.Clone(keys)
+	slices.Sort(keys)
+	keys = slices.Compact(keys)
+	return db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, key := range keys {
+			hash := sha256.Sum256([]byte("lamassu:" + db.tableName + ":" + key))
+			lockID := int64(binary.BigEndian.Uint64(hash[:8]))
+			if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", lockID).Error; err != nil {
+				return err
+			}
+		}
+		scoped := *db
+		scoped.DB = tx
+		return fn(&scoped)
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+}
+
+// withScopedLocks is the store-side adapter of DBQuerier.WithLocks: it
+// rebuilds the store (via scope) on top of the lock-owning querier and hands
+// it to fn, so a store's WithLocks reduces to a single call.
+func withScopedLocks[E any, R any](ctx context.Context, q *DBQuerier[E], keys []string, scope func(*DBQuerier[E]) R, fn func(R) error) error {
+	return q.WithLocks(ctx, keys, func(scoped *DBQuerier[E]) error {
+		return fn(scope(scoped))
+	})
 }
 
 type GormExtraOps struct {

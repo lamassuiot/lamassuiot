@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -16,6 +18,16 @@ const caJoinCaCertificatesAndCertificates = "JOIN certificates ON ca_certificate
 type PostgresCAStore struct {
 	db      *gorm.DB
 	querier *DBQuerier[models.CACertificate]
+}
+
+func (db *PostgresCAStore) WithIDLock(ctx context.Context, id string, fn func(storage.CACertificatesRepo) error) error {
+	return db.WithLocks(ctx, []string{storage.IDLockKey(id)}, fn)
+}
+
+func (db *PostgresCAStore) WithLocks(ctx context.Context, keys []string, fn func(storage.CACertificatesRepo) error) error {
+	return withScopedLocks(ctx, db.querier, keys, func(q *DBQuerier[models.CACertificate]) storage.CACertificatesRepo {
+		return &PostgresCAStore{db: q.DB, querier: q}
+	}, fn)
 }
 
 func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
@@ -160,7 +172,11 @@ func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (boo
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	ca, err := db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return nil, errs.ErrCAAlreadyExists
+	}
+	return ca, err
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
