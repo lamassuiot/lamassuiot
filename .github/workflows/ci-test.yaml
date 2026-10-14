@@ -12,7 +12,37 @@ on:
   workflow_dispatch:
   
 jobs:
+  setup:
+    name: Set up tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ github.head_ref }}
+
+      # Saves the Go module and build caches once, so every test job restores them instead of racing to create them
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '^1.26.5'
+          cache-dependency-path: "**/*.sum"
+
+      - name: Install Dependencies
+        run: |
+          go mod download
+          go install gotest.tools/gotestsum@v1.13.0
+
+      # -exec /bin/true compiles the test binaries without running them (no TestMain, no containers)
+      - name: Warm up build cache
+        run: |
+          go build ./...
+          go test -exec /bin/true ./... > /dev/null
+
   test:
+    needs: setup
     strategy:
       max-parallel: 5
       matrix:
@@ -71,7 +101,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@v1.13.0 --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -81,6 +111,7 @@ jobs:
           verbose: true
           flags: ${{ matrix.module.tag }}
   test-pkcs11:
+    needs: setup
     name: engines/crypto/pkcs11
     runs-on: ubuntu-latest
     permissions:
@@ -108,7 +139,7 @@ jobs:
         env:
           PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@v1.13.0 --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -119,6 +150,7 @@ jobs:
           flags: crypto-pkcs11
 
   test-backend-assemblers:
+    needs: setup
     strategy:
       max-parallel: 5
       matrix:
@@ -164,7 +196,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@v1.13.0 --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -175,6 +207,7 @@ jobs:
           flags: ${{ matrix.module.tag }}
 
   test-backend-rest:
+    needs: setup
     name: backend (excluding assemblers/tests)
     runs-on: ubuntu-latest
     permissions:
@@ -198,7 +231,7 @@ jobs:
         id: run
         working-directory: backend
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@v1.13.0 --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
