@@ -15,7 +15,7 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
-		PageSize:     25,
+		PageSize:     resources.DefaultPageSize,
 	}
 
 	if len(r.URL.RawQuery) > 0 {
@@ -65,7 +65,7 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				value := v[len(v)-1] //only get last
 				pageS, err := strconv.Atoi(value)
 				if err == nil {
-					queryParams.PageSize = pageS
+					queryParams.PageSize = min(pageS, resources.MaxPageSize)
 				}
 
 			case "bookmark":
@@ -342,7 +342,7 @@ func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
-		PageSize:     25,
+		PageSize:     resources.DefaultPageSize,
 	}
 
 	for _, value := range filterValues {
