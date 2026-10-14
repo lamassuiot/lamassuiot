@@ -33,7 +33,7 @@ jobs:
       - name: Install Dependencies
         run: |
           go mod download
-          go install gotest.tools/gotestsum@v1.13.0
+          go tool gotestsum --version
 
       # -exec /bin/true compiles the test binaries without running them (no TestMain, no containers)
       - name: Warm up build cache
@@ -101,7 +101,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@v1.13.0 --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go tool gotestsum --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -139,7 +139,7 @@ jobs:
         env:
           PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
-          go run gotest.tools/gotestsum@v1.13.0 --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+          go tool gotestsum --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -196,7 +196,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@v1.13.0 --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go tool gotestsum --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -231,7 +231,7 @@ jobs:
         id: run
         working-directory: backend
         run: |
-          go run gotest.tools/gotestsum@v1.13.0 --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go tool gotestsum --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
