@@ -1,70 +1,91 @@
+codecov:
+  notify:
+    # Notifications (PR comment + statuses) are only sent when the "codecov-notify"
+    # job of .github/workflows/ci-test.yaml runs, once every test job has uploaded.
+    manual_trigger: true
+
 coverage:
   status:
     project:
       default: off
-      shared-aws:
-        target: auto
-        flags: 
-        - shared-aws
-      shared-http:
-        target: auto
-        flags: 
-        - shared-http
       core:
         target: auto
-        flags: 
+        flags:
         - core
       sdk:
         target: auto
         flags:
         - sdk
+      shared-subsystems:
+        target: auto
+        flags:
+        - shared-subsystems
+      shared-aws:
+        target: auto
+        flags:
+        - shared-aws
+      shared-http:
+        target: auto
+        flags:
+        - shared-http
       crypto-aws:
         target: auto
-        flags: 
+        flags:
         - crypto-aws
       crypto-filesystem:
         target: auto
-        flags: 
+        flags:
         - crypto-filesystem
       crypto-vaultkv2:
         target: auto
-        flags: 
+        flags:
         - crypto-vaultkv2
-      crypto-pkc11:
+      crypto-azure:
         target: auto
-        flags: 
+        flags:
+        - crypto-azure
+      crypto-pkcs11:
+        target: auto
+        flags:
         - crypto-pkcs11
-      storage-postgres:
-        target: auto
-        flags: 
-        - storage-postgres
       eventbus-amqp:
         target: auto
-        flags: 
+        flags:
         - eventbus-amqp
       eventbus-aws:
         target: auto
-        flags: 
+        flags:
         - eventbus-aws
+      storage-postgres:
+        target: auto
+        flags:
+        - storage-postgres
+      connector-awsiot:
+        target: auto
+        flags:
+        - connector-awsiot
+      connector-authz:
+        target: auto
+        flags:
+        - connector-authz
+      monolithic:
+        target: auto
+        flags:
+        - monolithic
       backend:
         target: auto
-        flags: 
-        - backend
-      connector-aws:
-        target: auto
-        flags: 
-        - connector-aws
+        flags:
+        - backend-rest
+        - backend-assemblers-ca
+        - backend-assemblers-kms
+        - backend-assemblers-va
+        - backend-assemblers-device-manager
+        - backend-assemblers-dms-manager
+        - backend-assemblers-alerts
     patch: off
 
+# Flag names must match the "tag"/"flags" values uploaded by .github/workflows/ci-test.yaml
 flags:
-  shared-aws:
-    paths:
-        - shared/aws/
-    carryforward: true
-  shared-http:
-    paths:
-        - shared/http/
-    carryforward: true
   core:
     paths:
         - core/
@@ -72,6 +93,18 @@ flags:
   sdk:
     paths:
         - sdk/
+    carryforward: true
+  shared-subsystems:
+    paths:
+        - shared/subsystems/
+    carryforward: true
+  shared-aws:
+    paths:
+        - shared/aws/
+    carryforward: true
+  shared-http:
+    paths:
+        - shared/http/
     carryforward: true
   crypto-aws:
     paths:
@@ -85,13 +118,13 @@ flags:
     paths:
         - engines/crypto/vaultkv2/
     carryforward: true
+  crypto-azure:
+    paths:
+        - engines/crypto/azure/
+    carryforward: true
   crypto-pkcs11:
     paths:
         - engines/crypto/pkcs11/
-    carryforward: true
-  storage-postgres:
-    paths:
-        - engines/storage/postgres/
     carryforward: true
   eventbus-amqp:
     paths:
@@ -101,13 +134,49 @@ flags:
     paths:
         - engines/eventbus/aws/
     carryforward: true
-  backend:
+  storage-postgres:
+    paths:
+        - engines/storage/postgres/
+    carryforward: true
+  connector-awsiot:
+    paths:
+        - connectors/awsiot/
+    carryforward: true
+  connector-authz:
+    paths:
+        - connectors/authz/
+    carryforward: true
+  monolithic:
+    paths:
+        - monolithic/
+    carryforward: true
+  backend-rest:
     paths:
         - backend/
     carryforward: true
-  connector-aws:
+  backend-assemblers-ca:
     paths:
-        - connector/aws/
+        - backend/
+    carryforward: true
+  backend-assemblers-kms:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-va:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-device-manager:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-dms-manager:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-alerts:
+    paths:
+        - backend/
     carryforward: true
 
 ignore:
@@ -122,4 +191,3 @@ ignore:
   - "**/docker/*"
   - "**/dockerrunner/**/*"
   - "**/dockerrunner/*"
-

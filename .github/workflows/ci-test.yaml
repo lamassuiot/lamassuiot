@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - v4
   workflow_dispatch:
   
 jobs:
@@ -76,7 +77,6 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          commit_parent: ${{ github.event.pull_request.base.sha }}
           fail_ci_if_error: true
           verbose: true
           flags: ${{ matrix.module.tag }}
@@ -114,7 +114,6 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          commit_parent: ${{ github.event.pull_request.base.sha }}
           fail_ci_if_error: true
           verbose: true
           flags: crypto-pkcs11
@@ -171,7 +170,6 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          commit_parent: ${{ github.event.pull_request.base.sha }}
           fail_ci_if_error: true
           verbose: true
           flags: ${{ matrix.module.tag }}
@@ -206,7 +204,27 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          commit_parent: ${{ github.event.pull_request.base.sha }}
           fail_ci_if_error: true
           verbose: true
           flags: backend-rest
+
+  codecov-notify:
+    name: Codecov notifications
+    needs: [test, test-pkcs11, test-backend-assemblers, test-backend-rest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ github.head_ref }}
+
+      # Uploads are held by Codecov (codecov.notify.manual_trigger) until every test job has finished
+      - name: Send Codecov notifications
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          run_command: send-notifications
+          fail_ci_if_error: true
+          verbose: true
