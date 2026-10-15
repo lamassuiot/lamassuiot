@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
-	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
+	dockerrunner "github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
 	mobycontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"

@@ -4,7 +4,7 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 
-	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 func SubjectToPkixName(subj cmodels.Subject) pkix.Name {

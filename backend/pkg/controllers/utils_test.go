@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 func TestFilterQuery_SubjectKeyID(t *testing.T) {

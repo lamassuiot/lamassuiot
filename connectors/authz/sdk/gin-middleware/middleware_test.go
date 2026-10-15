@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	lamassucore "github.com/lamassuiot/lamassuiot/core/v3"
+	lamassucore "github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

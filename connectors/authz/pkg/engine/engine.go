@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -69,7 +69,7 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	return e, nil
 }
 
-const engineTracer = "github.com/lamassuiot/lamassuiot/connectors/authz/v3/engine"
+const engineTracer = "github.com/lamassuiot/lamassuiot/v4/connectors/authz/engine"
 
 // Authorize checks if an action is allowed.
 // For atomic actions: checks against a specific entity key in the database.

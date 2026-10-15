@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/stretchr/testify/assert"
 
-	_ "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/dmsmanager"
+	_ "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"

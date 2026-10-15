@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	gormlogger "gorm.io/gorm/logger"
 )

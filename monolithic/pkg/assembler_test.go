@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 )
 
 func TestMonolithicAuthzProxyAuthorizeForwardsOriginalRequestAndRestoresBody(t *testing.T) {

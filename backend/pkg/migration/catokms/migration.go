@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"time"
 
-	storagebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	storagebuilder "github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
 

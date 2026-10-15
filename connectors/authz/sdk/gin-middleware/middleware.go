@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
-	authzengine "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	authzsdk "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk"
-	lamassucore "github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
+	authzengine "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
+	lamassucore "github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 

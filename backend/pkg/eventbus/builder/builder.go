@@ -1,7 +1,7 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
 	"github.com/sirupsen/logrus"
 )
 

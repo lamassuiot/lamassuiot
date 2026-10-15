@@ -9,14 +9,15 @@ import (
 	"io/fs"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -258,6 +259,26 @@ func (db *DBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.F
 	return int(count), nil
 }
 
+var sortColumnRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// plainOrderExpr builds an ORDER BY expression for a plain column, rejecting
+// anything that is not a simple identifier plus asc/desc, as both values can
+// originate from user input (query params or a decoded bookmark).
+func plainOrderExpr(sortBy, sortMode string) (string, error) {
+	if !sortColumnRegex.MatchString(sortBy) {
+		return "", fmt.Errorf("invalid sort field")
+	}
+
+	switch strings.ToLower(sortMode) {
+	case "asc":
+		return sortBy + " ASC", nil
+	case "desc":
+		return sortBy + " DESC", nil
+	default:
+		return "", fmt.Errorf("invalid sort mode")
+	}
+}
+
 func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []GormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 	tx := db.Table(db.tableName)
@@ -308,7 +329,11 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 				} else {
 					sortBy = strings.ReplaceAll(queryParams.Sort.SortField, ".", "_")
 					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
-					tx = tx.Order(sortBy + " " + sortMode)
+					orderExpr, err := plainOrderExpr(sortBy, sortMode)
+					if err != nil {
+						return "", err
+					}
+					tx = tx.Order(orderExpr)
 				}
 			}
 
@@ -398,7 +423,11 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 							})
 						}
 					} else {
-						tx = tx.Order(sortBy + " " + sortMode)
+						orderExpr, err := plainOrderExpr(sortBy, sortMode)
+						if err != nil {
+							return "", err
+						}
+						tx = tx.Order(orderExpr)
 					}
 				}
 			}

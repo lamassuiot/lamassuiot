@@ -1,7 +1,7 @@
 package s3
 
 import (
-	sharedAWS "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	sharedAWS "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 )
 
 type AWSS3FilesystemConfig struct {

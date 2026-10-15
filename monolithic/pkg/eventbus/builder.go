@@ -1,8 +1,8 @@
 package eventbus
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/v4/monolithic/pkg/eventbus/inmemory"
 	"github.com/sirupsen/logrus"
 )
 

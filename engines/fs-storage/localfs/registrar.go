@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	fsstorage "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/fs-storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	fsstorage "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/fs-storage"
 	log "github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"

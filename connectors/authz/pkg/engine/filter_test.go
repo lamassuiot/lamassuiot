@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
 
 func mustNewFilterGenerator(t *testing.T, schemas *SchemaRegistry, policies *PolicyRegistry) *FilterGenerator {

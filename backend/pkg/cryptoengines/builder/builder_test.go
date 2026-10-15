@@ -3,8 +3,8 @@ package builder
 import (
 	"testing"
 
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/filesystem"
 	log "github.com/sirupsen/logrus"
 )
 

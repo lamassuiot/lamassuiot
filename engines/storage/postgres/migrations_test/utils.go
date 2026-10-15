@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
-	postgres_test "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/test"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	postgres_test "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/test"
 	"github.com/sirupsen/logrus"
 	postgresDriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"

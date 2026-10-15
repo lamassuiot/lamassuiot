@@ -3,8 +3,8 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
-	pkcs11_subsystem "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/subsystem"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11"
+	pkcs11_subsystem "github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/subsystem"
 	log "github.com/sirupsen/logrus"
 )
 

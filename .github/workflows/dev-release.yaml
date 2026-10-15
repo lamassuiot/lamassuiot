@@ -12,12 +12,13 @@ on:
         required: true
         type: choice
         options:
-          - golang:1.26.2-bookworm
+          - golang:1.26.8-bookworm
+          - golang:1.27.2-bookworm
           - ghcr.io/lamassuiot/golang-pqc:latest
           - ghcr.io/lamassuiot/golang-pqc:go1.27
           - ghcr.io/lamassuiot/golang-pqc:go1.26
           - other
-        default: golang:1.26.2-bookworm
+        default: golang:1.26.8-bookworm
       other:
         description: "Only used when go = 'other'. Must be Debian/Ubuntu-based and provide apt-get (required by the ci/kms.dockerfile arm64 build)."
         type: string
@@ -47,8 +48,35 @@ jobs:
 
           printf 'TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
 
+  # Resolve dependencies once and share them with every image build, instead of
+  # each matrix job (and each target architecture) fetching them on its own.
+  vendor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Vendor dependencies
+        run: go mod vendor
+
+      - name: Upload vendor directory
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vendor
+          path: vendor
+          retention-days: 1
+
   build_docker_image:
-    needs: validate_tag
+    needs: [validate_tag, vendor]
     permissions:
       contents: read
       packages: write
@@ -74,7 +102,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.sha }}
 
       - name: Resolve tag
         run: |
@@ -92,6 +120,12 @@ jobs:
             BUILDER="$GO_INPUT"
           fi
           echo "BUILDER=$BUILDER" >> $GITHUB_ENV
+
+      - name: Download vendor directory
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vendor
+          path: vendor
 
       - name: Login to Github Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -134,6 +168,8 @@ jobs:
         with:
           context: .
           file: ci/${{ matrix.service }}.dockerfile
+          build-contexts: |
+            vendor=./vendor
           platforms: linux/amd64,linux/arm64
           build-args: |
             BUILDER=${{ env.BUILDER }}

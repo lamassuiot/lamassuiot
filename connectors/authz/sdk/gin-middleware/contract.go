@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
-	authzengine "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
+	authzengine "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )

@@ -1,9 +1,9 @@
 package migrations
 
 import (
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/ca"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/devicemanager"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/dmsmanager"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/ca"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/devicemanager"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
 )
 
 // the order of the migrations is NOT IMPORTANT. It is only necessary to register them all

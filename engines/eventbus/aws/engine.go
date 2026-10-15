@@ -2,9 +2,9 @@ package aws
 
 import (
 	"github.com/ThreeDotsLabs/watermill/message"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 	"github.com/sirupsen/logrus"
 )
 

@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 type StorageListRequest[E any] struct {

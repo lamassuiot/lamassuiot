@@ -1,6 +1,6 @@
 package api
 
-import "github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+import "github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 
 var PrincipalFilterableFields = map[string]resources.FilterFieldType{
 	"id":          resources.StringFilterFieldType,

@@ -1,6 +1,6 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+import cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 
 // BootstrapEntry defines a principal and the policies to pre-grant on first startup.
 // All operations are idempotent — safe to leave in config permanently.

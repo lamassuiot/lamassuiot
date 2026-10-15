@@ -3,8 +3,8 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3"
-	vault_subsystem "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/subsystem"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2"
+	vault_subsystem "github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2/subsystem"
 	log "github.com/sirupsen/logrus"
 )
 

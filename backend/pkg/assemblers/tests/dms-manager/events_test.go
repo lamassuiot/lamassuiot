@@ -12,12 +12,12 @@ import (
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestBindIDEvent(t *testing.T) {

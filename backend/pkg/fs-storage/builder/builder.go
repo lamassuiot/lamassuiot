@@ -3,9 +3,9 @@ package builder
 import (
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	fsstorage "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/fs-storage"
-	"github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	fsstorage "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/fs-storage"
+	"github.com/lamassuiot/lamassuiot/v4/engines/fs-storage/localfs"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 )

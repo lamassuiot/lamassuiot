@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
+	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	log "github.com/sirupsen/logrus"
 )
 
