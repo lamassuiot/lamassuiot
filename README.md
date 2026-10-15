@@ -98,6 +98,11 @@ We welcome community contributions! To get started:
 Please adhere to our coding standards, commit conventions, and security practices outlined in
 [SECURITY.md](SECURITY.md).
 
+## Security
+
+To report a security vulnerability, do **not** open a public issue — follow
+[SECURITY.md](./SECURITY.md) instead.
+
 ## Support & community
 
 - 📚 Documentation: https://www.lamassu.io/docs/
