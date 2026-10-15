@@ -95,9 +95,6 @@ We welcome community contributions! To get started:
 2. Open an issue describing your proposal or bug report.
 3. Submit a pull request with a focused change set and accompanying tests.
 
-Please adhere to our coding standards, commit conventions, and security practices outlined in
-[SECURITY.md](SECURITY.md).
-
 ## Security
 
 To report a security vulnerability, do **not** open a public issue — follow
