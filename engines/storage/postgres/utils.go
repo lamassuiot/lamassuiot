@@ -360,9 +360,11 @@ func decodeBookmark(bookmark string) (pageState, error) {
 			}
 		case "lim":
 			page.limit, err = strconv.Atoi(val)
-			if err != nil || page.limit <= 0 || page.limit > resources.MaxPageSize {
+			if err != nil || page.limit <= 0 {
 				return page, errInvalid
 			}
+			// bookmarks issued before the page size cap may carry a larger limit
+			page.limit = min(page.limit, resources.MaxPageSize)
 		case "sortM":
 			page.sort.mode = val
 		case "sortB":

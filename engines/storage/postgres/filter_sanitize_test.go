@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -290,15 +291,15 @@ func TestSelectAll_UniqueOrder(t *testing.T) {
 		params *resources.QueryParameters
 		want   string
 	}{
-		{"no sort", nil, nil, `ORDER BY "filter_test_rows"."id" LIMIT 26`},
+		{"no sort", nil, nil, `ORDER BY "filter_test_rows"."id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
 		{"plain sort", nil,
 			&resources.QueryParameters{Sort: resources.SortOptions{SortField: "name", SortMode: resources.SortModeDesc}},
-			`ORDER BY "name" DESC,"filter_test_rows"."id" LIMIT 26`},
+			`ORDER BY "name" DESC,"filter_test_rows"."id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
 		{"json path sort", nil,
 			&resources.QueryParameters{Sort: resources.SortOptions{SortField: "metadata", JsonPathExpr: "$.a"}},
-			`END ASC NULLS FIRST, "filter_test_rows"."id" LIMIT 26`},
+			`END ASC NULLS FIRST, "filter_test_rows"."id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
 		{"composite unique columns", []string{"key_id", "engine_id"}, nil,
-			`ORDER BY "filter_test_rows"."key_id","filter_test_rows"."engine_id" LIMIT 26`},
+			`ORDER BY "filter_test_rows"."key_id","filter_test_rows"."engine_id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
 	}
 	for _, c := range cases {
 		querier := newPostgresDBQuerier[filterTestRow](dryRunDB(t), "filter_test_rows", "id")
@@ -316,7 +317,12 @@ func TestPageState_MaxPageSize(t *testing.T) {
 	if err != nil || page.limit != resources.MaxPageSize {
 		t.Fatalf("expected limit capped to %d, got %+v, %v", resources.MaxPageSize, page, err)
 	}
-	if _, err := decodeBookmark(encodeBookmark("off:0;lim:1001;")); err == nil {
-		t.Fatal("expected error for a bookmark above the max page size")
+	// bookmarks issued before the cap existed may carry a larger limit: clamp them
+	old, err := decodeBookmark(encodeBookmark("off:0;lim:5000;"))
+	if err != nil || old.limit != resources.MaxPageSize {
+		t.Fatalf("expected legacy bookmark limit clamped to %d, got %+v, %v", resources.MaxPageSize, old, err)
+	}
+	if _, err := decodeBookmark(encodeBookmark("off:0;lim:0;")); err == nil {
+		t.Fatal("expected error for a bookmark with a non-positive limit")
 	}
 }
