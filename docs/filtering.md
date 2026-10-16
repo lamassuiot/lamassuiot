@@ -347,6 +347,8 @@ The system ensures consistent ordering across all pages of results.
 - Always URL-encode filter values when they contain spaces, quotes, or special characters.
 - JSONPath filtering depends on PostgreSQL's `jsonpath` implementation — consult Postgres docs for expression semantics.
 - Not all fields are filterable; check the resource-specific filter maps (e.g. `core/pkg/resources/*.go`) for allowed fields.
+- Pagination: when `page_size` is omitted the default is 50 items per page (previously 25); the maximum is 1000 and larger values are capped. Bookmarks issued with a larger limit are clamped to 1000.
+- Substring matching (`contains`, `ilike`-style operators) treats `%`, `_` and `\` in the filter value as literal characters, not SQL wildcards.
 - For client libraries, prefer SDK helpers to encode filters properly; the SDK maps filter operations to short operator strings (e.g. `EnumEqual` -> `eq`, `JsonPathExpression` -> `jsonpath`).
 
 ---
