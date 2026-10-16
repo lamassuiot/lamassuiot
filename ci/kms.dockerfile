@@ -70,14 +70,22 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -o kms \
       backend/cmd/kms/main.go
 
-FROM debian:bookworm-slim AS pkcs11-client-proxy
+# The p11-kit RPC protocol is not compatible across minor versions: a 0.24/0.25
+# client gets CKR_DEVICE_MEMORY from a 0.26 server on C_GenerateKeyPair. This
+# stage must therefore use the same base image as the SoftHSM image
+# (lamassuiot/helmchart ci/softhsm/dockerfile), not the runtime's Debian.
+FROM ubuntu:26.04 AS pkcs11-client-proxy
 # Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
 # this intermediate stage (in addition to the default final-stage scan).
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 # This stage is NOT pinned to $BUILDPLATFORM: it must run for the target
 # architecture so that apt installs matching p11-kit libraries.
 ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends p11-kit && \
+# glibc shipped by the runtime image (cc-debian13). The copied libraries are
+# built against Ubuntu's newer glibc, so the build fails if they require any
+# symbol version above this one instead of failing at module load time.
+ARG RUNTIME_GLIBC=2.41
+RUN apt-get update && apt-get install -y --no-install-recommends p11-kit-modules && \
     case "$TARGETARCH" in \
       amd64) TRIPLET=x86_64-linux-gnu ;; \
       arm64) TRIPLET=aarch64-linux-gnu ;; \
@@ -85,7 +93,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends p11-kit && \
     esac && \
     mkdir -p /out/pkcs11 && \
     cp -L /usr/lib/${TRIPLET}/libffi.so.8 /out/ && \
-    cp -L /usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so /out/pkcs11/
+    cp -L /usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so /out/pkcs11/ && \
+    for lib in /out/libffi.so.8 /out/pkcs11/p11-kit-client.so; do \
+      required=$(grep -aoE 'GLIBC_2\.[0-9]+' "$lib" | sed 's/^GLIBC_//' | sort -uV | tail -n1); \
+      printf '%s\n%s\n' "$required" "$RUNTIME_GLIBC" | sort -V -C || \
+        { echo "$lib requires glibc $required, runtime image provides $RUNTIME_GLIBC" >&2; exit 1; }; \
+    done
 
 # gcr.io/distroless/cc-debian13:nonroot provides glibc + libgcc (required for
 # the CGO-linked binary), CA certificates, and a non-root user (UID 65532).
