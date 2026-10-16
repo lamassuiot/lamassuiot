@@ -32,7 +32,10 @@ type CreateDMSInput struct {
 }
 
 type UpdateDMSInput struct {
-	DMS models.DMS `validate:"required"`
+	ID       string `validate:"required"`
+	Name     string `validate:"required"`
+	Metadata map[string]any
+	Settings models.DMSSettings `validate:"required"`
 }
 
 type GetDMSByIDInput struct {
