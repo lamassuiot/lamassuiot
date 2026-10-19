@@ -495,31 +495,13 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 
 	tx = applyExtraOpts(tx, extraOpts)
 
-	if offset > 0 {
-		tx.Offset(offset)
-	}
-
 	if exhaustiveRun {
-		// FindInBatches already pages through rows by primary key
 		if orderBy != nil {
-			tx = tx.Clauses(*orderBy)
+			return "", fmt.Errorf("sorting is not supported on exhaustive runs")
 		}
-		res := tx.WithContext(ctx).Preload(clause.Associations).FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
-			for _, elem := range elems {
-				applyFunc(elem)
-			}
-
-			return nil
-		})
-		if res.Error != nil {
-			return "", res.Error
-		}
-
-		return "", nil
+		return "", db.selectAllInBatches(ctx, tx, offset, limit, applyFunc)
 	} else {
-		tx = tx.Clauses(db.withUniqueOrder(orderBy))
-		tx.Offset(offset)
-		tx.Limit(limit + 1)
+		tx = tx.Clauses(db.withUniqueOrder(orderBy)).Offset(offset).Limit(limit + 1)
 		rs := tx.WithContext(ctx).Preload(clause.Associations).Find(&elems)
 
 		if rs.Error != nil {
@@ -546,6 +528,55 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 		}
 
 		return page.nextBookmark(), nil
+	}
+}
+
+// selectAllInBatches walks every row matching tx in batches, ordered by the
+// querier's unique columns, fetching each batch with a keyset condition
+// ((unique cols) > (last row's values)) instead of an offset. Callers may update
+// rows while iterating (e.g. moving certificates out of the filtered status),
+// which would shift an offset and skip rows; a keyset is not affected. The
+// initial offset (from a bookmark) only applies to the first batch.
+func (db *DBQuerier[E]) selectAllInBatches(ctx context.Context, tx *gorm.DB, offset, batchSize int, applyFunc func(elem E)) error {
+	cols := make([]any, len(db.uniqueColumns))
+	for i, name := range db.uniqueColumns {
+		cols[i] = clause.Column{Table: clause.CurrentTable, Name: name}
+	}
+	placeholders := "(?" + strings.Repeat(", ?", len(cols)-1) + ")"
+	order := db.withUniqueOrder(nil)
+	base := tx.Session(&gorm.Session{})
+
+	var last []any
+	for {
+		var batch []E
+		q := base.WithContext(ctx).Preload(clause.Associations).Clauses(order).Limit(batchSize)
+		if last == nil {
+			q = q.Offset(offset)
+		} else {
+			q = q.Where(clause.Expr{SQL: placeholders + " > " + placeholders, Vars: append(append([]any{}, cols...), last...)})
+		}
+		res := q.Find(&batch)
+		if res.Error != nil {
+			return res.Error
+		}
+
+		for _, elem := range batch {
+			applyFunc(elem)
+		}
+
+		if len(batch) < batchSize {
+			return nil
+		}
+
+		lastRow := reflect.ValueOf(&batch[len(batch)-1]).Elem()
+		last = make([]any, len(db.uniqueColumns))
+		for i, name := range db.uniqueColumns {
+			field := res.Statement.Schema.LookUpField(name)
+			if field == nil {
+				return fmt.Errorf("unique column %q not found in %s", name, res.Statement.Schema.Name)
+			}
+			last[i], _ = field.ValueOf(ctx, lastRow)
+		}
 	}
 }
 
