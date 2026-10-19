@@ -78,12 +78,23 @@ func TestDeviceExhaustiveRun(t *testing.T) {
 		assert.Len(t, ids, total)
 	})
 
-	t.Run("sorting is rejected", func(t *testing.T) {
-		_, err := repo.SelectAll(context.Background(), true, func(models.Device) {}, &resources.QueryParameters{
+	t.Run("sorting is ignored", func(t *testing.T) {
+		insertDevices(t)
+
+		var ids []string
+		_, err := repo.SelectAll(context.Background(), true, func(d models.Device) {
+			ids = append(ids, d.ID)
+		}, &resources.QueryParameters{
 			PageSize: 2,
 			Sort:     resources.SortOptions{SortField: "id", SortMode: resources.SortModeDesc},
 		}, nil)
-		assert.Error(t, err)
+		require.NoError(t, err)
+
+		want := make([]string, total)
+		for i := range total {
+			want[i] = fmt.Sprintf("device-%02d", i)
+		}
+		assert.Equal(t, want, ids, "exhaustive runs walk rows in unique column order")
 	})
 }
 

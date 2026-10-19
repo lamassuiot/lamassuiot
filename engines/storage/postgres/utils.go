@@ -43,6 +43,16 @@ func safeColumn(name string) (clause.Column, error) {
 	return clause.Column{Name: name}, nil
 }
 
+// columnEquals builds a "column = value" condition. The column goes through
+// safeColumn and is quoted, so it is never formatted into the SQL as is.
+func columnEquals(name string, value any) (clause.Expr, error) {
+	col, err := safeColumn(name)
+	if err != nil {
+		return clause.Expr{}, err
+	}
+	return clause.Expr{SQL: "? = ?", Vars: []any{col, value}}, nil
+}
+
 // plainOrderColumn builds a safe ORDER BY column clause for a plain column.
 func plainOrderColumn(sortBy, sortMode string) (clause.OrderByColumn, error) {
 	col, err := safeColumn(sortBy)
@@ -496,9 +506,9 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 	tx = applyExtraOpts(tx, extraOpts)
 
 	if exhaustiveRun {
-		if orderBy != nil {
-			return "", fmt.Errorf("sorting is not supported on exhaustive runs")
-		}
+		// The requested sort is ignored: exhaustive runs always walk rows in
+		// unique column order, which keeps them safe against rows changing
+		// while iterating (see selectAllInBatches)
 		return "", db.selectAllInBatches(ctx, tx, offset, limit, applyFunc)
 	} else {
 		tx = tx.Clauses(db.withUniqueOrder(orderBy)).Offset(offset).Limit(limit + 1)
@@ -588,8 +598,13 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 		searchCol = *queryCol
 	}
 
+	cond, err := columnEquals(searchCol, queryID)
+	if err != nil {
+		return false, nil, err
+	}
+
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, cond)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -611,7 +626,12 @@ func (db *DBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E,
 }
 
 func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
+	cond, err := columnEquals(db.primaryKeyColumn, elemID)
+	if err != nil {
+		return nil, err
+	}
+
+	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(cond).Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -624,7 +644,12 @@ func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E,
 }
 
 func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
-	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
+	cond, err := columnEquals(db.primaryKeyColumn, elemID)
+	if err != nil {
+		return err
+	}
+
+	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, cond)
 	if err := tx.Error; err != nil {
 		return err
 	}

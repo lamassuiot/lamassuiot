@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,7 +18,8 @@ import (
 )
 
 type filterTestRow struct {
-	ID string
+	ID   string
+	Name string
 }
 
 func dryRunDB(t *testing.T) *gorm.DB {
@@ -354,5 +356,63 @@ func TestPageState_MaxPageSize(t *testing.T) {
 	}
 	if _, err := decodeBookmark(encodeBookmark("off:0;lim:0;")); err == nil {
 		t.Fatal("expected error for a bookmark with a non-positive limit")
+	}
+}
+
+// dryRunQuerier returns a querier whose statements are only logged. The default
+// transaction is skipped, as opening it would need a real connection.
+func dryRunQuerier(t *testing.T, primaryKeyColumn string) (DBQuerier[filterTestRow], *sqlCaptureLogger) {
+	t.Helper()
+	querier := newPostgresDBQuerier[filterTestRow](dryRunDB(t), "filter_test_rows", primaryKeyColumn)
+	querier.DB = querier.DB.Session(&gorm.Session{SkipDefaultTransaction: true})
+	capture := &sqlCaptureLogger{Interface: gormlogger.Discard}
+	querier.DB.Logger = capture
+	return querier, capture
+}
+
+func TestSelectExistsUpdateDelete_QuoteColumn(t *testing.T) {
+	querier, capture := dryRunQuerier(t, "id")
+	ctx := context.Background()
+
+	col := "serial_number"
+	if _, _, err := querier.SelectExists(ctx, "x", &col); err != nil {
+		t.Fatalf("SelectExists: unexpected error: %v", err)
+	}
+	// Dry runs affect no rows, so Update and Delete report not found
+	if _, err := querier.Update(ctx, &filterTestRow{ID: "x"}, "x"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("Update: unexpected error: %v", err)
+	}
+	if err := querier.Delete(ctx, "x"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("Delete: unexpected error: %v", err)
+	}
+
+	want := []string{`WHERE "serial_number" = 'x'`, `WHERE "id" = 'x'`, `WHERE "id" = 'x'`}
+	if len(capture.sqls) != len(want) {
+		t.Fatalf("captured %d statements, want %d: %q", len(capture.sqls), len(want), capture.sqls)
+	}
+	for i, w := range want {
+		if !strings.Contains(capture.sqls[i], w) {
+			t.Errorf("SQL %q does not contain %q", capture.sqls[i], w)
+		}
+	}
+}
+
+func TestSelectExistsUpdateDelete_RejectInjection(t *testing.T) {
+	ctx := context.Background()
+	for _, col := range []string{"id = id OR 1=1 --", "id; DROP TABLE x", `"id"`, "id)"} {
+		querier, capture := dryRunQuerier(t, col)
+
+		if _, _, err := querier.SelectExists(ctx, "x", &col); err == nil || err.Error() != "invalid column name" {
+			t.Errorf("SelectExists: expected invalid column error for %q, got %v", col, err)
+		}
+		if _, err := querier.Update(ctx, &filterTestRow{ID: "x"}, "x"); err == nil || err.Error() != "invalid column name" {
+			t.Errorf("Update: expected invalid column error for %q, got %v", col, err)
+		}
+		if err := querier.Delete(ctx, "x"); err == nil || err.Error() != "invalid column name" {
+			t.Errorf("Delete: expected invalid column error for %q, got %v", col, err)
+		}
+		if len(capture.sqls) != 0 {
+			t.Errorf("column %q: no SQL should be issued, got %q", col, capture.sqls)
+		}
 	}
 }
