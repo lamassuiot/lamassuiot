@@ -31,6 +31,13 @@ type FilterOption struct {
 	Value           string
 }
 
+const (
+	// DefaultPageSize is the page size used when a request does not set one
+	DefaultPageSize = 50
+	// MaxPageSize caps the page size a client can request
+	MaxPageSize = 1000
+)
+
 type QueryParameters struct {
 	NextBookmark string
 	Sort         SortOptions

@@ -15,7 +15,7 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
-		PageSize:     25,
+		PageSize:     resources.DefaultPageSize,
 	}
 
 	if len(r.URL.RawQuery) > 0 {
@@ -65,7 +65,7 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				value := v[len(v)-1] //only get last
 				pageS, err := strconv.Atoi(value)
 				if err == nil {
-					queryParams.PageSize = pageS
+					queryParams.PageSize = min(pageS, resources.MaxPageSize)
 				}
 
 			case "bookmark":
@@ -170,33 +170,13 @@ func isValidJsonPath(jsonPath string) bool {
 	return true
 }
 
-// isSimpleJsonPath checks if a JSONPath expression is a simple dot-separated path
-// suitable for sorting (e.g., $.field, $.field.nested)
-// Complex expressions with filters, comparisons, etc. are not supported for sorting
+// isSimpleJsonPath checks if a JSONPath expression is a simple path suitable for
+// sorting (e.g., $.field, $.field.nested, $.tags[0], $.tags[last])
+// Complex expressions with filters, comparisons, etc. are not supported for sorting.
+// It uses the same parser as the storage engines, so an accepted path never fails there.
 func isSimpleJsonPath(jsonPath string) bool {
-	// Must start with $. or $[
-	if !strings.HasPrefix(jsonPath, "$.") && !strings.HasPrefix(jsonPath, "$[") {
-		return false
-	}
-
-	// Remove the $ prefix
-	jsonPath = strings.TrimPrefix(jsonPath, "$")
-
-	// Check for characters that indicate complex expressions
-	// Simple paths should only contain: letters, numbers, underscore, dot, hyphen, and basic array access
-	complexChars := "?@!=<>&|()\" "
-	for _, complexChar := range complexChars {
-		if strings.ContainsRune(jsonPath, complexChar) {
-			return false
-		}
-	}
-
-	// Allow only simple array access like [0], [1], [last], but not [*] or filters
-	if strings.Contains(jsonPath, "[*]") {
-		return false
-	}
-
-	return true
+	_, err := resources.ParseSortJsonPath(jsonPath)
+	return err == nil
 }
 
 // parseFilterOperand parses a filter operand string and returns the corresponding FilterOperation
@@ -342,7 +322,7 @@ func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
-		PageSize:     25,
+		PageSize:     resources.DefaultPageSize,
 	}
 
 	for _, value := range filterValues {
