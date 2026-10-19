@@ -238,6 +238,8 @@ GET /api/devmanager/v1/devices?sort_by=metadata[jsonpath]$.created_at&sort_mode=
 GET /api/devmanager/v1/devices?sort_by=metadata%5Bjsonpath%5D$.environment&sort_mode=asc
 ```
 
+**Supported paths:** only simple paths can be used for sorting: `$` followed by `.key` segments, where keys contain only letters, digits, `_` and `-`, and array indexes `[n]` or `[last]` (e.g. `$.location.region`, `$.tags[0]`, `$.items[last].name`). Wildcards, filters, slices, quoted keys and keys with any other character (such as `lamassu.io/...` keys) are not supported: the API ignores such a `sort_by` and returns results in the default order (in-process calls to the backend services get an `invalid json path` error instead).
+
 ### Type-Aware Sorting
 
 The system automatically detects and handles different data types in JSON fields:
@@ -339,6 +341,11 @@ GET /api/devmanager/v1/devices?bookmark=<encoded_bookmark>
 ```
 
 The system ensures consistent ordering across all pages of results.
+
+**Exhaustive runs (Go):** whether `ExhaustiveRun: true` keeps the sort depends on where it runs:
+
+- HTTP SDK clients (`sdk` package) request every page from the API, so the requested sort is kept.
+- In-process calls to the backend services or the storage layer walk every matching row in batches of `PageSize` rows (50 by default), ordered by primary key, and ignore any sort, including service defaults such as newest-first device events. This fixed order keeps the walk complete even when the callback updates rows while iterating (for example, moving certificates out of a filtered status). Sort the collected results yourself if you need a specific order.
 
 ---
 
