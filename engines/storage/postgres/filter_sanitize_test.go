@@ -111,6 +111,33 @@ func TestBuildJsonPathOrderExpr(t *testing.T) {
 	}
 }
 
+func TestBuildJsonPathOrderExpr_ArrayIndexes(t *testing.T) {
+	db := dryRunDB(t)
+	cases := map[string]string{
+		"$.tags[0]":    "{tags,0}",
+		"$.tags[1]":    "{tags,1}",
+		"$.tags[last]": "{tags,-1}",
+		"$.a[0].b":     "{a,0,b}",
+		"$[0]":         "{0}",
+	}
+	for path, want := range cases {
+		expr, err := buildJsonPathOrderExpr("metadata", path, "asc")
+		if err != nil {
+			t.Errorf("path %q: unexpected error: %v", path, err)
+			continue
+		}
+		var rows []filterTestRow
+		tx := db.Model(&filterTestRow{}).Clauses(clause.OrderBy{Expression: expr}).Find(&rows)
+		if tx.Error != nil {
+			t.Errorf("path %q: unexpected error: %v", path, tx.Error)
+			continue
+		}
+		if got := tx.Statement.Vars[0]; got != want {
+			t.Errorf("path %q: path param = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func TestBuildJsonPathOrderExpr_RejectsInjection(t *testing.T) {
 	cases := []struct{ field, path string }{
 		{"metadata", "$.a'; DROP TABLE x --"},
@@ -118,6 +145,9 @@ func TestBuildJsonPathOrderExpr_RejectsInjection(t *testing.T) {
 		{"metadata", "$.a..b"},
 		{"metadata", "$."},
 		{"metadata", `$.a"b`},
+		{"metadata", "$.tags[*]"},
+		{"metadata", "$.tags[x]"},
+		{"metadata", "$.tags["},
 		{"meta data", "$.a"},
 		{"metadata; DROP", "$.a"},
 	}

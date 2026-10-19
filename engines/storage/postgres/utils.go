@@ -776,39 +776,17 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 
 }
 
-var jsonKeyRegex = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-
-// jsonPathKeys converts a simple JSONPath expression (e.g., "$.foo.bar") into its
-// list of keys, rejecting anything that is not a plain dot-separated path.
-// The path may originate from user input (query params or a decoded bookmark).
-func jsonPathKeys(jsonPath string) ([]string, error) {
-	jsonPath = strings.TrimPrefix(jsonPath, "$.")
-	jsonPath = strings.TrimPrefix(jsonPath, "$[")
-	jsonPath = strings.TrimSuffix(jsonPath, "]")
-
-	parts := strings.Split(jsonPath, ".")
-	for i, part := range parts {
-		// Simple array access like $.tags[0] sorts by the array itself
-		part = strings.TrimSuffix(part, "[0]")
-		part = strings.TrimSuffix(part, "[last]")
-		if !jsonKeyRegex.MatchString(part) {
-			return nil, fmt.Errorf("invalid json path")
-		}
-		parts[i] = part
-	}
-	return parts, nil
-}
-
 // buildJsonPathOrderExpr builds an ORDER BY expression that sorts by a value
 // inside a JSONB column. The column is quoted and the path is bound as a
 // parameter (keys are validated beforehand), so nothing user-controlled is
-// concatenated into the SQL.
+// concatenated into the SQL. The path may originate from user input (query
+// params or a decoded bookmark).
 func buildJsonPathOrderExpr(field, jsonPath, sortMode string) (clause.Expression, error) {
 	col, err := safeColumn(field)
 	if err != nil {
 		return nil, err
 	}
-	keys, err := jsonPathKeys(jsonPath)
+	keys, err := resources.ParseSortJsonPath(jsonPath)
 	if err != nil {
 		return nil, err
 	}

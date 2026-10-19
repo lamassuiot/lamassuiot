@@ -484,9 +484,17 @@ func TestIsSimpleJsonPath(t *testing.T) {
 		{"array index", "$.tags[0]", true},
 		{"array last", "$.tags[last]", true},
 		{"array bracket", "$[0]", true},
+		{"array other index", "$.tags[1]", true},
+		{"nested after index", "$.items[0].name", true},
 
 		// Complex paths (not suitable for sorting)
 		{"array wildcard", "$.tags[*]", false},
+		{"member wildcard", "$.*", false},
+		{"negative index", "$.tags[-1]", false},
+		{"slice", "$.tags[1:2]", false},
+		{"unclosed bracket", "$.tags[", false},
+		{"empty key", "$.a..b", false},
+		{"trailing dot", "$.a.", false},
 		{"array filter", "$.tags[*] ? (@ == \"production\")", false},
 		{"comparison", "$.version > 1", false},
 		{"equality", "$.environment == \"production\"", false},
