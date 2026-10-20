@@ -321,8 +321,8 @@ func (mw CAEventPublisher) CreateIssuanceProfile(ctx context.Context, input serv
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, "profile/unknown")
 
 	defer func() {
-		ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("profile/%s", output.ID))
 		if err == nil {
+			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("profile/%s", output.ID))
 			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
