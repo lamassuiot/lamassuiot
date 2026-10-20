@@ -102,6 +102,12 @@ paths:
     post:
       tags: [Certificate Authorities]
       summary: Import an existing certificate authority
+      description: |
+        Imports a CA certificate. With private_key, the key is imported into the crypto engine
+        engine_id, or the default one. Without it, the CA is linked on a best-effort basis to its
+        private key if any crypto engine of the KMS holds it, found by the certificate's public key:
+        the copy in engine_id if there is one, otherwise the copy in the default engine or another
+        engine. The CA can then sign. When no engine holds the key, the CA is imported without key.
       operationId: importCA
       x-authz:
         namespace: pki
@@ -1168,6 +1174,9 @@ components:
           type: string
         engine_id:
           type: string
+          description: |
+            Crypto engine to import private_key into. Without private_key, the engine preferred
+            when linking the CA to a key already in the KMS.
         parent_id:
           type: string
         ca_request_id:

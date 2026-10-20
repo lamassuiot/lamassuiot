@@ -770,10 +770,12 @@ func (svc *KMSServiceBackend) updateKeyBindings(ctx context.Context, input servi
 		return nil, err
 	}
 
+	// The bound resources keep a key in use from being deleted: replacing unreadable ones would
+	// drop the record of the resources still using it.
 	bound, err := key.BoundResources()
 	if err != nil {
-		lFunc.Warnf("discarding unreadable bound resources of key '%s': %s", input.Identifier, err)
-		bound = []models.KMSBindResource{}
+		lFunc.Errorf("could not read the resources bound to key '%s': %s", input.Identifier, err)
+		return nil, err
 	}
 
 	if key.Metadata == nil {

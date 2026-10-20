@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -321,10 +322,9 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 	} else {
-		//search in KMS if key exists for the CA being imported
-		key, err = findCertificateKey(ctx, svc.kmsService, caCertX509.PublicKey, input.EngineID)
-		if err != nil {
-			lFunc.Infof("could not find the key of CA %s in KMS: %s. Assuming key does not exist", caCertSN, err)
+		key = svc.discoverCAKey(ctx, lFunc, caCertX509.PublicKey, input.EngineID)
+		if key == nil {
+			lFunc.Infof("the private key of CA %s is not in any crypto engine. Importing it without key", caCertSN)
 			importType = models.CertificateTypeImportedWithoutKey
 		} else {
 			lFunc.Infof("found key %s for CA %s in KMS", key.PKCS11URI, caCertSN)
@@ -818,6 +818,47 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 // getCACertificateIfExists retrieves the CA certificate for the given caID if it exists.
 // Returns the CA certificate and nil error if found, or nil certificate and ErrCANotFound if not found.
+// discoverCAKey looks, in every crypto engine, for a private key of the given public key to link an
+// imported CA to, on a best-effort basis: it returns nil rather than an error when there is none.
+// The preferred engine is used when it holds the key. Otherwise any engine holding it is, the
+// default one first.
+func (svc *CAServiceBackend) discoverCAKey(ctx context.Context, lFunc *logrus.Entry, pub crypto.PublicKey, preferredEngineID string) *models.Key {
+	keys, err := svc.kmsService.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: pub})
+	if err != nil {
+		lFunc.Warnf("could not look up the CA key in KMS: %s", err)
+		return nil
+	}
+
+	candidates := slices.DeleteFunc(keys, func(key *models.Key) bool { return !key.HasPrivateKey })
+	if len(candidates) == 0 {
+		return nil
+	}
+	slices.SortFunc(candidates, func(a, b *models.Key) int { return strings.Compare(a.EngineID, b.EngineID) })
+
+	if i := slices.IndexFunc(candidates, func(key *models.Key) bool { return key.EngineID == preferredEngineID }); i >= 0 {
+		return candidates[i]
+	}
+
+	chosen := candidates[0]
+	if len(candidates) > 1 {
+		if engines, err := svc.kmsService.GetCryptoEngineProvider(ctx); err == nil {
+			for _, engine := range engines {
+				if !engine.Default {
+					continue
+				}
+				if i := slices.IndexFunc(candidates, func(key *models.Key) bool { return key.EngineID == engine.ID }); i >= 0 {
+					chosen = candidates[i]
+				}
+			}
+		}
+	}
+
+	if preferredEngineID != "" {
+		lFunc.Warnf("the CA key is not in crypto engine %s, linking it to the copy in crypto engine %s", preferredEngineID, chosen.EngineID)
+	}
+	return chosen
+}
+
 func (svc *CAServiceBackend) getCACertificateIfExists(ctx context.Context, caID string) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
