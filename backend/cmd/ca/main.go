@@ -46,14 +46,14 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "Device Manager", "LMS SDK - KMS Client")
+	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "CA", "LMS SDK - KMS Client")
 	kmsHttpCli, err := sdk.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP KMS Client: %s", err)
 	}
 
 	kmsSDK := sdk.NewHttpKMSClient(
-		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.DeviceManagerSource), "X-Principal-ID", "admin-mode"),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.CASource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
 	)
 
