@@ -10,10 +10,10 @@ import (
 )
 
 type AuditBody struct {
-	Input      interface{} `json:"input"`
-	HasError   bool        `json:"has_error"`
-	Output     interface{} `json:"output"`
-	Principals []string    `json:"principals,omitempty"`
+	Input      any      `json:"input"`
+	HasError   bool     `json:"has_error"`
+	Output     any      `json:"output"`
+	Principals []string `json:"principals,omitempty"`
 }
 
 type AuditPublisher struct {
@@ -26,7 +26,7 @@ func NewAuditPublisher(publisher eventpub.ICloudEventPublisher) *AuditPublisher 
 	}
 }
 
-func (audit *AuditPublisher) HandleServiceOutputAndPublishAuditRecord(ctx context.Context, eventType models.EventType, input interface{}, err error, output interface{}) {
+func (audit *AuditPublisher) HandleServiceOutputAndPublishAuditRecord(ctx context.Context, eventType models.EventType, input any, err error, output any) {
 	var auditBody AuditBody
 	var auditEventType = fmt.Sprintf("audit.%s", eventType)
 

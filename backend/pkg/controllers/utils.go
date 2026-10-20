@@ -27,9 +27,9 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				sortQueryParam := value
 				sortField := strings.Trim(sortQueryParam, " ")
 
-				if idx := strings.Index(sortField, "[jsonpath]"); idx != -1 {
-					fieldName := sortField[:idx]
-					jsonPathExpr := sortField[idx+len("[jsonpath]"):]
+				if before, after, ok := strings.Cut(sortField, "[jsonpath]"); ok {
+					fieldName := before
+					jsonPathExpr := after
 
 					if fieldType, exists := filterFieldMap[fieldName]; exists && fieldType == resources.JsonFilterFieldType {
 						// Validate JSONPath expression to prevent SQL injection
@@ -399,21 +399,18 @@ func (e *InvalidOperandError) Error() string {
 // ConvertDeviceGroupToResponse converts a device group model (with FilterOperation integers) to an API response format (with operand names).
 // The group model is expected to have all criteria (inherited + own) in the Criteria field.
 // This function separates them into inherited_criteria and criteria fields for the API response.
-func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount int) map[string]interface{} {
+func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount int) map[string]any {
 	if group == nil {
 		return nil
 	}
 
 	// Separate inherited criteria from own criteria
 	totalCriteria := len(group.Criteria)
-	inheritedCount := totalCriteria - ownCriteriaCount
-	if inheritedCount < 0 {
-		inheritedCount = 0
-	}
+	inheritedCount := max(totalCriteria-ownCriteriaCount, 0)
 
 	// Convert inherited criteria
 	inheritedCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, inheritedCount)
-	for i := 0; i < inheritedCount; i++ {
+	for i := range inheritedCount {
 		criterion := group.Criteria[i]
 		fieldType, exists := resources.DeviceFilterableFields[criterion.Field]
 		if !exists {
@@ -444,7 +441,7 @@ func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount in
 	}
 
 	// Build response map with separated criteria
-	response := map[string]interface{}{
+	response := map[string]any{
 		"id":                 group.ID,
 		"name":               group.Name,
 		"description":        group.Description,

@@ -23,7 +23,7 @@ func (p *AwsSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBack
 
 	cryptoEngine, err := config.CryptoEngineConfigAdapter[aws.AWSSDKConfig]{
 		ID:       "aws-1",
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 		Type:     config.AWSKMSProvider,
 		Config:   *awsCfg,
 	}.Unmarshal()

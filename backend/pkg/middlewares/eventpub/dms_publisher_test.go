@@ -190,7 +190,6 @@ func TestDMSEventPublisher(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, tc.test)
 	}
 }

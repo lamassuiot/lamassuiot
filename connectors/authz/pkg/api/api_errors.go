@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
 )
 
 // replyBadRequest writes a 400 with a validation error detail. Used for both
@@ -40,6 +40,6 @@ func replyPolicyNotFound(c *gin.Context, err error, policyID string) bool {
 
 // decodeJWTPayload extracts claims from a JWT token for log context enrichment.
 // No signature verification is performed — auth uses OIDCMatcher with full verification.
-func decodeJWTPayload(token string) (map[string]interface{}, error) {
+func decodeJWTPayload(token string) (map[string]any, error) {
 	return helpers.DecodeJWTPayload(token)
 }

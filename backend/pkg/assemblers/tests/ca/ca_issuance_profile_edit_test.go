@@ -274,7 +274,6 @@ func TestEditCAProfiles(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -635,7 +634,6 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -765,7 +763,6 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()

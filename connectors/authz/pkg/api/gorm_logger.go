@@ -24,15 +24,15 @@ func (l *GormLogger) LogMode(_ gormlogger.LogLevel) gormlogger.Interface {
 	return &newlogger
 }
 
-func (l *GormLogger) Info(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Info(ctx context.Context, str string, rest ...any) {
 	helpers.ConfigureLogger(ctx, l.Logger).Infof(str, rest...)
 }
 
-func (l *GormLogger) Warn(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Warn(ctx context.Context, str string, rest ...any) {
 	helpers.ConfigureLogger(ctx, l.Logger).Warnf(str, rest...)
 }
 
-func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Error(ctx context.Context, str string, rest ...any) {
 	helpers.ConfigureLogger(ctx, l.Logger).Errorf(str, rest...)
 }
 

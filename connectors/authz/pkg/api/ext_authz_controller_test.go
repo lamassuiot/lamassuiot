@@ -184,7 +184,7 @@ func writeExtAuthzHTTPSchema(t *testing.T) string {
 
 type testPrincipalMatcher struct{}
 
-func (testPrincipalMatcher) MatchPrincipals(_ context.Context, authMaterial interface{}, authType string) ([]string, error) {
+func (testPrincipalMatcher) MatchPrincipals(_ context.Context, authMaterial any, authType string) ([]string, error) {
 	if authType == "oidc" && authMaterial == "Bearer good" {
 		return []string{"principal-1"}, nil
 	}

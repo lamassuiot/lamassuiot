@@ -199,7 +199,7 @@ type kmsOperationSetup struct {
 	Engine *cryptoengines.CryptoEngine
 }
 
-func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
+func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input any) (*kmsOperationSetup, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Validate input struct

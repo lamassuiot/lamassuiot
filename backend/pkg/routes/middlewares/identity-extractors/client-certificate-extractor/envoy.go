@@ -28,8 +28,8 @@ func (extractor envoyClientCertificateExtractor) ExtractCertificate(headers http
 		return []*x509.Certificate{}
 	}
 
-	splits := strings.Split(forwardedClientCertificate, ";")
-	for _, split := range splits {
+	splits := strings.SplitSeq(forwardedClientCertificate, ";")
+	for split := range splits {
 		splitKeyVal := strings.Split(split, "=")
 		if len(splitKeyVal) == 2 {
 			key := splitKeyVal[0]

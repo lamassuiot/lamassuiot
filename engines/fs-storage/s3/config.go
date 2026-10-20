@@ -6,7 +6,7 @@ import (
 
 type AWSS3FilesystemConfig struct {
 	sharedAWS.AWSSDKConfig `mapstructure:",squash"`
-	BucketName             string                 `mapstructure:"bucket_name"`
-	ID                     string                 `mapstructure:"id"`
-	Metadata               map[string]interface{} `mapstructure:"metadata"`
+	BucketName             string         `mapstructure:"bucket_name"`
+	ID                     string         `mapstructure:"id"`
+	Metadata               map[string]any `mapstructure:"metadata"`
 }

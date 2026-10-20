@@ -17,7 +17,7 @@ func setup(t *testing.T) (string, *FilesystemCryptoEngine) {
 	log := helpers.SetupLogger(cconfig.Info, "CA TestCase", "Golang Engine")
 	ceconfig := cconfig.CryptoEngineConfigAdapter[FilesystemEngineConfig]{
 		ID:       "test-engine",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Type:     cconfig.FilesystemProvider,
 		Config:   FilesystemEngineConfig{StorageDirectory: tempDir},
 	}

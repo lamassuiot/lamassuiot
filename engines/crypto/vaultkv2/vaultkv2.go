@@ -269,7 +269,7 @@ func (engine *VaultKV2Engine) importKey(ctx context.Context, key any) (string, c
 		return "", nil, err
 	}
 
-	var keyMap = map[string]interface{}{
+	var keyMap = map[string]any{
 		"key": b64PemKey,
 	}
 
@@ -347,7 +347,7 @@ func Unseal(client *api.Client, unsealKeys []config.Password, logger *logrus.Ent
 
 func Login(client *api.Client, roleID string, secretID string) error {
 	loginPath := "auth/approle/login"
-	options := map[string]interface{}{
+	options := map[string]any{
 		"role_id":   roleID,
 		"secret_id": secretID,
 	}

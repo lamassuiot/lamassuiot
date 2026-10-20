@@ -23,7 +23,7 @@ import (
 func TestCheckHTTP_AllowsKnownPrincipalWithSubjectAttribute(t *testing.T) {
 	router := testHTTPAuthzCheckRouter(t)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"principal_id": "principal-1",
 		"subject_attributes": map[string]string{
 			"client_id": "hub-1",
@@ -52,7 +52,7 @@ func TestCheckHTTP_AllowsKnownPrincipalWithSubjectAttribute(t *testing.T) {
 func TestCheckHTTP_DeniesKnownPrincipalWhenConstraintAttributeMissing(t *testing.T) {
 	router := testHTTPAuthzCheckRouter(t)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"principal_id": "principal-1",
 		"request": map[string]string{
 			"method":    "GET",
@@ -75,7 +75,7 @@ func TestCheckHTTP_DeniesKnownPrincipalWhenConstraintAttributeMissing(t *testing
 func TestMatchAndCheckHTTP_AllowsCredentialResolvedSubjectAttribute(t *testing.T) {
 	router := testHTTPAuthzCheckRouter(t)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"auth_type":     "oidc",
 		"auth_material": "Bearer good",
 		"request": map[string]string{
@@ -99,7 +99,7 @@ func TestMatchAndCheckHTTP_AllowsCredentialResolvedSubjectAttribute(t *testing.T
 	assert.Equal(t, "http_rule grants access to this route", resp.Reason)
 }
 
-func performHTTPCheckRequest(t *testing.T, router *gin.Engine, path string, body map[string]interface{}) *httptest.ResponseRecorder {
+func performHTTPCheckRequest(t *testing.T, router *gin.Engine, path string, body map[string]any) *httptest.ResponseRecorder {
 	t.Helper()
 
 	raw, err := json.Marshal(body)
@@ -166,7 +166,7 @@ func writeHTTPAuthzCheckSchema(t *testing.T) string {
 	return path
 }
 
-func (testPrincipalMatcher) MatchSubjects(_ context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error) {
+func (testPrincipalMatcher) MatchSubjects(_ context.Context, authMaterial any, authType string) ([]engine.ResolvedSubject, error) {
 	if authType == "oidc" && authMaterial == "Bearer good" {
 		return []engine.ResolvedSubject{
 			{

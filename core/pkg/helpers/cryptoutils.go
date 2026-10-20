@@ -19,8 +19,8 @@ import (
 	"net/url"
 	"slices"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	cmodels "github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
@@ -107,7 +107,7 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		SubjectKeyId:          []byte(uuid.NewString()),
+		SubjectKeyId:          []byte(uuid.NewV7().String()),
 		IsCA:                  true,
 	}
 

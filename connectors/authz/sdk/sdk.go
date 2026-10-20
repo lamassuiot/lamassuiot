@@ -102,15 +102,15 @@ func (c *Client) WithHeader(key, value string) *Client {
 
 // HTTP utility methods
 
-func (c *Client) get(ctx context.Context, path string, result interface{}) error {
+func (c *Client) get(ctx context.Context, path string, result any) error {
 	return c.doRequest(ctx, "GET", path, nil, result)
 }
 
-func (c *Client) post(ctx context.Context, path string, body interface{}, result interface{}) error {
+func (c *Client) post(ctx context.Context, path string, body any, result any) error {
 	return c.doRequest(ctx, "POST", path, body, result)
 }
 
-func (c *Client) put(ctx context.Context, path string, body interface{}, result interface{}) error {
+func (c *Client) put(ctx context.Context, path string, body any, result any) error {
 	return c.doRequest(ctx, "PUT", path, body, result)
 }
 
@@ -118,7 +118,7 @@ func (c *Client) delete(ctx context.Context, path string) error {
 	return c.doRequest(ctx, "DELETE", path, nil, nil)
 }
 
-func (c *Client) doRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
+func (c *Client) doRequest(ctx context.Context, method, path string, body any, result any) error {
 	fullURL := c.baseURL + path
 
 	var bodyReader io.Reader

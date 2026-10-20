@@ -30,7 +30,7 @@ type FilesystemCryptoEngine struct {
 func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[FilesystemEngineConfig]) (cryptoengines.CryptoEngine, error) {
 	lGo := logger.WithField("subsystem-provider", "GoSoft")
 
-	defaultMeta := map[string]interface{}{
+	defaultMeta := map[string]any{
 		"lamassu.io/cryptoengine.golang.storage-path": conf,
 	}
 
@@ -185,7 +185,7 @@ func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(ctx context.Context,
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) importKey(ctx context.Context, key interface{}) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) importKey(ctx context.Context, key any) (string, crypto.Signer, error) {
 	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
 	pubKey := key.(crypto.Signer).Public()
 

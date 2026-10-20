@@ -36,11 +36,11 @@ type IdentityResolver struct {
 
 // principalMatcher is the local interface for the MatchService.
 type principalMatcher interface {
-	MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error)
+	MatchPrincipals(ctx context.Context, authMaterial any, authType string) ([]string, error)
 }
 
 type subjectMatcher interface {
-	MatchSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error)
+	MatchSubjects(ctx context.Context, authMaterial any, authType string) ([]engine.ResolvedSubject, error)
 }
 
 // policyLoader is the local interface for PolicyManager used by IdentityResolver.
@@ -83,7 +83,7 @@ func (r *IdentityResolver) loadGrantedPolicies(ctx context.Context, registry *en
 // Resolve matches auth material to active principals, loads all their granted policies,
 // and returns a populated PolicyRegistry ready for Engine.Authorize or Engine.GetListFilter.
 // Returns ErrNoMatch (check with errors.Is) when no principals matched.
-func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}, authType string) (*engine.PolicyRegistry, []string, error) {
+func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial any, authType string) (*engine.PolicyRegistry, []string, error) {
 	matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
 		trace.WithAttributes(attribute.String("authz.auth_type", authType)),
 	)
@@ -117,7 +117,7 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial interface{}
 // ResolveSubjects matches auth material to active subjects and loads policies
 // separately for each subject. This is used by HTTP authorization so policy
 // grants cannot be merged across subjects before route constraints are checked.
-func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.SubjectPolicySet, []string, error) {
+func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial any, authType string) ([]engine.SubjectPolicySet, []string, error) {
 	var subjects []engine.ResolvedSubject
 	if matcher, ok := r.match.(subjectMatcher); ok {
 		matchCtx, matchSpan := otel.Tracer(models.OtelTracerName).Start(ctx, "authz.principal.match",
@@ -220,6 +220,6 @@ func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principa
 
 // MatchPrincipals delegates to the underlying MatchService. Useful for callers that need
 // the principal IDs without loading policies (e.g. capabilities controller).
-func (r *IdentityResolver) MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error) {
+func (r *IdentityResolver) MatchPrincipals(ctx context.Context, authMaterial any, authType string) ([]string, error) {
 	return r.match.MatchPrincipals(ctx, authMaterial, authType)
 }

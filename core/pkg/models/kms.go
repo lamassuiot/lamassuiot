@@ -73,8 +73,8 @@ func ParsePKCS11URI(uri string) (map[string]string, error) {
 	uri = strings.TrimPrefix(uri, "pkcs11:")
 
 	// Split key=value pairs by ";"
-	parts := strings.Split(uri, ";")
-	for _, part := range parts {
+	parts := strings.SplitSeq(uri, ";")
+	for part := range parts {
 		if part == "" {
 			continue
 		}

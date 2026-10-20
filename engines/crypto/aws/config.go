@@ -6,6 +6,6 @@ import (
 
 type AWSCryptoEngine struct {
 	laws.AWSSDKConfig `mapstructure:",squash"`
-	ID                string                 `mapstructure:"id"`
-	Metadata          map[string]interface{} `mapstructure:"metadata"`
+	ID                string         `mapstructure:"id"`
+	Metadata          map[string]any `mapstructure:"metadata"`
 }

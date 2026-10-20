@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
@@ -43,7 +44,7 @@ func sqlStringLiteral(value string) string {
 // JSON numbers unmarshal as float64; booleans as bool; strings as string; arrays as []interface{}.
 // Returns an error for any type not produced by encoding/json so callers get a clear failure
 // instead of unquoted/unescaped output being silently interpolated into SQL.
-func formatColumnFilterValue(v interface{}) (string, error) {
+func formatColumnFilterValue(v any) (string, error) {
 	switch val := v.(type) {
 	case string:
 		return sqlStringLiteral(val), nil
@@ -54,7 +55,7 @@ func formatColumnFilterValue(v interface{}) (string, error) {
 		return "false", nil
 	case float64:
 		return fmt.Sprintf("%g", val), nil
-	case []interface{}:
+	case []any:
 		parts := make([]string, len(val))
 		for i, item := range val {
 			s, err := formatColumnFilterValue(item)
@@ -263,12 +264,7 @@ func (fg *FilterGenerator) applyCascadeDirectGrants(result *FilterResult, rule *
 
 // hasWildcardGrant reports whether any of the rule's direct grants is "*".
 func hasWildcardGrant(rule *models.Rule) bool {
-	for _, id := range rule.GetDirectGrants() {
-		if id == "*" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(rule.GetDirectGrants(), "*")
 }
 
 // GenerateCheckFilter generates JOIN clauses and WHERE conditions for checking single entity access
@@ -415,8 +411,8 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 
 	var ownedSchema *SchemaDefinition
 	var ownedAlias string
-	for i := len(path) - 1; i >= 0; i-- {
-		edge := path[i]
+	for i, edge := range slices.Backward(path) {
+
 		joinIdx := len(path) - 1 - i
 		alias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx)
 
@@ -490,8 +486,8 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 		Conditions: []string{},
 	}
 
-	for i := len(path) - 1; i >= 0; i-- {
-		edge := path[i]
+	for i, edge := range slices.Backward(path) {
+
 		joinIdx := len(path) - 1 - i
 		alias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx)
 
@@ -595,8 +591,8 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 		Conditions: []string{},
 	}
 
-	for i := len(path) - 1; i >= 0; i-- {
-		edge := path[i]
+	for i, edge := range slices.Backward(path) {
+
 		joinIdx := len(path) - 1 - i
 		alias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx)
 

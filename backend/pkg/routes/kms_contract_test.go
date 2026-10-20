@@ -11,9 +11,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	middleware "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	middleware "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gin-middleware"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -25,7 +24,7 @@ func TestKMSOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	// Construct the production router without contacting an authz service.
-	client := config.AuthzClient{HTTPClient: cconfig.HTTPClient{HTTPConnection: cconfig.HTTPConnection{Protocol: "http", BasePath: "/api/authz", BasicConnection: cconfig.BasicConnection{Hostname: "localhost", Port: 8080}}}}
+	client := config.AuthzClient{Protocol: "http", BasePath: "/api/authz", Hostname: "localhost", Port: 8080}
 	contract := registerKMSRoutes(router.Group("/api/kms"), nil, newRemoteAuthzEngine(client, models.KMSSource, logrus.NewEntry(logrus.New())), logrus.NewEntry(logrus.New()))
 	require.NotEmpty(t, contract.Declarations())
 	require.NoError(t, contract.ValidateRoutes(router.Routes()))

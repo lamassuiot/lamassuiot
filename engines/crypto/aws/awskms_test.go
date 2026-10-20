@@ -21,7 +21,7 @@ import (
 func TestNewAWSKMSEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAWSKMSEngine")
 	awsConf := aws.Config{}
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"key": "value",
 	}
 

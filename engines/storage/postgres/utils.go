@@ -126,7 +126,7 @@ func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primary
 // TextSerializer string serializer
 type TextSerializer struct{}
 
-func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue any) (err error) {
 	// Create a new instance of the field type
 	fieldValue := reflect.New(field.FieldType).Interface()
 
@@ -158,7 +158,7 @@ func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect
 }
 
 // Value implements serializer interface
-func (TextSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+func (TextSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue any) (any, error) {
 	// Check if fieldValue implements encoding.TextMarshaler
 	if marshaler, ok := fieldValue.(encoding.TextMarshaler); ok {
 		text, err := marshaler.MarshalText()
@@ -250,8 +250,8 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 }
 
 type GormExtraOps struct {
-	Query           interface{}
-	AdditionalWhere []interface{}
+	Query           any
+	AdditionalWhere []any
 	Joins           []string
 }
 
@@ -806,17 +806,17 @@ func (l *GormLogger) LogMode(lvl gormlogger.LogLevel) gormlogger.Interface {
 	return &newlogger
 }
 
-func (l *GormLogger) Info(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Info(ctx context.Context, str string, rest ...any) {
 	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Infof(str, rest...)
 }
 
-func (l *GormLogger) Warn(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Warn(ctx context.Context, str string, rest ...any) {
 	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Warnf(str, rest...)
 }
 
-func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Error(ctx context.Context, str string, rest ...any) {
 	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Errorf(str, rest...)
 }

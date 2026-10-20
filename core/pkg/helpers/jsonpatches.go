@@ -42,7 +42,7 @@ func NewPatchBuilder() *PatchBuilder {
 	return &PatchBuilder{}
 }
 
-func (pb *PatchBuilder) addOperation(op models.PatchOp, path JSONPointer, value interface{}) *PatchBuilder {
+func (pb *PatchBuilder) addOperation(op models.PatchOp, path JSONPointer, value any) *PatchBuilder {
 	pb.patches = append(pb.patches, models.PatchOperation{
 		Op:    op,
 		Path:  path.Pointer,
@@ -51,11 +51,11 @@ func (pb *PatchBuilder) addOperation(op models.PatchOp, path JSONPointer, value 
 	return pb
 }
 
-func (pb *PatchBuilder) Add(path JSONPointer, value interface{}) *PatchBuilder {
+func (pb *PatchBuilder) Add(path JSONPointer, value any) *PatchBuilder {
 	return pb.addOperation(models.PatchAdd, path, value)
 }
 
-func (pb *PatchBuilder) Replace(path JSONPointer, value interface{}) *PatchBuilder {
+func (pb *PatchBuilder) Replace(path JSONPointer, value any) *PatchBuilder {
 	return pb.addOperation(models.PatchReplace, path, value)
 }
 
@@ -118,7 +118,7 @@ func ApplyPatches[rt any](metadata any, patches []models.PatchOperation) (*rt, e
 
 // ensureArrayParentsExist pre-processes patches to create parent arrays when adding to array indices
 func ensureArrayParentsExist(patches []models.PatchOperation, metadataBytes []byte) ([]models.PatchOperation, error) {
-	var metadata map[string]interface{}
+	var metadata map[string]any
 	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
 		// If it's not a map, return patches as-is
 		return patches, nil
@@ -142,7 +142,7 @@ func ensureArrayParentsExist(patches []models.PatchOperation, metadataBytes []by
 				enhancedPatches = append(enhancedPatches, models.PatchOperation{
 					Op:    models.PatchAdd,
 					Path:  parentPath,
-					Value: []interface{}{},
+					Value: []any{},
 				})
 				createdPaths[parentPath] = true
 			}
@@ -191,7 +191,7 @@ func isNumeric(s string) bool {
 }
 
 // pathExists checks if a path exists in the metadata
-func pathExists(metadata map[string]interface{}, path string) bool {
+func pathExists(metadata map[string]any, path string) bool {
 	if path == "" || path == "/" {
 		return true
 	}
@@ -201,20 +201,20 @@ func pathExists(metadata map[string]interface{}, path string) bool {
 
 	// Split path and decode RFC 6901 encoding
 	segments := strings.Split(path, "/")
-	current := interface{}(metadata)
+	current := any(metadata)
 
 	for _, segment := range segments {
 		// Decode the segment
 		decodedSegment := decodePathSegment(segment)
 
 		switch v := current.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			val, exists := v[decodedSegment]
 			if !exists {
 				return false
 			}
 			current = val
-		case []interface{}:
+		case []any:
 			// For arrays, we just check if the array exists, not the specific index
 			return true
 		default:

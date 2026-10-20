@@ -92,7 +92,7 @@ func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() er
 		return nil, nil, nil, "", err
 	}
 
-	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]interface{}{
+	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]any{
 		"policies": []string{"pki-kv"},
 	})
 	if err != nil {
@@ -123,15 +123,11 @@ func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() er
 			RoleID:    roleID,
 			SecretID:  config.Password(secretID),
 			MountPath: mountPath,
-			HTTPConnection: config.HTTPConnection{
-				Protocol: config.HTTP,
-				BasePath: "",
-				BasicConnection: config.BasicConnection{
-					Hostname:  "127.0.0.1",
-					Port:      p,
-					TLSConfig: config.TLSConfig{},
-				},
-			},
+			Protocol:  config.HTTP,
+			BasePath:  "",
+			Hostname:  "127.0.0.1",
+			Port:      p,
+			TLSConfig: config.TLSConfig{},
 		},
 		rootToken,
 		nil

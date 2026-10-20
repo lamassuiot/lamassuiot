@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
@@ -23,7 +23,7 @@ func NewInMemoryPolicyStore() *InMemoryPolicyStore {
 
 func (s *InMemoryPolicyStore) Create(_ context.Context, policy *models.Policy) error {
 	if policy.ID == "" {
-		policy.ID = uuid.New().String()
+		policy.ID = uuid.NewV7().String()
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

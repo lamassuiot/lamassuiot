@@ -54,7 +54,7 @@ func deviceAuditWithoutErrors[E any, O any](t *testing.T, method string, input E
 	deviceAuditEventChecker(event, expectations, operation, assertions)
 }
 
-func deviceAuditVoidWithoutErrors(t *testing.T, method string, input interface{}, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
+func deviceAuditVoidWithoutErrors(t *testing.T, method string, input any, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
 	expectations := []func(*svcmock.MockDeviceManagerService){
 		func(mockDeviceService *svcmock.MockDeviceManagerService) {
 			mockDeviceService.On(method, mock.Anything, mock.Anything).Return(nil)
@@ -76,7 +76,7 @@ func deviceAuditVoidWithoutErrors(t *testing.T, method string, input interface{}
 	deviceAuditEventChecker(event, expectations, operation, assertions)
 }
 
-func deviceAuditVoidWithErrors(t *testing.T, method string, input interface{}, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
+func deviceAuditVoidWithErrors(t *testing.T, method string, input any, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
 	expectations := []func(*svcmock.MockDeviceManagerService){
 		func(mockDeviceService *svcmock.MockDeviceManagerService) {
 			mockDeviceService.On(method, mock.Anything, mock.Anything).Return(errors.New("some error"))
@@ -188,7 +188,6 @@ func TestDeviceAuditEventPublisher(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, tc.test)
 	}
 }

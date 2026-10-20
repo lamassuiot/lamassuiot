@@ -58,7 +58,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for each key
-	ud1 := make(map[string]interface{})
+	ud1 := make(map[string]any)
 	ud1["environment"] = "production"
 	ud1["purpose"] = "signing"
 	ud1["critical"] = true
@@ -73,7 +73,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for key1: %s", err)
 	}
 
-	ud2 := make(map[string]interface{})
+	ud2 := make(map[string]any)
 	ud2["environment"] = "development"
 	ud2["purpose"] = "encryption"
 	ud2["critical"] = false
@@ -88,7 +88,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for key2: %s", err)
 	}
 
-	ud3 := make(map[string]interface{})
+	ud3 := make(map[string]any)
 	ud3["environment"] = "staging"
 	ud3["purpose"] = "signing"
 	ud3["critical"] = true

@@ -210,7 +210,7 @@ func (r *estHttpRoutes) ServerKeyGen(ctx *gin.Context) {
 
 type multipartPart struct {
 	ContentType string
-	Data        interface{}
+	Data        any
 }
 
 const (
@@ -331,7 +331,7 @@ func encodeMultiPart(boundary string, parts []multipartPart) (*bytes.Buffer, str
 	return buf, fmt.Sprintf("%s; %s=%s", "multipart/mixed", "boundary", boundary), nil
 }
 
-func WriteResponse(w http.ResponseWriter, contentType string, encode bool, obj interface{}) {
+func WriteResponse(w http.ResponseWriter, contentType string, encode bool, obj any) {
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}

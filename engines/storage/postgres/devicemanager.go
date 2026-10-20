@@ -50,11 +50,11 @@ func (db *PostgresDeviceManagerStore) Count(ctx context.Context, queryParams *re
 	return db.querier.CountFiltered(ctx, filters, []GormExtraOps{})
 }
 
-func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error) {
 	return db.querier.SelectAll(ctx, queryParams, []GormExtraOps{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error) {
 	opts := []GormExtraOps{
 		{Query: "dms_owner = ?", AdditionalWhere: []any{dmsID}},
 	}

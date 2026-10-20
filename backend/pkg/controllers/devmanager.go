@@ -600,7 +600,7 @@ func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {
 	}
 
 	// Convert groups to response format with operand names
-	responseGroups := make([]map[string]interface{}, len(groups))
+	responseGroups := make([]map[string]any, len(groups))
 	for i, group := range groups {
 		responseGroups[i] = ConvertDeviceGroupToResponse(&group, group.OwnCriteriaCount)
 	}

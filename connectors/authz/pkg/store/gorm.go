@@ -3,8 +3,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
@@ -36,7 +36,7 @@ func NewGormPrincipalStore(db *gorm.DB) (*GormPrincipalStore, error) {
 
 func (s *GormPrincipalStore) Create(ctx context.Context, p *models.Principal) error {
 	if p.ID == "" {
-		p.ID = uuid.New().String()
+		p.ID = uuid.NewV7().String()
 	}
 	if p.Name == "" {
 		return fmt.Errorf("principal name is required")
@@ -82,7 +82,7 @@ func (s *GormPrincipalStore) List(ctx context.Context, queryParams *resources.Qu
 }
 
 func (s *GormPrincipalStore) Update(ctx context.Context, p *models.Principal) error {
-	updates := map[string]interface{}{
+	updates := map[string]any{
 		"name":        p.Name,
 		"description": p.Description,
 		"type":        p.Type,
@@ -216,7 +216,7 @@ func (s *GormPrincipalStore) Has(ctx context.Context, principalID, policyID stri
 
 func (s *GormPrincipalStore) ListForPrincipal(ctx context.Context, principalID string, queryParams *resources.QueryParameters) ([]models.PrincipalPolicy, string, error) {
 	var rows []models.PrincipalPolicy
-	filter := postgres.GormExtraOps{Query: "principal_id = ?", AdditionalWhere: []interface{}{principalID}}
+	filter := postgres.GormExtraOps{Query: "principal_id = ?", AdditionalWhere: []any{principalID}}
 	// nil queryParams means "load everything" (e.g. internal auth resolution); paginate only when params provided.
 	exhaustive := queryParams == nil
 	nextBookmark, err := s.ppQuerier.SelectAll(ctx, queryParams, []postgres.GormExtraOps{filter}, exhaustive, func(pp models.PrincipalPolicy) {

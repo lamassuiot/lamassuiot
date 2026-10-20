@@ -3,17 +3,17 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/handlers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
@@ -149,7 +149,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 				// Caveat: queues are declared durable by the eventbus layer, so
 				// queues from crashed/replaced instances linger until cleaned up
 				// out-of-band (operator tooling or RabbitMQ TTL policies).
-				sseServiceID := fmt.Sprintf("%s-sse-%s", serviceID, uuid.NewString())
+				sseServiceID := fmt.Sprintf("%s-sse-%s", serviceID, uuid.NewV7().String())
 				sseSubscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, sseServiceID, lSSE)
 				if err != nil {
 					lSSE.Errorf("could not generate SSE Event Bus Subscriber: %s", err)

@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/x509engines"
@@ -470,7 +470,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	ca := &models.CACertificate{
 		ID:         caID,
-		Metadata:   map[string]interface{}{},
+		Metadata:   map[string]any{},
 		ProfileID:  input.ProfileID,
 		CreationTS: time.Now(),
 		Level:      level,
@@ -487,7 +487,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
-			Metadata:            map[string]interface{}{},
+			Metadata:            map[string]any{},
 			Type:                importType,
 			IssuerCAMetadata:    issuerMeta,
 			EngineID:            engineID,
@@ -812,7 +812,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			ValidTo:             ca.NotAfter,
 			RevocationTimestamp: time.Time{},
 			IssuerCAMetadata:    issuerCAMeta,
-			Metadata:            map[string]interface{}{},
+			Metadata:            map[string]any{},
 			Type:                models.CertificateTypeManaged,
 			EngineID:            key.EngineID,
 			IsCA:                true,
@@ -1010,7 +1010,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 			ExhaustiveRun: true,
 			ApplyFunc:     revokeCertFunc,
 			QueryParams:   &resources.QueryParameters{},
-			ExtraOpts:     map[string]interface{}{},
+			ExtraOpts:     map[string]any{},
 		})
 		if err != nil {
 			return nil, err
@@ -1171,7 +1171,7 @@ func (svc *CAServiceBackend) deleteCertificatesIssuedByCA(ctx context.Context, c
 		ExhaustiveRun: true,
 		ApplyFunc:     deleteCertFunc,
 		QueryParams:   &resources.QueryParameters{},
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 	})
 
 	return err
@@ -1198,7 +1198,7 @@ func (svc *CAServiceBackend) revokeCertificatesIssuedByCA(ctx context.Context, c
 		ExhaustiveRun: true,
 		ApplyFunc:     revokeCertFunc,
 		QueryParams:   &resources.QueryParameters{},
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 	})
 	if err != nil {
 		lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.Certificate.SerialNumber, ca.Certificate.IssuerCAMetadata.ID)
@@ -1399,7 +1399,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	// Update old certificate metadata to link to new certificate
 	if ca.Certificate.Metadata == nil {
-		ca.Certificate.Metadata = map[string]interface{}{}
+		ca.Certificate.Metadata = map[string]any{}
 	}
 	ca.Certificate.Metadata[models.CAMetadataReissuedAsKey] = helpers.SerialNumberToHexString(newCert.SerialNumber)
 	ca.Certificate.Metadata[models.CAMetadataReissuedAtKey] = time.Now().Format(time.RFC3339)
@@ -1412,7 +1412,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	}
 
 	// Create new certificate metadata with link to old certificate
-	newMetadata := map[string]interface{}{}
+	newMetadata := map[string]any{}
 	newMetadata[models.CAMetadataReissuedFromKey] = oldSerialNumber
 	newMetadata[models.CAMetadataReissueReasonKey] = "certificate-reissuance"
 
@@ -1592,7 +1592,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	}
 
 	cert := models.Certificate{
-		Metadata:    map[string]interface{}{},
+		Metadata:    map[string]any{},
 		Type:        certType,
 		Certificate: (*models.X509Certificate)(x509Cert),
 		Extensions:  certificateExtensionsFromX509(x509Cert),
@@ -2044,7 +2044,7 @@ func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input serv
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
 		QueryParams:   input.QueryParameters,
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 	})
 }
 
@@ -2066,7 +2066,7 @@ func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input s
 
 func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	id := uuid.NewString()
+	id := uuid.NewV7().String()
 	input.Profile.ID = id
 	lFunc.Infof("creating issuance profile '%s' with ID '%s'", input.Profile.Name, id)
 

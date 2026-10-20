@@ -20,7 +20,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "valid script returns true",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:   "function(event) { return event.data.key === 'value'; }",
@@ -31,7 +31,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "valid script returns false",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "other"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "other"})
 				return e
 			}(),
 			script:   "function(event) { return event.data.key === 'value'; }",
@@ -42,7 +42,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "invalid script",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:  "function(event) { return event.data.key === 'value' ",
@@ -52,7 +52,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script returns non-boolean value",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:   "function(event) { return event.data.key }",
@@ -63,7 +63,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script execution error",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:  "function(event) { throw new Error('error'); }",
@@ -73,7 +73,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script execution multiple functions error",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script: `
@@ -86,7 +86,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script execution not a function",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:   "{'a': 1}",

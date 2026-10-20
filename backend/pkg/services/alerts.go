@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	eventfilters "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/event_filters"
 	outputchannels "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/output_channels"
@@ -130,7 +130,7 @@ func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input
 	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub models.Subscription) {
 		derefSub := sub
 		userSubs = append(userSubs, &derefSub)
-	}, &resources.QueryParameters{}, map[string]interface{}{})
+	}, &resources.QueryParameters{}, map[string]any{})
 
 	if err != nil {
 		lFunc.Errorf("got unexpected error while reading subscriptions from DB: %s", err)
@@ -147,7 +147,7 @@ func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *services.
 
 	lFunc.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
 	sub := &models.Subscription{
-		ID:               uuid.NewString(),
+		ID:               uuid.NewV7().String(),
 		UserID:           input.UserID,
 		EventType:        input.EventType,
 		SubscriptionDate: time.Now(),
@@ -181,7 +181,7 @@ func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *service
 			derefSub := sub
 			userSubs = append(userSubs, &derefSub)
 		}
-	}, &resources.QueryParameters{}, map[string]interface{}{})
+	}, &resources.QueryParameters{}, map[string]any{})
 
 	if err != nil {
 		lFunc.Errorf("got unexpected error while reading subscriptions from DB: %s", err)

@@ -227,7 +227,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	event := helpers.BuildCloudEvent(ctx, payload)
 
@@ -237,7 +237,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
-	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
+	payload = map[string]any{"person": map[string]any{"name": "John", "age": "30"}}
 	ctx = context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
@@ -288,7 +288,7 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
@@ -301,7 +301,7 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
-	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
+	payload = map[string]any{"person": map[string]any{"name": "John", "age": "30"}}
 	event = helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
@@ -365,7 +365,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
@@ -378,7 +378,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
-	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
+	payload = map[string]any{"person": map[string]any{"name": "John", "age": "30"}}
 	ctx = context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
@@ -472,7 +472,7 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
@@ -553,7 +553,7 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)

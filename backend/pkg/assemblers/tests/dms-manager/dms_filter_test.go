@@ -61,7 +61,7 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for each DMS
-	ud1 := make(map[string]interface{})
+	ud1 := make(map[string]any)
 	ud1["environment"] = "production"
 	ud1["region"] = "us-east-1"
 	ud1["critical"] = true
@@ -76,7 +76,7 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for dms1: %s", err)
 	}
 
-	ud2 := make(map[string]interface{})
+	ud2 := make(map[string]any)
 	ud2["environment"] = "development"
 	ud2["region"] = "us-west-2"
 	ud2["critical"] = false
@@ -91,7 +91,7 @@ func TestGetDMSFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for dms2: %s", err)
 	}
 
-	ud3 := make(map[string]interface{})
+	ud3 := make(map[string]any)
 	ud3["environment"] = "staging"
 	ud3["region"] = "us-east-1"
 	ud3["critical"] = true

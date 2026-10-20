@@ -32,7 +32,7 @@ func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
 		Name:        "John Doe",
 		Description: "Before update",
 		Type:        "oidc",
-		AuthConfig:  models.AuthConfig{"claims": []interface{}{}},
+		AuthConfig:  models.AuthConfig{"claims": []any{}},
 		Active:      true,
 	}
 

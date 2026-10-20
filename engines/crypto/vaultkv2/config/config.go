@@ -6,8 +6,8 @@ import (
 
 type HashicorpVaultCryptoEngineConfig struct {
 	HashicorpVaultSDK `mapstructure:",squash"`
-	ID                string                 `mapstructure:"id"`
-	Metadata          map[string]interface{} `mapstructure:"metadata"`
+	ID                string         `mapstructure:"id"`
+	Metadata          map[string]any `mapstructure:"metadata"`
 }
 type HashicorpVaultSDK struct {
 	RoleID                string            `mapstructure:"role_id"`

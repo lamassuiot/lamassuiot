@@ -26,7 +26,7 @@ func filterJSONSchema(event cloudevents.Event, schemaCondition string) (bool, er
 		return false, err
 	}
 
-	var data map[string]interface{}
+	var data map[string]any
 	err = json.Unmarshal(encoded, &data)
 	if err != nil {
 		return false, err

@@ -86,7 +86,7 @@ func prepareVaultkv2CryptoEngine(t *testing.T) (func() error, cryptoengines.Cryp
 
 	ceConfig := config.CryptoEngineConfigAdapter[vconfig.HashicorpVaultSDK]{
 		ID:       "dockertest-hcpvault-kvv2",
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 		Type:     config.HashicorpVaultProvider,
 		Config:   *vaultConfig,
 	}
