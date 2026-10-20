@@ -335,7 +335,6 @@ func TestESTEnroll(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -2764,7 +2763,6 @@ func TestESTGetCACerts(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -2996,7 +2994,6 @@ func TestESTServerKeyGen(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -3403,7 +3400,6 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode: models.ESTAuthModeClientCertificate,
 					},
 					RevokeOnReEnrollment:        true,
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -3530,6 +3526,147 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/EnrollCAWithoutValidationCAs",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = nil
+					},
+					"1m",
+				)
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while reenrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/EnrollCAWithValidationCAsDefined",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				otherCA, err := createCA(fmt.Sprintf("other-ca-%s", uuid.NewString()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create validation CA: %s", err)
+				}
+
+				// The device certificate is issued by the enrollment CA, which is not listed in ValidationCAs.
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{otherCA.ID}
+					},
+					"1m",
+				)
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while reenrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/RAUpdate-ReenrollWithOldAndNewCerts",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				// 1. Regular enrollment: the device certificate is issued by the original enrollment CA.
+				dms, oldEnrollCA, oldDeviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+					},
+					"5m",
+				)
+				oldEnrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+
+				// 2. Create the new CA.
+				newCA, err := createCA(fmt.Sprintf("new-enroll-ca-%s", uuid.NewString()), "5y", "5m")
+				if err != nil {
+					t.Fatalf("could not create new enrollment CA: %s", err)
+				}
+				newCACert := (*x509.Certificate)(newCA.Certificate.Certificate)
+
+				// 3. Switch the enrollment CA to the new CA and trust the old one for re-enrollment.
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{oldEnrollCAID}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS: %s", err)
+				}
+
+				reenroll := func(clientCrt *x509.Certificate) *x509.Certificate {
+					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: clientCrt.Subject.CommonName}, deviceKey)
+					estCli := est.Client{
+						Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+						AdditionalPathSegment: dms.ID,
+						Certificates:          []*x509.Certificate{clientCrt},
+						PrivateKey:            deviceKey,
+						InsecureSkipVerify:    true,
+					}
+					crt, err := estCli.Reenroll(context.Background(), csr)
+					if err != nil {
+						t.Fatalf("unexpected error while reenrolling with certificate issued by '%s': %s", clientCrt.Issuer.CommonName, err)
+					}
+					return crt
+				}
+
+				// Old certificate (issued by the old CA, validated through ValidationCAs).
+				if err := helpers.ValidateCertificate(oldEnrollCA, oldDeviceCrt, true); err != nil {
+					t.Fatalf("device certificate should be issued by the old enrollment CA: %s", err)
+				}
+				newDeviceCrt := reenroll(oldDeviceCrt)
+				checkReEnroll(t, newCACert, newDeviceCrt, deviceKey)
+
+				// New certificate (issued by the new enrollment CA).
+				renewedCrt := reenroll(newDeviceCrt)
+
+				return newCACert, renewedCrt, deviceKey, nil
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -3729,7 +3866,7 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/RotateCAWithAdditionalValCAs",
+			name: "OK/RotateCAWithValidationCAs",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
@@ -3744,7 +3881,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("could not create Rotational CA: %s", err)
 				}
 
-				dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = append(dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
@@ -3775,6 +3912,115 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("unexpected error: %s", err)
 				}
 				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/RotateCAWithMultipleValidationCAs",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+					},
+					"5m",
+				)
+
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create Rotational CA: %s", err)
+				}
+
+				unrelatedCA, err := createCA(fmt.Sprintf("unrelated-ca-%s", uuid.NewString()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create unrelated CA: %s", err)
+				}
+
+				// The issuing CA is listed last, after a CA that does not exist and a CA that did not issue the certificate.
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					fmt.Sprintf("non-existent-ca-%s", uuid.NewString()),
+					unrelatedCA.ID,
+					dms.Settings.EnrollmentSettings.EnrollmentCA,
+				}
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not create update DMS: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(newCA.Certificate.Certificate), reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "Err/RotateCAWithoutValidationCAs",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+					},
+					"5m",
+				)
+
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create Rotational CA: %s", err)
+				}
+
+				// The enrollment CA is rotated but the old one is NOT added to the re-enrollment ValidationCAs.
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "invalid certificate"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
 			},
 		},
 		{
@@ -4462,7 +4708,6 @@ func TestGetAllDMS(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),

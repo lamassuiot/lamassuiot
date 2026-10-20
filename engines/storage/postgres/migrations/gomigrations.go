@@ -22,5 +22,6 @@ func RegisterGoMigrations(dbname string) {
 		dmsmanager.Register20250612100530ESTVerifyCSRSignature()
 		dmsmanager.Register20260604110000ReenrollAuthSettings()
 		dmsmanager.Register20261021120000WebhookHTTPClientConfig()
+		dmsmanager.Register20261020120000ReenrollValidationCAs()
 	}
 }

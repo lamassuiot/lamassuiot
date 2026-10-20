@@ -77,7 +77,6 @@ func TestBindIDEvent(t *testing.T) {
 					ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 						AuthMode: models.ESTAuthModeClientCertificate,
 					},
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),

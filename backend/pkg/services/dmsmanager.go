@@ -423,7 +423,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 	return lFunc, nil
 }
 
-// findReenrollmentValidationCA tries the enrollment CA first, then each additional validation CA.
+// findReenrollmentValidationCA tries the enrollment CA first, then each of the re-enrollment validation CAs.
 // Returns the matching CA's certificate, or nil if none validated the leaf.
 func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, leafCert *x509.Certificate) *x509.Certificate {
 	enrollCACert := (*x509.Certificate)(enrollCA.Certificate.Certificate)
@@ -435,10 +435,11 @@ func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Con
 	}
 	lFunc.Warnf("invalid validation using enroll CA. Will try validating using Additional Validation CAs")
 
-	aValCAsCtr := len(reEnrollSettings.AdditionalValidationCAs)
+	validationCAs := reEnrollSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs
+	aValCAsCtr := len(validationCAs)
 	lFunc.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
 
-	for idx, caID := range reEnrollSettings.AdditionalValidationCAs {
+	for idx, caID := range validationCAs {
 		lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
 		ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
 		if err != nil {

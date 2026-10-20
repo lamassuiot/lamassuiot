@@ -723,10 +723,6 @@ components:
       properties:
         est_rfc7030_settings:
           $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
-        additional_validation_cas:
-          type: array
-          items:
-            type: string
         revoke_on_reenrollment:
           type: boolean
         reenrollment_delta:

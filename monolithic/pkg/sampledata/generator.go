@@ -196,8 +196,7 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 				RegistrationMode: models.JITP,
 			},
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				RevokeOnReEnrollment:    false,
-				AdditionalValidationCAs: []string{},
+				RevokeOnReEnrollment: false,
 				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 					AuthMode: "CLIENT_CERTIFICATE",
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
