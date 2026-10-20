@@ -75,7 +75,7 @@ func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.Up
 		CAID: input.CAID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -97,7 +97,7 @@ func (mw CAEventPublisher) UpdateCAProfile(ctx context.Context, input services.U
 		CAID: input.CAID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -120,7 +120,7 @@ func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.
 		CAID: input.CAID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -142,7 +142,7 @@ func (mw CAEventPublisher) ReissueCA(ctx context.Context, input services.Reissue
 		CAID: input.CAID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -252,7 +252,7 @@ func (mw CAEventPublisher) UpdateCertificateStatus(ctx context.Context, input se
 		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Certificate %s: %w", input.SerialNumber, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -282,7 +282,7 @@ func (mw CAEventPublisher) UpdateCertificateMetadata(ctx context.Context, input 
 		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Certificate %s: %w", input.SerialNumber, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -338,7 +338,7 @@ func (mw CAEventPublisher) UpdateIssuanceProfile(ctx context.Context, input serv
 		ProfileID: input.Profile.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get IssuanceProfile %s: %w", input.Profile.ID, err)
+		return nil, err
 	}
 
 	defer func() {
