@@ -1821,6 +1821,50 @@ func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, i
 	return cert, nil
 }
 
+// Returned Error Codes:
+//   - ErrCertificateNotFound
+//     The specified Certificate can not be found in the Database
+//   - ErrKeyNotFound
+//     The certificate's key is not held by the crypto engine the certificate is bound to
+//   - ErrValidateBadRequest
+//     The required variables of the data structure are not valid.
+func (svc *CAServiceBackend) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := caValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("GetCertificateKeyInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	cert, err := svc.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: input.SerialNumber})
+	if err != nil {
+		return nil, err
+	}
+
+	if cert.EngineID == "" {
+		lFunc.Infof("certificate %s is not bound to a crypto engine", input.SerialNumber)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	// The certificate's SKI is whatever its issuer wrote, so the key is found by its public key.
+	keys, err := svc.kmsService.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{
+		PublicKey: cert.Certificate.PublicKey,
+		EngineID:  cert.EngineID,
+	})
+	if err != nil {
+		lFunc.Errorf("could not look up the key of certificate %s: %s", input.SerialNumber, err)
+		return nil, err
+	}
+
+	if len(keys) == 0 {
+		lFunc.Infof("key of certificate %s not found in crypto engine %s", input.SerialNumber, cert.EngineID)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	return keys[0], nil
+}
+
 func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	return svc.certStorage.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,

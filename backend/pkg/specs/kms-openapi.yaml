@@ -241,6 +241,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /keys/lookup:
+    post:
+      tags:
+        - Keys
+      summary: Find keys by public key
+      description: |
+        Returns the keys of the key pair with the given public key, which can be taken from a
+        certificate. A certificate's Subject Key Identifier is set by its issuer and may not match
+        the key ID, so the public key is the reliable way to find a certificate's key. The same key
+        can be held by several engines: without engine_id, every engine's copy is returned. Only
+        keys the caller can read are returned.
+      operationId: getKeysByPublicKey
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        check: filter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetKeysByPublicKeyBody'
+      responses:
+        '200':
+          description: Matching keys, empty when the KMS does not hold the key pair
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid public key or certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /keys/{id}:
     get:
       tags:
@@ -807,6 +852,21 @@ components:
           example:
             source: "legacy-system"
             imported_date: "2025-11-07"
+
+    GetKeysByPublicKeyBody:
+      type: object
+      required:
+        - public_key
+      properties:
+        public_key:
+          type: string
+          format: byte
+          description: Base64 encoded PEM public key (PUBLIC KEY) or certificate (CERTIFICATE)
+          example: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0..."
+        engine_id:
+          type: string
+          description: Only return the key held by this crypto engine
+          example: "engine-1"
 
     UpdateKeyMetadataBody:
       type: object

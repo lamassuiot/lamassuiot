@@ -2,7 +2,9 @@ package sdk
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -50,6 +52,21 @@ func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput
 	}
 
 	return &response, nil
+}
+
+func (cli *httpKMSClient) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	der, err := x509.MarshalPKIXPublicKey(input.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+	pubKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
+
+	return Post[[]*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/lookup", resources.GetKeysByPublicKeyBody{
+		PublicKey: base64.StdEncoding.EncodeToString(pubKeyPEM),
+		EngineID:  input.EngineID,
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest},
+	})
 }
 
 func (cli *httpKMSClient) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {

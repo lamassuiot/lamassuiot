@@ -596,6 +596,35 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	ctx.JSON(200, cert)
 }
 
+func (r *caHttpRoutes) GetCertificateKey(ctx *gin.Context) {
+	type uriParams struct {
+		SerialNumber string `uri:"sn" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := r.svc.GetCertificateKey(ctx.Request.Context(), services.GetCertificateKeyInput{
+		SerialNumber: params.SerialNumber,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrCertificateNotFound, errs.ErrKeyNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+	ctx.JSON(200, key)
+}
+
 // @Summary Get Certificates
 // @Description Update CA Metadata
 // @Accept json
