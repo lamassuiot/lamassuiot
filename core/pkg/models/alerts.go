@@ -47,12 +47,14 @@ type EmailConfig struct {
 }
 
 type MSTeamsChannelConfig struct {
-	WebhookURL string `json:"webhook_url"`
+	WebhookURL string                 `json:"webhook_url"`
+	HTTPClient *WebhookCallHttpClient `json:"http_client,omitempty"`
 }
 
 type WebhookChannelConfig struct {
-	WebhookURL    string `json:"webhook_url"`
-	WebhookMethod string `json:"webhook_method"`
+	WebhookURL    string                 `json:"webhook_url"`
+	WebhookMethod string                 `json:"webhook_method"`
+	HTTPClient    *WebhookCallHttpClient `json:"http_client,omitempty"`
 }
 
 type AlertLatestEvent struct {

@@ -258,7 +258,7 @@ components:
           $ref: '#/components/schemas/ConditionType'
         condition:
           type: string
-          description: Condition expression (JSON Schema, JSONPath, or JavaScript)
+          description: Condition expression (JSON Schema, JSONPath, or JavaScript). JavaScript execution is limited to 100 milliseconds.
 
     SubscribeBody:
       type: object
@@ -302,6 +302,8 @@ components:
         webhook_url:
           type: string
           format: uri
+        http_client:
+          $ref: '#/components/schemas/NotificationHTTPClient'
 
     WebhookChannelConfig:
       type: object
@@ -309,9 +311,57 @@ components:
         webhook_url:
           type: string
           format: uri
+        http_client:
+          $ref: '#/components/schemas/NotificationHTTPClient'
         webhook_method:
           type: string
           enum: [GET, POST, PUT, PATCH, DELETE]
+
+    NotificationHTTPClient:
+      type: object
+      description: Optional client authentication for notification webhooks. HTTPS server certificates are always verified against the system trust store. Existing URL-secret webhooks require no additional authentication.
+      properties:
+        validate_server_cert:
+          type: boolean
+          enum: [true]
+          default: true
+          description: Always enforced, including when omitted or set to false.
+        auth_mode:
+          type: string
+          enum: [noauth, apikey, jwt, mtls]
+          default: noauth
+        log_level:
+          type: string
+          default: INFO
+        apikey:
+          type: object
+          required: [key, header]
+          properties:
+            key:
+              type: string
+            header:
+              type: string
+        oidc:
+          type: object
+          required: [client_id, client_secret, well_known]
+          properties:
+            client_id:
+              type: string
+            client_secret:
+              type: string
+            well_known:
+              type: string
+              format: uri
+        mtls:
+          type: object
+          required: [cert, key]
+          properties:
+            cert:
+              type: string
+              description: PEM certificate or certificate file path.
+            key:
+              type: string
+              description: PEM private key or key file path.
 
     AlertLatestEvent:
       type: object
