@@ -401,43 +401,64 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 }
 
 func migrationTest_DMS_20261020120000_reenroll_validation_cas(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
-	con.Exec(`INSERT INTO dms
-		(id, "name", metadata, creation_date, settings)
-		VALUES('dms-reenroll-cas-moved', 'DMS Reenroll CAs Moved', '{}', '2024-11-25 10:46:28.914', '{"reenrollment_settings":{"additional_validation_cas":["ca-1","ca-2"],"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["enroll-copy"],"chain_level_validation":-1}}}}');
-	`)
+	insertDMS := func(id, settings string) {
+		tx := con.Exec(`INSERT INTO dms (id, "name", metadata, creation_date, settings) VALUES(?, ?, '{}', '2024-11-25 10:46:28.914', ?)`, id, id, settings)
+		if tx.Error != nil {
+			t.Fatalf("failed to insert dms %s: %v", id, tx.Error)
+		}
+	}
 
-	con.Exec(`INSERT INTO dms
-		(id, "name", metadata, creation_date, settings)
-		VALUES('dms-reenroll-cas-no-est', 'DMS Reenroll CAs No EST', '{}', '2024-11-25 10:46:28.914', '{"reenrollment_settings":{"additional_validation_cas":["ca-3"]}}');
-	`)
+	queryJSON := func(id, path string) string {
+		var out *string
+		tx := con.Raw("SELECT (settings #> ?::text[])::text FROM dms WHERE id = ?", path, id).Scan(&out)
+		if tx.Error != nil {
+			t.Fatalf("failed to query %s for dms %s: %v", path, id, tx.Error)
+		}
+		if out == nil {
+			return ""
+		}
+		return *out
+	}
+
+	const reenrollValidationCAsPath = "{reenrollment_settings,est_rfc7030_settings,client_certificate_settings,validation_cas}"
+	const enrollmentESTPath = "{enrollment_settings,est_rfc7030_settings}"
+	const enrollmentEST = `{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["bootstrap-ca"],"chain_level_validation":-1,"allow_expired":false}}`
+
+	// Old key present: it replaces the (previously unused) nested list.
+	insertDMS("dms-reenroll-cas-moved", `{"enrollment_settings":{"est_rfc7030_settings":`+enrollmentEST+`},"reenrollment_settings":{"additional_validation_cas":["ca-1","ca-2"],"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["enroll-copy"],"chain_level_validation":-1}}}}`)
+	// Old key present but no EST block: the nested objects are created.
+	insertDMS("dms-reenroll-cas-no-est", `{"reenrollment_settings":{"additional_validation_cas":["ca-3"]}}`)
+	// Old key null: the nested list becomes empty.
+	insertDMS("dms-reenroll-cas-null", `{"reenrollment_settings":{"additional_validation_cas":null,"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["stale-ca"]}}}}`)
+	// Old key missing: the stale nested list must not become trusted.
+	insertDMS("dms-reenroll-cas-missing", `{"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["stale-ca"]}}}}`)
+	// No re-enrollment settings at all: the row is left untouched.
+	insertDMS("dms-reenroll-cas-no-reenroll", `{"enrollment_settings":{"est_rfc7030_settings":`+enrollmentEST+`}}`)
 
 	ApplyMigration(t, logger, con, dmsDBName)
 
-	var moved string
-	tx := con.Raw("SELECT settings->'reenrollment_settings'->'est_rfc7030_settings'->'client_certificate_settings'->>'validation_cas' FROM dms WHERE id = 'dms-reenroll-cas-moved'").Scan(&moved)
-	if tx.Error != nil {
-		t.Fatalf("failed to query moved validation cas: %v", tx.Error)
-	}
-	assert.JSONEq(t, `["ca-1","ca-2"]`, moved)
-
-	var chainLevel string
-	tx = con.Raw("SELECT settings->'reenrollment_settings'->'est_rfc7030_settings'->'client_certificate_settings'->>'chain_level_validation' FROM dms WHERE id = 'dms-reenroll-cas-moved'").Scan(&chainLevel)
-	if tx.Error != nil {
-		t.Fatalf("failed to query chain level: %v", tx.Error)
-	}
-	assert.Equal(t, "-1", chainLevel)
+	assert.JSONEq(t, `["ca-1","ca-2"]`, queryJSON("dms-reenroll-cas-moved", reenrollValidationCAsPath))
+	assert.Equal(t, "-1", queryJSON("dms-reenroll-cas-moved", "{reenrollment_settings,est_rfc7030_settings,client_certificate_settings,chain_level_validation}"))
+	assert.JSONEq(t, enrollmentEST, queryJSON("dms-reenroll-cas-moved", enrollmentESTPath))
+	assert.JSONEq(t, `["ca-3"]`, queryJSON("dms-reenroll-cas-no-est", reenrollValidationCAsPath))
+	assert.JSONEq(t, `[]`, queryJSON("dms-reenroll-cas-null", reenrollValidationCAsPath))
+	assert.JSONEq(t, `[]`, queryJSON("dms-reenroll-cas-missing", reenrollValidationCAsPath))
+	assert.JSONEq(t, `{"enrollment_settings":{"est_rfc7030_settings":`+enrollmentEST+`}}`, queryJSON("dms-reenroll-cas-no-reenroll", "{}"))
 
 	var oldKeyCount int
-	tx = con.Raw("SELECT count(*) FROM dms WHERE settings->'reenrollment_settings' ? 'additional_validation_cas'").Scan(&oldKeyCount)
+	tx := con.Raw("SELECT count(*) FROM dms WHERE settings->'reenrollment_settings' ? 'additional_validation_cas'").Scan(&oldKeyCount)
 	if tx.Error != nil {
 		t.Fatalf("failed to query old key: %v", tx.Error)
 	}
 	assert.Equal(t, 0, oldKeyCount)
 
-	var noEst string
-	tx = con.Raw("SELECT settings->'reenrollment_settings'->'est_rfc7030_settings'->'client_certificate_settings'->>'validation_cas' FROM dms WHERE id = 'dms-reenroll-cas-no-est'").Scan(&noEst)
-	if tx.Error != nil {
-		t.Fatalf("failed to query validation cas: %v", tx.Error)
-	}
-	assert.JSONEq(t, `["ca-3"]`, noEst)
+	// Down migration copies the re-enrollment validation CAs back into additional_validation_cas.
+	RollbackMigration(t, logger, con, dmsDBName, "20261020120000_reenroll_validation_cas")
+
+	assert.JSONEq(t, `["ca-1","ca-2"]`, queryJSON("dms-reenroll-cas-moved", "{reenrollment_settings,additional_validation_cas}"))
+	assert.JSONEq(t, `["ca-3"]`, queryJSON("dms-reenroll-cas-no-est", "{reenrollment_settings,additional_validation_cas}"))
+	assert.JSONEq(t, `[]`, queryJSON("dms-reenroll-cas-null", "{reenrollment_settings,additional_validation_cas}"))
+	assert.Equal(t, "", queryJSON("dms-reenroll-cas-no-reenroll", "{reenrollment_settings}"))
+
+	ApplyMigration(t, logger, con, dmsDBName)
 }
