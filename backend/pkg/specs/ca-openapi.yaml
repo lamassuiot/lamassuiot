@@ -772,13 +772,15 @@ paths:
       description: |
         Returns the KMS key of the certificate's key pair, CA certificates included. The key is
         found by the certificate's public key in the crypto engine the certificate is bound to,
-        not by its Subject Key Identifier, which is set by the issuer.
+        not by its Subject Key Identifier, which is set by the issuer. The CA service reads the
+        key from the KMS on the caller's behalf, so this needs its own read-key action rather
+        than certificate read: it discloses the key's name, aliases, tags and metadata.
       operationId: getCertificateKey
       x-authz:
         namespace: pki
         schema_name: ca
         entity_type: certificate
-        action: read
+        action: read-key
       parameters:
         - $ref: '#/components/parameters/SerialNumber'
       responses:
