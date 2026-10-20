@@ -32,6 +32,7 @@ type CAService interface {
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
 
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
+	GetCertificateKey(ctx context.Context, input GetCertificateKeyInput) (*models.Key, error)
 	GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error)
 	GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error)
 	GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error)
@@ -258,6 +259,11 @@ type SignatureVerifyInput struct {
 }
 
 type GetCertificatesBySerialNumberInput struct {
+	SerialNumber string `validate:"required"`
+}
+
+// GetCertificateKeyInput finds the KMS key of a certificate, CA certificates included.
+type GetCertificateKeyInput struct {
 	SerialNumber string `validate:"required"`
 }
 

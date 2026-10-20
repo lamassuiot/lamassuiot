@@ -68,6 +68,27 @@ func ParsePrivateKey(privKeyBytes []byte) (any, error) {
 	return nil, errors.New("tls: failed to parse private key")
 }
 
+// ParsePublicKey parses a PEM public key, or takes the public key of a PEM certificate.
+func ParsePublicKey(pemBytes []byte) (crypto.PublicKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("no PEM block found")
+	}
+
+	switch block.Type {
+	case "PUBLIC KEY":
+		return x509.ParsePKIXPublicKey(block.Bytes)
+	case "CERTIFICATE":
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		return cert.PublicKey, nil
+	default:
+		return nil, fmt.Errorf("unsupported PEM block type %q: expected PUBLIC KEY or CERTIFICATE", block.Type)
+	}
+}
+
 func CertificateToPEM(c *x509.Certificate) string {
 	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})
 	return string(pemCert)

@@ -3,6 +3,8 @@ package helpers
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"strings"
 	"testing"
 )
@@ -214,5 +216,48 @@ func TestGenerateSelfSignedCertificateIntegration(t *testing.T) {
 	// Verify that the parsed certificate's public key matches the input private key
 	if !cert.PublicKey.(*rsa.PublicKey).Equal(privateKey.Public()) {
 		t.Error("Parsed certificate has incorrect public key")
+	}
+}
+
+func TestParsePublicKey(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("could not generate key: %v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(privateKey.Public())
+	if err != nil {
+		t.Fatalf("could not marshal public key: %v", err)
+	}
+	cert, err := GenerateSelfSignedCertificate(privateKey, "parse-public-key")
+	if err != nil {
+		t.Fatalf("could not generate certificate: %v", err)
+	}
+
+	for name, input := range map[string][]byte{
+		"PublicKey":   pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}),
+		"Certificate": []byte(CertificateToPEM(cert)),
+	} {
+		pub, err := ParsePublicKey(input)
+		if err != nil {
+			t.Errorf("%s: ParsePublicKey failed: %v", name, err)
+			continue
+		}
+		if !privateKey.PublicKey.Equal(pub) {
+			t.Errorf("%s: ParsePublicKey returned a different public key", name)
+		}
+	}
+
+	privateKeyPEM, err := PrivateKeyToPEM(privateKey)
+	if err != nil {
+		t.Fatalf("could not encode private key: %v", err)
+	}
+	for name, input := range map[string][]byte{
+		"PrivateKey": []byte(privateKeyPEM),
+		"NotPEM":     []byte("not a PEM block"),
+		"BadDER":     pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: []byte("garbage")}),
+	} {
+		if _, err := ParsePublicKey(input); err == nil {
+			t.Errorf("%s: ParsePublicKey should fail", name)
+		}
 	}
 }

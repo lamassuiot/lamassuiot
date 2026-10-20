@@ -161,6 +161,12 @@ type ImportKeyBody struct {
 	Metadata   map[string]any `json:"metadata"`
 }
 
+type GetKeysByPublicKeyBody struct {
+	// Base64 encoded PEM public key or certificate.
+	PublicKey string `json:"public_key"`
+	EngineID  string `json:"engine_id"`
+}
+
 type CreateUpdateIssuanceProfileBody struct {
 	Name                   string                                     `json:"name"`
 	Description            string                                     `json:"description"`

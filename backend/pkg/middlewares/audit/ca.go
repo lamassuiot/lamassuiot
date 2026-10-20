@@ -140,6 +140,10 @@ func (mw CAAuditEventPublisher) GetCertificateBySerialNumber(ctx context.Context
 	return mw.next.GetCertificateBySerialNumber(ctx, input)
 }
 
+func (mw CAAuditEventPublisher) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
+	return mw.next.GetCertificateKey(ctx, input)
+}
+
 func (mw CAAuditEventPublisher) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	return mw.next.GetCertificates(ctx, input)
 }
