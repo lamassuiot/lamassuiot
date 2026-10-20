@@ -377,7 +377,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx cont
 
 // validateClientCertificateReenrollment validates the presented client certificate for re-enrollment.
 // It checks that the certificate's CommonName matches the CSR subject, then checks against the
-// enrollment CA first, then falls back to additional validation CAs,
+// enrollment CA first, then falls back to the re-enrollment validation CAs,
 // and finally verifies expiry and revocation status.
 func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate, csrSubjectCN string) (*logrus.Entry, error) {
 	leafCert := clientCerts[0]
@@ -433,11 +433,11 @@ func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Con
 		lFunc.Infof("certificate validated. Revocation and Expiration (if needed) check will be performed next")
 		return enrollCACert
 	}
-	lFunc.Warnf("invalid validation using enroll CA. Will try validating using Additional Validation CAs")
+	lFunc.Warnf("invalid validation using enroll CA. Will try validating using re-enrollment validation CAs")
 
 	validationCAs := reEnrollSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs
 	aValCAsCtr := len(validationCAs)
-	lFunc.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
+	lFunc.Debugf("DMS has %d re-enrollment validation CAs", aValCAsCtr)
 
 	for idx, caID := range validationCAs {
 		lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
