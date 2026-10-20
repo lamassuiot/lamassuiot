@@ -39,6 +39,16 @@ func TestEnrollmentWebhookEveryOpenAPIOperation(t *testing.T) {
 	logger := logrus.NewEntry(logrus.New())
 	original := httptest.NewRequest(http.MethodPost, "http://est.example/.well-known/est/profile/simpleenroll", nil)
 	original.Header.Set("X-Device", "device-123")
+	original.Header.Set("Content-Type", "application/pkcs10")
+	original.Header.Set("Accept", "application/pkcs7-mime")
+	original.Header.Set("User-Agent", "test-device")
+	original.Header.Set("X-Request-Id", "request-123")
+	original.Header["authorization"] = []string{"Bearer sensitive-token"}
+	original.Header.Set("Cookie", "session=sensitive-cookie")
+	original.Header.Set("Proxy-Authorization", "Basic sensitive-proxy-credentials")
+	original.Header.Set("X-Forwarded-Client-Cert", "sensitive-certificate")
+	original.Header.Set("X-Ssl-Client-Cert", "sensitive-certificate")
+	original.Header.Set("X-Custom-Secret", "sensitive-custom-secret")
 	ctx := context.WithValue(context.Background(), core.LamassuContextKeyHTTPRequest, original)
 	operations := 0
 	for path, item := range doc.Paths {
@@ -120,10 +130,75 @@ func TestEnrollmentWebhookEveryOpenAPIOperation(t *testing.T) {
 					request, ok := payload["http_request"].(map[string]any)
 					require.True(t, ok)
 					assert.Equal(t, original.URL.String(), request["url"])
-					assert.Equal(t, "device-123", request["headers"].(map[string]any)["X-Device"])
+					assert.Equal(t, map[string]any{
+						"X-Device":     "device-123",
+						"Content-Type": "application/pkcs10",
+						"Accept":       "application/pkcs7-mime",
+						"User-Agent":   "test-device",
+						"X-Request-Id": "request-123",
+					}, request["headers"])
 				})
 			}
 		}
 	}
 	require.Equal(t, 2, operations)
+}
+
+func TestEnrollmentWebhookHeaderConfiguration(t *testing.T) {
+	csrPEM, err := os.ReadFile("../helpers/testdata/samplecsr.pem")
+	require.NoError(t, err)
+	block, _ := pem.Decode(csrPEM)
+	require.NotNil(t, block)
+	csr, err := x509.ParseCertificateRequest(block.Bytes)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name, configJSON string
+		expected         map[string]any
+	}{
+		{"defaults", `{}`, map[string]any{"X-Device": "device-123"}},
+		{"case insensitive and duplicate names", `{"allowed_headers":["x-device-model","X-DEVICE-MODEL","x-request-id"]}`, map[string]any{"X-Device-Model": "model-1"}},
+		{"replacement", `{"allowed_headers":["x-device-model"]}`, map[string]any{"X-Device-Model": "model-1"}},
+		{"empty list", `{"allowed_headers":[]}`, map[string]any{}},
+		{"null uses defaults", `{"allowed_headers":null}`, map[string]any{"X-Device": "device-123"}},
+		{"explicit sensitive header", `{"allowed_headers":["authorization"]}`, map[string]any{"Authorization": "Bearer opt-in-token"}},
+		{"wildcard does not forward everything", `{"allowed_headers":["*"]}`, map[string]any{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var conf models.WebhookCall
+			require.NoError(t, json.Unmarshal([]byte(tc.configJSON), &conf))
+			// Stored DMS configurations must preserve an explicit empty allowlist.
+			stored, err := json.Marshal(conf)
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(stored, &conf))
+			received := make(chan map[string]any, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var payload struct {
+					Request struct {
+						Headers map[string]any `json:"headers"`
+					} `json:"http_request"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				received <- payload.Request.Headers
+				_, _ = io.WriteString(w, `{"authorized":true}`)
+			}))
+			defer server.Close()
+			conf.Url = server.URL
+			conf.Config.AuthMode = config.NoAuth
+			original := httptest.NewRequest(http.MethodPost, "http://est.example/simpleenroll", nil)
+			original.Header.Set("X-Device", "device-123")
+			original.Header["x-device-model"] = []string{"model-1", "model-2"}
+			original.Header.Set("Authorization", "Bearer opt-in-token")
+			original.Header.Set("Cookie", "session=secret")
+			original.Header.Set("X-Forwarded-Client-Cert", "certificate")
+			original.Header.Set("X-Unlisted", "excluded")
+			ctx := context.WithValue(context.Background(), core.LamassuContextKeyHTTPRequest, original)
+			_, err = invokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, csr, "profile", "enrollment")
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, <-received)
+		})
+	}
 }

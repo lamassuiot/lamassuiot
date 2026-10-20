@@ -2,6 +2,7 @@ package webhookclient
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,7 +20,8 @@ func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte
 		HTTPConnection: config.HTTPConnection{
 			BasicConnection: config.BasicConnection{
 				TLSConfig: config.TLSConfig{
-					InsecureSkipVerify: !conf.Config.ValidateServerCert,
+					// API-configured webhooks must always verify the server.
+					InsecureSkipVerify: false,
 				},
 			},
 		},
@@ -37,6 +39,12 @@ func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte
 			Header: conf.Config.ApiKey.Header,
 		}
 	} else if conf.Config.AuthMode == config.MTLS {
+		// Validate inline PEM before calling the SDK, which also supports local
+		// file paths for trusted service configuration. API input must not select
+		// credentials from the server filesystem.
+		if _, err := tls.X509KeyPair([]byte(conf.Config.MutualTLS.Cert), []byte(conf.Config.MutualTLS.Key)); err != nil {
+			return nil, fmt.Errorf("webhook mTLS requires a PEM-encoded certificate and private key: %w", err)
+		}
 		clientConfig.AuthMTLSOptions = config.AuthMTLSOptions{
 			CertFile: conf.Config.MutualTLS.Cert,
 			KeyFile:  conf.Config.MutualTLS.Key,

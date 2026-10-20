@@ -9,9 +9,13 @@ type WebhookCall struct {
 	Url    string                `json:"url"`
 	Method string                `json:"method"`
 	Config WebhookCallHttpClient `json:"config"`
+	// AllowedHeaders replaces the default EST request header allowlist when set.
+	// An explicit empty list forwards no headers.
+	AllowedHeaders *[]string `json:"allowed_headers,omitempty"`
 }
 
 type WebhookCallHttpClient struct {
+	// Deprecated: HTTPS server verification is always enforced for webhooks.
 	ValidateServerCert bool                             `json:"validate_server_cert"`
 	LogLevel           string                           `json:"log_level"`
 	AuthMode           config.HTTPClientAuthMethod      `json:"auth_mode"`
@@ -33,6 +37,7 @@ type WebhookCallHttpClientApiKey struct {
 }
 
 type WebhookCallHttpClientMutualTLS struct {
+	// Cert and Key contain inline PEM. Server filesystem paths are not accepted.
 	Cert string `json:"cert"`
 	Key  string `json:"key"`
 }

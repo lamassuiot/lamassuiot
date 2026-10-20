@@ -482,11 +482,7 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 	requestURL := ""
 	httpReq, ok := ctx.Value(core.LamassuContextKeyHTTPRequest).(*http.Request)
 	if ok && httpReq != nil {
-		for key, values := range httpReq.Header {
-			if len(values) > 0 {
-				webhookRequestBodyHeaders[key] = values[0]
-			}
-		}
+		webhookRequestBodyHeaders = allowedWebhookRequestHeaders(httpReq.Header, webhookConf)
 		requestURL = httpReq.URL.String()
 	}
 
@@ -551,6 +547,27 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 
 	lFunc.Infof("webhook authorized %s", operation)
 	return lFunc, nil
+}
+
+// allowedWebhookRequestHeaders forwards only explicitly allowed metadata into
+// the JSON payload. Administrators may opt in to sensitive headers per webhook.
+func allowedWebhookRequestHeaders(headers http.Header, conf models.WebhookCall) map[string]string {
+	names := []string{"Accept", "Content-Type", "User-Agent", "X-Device", "X-Request-Id"}
+	if conf.AllowedHeaders != nil {
+		names = *conf.AllowedHeaders
+	}
+	allowed := make(map[string]bool, len(names))
+	for _, name := range names {
+		allowed[http.CanonicalHeaderKey(name)] = true
+	}
+	filtered := make(map[string]string)
+	for name, values := range headers {
+		canonical := http.CanonicalHeaderKey(name)
+		if allowed[canonical] && len(values) > 0 {
+			filtered[canonical] = values[0]
+		}
+	}
+	return filtered
 }
 
 // clientCertValidator is a function type used by authenticateEST to delegate

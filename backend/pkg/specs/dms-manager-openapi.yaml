@@ -631,7 +631,17 @@ components:
           $ref: '#/components/schemas/AuthOptionsClientCertificate'
         external_webhook_settings:
           type: object
+          description: Webhook configuration. HTTPS server certificates are always verified, regardless of validate_server_cert. For mTLS, config.mtls.cert and config.mtls.key must contain inline PEM; server filesystem paths are rejected. EST request headers included in the JSON payload are controlled by allowed_headers. Sensitive headers are excluded by default; explicitly allowing them discloses their values to the webhook.
           additionalProperties: true
+          properties:
+            allowed_headers:
+              type: array
+              description: Replaces the default EST request header allowlist. Omit or set to null to use the defaults; an empty array forwards no headers. Names are matched case-insensitively and must be exact (no wildcards). Values appear in http_request.headers in the JSON payload, not as outbound HTTP headers. Only configure names whose values may be disclosed to this webhook, including any explicitly allowed credentials or forwarded certificates.
+              nullable: true
+              default: [Accept, Content-Type, User-Agent, X-Device, X-Request-Id]
+              example: [Accept, Content-Type, User-Agent, X-Device, X-Request-Id, X-Tenant-Id]
+              items:
+                type: string
 
     AuthOptionsClientCertificate:
       type: object

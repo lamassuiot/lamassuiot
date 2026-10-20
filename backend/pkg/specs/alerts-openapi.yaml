@@ -358,10 +358,10 @@ components:
           properties:
             cert:
               type: string
-              description: PEM certificate or certificate file path.
+              description: Inline PEM certificate. Server filesystem paths are not accepted.
             key:
               type: string
-              description: PEM private key or key file path.
+              description: Inline PEM private key. Server filesystem paths are not accepted.
 
     AlertLatestEvent:
       type: object

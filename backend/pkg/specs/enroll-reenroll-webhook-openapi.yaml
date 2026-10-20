@@ -150,7 +150,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: First value of each header from the original EST request.
+          description: First value of allowlisted headers from the original EST request, with canonical header names. Defaults are Accept, Content-Type, User-Agent, X-Device and X-Request-Id. Administrators may replace the list with allowed_headers in external_webhook_settings. Credentials, cookies and forwarded certificates are excluded unless explicitly allowed. These values are request metadata, not verified device identity.
         url:
           type: string
           format: uri-reference
