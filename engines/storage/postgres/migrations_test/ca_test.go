@@ -686,6 +686,33 @@ func MigrationTest_CA_20261008120000_unique_ca_id(t *testing.T, logger *logrus.E
 	}
 }
 
+func MigrationTest_CA_20261020120000_backfill_certificate_issuer(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// A certificate whose issuer was stored, which must be kept.
+	err := con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, issuer_common_name)
+		SELECT 'issuer-test-kept', '{}', 'issuer-test-kept', 'x', 0, 'ACTIVE', certificate, 'RSA', 4096, 'HIGH', 'Kept', '', '', '', '', '', valid_from, valid_to, revocation_timestamp, 'Unspecified', 'MANAGED', '', 'Stored Issuer'
+		FROM certificates WHERE serial_number = '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79'`).Error
+	if err != nil {
+		t.Fatalf("failed to insert certificate with an issuer: %v", err)
+	}
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	issuer := func(serial string) string {
+		var name string
+		if err := con.Raw(`SELECT COALESCE(issuer_common_name, '') FROM certificates WHERE serial_number = ?`, serial).Scan(&name).Error; err != nil {
+			t.Fatalf("failed to read the issuer of %s: %v", serial, err)
+		}
+		return name
+	}
+
+	// Stored without issuer: filled from its self-signed certificate.
+	assert.Equal(t, "ECS-Manufacturing", issuer("37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79"))
+	assert.Equal(t, "Stored Issuer", issuer("issuer-test-kept"))
+	// An undecodable certificate is skipped rather than failing the migration.
+	assert.Equal(t, "", issuer("type-test-managed"))
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -793,5 +820,10 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20261008120000_unique_ca_id(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261008120000_unique_ca_id")
+	}
+
+	MigrationTest_CA_20261020120000_backfill_certificate_issuer(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261020120000_backfill_certificate_issuer")
 	}
 }
