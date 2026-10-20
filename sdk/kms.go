@@ -2,8 +2,11 @@ package sdk
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"net/http"
+	"net/url"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -43,6 +46,7 @@ func (cli *httpKMSClient) GetKeys(ctx context.Context, input services.GetKeysInp
 
 func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	response, err := Get[models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.Identifier, nil, map[int][]error{
+		400: {errs.ErrKeyEngineRequired, errs.ErrValidateBadRequest},
 		404: {errs.ErrKeyNotFound},
 	})
 	if err != nil {
@@ -50,6 +54,21 @@ func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput
 	}
 
 	return &response, nil
+}
+
+func (cli *httpKMSClient) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	der, err := x509.MarshalPKIXPublicKey(input.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+	pubKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
+
+	return Post[[]*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/lookup", resources.GetKeysByPublicKeyBody{
+		PublicKey: base64.StdEncoding.EncodeToString(pubKeyPEM),
+		EngineID:  input.EngineID,
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest},
+	})
 }
 
 func (cli *httpKMSClient) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
@@ -100,6 +119,20 @@ func (cli *httpKMSClient) ImportKey(ctx context.Context, input services.ImportKe
 	}
 
 	return response, nil
+}
+
+func (cli *httpKMSClient) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
+	return Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.Identifier+"/bindings", input.Resource, kmsBindingErrors)
+}
+
+func (cli *httpKMSClient) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
+	bindingURL := cli.baseUrl + "/v1/keys/" + input.Identifier + "/bindings/" + url.PathEscape(input.Resource.ResourceType) + "/" + url.PathEscape(input.Resource.ResourceID)
+	return requestWithBody[*models.Key](ctx, cli.httpClient, "DELETE", bindingURL, nil, kmsBindingErrors)
+}
+
+var kmsBindingErrors = map[int][]error{
+	400: {errs.ErrValidateBadRequest, errs.ErrKeyEngineRequired},
+	404: {errs.ErrKeyNotFound},
 }
 
 func (cli *httpKMSClient) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {

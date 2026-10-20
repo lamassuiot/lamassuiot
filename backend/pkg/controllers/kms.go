@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -21,11 +22,16 @@ func NewKMSHttpRoutes(svc services.KMSService) *kmsHttpRoutes {
 	}
 }
 
+// handleError maps the service errors to status codes. Middlewares wrap the errors they get from
+// the service, so the known errors are matched with errors.Is.
 func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
-	switch err {
-	case errs.ErrKeyNotFound:
+	switch {
+	case errors.Is(err, errs.ErrKeyNotFound):
 		ctx.JSON(404, gin.H{"err": err.Error()})
-	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrValidateBadRequest:
+	case errors.Is(err, errs.ErrKeyEngineRequired),
+		errors.Is(err, errs.ErrKeyAliasCollidesWithKeyID),
+		errors.Is(err, errs.ErrKeyBindingsReadOnly),
+		errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(400, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(500, gin.H{"err": err.Error()})
@@ -104,6 +110,37 @@ func (r *kmsHttpRoutes) GetKeyByID(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, key)
+}
+
+func (r *kmsHttpRoutes) GetKeysByPublicKey(ctx *gin.Context) {
+	var requestBody resources.GetKeysByPublicKeyBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	decodedKey, err := base64.StdEncoding.DecodeString(requestBody.PublicKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	pubKey, err := helpers.ParsePublicKey(decodedKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	keys, err := r.svc.GetKeysByPublicKey(ctx.Request.Context(), services.GetKeysByPublicKeyInput{
+		PublicKey: pubKey,
+		EngineID:  requestBody.EngineID,
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, keys)
 }
 
 func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
@@ -191,6 +228,60 @@ func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
 		Patches: requestBody.Patches,
 	})
 
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, key)
+}
+
+func (r *kmsHttpRoutes) BindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody models.KMSBindResource
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := r.svc.BindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   requestBody,
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, key)
+}
+
+func (r *kmsHttpRoutes) UnbindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID           string `uri:"id" binding:"required"`
+		ResourceType string `uri:"resource_type" binding:"required"`
+		ResourceID   string `uri:"resource_id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := r.svc.UnbindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   models.KMSBindResource{ResourceType: params.ResourceType, ResourceID: params.ResourceID},
+	})
 	if err != nil {
 		r.handleError(ctx, err)
 		return

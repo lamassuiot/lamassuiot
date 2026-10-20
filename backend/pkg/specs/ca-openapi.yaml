@@ -102,6 +102,12 @@ paths:
     post:
       tags: [Certificate Authorities]
       summary: Import an existing certificate authority
+      description: |
+        Imports a CA certificate. With private_key, the key is imported into the crypto engine
+        engine_id, or the default one. Without it, the CA is linked on a best-effort basis to its
+        private key if any crypto engine of the KMS holds it, found by the certificate's public key:
+        the copy in engine_id if there is one, otherwise the copy in the default engine or another
+        engine. The CA can then sign. When no engine holds the key, the CA is imported without key.
       operationId: importCA
       x-authz:
         namespace: pki
@@ -759,6 +765,36 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /certificates/{sn}/key:
+    get:
+      tags: [Certificates]
+      summary: Get the KMS key of a certificate
+      description: |
+        Returns the KMS key of the certificate's key pair, CA certificates included. The key is
+        found by the certificate's public key in the crypto engine the certificate is bound to,
+        not by its Subject Key Identifier, which is set by the issuer. The CA service reads the
+        key from the KMS on the caller's behalf, so this needs its own read-key action rather
+        than certificate read: it discloses the key's name, aliases, tags and metadata.
+      operationId: getCertificateKey
+      x-authz:
+        namespace: pki
+        schema_name: ca
+        entity_type: certificate
+        action: read-key
+      parameters:
+        - $ref: '#/components/parameters/SerialNumber'
+      responses:
+        '200':
+          description: KMS key of the certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404':
+          description: Certificate not found, or its key is not in the KMS
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /certificates/{sn}/status:
     put:
       tags: [Certificates]
@@ -1138,6 +1174,9 @@ components:
           type: string
         engine_id:
           type: string
+          description: |
+            Crypto engine to import private_key into. Without private_key, the engine preferred
+            when linking the CA to a key already in the KMS.
         parent_id:
           type: string
         ca_request_id:
@@ -1387,6 +1426,44 @@ components:
           type: string
         is_ca:
           type: boolean
+
+    Key:
+      type: object
+      description: KMS key of a certificate's key pair
+      properties:
+        pkcs11_uri:
+          type: string
+          example: "pkcs11:token-id=engine-1;id=2d83ea43...;type=private"
+        key_id:
+          type: string
+          description: Hex SHA-256 of the DER SubjectPublicKeyInfo
+        name:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        engine_id:
+          type: string
+        has_private_key:
+          type: boolean
+        algorithm:
+          type: string
+        size:
+          type: integer
+        public_key:
+          type: string
+          description: Base64 encoded public key
+        creation_ts:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
 
     IssuerCAMetadata:
       type: object

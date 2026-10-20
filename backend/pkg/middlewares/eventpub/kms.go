@@ -36,6 +36,10 @@ func (mw KMSEventPublisher) GetKey(ctx context.Context, input services.GetKeyInp
 	return mw.Next.GetKey(ctx, input)
 }
 
+func (mw KMSEventPublisher) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	return mw.Next.GetKeysByPublicKey(ctx, input)
+}
+
 func (mw KMSEventPublisher) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
 	return mw.Next.GetKeyStats(ctx, input)
 }
@@ -75,7 +79,7 @@ func (mw KMSEventPublisher) UpdateKeyMetadata(ctx context.Context, input service
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -89,6 +93,37 @@ func (mw KMSEventPublisher) UpdateKeyMetadata(ctx context.Context, input service
 	return mw.Next.UpdateKeyMetadata(ctx, input)
 }
 
+// Bound resources live in the key metadata, so binding changes are published as metadata updates.
+func (mw KMSEventPublisher) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (output *models.Key, err error) {
+	return mw.publishKeyBindingUpdate(ctx, input, mw.Next.BindKeyResource)
+}
+
+func (mw KMSEventPublisher) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (output *models.Key, err error) {
+	return mw.publishKeyBindingUpdate(ctx, input, mw.Next.UnbindKeyResource)
+}
+
+func (mw KMSEventPublisher) publishKeyBindingUpdate(ctx context.Context, input services.KeyResourceBindingInput, next func(context.Context, services.KeyResourceBindingInput) (*models.Key, error)) (output *models.Key, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateKMSKeyMetadata)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.Identifier))
+
+	prev, err := mw.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.Identifier,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Key]{
+				Updated:  *output,
+				Previous: *prev,
+			})
+		}
+	}()
+	return next(ctx, input)
+}
+
 func (mw KMSEventPublisher) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (output *models.Key, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateKMSKeyAliases)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.ID))
@@ -97,7 +132,7 @@ func (mw KMSEventPublisher) UpdateKeyAliases(ctx context.Context, input services
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -119,7 +154,7 @@ func (mw KMSEventPublisher) UpdateKeyName(ctx context.Context, input services.Up
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -141,7 +176,7 @@ func (mw KMSEventPublisher) UpdateKeyTags(ctx context.Context, input services.Up
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {

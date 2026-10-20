@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
@@ -12,6 +13,7 @@ type KMSService interface {
 
 	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
 	GetKey(ctx context.Context, input GetKeyInput) (*models.Key, error)
+	GetKeysByPublicKey(ctx context.Context, input GetKeysByPublicKeyInput) ([]*models.Key, error)
 	GetKeyStats(ctx context.Context, input GetKeyStatsInput) (*models.KeyStats, error)
 
 	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
@@ -21,6 +23,9 @@ type KMSService interface {
 	UpdateKeyAliases(ctx context.Context, input UpdateKeyAliasesInput) (*models.Key, error)
 	UpdateKeyName(ctx context.Context, input UpdateKeyNameInput) (*models.Key, error)
 	UpdateKeyTags(ctx context.Context, input UpdateKeyTagsInput) (*models.Key, error)
+
+	BindKeyResource(ctx context.Context, input KeyResourceBindingInput) (*models.Key, error)
+	UnbindKeyResource(ctx context.Context, input KeyResourceBindingInput) (*models.Key, error)
 
 	DeleteKeyByID(ctx context.Context, input GetKeyInput) error
 
@@ -39,6 +44,14 @@ type GetKeyInput struct {
 
 type GetKeysInput struct {
 	resources.ListInput[models.Key]
+}
+
+// GetKeysByPublicKeyInput finds the KMS keys of a key pair from its public key, which is the only
+// reliable link between a certificate and its key: a certificate's SKI is whatever its issuer wrote.
+// Without EngineID it returns every engine's copy of the key.
+type GetKeysByPublicKeyInput struct {
+	PublicKey crypto.PublicKey `validate:"required"`
+	EngineID  string
 }
 
 type CreateKeyInput struct {
@@ -72,6 +85,13 @@ type ImportKeyInput struct {
 	Name       string
 	Tags       []string
 	Metadata   map[string]any
+}
+
+// KeyResourceBindingInput records, or removes, that a resource uses the key. Binding is idempotent
+// and unbinding removes every entry for the resource.
+type KeyResourceBindingInput struct {
+	Identifier string                 `validate:"required"`
+	Resource   models.KMSBindResource `validate:"required"`
 }
 
 type UpdateKeyMetadataInput struct {

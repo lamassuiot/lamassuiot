@@ -403,6 +403,23 @@ func (cli *httpCAClient) GetCertificateBySerialNumber(ctx context.Context, input
 	return response, nil
 }
 
+func (cli *httpCAClient) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.Key, error) {
+	response, err := Get[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/key", nil, map[int][]error{
+		404: {
+			errs.ErrCertificateNotFound,
+			errs.ErrKeyNotFound,
+		},
+		400: {
+			errs.ErrValidateBadRequest,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *httpCAClient) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	url := cli.baseUrl + "/v1/certificates"
 	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})

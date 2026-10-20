@@ -127,10 +127,15 @@ type CAAttachedToDevice struct {
 }
 
 const (
+	// KMSBindResourceKey is the key metadata entry listing the resources that use the key. Lamassu
+	// manages it through BindKeyResource and UnbindKeyResource: metadata updates cannot change it.
 	KMSBindResourceKey = "lamassu.io/kms/binded-resources"
+
+	// KMSBindResourceTypeCertificate binds a certificate, CA certificates included, by serial number.
+	KMSBindResourceTypeCertificate = "certificate"
 )
 
 type KMSBindResource struct {
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
+	ResourceType string `json:"resource_type" validate:"required"`
+	ResourceID   string `json:"resource_id" validate:"required"`
 }

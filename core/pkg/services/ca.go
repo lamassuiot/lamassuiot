@@ -32,6 +32,7 @@ type CAService interface {
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
 
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
+	GetCertificateKey(ctx context.Context, input GetCertificateKeyInput) (*models.Key, error)
 	GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error)
 	GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error)
 	GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error)
@@ -195,6 +196,9 @@ type SignCertificateInput struct {
 	CertRequest       *models.X509CertificateRequest `validate:"required"`
 	IssuanceProfile   *models.IssuanceProfile
 	IssuanceProfileID string
+	// KeyEngineID is the crypto engine holding the private key of the request, when the caller knows
+	// it: the certificate is then bound to that copy of the key rather than to one found in the KMS.
+	KeyEngineID string
 }
 
 // CertificateKeySpec defines the private key to use when issuing the certificate.
@@ -258,6 +262,11 @@ type SignatureVerifyInput struct {
 }
 
 type GetCertificatesBySerialNumberInput struct {
+	SerialNumber string `validate:"required"`
+}
+
+// GetCertificateKeyInput finds the KMS key of a certificate, CA certificates included.
+type GetCertificateKeyInput struct {
 	SerialNumber string `validate:"required"`
 }
 

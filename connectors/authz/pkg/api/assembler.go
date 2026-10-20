@@ -154,7 +154,8 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 	return principalManager, eng, policyManager, resolver, nil
 }
 
-// preloadPolicies reads all JSON files from dir and creates them as policies if they don't already exist.
+// preloadPolicies reads all JSON files from dir as system-managed policies, creating the missing ones
+// and bringing the existing ones up to date.
 func preloadPolicies(ctx context.Context, pm *service.PolicyManager, dir string, log *logrus.Entry) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -183,12 +184,17 @@ func preloadPolicies(ctx context.Context, pm *service.PolicyManager, dir string,
 			policy.ID = service.SystemPolicyPrefix + policy.ID
 		}
 
-		if err := pm.CreatePolicy(ctx, &policy); err != nil {
+		created, err := pm.SyncSystemPolicy(ctx, &policy)
+		if err != nil {
 			log.Warnf("Skipping preload file %s: %v", filePath, err)
 			continue
 		}
 
-		log.Infof("Preloaded policy %q (id=%s) from %s", policy.Name, policy.ID, filePath)
+		if created {
+			log.Infof("Preloaded policy %q (id=%s) from %s", policy.Name, policy.ID, filePath)
+		} else {
+			log.Infof("Updated policy %q (id=%s) from %s", policy.Name, policy.ID, filePath)
+		}
 	}
 
 	return nil

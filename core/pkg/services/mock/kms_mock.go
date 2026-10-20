@@ -36,6 +36,12 @@ func (m *MockKMSService) GetKey(ctx context.Context, input services.GetKeyInput)
 	return args.Get(0).(*models.Key), args.Error(1)
 }
 
+// GetKeysByPublicKey returns the keys of the key pair with the given public key
+func (m *MockKMSService) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).([]*models.Key), args.Error(1)
+}
+
 // CreateKey creates a new cryptographic key
 func (m *MockKMSService) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
 	args := m.Called(ctx, input)
@@ -44,6 +50,18 @@ func (m *MockKMSService) CreateKey(ctx context.Context, input services.CreateKey
 
 // ImportKey imports an existing private key
 func (m *MockKMSService) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+// BindKeyResource records that a resource uses a key
+func (m *MockKMSService) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+// UnbindKeyResource removes a resource from the ones using a key
+func (m *MockKMSService) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.Key), args.Error(1)
 }
