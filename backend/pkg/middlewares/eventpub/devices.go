@@ -75,7 +75,7 @@ func (mw *deviceEventPublisher) UpdateDeviceStatus(ctx context.Context, input se
 		ID: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -97,7 +97,7 @@ func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(ctx context.Context, in
 		ID: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
+		return nil, err
 	}
 	defer func() {
 		if err == nil {
@@ -118,7 +118,7 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 		ID: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -168,7 +168,7 @@ func (mw *deviceEventPublisher) UpdateDeviceGroup(ctx context.Context, input ser
 		ID: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get DeviceGroup %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {

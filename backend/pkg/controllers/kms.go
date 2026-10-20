@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -21,11 +22,16 @@ func NewKMSHttpRoutes(svc services.KMSService) *kmsHttpRoutes {
 	}
 }
 
+// handleError maps the service errors to status codes. Middlewares wrap the errors they get from
+// the service, so the known errors are matched with errors.Is.
 func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
-	switch err {
-	case errs.ErrKeyNotFound:
+	switch {
+	case errors.Is(err, errs.ErrKeyNotFound):
 		ctx.JSON(404, gin.H{"err": err.Error()})
-	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrKeyBindingsReadOnly, errs.ErrValidateBadRequest:
+	case errors.Is(err, errs.ErrKeyEngineRequired),
+		errors.Is(err, errs.ErrKeyAliasCollidesWithKeyID),
+		errors.Is(err, errs.ErrKeyBindingsReadOnly),
+		errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(400, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(500, gin.H{"err": err.Error()})

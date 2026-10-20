@@ -79,7 +79,7 @@ func (mw KMSEventPublisher) UpdateKeyMetadata(ctx context.Context, input service
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -110,7 +110,7 @@ func (mw KMSEventPublisher) publishKeyBindingUpdate(ctx context.Context, input s
 		Identifier: input.Identifier,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.Identifier, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -132,7 +132,7 @@ func (mw KMSEventPublisher) UpdateKeyAliases(ctx context.Context, input services
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -154,7 +154,7 @@ func (mw KMSEventPublisher) UpdateKeyName(ctx context.Context, input services.Up
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
@@ -176,7 +176,7 @@ func (mw KMSEventPublisher) UpdateKeyTags(ctx context.Context, input services.Up
 		Identifier: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {

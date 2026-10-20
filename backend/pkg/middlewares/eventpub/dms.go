@@ -49,7 +49,7 @@ func (mw dmsEventPublisher) UpdateDMS(ctx context.Context, input services.Update
 		ID: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get DMS %s: %w", input.ID, err)
+		return nil, err
 	}
 	defer func() {
 		if err == nil {
@@ -70,7 +70,7 @@ func (mw dmsEventPublisher) UpdateDMSMetadata(ctx context.Context, input service
 		ID: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get DMS %s: %w", input.ID, err)
+		return nil, err
 	}
 
 	defer func() {
