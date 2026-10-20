@@ -26,24 +26,25 @@ type Key struct {
 	Metadata      map[string]any `json:"metadata" gorm:"serializer:json"`
 }
 
-// BoundResources returns the resources bound to the key, read from its metadata.
+// BoundResources returns the resources bound to the key, read from its metadata, where they are
+// stored as a list.
 func (k *Key) BoundResources() ([]KMSBindResource, error) {
 	value, ok := k.Metadata[KMSBindResourceKey]
 	if !ok || value == nil {
 		return []KMSBindResource{}, nil
 	}
-
-	raw, ok := value.(string)
-	if !ok {
-		b, err := json.Marshal(value)
-		if err != nil {
-			return nil, err
-		}
-		raw = string(b)
+	switch value.(type) {
+	case []any, []KMSBindResource:
+	default:
+		return nil, fmt.Errorf("could not parse %s metadata: expected a list, got %T", KMSBindResourceKey, value)
 	}
 
+	b, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
 	resources := []KMSBindResource{}
-	if err := json.Unmarshal([]byte(raw), &resources); err != nil {
+	if err := json.Unmarshal(b, &resources); err != nil {
 		return nil, fmt.Errorf("could not parse %s metadata: %w", KMSBindResourceKey, err)
 	}
 	return resources, nil
