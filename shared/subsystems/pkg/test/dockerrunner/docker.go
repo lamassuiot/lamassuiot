@@ -2,6 +2,7 @@ package dockerrunner
 
 import (
 	"context"
+	"fmt"
 
 	mobycontainer "github.com/moby/moby/api/types/container"
 	"github.com/ory/dockertest/v4"
@@ -11,7 +12,7 @@ func RunDocker(repository string, opts ...dockertest.RunOption) (func() error, d
 	ctx := context.Background()
 	pool, err := dockertest.NewPool(ctx, "")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("could not connect to Docker: %w", err)
 	}
 
 	opts = append([]dockertest.RunOption{

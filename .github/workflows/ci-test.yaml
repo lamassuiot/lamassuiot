@@ -19,7 +19,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
 
@@ -27,7 +27,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '^1.26.5'
+          go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
 
       - name: Install Dependencies
@@ -84,14 +84,14 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '^1.26.5' # The Go version to download (if necessary) and use.
+          go-version: '^1.27.3' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
  
       - name: Install Dependencies
@@ -118,15 +118,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '^1.26.5' # The Go version to download (if necessary) and use.
+          go-version: '^1.27.3' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
       
       - name: Install PKCS11 Proxy Dependencies
+        # v3 maps CKA_LABEL to NetHSM labels (max 32 bytes); Lamassu uses 64-byte key digests.
         run: |
           wget https://github.com/Nitrokey/nethsm-pkcs11/releases/download/v2.2.0/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
           printf '%s  %s\n' '0d32cce121e9ff6d7616f4c95d58355b0a821d7d4af20451cea8efec96e77bd1' 'nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so' | sha256sum --check --strict -
@@ -179,14 +180,14 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '^1.26.5'
+          go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
  
       - name: Install Dependencies
@@ -214,14 +215,14 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '^1.26.5'
+          go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
  
       - name: Install Dependencies
@@ -249,7 +250,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
 

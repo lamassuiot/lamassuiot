@@ -1,4 +1,4 @@
-ARG BUILDER=golang:1.26.8-bookworm
+ARG BUILDER=golang:1.27.3-bookworm
 
 # Optional pre-vendored dependencies. CI runs `go mod vendor` once and passes
 # the result with `--build-context vendor=./vendor`, which replaces this empty
@@ -47,9 +47,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -o ca \
       backend/cmd/ca/main.go
 
-# gcr.io/distroless/static-debian12:nonroot provides:
+# gcr.io/distroless/static-debian13:nonroot provides:
 #   - a minimal (~2 MB) static-binary runtime with CA certificates included
 #   - a pre-configured non-root user (UID/GID 65532) with no shell or package manager
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=builder /app/ca /ca
 CMD ["/ca"]

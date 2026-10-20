@@ -1,11 +1,12 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
+	"github.com/ory/dockertest/v4"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -18,8 +19,8 @@ const (
 )
 
 type PostgresContainer struct {
-	Pool     *dockertest.Pool
-	Resource *dockertest.Resource
+	Pool     dockertest.ClosablePool
+	Resource dockertest.ClosableResource
 	DB       *gorm.DB
 	Host     string
 	Port     string
@@ -32,15 +33,6 @@ func RunPostgresWithMigration(migrationPath string) (*PostgresContainer, error) 
 	migrationContent, err := os.ReadFile(migrationPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read migration file: %w", err)
-	}
-
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		return nil, fmt.Errorf("could not construct pool: %w", err)
-	}
-
-	if err := pool.Client.Ping(); err != nil {
-		return nil, fmt.Errorf("could not connect to Docker: %w", err)
 	}
 
 	pwd, err := os.Getwd()
@@ -56,22 +48,17 @@ func RunPostgresWithMigration(migrationPath string) (*PostgresContainer, error) 
 		return nil, fmt.Errorf("failed to write init script: %w", err)
 	}
 
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "postgres",
-		Tag:        "15-alpine",
-		Env: []string{
+	_, resource, pool, err := dockerrunner.RunDocker("postgres",
+		dockertest.WithTag("15-alpine"),
+		dockertest.WithEnv([]string{
 			fmt.Sprintf("POSTGRES_USER=%s", defaultUser),
 			fmt.Sprintf("POSTGRES_PASSWORD=%s", defaultPassword),
 			fmt.Sprintf("POSTGRES_DB=%s", defaultDBName),
-		},
-		Mounts: []string{
+		}),
+		dockertest.WithMounts([]string{
 			fmt.Sprintf("%s:/docker-entrypoint-initdb.d/init.sql", initScriptPath),
-		},
-	}, func(config *docker.HostConfig) {
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{Name: "no"}
-		// Let Docker assign a random available port to avoid conflicts
-	})
+		}),
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not start resource: %w", err)
@@ -90,7 +77,7 @@ func RunPostgresWithMigration(migrationPath string) (*PostgresContainer, error) 
 		Password: defaultPassword,
 	}
 
-	if err := pool.Retry(func() error {
+	if err := pool.Retry(context.Background(), 0, func() error {
 		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			host, port, defaultUser, defaultPassword, defaultDBName)
 
@@ -123,7 +110,7 @@ func RunPostgresWithMigration(migrationPath string) (*PostgresContainer, error) 
 
 func (c *PostgresContainer) Cleanup() error {
 	if c.Resource != nil {
-		return c.Pool.Purge(c.Resource)
+		return c.Pool.Close(context.Background())
 	}
 	return nil
 }
@@ -136,27 +123,14 @@ func (c *PostgresContainer) DSN() string {
 // RunPostgresEmpty starts a Postgres 15-alpine container with no init SQL.
 // The caller is responsible for running any schema migrations after connecting.
 func RunPostgresEmpty() (*PostgresContainer, error) {
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		return nil, fmt.Errorf("could not construct pool: %w", err)
-	}
-
-	if err := pool.Client.Ping(); err != nil {
-		return nil, fmt.Errorf("could not connect to Docker: %w", err)
-	}
-
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "postgres",
-		Tag:        "15-alpine",
-		Env: []string{
+	_, resource, pool, err := dockerrunner.RunDocker("postgres",
+		dockertest.WithTag("15-alpine"),
+		dockertest.WithEnv([]string{
 			fmt.Sprintf("POSTGRES_USER=%s", defaultUser),
 			fmt.Sprintf("POSTGRES_PASSWORD=%s", defaultPassword),
 			fmt.Sprintf("POSTGRES_DB=%s", defaultDBName),
-		},
-	}, func(config *docker.HostConfig) {
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{Name: "no"}
-	})
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("could not start resource: %w", err)
 	}
@@ -174,7 +148,7 @@ func RunPostgresEmpty() (*PostgresContainer, error) {
 		Password: defaultPassword,
 	}
 
-	if err := pool.Retry(func() error {
+	if err := pool.Retry(context.Background(), 0, func() error {
 		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			host, port, defaultUser, defaultPassword, defaultDBName)
 

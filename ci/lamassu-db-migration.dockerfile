@@ -1,4 +1,4 @@
-ARG BUILDER=golang:1.26.8-bookworm
+ARG BUILDER=golang:1.27.3-bookworm
 
 # Optional pre-vendored dependencies. CI runs `go mod vendor` once and passes
 # the result with `--build-context vendor=./vendor`, which replaces this empty
@@ -46,12 +46,12 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -o goose-lamassu \
       engines/storage/postgres/cmd/goose-lamassu/main.go
 
-# gcr.io/distroless/static-debian12:nonroot provides:
+# gcr.io/distroless/static-debian13:nonroot provides:
 #   - a minimal (~2 MB) static-binary runtime with CA certificates and tzdata included
 #     (covers TLS connections to PostgreSQL and time zone handling)
 #   - a pre-configured non-root user (UID/GID 65532) with no shell or package manager
 # Usage: docker run <image> "<pg-conn-string>" <command> [args...]
 #   e.g. docker run <image> "host=localhost user=postgres dbname=ca sslmode=disable" up
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=builder /app/goose-lamassu /goose-lamassu
 ENTRYPOINT ["/goose-lamassu"]
