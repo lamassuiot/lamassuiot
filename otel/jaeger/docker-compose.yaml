@@ -1,6 +1,6 @@
 services:
   jaeger:
-    image: jaegertracing/all-in-one:1.51 # At least 1.35 if you want to have enabled collector
+    image: jaegertracing/all-in-one:1.76.0
     container_name: jaeger
     environment:
       - COLLECTOR_ZIPKIN_HOST_PORT=:9411

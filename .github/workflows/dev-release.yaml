@@ -12,13 +12,11 @@ on:
         required: true
         type: choice
         options:
-          - golang:1.26.8-bookworm
-          - golang:1.27.2-bookworm
+          - golang:1.27.3-bookworm
           - ghcr.io/lamassuiot/golang-pqc:latest
           - ghcr.io/lamassuiot/golang-pqc:go1.27
-          - ghcr.io/lamassuiot/golang-pqc:go1.26
           - other
-        default: golang:1.26.8-bookworm
+        default: golang:1.27.3-bookworm
       other:
         description: "Only used when go = 'other'. Must be Debian/Ubuntu-based and provide apt-get (required by the ci/kms.dockerfile arm64 build)."
         type: string
@@ -56,7 +54,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
 
@@ -99,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
 
