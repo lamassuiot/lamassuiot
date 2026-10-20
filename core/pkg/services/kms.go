@@ -24,6 +24,9 @@ type KMSService interface {
 	UpdateKeyName(ctx context.Context, input UpdateKeyNameInput) (*models.Key, error)
 	UpdateKeyTags(ctx context.Context, input UpdateKeyTagsInput) (*models.Key, error)
 
+	BindKeyResource(ctx context.Context, input KeyResourceBindingInput) (*models.Key, error)
+	UnbindKeyResource(ctx context.Context, input KeyResourceBindingInput) (*models.Key, error)
+
 	DeleteKeyByID(ctx context.Context, input GetKeyInput) error
 
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
@@ -82,6 +85,13 @@ type ImportKeyInput struct {
 	Name       string
 	Tags       []string
 	Metadata   map[string]any
+}
+
+// KeyResourceBindingInput records, or removes, that a resource uses the key. Binding is idempotent
+// and unbinding removes every entry for the resource.
+type KeyResourceBindingInput struct {
+	Identifier string                 `validate:"required"`
+	Resource   models.KMSBindResource `validate:"required"`
 }
 
 type UpdateKeyMetadataInput struct {

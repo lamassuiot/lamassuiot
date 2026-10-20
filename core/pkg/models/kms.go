@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -23,6 +24,29 @@ type Key struct {
 	CreationTS    time.Time      `json:"creation_ts"`
 	Tags          []string       `json:"tags" gorm:"serializer:json"`
 	Metadata      map[string]any `json:"metadata" gorm:"serializer:json"`
+}
+
+// BoundResources returns the resources bound to the key, read from its metadata.
+func (k *Key) BoundResources() ([]KMSBindResource, error) {
+	value, ok := k.Metadata[KMSBindResourceKey]
+	if !ok || value == nil {
+		return []KMSBindResource{}, nil
+	}
+
+	raw, ok := value.(string)
+	if !ok {
+		b, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		raw = string(b)
+	}
+
+	resources := []KMSBindResource{}
+	if err := json.Unmarshal([]byte(raw), &resources); err != nil {
+		return nil, fmt.Errorf("could not parse %s metadata: %w", KMSBindResourceKey, err)
+	}
+	return resources, nil
 }
 
 func (k *Key) AfterFind(tx *gorm.DB) (err error) {

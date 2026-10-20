@@ -77,6 +77,20 @@ func (mw KMSOTelTracer) UpdateKeyMetadata(ctx context.Context, input services.Up
 	return mw.next.UpdateKeyMetadata(ctx, input)
 }
 
+func (mw KMSOTelTracer) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (output *models.Key, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.BindKeyResource(ctx, input)
+}
+
+func (mw KMSOTelTracer) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (output *models.Key, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.UnbindKeyResource(ctx, input)
+}
+
 func (mw KMSOTelTracer) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (output *models.Key, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()

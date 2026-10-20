@@ -116,3 +116,48 @@ func TestGetCertificateKey(t *testing.T) {
 		assert.ErrorIs(t, err, errs.ErrCertificateNotFound)
 	})
 }
+
+// A certificate whose key Lamassu generates is bound to that key until the certificate is deleted.
+func TestCertificateKeyBindingFollowsCertificate(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	caTest := serverTest.CA
+	ctx := context.Background()
+
+	profile, err := caTest.Service.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	require.NoError(t, err)
+	ca, err := caTest.Service.CreateCA(ctx, services.CreateCAInput{
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "CertificateKeyBindingCA"},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
+		ProfileID:    profile.ID,
+	})
+	require.NoError(t, err)
+
+	cert, err := caTest.Service.CreateCertificate(ctx, services.CreateCertificateInput{
+		CAID:    ca.ID,
+		KeySpec: services.CertificateKeySpec{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject: models.Subject{CommonName: "certificate-key-binding-leaf"},
+	})
+	require.NoError(t, err)
+
+	key, err := caTest.HttpCASDK.GetCertificateKey(ctx, services.GetCertificateKeyInput{SerialNumber: cert.SerialNumber})
+	require.NoError(t, err)
+	binding := models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: cert.SerialNumber}
+	bound, err := key.BoundResources()
+	require.NoError(t, err)
+	assert.Equal(t, []models.KMSBindResource{binding}, bound)
+
+	// A certificate can only be deleted once its issuer CA is gone.
+	revokeAndDeleteCA(t, caTest, ca.ID, false)
+	require.NoError(t, caTest.Service.DeleteCertificate(ctx, services.DeleteCertificateInput{SerialNumber: cert.SerialNumber}))
+
+	key, err = serverTest.KMS.Service.GetKey(ctx, services.GetKeyInput{Identifier: key.PKCS11URI})
+	require.NoError(t, err, "deleting a certificate keeps its key")
+	bound, err = key.BoundResources()
+	require.NoError(t, err)
+	assert.Empty(t, bound)
+}

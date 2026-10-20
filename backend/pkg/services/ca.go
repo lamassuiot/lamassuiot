@@ -299,42 +299,35 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		importType = models.CertificateTypeImportedWithKey
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, importType)
 
+		// A key that does not match the certificate would leave a CA that can never sign.
+		privKey, ok := input.Key.(crypto.Signer)
+		if !ok {
+			lFunc.Errorf("unsupported private key type %T for CA %s", input.Key, caCertSN)
+			return nil, errs.ErrValidateBadRequest
+		}
+		pub, ok := privKey.Public().(interface{ Equal(crypto.PublicKey) bool })
+		if !ok || !pub.Equal(caCertX509.PublicKey) {
+			lFunc.Errorf("private key does not match the public key of CA %s", caCertSN)
+			return nil, errs.ErrValidateBadRequest
+		}
+
 		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
 			PrivateKey: input.Key,
+			EngineID:   input.EngineID,
+			Name:       fmt.Sprintf("Key For CA CN=%s", caCertX509.Subject.CommonName),
 		})
-		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
-			return nil, fmt.Errorf("could not import key: %w", err)
-		}
-
-		if key.KeyID != skid {
-			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-				ID: key.KeyID,
-				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-					ResourceType: "certificate",
-					ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
-				}).Build(),
-			})
-			if err != nil {
-				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
-				return nil, fmt.Errorf("could not rename imported key: %w", err)
-			}
-		}
-
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 	} else {
 		//search in KMS if key exists for the CA being imported
-		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
-			Identifier: skid,
-		})
+		key, err = findCertificateKey(ctx, svc.kmsService, caCertX509.PublicKey, input.EngineID)
 		if err != nil {
-			lFunc.Infof("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
+			lFunc.Infof("could not find the key of CA %s in KMS: %s. Assuming key does not exist", caCertSN, err)
 			importType = models.CertificateTypeImportedWithoutKey
 		} else {
-			lFunc.Infof("found key with SKID %s for CA %s in KMS", skid, caCertSN)
+			lFunc.Infof("found key %s for CA %s in KMS", key.PKCS11URI, caCertSN)
 			importType = models.CertificateTypeManaged
 		}
 	}
@@ -455,15 +448,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	engineID := ""
 	if key != nil {
 		engineID = key.EngineID
-		key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: key.KeyID,
-			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
-			}).Build(),
+		key, err = svc.kmsService.BindKeyResource(ctx, services.KeyResourceBindingInput{
+			Identifier: key.PKCS11URI,
+			Resource:   certificateKeyBinding(caCertX509),
 		})
 		if err != nil {
-			lFunc.Errorf("could not bind CA %s to key %s: %s", caCert.Subject.CommonName, key.KeyID, err)
+			lFunc.Errorf("could not bind CA %s to key: %s", caCert.Subject.CommonName, err)
 			return nil, err
 		}
 	}
@@ -673,6 +663,12 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
 			Identifier: input.KeyMetadata.KeyID,
 		})
+		// A bare keyID held by several engines needs the engine to address a single key.
+		if errors.Is(err, errs.ErrKeyEngineRequired) && input.EngineID != "" {
+			key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
+				Identifier: buildPKCS11ID(input.EngineID, input.KeyMetadata.KeyID, "private"),
+			})
+		}
 		if err != nil {
 			lFunc.Errorf("could not get key for CA %s: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -777,12 +773,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		return nil, err
 	}
 
-	key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key.KeyID,
-		Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-			ResourceType: "certificate",
-			ResourceID:   helpers.SerialNumberToHexString(ca.SerialNumber),
-		}).Build(),
+	key, err = svc.kmsService.BindKeyResource(ctx, services.KeyResourceBindingInput{
+		Identifier: key.PKCS11URI,
+		Resource:   certificateKeyBinding(ca),
 	})
 	if err != nil {
 		lFunc.Errorf("could not bind CA %s to key %s: %s", input.Subject.CommonName, key.KeyID, err)
@@ -1245,22 +1238,84 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 		return
 	}
 
+	// Only the copy held by this CA's engine, not every engine's copy of the same key.
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
-	keyID, err := helpers.GetSubjectKeyID(ctx, lFunc, caCert)
+	key, err := findCertificateKey(ctx, svc.kmsService, caCert.PublicKey, ca.Certificate.EngineID)
 	if err != nil {
-		lFunc.Warnf("could not compute key ID for CA %s: %s", ca.ID, err)
+		lFunc.Warnf("could not find the private key of CA %s in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
 		return
 	}
 
-	// Delete the copy held by this CA's engine, not every engine's copy of the same keyID.
+	key, err = svc.kmsService.UnbindKeyResource(ctx, services.KeyResourceBindingInput{
+		Identifier: key.PKCS11URI,
+		Resource:   certificateKeyBinding(caCert),
+	})
+	if err != nil {
+		lFunc.Warnf("could not unbind CA %s from its key, keeping it in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
+		return
+	}
+
+	// A cross-signed CA reuses the key of the CA it was issued for: deleting either one must not
+	// leave the other unable to sign.
+	bound, err := key.BoundResources()
+	if err != nil {
+		lFunc.Warnf("could not read the resources bound to the key of CA %s, keeping it in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
+		return
+	}
+	if len(bound) > 0 {
+		lFunc.Infof("key of CA %s is still bound to %d resources, keeping it in crypto engine %s", ca.ID, len(bound), ca.Certificate.EngineID)
+		return
+	}
+
+	// Keys created before bindings were kept up to date may lack them, so check the CAs as well.
+	inUse, err := svc.caKeyInUseByOtherCA(ctx, ca)
+	if err != nil {
+		lFunc.Warnf("could not check whether other CAs use the key of CA %s, keeping it in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
+		return
+	}
+	if inUse {
+		lFunc.Infof("key of CA %s is still used by other CAs, keeping it in crypto engine %s", ca.ID, ca.Certificate.EngineID)
+		return
+	}
+
 	err = svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{
-		Identifier: buildPKCS11ID(ca.Certificate.EngineID, keyID, "private"),
+		Identifier: key.PKCS11URI,
 	})
 	if err != nil {
 		lFunc.Warnf("could not delete private key for CA %s from crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
 	} else {
 		lFunc.Debugf("successfully deleted private key for CA %s from crypto engine %s", ca.ID, ca.Certificate.EngineID)
 	}
+}
+
+// caKeyInUseByOtherCA reports whether another CA in the same crypto engine certifies the public key
+// of the given CA. Public keys are compared rather than SKIs, as imported CAs keep the SKI they came with.
+func (svc *CAServiceBackend) caKeyInUseByOtherCA(ctx context.Context, ca *models.CACertificate) (bool, error) {
+	pub, ok := ca.Certificate.Certificate.PublicKey.(interface{ Equal(crypto.PublicKey) bool })
+	if !ok {
+		return false, fmt.Errorf("unsupported public key type %T", ca.Certificate.Certificate.PublicKey)
+	}
+
+	inUse := false
+	_, err := svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: true,
+		ApplyFunc: func(other models.CACertificate) {
+			if inUse || other.ID == ca.ID || other.Certificate.Certificate == nil {
+				return
+			}
+			inUse = pub.Equal(other.Certificate.Certificate.PublicKey)
+		},
+		QueryParams: &resources.QueryParameters{
+			Filters: []resources.FilterOption{
+				{Field: "engine_id", FilterOperation: resources.StringEqual, Value: ca.Certificate.EngineID},
+			},
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return inUse, nil
 }
 
 // Returned Error Codes:
@@ -1575,16 +1630,14 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	// Detect whether the subject key is managed in the KMS and, if so, bind it to this certificate.
 	certType := models.CertificateTypeImportedWithoutKey
 	engineID := ""
-	subjectKey, getKeyErr := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: ski})
+	subjectKey, getKeyErr := findCertificateKey(ctx, svc.kmsService, x509Cert.PublicKey, "")
 	if getKeyErr == nil && subjectKey.HasPrivateKey {
 		certType = models.CertificateTypeManaged
 		engineID = subjectKey.EngineID
-		_, bindErr := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: subjectKey.KeyID,
-			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   helpers.SerialNumberToHexString(x509Cert.SerialNumber),
-			}).Build(),
+		// The certificate is already signed, so a failed binding does not fail the issuance.
+		_, bindErr := svc.kmsService.BindKeyResource(ctx, services.KeyResourceBindingInput{
+			Identifier: subjectKey.PKCS11URI,
+			Resource:   certificateKeyBinding(x509Cert),
 		})
 		if bindErr != nil {
 			lFunc.Warnf("could not bind key %s to certificate %s: %s", subjectKey.KeyID, helpers.SerialNumberToHexString(x509Cert.SerialNumber), bindErr)
@@ -1777,8 +1830,14 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 		return false, errs.ErrCANotFound
 	}
 
+	key, err := findCertificateKey(ctx, svc.kmsService, ca.Certificate.Certificate.PublicKey, ca.Certificate.EngineID)
+	if err != nil {
+		lFunc.Errorf("could not find the key of CA %s: %s", ca.ID, err)
+		return false, err
+	}
+
 	res, err := svc.kmsService.VerifySignature(ctx, services.VerifySignInput{
-		Identifier:  ca.Certificate.SubjectKeyID,
+		Identifier:  key.PKCS11URI,
 		Algorithm:   input.SigningAlgorithm,
 		Message:     input.Message,
 		Signature:   input.Signature,
@@ -1847,22 +1906,13 @@ func (svc *CAServiceBackend) GetCertificateKey(ctx context.Context, input servic
 		return nil, errs.ErrKeyNotFound
 	}
 
-	// The certificate's SKI is whatever its issuer wrote, so the key is found by its public key.
-	keys, err := svc.kmsService.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{
-		PublicKey: cert.Certificate.PublicKey,
-		EngineID:  cert.EngineID,
-	})
+	key, err := findCertificateKey(ctx, svc.kmsService, cert.Certificate.PublicKey, cert.EngineID)
 	if err != nil {
-		lFunc.Errorf("could not look up the key of certificate %s: %s", input.SerialNumber, err)
+		lFunc.Infof("could not find the key of certificate %s in crypto engine %s: %s", input.SerialNumber, cert.EngineID, err)
 		return nil, err
 	}
 
-	if len(keys) == 0 {
-		lFunc.Infof("key of certificate %s not found in crypto engine %s", input.SerialNumber, cert.EngineID)
-		return nil, errs.ErrKeyNotFound
-	}
-
-	return keys[0], nil
+	return key, nil
 }
 
 func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
@@ -2070,6 +2120,21 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting certificate '%s' from storage engine: %s", input.SerialNumber, err)
 		return err
+	}
+
+	// The certificate no longer uses its key. The key itself stays: it may be in use elsewhere.
+	if cert.EngineID != "" {
+		x509Cert := (*x509.Certificate)(cert.Certificate)
+		key, err := findCertificateKey(ctx, svc.kmsService, x509Cert.PublicKey, cert.EngineID)
+		if err == nil {
+			_, err = svc.kmsService.UnbindKeyResource(ctx, services.KeyResourceBindingInput{
+				Identifier: key.PKCS11URI,
+				Resource:   certificateKeyBinding(x509Cert),
+			})
+		}
+		if err != nil {
+			lFunc.Warnf("could not unbind deleted certificate %s from its key: %s", input.SerialNumber, err)
+		}
 	}
 
 	return nil

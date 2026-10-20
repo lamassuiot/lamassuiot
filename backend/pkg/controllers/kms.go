@@ -25,7 +25,7 @@ func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
 	switch err {
 	case errs.ErrKeyNotFound:
 		ctx.JSON(404, gin.H{"err": err.Error()})
-	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrValidateBadRequest:
+	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrKeyBindingsReadOnly, errs.ErrValidateBadRequest:
 		ctx.JSON(400, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(500, gin.H{"err": err.Error()})
@@ -222,6 +222,60 @@ func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
 		Patches: requestBody.Patches,
 	})
 
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, key)
+}
+
+func (r *kmsHttpRoutes) BindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody models.KMSBindResource
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := r.svc.BindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   requestBody,
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, key)
+}
+
+func (r *kmsHttpRoutes) UnbindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID           string `uri:"id" binding:"required"`
+		ResourceType string `uri:"resource_type" binding:"required"`
+		ResourceID   string `uri:"resource_id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := r.svc.UnbindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   models.KMSBindResource{ResourceType: params.ResourceType, ResourceID: params.ResourceID},
+	})
 	if err != nil {
 		r.handleError(ctx, err)
 		return
