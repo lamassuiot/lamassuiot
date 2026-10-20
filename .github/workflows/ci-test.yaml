@@ -127,9 +127,10 @@ jobs:
           cache-dependency-path: "**/*.sum"
       
       - name: Install PKCS11 Proxy Dependencies
+        # v3 maps CKA_LABEL to NetHSM labels (max 32 bytes); Lamassu uses 64-byte key digests.
         run: |
-          wget https://github.com/Nitrokey/nethsm-pkcs11/releases/download/v3.0.0/nethsm-pkcs11-v3.0.0-x86_64-linux-glibc.so
-          printf '%s  %s\n' '32e50e930196071e0a4b8d62b8dcf26fa967775a61f1eedc13d7153004098ea3' 'nethsm-pkcs11-v3.0.0-x86_64-linux-glibc.so' | sha256sum --check --strict -
+          wget https://github.com/Nitrokey/nethsm-pkcs11/releases/download/v2.2.0/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
+          printf '%s  %s\n' '0d32cce121e9ff6d7616f4c95d58355b0a821d7d4af20451cea8efec96e77bd1' 'nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so' | sha256sum --check --strict -
       - name: Install Dependencies
         run: go mod download
 
@@ -137,7 +138,7 @@ jobs:
         id: run
         working-directory: engines/crypto/pkcs11
         env:
-          PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v3.0.0-x86_64-linux-glibc.so
+          PKCS11_MODULE_PATH: ${{ github.workspace }}/nethsm-pkcs11-v2.2.0-x86_64-linux-glibc.so
         run: |
           go tool gotestsum --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
