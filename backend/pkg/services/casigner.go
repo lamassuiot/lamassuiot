@@ -5,11 +5,14 @@ import (
 	"crypto"
 	"crypto/x509"
 	"io"
+	"slices"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/sirupsen/logrus"
 )
 
 type certSignerImpl struct {
@@ -64,6 +67,50 @@ func findCertificateKey(ctx context.Context, kms services.KMSService, pub crypto
 	default:
 		return nil, errs.ErrKeyEngineRequired
 	}
+}
+
+// discoverCertificateKey looks, in every crypto engine, for a private key of the given public key to
+// link a certificate to, on a best-effort basis: it returns nil rather than an error when there is
+// none. The preferred engine is used when it holds the key. Otherwise any engine holding it is, the
+// default one first.
+func discoverCertificateKey(ctx context.Context, lFunc *logrus.Entry, kms services.KMSService, pub crypto.PublicKey, preferredEngineID string) *models.Key {
+	keys, err := kms.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: pub})
+	if err != nil {
+		lFunc.Warnf("could not look up the key in KMS: %s", err)
+		return nil
+	}
+
+	candidates := slices.DeleteFunc(keys, func(key *models.Key) bool { return !key.HasPrivateKey })
+	if len(candidates) == 0 {
+		return nil
+	}
+	slices.SortFunc(candidates, func(a, b *models.Key) int { return strings.Compare(a.EngineID, b.EngineID) })
+
+	if i := slices.IndexFunc(candidates, func(key *models.Key) bool { return key.EngineID == preferredEngineID }); i >= 0 {
+		return candidates[i]
+	}
+
+	chosen := candidates[0]
+	if len(candidates) > 1 {
+		if engines, err := kms.GetCryptoEngineProvider(ctx); err != nil {
+			lFunc.Warnf("could not get the default crypto engine, linking the copy in crypto engine %s: %s", chosen.EngineID, err)
+		} else {
+			for _, engine := range engines {
+				if !engine.Default {
+					continue
+				}
+				if i := slices.IndexFunc(candidates, func(key *models.Key) bool { return key.EngineID == engine.ID }); i >= 0 {
+					chosen = candidates[i]
+				}
+				break
+			}
+		}
+	}
+
+	if preferredEngineID != "" {
+		lFunc.Warnf("the key is not in crypto engine %s, linking it to the copy in crypto engine %s", preferredEngineID, chosen.EngineID)
+	}
+	return chosen
 }
 
 // certificateKeyBinding is the KMS binding recording that a certificate, CA certificates included,

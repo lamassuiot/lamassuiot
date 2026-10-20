@@ -107,11 +107,14 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 		return nil, fmt.Errorf("unsupported key algorithm: %s", kmsKeyAlg)
 	}
 
-	// Sign the digest using the KMS service. The key is addressed by (keyID, engineID): the keyID
-	// alone stops resolving as soon as another engine holds a copy of the same key.
-	identifier := s.key.KeyID
-	if s.key.EngineID != "" {
+	// Sign the digest using the KMS service. The key is addressed by its PKCS#11 URI, which carries
+	// the engine: the keyID alone stops resolving as soon as another engine holds a copy of the key.
+	identifier := s.key.PKCS11URI
+	if identifier == "" && s.key.EngineID != "" {
 		identifier = buildPKCS11ID(s.key.EngineID, s.key.KeyID, "private")
+	}
+	if identifier == "" {
+		identifier = s.key.KeyID
 	}
 	response, err := s.sdk.SignMessage(s.ctx, services.SignMessageInput{
 		Identifier:  identifier,

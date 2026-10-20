@@ -196,6 +196,9 @@ type SignCertificateInput struct {
 	CertRequest       *models.X509CertificateRequest `validate:"required"`
 	IssuanceProfile   *models.IssuanceProfile
 	IssuanceProfileID string
+	// KeyEngineID is the crypto engine holding the private key of the request, when the caller knows
+	// it: the certificate is then bound to that copy of the key rather than to one found in the KMS.
+	KeyEngineID string
 }
 
 // CertificateKeySpec defines the private key to use when issuing the certificate.
