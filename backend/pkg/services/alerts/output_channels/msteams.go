@@ -7,7 +7,6 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
@@ -45,6 +44,11 @@ func NewMSTeamsOutputService(name string, config models.MSTeamsChannelConfig) No
 }
 
 func (s *MSTeamsWebhookOutputService) SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error {
+	httpConfig, err := notificationHTTPConfig(s.config.HTTPClient)
+	if err != nil {
+		return err
+	}
+
 	var eventDataMap map[string]any
 	json.Unmarshal(event.Data(), &eventDataMap)
 
@@ -85,11 +89,7 @@ func (s *MSTeamsWebhookOutputService) SendNotification(logger *logrus.Entry, ctx
 		Name:   s.name,
 		Url:    s.config.WebhookURL,
 		Method: "POST",
-		Config: models.WebhookCallHttpClient{
-			ValidateServerCert: false,
-			LogLevel:           "INFO",
-			AuthMode:           config.NoAuth,
-		},
+		Config: httpConfig,
 	}, msBytes)
 
 	return err

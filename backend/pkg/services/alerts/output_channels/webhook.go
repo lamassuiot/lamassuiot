@@ -7,7 +7,6 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
@@ -25,6 +24,11 @@ func NewWebhookOutputService(name string, config models.WebhookChannelConfig) No
 }
 
 func (s *WebhookOutputService) SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error {
+	httpConfig, err := notificationHTTPConfig(s.config.HTTPClient)
+	if err != nil {
+		return err
+	}
+
 	msBytes, err := json.Marshal(event)
 	if err != nil {
 		return err
@@ -35,11 +39,7 @@ func (s *WebhookOutputService) SendNotification(logger *logrus.Entry, ctx contex
 			Name:   s.name,
 			Url:    s.config.WebhookURL,
 			Method: s.config.WebhookMethod,
-			Config: models.WebhookCallHttpClient{
-				ValidateServerCert: false,
-				LogLevel:           "INFO",
-				AuthMode:           config.NoAuth,
-			},
+			Config: httpConfig,
 		},
 			msBytes)
 		if err != nil {
