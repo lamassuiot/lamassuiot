@@ -75,6 +75,8 @@ func registerKMSRoutes(parentRouterGroup *gin.RouterGroup, svc services.KMSServi
 	rv1.PUT("/keys/:id/name", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyName)
 	rv1.PUT("/keys/:id/tags", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyTags)
 	rv1.PUT("/keys/:id/metadata", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyMetadata)
+	rv1.POST("/keys/:id/bindings", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.BindKeyResource)
+	rv1.DELETE("/keys/:id/bindings/:resource_type/:resource_id", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UnbindKeyResource)
 	rv1.DELETE("/keys/:id", kmsAuthzMw.ResourceCustom("delete", "id", keyIDExtractor), routes.DeleteKeyByID)
 	rv1.POST("/keys/:id/sign", kmsAuthzMw.ResourceCustom("sign", "id", keyIDExtractor), routes.SignMessage)
 	rv1.POST("/keys/:id/verify", kmsAuthzMw.ResourceCustom("read", "id", keyIDExtractor), routes.VerifySignature)

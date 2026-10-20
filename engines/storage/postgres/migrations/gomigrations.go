@@ -4,6 +4,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/ca"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/devicemanager"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/kms"
 )
 
 // the order of the migrations is NOT IMPORTANT. It is only necessary to register them all
@@ -23,5 +24,7 @@ func RegisterGoMigrations(dbname string) {
 		dmsmanager.Register20260604110000ReenrollAuthSettings()
 		dmsmanager.Register20261021120000WebhookHTTPClientConfig()
 		dmsmanager.Register20261022120000ReenrollValidationCAs()
+	case "kms":
+		kms.Register20261020100000ReconcileKeyBindings()
 	}
 }

@@ -170,7 +170,7 @@ paths:
       tags:
         - Keys
       summary: Create a new key
-      description: Creates a new cryptographic key with specified algorithm and size
+      description: Creates a new cryptographic key with specified algorithm and size. The metadata can not set lamassu.io/kms/binded-resources.
       operationId: createKey
       x-authz:
         namespace: pki
@@ -208,7 +208,7 @@ paths:
       tags:
         - Keys
       summary: Import an existing key
-      description: Imports an existing private key into the KMS
+      description: Imports an existing private key into the KMS. The metadata can not set lamassu.io/kms/binded-resources.
       operationId: importKey
       x-authz:
         namespace: pki
@@ -537,7 +537,11 @@ paths:
       tags:
         - Keys
       summary: Update key metadata
-      description: Updates the metadata of a key using JSON Patch operations
+      description: |
+        Updates the metadata of a key using JSON Patch operations. The
+        lamassu.io/kms/binded-resources entry lists the resources using the key and only changes
+        through the bindings endpoints: a patch on it is rejected, and a patch replacing the whole
+        metadata keeps it.
       operationId: updateKeyMetadata
       x-authz:
         namespace: pki
@@ -560,6 +564,118 @@ paths:
       responses:
         '200':
           description: Key metadata updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/bindings:
+    post:
+      tags:
+        - Keys
+      summary: Bind a resource to a key
+      description: |
+        Records that a resource, such as a certificate, uses the key. Lamassu binds certificates
+        to their keys and keeps a key from being deleted while a resource is bound to it. Binding
+        a resource that is already bound changes nothing.
+      operationId: bindKeyResource
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        action: update
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KMSBindResource'
+      responses:
+        '200':
+          description: Key with the resource bound
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/bindings/{resource_type}/{resource_id}:
+    delete:
+      tags:
+        - Keys
+      summary: Unbind a resource from a key
+      description: Removes every binding of the resource to the key.
+      operationId: unbindKeyResource
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        action: update
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+        - name: resource_type
+          in: path
+          required: true
+          description: Type of the bound resource
+          schema:
+            type: string
+            example: certificate
+        - name: resource_id
+          in: path
+          required: true
+          description: ID of the bound resource, the serial number for a certificate
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Key without the resource bound
           content:
             application/json:
               schema:
@@ -852,6 +968,21 @@ components:
           example:
             source: "legacy-system"
             imported_date: "2025-11-07"
+
+    KMSBindResource:
+      type: object
+      required:
+        - resource_type
+        - resource_id
+      properties:
+        resource_type:
+          type: string
+          description: Type of the resource using the key
+          example: certificate
+        resource_id:
+          type: string
+          description: ID of the resource, the serial number for a certificate
+          example: "3a-1f-9c-..."
 
     GetKeysByPublicKeyBody:
       type: object

@@ -36,6 +36,9 @@ var (
 	// A keyID wins over an alias when resolving an identifier, so such an alias would never
 	// resolve to the key it was set on.
 	ErrKeyAliasCollidesWithKeyID error = errors.New("alias collides with an existing keyID")
+	// The resources bound to a key are what keeps it from being deleted while in use, so only
+	// BindKeyResource and UnbindKeyResource change them.
+	ErrKeyBindingsReadOnly error = errors.New("the lamassu.io/kms/binded-resources metadata entry is managed by Lamassu and cannot be set or modified")
 
 	// CreateCertificate
 	ErrInvalidKeySpec error = errors.New("invalid key spec: exactly one of (Type+Bits) or KeyIdentifier must be provided")

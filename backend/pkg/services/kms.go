@@ -446,6 +446,11 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		return nil, errs.ErrValidateBadRequest
 	}
 
+	if _, ok := input.Metadata[models.KMSBindResourceKey]; ok {
+		lFunc.Errorf("%s metadata can not be set by the caller", models.KMSBindResourceKey)
+		return nil, errs.ErrKeyBindingsReadOnly
+	}
+
 	if input.Algorithm == "" || input.Size == 0 {
 		lFunc.Error("algorithm and size are required")
 		return nil, errs.ErrValidateBadRequest
@@ -560,6 +565,11 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	if err != nil {
 		lFunc.Errorf("ImportKeyInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
+	}
+
+	if _, ok := input.Metadata[models.KMSBindResourceKey]; ok {
+		lFunc.Errorf("%s metadata can not be set by the caller", models.KMSBindResourceKey)
+		return nil, errs.ErrKeyBindingsReadOnly
 	}
 
 	// Check if EngineID is provided, otherwise use default
@@ -692,6 +702,17 @@ func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input servi
 		return nil, err
 	}
 
+	// The bound resources keep a key in use from being deleted, so they only change through
+	// BindKeyResource and UnbindKeyResource. A patch replacing the whole metadata keeps them.
+	bindingsPointer := chelpers.JSONPointerBuilder(models.KMSBindResourceKey).Pointer
+	for _, patch := range input.Patches {
+		if patch.Path == bindingsPointer || strings.HasPrefix(patch.Path, bindingsPointer+"/") {
+			lFunc.Errorf("patch on %s rejected for key '%s'", models.KMSBindResourceKey, input.ID)
+			return nil, errs.ErrKeyBindingsReadOnly
+		}
+	}
+	bindings, hasBindings := key.Metadata[models.KMSBindResourceKey]
+
 	updatedMetadata, err := chelpers.ApplyPatches[map[string]any](key.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for key '%s': %v", input.ID, err)
@@ -699,10 +720,70 @@ func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input servi
 	}
 
 	key.Metadata = *updatedMetadata
+	if key.Metadata == nil {
+		key.Metadata = map[string]any{}
+	}
+	if hasBindings {
+		key.Metadata[models.KMSBindResourceKey] = bindings
+	} else {
+		delete(key.Metadata, models.KMSBindResourceKey)
+	}
 
 	updatedKey, err := svc.kmsStorage.Update(ctx, key)
 	if err != nil {
 		lFunc.Errorf("failed to update key metadata: %s", err)
+		return nil, err
+	}
+
+	return updatedKey, nil
+}
+
+func (svc *KMSServiceBackend) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
+	return svc.updateKeyBindings(ctx, input, func(bound []models.KMSBindResource) []models.KMSBindResource {
+		if slices.Contains(bound, input.Resource) {
+			return bound
+		}
+		return append(bound, input.Resource)
+	})
+}
+
+func (svc *KMSServiceBackend) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
+	return svc.updateKeyBindings(ctx, input, func(bound []models.KMSBindResource) []models.KMSBindResource {
+		return slices.DeleteFunc(bound, func(r models.KMSBindResource) bool { return r == input.Resource })
+	})
+}
+
+func (svc *KMSServiceBackend) updateKeyBindings(ctx context.Context, input services.KeyResourceBindingInput, update func([]models.KMSBindResource) []models.KMSBindResource) (*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := kmsValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("KeyResourceBindingInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	key, err := svc.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.Identifier,
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+		return nil, err
+	}
+
+	bound, err := key.BoundResources()
+	if err != nil {
+		lFunc.Warnf("discarding unreadable bound resources of key '%s': %s", input.Identifier, err)
+		bound = []models.KMSBindResource{}
+	}
+
+	if key.Metadata == nil {
+		key.Metadata = map[string]any{}
+	}
+	key.Metadata[models.KMSBindResourceKey] = update(bound)
+
+	updatedKey, err := svc.kmsStorage.Update(ctx, key)
+	if err != nil {
+		lFunc.Errorf("failed to update bound resources of key '%s': %s", input.Identifier, err)
 		return nil, err
 	}
 

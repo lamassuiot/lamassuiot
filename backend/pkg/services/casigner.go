@@ -7,9 +7,9 @@ import (
 	"io"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
-	"github.com/sirupsen/logrus"
 )
 
 type certSignerImpl struct {
@@ -35,29 +35,42 @@ func (s *certSignerImpl) Public() crypto.PublicKey {
 }
 
 func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	l := logrus.New()
-	l.SetOutput(io.Discard)
-
-	ski, err := helpers.GetSubjectKeyID(s.ctx, logrus.NewEntry(l), s.cert)
-	if err != nil {
-		return nil, err
-	}
-
-	// The certificate's key is addressed by (keyID, engineID): the SKI alone would stop
-	// resolving as soon as another engine holds a copy of the same key.
-	identifier := ski
-	if s.engineID != "" {
-		identifier = buildPKCS11ID(s.engineID, ski, "private")
-	}
-
-	key, err := s.sdk.GetKey(s.ctx, services.GetKeyInput{
-		Identifier: identifier,
-	})
-
+	key, err := findCertificateKey(s.ctx, s.sdk, s.cert.PublicKey, s.engineID)
 	if err != nil {
 		return nil, err
 	}
 
 	kmsSigner := NewKMSCryptoSigner(s.ctx, *key, s.sdk)
 	return kmsSigner.Sign(rand, digest, opts)
+}
+
+// findCertificateKey returns the KMS key of a certificate's key pair, found by its public key: the
+// certificate's SKI is whatever its issuer wrote. A key is identified by (keyID, engineID), so without
+// an engine it resolves only while a single engine holds the key.
+func findCertificateKey(ctx context.Context, kms services.KMSService, pub crypto.PublicKey, engineID string) (*models.Key, error) {
+	keys, err := kms.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{
+		PublicKey: pub,
+		EngineID:  engineID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	switch len(keys) {
+	case 0:
+		return nil, errs.ErrKeyNotFound
+	case 1:
+		return keys[0], nil
+	default:
+		return nil, errs.ErrKeyEngineRequired
+	}
+}
+
+// certificateKeyBinding is the KMS binding recording that a certificate, CA certificates included,
+// uses its key.
+func certificateKeyBinding(cert *x509.Certificate) models.KMSBindResource {
+	return models.KMSBindResource{
+		ResourceType: models.KMSBindResourceTypeCertificate,
+		ResourceID:   helpers.SerialNumberToHexString(cert.SerialNumber),
+	}
 }

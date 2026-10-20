@@ -70,6 +70,23 @@ func (mw KMSAuditEventPublisher) UpdateKeyMetadata(ctx context.Context, input se
 	return mw.next.UpdateKeyMetadata(ctx, input)
 }
 
+// Bound resources live in the key metadata, so binding changes are recorded as metadata updates.
+func (mw KMSAuditEventPublisher) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (output *models.Key, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateKMSKeyMetadata, input, err, output)
+	}()
+
+	return mw.next.BindKeyResource(ctx, input)
+}
+
+func (mw KMSAuditEventPublisher) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (output *models.Key, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateKMSKeyMetadata, input, err, output)
+	}()
+
+	return mw.next.UnbindKeyResource(ctx, input)
+}
+
 func (mw KMSAuditEventPublisher) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (output *models.Key, err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateKMSKeyAliases, input, err, output)

@@ -54,6 +54,18 @@ func (m *MockKMSService) ImportKey(ctx context.Context, input services.ImportKey
 	return args.Get(0).(*models.Key), args.Error(1)
 }
 
+// BindKeyResource records that a resource uses a key
+func (m *MockKMSService) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+// UnbindKeyResource removes a resource from the ones using a key
+func (m *MockKMSService) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Key), args.Error(1)
+}
+
 // UpdateKeyMetadata updates the metadata of a key
 func (m *MockKMSService) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {
 	args := m.Called(ctx, input)

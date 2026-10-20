@@ -180,7 +180,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 		bindedResources := make([]models.KMSBindResource, len(entry.serials))
 		for i, sn := range entry.serials {
 			bindedResources[i] = models.KMSBindResource{
-				ResourceType: "certificate",
+				ResourceType: models.KMSBindResourceTypeCertificate,
 				ResourceID:   sn,
 			}
 		}
