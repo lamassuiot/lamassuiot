@@ -84,6 +84,7 @@
     "primary_key": "serial_number",
     "atomic_actions": [
       "read",
+      "read-key",
       "metadata-update",
       "delete",
       "status-update"

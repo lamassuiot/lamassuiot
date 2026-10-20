@@ -42,6 +42,27 @@ func (pm *PolicyManager) CreatePolicy(ctx context.Context, policy *models.Policy
 	return pm.store.Create(ctx, policy)
 }
 
+// SyncSystemPolicy creates a system-managed policy, or replaces the stored one with the given
+// definition. Only the preload manages system policies, so there are no API edits to keep, and
+// existing installations pick up the actions later versions add to them.
+func (pm *PolicyManager) SyncSystemPolicy(ctx context.Context, policy *models.Policy) (created bool, err error) {
+	if !IsSystemPolicy(policy.ID) {
+		return false, fmt.Errorf("policy %q is not system-managed", policy.ID)
+	}
+	if err := engine.ValidatePolicyStruct(policy); err != nil {
+		return false, fmt.Errorf("invalid policy: %w", err)
+	}
+
+	exists, err := pm.store.Exists(ctx, policy.ID)
+	if err != nil {
+		return false, err
+	}
+	if exists {
+		return false, pm.store.Update(ctx, policy)
+	}
+	return true, pm.store.Create(ctx, policy)
+}
+
 func (pm *PolicyManager) GetPolicy(ctx context.Context, policyID string) (*models.Policy, error) {
 	return pm.store.Get(ctx, policyID)
 }
