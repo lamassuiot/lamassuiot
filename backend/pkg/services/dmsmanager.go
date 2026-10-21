@@ -507,11 +507,6 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 		Authorized bool `json:"authorized"`
 	}
 
-	type webhookInvocationResult struct {
-		resp *webhookResponse
-		err  error
-	}
-
 	webhookTimeout := 10 * time.Second
 	if webhookConf.Config.CallTimeout > 0 {
 		webhookTimeout = time.Duration(webhookConf.Config.CallTimeout)
@@ -519,34 +514,23 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 	webhookCtx, cancel := context.WithTimeout(ctx, webhookTimeout)
 	defer cancel()
 
-	webhookResultCh := make(chan webhookInvocationResult, 1)
-	go func() {
-		resp, err := webhookclient.InvokeJSONWebhook[webhookResponse](lFunc, webhookConf, webhookRequestBody)
-		webhookResultCh <- webhookInvocationResult{
-			resp: resp,
-			err:  err,
+	resp, err := webhookclient.InvokeJSONWebhook[webhookResponse](webhookCtx, lFunc, webhookConf, webhookRequestBody)
+	if err != nil {
+		if ctxErr := webhookCtx.Err(); ctxErr != nil {
+			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook authorization did not complete before deadline: %s", operation, ctxErr)
+			return lFunc, fmt.Errorf("external webhook authorization timed out or was canceled: %w", ctxErr)
 		}
-	}()
-
-	select {
-	case <-webhookCtx.Done():
-		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook authorization did not complete before deadline: %s", operation, webhookCtx.Err())
-		return lFunc, fmt.Errorf("external webhook authorization timed out or was canceled: %w", webhookCtx.Err())
-	case result := <-webhookResultCh:
-		if result.err != nil {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, result.err)
-			return lFunc, fmt.Errorf("error while calling external webhook: %s", result.err)
-		}
-		resp := result.resp
-		lFunc.Debugf("webhook response: %v", resp)
-		if resp == nil {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
-			return lFunc, fmt.Errorf("external webhook didn't return a response")
-		}
-		if !resp.Authorized {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
-			return lFunc, fmt.Errorf("external webhook denied %s", operation)
-		}
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, err)
+		return lFunc, fmt.Errorf("error while calling external webhook: %s", err)
+	}
+	lFunc.Debugf("webhook response: %v", resp)
+	if resp == nil {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
+		return lFunc, fmt.Errorf("external webhook didn't return a response")
+	}
+	if !resp.Authorized {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
+		return lFunc, fmt.Errorf("external webhook denied %s", operation)
 	}
 
 	lFunc.Infof("webhook authorized %s", operation)

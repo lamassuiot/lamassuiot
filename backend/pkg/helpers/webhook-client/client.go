@@ -2,6 +2,7 @@ package webhookclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte) ([]byte, error) {
+func InvokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.WebhookCall, payload []byte) ([]byte, error) {
 	clientConfig := config.HTTPClient{
 		LogLevel:           config.LogLevel(conf.Config.LogLevel),
 		AuthMode:           conf.Config.AuthMode,
@@ -26,6 +27,9 @@ func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte
 			OIDCWellKnownURL: conf.Config.OIDC.OIDCWellKnownURL,
 		}
 	} else if conf.Config.AuthMode == config.ApiKey {
+		if isReservedHeader(conf.Config.ApiKey.Header) {
+			return nil, fmt.Errorf("webhook API key header %q is reserved", conf.Config.ApiKey.Header)
+		}
 		clientConfig.AuthApiKeyOptions = config.AuthApiKeyOptions{
 			Key:    conf.Config.ApiKey.Key,
 			Header: conf.Config.ApiKey.Header,
@@ -52,7 +56,7 @@ func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte
 		method = conf.Method
 	}
 
-	req, err := http.NewRequest(method, conf.Url, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, method, conf.Url, bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -80,13 +84,13 @@ func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte
 	return bodyBytes, nil
 }
 
-func InvokeJSONWebhook[E any](logger *logrus.Entry, config models.WebhookCall, payload any) (*E, error) {
+func InvokeJSONWebhook[E any](ctx context.Context, logger *logrus.Entry, config models.WebhookCall, payload any) (*E, error) {
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	res, err := InvokeWebhook(logger, config, b)
+	res, err := InvokeWebhook(ctx, logger, config, b)
 	if err != nil {
 		return nil, err
 	}

@@ -73,6 +73,26 @@ func TestNotificationChannelsSendConfiguredAuthentication(t *testing.T) {
 	}
 }
 
+func TestNotificationChannelsRejectReservedApiKeyHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("notification with reserved header reached the server: X-Principal-ID=%q", r.Header.Get("X-Principal-ID"))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	// The full reserved-header list is covered by the webhook client tests.
+	headers := []string{"X-Principal-ID", "X-Forwarded-Tls-Client-Cert"}
+	for _, kind := range []models.ChannelType{models.ChannelTypeWebhook, models.ChannelTypeMSTeams} {
+		for _, header := range headers {
+			t.Run(string(kind)+"/"+header, func(t *testing.T) {
+				options := &models.WebhookCallHttpClient{AuthMode: config.ApiKey, ApiKey: models.WebhookCallHttpClientApiKey{Header: header, Key: "admin-mode"}}
+				svc := notificationTestService(t, kind, server.URL, options)
+				err := svc.SendNotification(logrus.NewEntry(logrus.New()), context.Background(), notificationTestEvent())
+				require.ErrorContains(t, err, "is reserved")
+			})
+		}
+	}
+}
+
 func TestNotificationChannelsRejectUnknownAuthentication(t *testing.T) {
 	for _, kind := range []models.ChannelType{models.ChannelTypeWebhook, models.ChannelTypeMSTeams} {
 		svc := notificationTestService(t, kind, "http://127.0.0.1:1", &models.WebhookCallHttpClient{AuthMode: "invalid"})

@@ -127,3 +127,23 @@ func TestEnrollmentWebhookEveryOpenAPIOperation(t *testing.T) {
 	}
 	require.Equal(t, 2, operations)
 }
+
+func TestEnrollmentWebhookRejectsReservedApiKeyHeader(t *testing.T) {
+	csrPEM, err := os.ReadFile("../helpers/testdata/samplecsr.pem")
+	require.NoError(t, err)
+	block, _ := pem.Decode(csrPEM)
+	require.NotNil(t, block)
+	csr, err := x509.ParseCertificateRequest(block.Bytes)
+	require.NoError(t, err)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("webhook with reserved header reached the server: X-Principal-ID=%q", r.Header.Get("X-Principal-ID"))
+		_, _ = w.Write([]byte(`{"authorized":true}`))
+	}))
+	defer server.Close()
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Method: http.MethodPost, Config: models.WebhookCallHttpClient{
+		AuthMode: config.ApiKey,
+		ApiKey:   models.WebhookCallHttpClientApiKey{Header: "X-Principal-ID", Key: "admin-mode"},
+	}}
+	_, err = invokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, csr, "profile", "enrollment")
+	require.ErrorContains(t, err, "is reserved")
+}
