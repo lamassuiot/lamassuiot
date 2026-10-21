@@ -308,7 +308,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	var importType models.CertificateType
 	var key *models.Key
-	var importedKeyID string
 
 	if input.Key != nil {
 		importType = models.CertificateTypeImportedWithKey
@@ -322,15 +321,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
-		// The key was created by this request, so delete it if the CA is never
-		// stored, e.g. when a concurrent import with the same ID wins the insert.
-		importedKeyID = key.PKCS11URI
+		// The key is not deleted automatically: a concurrent import of the same
+		// certificate without a key can find it by SKI and adopt it.
+		importedKeyID := key.PKCS11URI
 		defer func() {
-			if err == nil || importedKeyID == "" {
-				return
-			}
-			if delErr := svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{Identifier: importedKeyID}); delErr != nil {
-				lFunc.Warnf("could not delete key %s after failed CA import: %s", importedKeyID, delErr)
+			if err != nil {
+				lFunc.Warnf("CA import failed after importing key %s. Delete the key manually if no CA uses it", importedKeyID)
 			}
 		}()
 
@@ -534,8 +530,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		lFunc.Errorf("something went wrong while inserting CA '%s' in storage engine: %s", caID, err)
 		return nil, err
 	}
-	// The stored CA now owns the imported key, so a later failure must keep it.
-	importedKeyID = ""
 
 	// Flag to check if it's the first iteration
 	firstIteration := true

@@ -305,45 +305,23 @@ func TestImportCAStopsOnInsertFailureAndAllowsRetry(t *testing.T) {
 	require.Equal(t, input.ID, ca.ID)
 }
 
-func TestImportCAImportedKeyCleanup(t *testing.T) {
-	const keyURI = "pkcs11:token-id=engine;id=imported;type=private"
-	chain := importCAChain(t, false)
-	for _, tc := range []struct {
-		name        string
-		insertErr   error
-		updateErr   error
-		wantDeleted []string
-	}{
-		{name: "CA stored", wantDeleted: nil},
-		{name: "concurrent import wins the ID", insertErr: errs.ErrCAAlreadyExists, wantDeleted: []string{keyURI}},
-		{name: "insert fails", insertErr: errors.New("insert failed"), wantDeleted: []string{keyURI}},
-		// The root is stored before reparenting its child fails, so it keeps its key.
-		{name: "reparenting fails after insert", updateErr: errors.New("update failed"), wantDeleted: nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+func TestImportCAKeepsImportedKeyWhenInsertFails(t *testing.T) {
+	// A concurrent import of the same certificate without a key can adopt the
+	// imported key, so a failed import must never delete it.
+	for _, insertErr := range []error{errs.ErrCAAlreadyExists, errors.New("insert failed")} {
+		t.Run(insertErr.Error(), func(t *testing.T) {
 			svc, repo := newImportCAService(t)
 			kms := svc.kmsService.(*importCAKMS)
-			kms.importedKey = &models.Key{KeyID: "imported", EngineID: "engine", PKCS11URI: keyURI}
-			_, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "intermediate", CACertificate: (*models.X509Certificate)(chain[1]),
-			})
-			require.NoError(t, err)
+			kms.importedKey = &models.Key{KeyID: "imported", EngineID: "engine", PKCS11URI: "pkcs11:token-id=engine;id=imported;type=private"}
 			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 			require.NoError(t, err)
-			repo.insertErr, repo.updateErr = tc.insertErr, tc.updateErr
+			repo.insertErr = insertErr
 			_, err = svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "root", CACertificate: (*models.X509Certificate)(chain[0]), Key: key,
+				ID: "root", CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]), Key: key,
 			})
-			switch {
-			case tc.insertErr != nil:
-				require.ErrorIs(t, err, tc.insertErr)
-			case tc.updateErr != nil:
-				require.ErrorIs(t, err, tc.updateErr)
-			default:
-				require.NoError(t, err)
-			}
+			require.ErrorIs(t, err, insertErr)
 			require.Equal(t, 1, kms.importKeyCalls)
-			require.Equal(t, tc.wantDeleted, kms.deletedKeys)
+			require.Empty(t, kms.deletedKeys)
 		})
 	}
 }
