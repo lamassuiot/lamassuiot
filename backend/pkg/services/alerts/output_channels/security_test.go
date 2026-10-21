@@ -102,6 +102,26 @@ func TestNotificationChannelsRejectUnknownAuthentication(t *testing.T) {
 	}
 }
 
+func TestValidateChannel(t *testing.T) {
+	invalid := map[string]map[string]any{
+		"mtls without content":  {"auth_mode": "mtls"},
+		"file reference":        {"auth_mode": "mtls", "mtls_options": map[string]any{"cert_file": "/etc/cert.pem", "key_file": "/etc/key.pem"}},
+		"reserved api key":      {"auth_mode": "apikey", "apikey_options": map[string]any{"header": "X-Principal-ID", "key": "admin"}},
+		"unsupported auth mode": {"auth_mode": "invalid"},
+	}
+	for _, kind := range []models.ChannelType{models.ChannelTypeWebhook, models.ChannelTypeMSTeams} {
+		require.NoError(t, ValidateChannel(models.Channel{Type: kind, Config: map[string]any{"webhook_url": "https://x/hook"}}))
+		for name, httpClient := range invalid {
+			t.Run(string(kind)+"/"+name, func(t *testing.T) {
+				err := ValidateChannel(models.Channel{Type: kind, Config: map[string]any{"webhook_url": "https://x/hook", "http_client": httpClient}})
+				require.Error(t, err)
+			})
+		}
+		require.Error(t, ValidateChannel(models.Channel{Type: kind, Config: "not an object"}))
+	}
+	require.NoError(t, ValidateChannel(models.Channel{Type: models.ChannelTypeEmail, Config: map[string]any{"email": "to@example.com"}}))
+}
+
 func TestNotificationHTTPConfigCapsCallTimeout(t *testing.T) {
 	cfg, err := notificationHTTPConfig(&models.WebhookCallHttpClient{CallTimeout: models.TimeDuration(time.Hour)})
 	require.NoError(t, err)

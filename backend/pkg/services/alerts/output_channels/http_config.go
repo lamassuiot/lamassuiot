@@ -39,6 +39,36 @@ func notificationHTTPConfig(options *models.WebhookCallHttpClient) (models.Webho
 	}
 }
 
+// ValidateChannel applies the notification client policy to the HTTP client
+// options of a channel so invalid configs are rejected when the subscription
+// is created instead of failing on every event delivery. Channels without
+// HTTP client options are accepted as is.
+func ValidateChannel(c models.Channel) error {
+	var options *models.WebhookCallHttpClient
+	switch c.Type {
+	case models.ChannelTypeWebhook:
+		cfg, err := decodeChannelConfig[models.WebhookChannelConfig](c)
+		if err != nil {
+			return fmt.Errorf("invalid webhook channel config: %w", err)
+		}
+		options = cfg.HTTPClient
+	case models.ChannelTypeMSTeams:
+		cfg, err := decodeChannelConfig[models.MSTeamsChannelConfig](c)
+		if err != nil {
+			return fmt.Errorf("invalid MS Teams channel config: %w", err)
+		}
+		options = cfg.HTTPClient
+	default:
+		return nil
+	}
+
+	httpConfig, err := notificationHTTPConfig(options)
+	if err != nil {
+		return err
+	}
+	return webhookclient.ValidateConfig(httpConfig)
+}
+
 // sendHTTPNotification delivers an already-encoded notification body to an
 // HTTP channel using the notification client policy.
 func sendHTTPNotification(ctx context.Context, logger *logrus.Entry, name, url, method string, options *models.WebhookCallHttpClient, body []byte) error {

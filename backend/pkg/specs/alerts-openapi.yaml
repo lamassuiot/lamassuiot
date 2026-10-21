@@ -168,7 +168,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Subscription'
         '400':
-          description: Invalid request body or user identifier
+          description: Invalid request body, user identifier or channel http_client config
           content:
             application/json:
               schema:
