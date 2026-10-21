@@ -7,6 +7,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - ".github/workflows/*.yaml"
+      - ".github/workflows/*.yml"
 
 jobs:
   pinact:
