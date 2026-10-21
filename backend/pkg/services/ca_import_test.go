@@ -31,6 +31,7 @@ type importCARepo struct {
 	lookupErr    error
 	insertErr    error
 	updateErr    error
+	childErr     error
 	insertCalls  int
 	childQueries int
 }
@@ -80,6 +81,9 @@ func (repo *importCARepo) SelectBySubjectAndSubjectKeyID(ctx context.Context, su
 
 func (repo *importCARepo) SelectByIssuerAndAuthorityKeyID(ctx context.Context, issuer models.Subject, aki string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
 	repo.childQueries++
+	if repo.childErr != nil {
+		return "", repo.childErr
+	}
 	return repo.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{ApplyFunc: func(ca models.CACertificate) {
 		if reflect.DeepEqual(ca.Certificate.Issuer, issuer) && ca.Certificate.AuthorityKeyID == aki {
 			req.ApplyFunc(ca)
@@ -322,6 +326,36 @@ func TestImportCAKeepsImportedKeyWhenInsertFails(t *testing.T) {
 			require.ErrorIs(t, err, insertErr)
 			require.Equal(t, 1, kms.importKeyCalls)
 			require.Empty(t, kms.deletedKeys)
+		})
+	}
+}
+
+func TestImportCASucceedsWhenReparentingFails(t *testing.T) {
+	// The CA is stored before its children are reparented. Returning an error
+	// there would make a retry fail with ErrCAAlreadyExists.
+	for _, tc := range []struct {
+		name      string
+		childErr  error
+		updateErr error
+	}{
+		{name: "child lookup fails", childErr: errors.New("lookup failed")},
+		{name: "child update fails", updateErr: errors.New("update failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo := newImportCAService(t)
+			chain := importCAChain(t, false)
+			_, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
+				ID: "intermediate", CACertificate: (*models.X509Certificate)(chain[1]),
+			})
+			require.NoError(t, err)
+			orphan := repo.cas["intermediate"]
+			repo.childErr, repo.updateErr = tc.childErr, tc.updateErr
+			root, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
+				ID: "root", CACertificate: (*models.X509Certificate)(chain[0]),
+			})
+			require.NoError(t, err)
+			require.Equal(t, *root, repo.cas["root"])
+			require.Equal(t, orphan, repo.cas["intermediate"], "a failed reparenting must not change the child")
 		})
 	}
 }

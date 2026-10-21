@@ -587,13 +587,15 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				}
 			},
 		})
+		// The CA is already stored, so failing here would leave it saved while a
+		// retry gets ErrCAAlreadyExists. Reparenting is best effort, as before.
 		if err != nil {
-			lFunc.Errorf("something went wrong while looking up child CAs of '%s': %s", parent.ID, err)
-			return nil, err
+			lFunc.Errorf("CA '%s' was imported, but looking up child CAs of '%s' failed: %s", caID, parent.ID, err)
+			break
 		}
 		if updateErr != nil {
-			lFunc.Errorf("something went wrong while updating child CAs of '%s': %s", parent.ID, updateErr)
-			return nil, updateErr
+			lFunc.Errorf("CA '%s' was imported, but updating child CAs of '%s' failed: %s", caID, parent.ID, updateErr)
+			break
 		}
 		firstIteration = false
 	}
