@@ -119,6 +119,12 @@ func TestValidateChannel(t *testing.T) {
 		}
 		require.Error(t, ValidateChannel(models.Channel{Type: kind, Config: "not an object"}))
 	}
+	for _, method := range []string{"", "POST", "PUT"} {
+		require.NoError(t, ValidateChannel(models.Channel{Type: models.ChannelTypeWebhook, Config: map[string]any{"webhook_url": "https://x/hook", "webhook_method": method}}))
+	}
+	for _, method := range []string{"GET", "PATCH", "DELETE", "post"} {
+		require.ErrorContains(t, ValidateChannel(models.Channel{Type: models.ChannelTypeWebhook, Config: map[string]any{"webhook_url": "https://x/hook", "webhook_method": method}}), "webhook_method")
+	}
 	require.NoError(t, ValidateChannel(models.Channel{Type: models.ChannelTypeEmail, Config: map[string]any{"email": "to@example.com"}}))
 }
 

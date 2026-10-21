@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
@@ -50,6 +51,11 @@ func ValidateChannel(c models.Channel) error {
 		cfg, err := decodeChannelConfig[models.WebhookChannelConfig](c)
 		if err != nil {
 			return fmt.Errorf("invalid webhook channel config: %w", err)
+		}
+		switch cfg.WebhookMethod {
+		case "", http.MethodPost, http.MethodPut:
+		default:
+			return fmt.Errorf("invalid webhook channel config: unsupported webhook_method %q (allowed: POST, PUT)", cfg.WebhookMethod)
 		}
 		options = cfg.HTTPClient
 	case models.ChannelTypeMSTeams:

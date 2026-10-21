@@ -315,7 +315,7 @@ components:
           $ref: '#/components/schemas/NotificationHTTPClient'
         webhook_method:
           type: string
-          enum: [GET, POST, PUT, PATCH, DELETE]
+          enum: [POST, PUT]
 
     NotificationHTTPClient:
       type: object
