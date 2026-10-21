@@ -119,16 +119,7 @@ func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logg
 			return nil, err
 		}
 
-		type ODICDiscoveryJSON struct {
-			Issuer        string `json:"issuer"`
-			AuthURL       string `json:"authorization_endpoint"`
-			TokenURL      string `json:"token_endpoint"`
-			JWKSURL       string `json:"jwks_uri"`
-			UserInfoURL   string `json:"userinfo_endpoint"`
-			RevocationURL string `json:"revocation_endpoint"`
-		}
-
-		wellKnown, err := Get[ODICDiscoveryJSON](ctx, authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &resources.QueryParameters{}, map[int][]error{})
+		wellKnown, err := getOIDCDiscovery(ctx, authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL)
 		if err != nil {
 			return nil, err
 		}
@@ -192,6 +183,48 @@ func (c restClient) delete(ctx context.Context, path string, knownErrors map[int
 
 func (c restClient) iterGet[E any, T resources.Iterator[E]](ctx context.Context, path string, exhaustiveRun bool, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
 	return IterGet[E, T](ctx, c.httpClient, c.baseUrl+path, exhaustiveRun, queryParams, applyFunc, knownErrors)
+}
+
+// maxOIDCDiscoverySize (1 MB) caps how much of an OIDC discovery document is
+// read into memory. The well-known URL may be user supplied (e.g. alert channels).
+// Token responses are already capped by golang.org/x/oauth2.
+const maxOIDCDiscoverySize = 1 << 20
+
+type oidcDiscovery struct {
+	Issuer        string `json:"issuer"`
+	AuthURL       string `json:"authorization_endpoint"`
+	TokenURL      string `json:"token_endpoint"`
+	JWKSURL       string `json:"jwks_uri"`
+	UserInfoURL   string `json:"userinfo_endpoint"`
+	RevocationURL string `json:"revocation_endpoint"`
+}
+
+func getOIDCDiscovery(ctx context.Context, client *http.Client, url string) (oidcDiscovery, error) {
+	var m oidcDiscovery
+	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return m, err
+	}
+
+	res, err := client.Do(r)
+	if err != nil {
+		return m, err
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxOIDCDiscoverySize+1))
+	if err != nil {
+		return m, err
+	}
+	if len(body) > maxOIDCDiscoverySize {
+		return m, fmt.Errorf("OIDC discovery response exceeds %d bytes", maxOIDCDiscoverySize)
+	}
+
+	if res.StatusCode != 200 {
+		return m, nonOKResponseToError(res.StatusCode, body, map[int][]error{})
+	}
+
+	return ParseJSON[oidcDiscovery](body)
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {

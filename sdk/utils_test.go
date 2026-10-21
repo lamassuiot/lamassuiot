@@ -81,3 +81,35 @@ func TestBuildHTTPClientMTLSCertificateSources(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildHTTPClientJWTDiscoverySizeCap(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/ok":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"token_endpoint":"` + srv.URL + `/token"}`))
+		case "/huge":
+			_, _ = w.Write(make([]byte, maxOIDCDiscoverySize+1))
+		}
+	}))
+	defer srv.Close()
+
+	build := func(wellKnown string) error {
+		_, err := BuildHTTPClient(config.HTTPClient{
+			AuthMode: config.JWT,
+			AuthJWTOptions: config.AuthJWTOptions{
+				ClientID:         "client",
+				ClientSecret:     "secret",
+				OIDCWellKnownURL: wellKnown,
+			},
+		}, logrus.NewEntry(logrus.New()))
+		return err
+	}
+
+	require.NoError(t, build(srv.URL+"/ok"))
+
+	err := build(srv.URL + "/huge")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "OIDC discovery response exceeds")
+}

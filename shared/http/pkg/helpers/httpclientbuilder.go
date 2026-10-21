@@ -57,15 +57,23 @@ type loggingRoundTripper struct {
 
 func (lrt loggingRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
 	start := time.Now()
+	// Dumping buffers request and response bodies, so only do it when the
+	// output is actually logged.
+	trace := lrt.logger.Logger.IsLevelEnabled(logrus.TraceLevel)
+	var dReq string
+	if trace {
+		dReq = gindump.DumpRequest(req, true, true)
+	}
 	// Send the request, get the response (or the error)
-	dReq := gindump.DumpRequest(req, true, true)
 	res, err = lrt.transport.RoundTrip(req)
 	if err != nil {
 		lrt.logger.Errorf("%s: %s", req.URL.String(), err)
 	} else {
 		log := lrt.logger.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
 		log.Debug(req.URL.String())
-		log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
+		if trace {
+			log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
+		}
 	}
 
 	return
