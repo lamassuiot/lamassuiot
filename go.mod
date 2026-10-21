@@ -35,7 +35,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/vault/api v1.23.0
-	github.com/jakehl/goid v1.1.0
 	github.com/kaptinlin/jsonschema v0.9.10
 	github.com/miekg/pkcs11 v1.1.2
 	github.com/moby/moby/api v1.56.1

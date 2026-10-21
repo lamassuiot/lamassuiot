@@ -14,7 +14,6 @@ import (
 	"uuid"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/x509engines"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
@@ -341,7 +340,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	caID := input.ID
 	if caID == "" {
-		caID = goid.NewV4UUID().String()
+		caID = uuid.NewV7().String()
 	}
 
 	issuerMeta := models.IssuerCAMetadata{
@@ -636,7 +635,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	// Check if CA already exists
 	caID := input.ID
 	if caID == "" {
-		caID = goid.NewV4UUID().String()
+		caID = uuid.NewV7().String()
 	}
 
 	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
