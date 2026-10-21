@@ -17,7 +17,7 @@ on:
 jobs:
   scan:
     name: Scan image vulnerabilities
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       actions: read
       contents: read
@@ -37,7 +37,7 @@ jobs:
           image-ref: ${{ inputs.image-ref }}
           format: sarif
           output: trivy-results.sarif
-          severity: CRITICAL,HIGH
+          severity: CRITICAL,HIGH,MEDIUM
           exit-code: '0'
 
       - name: Upload Trivy results to code scanning

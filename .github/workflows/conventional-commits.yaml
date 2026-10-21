@@ -10,7 +10,7 @@ permissions:
 jobs:
   validate-conventional-commits:
     name: Validate PR title and commits
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     env:
       # Keep these types aligned with the groups in cliff.toml.
       PATTERN: '^(feat|fix|bump|revert|remove|security|test|chore|refactor|docs|build|ci)(\([[:alnum:]][[:alnum:]._,-]*\))?!?: [^[:space:]].*'
