@@ -30,6 +30,7 @@ type importCARepo struct {
 	cas          map[string]models.CACertificate
 	lookupErr    error
 	insertErr    error
+	updateErr    error
 	insertCalls  int
 	childQueries int
 }
@@ -44,6 +45,9 @@ func (repo *importCARepo) Insert(_ context.Context, ca *models.CACertificate) (*
 }
 
 func (repo *importCARepo) Update(ctx context.Context, ca *models.CACertificate) (*models.CACertificate, error) {
+	if repo.updateErr != nil {
+		return nil, repo.updateErr
+	}
 	repo.cas[ca.ID] = *ca
 	return ca, nil
 }
@@ -85,8 +89,11 @@ func (repo *importCARepo) SelectByIssuerAndAuthorityKeyID(ctx context.Context, i
 
 type importCAKMS struct {
 	coreservices.KMSService
+	// importedKey is returned by ImportKey; when nil, ImportKey fails.
+	importedKey    *models.Key
 	getKeyCalls    int
 	importKeyCalls int
+	deletedKeys    []string
 }
 
 func (kms *importCAKMS) GetKey(context.Context, coreservices.GetKeyInput) (*models.Key, error) {
@@ -96,7 +103,21 @@ func (kms *importCAKMS) GetKey(context.Context, coreservices.GetKeyInput) (*mode
 
 func (kms *importCAKMS) ImportKey(context.Context, coreservices.ImportKeyInput) (*models.Key, error) {
 	kms.importKeyCalls++
-	return nil, errors.New("unexpected key import")
+	if kms.importedKey == nil {
+		return nil, errors.New("unexpected key import")
+	}
+	key := *kms.importedKey
+	return &key, nil
+}
+
+func (kms *importCAKMS) UpdateKeyMetadata(context.Context, coreservices.UpdateKeyMetadataInput) (*models.Key, error) {
+	key := *kms.importedKey
+	return &key, nil
+}
+
+func (kms *importCAKMS) DeleteKeyByID(_ context.Context, input coreservices.GetKeyInput) error {
+	kms.deletedKeys = append(kms.deletedKeys, input.Identifier)
+	return nil
 }
 
 func newImportCAService(t *testing.T) (*CAServiceBackend, *importCARepo) {
@@ -282,4 +303,47 @@ func TestImportCAStopsOnInsertFailureAndAllowsRetry(t *testing.T) {
 	ca, err = svc.ImportCA(context.Background(), input)
 	require.NoError(t, err)
 	require.Equal(t, input.ID, ca.ID)
+}
+
+func TestImportCAImportedKeyCleanup(t *testing.T) {
+	const keyURI = "pkcs11:token-id=engine;id=imported;type=private"
+	chain := importCAChain(t, false)
+	for _, tc := range []struct {
+		name        string
+		insertErr   error
+		updateErr   error
+		wantDeleted []string
+	}{
+		{name: "CA stored", wantDeleted: nil},
+		{name: "concurrent import wins the ID", insertErr: errs.ErrCAAlreadyExists, wantDeleted: []string{keyURI}},
+		{name: "insert fails", insertErr: errors.New("insert failed"), wantDeleted: []string{keyURI}},
+		// The root is stored before reparenting its child fails, so it keeps its key.
+		{name: "reparenting fails after insert", updateErr: errors.New("update failed"), wantDeleted: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo := newImportCAService(t)
+			kms := svc.kmsService.(*importCAKMS)
+			kms.importedKey = &models.Key{KeyID: "imported", EngineID: "engine", PKCS11URI: keyURI}
+			_, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
+				ID: "intermediate", CACertificate: (*models.X509Certificate)(chain[1]),
+			})
+			require.NoError(t, err)
+			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			require.NoError(t, err)
+			repo.insertErr, repo.updateErr = tc.insertErr, tc.updateErr
+			_, err = svc.ImportCA(context.Background(), coreservices.ImportCAInput{
+				ID: "root", CACertificate: (*models.X509Certificate)(chain[0]), Key: key,
+			})
+			switch {
+			case tc.insertErr != nil:
+				require.ErrorIs(t, err, tc.insertErr)
+			case tc.updateErr != nil:
+				require.ErrorIs(t, err, tc.updateErr)
+			default:
+				require.NoError(t, err)
+			}
+			require.Equal(t, 1, kms.importKeyCalls)
+			require.Equal(t, tc.wantDeleted, kms.deletedKeys)
+		})
+	}
 }

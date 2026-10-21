@@ -266,7 +266,7 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.
 	return stats, nil
 }
 
-func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (_ *models.CACertificate, err error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Validate IssuanceProfileID exists if provided (required for ImportedWithKey type)
@@ -308,6 +308,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	var importType models.CertificateType
 	var key *models.Key
+	var importedKeyID string
 
 	if input.Key != nil {
 		importType = models.CertificateTypeImportedWithKey
@@ -320,6 +321,18 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
+
+		// The key was created by this request, so delete it if the CA is never
+		// stored, e.g. when a concurrent import with the same ID wins the insert.
+		importedKeyID = key.PKCS11URI
+		defer func() {
+			if err == nil || importedKeyID == "" {
+				return
+			}
+			if delErr := svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{Identifier: importedKeyID}); delErr != nil {
+				lFunc.Warnf("could not delete key %s after failed CA import: %s", importedKeyID, delErr)
+			}
+		}()
 
 		if key.KeyID != skid {
 			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
@@ -407,6 +420,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			})
 
 		if err != nil {
+			lFunc.Errorf("something went wrong while looking up parent CA by AKID %s: %s", akid, err)
 			return nil, err
 		}
 
@@ -435,6 +449,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			})
 
 			if err != nil {
+				lFunc.Errorf("something went wrong while looking up parent CA by issuer subject: %s", err)
 				return nil, err
 			}
 
@@ -472,15 +487,16 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	engineID := ""
 	if key != nil {
 		engineID = key.EngineID
+		keyID := key.KeyID
 		key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: key.KeyID,
+			ID: keyID,
 			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
 				ResourceType: "certificate",
 				ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
 			}).Build(),
 		})
 		if err != nil {
-			lFunc.Errorf("could not bind CA %s to key %s: %s", caCert.Subject.CommonName, key.KeyID, err)
+			lFunc.Errorf("could not bind CA %s to key %s: %s", caCert.Subject.CommonName, keyID, err)
 			return nil, err
 		}
 	}
@@ -515,8 +531,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	lFunc.Debugf("insert CA %s in storage engine", caID)
 	cert, err := svc.caStorage.Insert(ctx, ca)
 	if err != nil {
+		lFunc.Errorf("something went wrong while inserting CA '%s' in storage engine: %s", caID, err)
 		return nil, err
 	}
+	// The stored CA now owns the imported key, so a later failure must keep it.
+	importedKeyID = ""
 
 	// Flag to check if it's the first iteration
 	firstIteration := true
@@ -575,9 +594,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			},
 		})
 		if err != nil {
+			lFunc.Errorf("something went wrong while looking up child CAs of '%s': %s", parent.ID, err)
 			return nil, err
 		}
 		if updateErr != nil {
+			lFunc.Errorf("something went wrong while updating child CAs of '%s': %s", parent.ID, updateErr)
 			return nil, updateErr
 		}
 		firstIteration = false
