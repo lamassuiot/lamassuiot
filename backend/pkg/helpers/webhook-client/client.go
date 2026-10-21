@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -23,9 +25,25 @@ const DefaultCallTimeout = 10 * time.Second
 // MaxResponseBodySize caps how much of a webhook response is read into memory.
 const MaxResponseBodySize = 1 << 20
 
+// ValidateWebhook rejects webhook calls that would fail on every invocation:
+// a URL the client cannot call, a method other than POST or PUT, and the
+// client options rejected by ValidateConfig.
+func ValidateWebhook(conf models.WebhookCall) error {
+	if err := validateURL("url", conf.Url); err != nil {
+		return err
+	}
+	switch conf.Method {
+	case "", http.MethodPost, http.MethodPut:
+	default:
+		return fmt.Errorf("webhook method %q is not supported (allowed: POST, PUT)", conf.Method)
+	}
+	return ValidateConfig(conf.Config)
+}
+
 // ValidateConfig rejects webhook client options that are unsafe for
-// user-supplied configs: anything that makes the service read its own files
-// and API key headers that receiving services trust.
+// user-supplied configs (anything that makes the service read its own files
+// and API key headers that receiving services trust) or that lack the options
+// their auth mode needs.
 func ValidateConfig(cfg models.WebhookCallHttpClient) error {
 	mtls := cfg.AuthMTLSOptions
 	if cfg.CACertificateFile != "" || mtls.CertFile != "" || mtls.KeyFile != "" {
@@ -34,15 +52,33 @@ func ValidateConfig(cfg models.WebhookCallHttpClient) error {
 
 	switch cfg.AuthMode {
 	case config.ApiKey:
-		if isReservedHeader(cfg.AuthApiKeyOptions.Header) {
-			return fmt.Errorf("webhook API key header %q is reserved", cfg.AuthApiKeyOptions.Header)
+		apiKey := cfg.AuthApiKeyOptions
+		if strings.TrimSpace(apiKey.Header) == "" || apiKey.Key == "" {
+			return errors.New("webhook API key auth requires apikey_options.header and apikey_options.key")
 		}
+		if isReservedHeader(apiKey.Header) {
+			return fmt.Errorf("webhook API key header %q is reserved", apiKey.Header)
+		}
+	case config.JWT:
+		jwt := cfg.AuthJWTOptions
+		if jwt.ClientID == "" || jwt.ClientSecret == "" {
+			return errors.New("webhook JWT auth requires jwt_options.oidc_client_id and jwt_options.oidc_client_secret")
+		}
+		return validateURL("jwt_options.oidc_well_known", jwt.OIDCWellKnownURL)
 	case config.MTLS:
 		if mtls.CertContent == "" || mtls.KeyContent == "" {
 			return errors.New("webhook mTLS requires mtls_options.cert_content and mtls_options.key_content")
 		}
 	}
 
+	return nil
+}
+
+func validateURL(field, raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("webhook %s must be an absolute http or https URL", field)
+	}
 	return nil
 }
 
@@ -90,7 +126,7 @@ func invokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if err := ValidateConfig(conf.Config); err != nil {
+	if err := ValidateWebhook(conf); err != nil {
 		return err
 	}
 
@@ -108,10 +144,6 @@ func invokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 
 	method := "POST"
 	if conf.Method != "" {
-		// Allow only POST and PUT methods
-		if conf.Method != "POST" && conf.Method != "PUT" {
-			return fmt.Errorf("invalid method: %s", conf.Method)
-		}
 		method = conf.Method
 	}
 

@@ -40,11 +40,12 @@ func notificationHTTPConfig(options *models.WebhookCallHttpClient) (models.Webho
 	}
 }
 
-// ValidateChannel applies the notification client policy to the HTTP client
-// options of a channel so invalid configs are rejected when the subscription
-// is created instead of failing on every event delivery. Channels without
-// HTTP client options are accepted as is.
+// ValidateChannel checks the URL, method and HTTP client options of webhook
+// and MS Teams channels with the same policy used to deliver them, so invalid
+// configs are rejected when the subscription is created instead of failing on
+// every event delivery.
 func ValidateChannel(c models.Channel) error {
+	var call models.WebhookCall
 	var options *models.WebhookCallHttpClient
 	switch c.Type {
 	case models.ChannelTypeWebhook:
@@ -52,17 +53,14 @@ func ValidateChannel(c models.Channel) error {
 		if err != nil {
 			return fmt.Errorf("invalid webhook channel config: %w", err)
 		}
-		switch cfg.WebhookMethod {
-		case "", http.MethodPost, http.MethodPut:
-		default:
-			return fmt.Errorf("invalid webhook channel config: unsupported webhook_method %q (allowed: POST, PUT)", cfg.WebhookMethod)
-		}
+		call = models.WebhookCall{Url: cfg.WebhookURL, Method: cfg.WebhookMethod}
 		options = cfg.HTTPClient
 	case models.ChannelTypeMSTeams:
 		cfg, err := decodeChannelConfig[models.MSTeamsChannelConfig](c)
 		if err != nil {
 			return fmt.Errorf("invalid MS Teams channel config: %w", err)
 		}
+		call = models.WebhookCall{Url: cfg.WebhookURL, Method: http.MethodPost}
 		options = cfg.HTTPClient
 	default:
 		return nil
@@ -72,7 +70,8 @@ func ValidateChannel(c models.Channel) error {
 	if err != nil {
 		return err
 	}
-	return webhookclient.ValidateConfig(httpConfig)
+	call.Config = httpConfig
+	return webhookclient.ValidateWebhook(call)
 }
 
 // sendHTTPNotification delivers an already-encoded notification body to an

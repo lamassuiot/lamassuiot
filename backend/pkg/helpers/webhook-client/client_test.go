@@ -177,6 +177,51 @@ func TestInvokeWebhookRejectsServerFiles(t *testing.T) {
 	}
 }
 
+func TestValidateWebhook(t *testing.T) {
+	webhook := func(url, method string, cfg config.HTTPClient) models.WebhookCall {
+		return models.WebhookCall{Name: "test", Url: url, Method: method, Config: models.WebhookCallHttpClient{HTTPClient: cfg}}
+	}
+	noAuth := config.HTTPClient{AuthMode: config.NoAuth}
+	jwt := func(opts config.AuthJWTOptions) config.HTTPClient {
+		return config.HTTPClient{AuthMode: config.JWT, AuthJWTOptions: opts}
+	}
+	apiKey := func(opts config.AuthApiKeyOptions) config.HTTPClient {
+		return config.HTTPClient{AuthMode: config.ApiKey, AuthApiKeyOptions: opts}
+	}
+	const hook, wellKnown = "https://hooks.example.com/x", "https://idp.example.com/.well-known/openid-configuration"
+
+	for name, conf := range map[string]models.WebhookCall{
+		"default method": webhook(hook, "", noAuth),
+		"put over http":  webhook("http://hooks.example.com/x", http.MethodPut, noAuth),
+		"api key":        webhook(hook, http.MethodPost, apiKey(config.AuthApiKeyOptions{Header: "X-Api-Key", Key: "secret"})),
+		"jwt":            webhook(hook, http.MethodPost, jwt(config.AuthJWTOptions{ClientID: "id", ClientSecret: "secret", OIDCWellKnownURL: wellKnown})),
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.NoError(t, ValidateWebhook(conf))
+		})
+	}
+
+	for name, tc := range map[string]struct {
+		conf models.WebhookCall
+		err  string
+	}{
+		"empty url":                 {webhook("", "", noAuth), "url must be an absolute http or https URL"},
+		"url without scheme":        {webhook("hooks.example.com/x", "", noAuth), "url must be an absolute http or https URL"},
+		"unsupported scheme":        {webhook("ftp://hooks.example.com/x", "", noAuth), "url must be an absolute http or https URL"},
+		"unsupported method":        {webhook(hook, http.MethodGet, noAuth), `method "GET" is not supported`},
+		"lowercase method":          {webhook(hook, "post", noAuth), `method "post" is not supported`},
+		"api key without key":       {webhook(hook, "", apiKey(config.AuthApiKeyOptions{Header: "X-Api-Key"})), "requires apikey_options.header and apikey_options.key"},
+		"api key without header":    {webhook(hook, "", apiKey(config.AuthApiKeyOptions{Key: "secret"})), "requires apikey_options.header and apikey_options.key"},
+		"jwt without client id":     {webhook(hook, "", jwt(config.AuthJWTOptions{ClientSecret: "secret", OIDCWellKnownURL: wellKnown})), "requires jwt_options.oidc_client_id and jwt_options.oidc_client_secret"},
+		"jwt without client secret": {webhook(hook, "", jwt(config.AuthJWTOptions{ClientID: "id", OIDCWellKnownURL: wellKnown})), "requires jwt_options.oidc_client_id and jwt_options.oidc_client_secret"},
+		"jwt without well-known":    {webhook(hook, "", jwt(config.AuthJWTOptions{ClientID: "id", ClientSecret: "secret"})), "oidc_well_known must be an absolute http or https URL"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.ErrorContains(t, ValidateWebhook(tc.conf), tc.err)
+		})
+	}
+}
+
 func TestInvokeWebhookPresentsMTLSCertificateContent(t *testing.T) {
 	certPEM, keyPEM := selfSignedPEM(t)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

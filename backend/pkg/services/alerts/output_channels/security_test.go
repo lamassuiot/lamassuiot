@@ -107,6 +107,8 @@ func TestValidateChannel(t *testing.T) {
 		"mtls without content":  {"auth_mode": "mtls"},
 		"file reference":        {"auth_mode": "mtls", "mtls_options": map[string]any{"cert_file": "/etc/cert.pem", "key_file": "/etc/key.pem"}},
 		"reserved api key":      {"auth_mode": "apikey", "apikey_options": map[string]any{"header": "X-Principal-ID", "key": "admin"}},
+		"api key without key":   {"auth_mode": "apikey", "apikey_options": map[string]any{"header": "X-API-Key"}},
+		"jwt without options":   {"auth_mode": "jwt"},
 		"unsupported auth mode": {"auth_mode": "invalid"},
 	}
 	for _, kind := range []models.ChannelType{models.ChannelTypeWebhook, models.ChannelTypeMSTeams} {
@@ -118,12 +120,15 @@ func TestValidateChannel(t *testing.T) {
 			})
 		}
 		require.Error(t, ValidateChannel(models.Channel{Type: kind, Config: "not an object"}))
+		for _, url := range []string{"", "x/hook", "ftp://x/hook"} {
+			require.ErrorContains(t, ValidateChannel(models.Channel{Type: kind, Config: map[string]any{"webhook_url": url}}), "url must be an absolute http or https URL")
+		}
 	}
 	for _, method := range []string{"", "POST", "PUT"} {
 		require.NoError(t, ValidateChannel(models.Channel{Type: models.ChannelTypeWebhook, Config: map[string]any{"webhook_url": "https://x/hook", "webhook_method": method}}))
 	}
 	for _, method := range []string{"GET", "PATCH", "DELETE", "post"} {
-		require.ErrorContains(t, ValidateChannel(models.Channel{Type: models.ChannelTypeWebhook, Config: map[string]any{"webhook_url": "https://x/hook", "webhook_method": method}}), "webhook_method")
+		require.ErrorContains(t, ValidateChannel(models.Channel{Type: models.ChannelTypeWebhook, Config: map[string]any{"webhook_url": "https://x/hook", "webhook_method": method}}), "is not supported")
 	}
 	require.NoError(t, ValidateChannel(models.Channel{Type: models.ChannelTypeEmail, Config: map[string]any{"email": "to@example.com"}}))
 }

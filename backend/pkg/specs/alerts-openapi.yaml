@@ -168,7 +168,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Subscription'
         '400':
-          description: Invalid request body, user identifier or channel http_client config
+          description: Invalid request body, user identifier or channel config (webhook_url not an absolute http or https URL, unsupported webhook_method or invalid http_client)
           content:
             application/json:
               schema:

@@ -173,6 +173,26 @@ func TestValidateDMSWebhooks(t *testing.T) {
 		require.ErrorContains(t, err, "must not reference files")
 	})
 
+	t.Run("rejects calls that fail on every enroll", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			edit func(*models.WebhookCall)
+			err  string
+		}{
+			"unsupported method":  {func(w *models.WebhookCall) { w.Method = http.MethodGet }, `method "GET" is not supported`},
+			"missing url":         {func(w *models.WebhookCall) { w.Url = "" }, "url must be an absolute http or https URL"},
+			"jwt without options": {func(w *models.WebhookCall) { w.Config.AuthMode = config.JWT }, "requires jwt_options"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				var settings models.DMSSettings
+				settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(config.HTTPClient{AuthMode: config.NoAuth})
+				tc.edit(&settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook)
+				err := validateDMSWebhooks(settings)
+				require.ErrorIs(t, err, errs.ErrValidateBadRequest)
+				require.ErrorContains(t, err, tc.err)
+			})
+		}
+	})
+
 	t.Run("validates client certificate and webhook mode", func(t *testing.T) {
 		var settings models.DMSSettings
 		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(fileMTLS)

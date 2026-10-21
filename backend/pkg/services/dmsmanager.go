@@ -494,7 +494,7 @@ func validateDMSWebhooks(settings models.DMSSettings) error {
 		default:
 			continue
 		}
-		if err := webhookclient.ValidateConfig(w.opts.AuthOptionsExternalWebhook.Config); err != nil {
+		if err := webhookclient.ValidateWebhook(w.opts.AuthOptionsExternalWebhook); err != nil {
 			return fmt.Errorf("%w: invalid %s external webhook config: %s", errs.ErrValidateBadRequest, w.operation, err)
 		}
 	}
