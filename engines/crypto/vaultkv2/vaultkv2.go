@@ -15,13 +15,13 @@ import (
 	"strings"
 
 	"github.com/hashicorp/vault/api"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
-	vconfig "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/config"
-	hhelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
+	vconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2/config"
+	hhelpers "github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -269,7 +269,7 @@ func (engine *VaultKV2Engine) importKey(ctx context.Context, key any) (string, c
 		return "", nil, err
 	}
 
-	var keyMap = map[string]interface{}{
+	var keyMap = map[string]any{
 		"key": b64PemKey,
 	}
 
@@ -347,7 +347,7 @@ func Unseal(client *api.Client, unsealKeys []config.Password, logger *logrus.Ent
 
 func Login(client *api.Client, roleID string, secretID string) error {
 	loginPath := "auth/approle/login"
-	options := map[string]interface{}{
+	options := map[string]any{
 		"role_id":   roleID,
 		"secret_id": secretID,
 	}

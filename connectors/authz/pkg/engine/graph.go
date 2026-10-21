@@ -3,7 +3,7 @@ package engine
 import (
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
 
 // GraphNode represents a node in the authorization graph

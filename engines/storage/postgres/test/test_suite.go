@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"

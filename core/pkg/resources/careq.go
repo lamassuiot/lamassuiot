@@ -3,7 +3,7 @@ package resources
 import (
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 type CreateCABody struct {
@@ -110,7 +110,7 @@ type GetCertificateStatus struct {
 }
 
 type ImportCertificateBody struct {
-	Metadata    map[string]interface{}  `json:"metadata"`
+	Metadata    map[string]any          `json:"metadata"`
 	Certificate *models.X509Certificate `json:"certificate"`
 }
 

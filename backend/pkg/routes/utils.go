@@ -15,14 +15,14 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
-	headerextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/basic-header-extractors"
-	basiclogger "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/basic-logger"
-	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
+	headerextractors "github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes/middlewares/basic-header-extractors"
+	basiclogger "github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes/middlewares/basic-logger"
+	identityextractors "github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes/middlewares/identity-extractors"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"gopkg.in/yaml.v3"
@@ -214,7 +214,7 @@ func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
 		c.Next()
 
 		latency := time.Since(start)
-		fields := make(map[string]interface{})
+		fields := make(map[string]any)
 
 		logger.WithFields(fields).Infof("[Request] %v |%3d| %13v | %15s |%-7s %s",
 			start.Format("2006/01/02 - 15:04:05"),
@@ -235,14 +235,14 @@ func InjectVersionIntoOpenAPI(openApiContent []byte, version string) []byte {
 	}
 
 	// Parse the YAML content
-	var spec map[string]interface{}
+	var spec map[string]any
 	if err := yaml.Unmarshal(openApiContent, &spec); err != nil {
 		// If parsing fails, return the original content
 		return openApiContent
 	}
 
 	// Navigate to info.version and update it
-	if info, ok := spec["info"].(map[string]interface{}); ok {
+	if info, ok := spec["info"].(map[string]any); ok {
 		info["version"] = version
 	} else {
 		// If info section doesn't exist, return original content

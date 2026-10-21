@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/stretchr/testify/assert"
 
-	_ "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/dmsmanager"
+	_ "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -26,7 +26,7 @@ func migrationTest_DMS_00000000000001_create_table(t *testing.T, logger *logrus.
 		VALUES('iot1', 'IoTThings', '{}', '2024-11-25 10:46:28.914', '{"server_keygen_settings":{"enabled":true,"key":{"type":"RSA","bits":4096}},"enrollment_settings":{"protocol":"EST_RFC7030","est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["9beebc5b-ba8d-4fc0-9e97-58299d30ae9f"],"chain_level_validation":-1,"allow_expired":false}},"device_provisioning_profile":{"icon":"CgBatteryFull","icon_color":"#37d67a-#333333","metadata":{},"tags":["iot"]},"enrollment_ca":"fd10a299-7cc0-47de-9f48-cdc9d79a711c","enable_replaceable_enrollment":false,"registration_mode":"JITP"},"reenrollment_settings":{"additional_validation_cas":[],"reenrollment_delta":"14w2d","enable_expired_renewal":false,"preventive_delta":"4w3d","critical_delta":"1w"},"ca_distribution_settings":{"include_system_ca":true,"include_enrollment_ca":false,"managed_cas":[]}}');
 	`)
 
-	var result map[string]interface{}
+	var result map[string]any
 	tx := con.Raw("SELECT * FROM dms").Scan(&result)
 	if tx.RowsAffected != 1 {
 		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
@@ -55,7 +55,7 @@ func migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 	ApplyMigration(t, logger, con, dmsDBName)
 
 	var result string
-	var config map[string]interface{}
+	var config map[string]any
 
 	// Select iot1, should have the new keygen settings enabled and reenrollment_settings.revoke_on_reenrollment set to false
 	tx = con.Table("dms").Where("id = 'iot1'").Select("settings").Find(&result)
@@ -67,8 +67,8 @@ func migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 		log.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
 
-	assert.Equal(t, true, config["server_keygen_settings"].(map[string]interface{})["enabled"])
-	assert.Equal(t, false, config["reenrollment_settings"].(map[string]interface{})["revoke_on_reenrollment"])
+	assert.Equal(t, true, config["server_keygen_settings"].(map[string]any)["enabled"])
+	assert.Equal(t, false, config["reenrollment_settings"].(map[string]any)["revoke_on_reenrollment"])
 
 	// Select iot2, should have the new keygen settings set to false and reenrollment_settings.revoke_on_reenrollment set to false
 	tx = con.Table("dms").Where("id = 'iot2'").Select("settings").Find(&result)
@@ -80,8 +80,8 @@ func migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 		log.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
 
-	assert.Equal(t, false, config["server_keygen_settings"].(map[string]interface{})["enabled"])
-	assert.Equal(t, false, config["reenrollment_settings"].(map[string]interface{})["revoke_on_reenrollment"])
+	assert.Equal(t, false, config["server_keygen_settings"].(map[string]any)["enabled"])
+	assert.Equal(t, false, config["reenrollment_settings"].(map[string]any)["revoke_on_reenrollment"])
 }
 
 func migrationTest_DMS_20250612100530_est_verify_csr_signature(t *testing.T, logger *logrus.Entry, con *gorm.DB) {

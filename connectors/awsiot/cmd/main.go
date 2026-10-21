@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
-	lamassu "github.com/lamassuiot/lamassuiot/connectors/awsiot/v3/pkg"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	lamassu "github.com/lamassuiot/lamassuiot/v4/connectors/awsiot/pkg"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -21,7 +21,7 @@ import (
 func TestNewAWSKMSEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAWSKMSEngine")
 	awsConf := aws.Config{}
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"key": "value",
 	}
 

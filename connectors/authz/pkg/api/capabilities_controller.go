@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -226,13 +226,11 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 	merged := make([]engine.EntityCapabilitiesResult, len(engineQueries))
 	for i, q := range engineQueries {
 		merged[i] = engine.EntityCapabilitiesResult{
-			EntityCapabilities: engine.EntityCapabilities{
-				Namespace:  q.Namespace,
-				SchemaName: q.SchemaName,
-				EntityType: q.EntityType,
-				EntityKey:  q.EntityKey,
-				Actions:    []string{},
-			},
+			Namespace:  q.Namespace,
+			SchemaName: q.SchemaName,
+			EntityType: q.EntityType,
+			EntityKey:  q.EntityKey,
+			Actions:    []string{},
 		}
 	}
 

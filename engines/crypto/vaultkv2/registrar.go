@@ -1,9 +1,9 @@
 package vaultkv2
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	vconfig "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	vconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2/config"
 
 	log "github.com/sirupsen/logrus"
 )

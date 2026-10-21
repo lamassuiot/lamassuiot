@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 // SystemPolicyPrefix marks policies managed by Lamassu itself. They are only
@@ -34,7 +34,7 @@ func NewPolicyManager(ps store.PolicyStore) *PolicyManager {
 
 func (pm *PolicyManager) CreatePolicy(ctx context.Context, policy *models.Policy) error {
 	if policy.ID == "" {
-		policy.ID = uuid.New().String()
+		policy.ID = uuid.NewV7().String()
 	}
 	if err := engine.ValidatePolicyStruct(policy); err != nil {
 		return fmt.Errorf("invalid policy: %w", err)

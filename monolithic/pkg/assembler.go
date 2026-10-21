@@ -14,20 +14,20 @@ import (
 	"os"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/fatih/color"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	authzapi "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api"
-	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
-	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
+	lamassu "github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	authzapi "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
+	"github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/utils/gindump"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -74,8 +74,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		localConn := func(port int) cconfig.HTTPConnection {
 			return cconfig.HTTPConnection{
-				BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: port},
-				Protocol:        cconfig.HTTP,
+				Hostname: "127.0.0.1", Port: port,
+				Protocol: cconfig.HTTP,
 			}
 		}
 
@@ -109,21 +109,17 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			}
 			authzPort = aPort
 			authzClientConf = config.AuthzClient{
-				HTTPClient: cconfig.HTTPClient{
-					LogLevel: cconfig.Info,
-					AuthMode: cconfig.NoAuth,
-					HTTPConnection: cconfig.HTTPConnection{
-						Protocol:        cconfig.HTTP,
-						BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: authzPort},
-					},
-				},
+				LogLevel: cconfig.Info,
+				AuthMode: cconfig.NoAuth,
+				Protocol: cconfig.HTTP,
+				Hostname: "127.0.0.1", Port: authzPort,
 			}
 		}
 
 		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			Logs:    svcLogs,
+			Server:  svcServer,
 			CryptoEngineConfig: config.CryptoEngines{
 				LogLevel:      cconfig.Info,
 				DefaultEngine: conf.CryptoEngines[0].ID,
@@ -145,9 +141,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			OpenAPI:                  cconfig.OpenAPIConfig{Enabled: true},
+			Logs:                     svcLogs,
+			Server:                   svcServer,
 			PublisherEventBus:        conf.PublisherEventBus,
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
@@ -167,12 +163,12 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
-			Logs:   svcLogs,
-			Server: svcServer,
+			Logs:    svcLogs,
+			Server:  svcServer,
 			FilesystemStorage: cconfig.FSStorageConfig{
 				ID:   "fs",
 				Type: cconfig.LocalFilesystem,
-				Config: map[string]interface{}{
+				Config: map[string]any{
 					"storage_directory": conf.VAStorageDir,
 				},
 			},
@@ -354,7 +350,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 					proxyUrl = strings.TrimSuffix(proxyUrl, "/")
 				}
 				//emulate envoy config by generating rand request id as HTTP header to the upstream service
-				c.Request.Header.Add("x-request-id", uuid.NewString())
+				c.Request.Header.Add("x-request-id", uuid.NewV7().String())
 				proxy := httputil.NewSingleHostReverseProxy(remote)
 				proxy.Director = func(req *http.Request) {
 					req.Header = c.Request.Header
@@ -390,7 +386,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				panic(err)
 			}
 			//emulate envoy config by generating rand request id as HTTP header to the upstream service
-			c.Request.Header.Add("x-request-id", uuid.NewString())
+			c.Request.Header.Add("x-request-id", uuid.NewV7().String())
 			proxy := httputil.NewSingleHostReverseProxy(remote)
 			//Define the director func
 			//This is a good place to log, for example
@@ -638,10 +634,10 @@ func envoyStyleClientCertHeader(certs []*x509.Certificate) string {
 	}
 
 	leafURLEnc := url.QueryEscape(chelpers.CertificateToPEM(certs[0]))
-	fullChain := ""
+	var fullChain strings.Builder
 	for _, crt := range certs {
-		fullChain += chelpers.CertificateToPEM(crt)
+		fullChain.WriteString(chelpers.CertificateToPEM(crt))
 	}
-	chainURLEnc := url.QueryEscape(fullChain)
+	chainURLEnc := url.QueryEscape(fullChain.String())
 	return fmt.Sprintf("Cert=%q;Chain=%q", leafURLEnc, chainURLEnc)
 }

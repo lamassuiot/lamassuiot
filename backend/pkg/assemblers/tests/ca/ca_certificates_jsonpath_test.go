@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"testing"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type jsonPathTestCase struct {
@@ -167,7 +167,7 @@ func TestGetCertificatesFilterByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Populate metadata for all certificates
-	updateMetadata := func(serialNumber string, metadata map[string]interface{}) {
+	updateMetadata := func(serialNumber string, metadata map[string]any) {
 		_, err := caTest.Service.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 			SerialNumber: serialNumber,
 			Patches: chelpers.NewPatchBuilder().
@@ -180,106 +180,106 @@ func TestGetCertificatesFilterByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Basic metadata
-	updateMetadata(certs["basic_prod"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["basic_prod"].SerialNumber, map[string]any{
 		"environment": "production",
 		"region":      "us-west-1",
 	})
-	updateMetadata(certs["basic_staging"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["basic_staging"].SerialNumber, map[string]any{
 		"environment": "staging",
 		"region":      "us-east-1",
 	})
 
 	// Complex nested metadata
-	updateMetadata(certs["complex_prod"].SerialNumber, map[string]interface{}{
-		"tags": []map[string]interface{}{
+	updateMetadata(certs["complex_prod"].SerialNumber, map[string]any{
+		"tags": []map[string]any{
 			{"key": "production", "value": "true"},
 			{"key": "critical", "value": "high"},
 		},
-		"owner": map[string]interface{}{
+		"owner": map[string]any{
 			"team":    "platform",
 			"contact": "platform@example.com",
 		},
 	})
-	updateMetadata(certs["complex_staging"].SerialNumber, map[string]interface{}{
-		"tags": []map[string]interface{}{
+	updateMetadata(certs["complex_staging"].SerialNumber, map[string]any{
+		"tags": []map[string]any{
 			{"key": "staging", "value": "true"},
 			{"key": "critical", "value": "low"},
 		},
-		"owner": map[string]interface{}{
+		"owner": map[string]any{
 			"team":    "development",
 			"contact": "dev@example.com",
 		},
 	})
 
 	// No-match metadata
-	updateMetadata(certs["nomatch"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["nomatch"].SerialNumber, map[string]any{
 		"environment": "production",
 	})
 
 	// Value matching metadata
-	updateMetadata(certs["value_prod"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["value_prod"].SerialNumber, map[string]any{
 		"environment": "production",
 		"version":     2,
 		"critical":    true,
 	})
-	updateMetadata(certs["value_staging"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["value_staging"].SerialNumber, map[string]any{
 		"environment": "staging",
 		"version":     1,
 		"critical":    false,
 	})
-	updateMetadata(certs["value_dev"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["value_dev"].SerialNumber, map[string]any{
 		"environment": "development",
 		"version":     3,
 		"critical":    true,
 	})
 
 	// Logical operators metadata
-	updateMetadata(certs["logical_prod_critical"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["logical_prod_critical"].SerialNumber, map[string]any{
 		"environment": "production",
 		"critical":    true,
 		"version":     2,
 	})
-	updateMetadata(certs["logical_prod_noncritical"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["logical_prod_noncritical"].SerialNumber, map[string]any{
 		"environment": "production",
 		"critical":    false,
 		"version":     1,
 	})
-	updateMetadata(certs["logical_staging_critical"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["logical_staging_critical"].SerialNumber, map[string]any{
 		"environment": "staging",
 		"critical":    true,
 		"version":     3,
 	})
 
 	// Array operations metadata
-	updateMetadata(certs["array_prod_web"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["array_prod_web"].SerialNumber, map[string]any{
 		"tags":  []string{"production", "web", "frontend"},
 		"ports": []int{80, 443},
 	})
-	updateMetadata(certs["array_staging_api"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["array_staging_api"].SerialNumber, map[string]any{
 		"tags":  []string{"staging", "api", "backend"},
 		"ports": []int{8080, 8443},
 	})
-	updateMetadata(certs["array_prod_api"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["array_prod_api"].SerialNumber, map[string]any{
 		"tags":  []string{"production", "api"},
 		"ports": []int{443, 8080},
 	})
 
 	// String operations metadata
-	updateMetadata(certs["string_web1"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["string_web1"].SerialNumber, map[string]any{
 		"hostname":    "web-server-01.example.com",
 		"description": "Production Web Server",
 	})
-	updateMetadata(certs["string_api"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["string_api"].SerialNumber, map[string]any{
 		"hostname":    "api-gateway-01.example.com",
 		"description": "API Gateway Instance",
 	})
-	updateMetadata(certs["string_web2"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["string_web2"].SerialNumber, map[string]any{
 		"hostname":    "web-server-02.example.com",
 		"description": "Staging Environment",
 	})
 
 	// Type checking metadata
-	updateMetadata(certs["type_mixed"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["type_mixed"].SerialNumber, map[string]any{
 		"stringField": "test",
 		"numberField": 42,
 		"boolField":   true,
@@ -287,14 +287,14 @@ func TestGetCertificatesFilterByMetadataJsonPath(t *testing.T) {
 		"objectField": map[string]string{"key": "value"},
 		"nullField":   nil,
 	})
-	updateMetadata(certs["type_simple"].SerialNumber, map[string]interface{}{
+	updateMetadata(certs["type_simple"].SerialNumber, map[string]any{
 		"stringField": "another",
 		"numberField": 100,
 	})
 
 	// Numeric ranges metadata
 	for i := 1; i <= 5; i++ {
-		updateMetadata(certs[strconv.Itoa(i)].SerialNumber, map[string]interface{}{
+		updateMetadata(certs[strconv.Itoa(i)].SerialNumber, map[string]any{
 			"score":    i * 20,
 			"priority": float64(i) * 1.5,
 		})

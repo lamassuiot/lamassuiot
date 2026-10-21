@@ -16,17 +16,17 @@ import (
 	"strconv"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/jobs"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -1042,7 +1042,6 @@ func TestCreateCA(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 
@@ -1110,7 +1109,7 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 					t.Fatalf("could not create CA: %s", err)
 				}
 
-				commonName := fmt.Sprintf("enrolled-%s", uuid.NewString())
+				commonName := fmt.Sprintf("enrolled-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: commonName}, enrollKey)
 
@@ -1280,7 +1279,6 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -1324,7 +1322,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < certsToIssue; i++ {
+				for i := range certsToIssue {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -1381,7 +1379,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 				}
 
 				certsToIssue := 15
-				for i := 0; i < certsToIssue; i++ {
+				for i := range certsToIssue {
 					key, _ := chelpers.GenerateRSAKey(2048)
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
 					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{
@@ -1428,7 +1426,6 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			//
@@ -2418,7 +2415,6 @@ func TestSignCertificate(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			//
@@ -2734,7 +2730,6 @@ func TestImportCertificate(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			//
@@ -2797,7 +2792,7 @@ func TestRevokeCA(t *testing.T) {
 				}
 
 				issue20 := 20
-				for i := 0; i < issue20; i++ {
+				for i := range issue20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return nil, err
@@ -2846,7 +2841,6 @@ func TestRevokeCA(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -2903,7 +2897,7 @@ func TestUpdateCAMetadata(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) error {
 
-				ud := make(map[string]interface{})
+				ud := make(map[string]any)
 				ud["userName"] = "anonymous"
 				//cas := []*models.CACertificate{}
 				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
@@ -2930,7 +2924,7 @@ func TestUpdateCAMetadata(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) error {
 
-				ud := make(map[string]interface{})
+				ud := make(map[string]any)
 				ud["userName"] = "anonymous"
 				//cas := []*models.CACertificate{}
 				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
@@ -2958,7 +2952,6 @@ func TestUpdateCAMetadata(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -3025,7 +3018,6 @@ func TestGetCAsByCommonName(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 
 			err := serverTest.BeforeEach()
@@ -3089,7 +3081,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				ud := make(map[string]interface{})
+				ud := make(map[string]any)
 				ud["userName"] = "anonymous"
 				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: cert.SerialNumber,
@@ -3111,7 +3103,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) error {
 
-				ud := make(map[string]interface{})
+				ud := make(map[string]any)
 				ud["userName"] = "anonymous"
 				_, err := caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: "dadaafgsdtw",
@@ -3138,7 +3130,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) error {
 
-				ud := make(map[string]interface{})
+				ud := make(map[string]any)
 				ud["userName"] = "anonymous"
 				_, err := caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: "dadaafgsdtw",
@@ -3161,7 +3153,6 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 
@@ -3327,7 +3318,6 @@ func TestUpdateCAStatus(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -3386,7 +3376,6 @@ func TestGetStats(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -3434,7 +3423,7 @@ func TestGetCertificates(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -3489,7 +3478,7 @@ func TestGetCertificates(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -3538,7 +3527,6 @@ func TestGetCertificates(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -3586,7 +3574,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -3641,7 +3629,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -3696,7 +3684,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -3751,7 +3739,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -3801,7 +3789,6 @@ func TestGetCertificatesByCA(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -4427,7 +4414,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -4778,7 +4764,6 @@ func TestDeleteCA(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -4832,7 +4817,6 @@ func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err = tc.server.BeforeEach()
@@ -5181,7 +5165,7 @@ func TestGetCAs(t *testing.T) {
 					t.Fatalf("could not create profile: %s", err)
 				}
 
-				for i := 0; i < 5; i++ {
+				for i := range 5 {
 					caName = DefaultCAID + strconv.Itoa(i)
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
 						ID:           caName,
@@ -5237,7 +5221,7 @@ func TestGetCAs(t *testing.T) {
 				if err != nil {
 					t.Fatalf("could not create profile: %s", err)
 				}
-				for i := 0; i < 5; i++ {
+				for i := range 5 {
 					caName = DefaultCAID + strconv.Itoa(i)
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
 						ID:           caName,
@@ -5278,7 +5262,6 @@ func TestGetCAs(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -5426,7 +5409,6 @@ func TestGetStatsByCAID(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
 			if err != nil {
@@ -5498,7 +5480,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -5554,7 +5536,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -5610,7 +5592,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					return fmt.Errorf("Error getting the CA: %s", err)
 				}
 
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
@@ -5659,7 +5641,6 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -5812,7 +5793,6 @@ func TestSignatureVerify(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -5938,7 +5918,6 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -6382,7 +6361,6 @@ func TestHierarchy(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -6455,7 +6433,6 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			if err := serverTest.BeforeEach(); err != nil {
@@ -6508,7 +6485,7 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 
 			maxSeconds := int(caLifespan.Seconds())
 			elapsedSeconds := 0
-			for i := 0; i < maxSeconds; i++ {
+			for range maxSeconds {
 				time.Sleep(time.Second * 1)
 				elapsedSeconds++
 				now := time.Now()

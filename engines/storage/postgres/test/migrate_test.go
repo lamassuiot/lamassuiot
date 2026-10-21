@@ -3,10 +3,10 @@ package postgrestest
 import (
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

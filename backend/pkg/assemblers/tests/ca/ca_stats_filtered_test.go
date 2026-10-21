@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 // TestGetStatsFiltered tests filtered statistics for CAs and Certificates
@@ -33,7 +33,7 @@ func TestGetStatsFiltered(t *testing.T) {
 	}
 
 	// Helper function to create CA with specific metadata
-	createCAWithMetadata := func(t *testing.T, id, commonName string, metadata map[string]interface{}) *models.CACertificate {
+	createCAWithMetadata := func(t *testing.T, id, commonName string, metadata map[string]any) *models.CACertificate {
 		profile := createProfile(t)
 		ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 			ID:           id,
@@ -50,7 +50,7 @@ func TestGetStatsFiltered(t *testing.T) {
 	}
 
 	// Helper function to sign a certificate
-	signCertificateWithMetadata := func(t *testing.T, caID string, metadata map[string]interface{}) *models.Certificate {
+	signCertificateWithMetadata := func(t *testing.T, caID string, metadata map[string]any) *models.Certificate {
 		// Generate key for CSR
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
@@ -117,7 +117,7 @@ func TestGetStatsFiltered(t *testing.T) {
 			name: "OK/FilterCAsByEngineID",
 			before: func(svc services.CAService) error {
 				// Create an additional CA with the default engine (filesystem-1)
-				createCAWithMetadata(t, "ca-2", "CA2", map[string]interface{}{"env": "production"})
+				createCAWithMetadata(t, "ca-2", "CA2", map[string]any{"env": "production"})
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
@@ -152,9 +152,9 @@ func TestGetStatsFiltered(t *testing.T) {
 					return err
 				}
 				// Sign certificates with different metadata
-				signCertificateWithMetadata(t, ca.ID, map[string]interface{}{"type": "server"})
-				signCertificateWithMetadata(t, ca.ID, map[string]interface{}{"type": "client"})
-				signCertificateWithMetadata(t, ca.ID, map[string]interface{}{"type": "server"})
+				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "server"})
+				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "client"})
+				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "server"})
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
@@ -234,7 +234,6 @@ func TestGetStatsFiltered(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -270,7 +269,7 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 	caTest := serverTest.CA
 
 	// Helper function to sign a certificate with metadata
-	signCertificateWithMetadata := func(t *testing.T, caID string, metadata map[string]interface{}) *models.Certificate {
+	signCertificateWithMetadata := func(t *testing.T, caID string, metadata map[string]any) *models.Certificate {
 		// Generate key for CSR
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
@@ -343,9 +342,9 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 					return err
 				}
 				// Sign certificates with different metadata
-				signCertificateWithMetadata(t, ca.ID, map[string]interface{}{"type": "server"})
-				signCertificateWithMetadata(t, ca.ID, map[string]interface{}{"type": "client"})
-				signCertificateWithMetadata(t, ca.ID, map[string]interface{}{"type": "server"})
+				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "server"})
+				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "client"})
+				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "server"})
 				return nil
 			},
 			run: func(caSDK services.CAService) (map[models.CertificateStatus]int, error) {
@@ -404,7 +403,6 @@ func TestGetStatsByCAIDFiltered(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()

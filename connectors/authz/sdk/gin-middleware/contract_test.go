@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	authzschemas "github.com/lamassuiot/lamassuiot/connectors/authz/v3"
-	authzsdk "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk"
+	authzschemas "github.com/lamassuiot/lamassuiot/v4/connectors/authz"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +71,7 @@ func TestCertificateCreateRecordedContractMatchesEnforcedPermission(t *testing.T
 	for _, allowed := range []bool{true, false} {
 		t.Run(fmt.Sprintf("allowed=%v", allowed), func(t *testing.T) {
 			router := testRouterWithAuthzInputs()
-			engine := &recordingCreateEngine{fakeEngine: fakeEngine{authorized: allowed}}
+			engine := &recordingCreateEngine{authorized: allowed}
 			schemas, err := authzschemas.PKISchemas()
 			require.NoError(t, err)
 			mw := MustNewAuthzMiddleware(engine, schemas, "pki", "ca", "certificate", testLogger())
@@ -144,7 +144,7 @@ func TestResourcePermissionValidatesAndExtractsSchemaKeys(t *testing.T) {
 	for _, allowed := range []bool{true, false} {
 		t.Run(fmt.Sprintf("allowed=%v", allowed), func(t *testing.T) {
 			router := testRouterWithAuthzInputs()
-			engine := &recordingCreateEngine{fakeEngine: fakeEngine{authorized: allowed}}
+			engine := &recordingCreateEngine{authorized: allowed}
 			schemas, err := authzschemas.PKISchemas()
 			require.NoError(t, err)
 			mw := MustNewAuthzMiddleware(engine, schemas, "pki", "ca", "certificate", testLogger())
@@ -323,7 +323,7 @@ func TestCustomResourcePermissionChecksCompositeKeysBeforeAuthorization(t *testi
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			router := testRouterWithAuthzInputs()
-			engine := &recordingCreateEngine{fakeEngine: fakeEngine{authorized: test.allowed}}
+			engine := &recordingCreateEngine{authorized: test.allowed}
 			schemas, err := authzschemas.PKISchemas()
 			require.NoError(t, err)
 			mw := MustNewAuthzMiddleware(engine, schemas, "pki", "kms", "kms_key", testLogger())
@@ -585,7 +585,7 @@ paths:
 
 func TestContractBindsResourcesToCatchAllParameters(t *testing.T) {
 	router := testRouterWithAuthzInputs()
-	engine := &recordingCreateEngine{fakeEngine: fakeEngine{authorized: true}}
+	engine := &recordingCreateEngine{authorized: true}
 	schemas, err := authzschemas.PKISchemas()
 	require.NoError(t, err)
 	mw := MustNewAuthzMiddleware(engine, schemas, "pki", "kms", "kms_key", testLogger())

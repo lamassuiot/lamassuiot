@@ -1,8 +1,8 @@
 package subsystems
 
 type SubsystemBackend struct {
-	Config     interface{}
-	Extra      *map[string]interface{}
+	Config     any
+	Extra      *map[string]any
 	BeforeEach func() error
 	AfterSuite func()
 }
@@ -18,7 +18,7 @@ type StorageSubsystem interface {
 
 type ParametrizedSubsystem interface {
 	Subsystem
-	Prepare(config map[string]interface{}) error
+	Prepare(config map[string]any) error
 }
 
 type SubsystemProvider string

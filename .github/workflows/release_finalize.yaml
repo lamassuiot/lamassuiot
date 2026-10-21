@@ -25,7 +25,7 @@ jobs:
       release_version_with_v: ${{ steps.extract.outputs.release_version_with_v }}
       is_release_commit: ${{ steps.extract.outputs.is_release_commit }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Extract version from commit message
         id: extract
@@ -56,92 +56,27 @@ jobs:
             exit 1
           fi
 
-  bump_versions:
-    name: Bump Module Versions
-    needs: extract_version
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: main
-          token: ${{ github.token }}
-
-      - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version: "^1.26.2"
-
-      - name: Bump versions in go.mod files
-        run: |
-          chmod +x scripts/bump-version.sh
-          ./scripts/bump-version.sh ${{ needs.extract_version.outputs.release_version }} --no-tidy
-
-      - name: Commit version bump
-        run: |
-          git config user.name "Lamassu IoT Bot"
-          git config user.email "lamassuiot@lamassu.io"
-          git add .
-          git commit -m "chore: bump module versions to v${{ needs.extract_version.outputs.release_version }}"
-          git push origin main
-
   finalize:
     name: Setup Release Variables
-    needs: [extract_version, bump_versions]
+    needs: extract_version
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
-
-      - name: Setup Modules Matrix
-        id: matrix
-        run: |
-          # Define MODULES as an array
-          MODULES=(
-            "core"
-            "sdk"
-            "shared/aws"
-            "shared/subsystems"
-            "shared/http"
-            "engines/crypto/aws"
-            "engines/crypto/filesystem"
-            "engines/crypto/software"
-            "engines/crypto/pkcs11"
-            "engines/crypto/vaultkv2"
-            "engines/eventbus/amqp"
-            "engines/eventbus/aws"
-            "engines/storage/postgres"
-            "engines/fs-storage/localfs"
-            "engines/fs-storage/s3"
-            "backend"
-            "connectors/awsiot"
-            "connectors/authz"
-            "monolithic"
-          )
-
-          # Convert the array into a JSON array
-          json_modules=$(printf '%s\n' "${MODULES[@]}" | jq -R -c . | jq -s -c .)
-          echo "json_modules=$json_modules"
-
-          # Set the JSON array as an output
-          echo "json_modules=$json_modules" >> $GITHUB_OUTPUT
 
       - name: Print Release Info
         run: |
           echo "MAJOR_VERSION          = ${{ needs.extract_version.outputs.major_version }}"
           echo "RELEASE_VERSION        = ${{ needs.extract_version.outputs.release_version }}"
           echo "RELEASE_VERSION_WITH_V = ${{ needs.extract_version.outputs.release_version_with_v }}"
-          echo "JSON_MODULES           = ${{ steps.matrix.outputs.json_modules }}"
 
     outputs:
       major_version: ${{ needs.extract_version.outputs.major_version }}
       release_version: ${{ needs.extract_version.outputs.release_version }}
       release_version_with_v: ${{ needs.extract_version.outputs.release_version_with_v }}
-      json_modules: ${{ steps.matrix.outputs.json_modules }}
 
   create_global_tag:
     name: Create Global Tag
@@ -151,7 +86,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
 
@@ -162,44 +97,16 @@ jobs:
           git tag ${{ needs.finalize.outputs.release_version_with_v }} -m "Release ${{ needs.finalize.outputs.release_version_with_v }}"
           git push origin ${{ needs.finalize.outputs.release_version_with_v }}
 
-  create_module_release:
-    name: "Create Module release"
-    needs: [create_global_tag, finalize]
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: write
-    strategy:
-      matrix:
-        module: ${{ fromJson(needs.finalize.outputs.json_modules) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: main
-
-      - name: Create Tag
-        run: |
-          git config user.name "Lamassu IoT Bot"
-          git config user.email "lamassuiot@lamassu.io"
-          git tag ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }} -m "Release ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}"
-          git push origin ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
-
-      - name: Checkout code to tag
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
-
   create_global_release:
     name: Create Global Release
-    needs: [create_module_release, finalize]
+    needs: [create_global_tag, finalize]
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: write
     steps:
       - name: Checkout code to tag
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.finalize.outputs.release_version_with_v }}
 
@@ -216,17 +123,22 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "^1.26.2"
+          go-version: "^1.27.3"
 
       - name: Build release assets
-        env:
-          GOPROXY: direct
-          GONOSUMDB: github.com/lamassuiot/lamassuiot
         run: |
-          go work vendor
+          go mod vendor
           zip -r vendor.zip vendor
+
+      # Images are built from the exact vendor tree published as vendor.zip.
+      - name: Share vendor directory with image builds
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vendor
+          path: vendor
+          retention-days: 1
 
       - name: Generate and publish source SBOM
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -254,7 +166,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: v${{ needs.finalize.outputs.major_version }}
           token: ${{ secrets.PAT_RELEASER }}
@@ -288,15 +200,19 @@ jobs:
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
-    environment: release
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.finalize.outputs.release_version_with_v }}
           fetch-tags: true
       - run: |
           echo "SHA1VER=$(git rev-parse HEAD)" >> $GITHUB_ENV
+      - name: Download vendor directory
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vendor
+          path: vendor
       - name: Login to Github Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -318,6 +234,8 @@ jobs:
         with:
           context: .
           file: ci/${{ matrix.service }}.dockerfile
+          build-contexts: |
+            vendor=./vendor
           platforms: linux/amd64,linux/arm64
           build-args: |
             BASE_IMAGE=alpine:3.14

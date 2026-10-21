@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
+	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations"
 	"github.com/pressly/goose/v3"
 )
 
@@ -127,8 +127,8 @@ func main() {
 func extractSearchPath(connStr string) string {
 	// Parse connection string for search_path parameter
 	// Format: "key=value key2=value2 ..."
-	parts := strings.Fields(connStr)
-	for _, part := range parts {
+	parts := strings.FieldsSeq(connStr)
+	for part := range parts {
 		if after, ok := strings.CutPrefix(part, "search_path="); ok {
 			return after
 		}

@@ -12,9 +12,9 @@ type TestConfig struct {
 func TestCryptoEngineConfigAdapterMarshal(t *testing.T) {
 	ce := CryptoEngineConfig{
 		ID:       "test-id",
-		Metadata: map[string]interface{}{"meta": "data"},
+		Metadata: map[string]any{"meta": "data"},
 		Type:     HashicorpVaultProvider,
-		Config:   map[string]interface{}{"Key": "value"},
+		Config:   map[string]any{"Key": "value"},
 	}
 
 	adapter := CryptoEngineConfigAdapter[TestConfig]{}
@@ -32,7 +32,7 @@ func TestCryptoEngineConfigAdapterMarshal(t *testing.T) {
 func TestCryptoEngineConfigAdapterUnmarshal(t *testing.T) {
 	adapter := CryptoEngineConfigAdapter[TestConfig]{
 		ID:       "test-id",
-		Metadata: map[string]interface{}{"meta": "data"},
+		Metadata: map[string]any{"meta": "data"},
 		Type:     HashicorpVaultProvider,
 		Config:   TestConfig{Key: "value"},
 	}
@@ -42,7 +42,7 @@ func TestCryptoEngineConfigAdapterUnmarshal(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	expectedConfig := map[string]interface{}{"Key": "value"}
+	expectedConfig := map[string]any{"Key": "value"}
 	if result.ID != adapter.ID || !reflect.DeepEqual(result.Metadata, adapter.Metadata) || result.Type != adapter.Type || !reflect.DeepEqual(result.Config, expectedConfig) {
 		t.Errorf("expected %v, got %v", adapter, result)
 	}

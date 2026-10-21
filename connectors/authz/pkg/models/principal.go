@@ -23,7 +23,7 @@ type Principal struct {
 }
 
 // AuthConfig stores type-specific authentication configuration
-type AuthConfig map[string]interface{}
+type AuthConfig map[string]any
 
 // Value implements the driver.Valuer interface for GORM
 func (a AuthConfig) Value() (driver.Value, error) {
@@ -31,7 +31,7 @@ func (a AuthConfig) Value() (driver.Value, error) {
 }
 
 // Scan implements the sql.Scanner interface for GORM
-func (a *AuthConfig) Scan(value interface{}) error {
+func (a *AuthConfig) Scan(value any) error {
 	if value == nil {
 		*a = make(AuthConfig)
 		return nil

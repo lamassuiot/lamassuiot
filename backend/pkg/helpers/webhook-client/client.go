@@ -6,23 +6,17 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 )
 
 func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte) ([]byte, error) {
 	clientConfig := config.HTTPClient{
-		LogLevel: config.LogLevel(conf.Config.LogLevel),
-		AuthMode: conf.Config.AuthMode,
-		HTTPConnection: config.HTTPConnection{
-			BasicConnection: config.BasicConnection{
-				TLSConfig: config.TLSConfig{
-					InsecureSkipVerify: !conf.Config.ValidateServerCert,
-				},
-			},
-		},
+		LogLevel:           config.LogLevel(conf.Config.LogLevel),
+		AuthMode:           conf.Config.AuthMode,
+		InsecureSkipVerify: !conf.Config.ValidateServerCert,
 	}
 
 	if conf.Config.AuthMode == config.JWT {

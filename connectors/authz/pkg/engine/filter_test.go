@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
 
 func mustNewFilterGenerator(t *testing.T, schemas *SchemaRegistry, policies *PolicyRegistry) *FilterGenerator {
@@ -879,7 +879,7 @@ func TestFilterGenerator_ColumnFilter_InOperator(t *testing.T) {
 				EntityType: "device",
 				Actions:    []string{"read"},
 				ColumnFilters: []models.ColumnFilter{
-					{Column: "status", Operator: "in", Value: []interface{}{"active", "provisioning"}},
+					{Column: "status", Operator: "in", Value: []any{"active", "provisioning"}},
 				},
 			},
 		},

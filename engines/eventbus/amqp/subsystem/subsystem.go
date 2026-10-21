@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/test"
-	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/v4/engines/eventbus/amqp/test"
+	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/subsystems"
 )
 
 func Register() {
@@ -37,7 +37,7 @@ func (p *RabbitMQSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 			Provider: config.Amqp,
 			Config:   eventBusConfig,
 		},
-		Extra: &map[string]interface{}{
+		Extra: &map[string]any{
 			"adminPort": adminPort,
 		},
 		AfterSuite: func() { cleanup() },
@@ -61,7 +61,7 @@ func purgeAndDrainQueues(adminPort int) error {
 		cli.Do(req) //nolint:errcheck // best-effort
 	}
 
-	getJSON := func(path string, dst interface{}) error {
+	getJSON := func(path string, dst any) error {
 		resp, err := cli.Get(baseURL + path)
 		if err != nil {
 			return err

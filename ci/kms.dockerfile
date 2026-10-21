@@ -1,4 +1,10 @@
-ARG BUILDER=golang:1.26.2-bookworm
+ARG BUILDER=golang:1.27.3-bookworm
+
+# Optional pre-vendored dependencies. CI runs `go mod vendor` once and passes
+# the result with `--build-context vendor=./vendor`, which replaces this empty
+# stage; plain `docker build` falls back to downloading modules.
+FROM scratch AS vendor
+
 # Pinned to the runner platform: the binary is cross-compiled with an
 # installed arm64 toolchain instead of emulating the whole build with QEMU.
 FROM --platform=$BUILDPLATFORM ${BUILDER} AS builder
@@ -6,13 +12,18 @@ WORKDIR /app
 # Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
 # this intermediate stage (in addition to the default final-stage scan).
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
-ARG TARGETARCH
-# Re-declared so the toolchain install step can report the selected builder.
-ARG BUILDER
 
-# go.work/go.work.sum rarely change — keep as an early cache layer.
-COPY go.work go.work
-COPY go.work.sum go.work.sum
+# Dependencies are resolved before the sources are copied, so this layer is
+# reused across code changes, version bumps and target architectures. A
+# provided vendor tree is used as is (go build picks vendor/ up automatically);
+# otherwise the empty vendor stage is copied and modules are downloaded.
+COPY go.mod go.sum ./
+COPY --from=vendor / vendor/
+RUN if [ -f vendor/modules.txt ]; then \
+      echo "Using provided vendor directory"; \
+    else \
+      rm -rf vendor && go mod download; \
+    fi
 
 COPY core core
 COPY shared shared
@@ -22,10 +33,10 @@ COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
 
-RUN GONOSUMDB=github.com/lamassuiot/lamassuiot GOPROXY=direct go work vendor
-
-# Build args are declared after vendoring so that a version-only change does
-# not bust the vendor cache layer.
+# Declared after the dependency layer so they do not bust its cache.
+ARG TARGETARCH
+# Re-declared so the toolchain install step can report the selected builder.
+ARG BUILDER
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
@@ -48,25 +59,33 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
       fi; \
     fi
 
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    if [ "$TARGETARCH" = "arm64" ]; then \
       export CC=aarch64-linux-gnu-gcc; \
     fi && \
     now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
     CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH \
     go build \
       -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \
-      -mod vendor \
       -o kms \
       backend/cmd/kms/main.go
 
-FROM debian:bookworm-slim AS pkcs11-client-proxy
+# The p11-kit RPC protocol is not compatible across minor versions: a 0.24/0.25
+# client gets CKR_DEVICE_MEMORY from a 0.26 server on C_GenerateKeyPair. This
+# stage must therefore use the same base image as the SoftHSM image
+# (lamassuiot/helmchart ci/softhsm/dockerfile), not the runtime's Debian.
+FROM ubuntu:26.04 AS pkcs11-client-proxy
 # Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
 # this intermediate stage (in addition to the default final-stage scan).
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 # This stage is NOT pinned to $BUILDPLATFORM: it must run for the target
 # architecture so that apt installs matching p11-kit libraries.
 ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends p11-kit && \
+# glibc shipped by the runtime image (cc-debian13). The copied libraries are
+# built against Ubuntu's newer glibc, so the build fails if they require any
+# symbol version above this one instead of failing at module load time.
+ARG RUNTIME_GLIBC=2.41
+RUN apt-get update && apt-get install -y --no-install-recommends p11-kit-modules && \
     case "$TARGETARCH" in \
       amd64) TRIPLET=x86_64-linux-gnu ;; \
       arm64) TRIPLET=aarch64-linux-gnu ;; \
@@ -74,7 +93,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends p11-kit && \
     esac && \
     mkdir -p /out/pkcs11 && \
     cp -L /usr/lib/${TRIPLET}/libffi.so.8 /out/ && \
-    cp -L /usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so /out/pkcs11/
+    cp -L /usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so /out/pkcs11/ && \
+    for lib in /out/libffi.so.8 /out/pkcs11/p11-kit-client.so; do \
+      required=$(grep -aoE 'GLIBC_2\.[0-9]+' "$lib" | sed 's/^GLIBC_//' | sort -uV | tail -n1); \
+      printf '%s\n%s\n' "$required" "$RUNTIME_GLIBC" | sort -V -C || \
+        { echo "$lib requires glibc $required, runtime image provides $RUNTIME_GLIBC" >&2; exit 1; }; \
+    done
 
 # gcr.io/distroless/cc-debian13:nonroot provides glibc + libgcc (required for
 # the CGO-linked binary), CA certificates, and a non-root user (UID 65532).

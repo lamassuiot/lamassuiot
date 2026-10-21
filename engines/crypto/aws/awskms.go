@@ -21,11 +21,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	corehelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
-	chelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	corehelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -644,7 +644,7 @@ func wrapAESKeyWithPad(kek, plaintext []byte) ([]byte, error) {
 	padded := padKey(plaintext)
 	n := len(padded) / 8
 	r := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		r[i] = make([]byte, 8)
 		copy(r[i], padded[i*8:(i+1)*8])
 	}
@@ -652,8 +652,8 @@ func wrapAESKeyWithPad(kek, plaintext []byte) ([]byte, error) {
 	a := buildIV(mli)
 
 	// Perform 6 * n iterations
-	for j := 0; j < 6; j++ {
-		for i := 0; i < n; i++ {
+	for j := range 6 {
+		for i := range n {
 			b := append(a, r[i]...)
 			bEncrypted := aesEncryptBlock(block, b)
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 )
 
 func TestMonolithicAuthzProxyAuthorizeForwardsOriginalRequestAndRestoresBody(t *testing.T) {
@@ -144,7 +144,7 @@ type capturedAuthzRequest struct {
 
 func decodeXFCCPart(t *testing.T, header, key string) string {
 	t.Helper()
-	for _, part := range strings.Split(header, ";") {
+	for part := range strings.SplitSeq(header, ";") {
 		part = strings.TrimSpace(part)
 		prefix := key + "="
 		if !strings.HasPrefix(part, prefix) {

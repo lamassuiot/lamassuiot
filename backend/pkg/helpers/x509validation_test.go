@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 )
 
 func TestValidateCertificate(t *testing.T) {

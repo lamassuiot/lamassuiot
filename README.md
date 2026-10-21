@@ -44,7 +44,7 @@ There are 3 main repositories to consider when developing Lamassu
 
 ### Prerequisites
 
-- [Go 1.26+](https://go.dev/doc/install)
+- [Go 1.27+](https://go.dev/doc/install)
 - Docker (for running dependencies such as PostgreSQL, Vault, or message brokers)
 - Kubernetes cluster (optional, recommended for production deployments)
 
@@ -55,15 +55,15 @@ There are 3 main repositories to consider when developing Lamassu
  git clone https://github.com/lamassuiot/lamassuiot.git
  cd lamassuiot
 
-# Synchronize go.work modules and tidy dependencies
- go work sync
- go mod tidy -e ./...
+# Download and tidy dependencies
+ go mod download
+ go mod tidy
 
 # Run the full test suite
  go test ./...
 ```
 
-> **Tip:** The repository uses a Go workspaces file (`go.work`) to orchestrate the multiple modules located under
+> **Tip:** The repository is a single Go module (`github.com/lamassuiot/lamassuiot/v4`) that covers
 > `backend`, `connectors`, `core`, `engines`, `sdk`, and `shared`.
 
 ### Running services locally - Development
@@ -95,8 +95,10 @@ We welcome community contributions! To get started:
 2. Open an issue describing your proposal or bug report.
 3. Submit a pull request with a focused change set and accompanying tests.
 
-Please adhere to our coding standards, commit conventions, and security practices outlined in
-[SECURITY.md](SECURITY.md).
+## Security
+
+To report a security vulnerability, do **not** open a public issue — follow
+[SECURITY.md](./SECURITY.md) instead.
 
 ## Support & community
 

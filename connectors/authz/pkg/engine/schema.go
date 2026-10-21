@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -97,13 +98,7 @@ func (s *SchemaDefinition) ValidateEntityKey(entityKey map[string]string) error 
 		}
 	}
 	for col := range entityKey {
-		found := false
-		for _, pk := range s.PrimaryKeys {
-			if pk == col {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(s.PrimaryKeys, col)
 		if !found {
 			return fmt.Errorf("entityKey contains unknown primary key column %q", col)
 		}
@@ -314,37 +309,20 @@ func (r *SchemaRegistry) validateSchema(schema *SchemaDefinition) error {
 
 // HasAction checks if a schema supports a specific action (atomic or global)
 func (s *SchemaDefinition) HasAction(action string) bool {
-	for _, a := range s.AtomicActions {
-		if a == action {
-			return true
-		}
+	if slices.Contains(s.AtomicActions, action) {
+		return true
 	}
-	for _, a := range s.GlobalActions {
-		if a == action {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.GlobalActions, action)
 }
 
 // IsAtomicAction checks if an action is atomic (requires entity ID)
 func (s *SchemaDefinition) IsAtomicAction(action string) bool {
-	for _, a := range s.AtomicActions {
-		if a == action {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.AtomicActions, action)
 }
 
 // IsGlobalAction checks if an action is global (doesn't require entity ID)
 func (s *SchemaDefinition) IsGlobalAction(action string) bool {
-	for _, a := range s.GlobalActions {
-		if a == action {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.GlobalActions, action)
 }
 
 // GetRelation retrieves a relation by name

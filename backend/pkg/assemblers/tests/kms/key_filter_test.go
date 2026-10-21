@@ -7,10 +7,10 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
@@ -58,7 +58,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for each key
-	ud1 := make(map[string]interface{})
+	ud1 := make(map[string]any)
 	ud1["environment"] = "production"
 	ud1["purpose"] = "signing"
 	ud1["critical"] = true
@@ -73,7 +73,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for key1: %s", err)
 	}
 
-	ud2 := make(map[string]interface{})
+	ud2 := make(map[string]any)
 	ud2["environment"] = "development"
 	ud2["purpose"] = "encryption"
 	ud2["critical"] = false
@@ -88,7 +88,7 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for key2: %s", err)
 	}
 
-	ud3 := make(map[string]interface{})
+	ud3 := make(map[string]any)
 	ud3["environment"] = "staging"
 	ud3["purpose"] = "signing"
 	ud3["critical"] = true

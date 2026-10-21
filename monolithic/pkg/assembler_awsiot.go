@@ -1,12 +1,11 @@
 //go:build !noaws
-// +build !noaws
 
 package pkg
 
 import (
-	awsiotconnector "github.com/lamassuiot/lamassuiot/connectors/awsiot/v3/pkg"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	awsiotconnector "github.com/lamassuiot/lamassuiot/v4/connectors/awsiot/pkg"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func AssembleAWSIoT(conf MonolithicConfig, caSDKBuilder func(serviceID string, src string) services.CAService, dmsMngrSDKBuilder func(serviceID string, src string) services.DMSManagerService, deviceMngrSDKBuilder func(serviceID string, src string) services.DeviceManagerService) error {

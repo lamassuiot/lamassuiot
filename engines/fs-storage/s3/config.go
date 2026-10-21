@@ -1,12 +1,12 @@
 package s3
 
 import (
-	sharedAWS "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	sharedAWS "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 )
 
 type AWSS3FilesystemConfig struct {
 	sharedAWS.AWSSDKConfig `mapstructure:",squash"`
-	BucketName             string                 `mapstructure:"bucket_name"`
-	ID                     string                 `mapstructure:"id"`
-	Metadata               map[string]interface{} `mapstructure:"metadata"`
+	BucketName             string         `mapstructure:"bucket_name"`
+	ID                     string         `mapstructure:"id"`
+	Metadata               map[string]any `mapstructure:"metadata"`
 }

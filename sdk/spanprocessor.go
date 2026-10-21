@@ -3,7 +3,7 @@ package sdk
 import (
 	"context"
 
-	core "github.com/lamassuiot/lamassuiot/core/v3"
+	core "github.com/lamassuiot/lamassuiot/v4/core"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )

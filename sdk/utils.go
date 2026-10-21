@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	hhelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	hhelpers "github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
@@ -153,6 +153,37 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 	client.Transport = otelhttp.NewTransport(client.Transport)
 
 	return hhelpers.BuildHTTPClientWithTracerLogger(client, logger)
+}
+
+// restClient is embedded by every service client. Its methods resolve paths
+// against baseUrl and issue the request with httpClient.
+type restClient struct {
+	httpClient *http.Client
+	baseUrl    string
+}
+
+func (c restClient) get[T any](ctx context.Context, path string, queryParams *resources.QueryParameters, knownErrors map[int][]error) (T, error) {
+	return Get[T](ctx, c.httpClient, c.baseUrl+path, queryParams, knownErrors)
+}
+
+func (c restClient) post[T any](ctx context.Context, path string, data any, knownErrors map[int][]error) (T, error) {
+	return Post[T](ctx, c.httpClient, c.baseUrl+path, data, knownErrors)
+}
+
+func (c restClient) put[T any](ctx context.Context, path string, data any, knownErrors map[int][]error) (T, error) {
+	return Put[T](ctx, c.httpClient, c.baseUrl+path, data, knownErrors)
+}
+
+func (c restClient) deleteWithBody[T any](ctx context.Context, path string, data any, knownErrors map[int][]error) (T, error) {
+	return DeleteWithBody[T](ctx, c.httpClient, c.baseUrl+path, data, knownErrors)
+}
+
+func (c restClient) delete(ctx context.Context, path string, knownErrors map[int][]error) error {
+	return Delete(ctx, c.httpClient, c.baseUrl+path, knownErrors)
+}
+
+func (c restClient) iterGet[E any, T resources.Iterator[E]](ctx context.Context, path string, exhaustiveRun bool, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
+	return IterGet[E, T](ctx, c.httpClient, c.baseUrl+path, exhaustiveRun, queryParams, applyFunc, knownErrors)
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {

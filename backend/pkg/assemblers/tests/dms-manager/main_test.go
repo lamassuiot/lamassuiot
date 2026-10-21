@@ -18,18 +18,18 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/est"
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )
@@ -284,7 +284,7 @@ func TestESTEnroll(t *testing.T) {
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -374,7 +374,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -451,7 +451,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -529,7 +529,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -620,7 +620,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -711,7 +711,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -762,7 +762,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -822,7 +822,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -886,7 +886,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -976,7 +976,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1046,7 +1046,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1110,7 +1110,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1187,7 +1187,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 
 				_, err = testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
 					ID:        deviceID,
@@ -1235,7 +1235,7 @@ func TestESTEnroll(t *testing.T) {
 				defer cleanup()
 
 				router.POST("/verify", func(c *gin.Context) {
-					var b map[string]interface{}
+					var b map[string]any
 					err := c.BindJSON(&b)
 					if err != nil {
 						c.JSON(400, gin.H{})
@@ -1259,8 +1259,8 @@ func TestESTEnroll(t *testing.T) {
 						return
 					}
 
-					request := b["http_request"].(map[string]interface{})
-					if request["headers"] == nil || request["headers"].(map[string]interface{}) == nil {
+					request := b["http_request"].(map[string]any)
+					if request["headers"] == nil || request["headers"].(map[string]any) == nil {
 						c.JSON(400, gin.H{})
 						return
 					}
@@ -1297,7 +1297,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1358,7 +1358,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1425,7 +1425,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1516,7 +1516,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1558,7 +1558,7 @@ func TestESTEnroll(t *testing.T) {
 		// 		}
 
 		// 		importedBootstrapCA, err := testServers.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
-		// 			ID:                 fmt.Sprintf("my-external-CA-%s", uuid.NewString()),
+		// 			ID:                 fmt.Sprintf("my-external-CA-%s", uuid.NewV7().String()),
 		// 			CAType:             models.CertificateTypeImportedWithoutKey,
 		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 		// 			CACertificate:      bootstrapCA.Certificate.Certificate,
@@ -1615,7 +1615,7 @@ func TestESTEnroll(t *testing.T) {
 		// 			InsecureSkipVerify:    true,
 		// 		}
 
-		// 		deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+		// 		deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 		// 		enrollKey, _ := chelpers.GenerateRSAKey(2048)
 		// 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1673,7 +1673,7 @@ func TestESTEnroll(t *testing.T) {
 					key:          bootKey,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1751,7 +1751,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1833,7 +1833,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1909,7 +1909,7 @@ func TestESTEnroll(t *testing.T) {
 					key:          bootKey,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -1996,7 +1996,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify: true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2078,7 +2078,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2165,7 +2165,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify: true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2262,7 +2262,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify: true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2338,7 +2338,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify: true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2436,7 +2436,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2519,7 +2519,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2608,7 +2608,7 @@ func TestESTEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -2741,7 +2741,7 @@ func TestESTGetCACerts(t *testing.T) {
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -2929,7 +2929,6 @@ func TestESTGetCACerts(t *testing.T) {
 		},
 	}
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -2968,7 +2967,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -3071,7 +3070,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewV7().String())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
@@ -3170,7 +3169,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewV7().String())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
@@ -3262,7 +3261,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewV7().String())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
@@ -3323,7 +3322,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewV7().String())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
@@ -3341,7 +3340,6 @@ func TestESTServerKeyGen(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -3379,7 +3377,7 @@ func TestESTReEnroll(t *testing.T) {
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -3467,7 +3465,7 @@ func TestESTReEnroll(t *testing.T) {
 			InsecureSkipVerify:    true,
 		}
 
-		deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+		deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 		enrollKey, _ := chelpers.GenerateRSAKey(2048)
 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -3743,7 +3741,7 @@ func TestESTReEnroll(t *testing.T) {
 					"5m",
 				)
 
-				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y", "1y")
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewV7().String()), "5y", "1y")
 				if err != nil {
 					t.Fatalf("could not create Rotational CA: %s", err)
 				}
@@ -4466,7 +4464,7 @@ func TestGetAllDMS(t *testing.T) {
 	}
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -4625,7 +4623,6 @@ func TestGetAllDMS(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())

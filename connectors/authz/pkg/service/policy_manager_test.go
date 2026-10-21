@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
 )
 
 func TestPolicyManager_CreatePolicy_RejectsRepeatedVertexPath(t *testing.T) {

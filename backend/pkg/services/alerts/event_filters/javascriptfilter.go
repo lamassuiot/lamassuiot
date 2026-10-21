@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/robertkrimen/otto"
 )
 
@@ -28,7 +28,7 @@ func javascriptFilter(event cloudevents.Event, script string) (bool, error) {
 		return false, err
 	}
 
-	var parsed interface{}
+	var parsed any
 	if err := json.Unmarshal(encoded, &parsed); err != nil {
 		return false, err
 	}

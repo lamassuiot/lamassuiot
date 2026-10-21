@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 // ---------------------------------------------------------------------------
@@ -656,7 +656,6 @@ func TestCreateCertificateSDK(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
 			if err != nil {
@@ -955,7 +954,6 @@ func TestCreateCertificateService(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
 			if err != nil {
@@ -1089,7 +1087,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 		ca := createActiveCA(t, caTest.Service)
 		serials := map[string]struct{}{}
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 				CAID: ca.ID,
 				KeySpec: services.CertificateKeySpec{
@@ -1130,7 +1128,7 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 		}
 
 		var prevSerial string
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 				CAID: ca.ID,
 				KeySpec: services.CertificateKeySpec{

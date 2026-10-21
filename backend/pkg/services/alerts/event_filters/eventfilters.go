@@ -2,7 +2,7 @@ package eventfilters
 
 import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 var eventFilters = make(map[models.ConditionType]func(c models.SubscriptionCondition, event cloudevents.Event) (bool, error))

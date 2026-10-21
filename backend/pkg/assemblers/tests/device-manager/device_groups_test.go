@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestCreateDeviceGroup(t *testing.T) {
@@ -32,7 +32,7 @@ func TestCreateDeviceGroup(t *testing.T) {
 		{
 			name: "OK/CreateRootGroup",
 			input: services.CreateDeviceGroupInput{
-				ID:          uuid.NewString(),
+				ID:          uuid.NewV7().String(),
 				Name:        "Test Root Group",
 				Description: "A test root group",
 				ParentID:    nil,
@@ -49,7 +49,7 @@ func TestCreateDeviceGroup(t *testing.T) {
 		{
 			name: "Err/InvalidFilterField",
 			input: services.CreateDeviceGroupInput{
-				ID:          uuid.NewString(),
+				ID:          uuid.NewV7().String(),
 				Name:        "Invalid Filter Group",
 				Description: "Group with invalid filter field",
 				ParentID:    nil,
@@ -72,10 +72,10 @@ func TestCreateDeviceGroup(t *testing.T) {
 		{
 			name: "Err/CircularReferenceToSelf",
 			input: services.CreateDeviceGroupInput{
-				ID:          uuid.NewString(),
+				ID:          uuid.NewV7().String(),
 				Name:        "Self Reference Group",
 				Description: "Group referencing itself",
-				ParentID:    stringPtr(""), // Will be set to ID below
+				ParentID:    new(""), // Will be set to ID below
 				Criteria:    []models.DeviceGroupFilterOption{},
 			},
 			expectError: true,
@@ -86,10 +86,10 @@ func TestCreateDeviceGroup(t *testing.T) {
 		{
 			name: "Err/ParentNotFound",
 			input: services.CreateDeviceGroupInput{
-				ID:          uuid.NewString(),
+				ID:          uuid.NewV7().String(),
 				Name:        "Orphan Group",
 				Description: "Group with non-existent parent",
-				ParentID:    stringPtr(uuid.NewString()), // Use valid UUID for non-existent parent
+				ParentID:    new(uuid.NewV7().String()), // Use valid UUID for non-existent parent
 				Criteria:    []models.DeviceGroupFilterOption{},
 			},
 			expectError: true,
@@ -141,7 +141,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 	client := dmgr.HttpDeviceManagerSDK
 
 	// Create root group
-	rootGroupID := uuid.NewString()
+	rootGroupID := uuid.NewV7().String()
 	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          rootGroupID,
 		Name:        "All Sensors",
@@ -160,7 +160,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 	}
 
 	// Create child group
-	childGroupID := uuid.NewString()
+	childGroupID := uuid.NewV7().String()
 	childGroup, err := client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          childGroupID,
 		Name:        "Active Sensors",
@@ -184,7 +184,7 @@ func TestNestedDeviceGroups(t *testing.T) {
 	}
 
 	// Create grandchild group
-	grandchildGroupID := uuid.NewString()
+	grandchildGroupID := uuid.NewV7().String()
 	grandchildGroup, err := client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          grandchildGroupID,
 		Name:        "High Temp Active Sensors",
@@ -232,7 +232,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 	client := dmgr.HttpDeviceManagerSDK
 
 	// Create test devices
-	device1ID := uuid.NewString()
+	device1ID := uuid.NewV7().String()
 	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device1ID,
 		Tags:      []string{"sensor", "production"},
@@ -244,7 +244,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 		t.Fatalf("could not create device 1: %s", err)
 	}
 
-	device2ID := uuid.NewString()
+	device2ID := uuid.NewV7().String()
 	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device2ID,
 		Tags:      []string{"sensor", "development"},
@@ -256,7 +256,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 		t.Fatalf("could not create device 2: %s", err)
 	}
 
-	device3ID := uuid.NewString()
+	device3ID := uuid.NewV7().String()
 	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device3ID,
 		Tags:      []string{"actuator", "production"},
@@ -269,7 +269,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 	}
 
 	// Create device group for sensors
-	sensorGroupID := uuid.NewString()
+	sensorGroupID := uuid.NewV7().String()
 	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          sensorGroupID,
 		Name:        "Sensor Devices",
@@ -288,7 +288,7 @@ func TestGetDevicesByGroup(t *testing.T) {
 	}
 
 	// Create nested group for production sensors
-	prodSensorGroupID := uuid.NewString()
+	prodSensorGroupID := uuid.NewV7().String()
 	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          prodSensorGroupID,
 		Name:        "Production Sensors",
@@ -357,7 +357,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 	client := dmgr.HttpDeviceManagerSDK
 
 	// Create test devices with different statuses
-	device1ID := uuid.NewString()
+	device1ID := uuid.NewV7().String()
 	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device1ID,
 		Tags:      []string{"sensor"},
@@ -369,7 +369,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 		t.Fatalf("could not create device 1: %s", err)
 	}
 
-	device2ID := uuid.NewString()
+	device2ID := uuid.NewV7().String()
 	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device2ID,
 		Tags:      []string{"sensor"},
@@ -381,7 +381,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 		t.Fatalf("could not create device 2: %s", err)
 	}
 
-	device3ID := uuid.NewString()
+	device3ID := uuid.NewV7().String()
 	_, err = client.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        device3ID,
 		Tags:      []string{"actuator"},
@@ -394,7 +394,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 	}
 
 	// Create device group for sensors
-	sensorGroupID := uuid.NewString()
+	sensorGroupID := uuid.NewV7().String()
 	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          sensorGroupID,
 		Name:        "Sensor Devices",
@@ -432,7 +432,7 @@ func TestGetDeviceGroupStats(t *testing.T) {
 
 	// Test non-existent group
 	_, err = client.GetDeviceGroupStats(ctx, services.GetDeviceGroupStatsInput{
-		GroupID: uuid.NewString(), // Use valid UUID for non-existent group
+		GroupID: uuid.NewV7().String(), // Use valid UUID for non-existent group
 	})
 	if err == nil {
 		t.Fatal("expected error for non-existent group but got none")
@@ -456,7 +456,7 @@ func TestUpdateDeviceGroup(t *testing.T) {
 	client := dmgr.HttpDeviceManagerSDK
 
 	// Create initial group
-	groupID := uuid.NewString()
+	groupID := uuid.NewV7().String()
 	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          groupID,
 		Name:        "Original Name",
@@ -510,7 +510,7 @@ func TestDeleteDeviceGroup(t *testing.T) {
 	client := dmgr.HttpDeviceManagerSDK
 
 	// Create group
-	groupID := uuid.NewString()
+	groupID := uuid.NewV7().String()
 	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          groupID,
 		Name:        "Test Group",
@@ -553,7 +553,7 @@ func TestGetDeviceGroups(t *testing.T) {
 	client := dmgr.HttpDeviceManagerSDK
 
 	// Create multiple groups
-	group1ID := uuid.NewString()
+	group1ID := uuid.NewV7().String()
 	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          group1ID,
 		Name:        "Group 1",
@@ -565,7 +565,7 @@ func TestGetDeviceGroups(t *testing.T) {
 		t.Fatalf("could not create group 1: %s", err)
 	}
 
-	group2ID := uuid.NewString()
+	group2ID := uuid.NewV7().String()
 	_, err = client.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          group2ID,
 		Name:        "Group 2",
@@ -608,7 +608,7 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 	hotDevice, err := dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        "hot-sensor",
 		Tags:      []string{"sensor"},
-		Metadata:  map[string]interface{}{"temp": 75, "active": true, "env": "production"},
+		Metadata:  map[string]any{"temp": 75, "active": true, "env": "production"},
 		DMSID:     "test-dms",
 		Icon:      "sensor",
 		IconColor: "#FF0000",
@@ -620,7 +620,7 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 	coldDevice, err := dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        "cold-sensor",
 		Tags:      []string{"sensor"},
-		Metadata:  map[string]interface{}{"temp": 20, "active": false, "env": "staging"},
+		Metadata:  map[string]any{"temp": 20, "active": false, "env": "staging"},
 		DMSID:     "test-dms",
 		Icon:      "sensor",
 		IconColor: "#0000FF",
@@ -632,7 +632,7 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 	warmDevice, err := dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        "warm-sensor",
 		Tags:      []string{"sensor"},
-		Metadata:  map[string]interface{}{"temp": 55, "active": true, "env": "staging"},
+		Metadata:  map[string]any{"temp": 55, "active": true, "env": "staging"},
 		DMSID:     "test-dms",
 		Icon:      "sensor",
 		IconColor: "#00FF00",
@@ -642,7 +642,7 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 	}
 
 	// Test 1: Group filtering by numeric threshold ($.temp > 50)
-	highTempGroupID := uuid.NewString()
+	highTempGroupID := uuid.NewV7().String()
 	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          highTempGroupID,
 		Name:        "High Temp Sensors",
@@ -683,7 +683,7 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 	}
 
 	// Test 2: Group filtering by boolean field ($.active == true)
-	activeGroupID := uuid.NewString()
+	activeGroupID := uuid.NewV7().String()
 	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          activeGroupID,
 		Name:        "Active Sensors",
@@ -724,7 +724,7 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 	}
 
 	// Test 3: Group filtering by string equality ($.env == "production")
-	prodGroupID := uuid.NewString()
+	prodGroupID := uuid.NewV7().String()
 	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          prodGroupID,
 		Name:        "Production Sensors",
@@ -763,7 +763,7 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 	}
 
 	// Test 4: Combined JSONPath with && — active AND temp > 50
-	activeHotGroupID := uuid.NewString()
+	activeHotGroupID := uuid.NewV7().String()
 	_, err = dmgr.Service.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
 		ID:          activeHotGroupID,
 		Name:        "Active Hot Sensors",
@@ -816,6 +816,8 @@ func TestGetDevicesByGroupWithJsonPathMetadata(t *testing.T) {
 }
 
 // Helper function
+//
+//go:fix inline
 func stringPtr(s string) *string {
-	return &s
+	return new(s)
 }

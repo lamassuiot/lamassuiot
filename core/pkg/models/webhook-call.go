@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 )
 
 type WebhookCall struct {

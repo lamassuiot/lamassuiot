@@ -1,10 +1,10 @@
 package subsystem
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/docker"
-	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/docker"
+	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/subsystems"
 )
 
 func Register() {
@@ -15,7 +15,7 @@ type Pkcs11Subsystem struct {
 	hsmModulePath string
 }
 
-func (p *Pkcs11Subsystem) Prepare(config map[string]interface{}) error {
+func (p *Pkcs11Subsystem) Prepare(config map[string]any) error {
 	p.hsmModulePath = config["hsmModulePath"].(string)
 	return nil
 }
@@ -28,7 +28,7 @@ func (p *Pkcs11Subsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemB
 
 	configAdapter := config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]{
 		ID:       "pkcs11-1",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Type:     config.PKCS11Provider,
 		Config:   pkcs11Cfg,
 	}

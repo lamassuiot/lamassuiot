@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
-	lamassu "github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	lamassu "github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/sirupsen/logrus"
 )
 
@@ -503,7 +503,7 @@ func enrichContextByPrincipalID(ctx context.Context, principalID string) context
 // before principals are matched, so that even failed-match logs carry auth context.
 // For JWT-based auth types (oidc), the raw token is never stored; decoded claims are
 // logged instead. X.509 and other credential types are stored as-is.
-func enrichContextByAuthMaterial(ctx context.Context, authType string, authMaterial interface{}) context.Context {
+func enrichContextByAuthMaterial(ctx context.Context, authType string, authMaterial any) context.Context {
 	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthType, authType)
 
 	credential := authMaterial
@@ -515,7 +515,7 @@ func enrichContextByAuthMaterial(ctx context.Context, authType string, authMater
 		}
 	}
 
-	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthContext, map[string]interface{}{
+	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthContext, map[string]any{
 		"credential": credential,
 	})
 	return ctx

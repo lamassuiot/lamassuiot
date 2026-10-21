@@ -25,7 +25,7 @@ Lamassu IoT is an IoT-first PKI (Public Key Infrastructure) designed for industr
 
 ### Key Patterns
 
-**Go Workspace**: Uses `go.work` with 18+ modules. Always use `go work sync` and workspace-aware commands. Changes in one module (e.g., `core/`) affect dependents.
+**Go Module**: Single module (`github.com/lamassuiot/lamassuiot/v4`) with one root `go.mod`. Use `go mod tidy` and `go mod vendor`.
 
 **Service Assembly Pattern**: Each service follows the assembler pattern in `backend/pkg/assemblers/`. Services are composed of:
 - Storage repos (Postgres via `engines/storage/postgres`)
@@ -298,7 +298,7 @@ Use `monolithic/cmd/development/main.go` for local development:
 - Hot-reloadable with `go run`
 
 ### Common Issues
-- **Workspace errors**: Run `go work sync && go mod tidy -e ./...`
+- **Workspace errors**: Run `go mod tidy`
 - **Migration test failures**: Ensure test function name matches pattern `MigrationTest_{DB}_{TIMESTAMP}_{desc}`
 - **Event not firing**: Check middleware is applied in assembler and event bus is enabled
 - **Test data conflicts**: Use unique IDs in migration tests, don't rely on clean DB state
@@ -308,10 +308,13 @@ Use `monolithic/cmd/development/main.go` for local development:
 ### Dockerfile Pattern
 Each service has a Dockerfile in `ci/` with multi-stage build:
 ```dockerfile
-# Build stage: golang:1.26.2-bookworm with workspace context
-COPY go.work go.work
-COPY {all modules} ...
-RUN go work vendor && go build -ldflags="-X main.version=..."
+# Build stage: golang:1.27.3-bookworm
+FROM scratch AS vendor  # replaced in CI via --build-context vendor=./vendor
+COPY go.mod go.sum ./
+COPY --from=vendor / vendor/
+RUN <use vendor/ if it has modules.txt, else go mod download>
+COPY {all source dirs} ...
+RUN --mount=type=cache,target=/root/.cache/go-build go build -ldflags="-X main.version=..."
 
 # Runtime stage: ubuntu:26.04 with non-root lamassu system user
 USER lamassu
@@ -325,7 +328,7 @@ CMD ["/app/service"]
 
 ## Anti-Patterns
 
-- ❌ Don't bypass workspace - always use `go work` commands
+- ❌ Don't add nested `go.mod` files - the repo is a single module
 - ❌ Don't hardcode crypto engine IDs - use configuration
 - ❌ Don't test database state globally - focus on test-created data
 - ❌ Don't use raw SQL without parameterization

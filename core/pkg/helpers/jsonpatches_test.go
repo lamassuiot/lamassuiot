@@ -9,7 +9,7 @@ func TestApplyPatchesMap(t *testing.T) {
 	meta := map[string]any{
 		"test":    "test",
 		"lamassu": "lamassu",
-		"arr":     []interface{}{"test", "test2"},
+		"arr":     []any{"test", "test2"},
 	}
 
 	checkValue := func(t *testing.T, spec string, result map[string]any, key string, expected any) {
@@ -99,7 +99,7 @@ func TestApplyPatchesMap(t *testing.T) {
 		t.Fatalf("Spec6: failed to apply patches: %s", err)
 	}
 
-	checkValue(t, "Spec6", *result6, "arr", []interface{}{"test3"})
+	checkValue(t, "Spec6", *result6, "arr", []any{"test3"})
 
 	// Spec7: Add element with key with "/"
 	result7, err := ApplyPatches[map[string]any](
@@ -181,7 +181,7 @@ func TestApplyPatchesNestedArrayInMap(t *testing.T) {
 		t.Fatal("Spec1: missing key lamassu.io/kms/binded-resources")
 	}
 
-	bindedResourcesSlice, ok := bindedResources.([]interface{})
+	bindedResourcesSlice, ok := bindedResources.([]any)
 	if !ok {
 		t.Fatalf("Spec1: expected lamassu.io/kms/binded-resources to be a slice, got %T", bindedResources)
 	}
@@ -190,7 +190,7 @@ func TestApplyPatchesNestedArrayInMap(t *testing.T) {
 		t.Errorf("Spec1: expected 1 element in array, got %d", len(bindedResourcesSlice))
 	}
 
-	firstElement, ok := bindedResourcesSlice[0].(map[string]interface{})
+	firstElement, ok := bindedResourcesSlice[0].(map[string]any)
 	if !ok {
 		t.Fatalf("Spec1: expected first element to be map[string]interface{}, got %T", bindedResourcesSlice[0])
 	}
@@ -220,7 +220,7 @@ func TestApplyPatchesNestedArrayInMap(t *testing.T) {
 		t.Fatal("Spec2: missing key lamassu.io/kms/binded-resources")
 	}
 
-	bindedResourcesSlice2, ok := bindedResources2.([]interface{})
+	bindedResourcesSlice2, ok := bindedResources2.([]any)
 	if !ok {
 		t.Fatalf("Spec2: expected lamassu.io/kms/binded-resources to be a slice, got %T", bindedResources2)
 	}
@@ -229,7 +229,7 @@ func TestApplyPatchesNestedArrayInMap(t *testing.T) {
 		t.Errorf("Spec2: expected 2 elements in array, got %d", len(bindedResourcesSlice2))
 	}
 
-	secondElement, ok := bindedResourcesSlice2[1].(map[string]interface{})
+	secondElement, ok := bindedResourcesSlice2[1].(map[string]any)
 	if !ok {
 		t.Fatalf("Spec2: expected second element to be map[string]interface{}, got %T", bindedResourcesSlice2[1])
 	}
@@ -258,7 +258,7 @@ func TestApplyPatchesNestedArrayInMap(t *testing.T) {
 		t.Fatal("Spec3: missing key lamassu.io/kms/binded-resources")
 	}
 
-	bindedResourcesSlice3, ok := bindedResources3.([]interface{})
+	bindedResourcesSlice3, ok := bindedResources3.([]any)
 	if !ok {
 		t.Fatalf("Spec3: expected lamassu.io/kms/binded-resources to be a slice, got %T", bindedResources3)
 	}

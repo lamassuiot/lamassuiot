@@ -8,9 +8,9 @@ import (
 
 func TestInjectVersionIntoOpenAPI(t *testing.T) {
 	validSpec := func(version string) []byte {
-		b, _ := yaml.Marshal(map[string]interface{}{
+		b, _ := yaml.Marshal(map[string]any{
 			"openapi": "3.0.0",
-			"info": map[string]interface{}{
+			"info": map[string]any{
 				"title":   "Test API",
 				"version": version,
 			},
@@ -56,9 +56,9 @@ func TestInjectVersionIntoOpenAPI(t *testing.T) {
 			wantSame: true,
 		},
 		{
-			name:     "missing info section — original returned",
+			name: "missing info section — original returned",
 			input: func() []byte {
-				b, _ := yaml.Marshal(map[string]interface{}{"openapi": "3.0.0"})
+				b, _ := yaml.Marshal(map[string]any{"openapi": "3.0.0"})
 				return b
 			}(),
 			version:  "1.2.3",
@@ -77,11 +77,11 @@ func TestInjectVersionIntoOpenAPI(t *testing.T) {
 				return
 			}
 
-			var parsed map[string]interface{}
+			var parsed map[string]any
 			if err := yaml.Unmarshal(got, &parsed); err != nil {
 				t.Fatalf("output is not valid YAML: %v", err)
 			}
-			info, ok := parsed["info"].(map[string]interface{})
+			info, ok := parsed["info"].(map[string]any)
 			if !ok {
 				t.Fatal("output missing info section")
 			}

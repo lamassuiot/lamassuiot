@@ -1,9 +1,9 @@
 package builder
 
 import (
-	authzgorm "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk/gorm"
-	postgres "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
-	subsystem "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/subsystem"
+	authzgorm "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gorm"
+	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	subsystem "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/subsystem"
 )
 
 func init() {

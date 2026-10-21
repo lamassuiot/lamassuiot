@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -52,8 +52,8 @@ func TestGetGlobalCapabilities_EndToEnd_JWT(t *testing.T) {
 		Name: "John Doe",
 		Type: "oidc",
 		AuthConfig: models.AuthConfig{
-			"claims": []interface{}{
-				map[string]interface{}{
+			"claims": []any{
+				map[string]any{
 					"claim":    "sub",
 					"operator": "equals",
 					"value":    "user-123",
@@ -123,8 +123,8 @@ func TestGetEntityCapabilities_EndToEnd_JWT(t *testing.T) {
 		Name: "Jane Doe",
 		Type: "oidc",
 		AuthConfig: models.AuthConfig{
-			"claims": []interface{}{
-				map[string]interface{}{
+			"claims": []any{
+				map[string]any{
 					"claim":    "sub",
 					"operator": "equals",
 					"value":    "user-456",
@@ -178,8 +178,8 @@ func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
 		Name: "Principal 1",
 		Type: "oidc",
 		AuthConfig: models.AuthConfig{
-			"claims": []interface{}{
-				map[string]interface{}{
+			"claims": []any{
+				map[string]any{
 					"claim":    "sub",
 					"operator": "equals",
 					"value":    "shared-user",
@@ -193,8 +193,8 @@ func TestGetCapabilities_MultiplePrincipalsMatched(t *testing.T) {
 		Name: "Principal 2",
 		Type: "oidc",
 		AuthConfig: models.AuthConfig{
-			"claims": []interface{}{
-				map[string]interface{}{
+			"claims": []any{
+				map[string]any{
 					"claim":    "sub",
 					"operator": "equals",
 					"value":    "shared-user",
@@ -234,17 +234,17 @@ func TestPrincipalManager_MatchSubjects_StaticAndOIDCDerivedAttributes(t *testin
 		Name: "OIDC Device",
 		Type: "oidc",
 		AuthConfig: models.AuthConfig{
-			"claims": []interface{}{
-				map[string]interface{}{
+			"claims": []any{
+				map[string]any{
 					"claim":    "sub",
 					"operator": "equals",
 					"value":    "device-token",
 				},
 			},
-			"subject_attributes": map[string]interface{}{
+			"subject_attributes": map[string]any{
 				"tenant_id": "tenant-a",
 			},
-			"subject_attribute_mappings": map[string]interface{}{
+			"subject_attribute_mappings": map[string]any{
 				"device_id": "oidc.claim.device_id",
 			},
 		},
@@ -283,15 +283,15 @@ func TestPrincipalManager_MatchSubjects_StaticAndX509DerivedAttributes(t *testin
 		AuthConfig: models.AuthConfig{
 			"match_mode": "cn_and_ca",
 			"subject_cn": "sensor-*.example.com",
-			"ca_trust": map[string]interface{}{
+			"ca_trust": map[string]any{
 				"pem":           base64PEMFromCert(caCert),
 				"identity_type": "authority_key_id",
 				"value":         formatAKIValue(leafCert.AuthorityKeyId),
 			},
-			"subject_attributes": map[string]interface{}{
+			"subject_attributes": map[string]any{
 				"tenant_id": "tenant-a",
 			},
-			"subject_attribute_mappings": map[string]interface{}{
+			"subject_attribute_mappings": map[string]any{
 				"device_id": "x509.subject.cn",
 			},
 		},

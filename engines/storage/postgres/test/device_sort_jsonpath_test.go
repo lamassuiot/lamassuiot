@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -39,6 +39,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 			ID: "device_prod",
 			Metadata: map[string]any{
 				"env":      "prod",
+				"zones":    []any{"b", "z"},
 				"priority": float64(10), // JSON numbers are float64
 			},
 			Status:            models.DeviceActive,
@@ -51,6 +52,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 			ID: "device_dev",
 			Metadata: map[string]any{
 				"env":      "dev",
+				"zones":    []any{"c", "a"},
 				"priority": float64(20),
 			},
 			Status:            models.DeviceActive,
@@ -63,6 +65,7 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 			ID: "device_stage",
 			Metadata: map[string]any{
 				"env":      "stage",
+				"zones":    []any{"a", "y"},
 				"priority": float64(5),
 			},
 			Status:            models.DeviceActive,
@@ -132,6 +135,39 @@ func TestDeviceSortByJsonPath(t *testing.T) {
 		assert.Equal(t, "device_prod", result[1].ID, "Expected second device to be device_prod (priority 10)")
 		assert.Equal(t, "device_stage", result[2].ID, "Expected third device to be device_stage (priority 5)")
 	})
+
+	// Array indexes sort by the selected element
+	// zones: prod [b z], dev [c a], stage [a y]
+	arrayCases := []struct {
+		jsonPath string
+		want     []string
+	}{
+		{"$.zones[0]", []string{"device_stage", "device_prod", "device_dev"}},
+		{"$.zones[1]", []string{"device_dev", "device_stage", "device_prod"}},
+		{"$.zones[last]", []string{"device_dev", "device_stage", "device_prod"}},
+	}
+	for _, tc := range arrayCases {
+		t.Run("SortByArrayIndex "+tc.jsonPath, func(t *testing.T) {
+			queryParams := &resources.QueryParameters{
+				Sort: resources.SortOptions{
+					SortField:    "metadata",
+					SortMode:     resources.SortModeAsc,
+					JsonPathExpr: tc.jsonPath,
+				},
+				PageSize: 10,
+			}
+
+			var ids []string
+			_, err := repo.SelectAll(context.Background(), false, func(d models.Device) {
+				ids = append(ids, d.ID)
+			}, queryParams, nil)
+
+			if err != nil {
+				t.Fatalf("SelectAll failed: %v", err)
+			}
+			assert.Equal(t, tc.want, ids)
+		})
+	}
 
 	// Test Case 3: Test pagination bookmark handling with JSONPath
 	t.Run("PaginationWithJsonPath", func(t *testing.T) {

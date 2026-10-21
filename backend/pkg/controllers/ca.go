@@ -4,11 +4,11 @@ import (
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type caHttpRoutes struct {
@@ -1225,10 +1225,8 @@ func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetItemsResponse[models.IssuanceProfile]{
-		IterableList: resources.IterableList[models.IssuanceProfile]{
-			NextBookmark: nextBookmark,
-			List:         items,
-		},
+		NextBookmark: nextBookmark,
+		List:         items,
 	})
 }
 

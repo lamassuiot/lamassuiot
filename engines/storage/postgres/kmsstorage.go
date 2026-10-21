@@ -2,11 +2,10 @@ package postgres
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -23,6 +22,8 @@ func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRe
 	if err != nil {
 		return nil, err
 	}
+	// The same key can live in several engines, so key_id alone is not unique
+	querier.uniqueColumns = []string{"key_id", "engine_id"}
 
 	return &PostgresKMSStore{
 		db:      db,
@@ -94,7 +95,7 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
 	var elem models.Key
 	tx := db.querier.Table(kmsTableName).WithContext(ctx).
-		Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).
+		Where("aliases @> ?::jsonb", jsonStringArray(alias)).
 		Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
