@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
@@ -30,7 +30,7 @@ func NewGormPolicyStore(db *gorm.DB) (*GormPolicyStore, error) {
 
 func (s *GormPolicyStore) Create(ctx context.Context, policy *models.Policy) error {
 	if policy.ID == "" {
-		policy.ID = uuid.New().String()
+		policy.ID = uuid.NewV7().String()
 	}
 	exists, err := s.Exists(ctx, policy.ID)
 	if err != nil {

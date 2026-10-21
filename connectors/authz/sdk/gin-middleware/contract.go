@@ -231,7 +231,7 @@ func (r *ContractRouter) Handle(method, relativePath string, permission Permissi
 	}
 	fullPath := joinPaths(r.group.BasePath(), relativePath)
 	params := map[string]bool{}
-	for _, segment := range strings.Split(fullPath, "/") {
+	for segment := range strings.SplitSeq(fullPath, "/") {
 		// Named (:id) and catch-all (*path) segments are both Gin path parameters.
 		if strings.HasPrefix(segment, ":") || strings.HasPrefix(segment, "*") {
 			params[segment[1:]] = true

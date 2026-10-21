@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/jakehl/goid"
 	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
@@ -82,7 +82,7 @@ func upAddProfileId(ctx context.Context, tx *sql.Tx) error {
 		var profileID string
 		if err == sql.ErrNoRows {
 			// No existing profile found, create a new one
-			profileID = goid.NewV4UUID().String()
+			profileID = uuid.NewV4().String()
 			_, err := tx.ExecContext(ctx,
 				`INSERT INTO issuance_profiles
 					(id, "name", description, validity_type, validity_time, validity_duration, sign_as_ca, honor_key_usage, key_usage, honor_extended_key_usages, extended_key_usages, honor_subject, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, honor_extensions, crypto_enforcement_enabled, crypto_enforcement_allow_rsa_keys, crypto_enforcement_allowed_rsa_key_sizes, crypto_enforcement_allow_ecdsa_keys, crypto_enforcement_allowed_ecdsa_key_sizes)

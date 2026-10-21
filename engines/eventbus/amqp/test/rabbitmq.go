@@ -68,12 +68,10 @@ func RunRabbitMQDocker(exposeAsStandardPort bool) (func() error, *ampq.AMQPConne
 	}
 
 	return containerCleanup, &ampq.AMQPConnection{
-		Protocol: ampq.AMQP,
-		BasicConnection: cconfig.BasicConnection{
-			Hostname:  "127.0.0.1",
-			Port:      p,
-			TLSConfig: cconfig.TLSConfig{},
-		},
+		Protocol:  ampq.AMQP,
+		Hostname:  "127.0.0.1",
+		Port:      p,
+		TLSConfig: cconfig.TLSConfig{},
 		BasicAuth: ampq.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
 		Exchange:  "lamassu",
 	}, adminPort, nil

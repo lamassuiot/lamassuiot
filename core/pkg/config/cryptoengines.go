@@ -1,15 +1,15 @@
 package config
 
 type CryptoEngineConfig struct {
-	ID       string                 `mapstructure:"id"`
-	Metadata map[string]interface{} `mapstructure:"metadata"`
-	Type     CryptoEngineProvider   `mapstructure:"type"`
-	Config   map[string]interface{} `mapstructure:",remain"`
+	ID       string               `mapstructure:"id"`
+	Metadata map[string]any       `mapstructure:"metadata"`
+	Type     CryptoEngineProvider `mapstructure:"type"`
+	Config   map[string]any       `mapstructure:",remain"`
 }
 
 type CryptoEngineConfigAdapter[E any] struct {
 	ID       string
-	Metadata map[string]interface{}
+	Metadata map[string]any
 	Type     CryptoEngineProvider
 	Config   E
 }
@@ -45,11 +45,11 @@ func (c CryptoEngineConfigAdapter[E]) Unmarshal() (*CryptoEngineConfig, error) {
 type CryptoEngineProvider string
 
 const (
-	HashicorpVaultProvider    CryptoEngineProvider = "hashicorp_vault"
-	AWSKMSProvider            CryptoEngineProvider = "aws_kms"
-	AWSSecretsManagerProvider CryptoEngineProvider = "aws_secrets_manager"
+	HashicorpVaultProvider       CryptoEngineProvider = "hashicorp_vault"
+	AWSKMSProvider               CryptoEngineProvider = "aws_kms"
+	AWSSecretsManagerProvider    CryptoEngineProvider = "aws_secrets_manager"
 	AzureKeyVaultProvider        CryptoEngineProvider = "azure_keyvault"
 	AzureKeyVaultSecretsProvider CryptoEngineProvider = "azure_keyvault_secrets"
 	FilesystemProvider           CryptoEngineProvider = "filesystem"
-	PKCS11Provider            CryptoEngineProvider = "pkcs11"
+	PKCS11Provider               CryptoEngineProvider = "pkcs11"
 )

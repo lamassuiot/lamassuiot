@@ -6,9 +6,9 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -50,7 +50,6 @@ func TestWildcardSubscribe(t *testing.T, input EventBusTestInput) {
 	}
 
 	for idx, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			cleanup, pub, subFunc := input.SetupEventBus()
@@ -104,7 +103,7 @@ func TestWildcardSubscribe(t *testing.T, input EventBusTestInput) {
 			}
 
 			err := subAndPub(func() error {
-				return pub.Publish("my.topic.test", message.NewMessage(uuid.NewString(), []byte("test msg")))
+				return pub.Publish("my.topic.test", message.NewMessage(uuid.NewV7().String(), []byte("test msg")))
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
@@ -167,7 +166,6 @@ func TestMultiServiceSubscribe(t *testing.T, input EventBusTestInput) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			cleanup, pub, subFunc := input.SetupEventBus()
@@ -258,7 +256,7 @@ func TestMultiServiceSubscribe(t *testing.T, input EventBusTestInput) {
 			}
 
 			err := subAndPub(func() error {
-				return pub.Publish("my.topic.test", message.NewMessage(uuid.NewString(), []byte("test msg")))
+				return pub.Publish("my.topic.test", message.NewMessage(uuid.NewV7().String(), []byte("test msg")))
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
@@ -306,7 +304,6 @@ func TestMultiConsumers(t *testing.T, input EventBusTestInput) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			cleanup, pub, subFunc := input.SetupEventBus()
 			defer cleanup()
@@ -394,7 +391,7 @@ func TestMultiConsumers(t *testing.T, input EventBusTestInput) {
 			}
 
 			err := subAndPub(func() error {
-				return pub.Publish("my.topic.test", message.NewMessage(uuid.NewString(), []byte("test msg")))
+				return pub.Publish("my.topic.test", message.NewMessage(uuid.NewV7().String(), []byte("test msg")))
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
@@ -428,7 +425,7 @@ func TestErrorHandling(t *testing.T, input EventBusTestInput) {
 
 	time.Sleep(3 * time.Second)
 
-	err = pub.Publish("error.topic", message.NewMessage(uuid.NewString(), []byte("test msg")))
+	err = pub.Publish("error.topic", message.NewMessage(uuid.NewV7().String(), []byte("test msg")))
 	if err != nil {
 		t.Fatalf("could not publish message: %s", err)
 	}

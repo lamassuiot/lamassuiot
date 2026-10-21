@@ -37,7 +37,7 @@ func (p *RabbitMQSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 			Provider: config.Amqp,
 			Config:   eventBusConfig,
 		},
-		Extra: &map[string]interface{}{
+		Extra: &map[string]any{
 			"adminPort": adminPort,
 		},
 		AfterSuite: func() { cleanup() },
@@ -61,7 +61,7 @@ func purgeAndDrainQueues(adminPort int) error {
 		cli.Do(req) //nolint:errcheck // best-effort
 	}
 
-	getJSON := func(path string, dst interface{}) error {
+	getJSON := func(path string, dst any) error {
 		resp, err := cli.Get(baseURL + path)
 		if err != nil {
 			return err

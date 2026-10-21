@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -162,7 +162,7 @@ func toDeviceEventRecord(deviceID string, eventTS time.Time, event models.Device
 	}
 
 	return &models.DeviceEventRecord{
-		ID:               uuid.NewString(),
+		ID:               uuid.NewV7().String(),
 		DeviceID:         deviceID,
 		EventTS:          eventTS,
 		EventType:        string(event.EvenType),

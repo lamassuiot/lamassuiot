@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
@@ -34,7 +34,7 @@ func NewPolicyManager(ps store.PolicyStore) *PolicyManager {
 
 func (pm *PolicyManager) CreatePolicy(ctx context.Context, policy *models.Policy) error {
 	if policy.ID == "" {
-		policy.ID = uuid.New().String()
+		policy.ID = uuid.NewV7().String()
 	}
 	if err := engine.ValidatePolicyStruct(policy); err != nil {
 		return fmt.Errorf("invalid policy: %w", err)

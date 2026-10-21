@@ -17,7 +17,7 @@ type CloudEventPublisherMock struct {
 	mock.Mock
 }
 
-func (m *CloudEventPublisherMock) PublishCloudEvent(ctx context.Context, payload interface{}) {
+func (m *CloudEventPublisherMock) PublishCloudEvent(ctx context.Context, payload any) {
 	m.Called(ctx, payload)
 }
 
@@ -200,7 +200,6 @@ func TestCAAuditEventPublisher(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, tc.test)
 	}
 }

@@ -879,7 +879,7 @@ func TestFilterGenerator_ColumnFilter_InOperator(t *testing.T) {
 				EntityType: "device",
 				Actions:    []string{"read"},
 				ColumnFilters: []models.ColumnFilter{
-					{Column: "status", Operator: "in", Value: []interface{}{"active", "provisioning"}},
+					{Column: "status", Operator: "in", Value: []any{"active", "provisioning"}},
 				},
 			},
 		},

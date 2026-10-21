@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"fmt"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -12,9 +13,9 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -288,13 +289,13 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 		CryptoEngines:     []cconfig.CryptoEngineConfig{},
 	}
 
-	fsid := fmt.Sprintf("/tmp/%s", uuid.NewString())
+	fsid := fmt.Sprintf("/tmp/%s", uuid.NewV7().String())
 
 	fsconfig := cconfig.CryptoEngineConfig{
 		ID:       "filesystem-1",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Type:     cconfig.FilesystemProvider,
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"storage_directory": fsid,
 		},
 	}
@@ -543,7 +544,7 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 		FilesystemStorage: cconfig.FSStorageConfig{
 			ID:   "fs",
 			Type: cconfig.LocalFilesystem,
-			Config: map[string]interface{}{
+			Config: map[string]any{
 				"storage_directory": "/tmp/lamassuiot",
 			},
 		},
@@ -610,7 +611,7 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 }
 
 func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool, allowCascadeDelete bool) (*TestServer, error) {
-	servicesMap := make(map[Service]interface{})
+	servicesMap := make(map[Service]any)
 
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
@@ -759,7 +760,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 
 func SleepRetry(retry int, sleep time.Duration, f func() error) error {
 	var err error
-	for i := 0; i < retry; i++ {
+	for range retry {
 		err = f()
 		if err == nil {
 			return nil
@@ -781,14 +782,12 @@ func getDlqEventBusConfig(conf cconfig.EventBusEngine) cconfig.EventBusEngine {
 	return dlqEventBus
 }
 
-func deepCopy(src map[string]interface{}) map[string]interface{} {
+func deepCopy(src map[string]any) map[string]any {
 	if src == nil {
 		return nil
 	}
-	dst := make(map[string]interface{}, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
+	dst := make(map[string]any, len(src))
+	maps.Copy(dst, src)
 	return dst
 }
 

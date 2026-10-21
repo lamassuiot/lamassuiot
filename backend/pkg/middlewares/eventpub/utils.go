@@ -11,7 +11,7 @@ import (
 )
 
 type ICloudEventPublisher interface {
-	PublishCloudEvent(ctx context.Context, payload interface{})
+	PublishCloudEvent(ctx context.Context, payload any)
 }
 
 type CloudEventPublisher struct {
@@ -20,7 +20,7 @@ type CloudEventPublisher struct {
 	Logger    *logrus.Entry
 }
 
-func (cemp *CloudEventPublisher) PublishCloudEvent(ctx context.Context, payload interface{}) {
+func (cemp *CloudEventPublisher) PublishCloudEvent(ctx context.Context, payload any) {
 	event := helpers.BuildCloudEvent(ctx, payload)
 
 	eventBytes, marshalErr := json.Marshal(event)
@@ -49,7 +49,7 @@ func NewEventPublisherWithSourceMiddleware(publisher ICloudEventPublisher, sourc
 	}
 }
 
-func (epws *EventPublisherWithSourceMiddleware) PublishCloudEvent(ctx context.Context, payload interface{}) {
+func (epws *EventPublisherWithSourceMiddleware) PublishCloudEvent(ctx context.Context, payload any) {
 	if ctx.Value(core.LamassuContextKeySource) == nil {
 		ctx = context.WithValue(ctx, core.LamassuContextKeySource, epws.Source)
 	}

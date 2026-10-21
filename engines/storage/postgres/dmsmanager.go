@@ -39,7 +39,7 @@ func (db *PostgresDMSManagerStore) CountWithFilters(ctx context.Context, queryPa
 	return db.querier.CountFiltered(ctx, queryParams.Filters, []GormExtraOps{})
 }
 
-func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error) {
 	return db.querier.SelectAll(ctx, queryParams, []GormExtraOps{}, exhaustiveRun, applyFunc)
 }
 

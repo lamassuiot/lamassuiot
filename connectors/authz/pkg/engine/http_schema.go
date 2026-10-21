@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"regexp"
@@ -217,9 +218,7 @@ func (r *HTTPSchemaRegistry) Load(path string) error {
 		}
 		staged[def.Name] = def
 	}
-	for name, def := range staged {
-		r.schemas[name] = def
-	}
+	maps.Copy(r.schemas, staged)
 	return nil
 }
 
@@ -478,7 +477,7 @@ func extractJSONBodyValue(req HTTPCheckRequest, path string) (string, bool) {
 		return "", false
 	}
 
-	var body interface{}
+	var body any
 	if err := json.Unmarshal(req.Body, &body); err != nil {
 		return "", false
 	}
@@ -489,7 +488,7 @@ func extractJSONBodyValue(req HTTPCheckRequest, path string) (string, bool) {
 		if part == "" {
 			return "", false
 		}
-		object, ok := current.(map[string]interface{})
+		object, ok := current.(map[string]any)
 		if !ok {
 			return "", false
 		}

@@ -687,7 +687,7 @@ func TestValidateCryptoEnforcement(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		publicKey   interface{}
+		publicKey   any
 		enforcement models.IssuanceProfileCryptoEnforcement
 		expectError bool
 	}{
@@ -807,7 +807,7 @@ func TestApplyIssuanceProfileToTemplate_Validity(t *testing.T) {
 	testCases := []struct {
 		name             string
 		validityType     models.ValidityType
-		validityValue    interface{}
+		validityValue    any
 		expectedNotAfter time.Time
 	}{
 		{

@@ -24,7 +24,7 @@ func (p *AzureSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBa
 
 	cryptoEngine, err := config.CryptoEngineConfigAdapter[azure.AzureSDKConfig]{
 		ID:       "azure-1",
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 		Type:     config.AzureKeyVaultProvider,
 		Config:   *azureCfg,
 	}.Unmarshal()

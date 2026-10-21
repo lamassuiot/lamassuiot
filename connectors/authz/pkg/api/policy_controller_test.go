@@ -23,10 +23,10 @@ func TestCreatePolicy_RejectsSystemManagedID(t *testing.T) {
 	router := gin.New()
 	router.POST("/policies", ctrl.CreatePolicy)
 
-	body, err := json.Marshal(map[string]interface{}{
+	body, err := json.Marshal(map[string]any{
 		"id":   "lamassu.custom",
 		"name": "Custom Policy",
-		"rules": []map[string]interface{}{
+		"rules": []map[string]any{
 			{
 				"namespace":  "iot",
 				"schemaName": "public",

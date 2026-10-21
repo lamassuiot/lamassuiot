@@ -39,7 +39,7 @@ type GrantStore interface {
 // the auth type is baked into the implementation rather than passed as a string parameter.
 // Implementations must hold no *gorm.DB — the caller pre-loads principals via ListByType.
 type PrincipalMatcher interface {
-	Match(principals []models.Principal, authMaterial interface{}) ([]string, error)
+	Match(principals []models.Principal, authMaterial any) ([]string, error)
 }
 
 // ResolvedSubject is the normalized identity shape consumed by authorization.

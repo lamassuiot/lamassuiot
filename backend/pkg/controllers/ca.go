@@ -1225,10 +1225,8 @@ func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetItemsResponse[models.IssuanceProfile]{
-		IterableList: resources.IterableList[models.IssuanceProfile]{
-			NextBookmark: nextBookmark,
-			List:         items,
-		},
+		NextBookmark: nextBookmark,
+		List:         items,
 	})
 }
 

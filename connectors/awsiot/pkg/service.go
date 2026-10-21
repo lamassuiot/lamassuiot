@@ -483,10 +483,9 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		Version: 0,
 	}
 
-	var rnf *iotdataplaneTypes.ResourceNotFoundException
 	getShadowOutput, err := svc.iotdataplaneSDK.GetThingShadow(context.Background(), getShadowReq)
 	if err != nil {
-		if !errors.As(err, &rnf) {
+		if _, ok := errors.AsType[*iotdataplaneTypes.ResourceNotFoundException](err); !ok {
 			return fmt.Errorf("could not get device %s shadow: %s", input.DeviceID, err)
 		}
 	} else {
@@ -888,8 +887,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdatePolicies(ctx context.C
 			PolicyName: &policy.PolicyName,
 		})
 		if err != nil {
-			var rne *types.ResourceNotFoundException
-			if !errors.As(err, &rne) {
+			if _, ok := errors.AsType[*types.ResourceNotFoundException](err); !ok {
 				lFunc.Errorf("got error while getting %s policy: %s", policy.PolicyName, err)
 				return err
 			}

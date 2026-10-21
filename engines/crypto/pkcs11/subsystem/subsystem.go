@@ -15,7 +15,7 @@ type Pkcs11Subsystem struct {
 	hsmModulePath string
 }
 
-func (p *Pkcs11Subsystem) Prepare(config map[string]interface{}) error {
+func (p *Pkcs11Subsystem) Prepare(config map[string]any) error {
 	p.hsmModulePath = config["hsmModulePath"].(string)
 	return nil
 }
@@ -28,7 +28,7 @@ func (p *Pkcs11Subsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemB
 
 	configAdapter := config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]{
 		ID:       "pkcs11-1",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Type:     config.PKCS11Provider,
 		Config:   pkcs11Cfg,
 	}

@@ -15,7 +15,7 @@ import (
 func TestNewAWSSecretManagerEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAWSSecretManagerEngine")
 	awsConf := aws.Config{}
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"key1": "value1",
 		"key2": "value2",
 	}
@@ -96,7 +96,7 @@ func prepareSecretsManagerCryptoEngine(t *testing.T) (func() error, cryptoengine
 
 	logger := logrus.New().WithField("test", "KMS")
 
-	metadata := map[string]interface{}{}
+	metadata := map[string]any{}
 
 	awsConf, err := laws.GetAwsSdkConfig(*conf)
 	if err != nil {

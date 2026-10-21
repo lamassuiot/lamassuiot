@@ -8,7 +8,7 @@ import (
 
 // BuildEventBusEngine builds an eventbus engine with monolithic-specific support
 // This extends the core eventbus registry with the inmemory GoChannel implementation
-func BuildEventBusEngine(provider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+func BuildEventBusEngine(provider string, config any, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 	// Handle inmemory provider specifically for monolithic mode
 	if provider == "inmemory" {
 		return inmemory.NewInMemoryEngine(serviceId, logger)

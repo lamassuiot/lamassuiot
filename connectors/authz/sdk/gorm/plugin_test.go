@@ -19,7 +19,7 @@ func TestAuthzGormPlugin_SkipsIfAuthzQueryMissing(t *testing.T) {
 	db := testDB(t)
 	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
 
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(context.Background()).Table("certificates").Find(&dest).Statement.SQL.String()
 
 	assert.NotContains(t, strings.ToUpper(sql), "JOIN")
@@ -32,7 +32,7 @@ func TestAuthzGormPlugin_SkipsIfAuthzQueryEmpty(t *testing.T) {
 	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
 
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, "")
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("certificates").Find(&dest).Statement.SQL.String()
 
 	assert.NotContains(t, strings.ToUpper(sql), "JOIN")
@@ -45,7 +45,7 @@ func TestAuthzGormPlugin_SkipsIfAuthzQueryNotAString(t *testing.T) {
 	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
 
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, 42)
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("certificates").Find(&dest).Statement.SQL.String()
 
 	assert.NotContains(t, strings.ToUpper(sql), "JOIN")
@@ -60,7 +60,7 @@ func TestAuthzGormPlugin_InjectsDenyAll(t *testing.T) {
 	authzSQL := `SELECT * FROM ca.certificates WHERE 1 = 0`
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
 
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("ca.certificates").Find(&dest).Statement.SQL.String()
 
 	assert.Contains(t, sql, "1 = 0")
@@ -75,7 +75,7 @@ func TestAuthzGormPlugin_InjectsWildcardGrantAll(t *testing.T) {
 	authzSQL := `SELECT * FROM ca.certificates WHERE 1 = 1`
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
 
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("ca.certificates").Find(&dest).Statement.SQL.String()
 
 	assert.Contains(t, sql, "1 = 1")
@@ -90,7 +90,7 @@ func TestAuthzGormPlugin_InjectsSingleHopFilter(t *testing.T) {
 	authzSQL := `SELECT * FROM devicemanager.devices LEFT JOIN dmsmanager.dms AS j0_0 ON devicemanager.devices.dms_owner = j0_0.id WHERE j0_0.id = 'sample-dms-01'`
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
 
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("devices").Find(&dest).Statement.SQL.String()
 
 	assert.Contains(t, sql, "LEFT JOIN dmsmanager.dms AS j0_0 ON devicemanager.devices.dms_owner = j0_0.id")
@@ -108,7 +108,7 @@ func TestAuthzGormPlugin_InjectsTwoHopFilterWithNullTest(t *testing.T) {
 	authzSQL := `SELECT * FROM ca.certificates LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id LEFT JOIN dmsmanager.dms AS j0_1 ON j0_0.dms_owner = j0_1.id WHERE j0_1.id IS NOT NULL`
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
 
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("certificates").Find(&dest).Statement.SQL.String()
 
 	assert.Contains(t, sql, "LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id")
@@ -125,7 +125,7 @@ func TestAuthzGormPlugin_InjectsTwoHopFilterWithEqualityWhere(t *testing.T) {
 	authzSQL := `SELECT * FROM ca.certificates LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id LEFT JOIN dmsmanager.dms AS j0_1 ON j0_0.dms_owner = j0_1.id WHERE j0_1.id = 'sample-dms-01'`
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
 
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("certificates").Find(&dest).Statement.SQL.String()
 
 	assert.Contains(t, sql, "LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id")
@@ -143,7 +143,7 @@ func TestAuthzGormPlugin_InjectsSingleHopFilterDeviceRevoke(t *testing.T) {
 	authzSQL := `SELECT * FROM ca.certificates LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id WHERE j0_0.id = 'device-007'`
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
 
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	sql := db.WithContext(ctx).Table("certificates").Find(&dest).Statement.SQL.String()
 
 	assert.Contains(t, sql, "LEFT JOIN devicemanager.devices AS j0_0 ON ca.certificates.subject_common_name = j0_0.id")

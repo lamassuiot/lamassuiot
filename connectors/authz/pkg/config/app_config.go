@@ -12,7 +12,7 @@ type BootstrapEntry struct {
 	// PrincipalType is the credential type: "oidc" or "x509".
 	PrincipalType string `mapstructure:"principal_type" json:"principal_type"`
 	// AuthConfig holds type-specific matching config (e.g. claim name/value for OIDC).
-	AuthConfig map[string]interface{} `mapstructure:"auth_config" json:"auth_config,omitempty"`
+	AuthConfig map[string]any `mapstructure:"auth_config" json:"auth_config,omitempty"`
 	// PolicyIDs is the list of policy IDs to grant to this principal.
 	PolicyIDs []string `mapstructure:"policy_ids" json:"policy_ids,omitempty"`
 }

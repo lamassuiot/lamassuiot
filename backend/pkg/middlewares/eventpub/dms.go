@@ -138,7 +138,7 @@ func (mw dmsEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateR
 	return mw.next.Reenroll(ctx, csr, aps)
 }
 
-func (mw dmsEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (mw dmsEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
 	return mw.next.ServerKeyGen(ctx, csr, aps)
 }
 

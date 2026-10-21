@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 package pkcs11
 
@@ -15,9 +14,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"uuid"
 
 	"github.com/eclipse-keypont/crypto11"
-	"github.com/google/uuid"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
@@ -249,7 +248,7 @@ func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs(ctx context.Context) ([
 
 func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
-	tmpKeyID := uuid.New().String()
+	tmpKeyID := uuid.NewV7().String()
 	lFunc.Debugf("creating RSA %d key", keySize)
 	newSigner, err := hsmContext.api.GenerateRSAKeyPair([]byte(tmpKeyID), keySize)
 	if err != nil {
@@ -274,7 +273,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(ctx context.Context, 
 
 func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
 	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
-	tmpKeyID := uuid.New().String()
+	tmpKeyID := uuid.NewV7().String()
 	lFunc.Debugf("creating ECDSA %d key", curve.Params().BitSize)
 	newSigner, err := hsmContext.api.GenerateECDSAKeyPair([]byte(tmpKeyID), curve)
 	if err != nil {

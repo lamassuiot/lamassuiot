@@ -29,24 +29,24 @@ const (
 )
 
 type Certificate struct {
-	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
-	SubjectKeyID        string                 `json:"subject_key_id"`
-	AuthorityKeyID      string                 `json:"authority_key_id"`
-	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	Status              CertificateStatus      `json:"status"`
-	Certificate         *X509Certificate       `json:"certificate"`
-	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
-	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-	Issuer              Subject                `json:"issuer" gorm:"embedded;embeddedPrefix:issuer_"`
-	ValidFrom           time.Time              `json:"valid_from"`
-	Extensions          CertificateExtensions  `json:"extensions" gorm:"embedded;embeddedPrefix:extensions_"`
-	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
-	ValidTo             time.Time              `json:"valid_to"`
-	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
-	RevocationReason    RevocationReason       `json:"revocation_reason" gorm:"serializer:text"`
-	Type                CertificateType        `json:"type"`
-	EngineID            string                 `json:"engine_id"`
-	IsCA                bool                   `json:"is_ca"`
+	SerialNumber        string                `json:"serial_number" gorm:"primaryKey"`
+	SubjectKeyID        string                `json:"subject_key_id"`
+	AuthorityKeyID      string                `json:"authority_key_id"`
+	Metadata            map[string]any        `json:"metadata" gorm:"serializer:json"`
+	Status              CertificateStatus     `json:"status"`
+	Certificate         *X509Certificate      `json:"certificate"`
+	KeyMetadata         KeyStrengthMetadata   `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
+	Subject             Subject               `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	Issuer              Subject               `json:"issuer" gorm:"embedded;embeddedPrefix:issuer_"`
+	ValidFrom           time.Time             `json:"valid_from"`
+	Extensions          CertificateExtensions `json:"extensions" gorm:"embedded;embeddedPrefix:extensions_"`
+	IssuerCAMetadata    IssuerCAMetadata      `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
+	ValidTo             time.Time             `json:"valid_to"`
+	RevocationTimestamp time.Time             `json:"revocation_timestamp"`
+	RevocationReason    RevocationReason      `json:"revocation_reason" gorm:"serializer:text"`
+	Type                CertificateType       `json:"type"`
+	EngineID            string                `json:"engine_id"`
+	IsCA                bool                  `json:"is_ca"`
 }
 
 type CertificateExtensions struct {
@@ -72,13 +72,13 @@ type IssuerCAMetadata struct {
 }
 
 type CACertificate struct {
-	ID                      string                 `json:"id"`
-	Certificate             Certificate            `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
-	CertificateSerialNumber string                 `json:"serial_number" gorm:"column:serial_number"`
-	Metadata                map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	CreationTS              time.Time              `json:"creation_ts"`
-	Level                   int                    `json:"level"`
-	ProfileID               string                 `json:"profile_id"`
+	ID                      string         `json:"id"`
+	Certificate             Certificate    `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
+	CertificateSerialNumber string         `json:"serial_number" gorm:"column:serial_number"`
+	Metadata                map[string]any `json:"metadata" gorm:"serializer:json"`
+	CreationTS              time.Time      `json:"creation_ts"`
+	Level                   int            `json:"level"`
+	ProfileID               string         `json:"profile_id"`
 }
 
 type CAStats struct {

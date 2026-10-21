@@ -24,7 +24,7 @@ type ESTService interface {
 	// encryption is not being employed, or returned inside a CMS SignedData
 	// structure which itself is inside a CMS EnvelopedData structure. See
 	// RFC7030 4.4.
-	ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error)
+	ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error)
 
 	// TPMEnroll requests a new certificate using the TPM 2.0 privacy-preserving
 	// protocol. An EK certificate chain with a length of at least one must be

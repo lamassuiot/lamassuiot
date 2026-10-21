@@ -19,7 +19,7 @@ func (p *VaultKV2Subsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 
 	config, err := config.CryptoEngineConfigAdapter[vconfig.HashicorpVaultSDK]{
 		ID:       "vault-1",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Type:     config.HashicorpVaultProvider,
 		Config:   vaultSDKConf,
 	}.Unmarshal()
@@ -30,7 +30,7 @@ func (p *VaultKV2Subsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 
 	return &subsystems.SubsystemBackend{
 		Config: *config,
-		Extra: &map[string]interface{}{
+		Extra: &map[string]any{
 			"rootToken": vaultSuite.GetRootToken(),
 		},
 		BeforeEach: vaultSuite.BeforeEach,

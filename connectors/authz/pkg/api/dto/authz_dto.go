@@ -14,7 +14,7 @@ type AuthorizeRequest struct {
 
 // MatchAndAuthorizeRequest for checking authorization with principal matching
 type MatchAndAuthorizeRequest struct {
-	AuthMaterial interface{}   `json:"auth_material" binding:"required"` // JWT or certificate data
+	AuthMaterial any           `json:"auth_material" binding:"required"` // JWT or certificate data
 	AuthType     string        `json:"auth_type" binding:"required"`     // "oidc" or "x509"
 	Namespace    string        `json:"namespace" binding:"required"`
 	SchemaName   string        `json:"schema_name" binding:"required"`
@@ -64,7 +64,7 @@ type HTTPAuthzCheckRequest struct {
 
 // MatchHTTPAuthzCheckRequest checks an HTTP route after resolving the supplied credential.
 type MatchHTTPAuthzCheckRequest struct {
-	AuthMaterial interface{}                  `json:"auth_material" binding:"required"`
+	AuthMaterial any                          `json:"auth_material" binding:"required"`
 	AuthType     string                       `json:"auth_type" binding:"required"`
 	Request      HTTPAuthzCheckRequestDetails `json:"request" binding:"required"`
 }
@@ -90,11 +90,11 @@ type GetFilterRequest struct {
 
 // MatchAndGetFilterRequest for retrieving list filters with principal matching
 type MatchAndGetFilterRequest struct {
-	AuthMaterial interface{} `json:"auth_material" binding:"required"` // JWT or certificate data
-	AuthType     string      `json:"auth_type" binding:"required"`     // "oidc" or "x509"
-	Namespace    string      `json:"namespace" binding:"required"`
-	SchemaName   string      `json:"schema_name" binding:"required"`
-	EntityType   string      `json:"entity_type" binding:"required"`
+	AuthMaterial any    `json:"auth_material" binding:"required"` // JWT or certificate data
+	AuthType     string `json:"auth_type" binding:"required"`     // "oidc" or "x509"
+	Namespace    string `json:"namespace" binding:"required"`
+	SchemaName   string `json:"schema_name" binding:"required"`
+	EntityType   string `json:"entity_type" binding:"required"`
 }
 
 // GetFilterResponse returns SQL filter

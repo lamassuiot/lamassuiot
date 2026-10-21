@@ -22,7 +22,7 @@ func TestGetDevicesFilterByMetadataJsonPath(t *testing.T) {
 		ID:        "device-1",
 		Alias:     "Production Device",
 		Tags:      []string{"prod"},
-		Metadata:  map[string]interface{}{},
+		Metadata:  map[string]any{},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#FF0000",
@@ -35,7 +35,7 @@ func TestGetDevicesFilterByMetadataJsonPath(t *testing.T) {
 		ID:        "device-2",
 		Alias:     "Development Device",
 		Tags:      []string{"dev"},
-		Metadata:  map[string]interface{}{},
+		Metadata:  map[string]any{},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#00FF00",
@@ -48,7 +48,7 @@ func TestGetDevicesFilterByMetadataJsonPath(t *testing.T) {
 		ID:        "device-3",
 		Alias:     "Test Device",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{},
+		Metadata:  map[string]any{},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#0000FF",
@@ -58,7 +58,7 @@ func TestGetDevicesFilterByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for each device
-	ud1 := make(map[string]interface{})
+	ud1 := make(map[string]any)
 	ud1["environment"] = "production"
 	ud1["location"] = "datacenter-1"
 	ud1["critical"] = true
@@ -72,7 +72,7 @@ func TestGetDevicesFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for device1: %s", err)
 	}
 
-	ud2 := make(map[string]interface{})
+	ud2 := make(map[string]any)
 	ud2["environment"] = "development"
 	ud2["location"] = "datacenter-2"
 	ud2["critical"] = false
@@ -86,7 +86,7 @@ func TestGetDevicesFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for device2: %s", err)
 	}
 
-	ud3 := make(map[string]interface{})
+	ud3 := make(map[string]any)
 	ud3["environment"] = "staging"
 	ud3["location"] = "datacenter-1"
 	ud3["critical"] = true

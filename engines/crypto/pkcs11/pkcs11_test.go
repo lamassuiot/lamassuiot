@@ -67,7 +67,7 @@ func preparePKCS11CryptoEngine(t *testing.T) (func() (cryptoengines.CryptoEngine
 
 	ceConfig := config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]{
 		ID:       "dockertest-pkcs11",
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 		Type:     config.PKCS11Provider,
 		Config:   engineConf,
 	}

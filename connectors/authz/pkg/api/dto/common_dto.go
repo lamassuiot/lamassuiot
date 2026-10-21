@@ -9,8 +9,8 @@ type ErrorResponse struct {
 
 // SuccessResponse represents a successful response
 type SuccessResponse struct {
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // PaginationRequest for list endpoints

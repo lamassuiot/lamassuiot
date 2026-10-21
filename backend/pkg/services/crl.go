@@ -320,7 +320,7 @@ func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetV
 	return svc.vaRepo.GetAll(ctx, storage.StorageListRequest[models.VARole]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		QueryParams:   input.QueryParameters,
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 		ApplyFunc: func(role models.VARole) {
 			input.ApplyFunc(role)
 		},

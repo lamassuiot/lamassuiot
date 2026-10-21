@@ -15,7 +15,7 @@ import (
 
 func TestNewAzureKeyVaultSecretsEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAzureKeyVaultSecretsEngine")
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"key1": "value1",
 		"key2": "value2",
 	}
@@ -89,7 +89,7 @@ func prepareKeyVaultSecretsCryptoEngine(t *testing.T) (func() error, cryptoengin
 
 	logger := logrus.New().WithField("test", "KeyVaultSecrets")
 
-	metadata := map[string]interface{}{}
+	metadata := map[string]any{}
 
 	credential, err := lazure.GetAzureCredential(*conf)
 	if err != nil {

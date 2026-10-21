@@ -14,7 +14,7 @@ var Newline = "\n"
 var Indent = 4
 
 func beautifyJsonBytes(data []byte, hiddenFields []string) ([]byte, error) {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func beautifyJsonBytes(data []byte, hiddenFields []string) ([]byte, error) {
 }
 
 // transfer v to beautified json bytes
-func formatToBeautifulJson(v interface{}, hiddenFields []string) ([]byte, error) {
+func formatToBeautifulJson(v any, hiddenFields []string) ([]byte, error) {
 
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -34,7 +34,7 @@ func formatToBeautifulJson(v interface{}, hiddenFields []string) ([]byte, error)
 	return beautifyJsonBytes(data, hiddenFields)
 }
 
-func format(v interface{}, depth int) string {
+func format(v any, depth int) string {
 	switch val := v.(type) {
 	case string:
 		return formatString(val)
@@ -44,9 +44,9 @@ func format(v interface{}, depth int) string {
 		return fmt.Sprint(strconv.FormatBool(val))
 	case nil:
 		return "null"
-	case map[string]interface{}:
+	case map[string]any:
 		return formatMap(val, depth)
-	case []interface{}:
+	case []any:
 		return formatArray(val, depth)
 	}
 
@@ -69,7 +69,7 @@ func formatString(s string) string {
 	return fmt.Sprint(s)
 }
 
-func formatMap(m map[string]interface{}, depth int) string {
+func formatMap(m map[string]any, depth int) string {
 	if len(m) == 0 {
 		return "{}"
 	}
@@ -101,7 +101,7 @@ func formatMap(m map[string]interface{}, depth int) string {
 	return fmt.Sprintf("{%s%s%s%s}", Newline, strings.Join(rows, ","+Newline), Newline, currentIndent)
 }
 
-func formatArray(a []interface{}, depth int) string {
+func formatArray(a []any, depth int) string {
 	if len(a) == 0 {
 		return "[]"
 	}
@@ -122,12 +122,12 @@ func generateIndent(depth int) string {
 	return strings.Repeat(" ", Indent*depth)
 }
 
-func removeHiddenFields(v interface{}, hiddenFields []string) interface{} {
-	if _, ok := v.(map[string]interface{}); !ok {
+func removeHiddenFields(v any, hiddenFields []string) any {
+	if _, ok := v.(map[string]any); !ok {
 		return v
 	}
 
-	m := v.(map[string]interface{})
+	m := v.(map[string]any)
 
 	// case insensitive key deletion
 	for _, hiddenField := range hiddenFields {

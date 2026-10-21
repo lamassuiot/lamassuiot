@@ -644,7 +644,7 @@ func wrapAESKeyWithPad(kek, plaintext []byte) ([]byte, error) {
 	padded := padKey(plaintext)
 	n := len(padded) / 8
 	r := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		r[i] = make([]byte, 8)
 		copy(r[i], padded[i*8:(i+1)*8])
 	}
@@ -652,8 +652,8 @@ func wrapAESKeyWithPad(kek, plaintext []byte) ([]byte, error) {
 	a := buildIV(mli)
 
 	// Perform 6 * n iterations
-	for j := 0; j < 6; j++ {
-		for i := 0; i < n; i++ {
+	for j := range 6 {
+		for i := range n {
 			b := append(a, r[i]...)
 			bEncrypted := aesEncryptBlock(block, b)
 

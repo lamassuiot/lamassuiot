@@ -28,7 +28,7 @@ func javascriptFilter(event cloudevents.Event, script string) (bool, error) {
 		return false, err
 	}
 
-	var parsed interface{}
+	var parsed any
 	if err := json.Unmarshal(encoded, &parsed); err != nil {
 		return false, err
 	}

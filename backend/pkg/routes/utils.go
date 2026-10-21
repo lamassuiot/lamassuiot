@@ -214,7 +214,7 @@ func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
 		c.Next()
 
 		latency := time.Since(start)
-		fields := make(map[string]interface{})
+		fields := make(map[string]any)
 
 		logger.WithFields(fields).Infof("[Request] %v |%3d| %13v | %15s |%-7s %s",
 			start.Format("2006/01/02 - 15:04:05"),
@@ -235,14 +235,14 @@ func InjectVersionIntoOpenAPI(openApiContent []byte, version string) []byte {
 	}
 
 	// Parse the YAML content
-	var spec map[string]interface{}
+	var spec map[string]any
 	if err := yaml.Unmarshal(openApiContent, &spec); err != nil {
 		// If parsing fails, return the original content
 		return openApiContent
 	}
 
 	// Navigate to info.version and update it
-	if info, ok := spec["info"].(map[string]interface{}); ok {
+	if info, ok := spec["info"].(map[string]any); ok {
 		info["version"] = version
 	} else {
 		// If info section doesn't exist, return original content

@@ -22,7 +22,7 @@ func TestUpdateCertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	certExpired := models.Certificate{
 		SerialNumber: "123456",
 		ValidTo:      time.Now().AddDate(0, 0, -1), // Expired in 1 day ago,
-		Metadata:     map[string]interface{}{},
+		Metadata:     map[string]any{},
 		Certificate:  &models.X509Certificate{},
 	}
 
@@ -40,7 +40,7 @@ func TestUpdateCertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	certValid := models.Certificate{
 		SerialNumber: "123456",
 		ValidTo:      time.Now().AddDate(0, 0, 1), // Expires in 1 day,
-		Metadata:     map[string]interface{}{},
+		Metadata:     map[string]any{},
 		Certificate:  &models.X509Certificate{},
 	}
 
@@ -61,12 +61,12 @@ func TestUpdateCACertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	// Create a sample expired certificate
 	certExpired := models.CACertificate{
 		ID:       "123456",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Certificate: models.Certificate{
 			Status:       models.StatusActive,
 			SerialNumber: "123456",
 			ValidTo:      time.Now().AddDate(0, 0, -1), // Expired in 1 day ago,
-			Metadata:     map[string]interface{}{},
+			Metadata:     map[string]any{},
 			Certificate:  &models.X509Certificate{},
 		},
 	}
@@ -84,12 +84,12 @@ func TestUpdateCACertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	// Create a sample expired certificate
 	certValid := models.CACertificate{
 		ID:       "123456",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Certificate: models.Certificate{
 			Status:       models.StatusActive,
 			SerialNumber: "123456",
 			ValidTo:      time.Now().AddDate(0, 0, -1), // Expired in 1 day ago,
-			Metadata:     map[string]interface{}{},
+			Metadata:     map[string]any{},
 			Certificate:  &models.X509Certificate{},
 		},
 	}
@@ -104,7 +104,7 @@ func TestShouldUpdateMonitoringDeltas(t *testing.T) {
 	svc := NewCryptoMonitor(nil, nil)
 
 	// Test case 1: Additional deltas exist and expiration is triggered
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		models.CAMetadataMonitoringExpirationDeltasKey: []models.MonitoringExpirationDelta{
 			{
 				Name:      "Delta1",
@@ -129,7 +129,7 @@ func TestShouldUpdateMonitoringDeltas(t *testing.T) {
 	assert.Equal(t, true, updatedMetadata[models.CAMetadataMonitoringExpirationDeltasKey].(models.CAMetadataMonitoringExpirationDeltas)[1].Triggered)
 
 	// Test case 2: Additional deltas exist but expiration is not triggered
-	metadata = map[string]interface{}{
+	metadata = map[string]any{
 		models.CAMetadataMonitoringExpirationDeltasKey: []models.MonitoringExpirationDelta{
 			{
 				Name:      "Delta1",
@@ -151,7 +151,7 @@ func TestShouldUpdateMonitoringDeltas(t *testing.T) {
 	assert.Empty(t, updatedMetadata)
 
 	// Test case 3: Additional deltas do not exist
-	metadata = map[string]interface{}{}
+	metadata = map[string]any{}
 	certificate = x509.Certificate{
 		NotAfter: time.Now().Add(-25 * time.Hour),
 	}
@@ -170,7 +170,7 @@ func TestUpdateCertificateIfNeededExpiredwithMetadata(t *testing.T) {
 	certExpired := models.Certificate{
 		SerialNumber: "123456",
 		ValidTo:      time.Now().AddDate(0, 0, 10), // Expired in 1 day ago,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			models.CAMetadataMonitoringExpirationDeltasKey: []models.MonitoringExpirationDelta{
 				{
 					Name:      "Delta1",
@@ -205,7 +205,7 @@ func TestUpdateCACertificateIfNeededNotExpiredWithMetadata(t *testing.T) {
 	// Create a sample expired certificate
 	certExpired := models.CACertificate{
 		ID: "123456",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			models.CAMetadataMonitoringExpirationDeltasKey: []models.MonitoringExpirationDelta{
 				{
 					Name:      "Delta1",
@@ -218,7 +218,7 @@ func TestUpdateCACertificateIfNeededNotExpiredWithMetadata(t *testing.T) {
 			Status:       models.StatusActive,
 			SerialNumber: "123456",
 			ValidTo:      time.Now().AddDate(0, 0, 10), // Expired in 1 day ago,
-			Metadata:     map[string]interface{}{},
+			Metadata:     map[string]any{},
 			Certificate:  &models.X509Certificate{},
 		},
 	}

@@ -37,7 +37,7 @@ func TestBaseCRL(t *testing.T) {
 			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
-				for i := 0; i < crtsToIssue; i++ {
+				for range crtsToIssue {
 					crt, err := generateCertificate(caSDK)
 					if err != nil {
 						return nil, err
@@ -70,7 +70,7 @@ func TestBaseCRL(t *testing.T) {
 			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
-				for i := 0; i < crtsToIssue; i++ {
+				for range crtsToIssue {
 					crt, err := generateCertificate(caSDK)
 					if err != nil {
 						return nil, err
@@ -102,7 +102,6 @@ func TestBaseCRL(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -155,7 +154,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	crtsToIssue := 10
 	issuedCertsSNs := []string{}
 	var oneCrt *models.Certificate
-	for i := 0; i < crtsToIssue; i++ {
+	for range crtsToIssue {
 		crt, err := generateCertificate(vaTestServer.HttpCASDK)
 		oneCrt = crt
 		if err != nil {
@@ -311,7 +310,6 @@ func TestPostOCSP(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()

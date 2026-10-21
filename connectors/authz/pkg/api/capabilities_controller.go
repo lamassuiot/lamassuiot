@@ -226,13 +226,11 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 	merged := make([]engine.EntityCapabilitiesResult, len(engineQueries))
 	for i, q := range engineQueries {
 		merged[i] = engine.EntityCapabilitiesResult{
-			EntityCapabilities: engine.EntityCapabilities{
-				Namespace:  q.Namespace,
-				SchemaName: q.SchemaName,
-				EntityType: q.EntityType,
-				EntityKey:  q.EntityKey,
-				Actions:    []string{},
-			},
+			Namespace:  q.Namespace,
+			SchemaName: q.SchemaName,
+			EntityType: q.EntityType,
+			EntityKey:  q.EntityKey,
+			Actions:    []string{},
 		}
 	}
 

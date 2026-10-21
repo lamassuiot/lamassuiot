@@ -13,8 +13,7 @@ import (
 )
 
 type deviceManagerClient struct {
-	httpClient *http.Client
-	baseUrl    string
+	restClient
 }
 
 func NewHttpDeviceManagerClient(client *http.Client, url string) services.DeviceManagerService {
@@ -26,7 +25,7 @@ func NewHttpDeviceManagerClient(client *http.Client, url string) services.Device
 }
 
 func (cli *deviceManagerClient) GetDevicesStats(ctx context.Context, input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
-	response, err := Get[models.DevicesStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", input.QueryParameters, map[int][]error{})
+	response, err := cli.get[models.DevicesStats](ctx, "/v1/stats", input.QueryParameters, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +34,7 @@ func (cli *deviceManagerClient) GetDevicesStats(ctx context.Context, input servi
 }
 
 func (cli *deviceManagerClient) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (*models.Device, error) {
-	response, err := Post[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices", resources.CreateDeviceBody{
+	response, err := cli.post[*models.Device](ctx, "/v1/devices", resources.CreateDeviceBody{
 		ID:        input.ID,
 		Alias:     input.Alias,
 		Tags:      input.Tags,
@@ -52,7 +51,7 @@ func (cli *deviceManagerClient) CreateDevice(ctx context.Context, input services
 }
 
 func (cli *deviceManagerClient) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
-	response, err := Get[models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID, nil, map[int][]error{
+	response, err := cli.get[models.Device](ctx, "/v1/devices/"+input.ID, nil, map[int][]error{
 		400: {errs.ErrDeviceNotFound},
 	})
 	if err != nil {
@@ -63,14 +62,14 @@ func (cli *deviceManagerClient) GetDeviceByID(ctx context.Context, input service
 }
 
 func (cli *deviceManagerClient) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
-	url := cli.baseUrl + "/v1/devices/" + input.DeviceID + "/events"
+	path := "/v1/devices/" + input.DeviceID + "/events"
 
 	applyFunc := input.ApplyFunc
 	if applyFunc == nil {
 		applyFunc = func(models.DeviceEvent) {}
 	}
 
-	return IterGet[models.DeviceEvent, *resources.GetDeviceEventsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, applyFunc, map[int][]error{
+	return cli.iterGet[models.DeviceEvent, *resources.GetDeviceEventsResponse](ctx, path, input.ExhaustiveRun, input.QueryParameters, applyFunc, map[int][]error{
 		404: {errs.ErrDeviceNotFound},
 	})
 }
@@ -90,7 +89,7 @@ func (cli *deviceManagerClient) CreateDeviceEvent(ctx context.Context, input ser
 		body["event_ts"] = input.Timestamp
 	}
 
-	response, err := Post[*models.DeviceEvent](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.DeviceID+"/events", body, map[int][]error{
+	response, err := cli.post[*models.DeviceEvent](ctx, "/v1/devices/"+input.DeviceID+"/events", body, map[int][]error{
 		400: {errs.ErrValidateBadRequest},
 		404: {errs.ErrDeviceNotFound},
 	})
@@ -102,19 +101,19 @@ func (cli *deviceManagerClient) CreateDeviceEvent(ctx context.Context, input ser
 }
 
 func (cli *deviceManagerClient) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
-	url := cli.baseUrl + "/v1/devices"
+	path := "/v1/devices"
 
-	return IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	return cli.iterGet[models.Device, *resources.GetDevicesResponse](ctx, path, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 func (cli *deviceManagerClient) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
-	url := cli.baseUrl + "/v1/devices/dms/" + input.DMSID
+	path := "/v1/devices/dms/" + input.DMSID
 
-	return IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	return cli.iterGet[models.Device, *resources.GetDevicesResponse](ctx, path, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 
 }
 
 func (cli *deviceManagerClient) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (*models.Device, error) {
-	response, err := DeleteWithBody[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/decommission", "", map[int][]error{
+	response, err := cli.deleteWithBody[*models.Device](ctx, "/v1/devices/"+input.ID+"/decommission", "", map[int][]error{
 		404: {errs.ErrDeviceNotFound},
 		422: {errs.ErrDeviceInvalidStatus},
 		400: {errs.ErrValidateBadRequest},
@@ -127,7 +126,7 @@ func (cli *deviceManagerClient) UpdateDeviceStatus(ctx context.Context, input se
 }
 
 func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
-	response, err := Put[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/idslot", resources.UpdateDeviceIdentitySlotBody{
+	response, err := cli.put[*models.Device](ctx, "/v1/devices/"+input.ID+"/idslot", resources.UpdateDeviceIdentitySlotBody{
 		Slot: input.Slot,
 	}, map[int][]error{})
 	if err != nil {
@@ -138,7 +137,7 @@ func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(ctx context.Context, in
 }
 
 func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (*models.Device, error) {
-	response, err := Put[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/metadata", resources.UpdateDeviceMetadataBody{
+	response, err := cli.put[*models.Device](ctx, "/v1/devices/"+input.ID+"/metadata", resources.UpdateDeviceMetadataBody{
 		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
@@ -149,7 +148,7 @@ func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input 
 }
 
 func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) error {
-	return Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID, map[int][]error{
+	return cli.delete(ctx, "/v1/devices/"+input.ID, map[int][]error{
 		404: {errs.ErrDeviceNotFound},
 		422: {errs.ErrDeviceInvalidStatus},
 		400: {errs.ErrValidateBadRequest},
@@ -161,7 +160,7 @@ func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services
 // ============================================================================
 
 func (cli *deviceManagerClient) CreateDeviceGroup(ctx context.Context, input services.CreateDeviceGroupInput) (*models.DeviceGroup, error) {
-	response, err := Post[map[string]interface{}](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups", resources.CreateDeviceGroupBody{
+	response, err := cli.post[map[string]any](ctx, "/v1/device-groups", resources.CreateDeviceGroupBody{
 		ID:          input.ID,
 		Name:        input.Name,
 		Description: input.Description,
@@ -185,7 +184,7 @@ func (cli *deviceManagerClient) CreateDeviceGroup(ctx context.Context, input ser
 }
 
 func (cli *deviceManagerClient) UpdateDeviceGroup(ctx context.Context, input services.UpdateDeviceGroupInput) (*models.DeviceGroup, error) {
-	response, err := Put[map[string]interface{}](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, resources.UpdateDeviceGroupBody{
+	response, err := cli.put[map[string]any](ctx, "/v1/device-groups/"+input.ID, resources.UpdateDeviceGroupBody{
 		Name:        input.Name,
 		Description: input.Description,
 		ParentID:    input.ParentID,
@@ -208,14 +207,14 @@ func (cli *deviceManagerClient) UpdateDeviceGroup(ctx context.Context, input ser
 }
 
 func (cli *deviceManagerClient) DeleteDeviceGroup(ctx context.Context, input services.DeleteDeviceGroupInput) error {
-	return Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, map[int][]error{
+	return cli.delete(ctx, "/v1/device-groups/"+input.ID, map[int][]error{
 		404: {errs.ErrDeviceGroupNotFound},
 		400: {errs.ErrValidateBadRequest},
 	})
 }
 
 func (cli *deviceManagerClient) GetDeviceGroupByID(ctx context.Context, input services.GetDeviceGroupByIDInput) (*models.DeviceGroup, error) {
-	response, err := Get[map[string]interface{}](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.ID, nil, map[int][]error{
+	response, err := cli.get[map[string]any](ctx, "/v1/device-groups/"+input.ID, nil, map[int][]error{
 		404: {errs.ErrDeviceGroupNotFound},
 	})
 	if err != nil {
@@ -232,21 +231,21 @@ func (cli *deviceManagerClient) GetDeviceGroupByID(ctx context.Context, input se
 }
 
 func (cli *deviceManagerClient) GetDeviceGroups(ctx context.Context, input services.GetDeviceGroupsInput) (string, error) {
-	url := cli.baseUrl + "/v1/device-groups"
+	path := "/v1/device-groups"
 
-	return IterGet[models.DeviceGroup, *resources.GetDeviceGroupsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	return cli.iterGet[models.DeviceGroup, *resources.GetDeviceGroupsResponse](ctx, path, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *deviceManagerClient) GetDevicesByGroup(ctx context.Context, input services.GetDevicesByGroupInput) (string, error) {
-	url := cli.baseUrl + "/v1/device-groups/" + input.GroupID + "/devices"
+	path := "/v1/device-groups/" + input.GroupID + "/devices"
 
-	return IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{
+	return cli.iterGet[models.Device, *resources.GetDevicesResponse](ctx, path, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{
 		404: {errs.ErrDeviceGroupNotFound},
 	})
 }
 
 func (cli *deviceManagerClient) GetDeviceGroupStats(ctx context.Context, input services.GetDeviceGroupStatsInput) (*models.DevicesStats, error) {
-	response, err := Get[models.DevicesStats](ctx, cli.httpClient, cli.baseUrl+"/v1/device-groups/"+input.GroupID+"/stats", nil, map[int][]error{
+	response, err := cli.get[models.DevicesStats](ctx, "/v1/device-groups/"+input.GroupID+"/stats", nil, map[int][]error{
 		404: {errs.ErrDeviceGroupNotFound},
 	})
 	if err != nil {
@@ -280,7 +279,7 @@ func convertCriteriaToRequest(modelCriteria []models.DeviceGroupFilterOption) []
 
 // convertResponseToDeviceGroup converts the HTTP response map back to a DeviceGroup model.
 // The HTTP response contains criteria with string operands, which need to be converted back to integer FilterOperations.
-func convertResponseToDeviceGroup(responseMap *map[string]interface{}) (*models.DeviceGroup, error) {
+func convertResponseToDeviceGroup(responseMap *map[string]any) (*models.DeviceGroup, error) {
 	if responseMap == nil {
 		return nil, nil
 	}

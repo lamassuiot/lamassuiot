@@ -9,7 +9,7 @@ import (
 )
 
 func Register() {
-	eventbus.RegisterEventBusEngine("aws_sqs_sns", func(eventBusProvider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+	eventbus.RegisterEventBusEngine("aws_sqs_sns", func(eventBusProvider string, config any, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 		return NewAWSEngine(config, serviceId, logger)
 	})
 }
@@ -22,7 +22,7 @@ type AwsEngine struct {
 	publisher  message.Publisher
 }
 
-func NewAWSEngine(conf interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+func NewAWSEngine(conf any, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 	localConf, err := cconfig.DecodeStruct[laws.AWSSDKConfig](conf)
 	if err != nil {
 		logger.Errorf("could not decode AMQP Connection config: %s", err)

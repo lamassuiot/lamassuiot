@@ -113,10 +113,10 @@ func (m *PrincipalManager) NewIdentityResolver(policies *PolicyManager) *Identit
 
 // --- Auth matching ---
 
-func (m *PrincipalManager) MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error) {
+func (m *PrincipalManager) MatchPrincipals(ctx context.Context, authMaterial any, authType string) ([]string, error) {
 	return m.matchService.MatchPrincipals(ctx, authMaterial, authType)
 }
 
-func (m *PrincipalManager) MatchSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error) {
+func (m *PrincipalManager) MatchSubjects(ctx context.Context, authMaterial any, authType string) ([]engine.ResolvedSubject, error) {
 	return m.matchService.MatchSubjects(ctx, authMaterial, authType)
 }

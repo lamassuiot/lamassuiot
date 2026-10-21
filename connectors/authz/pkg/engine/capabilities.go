@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
@@ -39,10 +40,8 @@ type EntityCapabilitiesResult struct {
 
 // addGlobalAction merges a single global action into the GlobalCapabilities map (deduplicates).
 func (gc GlobalCapabilities) addGlobalAction(qualifiedEntityType, action string) {
-	for _, a := range gc[qualifiedEntityType] {
-		if a == action {
-			return
-		}
+	if slices.Contains(gc[qualifiedEntityType], action) {
+		return
 	}
 	gc[qualifiedEntityType] = append(gc[qualifiedEntityType], action)
 }
@@ -134,14 +133,12 @@ func (e *Engine) GetEntityCapabilitiesBatch(
 		ec, err := e.GetEntityCapabilities(ctx, policies, q.Namespace, q.SchemaName, q.EntityType, q.EntityKey)
 		if err != nil {
 			results[i] = EntityCapabilitiesResult{
-				EntityCapabilities: EntityCapabilities{
-					Namespace:  q.Namespace,
-					SchemaName: q.SchemaName,
-					EntityType: q.EntityType,
-					EntityKey:  q.EntityKey,
-					Actions:    []string{},
-				},
-				Error: err.Error(),
+				Namespace:  q.Namespace,
+				SchemaName: q.SchemaName,
+				EntityType: q.EntityType,
+				EntityKey:  q.EntityKey,
+				Actions:    []string{},
+				Error:      err.Error(),
 			}
 		} else {
 			results[i] = EntityCapabilitiesResult{EntityCapabilities: *ec}

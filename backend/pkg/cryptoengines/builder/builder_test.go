@@ -11,7 +11,7 @@ import (
 func TestBuildStorageEnginePostgres(t *testing.T) {
 	logger := log.WithField("test", "BuildCryptoEngine_Filesystem")
 
-	cfg := map[string]interface{}{
+	cfg := map[string]any{
 		"storage_directory": "filepath",
 	}
 
@@ -38,7 +38,7 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 func TestBuildStorageEngineInvalidProvider(t *testing.T) {
 	logger := log.WithField("test", "BuildCryptoEngine_InvalidProvider")
 
-	cfg := map[string]interface{}{
+	cfg := map[string]any{
 		"storage_directory": "filepath",
 	}
 

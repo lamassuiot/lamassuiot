@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -347,16 +348,12 @@ func TestReissueCAService(t *testing.T) {
 
 				// The URLs should be recomputed (might contain new serial number for CRL endpoint)
 				// We just verify they exist and are not empty
-				for _, url := range reissuedCert.CRLDistributionPoints {
-					if url == "" {
-						return fmt.Errorf("empty CRL distribution point URL")
-					}
+				if slices.Contains(reissuedCert.CRLDistributionPoints, "") {
+					return fmt.Errorf("empty CRL distribution point URL")
 				}
 
-				for _, url := range reissuedCert.OCSPServer {
-					if url == "" {
-						return fmt.Errorf("empty OCSP server URL")
-					}
+				if slices.Contains(reissuedCert.OCSPServer, "") {
+					return fmt.Errorf("empty OCSP server URL")
 				}
 
 				// Verify the number of URLs matches
@@ -656,7 +653,6 @@ func TestReissueCASDK(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
