@@ -319,7 +319,7 @@ components:
 
     NotificationHTTPClient:
       type: object
-      description: Optional client authentication for notification webhooks. HTTPS server certificates are always verified against the system trust store. Existing URL-secret webhooks require no additional authentication. Options that reference files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file) are rejected.
+      description: Optional client authentication for notification webhooks. HTTPS server certificates are always verified against the system trust store. Existing URL-secret webhooks require no additional authentication. Options that reference files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file) are rejected. Credentials are sent regardless of the URL scheme. With http:// endpoints the API key or bearer token travels in cleartext (and the OIDC client secret too if oidc_well_known is http://), and mTLS has no effect. Use https:// URLs when configuring authentication.
       properties:
         insecure_skip_verify:
           type: boolean
