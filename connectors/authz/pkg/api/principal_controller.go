@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
