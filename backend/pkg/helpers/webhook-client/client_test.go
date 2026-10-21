@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -58,6 +59,25 @@ func TestInvokeWebhookSendsCustomApiKeyHeader(t *testing.T) {
 	err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), apiKeyWebhook(server.URL, "Authorization"), []byte("{}"))
 	require.NoError(t, err)
 	require.Equal(t, "admin-mode", <-received)
+}
+
+// The transport adds the credential to every request, including redirected
+// ones, so following a redirect would hand it to wherever the receiver points.
+func TestInvokeWebhookDoesNotFollowRedirects(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("redirect was followed: X-Api-Key=%q", r.Header.Get("X-Api-Key"))
+	}))
+	defer target.Close()
+	for _, code := range []int{http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL, code)
+			}))
+			defer server.Close()
+			err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), apiKeyWebhook(server.URL, "X-Api-Key"), []byte("{}"))
+			require.ErrorContains(t, err, fmt.Sprintf("unexpected status code: %d", code))
+		})
+	}
 }
 
 func TestInvokeWebhookHonoursContextCancellation(t *testing.T) {

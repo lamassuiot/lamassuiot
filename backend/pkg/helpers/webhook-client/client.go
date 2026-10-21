@@ -99,6 +99,12 @@ func invokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 	if err != nil {
 		return err
 	}
+	// The API key and bearer token are added by the transport on every
+	// request, so following a redirect would send them to wherever the
+	// receiver points. Webhooks must be configured with their final URL.
+	cli.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 
 	method := "POST"
 	if conf.Method != "" {
@@ -123,6 +129,9 @@ func invokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 
 	defer res.Body.Close()
 
+	if res.StatusCode >= 300 && res.StatusCode < 400 {
+		return fmt.Errorf("unexpected status code: %d: redirects are not followed", res.StatusCode)
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
 	}
