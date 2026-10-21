@@ -26,30 +26,7 @@ type CertificatesRepo interface {
 	Delete(ctx context.Context, serialNumber string) error
 }
 
-// IDLockKey is the lock key WithIDLock uses for an ID. Callers that need
-// several keys at once pass it to WithLocks so they exclude WithIDLock users.
-func IDLockKey(id string) string { return "id:" + id }
-
-// SubjectLockKey is the lock key for a certificate subject DN. CA imports lock
-// their own and their issuer's subject, so a parent and its child imported
-// concurrently find each other once the first one commits.
-func SubjectLockKey(subjectDN string) string { return "subject:" + subjectDN }
-
 type CACertificatesRepo interface {
-	// WithIDLock serializes operations on an ID. Use the supplied repository
-	// inside the callback; PostgreSQL binds it to the lock-owning transaction.
-	WithIDLock(ctx context.Context, id string, fn func(CACertificatesRepo) error) error
-	// WithLocks serializes operations that share at least one key: callers
-	// with disjoint key sets run in parallel. Keys are acquired in a fixed
-	// (sorted) order, so callers with overlapping sets wait for each other
-	// instead of deadlocking. Use the supplied repository inside the callback.
-	//
-	// Examples:
-	//   {id:root, subject:Root} and {id:child, subject:Root} exclude each other
-	//   (shared subject:Root); {id:ca1} and {id:ca2} run in parallel;
-	//   {x, y} and {y, x} do not deadlock, as both are acquired as x then y.
-	WithLocks(ctx context.Context, keys []string, fn func(CACertificatesRepo) error) error
-
 	SelectByType(ctx context.Context, CAType models.CertificateType, req StorageListRequest[models.CACertificate]) (string, error)
 	Count(ctx context.Context) (int, error)
 	CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error)

@@ -12,7 +12,6 @@ import (
 	"io"
 	"math/big"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,25 +27,11 @@ import (
 // child discovery matches both issuer subject and stored AKI, as the SQL store does.
 type importCARepo struct {
 	storage.CACertificatesRepo
-	mu           sync.Mutex
 	cas          map[string]models.CACertificate
 	lookupErr    error
 	insertErr    error
 	insertCalls  int
 	childQueries int
-}
-
-func (repo *importCARepo) WithIDLock(ctx context.Context, id string, fn func(storage.CACertificatesRepo) error) error {
-	return repo.WithLocks(ctx, []string{storage.IDLockKey(id)}, fn)
-}
-
-func (repo *importCARepo) WithLocks(ctx context.Context, _ []string, fn func(storage.CACertificatesRepo) error) error {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return fn(repo)
 }
 
 func (repo *importCARepo) Insert(_ context.Context, ca *models.CACertificate) (*models.CACertificate, error) {

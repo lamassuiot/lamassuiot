@@ -267,6 +267,8 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.
 }
 
 func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
 	// Validate IssuanceProfileID exists if provided (required for ImportedWithKey type)
 	if input.ProfileID != "" {
 		_, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
@@ -277,37 +279,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
-	if input.ID == "" {
-		input.ID = uuid.NewV7().String()
-	}
-
-	// The ID key rejects duplicates. The subject keys serialize imports of
-	// certificates that may be parent and child: each one only finds the other
-	// after it commits, so both must not look for relatives concurrently.
-	cert := (*x509.Certificate)(input.CACertificate)
-	keys := []string{
-		storage.IDLockKey(input.ID),
-		storage.SubjectLockKey(cert.Subject.String()),
-		storage.SubjectLockKey(cert.Issuer.String()),
-	}
-
-	var ca *models.CACertificate
-	err := svc.caStorage.WithLocks(ctx, keys, func(repo storage.CACertificatesRepo) error {
-		var err error
-		ca, err = svc.importCA(ctx, input, repo)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return ca, nil
-}
-
-func (svc *CAServiceBackend) importCA(ctx context.Context, input services.ImportCAInput, caStorage storage.CACertificatesRepo) (*models.CACertificate, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	// Reject duplicate IDs before importing or binding any private key.
 	caID := input.ID
-	// The ID guard must cover both this check and all subsequent KMS calls.
-	exists, _, err := caStorage.SelectExistsByID(ctx, caID)
+	if caID == "" {
+		caID = uuid.NewV7().String()
+	}
+
+	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
 	if err != nil {
 		lFunc.Errorf("could not check if CA %s exists: %s", caID, err)
 		return nil, err
@@ -420,7 +398,7 @@ func (svc *CAServiceBackend) importCA(ctx context.Context, input services.Import
 
 		// 1st Attempt: Check if the CA is signed by a parent CA using Authority Key Identifier (AKID)
 		lFunc.Debugf("checking if CA %s is signed by a parent CA using AKID", input.CACertificate.Subject.CommonName)
-		_, err = caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
+		_, err = svc.caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
 			storage.StorageListRequest[models.CACertificate]{
 				ExhaustiveRun: true,
 				ApplyFunc: func(c models.CACertificate) {
@@ -447,7 +425,7 @@ func (svc *CAServiceBackend) importCA(ctx context.Context, input services.Import
 
 			// 2nd Attempt: Find all CAs based on the Issuer Subject of the certificate being imported
 			candidateParentCAs = []models.CACertificate{}
-			_, err = caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+			_, err = svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
 				ExhaustiveRun: true,
 				ApplyFunc: func(c models.CACertificate) {
 					if chelpers.PkixNameEqual(c.Certificate.Certificate.Subject, input.CACertificate.Issuer) {
@@ -535,7 +513,7 @@ func (svc *CAServiceBackend) importCA(ctx context.Context, input services.Import
 	}
 
 	lFunc.Debugf("insert CA %s in storage engine", caID)
-	cert, err := caStorage.Insert(ctx, ca)
+	cert, err := svc.caStorage.Insert(ctx, ca)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +529,7 @@ func (svc *CAServiceBackend) importCA(ctx context.Context, input services.Import
 		// In the future if we plan to support Cross Signed certs, it is important not fetching just by AKI,
 		// since two cross signed certs (using the same SKI) are signed by different AKIs. Hence, we select by AKI AND Issuer DSN
 		var updateErr error
-		_, err = caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
+		_, err = svc.caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
 			ExhaustiveRun: true,
 			ApplyFunc: func(child models.CACertificate) {
 				if updateErr != nil {
@@ -586,7 +564,7 @@ func (svc *CAServiceBackend) importCA(ctx context.Context, input services.Import
 					child.Certificate.IssuerCAMetadata.SN = parent.Certificate.SerialNumber
 
 					// Update the level in DB
-					_, updateErr = caStorage.Update(ctx, &child)
+					_, updateErr = svc.caStorage.Update(ctx, &child)
 					if updateErr != nil {
 						return
 					}
