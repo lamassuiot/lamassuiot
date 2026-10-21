@@ -63,7 +63,8 @@ type AuthJWTOptions struct {
 }
 
 // AuthMTLSOptions loads the client certificate from CertContent/KeyContent
-// (PEM) when set, otherwise from CertFile/KeyFile.
+// (PEM) when set, otherwise from CertFile/KeyFile. For backwards compatibility,
+// CertFile/KeyFile may also hold PEM content directly.
 type AuthMTLSOptions struct {
 	CertFile    string `mapstructure:"cert_file" json:"cert_file,omitempty"`
 	KeyFile     string `mapstructure:"key_file" json:"key_file,omitempty"`
