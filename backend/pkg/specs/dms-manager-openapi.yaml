@@ -630,8 +630,63 @@ components:
         client_certificate_settings:
           $ref: '#/components/schemas/AuthOptionsClientCertificate'
         external_webhook_settings:
+          $ref: '#/components/schemas/WebhookCall'
+
+    WebhookCall:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        method:
+          type: string
+        config:
+          $ref: '#/components/schemas/WebhookCallHttpClient'
+
+    WebhookCallHttpClient:
+      type: object
+      description: HTTP client configuration for calls to the external webhook. If the EST auth mode of the enrollment or reenrollment settings uses the webhook (EXTERNAL_WEBHOOK or CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK), creating or updating the DMS returns 400 when the configuration references files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file), sets a reserved API key header, or uses mtls without mtls_options.cert_content and mtls_options.key_content.
+      properties:
+        log_level:
+          type: string
+        auth_mode:
+          type: string
+          enum: [noauth, apikey, jwt, mtls]
+        insecure_skip_verify:
+          type: boolean
+          default: false
+          description: Skip server certificate verification. Defaults to verifying against the system trust store.
+        call_timeout:
+          type: string
+          description: Maximum duration of the webhook call (for example "10s").
+        apikey_options:
           type: object
-          additionalProperties: true
+          properties:
+            key:
+              type: string
+            header:
+              type: string
+        jwt_options:
+          type: object
+          properties:
+            oidc_client_id:
+              type: string
+            oidc_client_secret:
+              type: string
+            oidc_well_known:
+              type: string
+              format: uri
+        mtls_options:
+          type: object
+          properties:
+            cert_content:
+              type: string
+              description: PEM-encoded client certificate.
+            key_content:
+              type: string
+              description: PEM-encoded private key.
 
     AuthOptionsClientCertificate:
       type: object

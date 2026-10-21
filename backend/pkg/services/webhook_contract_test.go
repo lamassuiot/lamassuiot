@@ -16,6 +16,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -146,4 +147,43 @@ func TestEnrollmentWebhookRejectsReservedApiKeyHeader(t *testing.T) {
 	}}}
 	_, err = invokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, csr, "profile", "enrollment")
 	require.ErrorContains(t, err, "is reserved")
+}
+
+func TestValidateDMSWebhooks(t *testing.T) {
+	webhookSettings := func(cfg config.HTTPClient) models.EnrollmentOptionsESTRFC7030 {
+		return models.EnrollmentOptionsESTRFC7030{
+			AuthMode:                   models.ESTAuthModeExternalWebhook,
+			AuthOptionsExternalWebhook: models.WebhookCall{Name: "hook", Url: "https://example.com", Config: models.WebhookCallHttpClient{HTTPClient: cfg}},
+		}
+	}
+	fileMTLS := config.HTTPClient{AuthMode: config.MTLS, AuthMTLSOptions: config.AuthMTLSOptions{CertFile: "/certs/client.crt", KeyFile: "/certs/client.key"}}
+
+	t.Run("valid", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(config.HTTPClient{AuthMode: config.NoAuth})
+		require.NoError(t, validateDMSWebhooks(settings))
+	})
+
+	t.Run("rejects reenrollment file references", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030 = webhookSettings(fileMTLS)
+		err := validateDMSWebhooks(settings)
+		require.ErrorIs(t, err, errs.ErrValidateBadRequest)
+		require.ErrorContains(t, err, "reenrollment external webhook")
+		require.ErrorContains(t, err, "must not reference files")
+	})
+
+	t.Run("validates client certificate and webhook mode", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(fileMTLS)
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+		require.ErrorIs(t, validateDMSWebhooks(settings), errs.ErrValidateBadRequest)
+	})
+
+	t.Run("ignores webhook config when auth mode is not external webhook", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(fileMTLS)
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificate
+		require.NoError(t, validateDMSWebhooks(settings))
+	})
 }

@@ -92,6 +92,10 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
+	if err := validateDMSWebhooks(input.Settings); err != nil {
+		lFunc.Errorf("webhook validation error: %s", err)
+		return nil, err
+	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	if exists, _, err := svc.dmsStorage.SelectExists(ctx, input.ID); err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
@@ -126,6 +130,10 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
+	}
+	if err := validateDMSWebhooks(input.DMS.Settings); err != nil {
+		lFunc.Errorf("webhook validation error: %s", err)
+		return nil, err
 	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.DMS.ID)
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.DMS.ID)
@@ -467,6 +475,29 @@ func checkReenrollmentExpiry(lFunc *logrus.Entry, leafCert *x509.Certificate, re
 		return fmt.Errorf("expired certificate")
 	}
 
+	return nil
+}
+
+// validateDMSWebhooks rejects external webhook configs that would fail on
+// every enroll or reenroll, so the error surfaces when the DMS is configured.
+func validateDMSWebhooks(settings models.DMSSettings) error {
+	webhooks := []struct {
+		operation string
+		opts      models.EnrollmentOptionsESTRFC7030
+	}{
+		{"enrollment", settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030},
+		{"reenrollment", settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030},
+	}
+	for _, w := range webhooks {
+		switch w.opts.AuthMode {
+		case models.ESTAuthModeExternalWebhook, models.ESTAuthModeClientCertificateAndWebhook:
+		default:
+			continue
+		}
+		if err := webhookclient.ValidateConfig(w.opts.AuthOptionsExternalWebhook.Config); err != nil {
+			return fmt.Errorf("%w: invalid %s external webhook config: %s", errs.ErrValidateBadRequest, w.operation, err)
+		}
+	}
 	return nil
 }
 

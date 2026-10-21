@@ -95,6 +95,33 @@ func TestUpdateDMS(t *testing.T) {
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
 }
 
+func TestCreateDMSWebhookConfig(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	createDMS := func(id, webhookConfig string) *http.Response {
+		body := fmt.Sprintf(`{"id":%q,"name":"Webhook DMS","settings":{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","method":"POST","config":%s}}}}}`, id, webhookConfig)
+		resp, err := tests.NewTestHTTPClientInsecure().Post(fmt.Sprintf("https://127.0.0.1:%d/v1/dms", dmsMgr.Port), "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("could not call create DMS: %s", err)
+		}
+		t.Cleanup(func() { resp.Body.Close() })
+		return resp
+	}
+
+	t.Run("rejects file references", func(t *testing.T) {
+		resp := createDMS("file-webhook", `{"auth_mode":"mtls","mtls_options":{"cert_file":"/certs/client.crt","key_file":"/certs/client.key"}}`)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		respBody, _ := io.ReadAll(resp.Body)
+		assert.Contains(t, string(respBody), "must not reference files")
+
+		_, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: "file-webhook"})
+		assert.Error(t, err)
+	})
+}
+
 func TestUpdateDMSMetadata(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
