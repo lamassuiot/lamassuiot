@@ -24,10 +24,15 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if [[ "$PR_TITLE" =~ $PATTERN ]]; then
-            echo "ok: $PR_TITLE"
+          # Escape the title so a multi-line title cannot inject workflow commands into the log.
+          safe_title="${PR_TITLE//'%'/'%25'}"
+          safe_title="${safe_title//$'\r'/'%0D'}"
+          safe_title="${safe_title//$'\n'/'%0A'}"
+
+          if [[ "$PR_TITLE" != *[$'\r\n']* && "$PR_TITLE" =~ $PATTERN ]]; then
+            echo "ok: $safe_title"
           else
-            echo "::error::PR title does not follow the Conventional Commits format used by cliff.toml: $PR_TITLE"
+            echo "::error::PR title does not follow the Conventional Commits format used by cliff.toml: $safe_title"
             echo "Expected: <type>[optional scope][!]: <description>"
             echo "Types: feat, fix, bump, revert, remove, security, test, chore, refactor, docs, build, ci"
             echo "Examples: feat(cryptoengines): add new cryptoengine; fix: typo in variable name; bump: update dependency versions; chore: release lamassu 3.8.0"

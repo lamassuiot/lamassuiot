@@ -15,7 +15,7 @@ jobs:
       matrix:
         service: [kms, ca, devmanager, dmsmanager, va, alerts, aws-connector, authz, lamassu-db-migration, ca-to-kms-migration]
         image-tag: [dev, latest]
-    uses: ./.github/workflows/trivy-image-scan.yml
+    uses: ./.github/workflows/trivy-image-scan.yaml
     with:
       image-ref: ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ matrix.image-tag }}
       category: trivy-image-${{ matrix.service }}-${{ matrix.image-tag }}
