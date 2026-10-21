@@ -20,13 +20,14 @@ func InvokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 		InsecureSkipVerify: !conf.Config.ValidateServerCert,
 	}
 
-	if conf.Config.AuthMode == config.JWT {
+	switch conf.Config.AuthMode {
+	case config.JWT:
 		clientConfig.AuthJWTOptions = config.AuthJWTOptions{
 			ClientID:         conf.Config.OIDC.ClientID,
 			ClientSecret:     config.Password(conf.Config.OIDC.ClientSecret),
 			OIDCWellKnownURL: conf.Config.OIDC.OIDCWellKnownURL,
 		}
-	} else if conf.Config.AuthMode == config.ApiKey {
+	case config.ApiKey:
 		if isReservedHeader(conf.Config.ApiKey.Header) {
 			return nil, fmt.Errorf("webhook API key header %q is reserved", conf.Config.ApiKey.Header)
 		}
@@ -34,7 +35,7 @@ func InvokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 			Key:    conf.Config.ApiKey.Key,
 			Header: conf.Config.ApiKey.Header,
 		}
-	} else if conf.Config.AuthMode == config.MTLS {
+	case config.MTLS:
 		clientConfig.AuthMTLSOptions = config.AuthMTLSOptions{
 			CertFile: conf.Config.MutualTLS.Cert,
 			KeyFile:  conf.Config.MutualTLS.Key,
@@ -42,7 +43,7 @@ func InvokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 	}
 
 	lCli := logger.WithField("webhook", fmt.Sprintf("webhook-cli: %s", conf.Name))
-	cli, err := sdk.BuildHTTPClient(clientConfig, lCli)
+	cli, err := sdk.BuildHTTPClientWithContext(ctx, clientConfig, lCli)
 	if err != nil {
 		return nil, err
 	}

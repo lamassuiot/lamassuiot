@@ -58,9 +58,15 @@ func (lrt customHeaderRoundTripper) RoundTrip(req *http.Request) (res *http.Resp
 }
 
 func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
+	return BuildHTTPClientWithContext(chelpers.InitContext(), cfg, logger)
+}
+
+// BuildHTTPClientWithContext is like BuildHTTPClient, but ctx bounds the
+// requests made while building and authenticating the client (OIDC discovery
+// and token retrieval for JWT auth). Use it for short-lived clients.
+func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
 	var err error
 	client := &http.Client{}
-	ctx := chelpers.InitContext()
 
 	caPool := chelpers.LoadSytemCACertPool()
 

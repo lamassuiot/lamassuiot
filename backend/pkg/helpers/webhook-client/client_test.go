@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -59,4 +60,28 @@ func TestInvokeWebhookHonoursContextCancellation(t *testing.T) {
 	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{AuthMode: config.NoAuth}}
 	_, err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestInvokeWebhookJWTDiscoveryHonoursContextDeadline(t *testing.T) {
+	release := make(chan struct{})
+	oidc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer oidc.Close()
+	defer close(release)
+	webhook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("webhook reached the server without a token")
+	}))
+	defer webhook.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	conf := models.WebhookCall{Name: "test", Url: webhook.URL, Config: models.WebhookCallHttpClient{
+		AuthMode: config.JWT,
+		OIDC:     models.WebhookCallHttpClientOidcOptions{ClientID: "id", ClientSecret: "secret", OIDCWellKnownURL: oidc.URL},
+	}}
+	start := time.Now()
+	_, err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 2*time.Second)
 }
