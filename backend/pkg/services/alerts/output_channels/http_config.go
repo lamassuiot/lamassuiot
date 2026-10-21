@@ -77,13 +77,12 @@ func sendHTTPNotification(ctx context.Context, logger *logrus.Entry, name, url, 
 		return err
 	}
 
-	_, err = webhookclient.InvokeWebhook(ctx, logger, models.WebhookCall{
+	return webhookclient.InvokeWebhook(ctx, logger, models.WebhookCall{
 		Name:   name,
 		Url:    url,
 		Method: method,
 		Config: httpConfig,
 	}, body)
-	return err
 }
 
 // decodeChannelConfig converts a stored channel config (decoded as generic

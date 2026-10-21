@@ -46,7 +46,43 @@ func ValidateConfig(cfg models.WebhookCallHttpClient) error {
 	return nil
 }
 
-func InvokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.WebhookCall, payload []byte) ([]byte, error) {
+// InvokeWebhook delivers payload and only checks the status code. The response
+// body is never read: receivers may answer anything and callers ignore it.
+func InvokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.WebhookCall, payload []byte) error {
+	return invokeWebhook(ctx, logger, conf, payload, nil)
+}
+
+// InvokeJSONWebhook delivers payload as JSON and decodes the response, reading
+// at most MaxResponseBodySize bytes of it.
+func InvokeJSONWebhook[E any](ctx context.Context, logger *logrus.Entry, config models.WebhookCall, payload any) (*E, error) {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var data E
+	err = invokeWebhook(ctx, logger, config, b, func(body io.Reader) error {
+		bodyBytes, err := io.ReadAll(io.LimitReader(body, MaxResponseBodySize+1))
+		if err != nil {
+			return err
+		}
+		if len(bodyBytes) > MaxResponseBodySize {
+			return fmt.Errorf("webhook response exceeds %d bytes", MaxResponseBodySize)
+		}
+
+		data, err = sdk.ParseJSON[E](bodyBytes)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &data, nil
+}
+
+// invokeWebhook performs the call and, for 2xx responses, hands the body to
+// readBody (if any) while the call deadline still applies.
+func invokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.WebhookCall, payload []byte, readBody func(io.Reader) error) error {
 	timeout := DefaultCallTimeout
 	if conf.Config.CallTimeout > 0 {
 		timeout = time.Duration(conf.Config.CallTimeout)
@@ -55,68 +91,44 @@ func InvokeWebhook(ctx context.Context, logger *logrus.Entry, conf models.Webhoo
 	defer cancel()
 
 	if err := ValidateConfig(conf.Config); err != nil {
-		return nil, err
+		return err
 	}
 
 	lCli := logger.WithField("webhook", fmt.Sprintf("webhook-cli: %s", conf.Name))
 	cli, err := sdk.BuildHTTPClientWithContext(ctx, conf.Config.HTTPClient, lCli)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	method := "POST"
 	if conf.Method != "" {
 		// Allow only POST and PUT methods
 		if conf.Method != "POST" && conf.Method != "PUT" {
-			return nil, fmt.Errorf("invalid method: %s", conf.Method)
+			return fmt.Errorf("invalid method: %s", conf.Method)
 		}
 		method = conf.Method
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, conf.Url, bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Both enrollment decisions and notification webhooks send JSON.
 	req.Header.Set("Content-Type", "application/json")
 	res, err := cli.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
 	}
 
-	bodyBytes, err := io.ReadAll(io.LimitReader(res.Body, MaxResponseBodySize+1))
-	if err != nil {
-		return nil, err
+	if readBody == nil {
+		return nil
 	}
-	if len(bodyBytes) > MaxResponseBodySize {
-		return nil, fmt.Errorf("webhook response exceeds %d bytes", MaxResponseBodySize)
-	}
-
-	return bodyBytes, nil
-}
-
-func InvokeJSONWebhook[E any](ctx context.Context, logger *logrus.Entry, config models.WebhookCall, payload any) (*E, error) {
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := InvokeWebhook(ctx, logger, config, b)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := sdk.ParseJSON[E](res)
-	if err != nil {
-		return nil, err
-	}
-
-	return &data, nil
+	return readBody(res.Body)
 }

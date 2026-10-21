@@ -42,7 +42,7 @@ func TestInvokeWebhookRejectsReservedApiKeyHeaders(t *testing.T) {
 		"Ssl-Client-Cert", "X-Amzn-Mtls-Clientcert", "X-Envoy-Original-Path", "X-Original-Uri", "Host",
 	} {
 		t.Run(header, func(t *testing.T) {
-			_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), apiKeyWebhook(server.URL, header), []byte("{}"))
+			err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), apiKeyWebhook(server.URL, header), []byte("{}"))
 			require.ErrorContains(t, err, "is reserved")
 		})
 	}
@@ -55,7 +55,7 @@ func TestInvokeWebhookSendsCustomApiKeyHeader(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
-	_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), apiKeyWebhook(server.URL, "Authorization"), []byte("{}"))
+	err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), apiKeyWebhook(server.URL, "Authorization"), []byte("{}"))
 	require.NoError(t, err)
 	require.Equal(t, "admin-mode", <-received)
 }
@@ -68,7 +68,7 @@ func TestInvokeWebhookHonoursContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
-	_, err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -91,7 +91,7 @@ func TestInvokeWebhookJWTDiscoveryHonoursContextDeadline(t *testing.T) {
 		AuthJWTOptions: config.AuthJWTOptions{ClientID: "id", ClientSecret: "secret", OIDCWellKnownURL: oidc.URL},
 	}}}
 	start := time.Now()
-	_, err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(start), 2*time.Second)
 }
@@ -151,7 +151,7 @@ func TestInvokeWebhookRejectsServerFiles(t *testing.T) {
 		"mismatched key":     {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(func() []byte { _, k := selfSignedPEM(t); return k }())}), "private key does not match"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), tc.conf, []byte("{}"))
+			err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), tc.conf, []byte("{}"))
 			require.ErrorContains(t, err, tc.err)
 		})
 	}
@@ -169,7 +169,7 @@ func TestInvokeWebhookPresentsMTLSCertificateContent(t *testing.T) {
 	defer server.Close()
 
 	conf := mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(keyPEM)})
-	_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
 	require.NoError(t, err)
 }
 
@@ -186,18 +186,45 @@ func TestInvokeWebhookAppliesCallTimeout(t *testing.T) {
 		CallTimeout: models.TimeDuration(50 * time.Millisecond),
 	}}
 	start := time.Now()
-	_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(start), 2*time.Second)
 }
 
-func TestInvokeWebhookRejectsOversizedResponse(t *testing.T) {
+// Responses are ignored, so their size must not fail the delivery.
+func TestInvokeWebhookIgnoresOversizedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(make([]byte, 2*MaxResponseBodySize))
+	}))
+	defer server.Close()
+
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
+	err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	require.NoError(t, err)
+}
+
+func TestInvokeJSONWebhookRejectsOversizedResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(make([]byte, MaxResponseBodySize+1))
 	}))
 	defer server.Close()
 
 	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
-	_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	_, err := InvokeJSONWebhook[map[string]any](context.Background(), logrus.NewEntry(logrus.New()), conf, map[string]any{})
 	require.ErrorContains(t, err, "webhook response exceeds")
+}
+
+func TestInvokeJSONWebhookDecodesResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"authorized":true}`))
+	}))
+	defer server.Close()
+
+	type response struct {
+		Authorized bool `json:"authorized"`
+	}
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
+	res, err := InvokeJSONWebhook[response](context.Background(), logrus.NewEntry(logrus.New()), conf, map[string]any{})
+	require.NoError(t, err)
+	require.True(t, res.Authorized)
 }
