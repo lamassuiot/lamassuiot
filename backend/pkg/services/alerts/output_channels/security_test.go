@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/mail"
 	"testing"
+	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
@@ -46,7 +47,7 @@ func TestNotificationChannelsRejectUntrustedTLS(t *testing.T) {
 	defer server.Close()
 	for _, kind := range []models.ChannelType{models.ChannelTypeWebhook, models.ChannelTypeMSTeams} {
 		t.Run(string(kind), func(t *testing.T) {
-			for _, options := range []*models.WebhookCallHttpClient{nil, {ValidateServerCert: false}} {
+			for _, options := range []*models.WebhookCallHttpClient{nil, {HTTPClient: config.HTTPClient{HTTPConnection: config.HTTPConnection{BasicConnection: config.BasicConnection{TLSConfig: config.TLSConfig{InsecureSkipVerify: true}}}}}} {
 				svc := notificationTestService(t, kind, server.URL, options)
 				err := svc.SendNotification(logrus.NewEntry(logrus.New()), context.Background(), notificationTestEvent())
 				var unknownAuthority x509.UnknownAuthorityError
@@ -65,7 +66,7 @@ func TestNotificationChannelsSendConfiguredAuthentication(t *testing.T) {
 				w.WriteHeader(http.StatusNoContent)
 			}))
 			defer server.Close()
-			options := &models.WebhookCallHttpClient{AuthMode: config.ApiKey, ApiKey: models.WebhookCallHttpClientApiKey{Header: "X-API-Key", Key: "test-secret"}}
+			options := &models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.ApiKey, AuthApiKeyOptions: config.AuthApiKeyOptions{Header: "X-API-Key", Key: "test-secret"}}}
 			svc := notificationTestService(t, kind, server.URL, options)
 			require.NoError(t, svc.SendNotification(logrus.NewEntry(logrus.New()), context.Background(), notificationTestEvent()))
 			require.Equal(t, "test-secret", <-requests)
@@ -84,7 +85,7 @@ func TestNotificationChannelsRejectReservedApiKeyHeaders(t *testing.T) {
 	for _, kind := range []models.ChannelType{models.ChannelTypeWebhook, models.ChannelTypeMSTeams} {
 		for _, header := range headers {
 			t.Run(string(kind)+"/"+header, func(t *testing.T) {
-				options := &models.WebhookCallHttpClient{AuthMode: config.ApiKey, ApiKey: models.WebhookCallHttpClientApiKey{Header: header, Key: "admin-mode"}}
+				options := &models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.ApiKey, AuthApiKeyOptions: config.AuthApiKeyOptions{Header: header, Key: "admin-mode"}}}
 				svc := notificationTestService(t, kind, server.URL, options)
 				err := svc.SendNotification(logrus.NewEntry(logrus.New()), context.Background(), notificationTestEvent())
 				require.ErrorContains(t, err, "is reserved")
@@ -95,10 +96,20 @@ func TestNotificationChannelsRejectReservedApiKeyHeaders(t *testing.T) {
 
 func TestNotificationChannelsRejectUnknownAuthentication(t *testing.T) {
 	for _, kind := range []models.ChannelType{models.ChannelTypeWebhook, models.ChannelTypeMSTeams} {
-		svc := notificationTestService(t, kind, "http://127.0.0.1:1", &models.WebhookCallHttpClient{AuthMode: "invalid"})
+		svc := notificationTestService(t, kind, "http://127.0.0.1:1", &models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: "invalid"}})
 		err := svc.SendNotification(logrus.NewEntry(logrus.New()), context.Background(), notificationTestEvent())
 		require.ErrorContains(t, err, "unsupported notification authentication mode")
 	}
+}
+
+func TestNotificationHTTPConfigCapsCallTimeout(t *testing.T) {
+	cfg, err := notificationHTTPConfig(&models.WebhookCallHttpClient{CallTimeout: models.TimeDuration(time.Hour)})
+	require.NoError(t, err)
+	require.Equal(t, models.TimeDuration(maxNotificationCallTimeout), cfg.CallTimeout)
+
+	cfg, err = notificationHTTPConfig(&models.WebhookCallHttpClient{CallTimeout: models.TimeDuration(5 * time.Second)})
+	require.NoError(t, err)
+	require.Equal(t, models.TimeDuration(5*time.Second), cfg.CallTimeout)
 }
 
 func TestEmailEscapesEventHTML(t *testing.T) {

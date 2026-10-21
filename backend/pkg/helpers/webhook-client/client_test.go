@@ -2,8 +2,18 @@ package webhookclient
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,10 +24,10 @@ import (
 )
 
 func apiKeyWebhook(url, header string) models.WebhookCall {
-	return models.WebhookCall{Name: "test", Url: url, Config: models.WebhookCallHttpClient{
-		AuthMode: config.ApiKey,
-		ApiKey:   models.WebhookCallHttpClientApiKey{Header: header, Key: "admin-mode"},
-	}}
+	return models.WebhookCall{Name: "test", Url: url, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{
+		AuthMode:          config.ApiKey,
+		AuthApiKeyOptions: config.AuthApiKeyOptions{Header: header, Key: "admin-mode"},
+	}}}
 }
 
 func TestInvokeWebhookRejectsReservedApiKeyHeaders(t *testing.T) {
@@ -57,7 +67,7 @@ func TestInvokeWebhookHonoursContextCancellation(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{AuthMode: config.NoAuth}}
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
 	_, err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
 	require.ErrorIs(t, err, context.Canceled)
 }
@@ -76,12 +86,118 @@ func TestInvokeWebhookJWTDiscoveryHonoursContextDeadline(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	conf := models.WebhookCall{Name: "test", Url: webhook.URL, Config: models.WebhookCallHttpClient{
-		AuthMode: config.JWT,
-		OIDC:     models.WebhookCallHttpClientOidcOptions{ClientID: "id", ClientSecret: "secret", OIDCWellKnownURL: oidc.URL},
-	}}
+	conf := models.WebhookCall{Name: "test", Url: webhook.URL, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{
+		AuthMode:       config.JWT,
+		AuthJWTOptions: config.AuthJWTOptions{ClientID: "id", ClientSecret: "secret", OIDCWellKnownURL: oidc.URL},
+	}}}
 	start := time.Now()
 	_, err := InvokeWebhook(ctx, logrus.NewEntry(logrus.New()), conf, []byte("{}"))
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(start), 2*time.Second)
+}
+
+func selfSignedPEM(t *testing.T) (certPEM, keyPEM []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "webhook-client"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+}
+
+func mtlsWebhook(url string, mtls config.AuthMTLSOptions) models.WebhookCall {
+	return models.WebhookCall{Name: "test", Url: url, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{
+		AuthMode:        config.MTLS,
+		AuthMTLSOptions: mtls,
+		// httptest servers use a self-signed certificate.
+		HTTPConnection: config.HTTPConnection{BasicConnection: config.BasicConnection{TLSConfig: config.TLSConfig{InsecureSkipVerify: true}}},
+	}}}
+}
+
+func TestInvokeWebhookRejectsServerFiles(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("webhook referencing server files reached the server")
+	}))
+	defer server.Close()
+
+	certPEM, keyPEM := selfSignedPEM(t)
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "client.crt")
+	keyPath := filepath.Join(dir, "client.key")
+	require.NoError(t, os.WriteFile(certPath, certPEM, 0o600))
+	require.NoError(t, os.WriteFile(keyPath, keyPEM, 0o600))
+
+	withCAFile := mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(keyPEM)})
+	withCAFile.Config.CACertificateFile = certPath
+
+	for name, tc := range map[string]struct {
+		conf models.WebhookCall
+		err  string
+	}{
+		"cert and key files": {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertFile: certPath, KeyFile: keyPath}), "must not reference files"},
+		"key file":           {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyFile: keyPath}), "must not reference files"},
+		"ca cert file":       {withCAFile, "must not reference files"},
+		"missing content":    {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM)}), "requires mtls_options.cert_content"},
+		"mismatched key":     {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(func() []byte { _, k := selfSignedPEM(t); return k }())}), "private key does not match"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), tc.conf, []byte("{}"))
+			require.ErrorContains(t, err, tc.err)
+		})
+	}
+}
+
+func TestInvokeWebhookPresentsMTLSCertificateContent(t *testing.T) {
+	certPEM, keyPEM := selfSignedPEM(t)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Len(t, r.TLS.PeerCertificates, 1)
+		require.Equal(t, "webhook-client", r.TLS.PeerCertificates[0].Subject.CommonName)
+		w.WriteHeader(http.StatusOK)
+	}))
+	server.TLS = &tls.Config{ClientAuth: tls.RequireAnyClientCert}
+	server.StartTLS()
+	defer server.Close()
+
+	conf := mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(keyPEM)})
+	_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	require.NoError(t, err)
+}
+
+func TestInvokeWebhookAppliesCallTimeout(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer server.Close()
+	defer close(release)
+
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{
+		HTTPClient:  config.HTTPClient{AuthMode: config.NoAuth},
+		CallTimeout: models.TimeDuration(50 * time.Millisecond),
+	}}
+	start := time.Now()
+	_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 2*time.Second)
+}
+
+func TestInvokeWebhookRejectsOversizedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(make([]byte, MaxResponseBodySize+1))
+	}))
+	defer server.Close()
+
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
+	_, err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
+	require.ErrorContains(t, err, "webhook response exceeds")
 }

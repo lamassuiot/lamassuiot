@@ -87,7 +87,7 @@ func TestEnrollmentWebhookEveryOpenAPIOperation(t *testing.T) {
 						_, _ = w.Write([]byte(scenario.body))
 					}))
 					defer server.Close()
-					conf := models.WebhookCall{Name: "test", Url: server.URL + path, Method: strings.ToUpper(method), Config: models.WebhookCallHttpClient{AuthMode: config.NoAuth, LogLevel: "error"}}
+					conf := models.WebhookCall{Name: "test", Url: server.URL + path, Method: strings.ToUpper(method), Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
 					if scenario.slow {
 						conf.Config.CallTimeout = models.TimeDuration(10 * time.Millisecond)
 					}
@@ -140,10 +140,10 @@ func TestEnrollmentWebhookRejectsReservedApiKeyHeader(t *testing.T) {
 		_, _ = w.Write([]byte(`{"authorized":true}`))
 	}))
 	defer server.Close()
-	conf := models.WebhookCall{Name: "test", Url: server.URL, Method: http.MethodPost, Config: models.WebhookCallHttpClient{
-		AuthMode: config.ApiKey,
-		ApiKey:   models.WebhookCallHttpClientApiKey{Header: "X-Principal-ID", Key: "admin-mode"},
-	}}
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Method: http.MethodPost, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{
+		AuthMode:          config.ApiKey,
+		AuthApiKeyOptions: config.AuthApiKeyOptions{Header: "X-Principal-ID", Key: "admin-mode"},
+	}}}
 	_, err = invokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, csr, "profile", "enrollment")
 	require.ErrorContains(t, err, "is reserved")
 }

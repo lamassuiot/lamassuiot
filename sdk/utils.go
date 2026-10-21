@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -90,17 +89,14 @@ func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logg
 	switch cfg.AuthMode {
 	case config.MTLS:
 		var cert tls.Certificate
-		//Check If Cert and Key contain a string-like PEM
-		if strings.Contains(cfg.AuthMTLSOptions.CertFile, "-----BEGIN CERTIFICATE-----") {
-			cert, err = tls.X509KeyPair([]byte(cfg.AuthMTLSOptions.CertFile), []byte(cfg.AuthMTLSOptions.KeyFile))
-			if err != nil {
-				return nil, err
-			}
+		mtls := cfg.AuthMTLSOptions
+		if mtls.CertContent != "" || mtls.KeyContent != "" {
+			cert, err = tls.X509KeyPair([]byte(mtls.CertContent), []byte(mtls.KeyContent))
 		} else {
-			cert, err = tls.LoadX509KeyPair(cfg.AuthMTLSOptions.CertFile, cfg.AuthMTLSOptions.KeyFile)
-			if err != nil {
-				return nil, err
-			}
+			cert, err = tls.LoadX509KeyPair(mtls.CertFile, mtls.KeyFile)
+		}
+		if err != nil {
+			return nil, err
 		}
 
 		tlsConfig.Certificates = []tls.Certificate{cert}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -11,20 +12,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// maxNotificationCallTimeout bounds how long a single notification channel can
+// stall alert delivery to the remaining subscribers of an event.
+const maxNotificationCallTimeout = 30 * time.Second
+
 // Notification channels always authenticate HTTPS servers using the system
 // trust store. Client authentication is optional for URL-secret webhooks.
 // Reserved API key headers are rejected by the webhook client itself.
 func notificationHTTPConfig(options *models.WebhookCallHttpClient) (models.WebhookCallHttpClient, error) {
-	cfg := models.WebhookCallHttpClient{LogLevel: "INFO", AuthMode: config.NoAuth}
+	var cfg models.WebhookCallHttpClient
 	if options != nil {
 		cfg = *options
 	}
-	cfg.ValidateServerCert = true
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = "INFO"
-	}
+	cfg.InsecureSkipVerify = false
 	if cfg.AuthMode == "" {
 		cfg.AuthMode = config.NoAuth
+	}
+	if time.Duration(cfg.CallTimeout) > maxNotificationCallTimeout {
+		cfg.CallTimeout = models.TimeDuration(maxNotificationCallTimeout)
 	}
 	switch cfg.AuthMode {
 	case config.NoAuth, config.ApiKey, config.JWT, config.MTLS:

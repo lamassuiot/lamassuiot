@@ -507,7 +507,7 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 		Authorized bool `json:"authorized"`
 	}
 
-	webhookTimeout := 10 * time.Second
+	webhookTimeout := webhookclient.DefaultCallTimeout
 	if webhookConf.Config.CallTimeout > 0 {
 		webhookTimeout = time.Duration(webhookConf.Config.CallTimeout)
 	}
