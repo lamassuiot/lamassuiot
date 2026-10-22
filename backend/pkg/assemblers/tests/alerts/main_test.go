@@ -1,7 +1,11 @@
 package alerts
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"testing"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -10,6 +14,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	outputchannels "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/output_channels"
 	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
@@ -582,4 +587,46 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 	}
 	messages = server.MessagesAndPurge()
 	assert.Equal(t, 0, len(messages), "should have 0 messages")
+}
+
+func TestSubscribeRejectsInvalidChannelHTTPClient(t *testing.T) {
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
+	}
+
+	alertsTest := serverTest.Alerts
+	input := &services.SubscribeInput{
+		UserID:    "user1",
+		EventType: models.EventCreateCAKey,
+		Channel: models.Channel{
+			Type: models.ChannelTypeWebhook,
+			Name: "webhook",
+			Config: map[string]any{
+				"webhook_url": "https://localhost:8080/hook",
+				"http_client": map[string]any{"auth_mode": "mtls"},
+			},
+		},
+	}
+
+	_, err = alertsTest.Service.Subscribe(context.TODO(), input)
+	assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
+	assert.ErrorContains(t, err, "mtls_options.cert_content")
+
+	body, err := json.Marshal(map[string]any{"event_type": input.EventType, "channel": input.Channel})
+	if err != nil {
+		t.Fatalf("could not encode subscribe body: %s", err)
+	}
+	res, err := tests.NewTestHTTPClient().Post(fmt.Sprintf("http://127.0.0.1:%d/v1/user/user1/subscribe", alertsTest.Port), "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("could not call subscribe endpoint: %s", err)
+	}
+	res.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+
+	subscriptions, err := alertsTest.Service.GetUserSubscriptions(context.TODO(), &services.GetUserSubscriptionsInput{UserID: "user1"})
+	if err != nil {
+		t.Fatalf("could not get subscriptions for user1: %s", err)
+	}
+	assert.Empty(t, subscriptions, "invalid subscriptions must not be stored")
 }

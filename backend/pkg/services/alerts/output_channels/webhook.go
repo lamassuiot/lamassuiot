@@ -6,8 +6,6 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
-	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
@@ -25,39 +23,22 @@ func NewWebhookOutputService(name string, config models.WebhookChannelConfig) No
 }
 
 func (s *WebhookOutputService) SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error {
+	if s.config.WebhookURL == "" {
+		return nil
+	}
+
 	msBytes, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
 
-	if s.config.WebhookURL != "" {
-		_, err = webhookclient.InvokeWebhook(logger, models.WebhookCall{
-			Name:   s.name,
-			Url:    s.config.WebhookURL,
-			Method: s.config.WebhookMethod,
-			Config: models.WebhookCallHttpClient{
-				ValidateServerCert: false,
-				LogLevel:           "INFO",
-				AuthMode:           config.NoAuth,
-			},
-		},
-			msBytes)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return sendHTTPNotification(ctx, logger, s.name, s.config.WebhookURL, s.config.WebhookMethod, s.config.HTTPClient, msBytes)
 }
 
 func RegisterWebhookOutputServiceBuilder() {
 	RegisterOutputServiceBuilder(models.ChannelTypeWebhook, func(c models.Channel, smtpServer lconfig.SMTPServer) (NotificationSenderService, error) {
-		chanConfigBytes, err := json.Marshal(c.Config)
+		config, err := decodeChannelConfig[models.WebhookChannelConfig](c)
 		if err != nil {
-			return nil, err
-		}
-		config := models.WebhookChannelConfig{}
-		if err := json.Unmarshal(chanConfigBytes, &config); err != nil {
 			return nil, err
 		}
 		return NewWebhookOutputService(c.Name, config), nil

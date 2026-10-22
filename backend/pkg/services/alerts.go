@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 	"uuid"
 
@@ -9,6 +10,7 @@ import (
 	eventfilters "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/event_filters"
 	outputchannels "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/output_channels"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
@@ -146,6 +148,11 @@ func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *services.
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
+	if err := outputchannels.ValidateChannel(input.Channel); err != nil {
+		lFunc.Errorf("invalid channel config for user %s: %s", input.UserID, err)
+		return nil, fmt.Errorf("%w: %s", errs.ErrValidateBadRequest, err)
+	}
+
 	sub := &models.Subscription{
 		ID:               uuid.NewV7().String(),
 		UserID:           input.UserID,

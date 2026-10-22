@@ -92,6 +92,10 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
+	if err := validateDMSWebhooks(input.Settings); err != nil {
+		lFunc.Errorf("webhook validation error: %s", err)
+		return nil, err
+	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	if exists, _, err := svc.dmsStorage.SelectExists(ctx, input.ID); err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
@@ -126,6 +130,10 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
+	}
+	if err := validateDMSWebhooks(input.DMS.Settings); err != nil {
+		lFunc.Errorf("webhook validation error: %s", err)
+		return nil, err
 	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.DMS.ID)
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.DMS.ID)
@@ -470,6 +478,29 @@ func checkReenrollmentExpiry(lFunc *logrus.Entry, leafCert *x509.Certificate, re
 	return nil
 }
 
+// validateDMSWebhooks rejects external webhook configs that would fail on
+// every enroll or reenroll, so the error surfaces when the DMS is configured.
+func validateDMSWebhooks(settings models.DMSSettings) error {
+	webhooks := []struct {
+		operation string
+		opts      models.EnrollmentOptionsESTRFC7030
+	}{
+		{"enrollment", settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030},
+		{"reenrollment", settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030},
+	}
+	for _, w := range webhooks {
+		switch w.opts.AuthMode {
+		case models.ESTAuthModeExternalWebhook, models.ESTAuthModeClientCertificateAndWebhook:
+		default:
+			continue
+		}
+		if err := webhookclient.ValidateWebhook(w.opts.AuthOptionsExternalWebhook); err != nil {
+			return fmt.Errorf("%w: invalid %s external webhook config: %s", errs.ErrValidateBadRequest, w.operation, err)
+		}
+	}
+	return nil
+}
+
 // invokeWebhook calls the configured external webhook and returns an error if the
 // webhook denies the operation or cannot be reached (fail-closed).
 // operation should be "enrollment" or "reenrollment" and is used in log messages and errors.
@@ -507,46 +538,30 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 		Authorized bool `json:"authorized"`
 	}
 
-	type webhookInvocationResult struct {
-		resp *webhookResponse
-		err  error
-	}
-
-	webhookTimeout := 10 * time.Second
+	webhookTimeout := webhookclient.DefaultCallTimeout
 	if webhookConf.Config.CallTimeout > 0 {
 		webhookTimeout = time.Duration(webhookConf.Config.CallTimeout)
 	}
 	webhookCtx, cancel := context.WithTimeout(ctx, webhookTimeout)
 	defer cancel()
 
-	webhookResultCh := make(chan webhookInvocationResult, 1)
-	go func() {
-		resp, err := webhookclient.InvokeJSONWebhook[webhookResponse](lFunc, webhookConf, webhookRequestBody)
-		webhookResultCh <- webhookInvocationResult{
-			resp: resp,
-			err:  err,
+	resp, err := webhookclient.InvokeJSONWebhook[webhookResponse](webhookCtx, lFunc, webhookConf, webhookRequestBody)
+	if err != nil {
+		if ctxErr := webhookCtx.Err(); ctxErr != nil {
+			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook authorization did not complete before deadline: %s", operation, ctxErr)
+			return lFunc, fmt.Errorf("external webhook authorization timed out or was canceled: %w", ctxErr)
 		}
-	}()
-
-	select {
-	case <-webhookCtx.Done():
-		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook authorization did not complete before deadline: %s", operation, webhookCtx.Err())
-		return lFunc, fmt.Errorf("external webhook authorization timed out or was canceled: %w", webhookCtx.Err())
-	case result := <-webhookResultCh:
-		if result.err != nil {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, result.err)
-			return lFunc, fmt.Errorf("error while calling external webhook: %s", result.err)
-		}
-		resp := result.resp
-		lFunc.Debugf("webhook response: %v", resp)
-		if resp == nil {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
-			return lFunc, fmt.Errorf("external webhook didn't return a response")
-		}
-		if !resp.Authorized {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
-			return lFunc, fmt.Errorf("external webhook denied %s", operation)
-		}
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, err)
+		return lFunc, fmt.Errorf("error while calling external webhook: %s", err)
+	}
+	lFunc.Debugf("webhook response: %v", resp)
+	if resp == nil {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
+		return lFunc, fmt.Errorf("external webhook didn't return a response")
+	}
+	if !resp.Authorized {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
+		return lFunc, fmt.Errorf("external webhook denied %s", operation)
 	}
 
 	lFunc.Infof("webhook authorized %s", operation)

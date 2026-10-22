@@ -6,8 +6,6 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
-	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
@@ -81,28 +79,12 @@ func (s *MSTeamsWebhookOutputService) SendNotification(logger *logrus.Entry, ctx
 		return err
 	}
 
-	_, err = webhookclient.InvokeWebhook(logger, models.WebhookCall{
-		Name:   s.name,
-		Url:    s.config.WebhookURL,
-		Method: "POST",
-		Config: models.WebhookCallHttpClient{
-			ValidateServerCert: false,
-			LogLevel:           "INFO",
-			AuthMode:           config.NoAuth,
-		},
-	}, msBytes)
-
-	return err
+	return sendHTTPNotification(ctx, logger, s.name, s.config.WebhookURL, "POST", s.config.HTTPClient, msBytes)
 }
 
 func RegisterMSTeamsOutputServiceBuilder() {
 	RegisterOutputServiceBuilder(models.ChannelTypeMSTeams, func(c models.Channel, smtpServer lconfig.SMTPServer) (NotificationSenderService, error) {
-		chanConfigBytes, err := json.Marshal(c.Config)
-		if err != nil {
-			return nil, err
-		}
-		var webhookCfg models.MSTeamsChannelConfig
-		err = json.Unmarshal(chanConfigBytes, &webhookCfg)
+		webhookCfg, err := decodeChannelConfig[models.MSTeamsChannelConfig](c)
 		if err != nil {
 			return nil, err
 		}

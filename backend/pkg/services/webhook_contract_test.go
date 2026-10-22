@@ -16,6 +16,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -87,7 +88,7 @@ func TestEnrollmentWebhookEveryOpenAPIOperation(t *testing.T) {
 						_, _ = w.Write([]byte(scenario.body))
 					}))
 					defer server.Close()
-					conf := models.WebhookCall{Name: "test", Url: server.URL + path, Method: strings.ToUpper(method), Config: models.WebhookCallHttpClient{AuthMode: config.NoAuth, LogLevel: "error"}}
+					conf := models.WebhookCall{Name: "test", Url: server.URL + path, Method: strings.ToUpper(method), Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{AuthMode: config.NoAuth}}}
 					if scenario.slow {
 						conf.Config.CallTimeout = models.TimeDuration(10 * time.Millisecond)
 					}
@@ -126,4 +127,83 @@ func TestEnrollmentWebhookEveryOpenAPIOperation(t *testing.T) {
 		}
 	}
 	require.Equal(t, 2, operations)
+}
+
+func TestEnrollmentWebhookRejectsReservedApiKeyHeader(t *testing.T) {
+	csrPEM, err := os.ReadFile("../helpers/testdata/samplecsr.pem")
+	require.NoError(t, err)
+	block, _ := pem.Decode(csrPEM)
+	require.NotNil(t, block)
+	csr, err := x509.ParseCertificateRequest(block.Bytes)
+	require.NoError(t, err)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("webhook with reserved header reached the server: X-Principal-ID=%q", r.Header.Get("X-Principal-ID"))
+		_, _ = w.Write([]byte(`{"authorized":true}`))
+	}))
+	defer server.Close()
+	conf := models.WebhookCall{Name: "test", Url: server.URL, Method: http.MethodPost, Config: models.WebhookCallHttpClient{HTTPClient: config.HTTPClient{
+		AuthMode:          config.ApiKey,
+		AuthApiKeyOptions: config.AuthApiKeyOptions{Header: "X-Principal-ID", Key: "admin-mode"},
+	}}}
+	_, err = invokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, csr, "profile", "enrollment")
+	require.ErrorContains(t, err, "is reserved")
+}
+
+func TestValidateDMSWebhooks(t *testing.T) {
+	webhookSettings := func(cfg config.HTTPClient) models.EnrollmentOptionsESTRFC7030 {
+		return models.EnrollmentOptionsESTRFC7030{
+			AuthMode:                   models.ESTAuthModeExternalWebhook,
+			AuthOptionsExternalWebhook: models.WebhookCall{Name: "hook", Url: "https://example.com", Config: models.WebhookCallHttpClient{HTTPClient: cfg}},
+		}
+	}
+	fileMTLS := config.HTTPClient{AuthMode: config.MTLS, AuthMTLSOptions: config.AuthMTLSOptions{CertFile: "/certs/client.crt", KeyFile: "/certs/client.key"}}
+
+	t.Run("valid", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(config.HTTPClient{AuthMode: config.NoAuth})
+		require.NoError(t, validateDMSWebhooks(settings))
+	})
+
+	t.Run("rejects reenrollment file references", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030 = webhookSettings(fileMTLS)
+		err := validateDMSWebhooks(settings)
+		require.ErrorIs(t, err, errs.ErrValidateBadRequest)
+		require.ErrorContains(t, err, "reenrollment external webhook")
+		require.ErrorContains(t, err, "must not reference files")
+	})
+
+	t.Run("rejects calls that fail on every enroll", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			edit func(*models.WebhookCall)
+			err  string
+		}{
+			"unsupported method":  {func(w *models.WebhookCall) { w.Method = http.MethodGet }, `method "GET" is not supported`},
+			"missing url":         {func(w *models.WebhookCall) { w.Url = "" }, "url must be an absolute http or https URL"},
+			"jwt without options": {func(w *models.WebhookCall) { w.Config.AuthMode = config.JWT }, "requires jwt_options"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				var settings models.DMSSettings
+				settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(config.HTTPClient{AuthMode: config.NoAuth})
+				tc.edit(&settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook)
+				err := validateDMSWebhooks(settings)
+				require.ErrorIs(t, err, errs.ErrValidateBadRequest)
+				require.ErrorContains(t, err, tc.err)
+			})
+		}
+	})
+
+	t.Run("validates client certificate and webhook mode", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(fileMTLS)
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
+		require.ErrorIs(t, validateDMSWebhooks(settings), errs.ErrValidateBadRequest)
+	})
+
+	t.Run("ignores webhook config when auth mode is not external webhook", func(t *testing.T) {
+		var settings models.DMSSettings
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030 = webhookSettings(fileMTLS)
+		settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificate
+		require.NoError(t, validateDMSWebhooks(settings))
+	})
 }

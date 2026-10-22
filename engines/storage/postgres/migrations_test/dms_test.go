@@ -1,6 +1,7 @@
 package migrationstest
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/assert"
 
 	_ "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
@@ -167,6 +169,11 @@ func TestDMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260604110000_reenroll_auth_settings")
 	}
+
+	migrationTest_DMS_20261021120000_webhook_http_client_config(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261021120000_webhook_http_client_config")
+	}
 }
 
 func migrationTest_DMS_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -295,4 +302,95 @@ func migrationTest_DMS_20260604110000_reenroll_auth_settings(t *testing.T, logge
 		t.Fatalf("failed to query existing reenroll auth mode: %v", tx.Error)
 	}
 	assert.Equal(t, "CLIENT_CERTIFICATE", existingAuth)
+}
+
+func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-jwt', 'DMS Webhook JWT', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":false,"log_level":"debug","auth_mode":"jwt","call_timeout":"5s","oidc":{"client_id":"id","client_secret":"s3cret","well_known":"https://idp/.well-known/openid-configuration"},"apikey":{"key":"","header":""},"mtls":{"cert":"","key":""}}}}},"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"apikey","oidc":{},"apikey":{"key":"k","header":"X-API-Key"},"mtls":{}}}}}}');
+	`)
+
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls', 'DMS Webhook mTLS', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n","key":"-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n"}}}}},"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"/certs/client.crt","key":"/certs/client.key"}}}}}}');
+	`)
+
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	webhookConfig := func(id, section string) map[string]any {
+		var raw string
+		tx := con.Raw("SELECT settings->'"+section+"'->'est_rfc7030_settings'->'external_webhook_settings'->>'config' FROM dms WHERE id = ?", id).Scan(&raw)
+		if tx.Error != nil {
+			t.Fatalf("failed to query webhook config: %v", tx.Error)
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+			t.Fatalf("failed to unmarshal webhook config %q: %v", raw, err)
+		}
+		return cfg
+	}
+
+	jwt := webhookConfig("dms-webhook-jwt", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"insecure_skip_verify": true,
+		"log_level":            "debug",
+		"auth_mode":            "jwt",
+		"call_timeout":         "5s",
+		"jwt_options":          map[string]any{"oidc_client_id": "id", "oidc_client_secret": "s3cret", "oidc_well_known": "https://idp/.well-known/openid-configuration"},
+		"apikey_options":       map[string]any{"key": "", "header": ""},
+	}, jwt)
+
+	apikey := webhookConfig("dms-webhook-jwt", "reenrollment_settings")
+	assert.Equal(t, false, apikey["insecure_skip_verify"])
+	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, apikey["apikey_options"])
+	assert.NotContains(t, apikey, "oidc")
+	assert.NotContains(t, apikey, "apikey")
+	assert.NotContains(t, apikey, "mtls")
+
+	mtlsContent := webhookConfig("dms-webhook-mtls", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert_content": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key_content":  "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n",
+	}, mtlsContent["mtls_options"])
+
+	mtlsFiles := webhookConfig("dms-webhook-mtls", "reenrollment_settings")
+	assert.Equal(t, map[string]any{"cert_file": "/certs/client.crt", "key_file": "/certs/client.key"}, mtlsFiles["mtls_options"])
+
+	// Down restores the legacy layout; up again leaves the schema at its latest version.
+	migrator := postgres.NewMigrator(logger, con)
+	_, err := migrator.Goose.ApplyVersion(context.Background(), 20261021120000, false)
+	if err != nil {
+		t.Fatalf("could not revert migration: %s", err)
+	}
+
+	jwt = webhookConfig("dms-webhook-jwt", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"validate_server_cert": false,
+		"log_level":            "debug",
+		"auth_mode":            "jwt",
+		"call_timeout":         "5s",
+		"oidc":                 map[string]any{"client_id": "id", "client_secret": "s3cret", "well_known": "https://idp/.well-known/openid-configuration"},
+		"apikey":               map[string]any{"key": "", "header": ""},
+	}, jwt)
+
+	apikey = webhookConfig("dms-webhook-jwt", "reenrollment_settings")
+	assert.Equal(t, true, apikey["validate_server_cert"])
+	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, apikey["apikey"])
+	assert.NotContains(t, apikey, "insecure_skip_verify")
+	assert.NotContains(t, apikey, "apikey_options")
+
+	mtlsContent = webhookConfig("dms-webhook-mtls", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key":  "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n",
+	}, mtlsContent["mtls"])
+
+	mtlsFiles = webhookConfig("dms-webhook-mtls", "reenrollment_settings")
+	assert.Equal(t, map[string]any{"cert": "/certs/client.crt", "key": "/certs/client.key"}, mtlsFiles["mtls"])
+
+	_, err = migrator.Goose.ApplyVersion(context.Background(), 20261021120000, true)
+	if err != nil {
+		t.Fatalf("could not re-apply migration: %s", err)
+	}
+	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, webhookConfig("dms-webhook-jwt", "reenrollment_settings")["apikey_options"])
 }

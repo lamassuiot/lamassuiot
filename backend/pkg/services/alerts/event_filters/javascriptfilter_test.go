@@ -2,11 +2,34 @@ package eventfilters
 
 import (
 	"testing"
+	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestJavascriptFilterInterruptsInfiniteLoops(t *testing.T) {
+	for _, script := range []string{
+		"function(event) { while (true) {} }",
+		"(function() { while (true) {} })()",
+		"function(event) { try { while (true) {} } catch (e) { return true; } }",
+		"function(event) { while (true) { try { while (true) {} } catch (e) {} } }",
+		"function(event) { try { while (true) {} } finally { while (true) {} } }",
+	} {
+		t.Run(script, func(t *testing.T) {
+			started := time.Now()
+			matched, err := javascriptFilter(cloudevents.NewEvent(), script)
+			require.ErrorIs(t, err, errJavascriptFilterTimeout)
+			require.False(t, matched)
+			require.Less(t, time.Since(started), 2*time.Second)
+			// A timed-out VM must not affect subsequent filters.
+			matched, err = javascriptFilter(cloudevents.NewEvent(), "function(event) { return true; }")
+			require.NoError(t, err)
+			require.True(t, matched)
+		})
+	}
+}
 
 func TestJavascriptFilter(t *testing.T) {
 	tests := []struct {

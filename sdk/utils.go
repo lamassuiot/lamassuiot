@@ -58,9 +58,15 @@ func (lrt customHeaderRoundTripper) RoundTrip(req *http.Request) (res *http.Resp
 }
 
 func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
+	return BuildHTTPClientWithContext(chelpers.InitContext(), cfg, logger)
+}
+
+// BuildHTTPClientWithContext is like BuildHTTPClient, but ctx bounds the
+// requests made while building and authenticating the client (OIDC discovery
+// and token retrieval for JWT auth). Use it for short-lived clients.
+func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
 	var err error
 	client := &http.Client{}
-	ctx := chelpers.InitContext()
 
 	caPool := chelpers.LoadSytemCACertPool()
 
@@ -84,17 +90,19 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 	switch cfg.AuthMode {
 	case config.MTLS:
 		var cert tls.Certificate
-		//Check If Cert and Key contain a string-like PEM
-		if strings.Contains(cfg.AuthMTLSOptions.CertFile, "-----BEGIN CERTIFICATE-----") {
-			cert, err = tls.X509KeyPair([]byte(cfg.AuthMTLSOptions.CertFile), []byte(cfg.AuthMTLSOptions.KeyFile))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			cert, err = tls.LoadX509KeyPair(cfg.AuthMTLSOptions.CertFile, cfg.AuthMTLSOptions.KeyFile)
-			if err != nil {
-				return nil, err
-			}
+		mtls := cfg.AuthMTLSOptions
+		switch {
+		case mtls.CertContent != "" || mtls.KeyContent != "":
+			cert, err = tls.X509KeyPair([]byte(mtls.CertContent), []byte(mtls.KeyContent))
+		case strings.Contains(mtls.CertFile, "-----BEGIN CERTIFICATE-----"):
+			// Legacy fallback: trusted service configs may carry PEM content
+			// in cert_file/key_file.
+			cert, err = tls.X509KeyPair([]byte(mtls.CertFile), []byte(mtls.KeyFile))
+		default:
+			cert, err = tls.LoadX509KeyPair(mtls.CertFile, mtls.KeyFile)
+		}
+		if err != nil {
+			return nil, err
 		}
 
 		tlsConfig.Certificates = []tls.Certificate{cert}
@@ -111,16 +119,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 			return nil, err
 		}
 
-		type ODICDiscoveryJSON struct {
-			Issuer        string `json:"issuer"`
-			AuthURL       string `json:"authorization_endpoint"`
-			TokenURL      string `json:"token_endpoint"`
-			JWKSURL       string `json:"jwks_uri"`
-			UserInfoURL   string `json:"userinfo_endpoint"`
-			RevocationURL string `json:"revocation_endpoint"`
-		}
-
-		wellKnown, err := Get[ODICDiscoveryJSON](ctx, authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &resources.QueryParameters{}, map[int][]error{})
+		wellKnown, err := getOIDCDiscovery(ctx, authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL)
 		if err != nil {
 			return nil, err
 		}
@@ -184,6 +183,48 @@ func (c restClient) delete(ctx context.Context, path string, knownErrors map[int
 
 func (c restClient) iterGet[E any, T resources.Iterator[E]](ctx context.Context, path string, exhaustiveRun bool, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
 	return IterGet[E, T](ctx, c.httpClient, c.baseUrl+path, exhaustiveRun, queryParams, applyFunc, knownErrors)
+}
+
+// maxOIDCDiscoverySize (1 MB) caps how much of an OIDC discovery document is
+// read into memory. The well-known URL may be user supplied (e.g. alert channels).
+// Token responses are already capped by golang.org/x/oauth2.
+const maxOIDCDiscoverySize = 1 << 20
+
+type oidcDiscovery struct {
+	Issuer        string `json:"issuer"`
+	AuthURL       string `json:"authorization_endpoint"`
+	TokenURL      string `json:"token_endpoint"`
+	JWKSURL       string `json:"jwks_uri"`
+	UserInfoURL   string `json:"userinfo_endpoint"`
+	RevocationURL string `json:"revocation_endpoint"`
+}
+
+func getOIDCDiscovery(ctx context.Context, client *http.Client, url string) (oidcDiscovery, error) {
+	var m oidcDiscovery
+	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return m, err
+	}
+
+	res, err := client.Do(r)
+	if err != nil {
+		return m, err
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxOIDCDiscoverySize+1))
+	if err != nil {
+		return m, err
+	}
+	if len(body) > maxOIDCDiscoverySize {
+		return m, fmt.Errorf("OIDC discovery response exceeds %d bytes", maxOIDCDiscoverySize)
+	}
+
+	if res.StatusCode != 200 {
+		return m, nonOKResponseToError(res.StatusCode, body, map[int][]error{})
+	}
+
+	return ParseJSON[oidcDiscovery](body)
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {

@@ -630,8 +630,66 @@ components:
         client_certificate_settings:
           $ref: '#/components/schemas/AuthOptionsClientCertificate'
         external_webhook_settings:
+          $ref: '#/components/schemas/WebhookCall'
+
+    WebhookCall:
+      type: object
+      description: External webhook that authorizes enrollment or reenrollment. If the EST auth mode of the enrollment or reenrollment settings uses the webhook (EXTERNAL_WEBHOOK or CLIENT_CERTIFICATE_AND_EXTERNAL_WEBHOOK), creating or updating the DMS returns 400 when url is not an absolute http or https URL, method is not POST or PUT, or config is invalid (see WebhookCallHttpClient).
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        method:
+          type: string
+          enum: [POST, PUT]
+          default: POST
+        config:
+          $ref: '#/components/schemas/WebhookCallHttpClient'
+
+    WebhookCallHttpClient:
+      type: object
+      description: HTTP client configuration for calls to the external webhook. It is invalid when it references files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file), sets a reserved API key header, or lacks the options its auth_mode needs (apikey_options.header and apikey_options.key for apikey, jwt_options.oidc_client_id, jwt_options.oidc_client_secret and an absolute http or https jwt_options.oidc_well_known for jwt, mtls_options.cert_content and mtls_options.key_content for mtls).
+      properties:
+        log_level:
+          type: string
+        auth_mode:
+          type: string
+          enum: [noauth, apikey, jwt, mtls]
+        insecure_skip_verify:
+          type: boolean
+          default: false
+          description: Skip server certificate verification. Defaults to verifying against the system trust store.
+        call_timeout:
+          type: string
+          description: Maximum duration of the webhook call (for example "10s").
+        apikey_options:
           type: object
-          additionalProperties: true
+          properties:
+            key:
+              type: string
+            header:
+              type: string
+        jwt_options:
+          type: object
+          properties:
+            oidc_client_id:
+              type: string
+            oidc_client_secret:
+              type: string
+            oidc_well_known:
+              type: string
+              format: uri
+        mtls_options:
+          type: object
+          properties:
+            cert_content:
+              type: string
+              description: PEM-encoded client certificate.
+            key_content:
+              type: string
+              description: PEM-encoded private key.
 
     AuthOptionsClientCertificate:
       type: object

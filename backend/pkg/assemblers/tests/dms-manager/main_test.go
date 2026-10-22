@@ -95,6 +95,33 @@ func TestUpdateDMS(t *testing.T) {
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
 }
 
+func TestCreateDMSWebhookConfig(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	createDMS := func(id, webhookConfig string) *http.Response {
+		body := fmt.Sprintf(`{"id":%q,"name":"Webhook DMS","settings":{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","method":"POST","config":%s}}}}}`, id, webhookConfig)
+		resp, err := tests.NewTestHTTPClientInsecure().Post(fmt.Sprintf("https://127.0.0.1:%d/v1/dms", dmsMgr.Port), "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("could not call create DMS: %s", err)
+		}
+		t.Cleanup(func() { resp.Body.Close() })
+		return resp
+	}
+
+	t.Run("rejects file references", func(t *testing.T) {
+		resp := createDMS("file-webhook", `{"auth_mode":"mtls","mtls_options":{"cert_file":"/certs/client.crt","key_file":"/certs/client.key"}}`)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		respBody, _ := io.ReadAll(resp.Body)
+		assert.Contains(t, string(respBody), "must not reference files")
+
+		_, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: "file-webhook"})
+		assert.Error(t, err)
+	})
+}
+
 func TestUpdateDMSMetadata(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
@@ -1276,13 +1303,9 @@ func TestESTEnroll(t *testing.T) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-						Name: "myHook",
-						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
-						},
+						Name:   "myHook",
+						Url:    url + "/verify",
+						Config: insecureWebhookTestClient(),
 					}
 				})
 				if err != nil {
@@ -1337,13 +1360,9 @@ func TestESTEnroll(t *testing.T) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-						Name: "myHook",
-						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
-						},
+						Name:   "myHook",
+						Url:    url + "/verify",
+						Config: insecureWebhookTestClient(),
 					}
 				})
 				if err != nil {
@@ -1404,13 +1423,9 @@ func TestESTEnroll(t *testing.T) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-						Name: "myHook",
-						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
-						},
+						Name:   "myHook",
+						Url:    url + "/verify",
+						Config: insecureWebhookTestClient(),
 					}
 				})
 				if err != nil {
@@ -1438,7 +1453,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook.Config.AuthMode = config.ApiKey
-				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook.Config.ApiKey = models.WebhookCallHttpClientApiKey{
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook.Config.AuthApiKeyOptions = config.AuthApiKeyOptions{
 					Header: "X-API-Key",
 					Key:    "mySecret",
 				}
@@ -1494,14 +1509,13 @@ func TestESTEnroll(t *testing.T) {
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
 						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
+						Config: func() models.WebhookCallHttpClient {
+							c := insecureWebhookTestClient()
 							// Use a short timeout so it fires well before the server's
 							// 10-second WriteTimeout, avoiding a TLS connection race.
-							CallTimeout: models.TimeDuration(2 * time.Second),
-						},
+							c.CallTimeout = models.TimeDuration(2 * time.Second)
+							return c
+						}(),
 					}
 				})
 				if err != nil {
@@ -2404,13 +2418,9 @@ func TestESTEnroll(t *testing.T) {
 						ChainLevelValidation: -1,
 					}
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-						Name: "myHook",
-						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
-						},
+						Name:   "myHook",
+						Url:    url + "/verify",
+						Config: insecureWebhookTestClient(),
 					}
 				})
 				if err != nil {
@@ -2487,13 +2497,9 @@ func TestESTEnroll(t *testing.T) {
 						ChainLevelValidation: -1,
 					}
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-						Name: "myHook",
-						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
-						},
+						Name:   "myHook",
+						Url:    url + "/verify",
+						Config: insecureWebhookTestClient(),
 					}
 				})
 				if err != nil {
@@ -2575,13 +2581,9 @@ func TestESTEnroll(t *testing.T) {
 						ChainLevelValidation: -1,
 					}
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-						Name: "myHook",
-						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
-						},
+						Name:   "myHook",
+						Url:    url + "/verify",
+						Config: insecureWebhookTestClient(),
 					}
 				})
 				if err != nil {
@@ -2657,13 +2659,9 @@ func TestESTEnroll(t *testing.T) {
 						ChainLevelValidation: -1,
 					}
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-						Name: "myHook",
-						Url:  url + "/verify",
-						Config: models.WebhookCallHttpClient{
-							ValidateServerCert: false,
-							LogLevel:           string(config.Debug),
-							AuthMode:           config.NoAuth,
-						},
+						Name:   "myHook",
+						Url:    url + "/verify",
+						Config: insecureWebhookTestClient(),
 					}
 				})
 				if err != nil {
@@ -4023,13 +4021,9 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeExternalWebhook
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-					Name: "myHook",
-					Url:  url + "/verify",
-					Config: models.WebhookCallHttpClient{
-						ValidateServerCert: false,
-						LogLevel:           string(config.Debug),
-						AuthMode:           config.NoAuth,
-					},
+					Name:   "myHook",
+					Url:    url + "/verify",
+					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
@@ -4085,13 +4079,9 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeExternalWebhook
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-					Name: "myHook",
-					Url:  url + "/verify",
-					Config: models.WebhookCallHttpClient{
-						ValidateServerCert: false,
-						LogLevel:           string(config.Debug),
-						AuthMode:           config.NoAuth,
-					},
+					Name:   "myHook",
+					Url:    url + "/verify",
+					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
@@ -4144,13 +4134,9 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-					Name: "myHook",
-					Url:  url + "/verify",
-					Config: models.WebhookCallHttpClient{
-						ValidateServerCert: false,
-						LogLevel:           string(config.Debug),
-						AuthMode:           config.NoAuth,
-					},
+					Name:   "myHook",
+					Url:    url + "/verify",
+					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
@@ -4205,13 +4191,9 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-					Name: "myHook",
-					Url:  url + "/verify",
-					Config: models.WebhookCallHttpClient{
-						ValidateServerCert: false,
-						LogLevel:           string(config.Debug),
-						AuthMode:           config.NoAuth,
-					},
+					Name:   "myHook",
+					Url:    url + "/verify",
+					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
@@ -4267,13 +4249,9 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-					Name: "myHook",
-					Url:  url + "/verify",
-					Config: models.WebhookCallHttpClient{
-						ValidateServerCert: false,
-						LogLevel:           string(config.Debug),
-						AuthMode:           config.NoAuth,
-					},
+					Name:   "myHook",
+					Url:    url + "/verify",
+					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
@@ -4332,13 +4310,9 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthMode = models.ESTAuthModeClientCertificateAndWebhook
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
-					Name: "myHook",
-					Url:  url + "/verify",
-					Config: models.WebhookCallHttpClient{
-						ValidateServerCert: false,
-						LogLevel:           string(config.Debug),
-						AuthMode:           config.NoAuth,
-					},
+					Name:   "myHook",
+					Url:    url + "/verify",
+					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
@@ -4727,4 +4701,13 @@ func corruptCSR(csr *x509.CertificateRequest) (*x509.CertificateRequest, error) 
 	}
 
 	return badCSR, nil
+}
+
+// insecureWebhookTestClient skips server certificate validation: the test
+// webhook servers use self-signed certificates.
+func insecureWebhookTestClient() models.WebhookCallHttpClient {
+	var c models.WebhookCallHttpClient
+	c.AuthMode = config.NoAuth
+	c.InsecureSkipVerify = true
+	return c
 }
