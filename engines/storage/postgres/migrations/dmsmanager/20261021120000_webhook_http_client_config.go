@@ -3,6 +3,7 @@ package dmsmanager
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -138,6 +139,21 @@ func migrateWebhookHTTPClientConfig(cfg map[string]any) bool {
 	return changed
 }
 
+// legacyPEM returns the plain PEM of a cert_content/key_content value. The
+// legacy model only reads plain PEM, so base64-encoded PEM is decoded; any
+// other value is returned untouched.
+func legacyPEM(v any) any {
+	s, ok := v.(string)
+	if !ok || strings.Contains(s, "-----BEGIN") {
+		return v
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s))
+	if err != nil || !strings.Contains(string(decoded), "-----BEGIN") {
+		return v
+	}
+	return string(decoded)
+}
+
 // revertWebhookHTTPClientConfig is the inverse of migrateWebhookHTTPClientConfig.
 // Options without a legacy equivalent (ca_cert_file, hostname, ...) are left
 // in place: the legacy model ignores them.
@@ -170,7 +186,7 @@ func revertWebhookHTTPClientConfig(cfg map[string]any) bool {
 	}
 
 	if mtls, ok := cfg["mtls_options"].(map[string]any); ok {
-		cert, key := mtls["cert_content"], mtls["key_content"]
+		cert, key := legacyPEM(mtls["cert_content"]), legacyPEM(mtls["key_content"])
 		if cert == nil && key == nil {
 			cert, key = mtls["cert_file"], mtls["key_file"]
 		}

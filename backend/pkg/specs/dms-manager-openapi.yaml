@@ -650,7 +650,7 @@ components:
 
     WebhookCallHttpClient:
       type: object
-      description: HTTP client configuration for calls to the external webhook. It is invalid when it references files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file), sets a reserved API key header, or lacks the options its auth_mode needs (apikey_options.header and apikey_options.key for apikey, jwt_options.oidc_client_id, jwt_options.oidc_client_secret and an absolute http or https jwt_options.oidc_well_known for jwt, mtls_options.cert_content and mtls_options.key_content for mtls).
+      description: HTTP client configuration for calls to the external webhook. It is invalid when it references files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file), sets a reserved API key header, or lacks the options its auth_mode needs (apikey_options.header and apikey_options.key for apikey, jwt_options.oidc_client_id, jwt_options.oidc_client_secret and an absolute http or https jwt_options.oidc_well_known for jwt, mtls_options.cert_content and mtls_options.key_content for mtls), or has an mtls_options.cert_content/key_content pair that is not a matching certificate and private key.
       properties:
         log_level:
           type: string
