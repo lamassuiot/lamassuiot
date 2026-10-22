@@ -3572,7 +3572,7 @@ func TestESTReEnroll(t *testing.T) {
 		{
 			name: "OK/EnrollCAWithValidationCAsDefined",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
-				otherCA, err := createCA(fmt.Sprintf("other-ca-%s", uuid.NewString()), "5y", "1y")
+				otherCA, err := createCA(fmt.Sprintf("other-ca-%s", uuid.NewV7().String()), "5y", "1y")
 				if err != nil {
 					t.Fatalf("could not create validation CA: %s", err)
 				}
@@ -3624,7 +3624,7 @@ func TestESTReEnroll(t *testing.T) {
 				oldEnrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
 
 				// 2. Create the new CA.
-				newCA, err := createCA(fmt.Sprintf("new-enroll-ca-%s", uuid.NewString()), "5y", "5m")
+				newCA, err := createCA(fmt.Sprintf("new-enroll-ca-%s", uuid.NewV7().String()), "5y", "5m")
 				if err != nil {
 					t.Fatalf("could not create new enrollment CA: %s", err)
 				}
@@ -3925,19 +3925,19 @@ func TestESTReEnroll(t *testing.T) {
 					"5m",
 				)
 
-				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y", "1y")
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewV7().String()), "5y", "1y")
 				if err != nil {
 					t.Fatalf("could not create Rotational CA: %s", err)
 				}
 
-				unrelatedCA, err := createCA(fmt.Sprintf("unrelated-ca-%s", uuid.NewString()), "5y", "1y")
+				unrelatedCA, err := createCA(fmt.Sprintf("unrelated-ca-%s", uuid.NewV7().String()), "5y", "1y")
 				if err != nil {
 					t.Fatalf("could not create unrelated CA: %s", err)
 				}
 
 				// The issuing CA is listed last, after a CA that does not exist and a CA that did not issue the certificate.
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-					fmt.Sprintf("non-existent-ca-%s", uuid.NewString()),
+					fmt.Sprintf("non-existent-ca-%s", uuid.NewV7().String()),
 					unrelatedCA.ID,
 					dms.Settings.EnrollmentSettings.EnrollmentCA,
 				}
@@ -3984,7 +3984,7 @@ func TestESTReEnroll(t *testing.T) {
 					"5m",
 				)
 
-				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y", "1y")
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewV7().String()), "5y", "1y")
 				if err != nil {
 					t.Fatalf("could not create Rotational CA: %s", err)
 				}
