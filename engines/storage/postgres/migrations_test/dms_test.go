@@ -375,6 +375,12 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 		VALUES('dms-webhook-mtls-b64', 'DMS Webhook mTLS base64', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"insecure_skip_verify":false,"auth_mode":"mtls","mtls_options":{"cert_content":"LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=","key_content":"LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUUKLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo="}}}}}}');
 	`)
 
+	// Content that is neither PEM nor base64 PEM is written back untouched.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls-raw', 'DMS Webhook mTLS raw', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"insecure_skip_verify":false,"auth_mode":"mtls","mtls_options":{"cert_content":"/certs/client.crt","key_content":"/certs/client.key"}}}}}}');
+	`)
+
 	migrator := postgres.NewMigrator(logger, con)
 	_, err := migrator.Goose.ApplyVersion(context.Background(), 20261021120000, false)
 	if err != nil {
@@ -412,7 +418,10 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 		"key":  "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n",
 	}, mtlsB64["mtls"])
 
-	_, err =migrator.Goose.ApplyVersion(context.Background(), 20261021120000, true)
+	mtlsRaw := webhookConfig("dms-webhook-mtls-raw", "enrollment_settings")
+	assert.Equal(t, map[string]any{"cert": "/certs/client.crt", "key": "/certs/client.key"}, mtlsRaw["mtls"])
+
+	_, err = migrator.Goose.ApplyVersion(context.Background(), 20261021120000, true)
 	if err != nil {
 		t.Fatalf("could not re-apply migration: %s", err)
 	}
