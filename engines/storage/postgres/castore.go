@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -160,7 +162,11 @@ func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (boo
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	ca, err := db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return nil, errs.ErrCAAlreadyExists
+	}
+	return ca, err
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
