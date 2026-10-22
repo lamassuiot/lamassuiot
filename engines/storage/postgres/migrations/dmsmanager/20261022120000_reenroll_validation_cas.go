@@ -10,7 +10,7 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-func Register20261020120000ReenrollValidationCAs() {
+func Register20261022120000ReenrollValidationCAs() {
 	goose.AddMigrationContext(upReenrollValidationCAs, downReenrollValidationCAs)
 }
 

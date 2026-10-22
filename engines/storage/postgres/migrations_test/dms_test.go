@@ -175,9 +175,9 @@ func TestDMSMigrations(t *testing.T) {
 		t.Fatalf("failed while running migration v20261021120000_webhook_http_client_config")
 	}
 
-	migrationTest_DMS_20261020120000_reenroll_validation_cas(t, logger, con)
+	migrationTest_DMS_20261022120000_reenroll_validation_cas(t, logger, con)
 	if t.Failed() {
-		t.Fatalf("failed while running migration v20261020120000_reenroll_validation_cas")
+		t.Fatalf("failed while running migration v20261022120000_reenroll_validation_cas")
 	}
 }
 
@@ -400,7 +400,7 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, webhookConfig("dms-webhook-jwt", "reenrollment_settings")["apikey_options"])
 }
 
-func migrationTest_DMS_20261020120000_reenroll_validation_cas(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+func migrationTest_DMS_20261022120000_reenroll_validation_cas(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	insertDMS := func(id, settings string) {
 		tx := con.Exec(`INSERT INTO dms (id, "name", metadata, creation_date, settings) VALUES(?, ?, '{}', '2024-11-25 10:46:28.914', ?)`, id, id, settings)
 		if tx.Error != nil {
@@ -453,7 +453,7 @@ func migrationTest_DMS_20261020120000_reenroll_validation_cas(t *testing.T, logg
 	assert.Equal(t, 0, oldKeyCount)
 
 	// Down migration copies the re-enrollment validation CAs back into additional_validation_cas.
-	RollbackMigration(t, logger, con, dmsDBName, "20261020120000_reenroll_validation_cas")
+	RollbackMigration(t, logger, con, dmsDBName, "20261022120000_reenroll_validation_cas")
 
 	assert.JSONEq(t, `["ca-1","ca-2"]`, queryJSON("dms-reenroll-cas-moved", "{reenrollment_settings,additional_validation_cas}"))
 	assert.JSONEq(t, `["ca-3"]`, queryJSON("dms-reenroll-cas-no-est", "{reenrollment_settings,additional_validation_cas}"))

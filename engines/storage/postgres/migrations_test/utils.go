@@ -93,7 +93,7 @@ func ApplyMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName str
 	}
 }
 
-// RollbackMigration runs the down step of the given migration (e.g. "20261020120000_reenroll_validation_cas").
+// RollbackMigration runs the down step of the given migration (e.g. "20261022120000_reenroll_validation_cas").
 func RollbackMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName string, migrationName string) {
 	m := postgres.NewMigrator(logger, con)
 	for _, s := range m.Goose.ListSources() {
