@@ -131,11 +131,6 @@ func parsePKCS11ID(id string) (engineID, keyID, keyType string, err error) {
 	return engineID, keyID, keyType, nil
 }
 
-// Helper to build pkcs11 id format
-func buildPKCS11ID(engineID, keyID, keyType string) string {
-	return "pkcs11:token-id=" + engineID + ";id=" + keyID + ";type=" + keyType
-}
-
 func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool, err error) {
 	switch inputAlgorithm {
 	case "RSASSA_PKCS1_V1_5_SHA_256":
@@ -429,7 +424,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
-		return nil, fmt.Errorf("crypto engine not found")
+		return nil, errs.ErrCryptoEngineNotFound
 	}
 
 	engineInstance := *engine
@@ -500,7 +495,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 	}
 
 	kmsKey := models.Key{
-		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
+		PKCS11URI:     models.BuildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
 		EngineID:      engineID,
 		Name:          input.Name,
@@ -541,7 +536,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
-		return nil, fmt.Errorf("crypto engine not found")
+		return nil, errs.ErrCryptoEngineNotFound
 	}
 
 	engineInstance := *engine
@@ -607,7 +602,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	kmsKey := models.Key{
-		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
+		PKCS11URI:     models.BuildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
 		EngineID:      engineID,
 		Name:          input.Name,
@@ -631,12 +626,12 @@ func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size 
 			if slices.Contains(spec.Sizes, size) {
 				return nil
 			} else {
-				return fmt.Errorf("key size %d is not supported for key type %s in engine %s", size, keyType, engineConfig.Provider)
+				return fmt.Errorf("%w: key size %d is not supported for key type %s in engine %s", errs.ErrCryptoEngineKeySpecNotSupported, size, keyType, engineConfig.Provider)
 			}
 		}
 	}
 
-	return fmt.Errorf("key type %s is not supported in engine %s", keyType, engineConfig.Provider)
+	return fmt.Errorf("%w: key type %s is not supported in engine %s", errs.ErrCryptoEngineKeySpecNotSupported, keyType, engineConfig.Provider)
 }
 
 func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {
