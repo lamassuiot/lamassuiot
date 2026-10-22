@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -169,6 +170,7 @@ func TestInvokeWebhookRejectsServerFiles(t *testing.T) {
 		"ca cert file":       {withCAFile, "must not reference files"},
 		"missing content":    {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM)}), "requires mtls_options.cert_content"},
 		"mismatched key":     {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(func() []byte { _, k := selfSignedPEM(t); return k }())}), "private key does not match"},
+		"invalid base64":     {mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: "not base64!", KeyContent: string(keyPEM)}), "mtls_options.cert_content must be base64-encoded PEM"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), tc.conf, []byte("{}"))
@@ -233,9 +235,15 @@ func TestInvokeWebhookPresentsMTLSCertificateContent(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	conf := mtlsWebhook(server.URL, config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(keyPEM)})
-	err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), conf, []byte("{}"))
-	require.NoError(t, err)
+	for name, opts := range map[string]config.AuthMTLSOptions{
+		"base64 PEM": {CertContent: base64.StdEncoding.EncodeToString(certPEM), KeyContent: base64.StdEncoding.EncodeToString(keyPEM)},
+		"plain PEM":  {CertContent: string(certPEM), KeyContent: string(keyPEM)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := InvokeWebhook(context.Background(), logrus.NewEntry(logrus.New()), mtlsWebhook(server.URL, opts), []byte("{}"))
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestInvokeWebhookAppliesCallTimeout(t *testing.T) {

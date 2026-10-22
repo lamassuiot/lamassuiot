@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"math/big"
 	"net/http"
@@ -60,7 +61,8 @@ func TestBuildHTTPClientMTLSCertificateSources(t *testing.T) {
 	defer server.Close()
 
 	for name, opts := range map[string]config.AuthMTLSOptions{
-		"content":            {CertContent: string(certPEM), KeyContent: string(keyPEM)},
+		"base64 content":     {CertContent: base64.StdEncoding.EncodeToString(certPEM), KeyContent: base64.StdEncoding.EncodeToString(keyPEM)},
+		"plain PEM content":  {CertContent: string(certPEM), KeyContent: string(keyPEM)},
 		"legacy PEM in file": {CertFile: string(certPEM), KeyFile: string(keyPEM)},
 		"file paths":         {CertFile: certPath, KeyFile: keyPath},
 	} {

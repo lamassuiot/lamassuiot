@@ -358,10 +358,10 @@ components:
           properties:
             cert_content:
               type: string
-              description: PEM-encoded client certificate.
+              description: Base64-encoded PEM client certificate, like certificates elsewhere in the API. Plain PEM is also accepted.
             key_content:
               type: string
-              description: PEM-encoded private key.
+              description: Base64-encoded PEM private key. Plain PEM is also accepted.
 
     AlertLatestEvent:
       type: object

@@ -93,7 +93,10 @@ func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logg
 		mtls := cfg.AuthMTLSOptions
 		switch {
 		case mtls.CertContent != "" || mtls.KeyContent != "":
-			cert, err = tls.X509KeyPair([]byte(mtls.CertContent), []byte(mtls.KeyContent))
+			var certPEM, keyPEM []byte
+			if certPEM, keyPEM, err = mtls.ContentPEM(); err == nil {
+				cert, err = tls.X509KeyPair(certPEM, keyPEM)
+			}
 		case strings.Contains(mtls.CertFile, "-----BEGIN CERTIFICATE-----"):
 			// Legacy fallback: trusted service configs may carry PEM content
 			// in cert_file/key_file.
