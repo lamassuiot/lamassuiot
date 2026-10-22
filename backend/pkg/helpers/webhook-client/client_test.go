@@ -224,6 +224,42 @@ func TestValidateWebhook(t *testing.T) {
 	}
 }
 
+// ValidateWebhook runs when a DMS or alert subscription is saved, so a bad
+// mTLS pair has to be rejected there rather than on the first call.
+func TestValidateWebhookMTLS(t *testing.T) {
+	const hook = "https://hooks.example.com/x"
+	certPEM, keyPEM := selfSignedPEM(t)
+	_, otherKeyPEM := selfSignedPEM(t)
+	b64 := func(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+	for name, opts := range map[string]config.AuthMTLSOptions{
+		"base64 PEM": {CertContent: b64(certPEM), KeyContent: b64(keyPEM)},
+		"plain PEM":  {CertContent: string(certPEM), KeyContent: string(keyPEM)},
+	} {
+		t.Run("accepts "+name, func(t *testing.T) {
+			require.NoError(t, ValidateWebhook(mtlsWebhook(hook, opts)))
+		})
+	}
+
+	for name, tc := range map[string]struct {
+		opts config.AuthMTLSOptions
+		err  string
+	}{
+		"missing key":           {config.AuthMTLSOptions{CertContent: b64(certPEM)}, "requires mtls_options.cert_content and mtls_options.key_content"},
+		"invalid base64":        {config.AuthMTLSOptions{CertContent: "not base64!", KeyContent: b64(keyPEM)}, "mtls_options.cert_content must be base64-encoded PEM"},
+		"base64 of non-PEM":     {config.AuthMTLSOptions{CertContent: b64(certPEM), KeyContent: b64([]byte("not a key"))}, "mtls_options.key_content must be base64-encoded PEM"},
+		"key is a file path":    {config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: "/certs/client.key"}, "mtls_options.key_content must be base64-encoded PEM"},
+		"mismatched pair":       {config.AuthMTLSOptions{CertContent: b64(certPEM), KeyContent: b64(otherKeyPEM)}, "private key does not match"},
+		"mismatched plain pair": {config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(otherKeyPEM)}, "private key does not match"},
+		"swapped cert and key":  {config.AuthMTLSOptions{CertContent: string(keyPEM), KeyContent: string(certPEM)}, "webhook mTLS certificate and key are invalid"},
+		"key file reference":    {config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(keyPEM), KeyFile: "/certs/client.key"}, "must not reference files"},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			require.ErrorContains(t, ValidateWebhook(mtlsWebhook(hook, tc.opts)), tc.err)
+		})
+	}
+}
+
 func TestInvokeWebhookPresentsMTLSCertificateContent(t *testing.T) {
 	certPEM, keyPEM := selfSignedPEM(t)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
