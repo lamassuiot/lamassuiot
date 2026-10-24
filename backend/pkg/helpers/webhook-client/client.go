@@ -3,6 +3,7 @@ package webhookclient
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,6 +69,14 @@ func ValidateConfig(cfg models.WebhookCallHttpClient) error {
 	case config.MTLS:
 		if mtls.CertContent == "" || mtls.KeyContent == "" {
 			return errors.New("webhook mTLS requires mtls_options.cert_content and mtls_options.key_content")
+		}
+		certPEM, keyPEM, err := mtls.ContentPEM()
+		if err != nil {
+			return fmt.Errorf("webhook %w", err)
+		}
+		// Reject an unusable pair when the webhook is saved, not on every call.
+		if _, err := tls.X509KeyPair(certPEM, keyPEM); err != nil {
+			return fmt.Errorf("webhook mTLS certificate and key are invalid: %w", err)
 		}
 	}
 

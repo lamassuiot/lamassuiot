@@ -315,6 +315,12 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 		VALUES('dms-webhook-mtls', 'DMS Webhook mTLS', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n","key":"-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n"}}}}},"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"/certs/client.crt","key":"/certs/client.key"}}}}}}');
 	`)
 
+	// Certificate as PEM but key as a file path: must not be split into content/file halves.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls-mixed', 'DMS Webhook mTLS mixed', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n","key":"/certs/client.key"}}}}}}');
+	`)
+
 	ApplyMigration(t, logger, con, dmsDBName)
 
 	webhookConfig := func(id, section string) map[string]any {
@@ -356,7 +362,25 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 	mtlsFiles := webhookConfig("dms-webhook-mtls", "reenrollment_settings")
 	assert.Equal(t, map[string]any{"cert_file": "/certs/client.crt", "key_file": "/certs/client.key"}, mtlsFiles["mtls_options"])
 
+	mtlsMixed := webhookConfig("dms-webhook-mtls-mixed", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert_file": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key_file":  "/certs/client.key",
+	}, mtlsMixed["mtls_options"])
+
 	// Down restores the legacy layout; up again leaves the schema at its latest version.
+	// A config saved after the up migration may carry base64-encoded PEM, which the legacy model cannot read.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls-b64', 'DMS Webhook mTLS base64', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"insecure_skip_verify":false,"auth_mode":"mtls","mtls_options":{"cert_content":"LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=","key_content":"LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUUKLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo="}}}}}}');
+	`)
+
+	// Content that is neither PEM nor base64 PEM is written back untouched.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls-raw', 'DMS Webhook mTLS raw', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"insecure_skip_verify":false,"auth_mode":"mtls","mtls_options":{"cert_content":"/certs/client.crt","key_content":"/certs/client.key"}}}}}}');
+	`)
+
 	migrator := postgres.NewMigrator(logger, con)
 	_, err := migrator.Goose.ApplyVersion(context.Background(), 20261021120000, false)
 	if err != nil {
@@ -387,6 +411,15 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 
 	mtlsFiles = webhookConfig("dms-webhook-mtls", "reenrollment_settings")
 	assert.Equal(t, map[string]any{"cert": "/certs/client.crt", "key": "/certs/client.key"}, mtlsFiles["mtls"])
+
+	mtlsB64 := webhookConfig("dms-webhook-mtls-b64", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key":  "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n",
+	}, mtlsB64["mtls"])
+
+	mtlsRaw := webhookConfig("dms-webhook-mtls-raw", "enrollment_settings")
+	assert.Equal(t, map[string]any{"cert": "/certs/client.crt", "key": "/certs/client.key"}, mtlsRaw["mtls"])
 
 	_, err = migrator.Goose.ApplyVersion(context.Background(), 20261021120000, true)
 	if err != nil {

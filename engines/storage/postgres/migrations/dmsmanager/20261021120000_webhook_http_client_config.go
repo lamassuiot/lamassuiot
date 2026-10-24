@@ -3,6 +3,7 @@ package dmsmanager
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -91,9 +92,9 @@ func nestedMap(m map[string]any, keys ...string) map[string]any {
 //	validate_server_cert     -> insecure_skip_verify (negated)
 //	oidc{client_id,...}      -> jwt_options{oidc_client_id,...}
 //	apikey{key,header}       -> apikey_options{key,header}
-//	mtls{cert,key}           -> mtls_options{cert_content,key_content} for PEM
-//	                            values, {cert_file,key_file} otherwise (rejected
-//	                            when the webhook is invoked)
+//	mtls{cert,key}           -> mtls_options{cert_content,key_content} when both
+//	                            values are PEM, {cert_file,key_file} otherwise
+//	                            (rejected when the webhook is saved or invoked)
 func migrateWebhookHTTPClientConfig(cfg map[string]any) bool {
 	changed := false
 	if v, ok := cfg["validate_server_cert"]; ok {
@@ -126,7 +127,7 @@ func migrateWebhookHTTPClientConfig(cfg map[string]any) bool {
 		cert, _ := mtls["cert"].(string)
 		key, _ := mtls["key"].(string)
 		switch {
-		case strings.Contains(cert, "-----BEGIN"):
+		case strings.Contains(cert, "-----BEGIN") && strings.Contains(key, "-----BEGIN"):
 			cfg["mtls_options"] = map[string]any{"cert_content": cert, "key_content": key}
 		case cert != "" || key != "":
 			cfg["mtls_options"] = map[string]any{"cert_file": cert, "key_file": key}
@@ -136,6 +137,21 @@ func migrateWebhookHTTPClientConfig(cfg map[string]any) bool {
 	}
 
 	return changed
+}
+
+// legacyPEM returns the plain PEM of a cert_content/key_content value. The
+// legacy model only reads plain PEM, so base64-encoded PEM is decoded; any
+// other value is returned untouched.
+func legacyPEM(v any) any {
+	s, ok := v.(string)
+	if !ok || strings.Contains(s, "-----BEGIN") {
+		return v
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s))
+	if err != nil || !strings.Contains(string(decoded), "-----BEGIN") {
+		return v
+	}
+	return string(decoded)
 }
 
 // revertWebhookHTTPClientConfig is the inverse of migrateWebhookHTTPClientConfig.
@@ -170,7 +186,7 @@ func revertWebhookHTTPClientConfig(cfg map[string]any) bool {
 	}
 
 	if mtls, ok := cfg["mtls_options"].(map[string]any); ok {
-		cert, key := mtls["cert_content"], mtls["key_content"]
+		cert, key := legacyPEM(mtls["cert_content"]), legacyPEM(mtls["key_content"])
 		if cert == nil && key == nil {
 			cert, key = mtls["cert_file"], mtls["key_file"]
 		}
