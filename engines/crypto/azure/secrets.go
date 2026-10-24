@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -157,6 +159,26 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) CreateECDSAPrivateKey(ctx contex
 	return engine.importKey(ctx, key)
 }
 
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (Ed25519)")
+}
+
 func (engine *AzureKeyVaultSecretsCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 
@@ -179,6 +201,26 @@ func (engine *AzureKeyVaultSecretsCryptoEngine) ImportECDSAPrivateKey(ctx contex
 	}
 
 	return keyID, signer, nil
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AzureKeyVaultSecretsCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault secrets: unsupported key type (Ed25519)")
 }
 
 func (engine *AzureKeyVaultSecretsCryptoEngine) importKey(ctx context.Context, key crypto.Signer) (string, crypto.Signer, error) {
