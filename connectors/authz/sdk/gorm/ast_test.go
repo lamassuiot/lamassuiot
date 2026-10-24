@@ -27,7 +27,7 @@ func testDB(t *testing.T) *gorm.DB {
 func applyAuthzSQL(t *testing.T, db *gorm.DB, table, authzSQL string) string {
 	t.Helper()
 	parsed := parseAuthzSQL(authzSQL)
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	result := AddASTToQuery(db.Table(table), parsed).Find(&dest)
 	return result.Statement.SQL.String()
 }
@@ -45,7 +45,7 @@ func whereAfterLastJoin(t *testing.T, sql string) {
 
 func TestAddASTToQuery_Empty(t *testing.T) {
 	db := testDB(t)
-	var dest []map[string]interface{}
+	var dest []map[string]any
 	result := AddASTToQuery(db.Table("certificates"), authzParsed{}).Find(&dest)
 	sql := result.Statement.SQL.String()
 	assert.NotContains(t, strings.ToUpper(sql), "JOIN")

@@ -6,11 +6,11 @@ import (
 	"os"
 	"slices"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api"
-	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api"
+	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )

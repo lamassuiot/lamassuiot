@@ -13,15 +13,15 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"uuid"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	software "github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
-	lazure "github.com/lamassuiot/lamassuiot/shared/azure/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	software "github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
+	lazure "github.com/lamassuiot/lamassuiot/v4/shared/azure"
 	"github.com/sirupsen/logrus"
 )
 
@@ -157,7 +157,7 @@ func (p *AzureKeyVaultCryptoEngine) CreateRSAPrivateKey(ctx context.Context, key
 	kty := azkeys.KeyTypeRSA
 	kSize := int32(keySize)
 	ops := allowedKeyOps()
-	resp, err := p.keyVaultCli.CreateKey(ctx, uuid.NewString(), azkeys.CreateKeyParameters{
+	resp, err := p.keyVaultCli.CreateKey(ctx, uuid.NewV7().String(), azkeys.CreateKeyParameters{
 		Kty:     &kty,
 		KeySize: &kSize,
 		KeyOps:  ops,
@@ -179,7 +179,7 @@ func (p *AzureKeyVaultCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, c
 
 	kty := azkeys.KeyTypeEC
 	ops := allowedKeyOps()
-	resp, err := p.keyVaultCli.CreateKey(ctx, uuid.NewString(), azkeys.CreateKeyParameters{
+	resp, err := p.keyVaultCli.CreateKey(ctx, uuid.NewV7().String(), azkeys.CreateKeyParameters{
 		Kty:    &kty,
 		Curve:  &crv,
 		KeyOps: ops,
@@ -232,7 +232,7 @@ func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key
 		QI:  key.Precomputed.Qinv.Bytes(),
 	}
 
-	keyName := uuid.NewString()
+	keyName := uuid.NewV7().String()
 	resp, err := p.keyVaultCli.ImportKey(ctx, keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("importing RSA key into Key Vault: %w", err)
@@ -267,7 +267,7 @@ func (p *AzureKeyVaultCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, k
 		D:   padLeft(key.D.Bytes(), byteLen),
 	}
 
-	keyName := uuid.NewString()
+	keyName := uuid.NewV7().String()
 	resp, err := p.keyVaultCli.ImportKey(ctx, keyName, azkeys.ImportKeyParameters{Key: jwk}, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("importing ECDSA key into Key Vault: %w", err)

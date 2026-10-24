@@ -2,17 +2,19 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	eventfilters "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/event_filters"
-	outputchannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	eventfilters "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/event_filters"
+	outputchannels "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/output_channels"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
@@ -130,7 +132,7 @@ func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input
 	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub models.Subscription) {
 		derefSub := sub
 		userSubs = append(userSubs, &derefSub)
-	}, &resources.QueryParameters{}, map[string]interface{}{})
+	}, &resources.QueryParameters{}, map[string]any{})
 
 	if err != nil {
 		lFunc.Errorf("got unexpected error while reading subscriptions from DB: %s", err)
@@ -146,8 +148,13 @@ func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *services.
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
+	if err := outputchannels.ValidateChannel(input.Channel); err != nil {
+		lFunc.Errorf("invalid channel config for user %s: %s", input.UserID, err)
+		return nil, fmt.Errorf("%w: %s", errs.ErrValidateBadRequest, err)
+	}
+
 	sub := &models.Subscription{
-		ID:               uuid.NewString(),
+		ID:               uuid.NewV7().String(),
 		UserID:           input.UserID,
 		EventType:        input.EventType,
 		SubscriptionDate: time.Now(),
@@ -181,7 +188,7 @@ func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *service
 			derefSub := sub
 			userSubs = append(userSubs, &derefSub)
 		}
-	}, &resources.QueryParameters{}, map[string]interface{}{})
+	}, &resources.QueryParameters{}, map[string]any{})
 
 	if err != nil {
 		lFunc.Errorf("got unexpected error while reading subscriptions from DB: %s", err)

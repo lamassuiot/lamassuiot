@@ -3,8 +3,8 @@ package builder
 import (
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -12,7 +12,7 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 	logger := log.WithField("test", "BuildStorageEngine_Postgres")
 	conf := config.PluggableStorageEngine{
 		Provider: config.Postgres,
-		Config:   map[string]interface{}{
+		Config:   map[string]any{
 			// Set Postgres configuration here
 		},
 	}

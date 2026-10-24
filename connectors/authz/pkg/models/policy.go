@@ -80,10 +80,10 @@ func PolicyRecordFromPolicy(p *Policy) (*PolicyRecord, error) {
 // access to specific entity IDs, it grants access to all entities where the
 // declared column satisfies the condition.
 type ColumnFilter struct {
-	Column   string      `json:"column"`
-	Type     string      `json:"type,omitempty"` // optional: string, int, float, bool, timestamp, jsonb — must match the schema's filterable declaration when provided
-	Operator string      `json:"operator"`       // eq, neq, gt, gte, lt, lte, in, like
-	Value    interface{} `json:"value"`
+	Column   string `json:"column"`
+	Type     string `json:"type,omitempty"` // optional: string, int, float, bool, timestamp, jsonb — must match the schema's filterable declaration when provided
+	Operator string `json:"operator"`       // eq, neq, gt, gte, lt, lte, in, like
+	Value    any    `json:"value"`
 }
 
 // Rule defines authorization rules for an entity type
@@ -152,13 +152,13 @@ func (r *RelationRule) UnmarshalJSON(data []byte) error {
 
 func (r RelationRule) MarshalJSON() ([]byte, error) {
 	type relationRuleOut struct {
-		To        interface{}    `json:"to"`
+		To        any            `json:"to"`
 		Via       string         `json:"via"`
 		Actions   []string       `json:"actions"`
 		Relations []RelationRule `json:"relations,omitempty"`
 	}
 
-	var toValue interface{}
+	var toValue any
 	if r.ToEntityType != "" || r.ToSchemaName != "" {
 		toValue = relationTarget{
 			SchemaName: r.ToSchemaName,

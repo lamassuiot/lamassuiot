@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type dmsManagerHttpRoutes struct {
@@ -107,7 +109,12 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 
 	dms, err := r.svc.CreateDMS(ctx.Request.Context(), input)
 	if err != nil {
-		ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
+		switch {
+		case errors.Is(err, errs.ErrValidateBadRequest):
+			ctx.AbortWithStatusJSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
+		}
 		return
 	}
 
@@ -132,7 +139,12 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		DMS: requestBody,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		switch {
+		case errors.Is(err, errs.ErrValidateBadRequest):
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
 		return
 	}
 

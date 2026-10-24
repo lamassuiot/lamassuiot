@@ -19,7 +19,7 @@ func (m *mockEventBusEngine) Publisher() (message.Publisher, error) {
 	return nil, nil
 }
 
-func mockEventBusBuilder(eventBusProvider string, config interface{}, serviceId string, logger *logrus.Entry) (EventBusEngine, error) {
+func mockEventBusBuilder(eventBusProvider string, config any, serviceId string, logger *logrus.Entry) (EventBusEngine, error) {
 	if eventBusProvider == "mock" {
 		return &mockEventBusEngine{}, nil
 	}

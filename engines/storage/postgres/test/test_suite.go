@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -40,7 +40,8 @@ func BeforeSuite(schemaNames []string, exposeAsStandardPort bool) (config.Postgr
 			schemaName,
 		)
 		db, _ := gorm.Open(postgres.Open(conStr), &gorm.Config{
-			Logger: gormLogger.Discard,
+			Logger:         gormLogger.Discard,
+			TranslateError: true,
 		})
 
 		// Set search_path for each connection

@@ -13,11 +13,11 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
 )
 
@@ -31,7 +31,7 @@ type FilesystemCryptoEngine struct {
 func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[FilesystemEngineConfig]) (cryptoengines.CryptoEngine, error) {
 	lGo := logger.WithField("subsystem-provider", "GoSoft")
 
-	defaultMeta := map[string]interface{}{
+	defaultMeta := map[string]any{
 		"lamassu.io/cryptoengine.golang.storage-path": conf,
 	}
 
@@ -271,7 +271,7 @@ func (engine *FilesystemCryptoEngine) ImportEd25519PrivateKey(key ed25519.Privat
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) importKey(ctx context.Context, key interface{}) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) importKey(ctx context.Context, key any) (string, crypto.Signer, error) {
 	lFunc := helpers.ConfigureLogger(ctx, engine.logger)
 	pubKey := key.(crypto.Signer).Public()
 

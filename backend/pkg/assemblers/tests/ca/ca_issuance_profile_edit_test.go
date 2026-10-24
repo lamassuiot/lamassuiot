@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestEditCAProfiles(t *testing.T) {
@@ -274,7 +274,6 @@ func TestEditCAProfiles(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -635,7 +634,6 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -765,7 +763,6 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()

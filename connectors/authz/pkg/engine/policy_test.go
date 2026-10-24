@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
 
 func TestLoadIoTPolicies(t *testing.T) {

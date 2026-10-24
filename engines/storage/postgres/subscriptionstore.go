@@ -3,9 +3,9 @@ package postgres
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -27,7 +27,7 @@ func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (stor
 	}, nil
 }
 
-func (db *PostgresSubscriptionsStore) GetSubscriptions(ctx context.Context, userID string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresSubscriptionsStore) GetSubscriptions(ctx context.Context, userID string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error) {
 	opts := []GormExtraOps{
 		{Query: "user_id = ?", AdditionalWhere: []any{userID}},
 	}
@@ -42,7 +42,7 @@ func (db *PostgresSubscriptionsStore) Unsubscribe(ctx context.Context, subscript
 	return db.querier.Delete(ctx, subscriptionID)
 }
 
-func (db *PostgresSubscriptionsStore) GetSubscriptionsByEventType(ctx context.Context, eventType string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresSubscriptionsStore) GetSubscriptionsByEventType(ctx context.Context, eventType string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error) {
 	opts := []GormExtraOps{
 		{Query: "event_type = ?", AdditionalWhere: []any{eventType}},
 	}

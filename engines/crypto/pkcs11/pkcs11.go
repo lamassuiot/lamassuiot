@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 package pkcs11
 
@@ -16,16 +15,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"uuid"
 
-	"github.com/ThalesIgnite/crypto11"
-	"github.com/google/uuid"
+	"github.com/eclipse-keypont/crypto11"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/miekg/pkcs11"
 	"github.com/sirupsen/logrus"
 )
@@ -143,7 +142,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	}
 
 	defaultMeta := map[string]any{
-		"lamassu.io/cryptoengine/pkcs11/cryptoki-version": fmt.Sprintf("%b.%b", pkcs11ProviderInfo.CryptokiVersion.Major, pkcs11ProviderInfo.CryptokiVersion.Minor),
+		"lamassu.io/cryptoengine/pkcs11/cryptoki-version": fmt.Sprintf("%d.%d", pkcs11ProviderInfo.CryptokiVersion.Major, pkcs11ProviderInfo.CryptokiVersion.Minor),
 		"lamassu.io/cryptoengine/pkcs11/library":          pkcs11ProviderInfo.LibraryDescription,
 		"lamassu.io/cryptoengine/pkcs11/manufacturer":     pkcs11ProviderInfo.ManufacturerID,
 		"lamassu.io/cryptoengine/pkcs11/model":            tokenInfo.Model,
@@ -250,7 +249,7 @@ func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs(ctx context.Context) ([
 
 func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
-	tmpKeyID := uuid.New().String()
+	tmpKeyID := uuid.NewV7().String()
 	lFunc.Debugf("creating RSA %d key", keySize)
 	newSigner, err := hsmContext.api.GenerateRSAKeyPair([]byte(tmpKeyID), keySize)
 	if err != nil {
@@ -275,7 +274,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(ctx context.Context, 
 
 func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
 	lFunc := helpers.ConfigureLogger(ctx, hsmContext.logger)
-	tmpKeyID := uuid.New().String()
+	tmpKeyID := uuid.NewV7().String()
 	lFunc.Debugf("creating ECDSA %d key", curve.Params().BitSize)
 	newSigner, err := hsmContext.api.GenerateECDSAKeyPair([]byte(tmpKeyID), curve)
 	if err != nil {

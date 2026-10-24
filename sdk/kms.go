@@ -5,18 +5,17 @@ import (
 	"encoding/base64"
 	"net/http"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type KMSClient services.KMSService
 
 type httpKMSClient struct {
-	httpClient *http.Client
-	baseUrl    string
+	restClient
 }
 
 func NewHttpKMSClient(client *http.Client, url string) services.KMSService {
@@ -28,7 +27,7 @@ func NewHttpKMSClient(client *http.Client, url string) services.KMSService {
 }
 
 func (cli *httpKMSClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	engine, err := Get[[]*models.CryptoEngineProvider](ctx, cli.httpClient, cli.baseUrl+"/v1/engines", nil, map[int][]error{})
+	engine, err := cli.get[[]*models.CryptoEngineProvider](ctx, "/v1/engines", nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +36,12 @@ func (cli *httpKMSClient) GetCryptoEngineProvider(ctx context.Context) ([]*model
 }
 
 func (cli *httpKMSClient) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
-	url := cli.baseUrl + "/v1/keys"
-	return IterGet[models.Key, *resources.GetKeysResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	path := "/v1/keys"
+	return cli.iterGet[models.Key, *resources.GetKeysResponse](ctx, path, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
-	response, err := Get[models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.Identifier, nil, map[int][]error{
+	response, err := cli.get[models.Key](ctx, "/v1/keys/"+input.Identifier, nil, map[int][]error{
 		404: {errs.ErrKeyNotFound},
 	})
 	if err != nil {
@@ -53,10 +52,10 @@ func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput
 }
 
 func (cli *httpKMSClient) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
-	url := cli.baseUrl + "/v1/stats"
+	path := "/v1/stats"
 
 	queryParams := input.QueryParameters
-	response, err := Get[models.KeyStats](ctx, cli.httpClient, url, queryParams, map[int][]error{})
+	response, err := cli.get[models.KeyStats](ctx, path, queryParams, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +64,7 @@ func (cli *httpKMSClient) GetKeyStats(ctx context.Context, input services.GetKey
 }
 
 func (cli *httpKMSClient) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
-	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys", resources.CreateKeyBody{
+	response, err := cli.post[*models.Key](ctx, "/v1/keys", resources.CreateKeyBody{
 		Algorithm: input.Algorithm,
 		Size:      input.Size,
 		EngineID:  input.EngineID,
@@ -88,7 +87,7 @@ func (cli *httpKMSClient) ImportKey(ctx context.Context, input services.ImportKe
 
 	keyB64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
 
-	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/import", resources.ImportKeyBody{
+	response, err := cli.post[*models.Key](ctx, "/v1/keys/import", resources.ImportKeyBody{
 		PrivateKey: keyB64,
 		EngineID:   input.EngineID,
 		Name:       input.Name,
@@ -103,7 +102,7 @@ func (cli *httpKMSClient) ImportKey(ctx context.Context, input services.ImportKe
 }
 
 func (cli *httpKMSClient) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {
-	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/metadata", resources.UpdateKeyMetadataBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/metadata", resources.UpdateKeyMetadataBody{
 		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
@@ -114,7 +113,7 @@ func (cli *httpKMSClient) UpdateKeyMetadata(ctx context.Context, input services.
 }
 
 func (cli *httpKMSClient) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (*models.Key, error) {
-	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/alias", resources.UpdateKeyAliasesBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/alias", resources.UpdateKeyAliasesBody{
 		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
@@ -125,7 +124,7 @@ func (cli *httpKMSClient) UpdateKeyAliases(ctx context.Context, input services.U
 }
 
 func (cli *httpKMSClient) UpdateKeyName(ctx context.Context, input services.UpdateKeyNameInput) (*models.Key, error) {
-	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/name", resources.UpdateKeyNameBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/name", resources.UpdateKeyNameBody{
 		Name: input.Name,
 	}, map[int][]error{})
 	if err != nil {
@@ -136,7 +135,7 @@ func (cli *httpKMSClient) UpdateKeyName(ctx context.Context, input services.Upda
 }
 
 func (cli *httpKMSClient) UpdateKeyTags(ctx context.Context, input services.UpdateKeyTagsInput) (*models.Key, error) {
-	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/tags", resources.UpdateKeyTagsBody{
+	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/tags", resources.UpdateKeyTagsBody{
 		Tags: input.Tags,
 	}, map[int][]error{})
 	if err != nil {
@@ -147,7 +146,7 @@ func (cli *httpKMSClient) UpdateKeyTags(ctx context.Context, input services.Upda
 }
 
 func (cli *httpKMSClient) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.Identifier, map[int][]error{})
+	err := cli.delete(ctx, "/v1/keys/"+input.Identifier, map[int][]error{})
 	if err != nil {
 		return err
 	}
@@ -156,7 +155,7 @@ func (cli *httpKMSClient) DeleteKeyByID(ctx context.Context, input services.GetK
 }
 
 func (cli *httpKMSClient) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
-	response, err := Post[*models.MessageSignature](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.Identifier+"/sign", resources.SignMessageBody{
+	response, err := cli.post[*models.MessageSignature](ctx, "/v1/keys/"+input.Identifier+"/sign", resources.SignMessageBody{
 		Algorithm:   input.Algorithm,
 		Message:     input.Message,
 		MessageType: input.MessageType,
@@ -169,7 +168,7 @@ func (cli *httpKMSClient) SignMessage(ctx context.Context, input services.SignMe
 }
 
 func (cli *httpKMSClient) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
-	response, err := Post[*models.MessageValidation](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.Identifier+"/verify", resources.VerifySignBody{
+	response, err := cli.post[*models.MessageValidation](ctx, "/v1/keys/"+input.Identifier+"/verify", resources.VerifySignBody{
 		Algorithm:   input.Algorithm,
 		Message:     input.Message,
 		Signature:   input.Signature,

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	mhelper "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
 

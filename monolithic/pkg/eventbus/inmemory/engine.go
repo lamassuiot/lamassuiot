@@ -5,7 +5,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,7 +20,7 @@ var (
 // Register registers the inmemory eventbus engine with the core registry
 // This should be called during monolithic initialization
 func Register() {
-	eventbus.RegisterEventBusEngine("inmemory", func(eventBusProvider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+	eventbus.RegisterEventBusEngine("inmemory", func(eventBusProvider string, config any, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 		return NewInMemoryEngine(serviceId, logger)
 	})
 }

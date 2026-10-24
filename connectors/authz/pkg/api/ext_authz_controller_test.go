@@ -11,10 +11,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -184,7 +184,7 @@ func writeExtAuthzHTTPSchema(t *testing.T) string {
 
 type testPrincipalMatcher struct{}
 
-func (testPrincipalMatcher) MatchPrincipals(_ context.Context, authMaterial interface{}, authType string) ([]string, error) {
+func (testPrincipalMatcher) MatchPrincipals(_ context.Context, authMaterial any, authType string) ([]string, error) {
 	if authType == "oidc" && authMaterial == "Bearer good" {
 		return []string{"principal-1"}, nil
 	}

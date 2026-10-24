@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +47,7 @@ func TestSQLStringLiteral_EscapesSingleQuotes(t *testing.T) {
 func TestFormatColumnFilterValue(t *testing.T) {
 	tests := []struct {
 		name    string
-		in      interface{}
+		in      any
 		want    string
 		wantErr bool
 	}{
@@ -57,11 +57,11 @@ func TestFormatColumnFilterValue(t *testing.T) {
 		{"bool false", false, "false", false},
 		{"float integer", float64(42), "42", false},
 		{"float decimal", 3.5, "3.5", false},
-		{"array of strings", []interface{}{"a", "b"}, "('a', 'b')", false},
-		{"array mixed", []interface{}{"a", float64(2)}, "('a', 2)", false},
+		{"array of strings", []any{"a", "b"}, "('a', 'b')", false},
+		{"array mixed", []any{"a", float64(2)}, "('a', 2)", false},
 		{"unsupported type int", 5, "", true},
 		{"unsupported type nil", nil, "", true},
-		{"array with unsupported element", []interface{}{"a", 5}, "", true},
+		{"array with unsupported element", []any{"a", 5}, "", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -108,7 +108,7 @@ func TestBuildColumnFilterConditions_MultipleFiltersAreANDed(t *testing.T) {
 func TestBuildColumnFilterConditions_InOperatorWithArray(t *testing.T) {
 	schema := schemaWithFilterable(FilterableField{Column: "id", Type: "string"})
 	filters := []models.ColumnFilter{
-		{Column: "id", Operator: "in", Value: []interface{}{"a", "b'c"}},
+		{Column: "id", Operator: "in", Value: []any{"a", "b'c"}},
 	}
 
 	cond, err := buildColumnFilterConditions(schema, filters)

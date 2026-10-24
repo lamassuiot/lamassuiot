@@ -22,9 +22,9 @@ import (
 	"cloudflare/circl/sign/slhdsa"
 	"crypto/mldsa"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -286,7 +286,7 @@ func (p *SoftwareCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer,
 	return encDigest, key, nil
 }
 
-func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(ctx context.Context, key interface{}) (string, error) {
+func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(ctx context.Context, key any) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, p.logger)
 	lFunc.Debugf("marshaling and encoding PKIX private key")
 

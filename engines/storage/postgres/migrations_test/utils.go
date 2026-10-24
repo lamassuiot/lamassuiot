@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
-	postgres_test "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/test"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	postgres_test "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/test"
 	"github.com/sirupsen/logrus"
 	postgresDriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -91,6 +91,22 @@ func ApplyMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName str
 	if !applied {
 		t.Fatalf("could not find migration")
 	}
+}
+
+// RollbackMigration runs the down step of the given migration (e.g. "20261022120000_reenroll_validation_cas").
+func RollbackMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName string, migrationName string) {
+	m := postgres.NewMigrator(logger, con)
+	for _, s := range m.Goose.ListSources() {
+		if strings.Contains(s.Path, migrationName) {
+			logger.Infof("ROLLING BACK MIGRATION %s - %d", s.Path, s.Version)
+			if _, err := m.Goose.ApplyVersion(context.Background(), s.Version, false); err != nil {
+				t.Fatalf("could not roll back migration: %s", err)
+			}
+			return
+		}
+	}
+
+	t.Fatalf("could not find migration %s", migrationName)
 }
 
 func CleanAllTables(t *testing.T, logger *logrus.Entry, con *gorm.DB) {

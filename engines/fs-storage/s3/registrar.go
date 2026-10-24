@@ -4,9 +4,9 @@ import (
 	"context"
 
 	s3v2 "github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	fsstorage "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/fs-storage"
-	sharedAWS "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	fsstorage "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/fs-storage"
+	sharedAWS "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 	log "github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 	"gocloud.dev/blob/s3blob"

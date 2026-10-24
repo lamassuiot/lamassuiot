@@ -1,8 +1,15 @@
 package config
 
+import (
+	"bytes"
+	"encoding/base64"
+	"fmt"
+	"strings"
+)
+
 type HTTPConnection struct {
-	Protocol        HTTPProtocol `mapstructure:"protocol"`
-	BasePath        string       `mapstructure:"base_path"`
+	Protocol        HTTPProtocol `mapstructure:"protocol" json:"protocol,omitempty"`
+	BasePath        string       `mapstructure:"base_path" json:"base_path,omitempty"`
 	BasicConnection `mapstructure:",squash"`
 }
 
@@ -47,34 +54,59 @@ const (
 // HTTPClient is the configuration for the HTTP client
 
 type HTTPClient struct {
-	LogLevel          LogLevel             `mapstructure:"log_level"`
-	AuthMode          HTTPClientAuthMethod `mapstructure:"auth_mode"`
-	AuthJWTOptions    AuthJWTOptions       `mapstructure:"jwt_options"`
-	AuthMTLSOptions   AuthMTLSOptions      `mapstructure:"mtls_options"`
-	AuthApiKeyOptions AuthApiKeyOptions    `mapstructure:"apikey_options"`
+	LogLevel          LogLevel             `mapstructure:"log_level" json:"log_level,omitempty"`
+	AuthMode          HTTPClientAuthMethod `mapstructure:"auth_mode" json:"auth_mode"`
+	AuthJWTOptions    AuthJWTOptions       `mapstructure:"jwt_options" json:"jwt_options"`
+	AuthMTLSOptions   AuthMTLSOptions      `mapstructure:"mtls_options" json:"mtls_options"`
+	AuthApiKeyOptions AuthApiKeyOptions    `mapstructure:"apikey_options" json:"apikey_options"`
 	HTTPConnection    `mapstructure:",squash"`
 }
 
 // Authentication related config
 type AuthJWTOptions struct {
-	ClientID         string   `mapstructure:"oidc_client_id"`
-	ClientSecret     Password `mapstructure:"oidc_client_secret"`
-	OIDCWellKnownURL string   `mapstructure:"oidc_well_known"`
+	ClientID         string   `mapstructure:"oidc_client_id" json:"oidc_client_id"`
+	ClientSecret     Password `mapstructure:"oidc_client_secret" json:"oidc_client_secret"`
+	OIDCWellKnownURL string   `mapstructure:"oidc_well_known" json:"oidc_well_known"`
 }
 
+// AuthMTLSOptions loads the client certificate from CertContent/KeyContent
+// when set, otherwise from CertFile/KeyFile. For backwards compatibility,
+// CertFile/KeyFile may also hold PEM content directly.
+//
+// CertContent/KeyContent hold base64-encoded PEM, like certificates elsewhere
+// in the API. Plain PEM is also accepted, as written by earlier configs.
 type AuthMTLSOptions struct {
-	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
+	CertFile    string `mapstructure:"cert_file" json:"cert_file,omitempty"`
+	KeyFile     string `mapstructure:"key_file" json:"key_file,omitempty"`
+	CertContent string `mapstructure:"cert_content" json:"cert_content,omitempty"`
+	KeyContent  string `mapstructure:"key_content" json:"key_content,omitempty"`
 }
 
-type AuthMTLSInMemoryOptions struct {
-	CertPEM []byte `mapstructure:"cert"`
-	KeyPEM  []byte `mapstructure:"key"`
+// ContentPEM returns CertContent and KeyContent decoded to PEM.
+func (o AuthMTLSOptions) ContentPEM() (cert, key []byte, err error) {
+	if cert, err = decodePEMContent("cert_content", o.CertContent); err != nil {
+		return nil, nil, err
+	}
+	if key, err = decodePEMContent("key_content", o.KeyContent); err != nil {
+		return nil, nil, err
+	}
+	return cert, key, nil
+}
+
+func decodePEMContent(field, value string) ([]byte, error) {
+	if strings.Contains(value, "-----BEGIN") {
+		return []byte(value), nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(value))
+	if err != nil || !bytes.Contains(decoded, []byte("-----BEGIN")) {
+		return nil, fmt.Errorf("mtls_options.%s must be base64-encoded PEM", field)
+	}
+	return decoded, nil
 }
 
 type AuthApiKeyOptions struct {
-	Key    string `mapstructure:"key"`
-	Header string `mapstructure:"header"`
+	Key    string `mapstructure:"key" json:"key"`
+	Header string `mapstructure:"header" json:"header"`
 }
 
 type HTTPClientAuthMethod string

@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -13,7 +13,7 @@ import (
 func TestNewAWSSecretManagerEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAWSSecretManagerEngine")
 	awsConf := aws.Config{}
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"key1": "value1",
 		"key2": "value2",
 	}
@@ -65,7 +65,7 @@ func prepareSecretsManagerCryptoEngine(t *testing.T) (func() error, cryptoengine
 
 	logger := logrus.New().WithField("test", "KMS")
 
-	metadata := map[string]interface{}{}
+	metadata := map[string]any{}
 
 	awsConf, err := laws.GetAwsSdkConfig(*conf)
 	if err != nil {

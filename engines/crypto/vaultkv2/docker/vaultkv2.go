@@ -10,9 +10,9 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/ory/dockertest/v4"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	vconfig "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/config"
-	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2/config"
+	dockerrunner "github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
 )
 
 func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() error, *vconfig.HashicorpVaultSDK, string, error) {
@@ -92,7 +92,7 @@ func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() er
 		return nil, nil, nil, "", err
 	}
 
-	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]interface{}{
+	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]any{
 		"policies": []string{"pki-kv"},
 	})
 	if err != nil {
@@ -123,15 +123,11 @@ func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() er
 			RoleID:    roleID,
 			SecretID:  config.Password(secretID),
 			MountPath: mountPath,
-			HTTPConnection: config.HTTPConnection{
-				Protocol: config.HTTP,
-				BasePath: "",
-				BasicConnection: config.BasicConnection{
-					Hostname:  "127.0.0.1",
-					Port:      p,
-					TLSConfig: config.TLSConfig{},
-				},
-			},
+			Protocol:  config.HTTP,
+			BasePath:  "",
+			Hostname:  "127.0.0.1",
+			Port:      p,
+			TLSConfig: config.TLSConfig{},
 		},
 		rootToken,
 		nil

@@ -7,17 +7,17 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/globalsign/est"
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestBindIDEvent(t *testing.T) {
@@ -50,7 +50,7 @@ func TestBindIDEvent(t *testing.T) {
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -77,7 +77,6 @@ func TestBindIDEvent(t *testing.T) {
 					ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 						AuthMode: models.ESTAuthModeClientCertificate,
 					},
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -188,7 +187,7 @@ func TestBindIDEvent(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -245,7 +244,7 @@ func TestBindIDEvent(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -298,7 +297,7 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				deviceKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				deviceCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("device-%s", uuid.NewString())}, deviceKey)
+				deviceCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("device-%s", uuid.NewV7().String())}, deviceKey)
 				deviceCert, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:              manualEnrollCA.ID,
 					CertRequest:       (*models.X509CertificateRequest)(deviceCsr),
@@ -382,7 +381,7 @@ func TestBindIDEvent(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -456,7 +455,7 @@ func TestBindIDEvent(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewV7().String())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -498,12 +497,11 @@ func TestBindIDEvent(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			publisher, err := eventbus.NewEventBusPublisher(
 				testServers.EventBus.Config,
-				uuid.NewString(),
+				uuid.NewV7().String(),
 				chelpers.SetupLogger(cconfig.Trace, "Test Case", "pub"),
 			)
 			if err != nil {
@@ -520,7 +518,7 @@ func TestBindIDEvent(t *testing.T) {
 
 			subscriber, err := eventbus.NewEventBusSubscriber(
 				testServers.EventBus.Config,
-				uuid.NewString(),
+				uuid.NewV7().String(),
 				chelpers.SetupLogger(cconfig.Trace, "Test Case", "sub"),
 			)
 			if err != nil {

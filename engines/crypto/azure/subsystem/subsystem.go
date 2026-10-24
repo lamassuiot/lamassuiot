@@ -3,9 +3,9 @@ package subsystem
 import (
 	"log"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/shared/azure/v3"
-	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/shared/azure"
+	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/subsystems"
 )
 
 func Register() {
@@ -24,7 +24,7 @@ func (p *AzureSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBa
 
 	cryptoEngine, err := config.CryptoEngineConfigAdapter[azure.AzureSDKConfig]{
 		ID:       "azure-1",
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 		Type:     config.AzureKeyVaultProvider,
 		Config:   *azureCfg,
 	}.Unmarshal()

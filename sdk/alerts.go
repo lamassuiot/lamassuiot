@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type httpAlertsClient struct {
-	httpClient *http.Client
-	baseUrl    string
+	restClient
 }
 
 func (cli *httpAlertsClient) GetLatestEventsPerEventType(ctx context.Context, input *services.GetLatestEventsPerEventTypeInput) (string, error) {
-	url := cli.baseUrl + "/v1/events/latest"
+	path := "/v1/events/latest"
 	if input == nil {
 		input = &services.GetLatestEventsPerEventTypeInput{}
 	}
@@ -24,10 +23,9 @@ func (cli *httpAlertsClient) GetLatestEventsPerEventType(ctx context.Context, in
 		input.ApplyFunc = func(models.AlertLatestEvent) {}
 	}
 
-	return IterGet[models.AlertLatestEvent, *resources.GetAlertsResponse](
+	return cli.iterGet[models.AlertLatestEvent, *resources.GetAlertsResponse](
 		ctx,
-		cli.httpClient,
-		url,
+		path,
 		input.ExhaustiveRun,
 		input.QueryParameters,
 		input.ApplyFunc,
@@ -36,9 +34,9 @@ func (cli *httpAlertsClient) GetLatestEventsPerEventType(ctx context.Context, in
 }
 
 func (cli *httpAlertsClient) GetUserSubscriptions(ctx context.Context, input *services.GetUserSubscriptionsInput) ([]*models.Subscription, error) {
-	url := fmt.Sprintf("%s/v1/user/%s/subscriptions", cli.baseUrl, input.UserID)
+	path := fmt.Sprintf("/v1/user/%s/subscriptions", input.UserID)
 	results := make([]*models.Subscription, 0)
-	_, err := IterGet[models.Subscription, *resources.GetItemsResponse[models.Subscription]](ctx, cli.httpClient, url, true, nil,
+	_, err := cli.iterGet[models.Subscription, *resources.GetItemsResponse[models.Subscription]](ctx, path, true, nil,
 		func(ale models.Subscription) {
 			results = append(results, &ale)
 		}, map[int][]error{})
@@ -46,14 +44,14 @@ func (cli *httpAlertsClient) GetUserSubscriptions(ctx context.Context, input *se
 }
 
 func (cli *httpAlertsClient) Subscribe(ctx context.Context, input *services.SubscribeInput) ([]*models.Subscription, error) {
-	url := fmt.Sprintf("%s/v1/user/%s/subscribe", cli.baseUrl, input.UserID)
-	sub, err := Post[models.Subscription](ctx, cli.httpClient, url, input, nil)
+	path := fmt.Sprintf("/v1/user/%s/subscribe", input.UserID)
+	sub, err := cli.post[models.Subscription](ctx, path, input, nil)
 	return []*models.Subscription{&sub}, err
 }
 
 func (cli *httpAlertsClient) Unsubscribe(ctx context.Context, input *services.UnsubscribeInput) ([]*models.Subscription, error) {
-	url := fmt.Sprintf("%s/v1/user/%s/unsubscribe/%s", cli.baseUrl, input.UserID, input.SubscriptionID)
-	sub, err := Post[models.Subscription](ctx, cli.httpClient, url, nil, nil)
+	path := fmt.Sprintf("/v1/user/%s/unsubscribe/%s", input.UserID, input.SubscriptionID)
+	sub, err := cli.post[models.Subscription](ctx, path, nil, nil)
 	return []*models.Subscription{&sub}, err
 }
 

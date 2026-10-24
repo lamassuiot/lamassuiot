@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
-	authzengine "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
+	authzengine "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -231,7 +231,7 @@ func (r *ContractRouter) Handle(method, relativePath string, permission Permissi
 	}
 	fullPath := joinPaths(r.group.BasePath(), relativePath)
 	params := map[string]bool{}
-	for _, segment := range strings.Split(fullPath, "/") {
+	for segment := range strings.SplitSeq(fullPath, "/") {
 		// Named (:id) and catch-all (*path) segments are both Gin path parameters.
 		if strings.HasPrefix(segment, ":") || strings.HasPrefix(segment, "*") {
 			params[segment[1:]] = true

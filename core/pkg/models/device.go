@@ -67,7 +67,7 @@ const (
 
 type DeviceEvent struct {
 	ID                string          `json:"id,omitempty" gorm:"-"`
-	EventTS           time.Time       `json:"event_ts,omitempty" gorm:"-"`
+	EventTS           time.Time       `json:"event_ts" gorm:"-"`
 	EvenType          DeviceEventType `json:"type"`
 	EventDescriptions string          `json:"description"`
 	Source            string          `json:"source,omitempty" gorm:"-"`

@@ -11,11 +11,11 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	svcmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	svcmock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -164,7 +164,7 @@ func TestGetRoleByID_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify response can be parsed
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "test-ca-ski", response["ca_ski"])
@@ -256,12 +256,10 @@ func TestUpdateRole_Success(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SubjectKeyIDSigner: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 
@@ -273,13 +271,13 @@ func TestUpdateRole_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify response can be parsed
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "test-ca-ski", response["ca_ski"])
 
 	// Verify CRL options
-	crlOptions := response["crl_options"].(map[string]interface{})
+	crlOptions := response["crl_options"].(map[string]any)
 	assert.False(t, crlOptions["regenerate_on_revoke"].(bool))
 
 	mockCRLService.AssertExpectations(t)
@@ -296,12 +294,10 @@ func TestUpdateRole_VARoleNotFound(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SubjectKeyIDSigner: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 
@@ -312,7 +308,7 @@ func TestUpdateRole_VARoleNotFound(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "VA role not found", response["err"])
@@ -328,12 +324,10 @@ func TestUpdateRole_ValidationError(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SubjectKeyIDSigner: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 
@@ -344,7 +338,7 @@ func TestUpdateRole_ValidationError(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "struct validation error", response["err"])
@@ -360,12 +354,10 @@ func TestUpdateRole_InternalServerError(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SubjectKeyIDSigner: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 

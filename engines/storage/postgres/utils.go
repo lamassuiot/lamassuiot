@@ -5,18 +5,20 @@ import (
 	"embed"
 	"encoding"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -26,6 +28,43 @@ import (
 	"gorm.io/gorm/schema"
 	"gorm.io/plugin/opentelemetry/tracing"
 )
+
+var identifierRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// safeColumn turns a field name into a quoted column reference. Field names can
+// originate from user input (query params or a decoded bookmark), so dots are
+// normalized to underscores and anything that is not a plain identifier is
+// rejected instead of being concatenated into the SQL.
+func safeColumn(name string) (clause.Column, error) {
+	name = strings.ReplaceAll(name, ".", "_")
+	if !identifierRegex.MatchString(name) {
+		return clause.Column{}, fmt.Errorf("invalid column name")
+	}
+	return clause.Column{Name: name}, nil
+}
+
+// columnEquals builds a "column = value" condition. The column goes through
+// safeColumn and is quoted, so it is never formatted into the SQL as is.
+func columnEquals(name string, value any) (clause.Expr, error) {
+	col, err := safeColumn(name)
+	if err != nil {
+		return clause.Expr{}, err
+	}
+	return clause.Expr{SQL: "? = ?", Vars: []any{col, value}}, nil
+}
+
+// plainOrderColumn builds a safe ORDER BY column clause for a plain column.
+func plainOrderColumn(sortBy, sortMode string) (clause.OrderByColumn, error) {
+	col, err := safeColumn(sortBy)
+	if err != nil {
+		return clause.OrderByColumn{}, err
+	}
+	mode := strings.ToLower(sortMode)
+	if mode != "asc" && mode != "desc" {
+		return clause.OrderByColumn{}, fmt.Errorf("invalid sort mode")
+	}
+	return clause.OrderByColumn{Column: col, Desc: mode == "desc"}, nil
+}
 
 //go:embed migrations/**
 var embedMigrations embed.FS
@@ -54,7 +93,8 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, cfg.Port, schema)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: dbLogger,
+		Logger:         dbLogger,
+		TranslateError: true,
 	})
 
 	if err != nil {
@@ -87,7 +127,7 @@ func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primary
 // TextSerializer string serializer
 type TextSerializer struct{}
 
-func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue any) (err error) {
 	// Create a new instance of the field type
 	fieldValue := reflect.New(field.FieldType).Interface()
 
@@ -119,7 +159,7 @@ func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect
 }
 
 // Value implements serializer interface
-func (TextSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+func (TextSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue any) (any, error) {
 	// Check if fieldValue implements encoding.TextMarshaler
 	if marshaler, ok := fieldValue.(encoding.TextMarshaler); ok {
 		text, err := marshaler.MarshalText()
@@ -196,6 +236,9 @@ type DBQuerier[E any] struct {
 	*gorm.DB
 	tableName        string
 	primaryKeyColumn string
+	// uniqueColumns identify a row and are appended to every paged ORDER BY so
+	// that offset pagination is deterministic. Defaults to the primary key.
+	uniqueColumns []string
 }
 
 func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) DBQuerier[E] {
@@ -203,12 +246,13 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 		DB:               db,
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
+		uniqueColumns:    []string{primaryKeyColumn},
 	}
 }
 
 type GormExtraOps struct {
-	Query           interface{}
-	AdditionalWhere []interface{}
+	Query           any
+	AdditionalWhere []any
 	Joins           []string
 }
 
@@ -258,184 +302,217 @@ func (db *DBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.F
 	return int(count), nil
 }
 
+// pageState holds everything needed to fetch one page of results. It is built
+// either from the request query params (first page) or from a bookmark
+// (following pages), and encodes the bookmark for the next page.
+type pageState struct {
+	offset  int
+	limit   int
+	sort    pageSort
+	filters []resources.FilterOption
+}
+
+// pageSort is the ordering of a page. When jsonPath is set, field is a JSONB
+// column and rows are sorted by the value found at that path.
+type pageSort struct {
+	field    string
+	mode     string
+	jsonPath string
+}
+
+func newPageState(queryParams *resources.QueryParameters) (pageState, error) {
+	page := pageState{limit: resources.DefaultPageSize}
+	if queryParams == nil {
+		return page, nil
+	}
+	if queryParams.NextBookmark != "" {
+		return decodeBookmark(queryParams.NextBookmark)
+	}
+
+	if queryParams.PageSize > 0 {
+		page.limit = min(queryParams.PageSize, resources.MaxPageSize)
+	}
+	if queryParams.Sort.SortField != "" {
+		page.sort = pageSort{
+			field:    queryParams.Sort.SortField,
+			mode:     string(queryParams.Sort.SortMode),
+			jsonPath: queryParams.Sort.JsonPathExpr,
+		}
+		if page.sort.mode == "" {
+			page.sort.mode = string(resources.SortModeAsc)
+		}
+	}
+	page.filters = queryParams.Filters
+	return page, nil
+}
+
+func decodeBookmark(bookmark string) (pageState, error) {
+	errInvalid := fmt.Errorf("not a valid bookmark")
+	page := pageState{limit: resources.DefaultPageSize}
+
+	decoded, err := base64.RawURLEncoding.DecodeString(bookmark)
+	if err != nil {
+		return page, errInvalid
+	}
+
+	for part := range strings.SplitSeq(string(decoded), ";") {
+		if part == "" {
+			continue
+		}
+		key, val, ok := strings.Cut(part, ":")
+		if !ok {
+			return page, errInvalid
+		}
+		switch key {
+		case "off":
+			page.offset, err = strconv.Atoi(val)
+			if err != nil || page.offset < 0 {
+				return page, errInvalid
+			}
+		case "lim":
+			page.limit, err = strconv.Atoi(val)
+			if err != nil || page.limit <= 0 {
+				return page, errInvalid
+			}
+			// bookmarks issued before the page size cap may carry a larger limit
+			page.limit = min(page.limit, resources.MaxPageSize)
+		case "sortM":
+			page.sort.mode = val
+		case "sortB":
+			page.sort.field = val
+		case "sortJP":
+			jp, err := base64.StdEncoding.DecodeString(val)
+			if err != nil {
+				return page, errInvalid
+			}
+			page.sort.jsonPath = string(jp)
+		case "filter":
+			filterSplit := strings.Split(val, "-")
+			if len(filterSplit) != 3 {
+				continue
+			}
+			field, err := base64.StdEncoding.DecodeString(filterSplit[0])
+			if err != nil {
+				continue
+			}
+			operand, err := strconv.Atoi(filterSplit[1])
+			if err != nil {
+				continue
+			}
+			value, err := base64.StdEncoding.DecodeString(filterSplit[2])
+			if err != nil {
+				continue
+			}
+			page.filters = append(page.filters, resources.FilterOption{
+				Field:           string(field),
+				FilterOperation: resources.FilterOperation(operand),
+				Value:           string(value),
+			})
+		}
+	}
+
+	// A sort is only meaningful with both a field and a mode
+	if page.sort.field == "" || page.sort.mode == "" {
+		page.sort = pageSort{}
+	}
+	return page, nil
+}
+
+// nextBookmark encodes the bookmark pointing to the page after this one,
+// keeping the same sort and filters.
+func (p pageState) nextBookmark() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "off:%d;lim:%d;", p.offset+p.limit, p.limit)
+	if p.sort.field != "" {
+		fmt.Fprintf(&b, "sortM:%s;", p.sort.mode)
+		if p.sort.jsonPath != "" {
+			fmt.Fprintf(&b, "sortJP:%s;", base64.StdEncoding.EncodeToString([]byte(p.sort.jsonPath)))
+		}
+		fmt.Fprintf(&b, "sortB:%s;", p.sort.field)
+	}
+	for _, f := range p.filters {
+		fmt.Fprintf(&b, "filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(f.Field)), f.FilterOperation, base64.StdEncoding.EncodeToString([]byte(f.Value)))
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(b.String()))
+}
+
+// orderBy builds the ORDER BY clause for the sort. Field and JSON path are
+// validated again here (beyond the controller whitelist), as they can also come
+// from a decoded bookmark; the column is quoted and the path bound as a parameter.
+func (s pageSort) orderBy() (clause.OrderBy, error) {
+	if s.jsonPath != "" {
+		expr, err := buildJsonPathOrderExpr(s.field, s.jsonPath, s.mode)
+		if err != nil {
+			return clause.OrderBy{}, err
+		}
+		return clause.OrderBy{Expression: expr}, nil
+	}
+
+	col, err := plainOrderColumn(s.field, s.mode)
+	if err != nil {
+		return clause.OrderBy{}, err
+	}
+	return clause.OrderBy{Columns: []clause.OrderByColumn{col}}, nil
+}
+
+// withUniqueOrder appends the querier's unique columns to the given ORDER BY
+// (nil when the request has no sort). Without them, rows sharing the same sort
+// value, or every row when there is no sort at all, have no defined order in
+// PostgreSQL and offset pagination can repeat or skip rows between pages.
+func (db *DBQuerier[E]) withUniqueOrder(orderBy *clause.OrderBy) clause.OrderBy {
+	unique := make([]clause.OrderByColumn, len(db.uniqueColumns))
+	for i, name := range db.uniqueColumns {
+		unique[i] = clause.OrderByColumn{Column: clause.Column{Table: clause.CurrentTable, Name: name}}
+	}
+
+	switch {
+	case orderBy == nil:
+		return clause.OrderBy{Columns: unique}
+	case orderBy.Expression != nil:
+		// GORM renders either the expression or the columns, never both, so the
+		// unique columns are appended to the expression itself
+		sql := "?" + strings.Repeat(", ?", len(unique))
+		vars := []any{orderBy.Expression}
+		for _, col := range unique {
+			vars = append(vars, col.Column)
+		}
+		return clause.OrderBy{Expression: clause.Expr{SQL: sql, Vars: vars}}
+	default:
+		return clause.OrderBy{Columns: append(orderBy.Columns, unique...)}
+	}
+}
+
 func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []GormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
+
+	page, err := newPageState(queryParams)
+	if err != nil {
+		return "", err
+	}
+	offset, limit := page.offset, page.limit
+
 	tx := db.Table(db.tableName)
-
-	offset := 0
-	limit := 15
-
-	var sortMode string
-	var sortBy string
-	var jsonPathExpr string
-
-	nextBookmark := ""
-
-	if queryParams != nil {
-		if queryParams.NextBookmark == "" {
-			if queryParams.PageSize > 0 {
-				limit = queryParams.PageSize
-			}
-
-			if queryParams.Sort.SortMode == "" {
-				sortMode = string(resources.SortModeAsc)
-			} else {
-				sortMode = string(queryParams.Sort.SortMode)
-			}
-
-			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", limit+offset, limit)
-
-			if queryParams.Sort.SortField != "" {
-				// JSONPath Sorting Security:
-				// - Field name validated against whitelist in controller layer
-				// - JsonPathExpr validated with isValidJsonPath() and isSimpleJsonPath() in controller layer
-				// - Only simple dot-separated paths allowed for sorting (complex expressions rejected)
-				// - Field name re-validated in buildJsonPathOrderClause() for extra safety
-				// - Single quotes escaped by convertJsonPathToPostgresPath()
-				// - No user input directly concatenated into SQL
-				if queryParams.Sort.JsonPathExpr != "" {
-					orderClause := buildJsonPathOrderClause(queryParams.Sort.SortField, queryParams.Sort.JsonPathExpr, "")
-					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortJP:%s;sortB:%s;", sortMode, base64.StdEncoding.EncodeToString([]byte(queryParams.Sort.JsonPathExpr)), queryParams.Sort.SortField)
-					if sortMode == "desc" {
-						tx = tx.Clauses(clause.OrderBy{
-							Expression: gorm.Expr(orderClause + " DESC NULLS LAST"),
-						})
-					} else {
-						tx = tx.Clauses(clause.OrderBy{
-							Expression: gorm.Expr(orderClause + " ASC NULLS FIRST"),
-						})
-					}
-				} else {
-					sortBy = strings.ReplaceAll(queryParams.Sort.SortField, ".", "_")
-					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
-					tx = tx.Order(sortBy + " " + sortMode)
-				}
-			}
-
-			for _, filter := range queryParams.Filters {
-				tx = FilterOperandToWhereClause(filter, tx)
-				nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
-			}
-
-		} else {
-			nextBookmark = ""
-			decodedBookmark, err := base64.RawURLEncoding.DecodeString(queryParams.NextBookmark)
-			if err != nil {
-				return "", fmt.Errorf("not a valid bookmark")
-			}
-
-			splits := strings.Split(string(decodedBookmark), ";")
-
-			for _, splitPart := range splits {
-				queryPart := strings.Split(splitPart, ":")
-				switch queryPart[0] {
-				case "off":
-					offset, err = strconv.Atoi(queryPart[1])
-					if err != nil {
-						return "", fmt.Errorf("not a valid bookmark")
-					}
-				case "lim":
-					limit, err = strconv.Atoi(queryPart[1])
-					if err != nil {
-						return "", fmt.Errorf("not a valid bookmark")
-					}
-				case "sortM":
-					sortMode = queryPart[1]
-					if err != nil {
-						return "", fmt.Errorf("not a valid bookmark")
-					}
-				case "sortJP":
-					jp, err := base64.StdEncoding.DecodeString(queryPart[1])
-					if err != nil {
-						return "", fmt.Errorf("not a valid bookmark")
-					}
-					jsonPathExpr = string(jp)
-				case "sortB":
-					sortBy = strings.ReplaceAll(queryPart[1], ".", "_")
-					if err != nil {
-						return "", fmt.Errorf("not a valid bookmark")
-					}
-				case "filter":
-					filter := queryPart[1]
-					if err != nil {
-						return "", fmt.Errorf("not a valid bookmark")
-					}
-					filterSplit := strings.Split(filter, "-")
-					if len(filterSplit) == 3 {
-						field, err := base64.StdEncoding.DecodeString(filterSplit[0])
-						if err != nil {
-							continue
-						}
-						value, err := base64.StdEncoding.DecodeString(filterSplit[2])
-						if err != nil {
-							continue
-						}
-
-						operand, err := strconv.Atoi(filterSplit[1])
-						if err != nil {
-							continue
-						}
-
-						tx = FilterOperandToWhereClause(resources.FilterOption{
-							Field:           string(field),
-							FilterOperation: resources.FilterOperation(operand),
-							Value:           string(value),
-						}, tx)
-
-						nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(field)), operand, base64.StdEncoding.EncodeToString([]byte(value)))
-					}
-				}
-				if sortMode != "" && sortBy != "" {
-					if jsonPathExpr != "" {
-						orderClause := buildJsonPathOrderClause(sortBy, jsonPathExpr, "")
-						if sortMode == "desc" {
-							tx = tx.Clauses(clause.OrderBy{
-								Expression: gorm.Expr(orderClause + " DESC NULLS LAST"),
-							})
-						} else {
-							tx = tx.Clauses(clause.OrderBy{
-								Expression: gorm.Expr(orderClause + " ASC NULLS FIRST"),
-							})
-						}
-					} else {
-						tx = tx.Order(sortBy + " " + sortMode)
-					}
-				}
-			}
-			nextBookmark = nextBookmark + fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
-			if queryParams.Sort.SortField != "" {
-				sortBy = queryParams.Sort.SortField
-				if queryParams.Sort.JsonPathExpr != "" {
-					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortJP:%s;sortB:%s;", sortMode, base64.StdEncoding.EncodeToString([]byte(queryParams.Sort.JsonPathExpr)), sortBy)
-				} else {
-					nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
-				}
-			}
+	for _, filter := range page.filters {
+		tx = FilterOperandToWhereClause(filter, tx)
+	}
+	var orderBy *clause.OrderBy
+	if page.sort.field != "" {
+		sortOrder, err := page.sort.orderBy()
+		if err != nil {
+			return "", err
 		}
+		orderBy = &sortOrder
 	}
 
 	tx = applyExtraOpts(tx, extraOpts)
 
-	if offset > 0 {
-		tx.Offset(offset)
-	}
-
 	if exhaustiveRun {
-		res := tx.WithContext(ctx).Preload(clause.Associations).FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
-			for _, elem := range elems {
-				applyFunc(elem)
-			}
-
-			return nil
-		})
-		if res.Error != nil {
-			return "", res.Error
-		}
-
-		return "", nil
+		// The requested sort is ignored: exhaustive runs always walk rows in
+		// unique column order, which keeps them safe against rows changing
+		// while iterating (see selectAllInBatches)
+		return "", db.selectAllInBatches(ctx, tx, offset, limit, applyFunc)
 	} else {
-		tx.Offset(offset)
-		tx.Limit(limit + 1)
+		tx = tx.Clauses(db.withUniqueOrder(orderBy)).Offset(offset).Limit(limit + 1)
 		rs := tx.WithContext(ctx).Preload(clause.Associations).Find(&elems)
 
 		if rs.Error != nil {
@@ -455,12 +532,62 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 			applyFunc(elem)
 		}
 
-		if !hasMore {
-			// no more records to fetch. Reset nextBookmark to empty string
+		// No bookmark when there are no more records, nor for requests without
+		// query params, which have always been limited to a single page
+		if !hasMore || queryParams == nil {
 			return "", nil
 		}
 
-		return base64.RawURLEncoding.EncodeToString([]byte(nextBookmark)), nil
+		return page.nextBookmark(), nil
+	}
+}
+
+// selectAllInBatches walks every row matching tx in batches, ordered by the
+// querier's unique columns, fetching each batch with a keyset condition
+// ((unique cols) > (last row's values)) instead of an offset. Callers may update
+// rows while iterating (e.g. moving certificates out of the filtered status),
+// which would shift an offset and skip rows; a keyset is not affected. The
+// initial offset (from a bookmark) only applies to the first batch.
+func (db *DBQuerier[E]) selectAllInBatches(ctx context.Context, tx *gorm.DB, offset, batchSize int, applyFunc func(elem E)) error {
+	cols := make([]any, len(db.uniqueColumns))
+	for i, name := range db.uniqueColumns {
+		cols[i] = clause.Column{Table: clause.CurrentTable, Name: name}
+	}
+	placeholders := "(?" + strings.Repeat(", ?", len(cols)-1) + ")"
+	order := db.withUniqueOrder(nil)
+	base := tx.Session(&gorm.Session{})
+
+	var last []any
+	for {
+		var batch []E
+		q := base.WithContext(ctx).Preload(clause.Associations).Clauses(order).Limit(batchSize)
+		if last == nil {
+			q = q.Offset(offset)
+		} else {
+			q = q.Where(clause.Expr{SQL: placeholders + " > " + placeholders, Vars: append(append([]any{}, cols...), last...)})
+		}
+		res := q.Find(&batch)
+		if res.Error != nil {
+			return res.Error
+		}
+
+		for _, elem := range batch {
+			applyFunc(elem)
+		}
+
+		if len(batch) < batchSize {
+			return nil
+		}
+
+		lastRow := reflect.ValueOf(&batch[len(batch)-1]).Elem()
+		last = make([]any, len(db.uniqueColumns))
+		for i, name := range db.uniqueColumns {
+			field := res.Statement.Schema.LookUpField(name)
+			if field == nil {
+				return fmt.Errorf("unique column %q not found in %s", name, res.Statement.Schema.Name)
+			}
+			last[i], _ = field.ValueOf(ctx, lastRow)
+		}
 	}
 }
 
@@ -472,8 +599,13 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 		searchCol = *queryCol
 	}
 
+	cond, err := columnEquals(searchCol, queryID)
+	if err != nil {
+		return false, nil, err
+	}
+
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, cond)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -495,7 +627,12 @@ func (db *DBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E,
 }
 
 func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
+	cond, err := columnEquals(db.primaryKeyColumn, elemID)
+	if err != nil {
+		return nil, err
+	}
+
+	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(cond).Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -508,7 +645,12 @@ func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E,
 }
 
 func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
-	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
+	cond, err := columnEquals(db.primaryKeyColumn, elemID)
+	if err != nil {
+		return err
+	}
+
+	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, cond)
 	if err := tx.Error; err != nil {
 		return err
 	}
@@ -532,39 +674,56 @@ func splitNonEmpty(s string) []string {
 	return result
 }
 
+// likeEscaper escapes the LIKE/ILIKE wildcards so user values are matched
+// literally. Backslash is PostgreSQL's default LIKE escape character.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func escapeLike(value string) string {
+	return likeEscaper.Replace(value)
+}
+
+// jsonStringArray encodes value as a single-element JSON array, so quotes and
+// other special characters in it cannot alter the resulting JSON document.
+func jsonStringArray(value string) string {
+	b, _ := json.Marshal([]string{value})
+	return string(b)
+}
+
 func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gorm.DB {
-	if strings.Contains(filter.Field, ".") {
-		filter.Field = strings.ReplaceAll(filter.Field, ".", "_")
+	col, err := safeColumn(filter.Field)
+	if err != nil {
+		_ = tx.AddError(err)
+		return tx
 	}
 
 	switch filter.FilterOperation {
 	case resources.StringEqual:
-		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+		return tx.Where("? = ?", col, filter.Value)
 	case resources.StringEqualIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), filter.Value)
+		return tx.Where("? ILIKE ?", col, escapeLike(filter.Value))
 	case resources.StringNotEqual:
-		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+		return tx.Where("? <> ?", col, filter.Value)
 	case resources.StringNotEqualIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), filter.Value)
+		return tx.Where("? NOT ILIKE ?", col, escapeLike(filter.Value))
 	case resources.StringContains:
-		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where("? LIKE ?", col, "%"+escapeLike(filter.Value)+"%")
 	case resources.StringContainsIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where("? ILIKE ?", col, "%"+escapeLike(filter.Value)+"%")
 	case resources.StringArrayContains:
 		// Arrays serialized into text columns need a cast before using the JSON containment operator.
-		return tx.Where(fmt.Sprintf("%s::jsonb @> ?::jsonb", filter.Field), fmt.Sprintf(`["%s"]`, filter.Value))
+		return tx.Where("?::jsonb @> ?::jsonb", col, jsonStringArray(filter.Value))
 	case resources.StringArrayContainsIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s::text ILIKE ?", filter.Field), "%\""+filter.Value+"\"%")
+		return tx.Where("?::text ILIKE ?", col, "%\""+escapeLike(filter.Value)+"\"%")
 	case resources.StringNotContains:
-		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where("? NOT LIKE ?", col, "%"+escapeLike(filter.Value)+"%")
 	case resources.StringNotContainsIgnoreCase:
-		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+		return tx.Where("? NOT ILIKE ?", col, "%"+escapeLike(filter.Value)+"%")
 	case resources.StringIn:
 		values := splitNonEmpty(filter.Value)
 		if len(values) == 0 {
 			return tx
 		}
-		return tx.Where(fmt.Sprintf("%s IN ?", filter.Field), values)
+		return tx.Where("? IN ?", col, values)
 	case resources.StringInIgnoreCase:
 		values := splitNonEmpty(filter.Value)
 		if len(values) == 0 {
@@ -574,13 +733,13 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		for i, v := range values {
 			lowerValues[i] = strings.ToLower(v)
 		}
-		return tx.Where(fmt.Sprintf("LOWER(%s) IN ?", filter.Field), lowerValues)
+		return tx.Where("LOWER(?) IN ?", col, lowerValues)
 	case resources.StringNotIn:
 		values := splitNonEmpty(filter.Value)
 		if len(values) == 0 {
 			return tx
 		}
-		return tx.Where(fmt.Sprintf("%s NOT IN ?", filter.Field), values)
+		return tx.Where("? NOT IN ?", col, values)
 	case resources.StringNotInIgnoreCase:
 		values := splitNonEmpty(filter.Value)
 		if len(values) == 0 {
@@ -590,42 +749,42 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		for i, v := range values {
 			lowerValues[i] = strings.ToLower(v)
 		}
-		return tx.Where(fmt.Sprintf("LOWER(%s) NOT IN ?", filter.Field), lowerValues)
+		return tx.Where("LOWER(?) NOT IN ?", col, lowerValues)
 	case resources.DateEqual:
-		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+		return tx.Where("? = ?", col, filter.Value)
 	case resources.DateBefore:
-		return tx.Where(fmt.Sprintf("%s < ?", filter.Field), filter.Value)
+		return tx.Where("? < ?", col, filter.Value)
 	case resources.DateAfter:
-		return tx.Where(fmt.Sprintf("%s > ?", filter.Field), filter.Value)
+		return tx.Where("? > ?", col, filter.Value)
 	case resources.NumberEqual:
-		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+		return tx.Where("? = ?", col, filter.Value)
 	case resources.NumberNotEqual:
-		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+		return tx.Where("? <> ?", col, filter.Value)
 	case resources.NumberLessThan:
-		return tx.Where(fmt.Sprintf("%s < ?", filter.Field), filter.Value)
+		return tx.Where("? < ?", col, filter.Value)
 	case resources.NumberLessOrEqualThan:
-		return tx.Where(fmt.Sprintf("%s <= ?", filter.Field), filter.Value)
+		return tx.Where("? <= ?", col, filter.Value)
 	case resources.NumberGreaterThan:
-		return tx.Where(fmt.Sprintf("%s > ?", filter.Field), filter.Value)
+		return tx.Where("? > ?", col, filter.Value)
 	case resources.NumberGreaterOrEqualThan:
-		return tx.Where(fmt.Sprintf("%s >= ?", filter.Field), filter.Value)
+		return tx.Where("? >= ?", col, filter.Value)
 	case resources.EnumEqual:
-		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+		return tx.Where("? = ?", col, filter.Value)
 	case resources.EnumNotEqual:
-		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+		return tx.Where("? <> ?", col, filter.Value)
 	case resources.EnumIn:
 		values := splitNonEmpty(filter.Value)
 		if len(values) == 0 {
 			return tx
 		}
-		return tx.Where(fmt.Sprintf("%s IN ?", filter.Field), values)
+		return tx.Where("? IN ?", col, values)
 	case resources.JsonPathExpression:
 		// JSONPath Filtering Security:
 		// - Field name validated against whitelist in controller layer
 		// - JsonPathExpr (filter.Value) validated with isValidJsonPath() in controller layer
 		// - Uses parameterized query (?) which prevents SQL injection
 		// - PostgreSQL's @@ operator safely evaluates the jsonpath expression
-		return tx.Where(fmt.Sprintf("%s @@ ?::jsonpath", filter.Field), filter.Value)
+		return tx.Where("? @@ ?::jsonpath", col, filter.Value)
 	default:
 		return tx
 	}
@@ -648,17 +807,17 @@ func (l *GormLogger) LogMode(lvl gormlogger.LogLevel) gormlogger.Interface {
 	return &newlogger
 }
 
-func (l *GormLogger) Info(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Info(ctx context.Context, str string, rest ...any) {
 	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Infof(str, rest...)
 }
 
-func (l *GormLogger) Warn(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Warn(ctx context.Context, str string, rest ...any) {
 	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Warnf(str, rest...)
 }
 
-func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{}) {
+func (l *GormLogger) Error(ctx context.Context, str string, rest ...any) {
 	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Errorf(str, rest...)
 }
@@ -674,82 +833,37 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 
 }
 
-// convertJsonPathToPostgresPath converts a simple JSONPath expression (e.g., "$.foo.bar")
-// to PostgreSQL JSONB path format (e.g., "{foo,bar}")
-// Note: This function only handles simple dot-separated paths, not complex expressions
-// Input should already be validated by controller layer
-func convertJsonPathToPostgresPath(jsonPath string) string {
-	// Remove leading "$." if present
-	jsonPath = strings.TrimPrefix(jsonPath, "$.")
-	// Remove leading "$[" if present (for array access)
-	jsonPath = strings.TrimPrefix(jsonPath, "$[")
-	// Remove trailing "]" if present
-	jsonPath = strings.TrimSuffix(jsonPath, "]")
-
-	// Split by "." and sanitize each part
-	parts := strings.Split(jsonPath, ".")
-	// Escape single quotes in each part to prevent SQL injection
-	for i, part := range parts {
-		// Remove any remaining brackets for simple array access like $.tags[0]
-		part = strings.TrimSuffix(part, "[0]")
-		part = strings.TrimSuffix(part, "[last]")
-		parts[i] = strings.ReplaceAll(part, "'", "''")
+// buildJsonPathOrderExpr builds an ORDER BY expression that sorts by a value
+// inside a JSONB column. The column is quoted and the path is bound as a
+// parameter (keys are validated beforehand), so nothing user-controlled is
+// concatenated into the SQL. The path may originate from user input (query
+// params or a decoded bookmark).
+func buildJsonPathOrderExpr(field, jsonPath, sortMode string) (clause.Expression, error) {
+	col, err := safeColumn(field)
+	if err != nil {
+		return nil, err
 	}
-	return "{" + strings.Join(parts, ",") + "}"
-}
-
-// buildJsonPathOrderClause generates a PostgreSQL ORDER BY clause for JSONB fields
-// that handles numeric, date/timestamp, and text values correctly
-// Note: Input validation should be performed at controller layer before calling this
-// This function only supports simple dot-separated paths for sorting
-func buildJsonPathOrderClause(field, jsonPath, sortMode string) string {
-	// Security: Validate that field name contains only safe characters
-	// Field names should be validated by controller layer, but double-check here
-	// Allow only alphanumeric, underscore, and hyphen
-	for _, char := range field {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char == '_' || char == '-') {
-			// If field name contains unsafe characters, return empty string
-			// This will cause a SQL error rather than injection
-			return ""
-		}
+	keys, err := resources.ParseSortJsonPath(jsonPath)
+	if err != nil {
+		return nil, err
 	}
 
-	pgPath := convertJsonPathToPostgresPath(jsonPath)
-	// Extract the last element for the -> operator
-	parts := strings.Split(strings.Trim(pgPath, "{}"), ",")
-	var operatorPath string
-	if len(parts) > 1 {
-		// For nested paths like {env,config}, use -> for intermediate and ->> for last
-		operatorPath = field
-		for i := 0; i < len(parts)-1; i++ {
-			// parts[i] is already sanitized (quotes escaped) by convertJsonPathToPostgresPath
-			operatorPath += " -> '" + parts[i] + "'"
-		}
-		operatorPath += " -> '" + parts[len(parts)-1] + "'"
-	} else {
-		// For simple paths like {priority}
-		operatorPath = field + " -> '" + parts[0] + "'"
-	}
-
-	textPath := fmt.Sprintf("%s #>> '%s'", field, pgPath)
+	path := "{" + strings.Join(keys, ",") + "}"
 
 	// Build CASE expression that handles:
 	// 1. Numbers - pad for proper text sorting
 	// 2. Dates/timestamps - cast to timestamp for proper chronological sorting
 	// 3. Text - use as-is
-	return fmt.Sprintf(
-		"CASE "+
-			"WHEN jsonb_typeof(%s) = 'number' THEN lpad(((%s)::numeric)::text, 20, '0') "+
-			"WHEN %s ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN to_char((%s)::timestamp, 'YYYY-MM-DD HH24:MI:SS.US') "+
-			"ELSE %s "+
-			"END",
-		operatorPath,
-		operatorPath,
-		textPath,
-		textPath,
-		textPath,
-	)
+	sql := "CASE " +
+		"WHEN jsonb_typeof(? #> ?::text[]) = 'number' THEN lpad(((? #> ?::text[])::numeric)::text, 20, '0') " +
+		"WHEN (? #>> ?::text[]) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN to_char(((? #>> ?::text[]))::timestamp, 'YYYY-MM-DD HH24:MI:SS.US') " +
+		"ELSE (? #>> ?::text[]) " +
+		"END"
+	if strings.EqualFold(sortMode, "desc") {
+		sql += " DESC NULLS LAST"
+	} else {
+		sql += " ASC NULLS FIRST"
+	}
+
+	return gorm.Expr(sql, col, path, col, path, col, path, col, path, col, path), nil
 }

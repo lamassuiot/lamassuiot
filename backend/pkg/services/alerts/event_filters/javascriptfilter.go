@@ -2,10 +2,13 @@ package eventfilters
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"runtime"
+	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/robertkrimen/otto"
 )
 
@@ -16,19 +19,41 @@ func RegisterJavascriptFilter() {
 		})
 }
 
-// JavascriptFilter evaluates the given script with the data as input
-// the source code of the script is provided with the following signature:
-// func(event: string) bool
-// The function should return true if the data matches the condition
-// and false otherwise
+const javascriptFilterTimeout = 100 * time.Millisecond
+
+var errJavascriptFilterTimeout = errors.New("javascript filter execution timed out")
+
+// javascriptFilter evaluates a function(event) bool with a bounded lifetime.
 func javascriptFilter(event cloudevents.Event, script string) (bool, error) {
 	vm := otto.New()
+	vm.Interrupt = make(chan func(), 1)
+	type outcome struct {
+		matched bool
+		err     error
+	}
+	finished := make(chan outcome, 1)
+	go func() {
+		result := outcome{err: errJavascriptFilterTimeout}
+		defer func() { finished <- result }()
+		result.matched, result.err = evaluateJavascriptFilter(vm, event, script)
+	}()
+	// Goexit terminates the VM's worker and runs its cleanup. Unlike a panic,
+	// it cannot be caught by JavaScript try/catch or finally blocks in Otto.
+	timer := time.AfterFunc(javascriptFilterTimeout, func() {
+		vm.Interrupt <- runtime.Goexit
+	})
+	defer timer.Stop()
+	result := <-finished
+	return result.matched, result.err
+}
+
+func evaluateJavascriptFilter(vm *otto.Otto, event cloudevents.Event, script string) (bool, error) {
 	encoded, err := json.Marshal(event)
 	if err != nil {
 		return false, err
 	}
 
-	var parsed interface{}
+	var parsed any
 	if err := json.Unmarshal(encoded, &parsed); err != nil {
 		return false, err
 	}

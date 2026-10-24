@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
 	"github.com/sirupsen/logrus"
 )
 
@@ -288,7 +288,7 @@ func extAuthzRequestBody(c *gin.Context) ([]byte, bool, error) {
 // extractAuthFromEnvoyHeaders derives (authType, authMaterial, error) from Envoy-forwarded
 // request headers. XFCC (mTLS cert) takes precedence over Bearer token when both are present,
 // because mutual TLS identity is cryptographically stronger.
-func extractAuthFromEnvoyHeaders(headers map[string]string) (authType string, authMaterial interface{}, err error) {
+func extractAuthFromEnvoyHeaders(headers map[string]string) (authType string, authMaterial any, err error) {
 	if xfcc, ok := headers["x-forwarded-client-cert"]; ok && xfcc != "" {
 		pemStr, parseErr := parseXFCCCert(xfcc)
 		if parseErr != nil {
@@ -308,7 +308,7 @@ func extractAuthFromEnvoyHeaders(headers map[string]string) (authType string, au
 //
 //	Cert="<url-encoded-PEM>";Chain="<url-encoded-PEM>";...
 func parseXFCCCert(xfcc string) (string, error) {
-	for _, part := range strings.Split(xfcc, ";") {
+	for part := range strings.SplitSeq(xfcc, ";") {
 		part = strings.TrimSpace(part)
 		if !strings.HasPrefix(part, "Cert=") {
 			continue

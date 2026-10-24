@@ -1,18 +1,29 @@
-#################################################################################################
-#                                                                                               #
-# Use the custom go fork as a base image                                                        #
-#                                                                                               #
-#################################################################################################
+ARG BUILDER=ghcr.io/lamassuiot/golang-pqc:latest
 
-FROM ghcr.io/lamassuiot/golang-pqc:latest
+# Optional pre-vendored dependencies. CI runs `go mod vendor` once and passes
+# the result with `--build-context vendor=./vendor`, which replaces this empty
+# stage; plain `docker build` falls back to downloading modules.
+FROM scratch AS vendor
 
-#################################################################################################
-#                                                                                               #
-# Install the application                                                                       #
-#                                                                                               #
-#################################################################################################
-
+# Pinned to the runner platform: Go cross-compiles the target architecture
+# natively instead of emulating the whole toolchain with QEMU.
+FROM --platform=$BUILDPLATFORM ${BUILDER} AS builder
 WORKDIR /app
+# Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
+# this intermediate stage (in addition to the default final-stage scan).
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+
+# Dependencies are resolved before the sources are copied, so this layer is
+# reused across code changes, version bumps and target architectures. A
+# provided vendor tree is used as is (go build picks vendor/ up automatically);
+# otherwise the empty vendor stage is copied and modules are downloaded.
+COPY go.mod go.sum ./
+COPY --from=vendor / vendor/
+RUN if [ -f vendor/modules.txt ]; then \
+      echo "Using provided vendor directory"; \
+    else \
+      rm -rf vendor && go mod download; \
+    fi
 
 COPY core core
 COPY shared shared
@@ -22,50 +33,23 @@ COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
 
-COPY go.work go.work
-COPY go.work.sum go.work.sum
-
+# Declared after the dependency layer so they do not bust its cache.
+ARG TARGETARCH
 ARG SHA1VER= # set by build script
 ARG VERSION= # set by build script
 
-RUN go work vendor
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \
+    go build \
+      -tags nopkcs11 \
+      -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \
+      -o ca \
+      backend/cmd/ca/main.go
 
-ENV GOSUMDB=off
-RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \ 
-    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o ca backend/cmd/ca/main.go 
-
-#################################################################################################
-#                                                                                               #
-# Configure the environment                                                                     #
-#                                                                                               #
-#################################################################################################
-
-# Alpine and scartch dont work for this image due to non corss compileable HSM library
-ARG DEBIAN_FRONTEND=noninteractive
-
-# Dependencies for pkcs11-proxy and opensc for pkcs11-tool
-RUN apt-get update && \
-    apt-get --no-install-recommends install -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev opensc ca-certificates  && \
-    apt-get clean
-
-RUN git clone https://github.com/SUNET/pkcs11-proxy && \
-    cd pkcs11-proxy && \
-    cmake . && make && make install
-
-# Clean build artifacts
-RUN rm -rf /pkcs11-proxy
-# Clean compilation dependencies
-RUN apt-get remove -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev && \
-    apt-get autoremove -y && \
-    apt-get clean
-
-ARG USERNAME=lamassu
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-
-RUN groupadd --gid "$USER_GID" "$USERNAME" \
-    && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" 
-
-USER $USERNAME
-
-CMD ["/app/ca"]
+# gcr.io/distroless/static-debian13:nonroot provides:
+#   - a minimal (~2 MB) static-binary runtime with CA certificates included
+#   - a pre-configured non-root user (UID/GID 65532) with no shell or package manager
+FROM gcr.io/distroless/static-debian13:nonroot
+COPY --from=builder /app/ca /ca
+CMD ["/ca"]

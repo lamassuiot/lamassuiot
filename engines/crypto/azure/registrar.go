@@ -1,9 +1,9 @@
 package azure
 
 import (
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	lazure "github.com/lamassuiot/lamassuiot/shared/azure/v3"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	lazure "github.com/lamassuiot/lamassuiot/v4/shared/azure"
 	log "github.com/sirupsen/logrus"
 )
 

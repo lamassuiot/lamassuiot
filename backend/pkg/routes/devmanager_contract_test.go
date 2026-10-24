@@ -9,11 +9,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	middleware "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk/gin-middleware"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
+	middleware "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gin-middleware"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +29,7 @@ func TestDeviceManagerOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 				hub = controllers.NewDeviceEventSSEHub(logger)
 			}
 			// Client and hub construction are local; no servers or devices are needed.
-			client := config.AuthzClient{HTTPClient: cconfig.HTTPClient{HTTPConnection: cconfig.HTTPConnection{Protocol: "http", BasePath: "/api/authz", BasicConnection: cconfig.BasicConnection{Hostname: "localhost", Port: 8080}}}}
+			client := config.AuthzClient{Protocol: "http", BasePath: "/api/authz", Hostname: "localhost", Port: 8080}
 			contract := registerDeviceManagerRoutes(router.Group("/api/devmanager"), nil, hub, newRemoteAuthzEngine(client, models.DeviceManagerSource, logger), logger)
 			require.NotEmpty(t, contract.Declarations())
 			require.NoError(t, contract.ValidateRoutes(router.Routes()))

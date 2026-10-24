@@ -4,8 +4,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/testutil"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/testutil"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"

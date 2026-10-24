@@ -11,10 +11,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/api/dto"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	core "github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	core "github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )
@@ -102,15 +102,15 @@ func (c *Client) WithHeader(key, value string) *Client {
 
 // HTTP utility methods
 
-func (c *Client) get(ctx context.Context, path string, result interface{}) error {
+func (c *Client) get(ctx context.Context, path string, result any) error {
 	return c.doRequest(ctx, "GET", path, nil, result)
 }
 
-func (c *Client) post(ctx context.Context, path string, body interface{}, result interface{}) error {
+func (c *Client) post(ctx context.Context, path string, body any, result any) error {
 	return c.doRequest(ctx, "POST", path, body, result)
 }
 
-func (c *Client) put(ctx context.Context, path string, body interface{}, result interface{}) error {
+func (c *Client) put(ctx context.Context, path string, body any, result any) error {
 	return c.doRequest(ctx, "PUT", path, body, result)
 }
 
@@ -118,7 +118,7 @@ func (c *Client) delete(ctx context.Context, path string) error {
 	return c.doRequest(ctx, "DELETE", path, nil, nil)
 }
 
-func (c *Client) doRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
+func (c *Client) doRequest(ctx context.Context, method, path string, body any, result any) error {
 	fullURL := c.baseURL + path
 
 	var bodyReader io.Reader

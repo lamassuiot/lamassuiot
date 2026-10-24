@@ -15,16 +15,16 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	webhookclient "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers/webhook-client"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
-	external_clients "github.com/lamassuiot/lamassuiot/sdk/v3/external"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
+	external_clients "github.com/lamassuiot/lamassuiot/v4/sdk/external"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -92,6 +92,10 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
+	if err := validateDMSWebhooks(input.Settings); err != nil {
+		lFunc.Errorf("webhook validation error: %s", err)
+		return nil, err
+	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	if exists, _, err := svc.dmsStorage.SelectExists(ctx, input.ID); err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
@@ -126,6 +130,10 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
+	}
+	if err := validateDMSWebhooks(input.DMS.Settings); err != nil {
+		lFunc.Errorf("webhook validation error: %s", err)
+		return nil, err
 	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.DMS.ID)
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.DMS.ID)
@@ -369,7 +377,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx cont
 
 // validateClientCertificateReenrollment validates the presented client certificate for re-enrollment.
 // It checks that the certificate's CommonName matches the CSR subject, then checks against the
-// enrollment CA first, then falls back to additional validation CAs,
+// enrollment CA first, then falls back to the re-enrollment validation CAs,
 // and finally verifies expiry and revocation status.
 func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate, csrSubjectCN string) (*logrus.Entry, error) {
 	leafCert := clientCerts[0]
@@ -415,7 +423,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 	return lFunc, nil
 }
 
-// findReenrollmentValidationCA tries the enrollment CA first, then each additional validation CA.
+// findReenrollmentValidationCA tries the enrollment CA first, then each of the re-enrollment validation CAs.
 // Returns the matching CA's certificate, or nil if none validated the leaf.
 func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, leafCert *x509.Certificate) *x509.Certificate {
 	enrollCACert := (*x509.Certificate)(enrollCA.Certificate.Certificate)
@@ -425,12 +433,13 @@ func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Con
 		lFunc.Infof("certificate validated. Revocation and Expiration (if needed) check will be performed next")
 		return enrollCACert
 	}
-	lFunc.Warnf("invalid validation using enroll CA. Will try validating using Additional Validation CAs")
+	lFunc.Warnf("invalid validation using enroll CA. Will try validating using re-enrollment validation CAs")
 
-	aValCAsCtr := len(reEnrollSettings.AdditionalValidationCAs)
-	lFunc.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
+	validationCAs := reEnrollSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs
+	aValCAsCtr := len(validationCAs)
+	lFunc.Debugf("DMS has %d re-enrollment validation CAs", aValCAsCtr)
 
-	for idx, caID := range reEnrollSettings.AdditionalValidationCAs {
+	for idx, caID := range validationCAs {
 		lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
 		ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
 		if err != nil {
@@ -467,6 +476,29 @@ func checkReenrollmentExpiry(lFunc *logrus.Entry, leafCert *x509.Certificate, re
 		return fmt.Errorf("expired certificate")
 	}
 
+	return nil
+}
+
+// validateDMSWebhooks rejects external webhook configs that would fail on
+// every enroll or reenroll, so the error surfaces when the DMS is configured.
+func validateDMSWebhooks(settings models.DMSSettings) error {
+	webhooks := []struct {
+		operation string
+		opts      models.EnrollmentOptionsESTRFC7030
+	}{
+		{"enrollment", settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030},
+		{"reenrollment", settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030},
+	}
+	for _, w := range webhooks {
+		switch w.opts.AuthMode {
+		case models.ESTAuthModeExternalWebhook, models.ESTAuthModeClientCertificateAndWebhook:
+		default:
+			continue
+		}
+		if err := webhookclient.ValidateWebhook(w.opts.AuthOptionsExternalWebhook); err != nil {
+			return fmt.Errorf("%w: invalid %s external webhook config: %s", errs.ErrValidateBadRequest, w.operation, err)
+		}
+	}
 	return nil
 }
 
@@ -507,46 +539,30 @@ func invokeWebhook(ctx context.Context, lFunc *logrus.Entry, webhookConf models.
 		Authorized bool `json:"authorized"`
 	}
 
-	type webhookInvocationResult struct {
-		resp *webhookResponse
-		err  error
-	}
-
-	webhookTimeout := 10 * time.Second
+	webhookTimeout := webhookclient.DefaultCallTimeout
 	if webhookConf.Config.CallTimeout > 0 {
 		webhookTimeout = time.Duration(webhookConf.Config.CallTimeout)
 	}
 	webhookCtx, cancel := context.WithTimeout(ctx, webhookTimeout)
 	defer cancel()
 
-	webhookResultCh := make(chan webhookInvocationResult, 1)
-	go func() {
-		resp, err := webhookclient.InvokeJSONWebhook[webhookResponse](lFunc, webhookConf, webhookRequestBody)
-		webhookResultCh <- webhookInvocationResult{
-			resp: resp,
-			err:  err,
+	resp, err := webhookclient.InvokeJSONWebhook[webhookResponse](webhookCtx, lFunc, webhookConf, webhookRequestBody)
+	if err != nil {
+		if ctxErr := webhookCtx.Err(); ctxErr != nil {
+			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook authorization did not complete before deadline: %s", operation, ctxErr)
+			return lFunc, fmt.Errorf("external webhook authorization timed out or was canceled: %w", ctxErr)
 		}
-	}()
-
-	select {
-	case <-webhookCtx.Done():
-		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook authorization did not complete before deadline: %s", operation, webhookCtx.Err())
-		return lFunc, fmt.Errorf("external webhook authorization timed out or was canceled: %w", webhookCtx.Err())
-	case result := <-webhookResultCh:
-		if result.err != nil {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, result.err)
-			return lFunc, fmt.Errorf("error while calling external webhook: %s", result.err)
-		}
-		resp := result.resp
-		lFunc.Debugf("webhook response: %v", resp)
-		if resp == nil {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
-			return lFunc, fmt.Errorf("external webhook didn't return a response")
-		}
-		if !resp.Authorized {
-			lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
-			return lFunc, fmt.Errorf("external webhook denied %s", operation)
-		}
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. got error while calling external webhook: %s", operation, err)
+		return lFunc, fmt.Errorf("error while calling external webhook: %s", err)
+	}
+	lFunc.Debugf("webhook response: %v", resp)
+	if resp == nil {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook didn't return a response", operation)
+		return lFunc, fmt.Errorf("external webhook didn't return a response")
+	}
+	if !resp.Authorized {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. external webhook denied %s", operation, operation)
+		return lFunc, fmt.Errorf("external webhook denied %s", operation)
 	}
 
 	lFunc.Infof("webhook authorized %s", operation)

@@ -6,9 +6,9 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	coreservices "github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	servicemock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	coreservices "github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	servicemock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

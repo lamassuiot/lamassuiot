@@ -3,8 +3,8 @@ package migrationstest
 import (
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/sirupsen/logrus"

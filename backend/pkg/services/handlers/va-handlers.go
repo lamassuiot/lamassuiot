@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services/eventhandling"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services/eventhandling"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )

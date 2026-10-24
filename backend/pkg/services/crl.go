@@ -11,17 +11,17 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
@@ -320,7 +320,7 @@ func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetV
 	return svc.vaRepo.GetAll(ctx, storage.StorageListRequest[models.VARole]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		QueryParams:   input.QueryParameters,
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 		ApplyFunc: func(role models.VARole) {
 			input.ApplyFunc(role)
 		},

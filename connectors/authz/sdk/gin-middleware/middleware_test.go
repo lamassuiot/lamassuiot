@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	lamassucore "github.com/lamassuiot/lamassuiot/core/v3"
+	lamassucore "github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -98,7 +98,7 @@ func TestAuthzCheckPropagatesMatchedPrincipalsToRequestContext(t *testing.T) {
 	engine := &fakeEngine{authorized: true, matchedPrincipals: []string{"principal-a", "principal-b"}}
 	mw := NewSimpleAuthzMiddleware(engine, "pki", "devicemanager", "device", testLogger())
 
-	var capturedPrincipals interface{}
+	var capturedPrincipals any
 	router.GET("/devices/:id", mw.AuthzCheck("read"), func(c *gin.Context) {
 		capturedPrincipals = c.Request.Context().Value(lamassucore.LamassuContextKeyMatchedPrincipals)
 		c.Status(http.StatusOK)
@@ -117,7 +117,7 @@ func TestAuthListCheckPropagatesMatchedPrincipalsToRequestContext(t *testing.T) 
 	engine := &fakeEngine{matchedPrincipals: []string{"principal-x"}, filterSQL: "1=1"}
 	mw := NewSimpleAuthzMiddleware(engine, "pki", "devicemanager", "device", testLogger())
 
-	var capturedPrincipals interface{}
+	var capturedPrincipals any
 	router.GET("/devices", mw.AuthListCheck(), func(c *gin.Context) {
 		capturedPrincipals = c.Request.Context().Value(lamassucore.LamassuContextKeyMatchedPrincipals)
 		c.Status(http.StatusOK)

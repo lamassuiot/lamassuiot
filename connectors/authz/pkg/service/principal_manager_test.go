@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,10 +84,10 @@ func TestPrincipalManager_MatchX509_CNAndCA_AuthorityKeyID(t *testing.T) {
 	caCert, leafCert, _ := createTestCAAndLeafCerts(t)
 
 	principal := models.Principal{
-		AuthConfig: map[string]interface{}{
+		AuthConfig: map[string]any{
 			"match_mode": "cn_and_ca",
 			"subject_cn": "sensor-*.example.com",
-			"ca_trust": map[string]interface{}{
+			"ca_trust": map[string]any{
 				"pem":           base64PEMFromCert(caCert),
 				"identity_type": "authority_key_id",
 				"value":         formatAKIValue(leafCert.AuthorityKeyId),
@@ -104,9 +104,9 @@ func TestPrincipalManager_MatchX509_AnyFromCA_FingerprintSelfSignedCA(t *testing
 	caCert, _, _ := createTestCAAndLeafCerts(t)
 
 	principal := models.Principal{
-		AuthConfig: map[string]interface{}{
+		AuthConfig: map[string]any{
 			"match_mode": "any_from_ca",
-			"ca_trust": map[string]interface{}{
+			"ca_trust": map[string]any{
 				"pem":           base64PEMFromCert(caCert),
 				"identity_type": "fingerprint",
 				"value":         sha256FingerprintFromDER(caCert.Raw),
@@ -125,9 +125,9 @@ func TestPrincipalManager_MatchX509_AnyFromCA_MissingPEM(t *testing.T) {
 	// A principal with missing PEM is silently skipped — per-principal errors
 	// are non-fatal in X509Matcher so that one bad config doesn't block others.
 	principal := models.Principal{
-		AuthConfig: map[string]interface{}{
+		AuthConfig: map[string]any{
 			"match_mode": "any_from_ca",
-			"ca_trust": map[string]interface{}{
+			"ca_trust": map[string]any{
 				"identity_type": "fingerprint",
 				"value":         sha256FingerprintFromDER(caCert.Raw),
 			},

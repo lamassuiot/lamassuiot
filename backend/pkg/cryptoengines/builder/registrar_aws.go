@@ -3,8 +3,8 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3"
-	aws_subsystem "github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3/subsystem"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/aws"
+	aws_subsystem "github.com/lamassuiot/lamassuiot/v4/engines/crypto/aws/subsystem"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -3,7 +3,7 @@ package gorm
 import (
 	"strings"
 
-	authzsdk "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"gorm.io/gorm"
 )
 

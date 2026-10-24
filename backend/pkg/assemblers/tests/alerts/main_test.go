@@ -1,18 +1,23 @@
 package alerts
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"testing"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	outputchannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	outputchannels "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/alerts/output_channels"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	smtpmock "github.com/mocktools/go-smtp-mock/v2"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -227,7 +232,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	event := helpers.BuildCloudEvent(ctx, payload)
 
@@ -237,7 +242,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
-	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
+	payload = map[string]any{"person": map[string]any{"name": "John", "age": "30"}}
 	ctx = context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
@@ -288,7 +293,7 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
@@ -301,7 +306,7 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
 
-	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
+	payload = map[string]any{"person": map[string]any{"name": "John", "age": "30"}}
 	event = helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
@@ -365,7 +370,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
@@ -378,7 +383,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
-	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
+	payload = map[string]any{"person": map[string]any{"name": "John", "age": "30"}}
 	ctx = context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
 	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
@@ -472,7 +477,7 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
@@ -553,7 +558,7 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
-	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	payload := map[string]any{"person": map[string]any{"name": "James", "age": "30"}}
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
@@ -582,4 +587,46 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 	}
 	messages = server.MessagesAndPurge()
 	assert.Equal(t, 0, len(messages), "should have 0 messages")
+}
+
+func TestSubscribeRejectsInvalidChannelHTTPClient(t *testing.T) {
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
+	}
+
+	alertsTest := serverTest.Alerts
+	input := &services.SubscribeInput{
+		UserID:    "user1",
+		EventType: models.EventCreateCAKey,
+		Channel: models.Channel{
+			Type: models.ChannelTypeWebhook,
+			Name: "webhook",
+			Config: map[string]any{
+				"webhook_url": "https://localhost:8080/hook",
+				"http_client": map[string]any{"auth_mode": "mtls"},
+			},
+		},
+	}
+
+	_, err = alertsTest.Service.Subscribe(context.TODO(), input)
+	assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
+	assert.ErrorContains(t, err, "mtls_options.cert_content")
+
+	body, err := json.Marshal(map[string]any{"event_type": input.EventType, "channel": input.Channel})
+	if err != nil {
+		t.Fatalf("could not encode subscribe body: %s", err)
+	}
+	res, err := tests.NewTestHTTPClient().Post(fmt.Sprintf("http://127.0.0.1:%d/v1/user/user1/subscribe", alertsTest.Port), "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("could not call subscribe endpoint: %s", err)
+	}
+	res.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+
+	subscriptions, err := alertsTest.Service.GetUserSubscriptions(context.TODO(), &services.GetUserSubscriptionsInput{UserID: "user1"})
+	if err != nil {
+		t.Fatalf("could not get subscriptions for user1: %s", err)
+	}
+	assert.Empty(t, subscriptions, "invalid subscriptions must not be stored")
 }

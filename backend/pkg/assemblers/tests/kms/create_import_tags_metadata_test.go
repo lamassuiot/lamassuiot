@@ -7,10 +7,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"slices"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
@@ -51,13 +52,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 
 				expectedTags := []string{"production", "critical", "backup-enabled"}
 				for _, tag := range expectedTags {
-					found := false
-					for _, keyTag := range createdKey.Tags {
-						if keyTag == tag {
-							found = true
-							break
-						}
-					}
+					found := slices.Contains(createdKey.Tags, tag)
 					if !found {
 						return fmt.Errorf("expected tag '%s' not found in key tags", tag)
 					}
@@ -289,13 +284,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 
 				expectedTags := []string{"imported", "rsa-key", "archive"}
 				for _, tag := range expectedTags {
-					found := false
-					for _, keyTag := range importedKey.Tags {
-						if keyTag == tag {
-							found = true
-							break
-						}
-					}
+					found := slices.Contains(importedKey.Tags, tag)
 					if !found {
 						return fmt.Errorf("expected tag '%s' not found in key tags", tag)
 					}

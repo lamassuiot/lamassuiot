@@ -1,11 +1,14 @@
 package controllers
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
-	backendresources "github.com/lamassuiot/lamassuiot/backend/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	backendresources "github.com/lamassuiot/lamassuiot/v4/backend/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type alertsHttpRoutes struct {
@@ -103,7 +106,9 @@ func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
+		switch {
+		case errors.Is(err, errs.ErrValidateBadRequest):
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}

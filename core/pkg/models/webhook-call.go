@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 )
 
 type WebhookCall struct {
@@ -11,28 +11,9 @@ type WebhookCall struct {
 	Config WebhookCallHttpClient `json:"config"`
 }
 
+// WebhookCallHttpClient is a user-supplied HTTP client configuration. Fields
+// that reference files on the service filesystem are rejected when invoked.
 type WebhookCallHttpClient struct {
-	ValidateServerCert bool                             `json:"validate_server_cert"`
-	LogLevel           string                           `json:"log_level"`
-	AuthMode           config.HTTPClientAuthMethod      `json:"auth_mode"`
-	CallTimeout        TimeDuration                     `json:"call_timeout,omitempty"`
-	OIDC               WebhookCallHttpClientOidcOptions `json:"oidc"`
-	ApiKey             WebhookCallHttpClientApiKey      `json:"apikey"`
-	MutualTLS          WebhookCallHttpClientMutualTLS   `json:"mtls"`
-}
-
-type WebhookCallHttpClientOidcOptions struct {
-	ClientID         string `json:"client_id"`
-	ClientSecret     string `json:"client_secret"`
-	OIDCWellKnownURL string `json:"well_known"`
-}
-
-type WebhookCallHttpClientApiKey struct {
-	Key    string `json:"key"`
-	Header string `json:"header"`
-}
-
-type WebhookCallHttpClientMutualTLS struct {
-	Cert string `json:"cert"`
-	Key  string `json:"key"`
+	config.HTTPClient
+	CallTimeout TimeDuration `json:"call_timeout,omitempty"`
 }

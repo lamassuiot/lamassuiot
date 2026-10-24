@@ -31,7 +31,7 @@ func (extractor traefikClientCertificateExtractor) ExtractCertificate(headers ht
 	}
 
 	var certs []*x509.Certificate
-	for _, encodedCert := range strings.Split(header, ",") {
+	for encodedCert := range strings.SplitSeq(header, ",") {
 		derBytes, err := base64.StdEncoding.DecodeString(encodedCert)
 		if err != nil {
 			extractor.logger.Warnf("request includes header %s but could not decode certificate. Skipping: %s", traefikClientCertificateHeader, err)

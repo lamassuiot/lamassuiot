@@ -67,7 +67,7 @@ func (h *DeviceEventSSEHub) Unsubscribe(deviceID string, ch chan string) {
 
 // Publish sends a device event to all SSE listeners for the given device ID.
 // The payload is any serializable object; it will be wrapped in a DeviceSSEMessage with the event type.
-func (h *DeviceEventSSEHub) Publish(deviceID string, eventType string, payload interface{}) {
+func (h *DeviceEventSSEHub) Publish(deviceID string, eventType string, payload any) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		h.logger.Errorf("could not marshal SSE payload for device %s: %s", deviceID, err)

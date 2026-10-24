@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -638,6 +638,54 @@ func MigrationTest_CA_20260520120000_update_certificate_type_values(t *testing.T
 	}
 }
 
+func MigrationTest_CA_20261008120000_unique_ca_id(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	const version = int64(20261008120000)
+	insertCA := func(serial, id string) error {
+		err := con.Exec(`INSERT INTO certificates
+			(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id)
+			VALUES(?, '{}', ?, 'test-issuer-id', 0, 'ACTIVE', 'test-cert', 'RSA', 4096, 'HIGH', 'Test', '', '', '', '', '', '2024-11-25 09:45:48+00', '2025-09-21 11:45:44+00', '0001-01-01 00:00:00+00', 'Unspecified', 'IMPORTED_WITHOUT_KEY', '')
+			ON CONFLICT (serial_number) DO NOTHING`,
+			serial, serial).Error
+		if err != nil {
+			return err
+		}
+		return con.Exec(`INSERT INTO ca_certificates (serial_number, metadata, id, creation_ts, "level")
+			VALUES(?, '{}', ?, '2024-11-25 11:45:48.620', 0)`, serial, id).Error
+	}
+	for _, serial := range []string{"unique-id-a", "unique-id-b"} {
+		if err := insertCA(serial, "duplicated-ca"); err != nil {
+			t.Fatalf("failed to insert CA %s: %v", serial, err)
+		}
+	}
+
+	m := postgres.NewMigrator(logger, con)
+	_, err := m.Goose.ApplyVersion(context.Background(), version, true)
+	assert.Error(t, err, "existing duplicate IDs must block the migration")
+
+	if err := con.Exec(`DELETE FROM ca_certificates WHERE serial_number = 'unique-id-b'`).Error; err != nil {
+		t.Fatalf("failed to resolve the duplicate ID: %v", err)
+	}
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	err = insertCA("unique-id-b", "duplicated-ca")
+	assert.ErrorContains(t, err, "ca_certificates_id_unique")
+
+	_, err = m.Goose.ApplyVersion(context.Background(), version, false)
+	if err != nil {
+		t.Fatalf("could not roll back migration: %v", err)
+	}
+	assert.NoError(t, insertCA("unique-id-b", "duplicated-ca"), "rollback must drop the unique constraint")
+
+	// Leave the schema at the latest version for any later migration test.
+	if err := con.Exec(`DELETE FROM ca_certificates WHERE serial_number = 'unique-id-b'`).Error; err != nil {
+		t.Fatalf("failed to resolve the duplicate ID: %v", err)
+	}
+	if _, err := m.Goose.ApplyVersion(context.Background(), version, true); err != nil {
+		t.Fatalf("could not reapply migration: %v", err)
+	}
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -740,5 +788,10 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20260520120000_update_certificate_type_values(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260520120000_update_certificate_type_values")
+	}
+
+	MigrationTest_CA_20261008120000_unique_ca_id(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261008120000_unique_ca_id")
 	}
 }

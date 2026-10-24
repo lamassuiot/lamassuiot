@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/docker"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/config"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/docker"
 	"github.com/sirupsen/logrus"
 )
 
@@ -67,7 +67,7 @@ func preparePKCS11CryptoEngine(t *testing.T) (func() (cryptoengines.CryptoEngine
 
 	ceConfig := config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]{
 		ID:       "dockertest-pkcs11",
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 		Type:     config.PKCS11Provider,
 		Config:   engineConf,
 	}

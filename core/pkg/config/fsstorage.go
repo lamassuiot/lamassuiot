@@ -8,15 +8,15 @@ const (
 )
 
 type FSStorageConfig struct {
-	ID       string                 `mapstructure:"id"`
-	Metadata map[string]interface{} `mapstructure:"metadata"`
-	Type     FSStorageProvider      `mapstructure:"type"`
-	Config   map[string]interface{} `mapstructure:",remain"`
+	ID       string            `mapstructure:"id"`
+	Metadata map[string]any    `mapstructure:"metadata"`
+	Type     FSStorageProvider `mapstructure:"type"`
+	Config   map[string]any    `mapstructure:",remain"`
 }
 
 type FSStorageConfigAdapter[E any] struct {
 	ID       string
-	Metadata map[string]interface{}
+	Metadata map[string]any
 	Type     FSStorageProvider
 	Config   E
 }

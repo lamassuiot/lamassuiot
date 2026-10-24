@@ -3,10 +3,10 @@ package service
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/store"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"gorm.io/gorm"
 )
 
@@ -113,10 +113,10 @@ func (m *PrincipalManager) NewIdentityResolver(policies *PolicyManager) *Identit
 
 // --- Auth matching ---
 
-func (m *PrincipalManager) MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error) {
+func (m *PrincipalManager) MatchPrincipals(ctx context.Context, authMaterial any, authType string) ([]string, error) {
 	return m.matchService.MatchPrincipals(ctx, authMaterial, authType)
 }
 
-func (m *PrincipalManager) MatchSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error) {
+func (m *PrincipalManager) MatchSubjects(ctx context.Context, authMaterial any, authType string) ([]engine.ResolvedSubject, error) {
 	return m.matchService.MatchSubjects(ctx, authMaterial, authType)
 }

@@ -6,15 +6,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type dmsManagerClient struct {
-	httpClient *http.Client
-	baseUrl    string
+	restClient
 }
 
 func NewHttpDMSManagerClient(client *http.Client, url string) services.DMSManagerService {
@@ -26,13 +25,13 @@ func NewHttpDMSManagerClient(client *http.Client, url string) services.DMSManage
 }
 
 func (cli *dmsManagerClient) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
-	url := cli.baseUrl + "/v1/stats"
-	resp, err := Get[models.DMSStats](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+	path := "/v1/stats"
+	resp, err := cli.get[models.DMSStats](ctx, path, input.QueryParameters, map[int][]error{})
 	return &resp, err
 }
 
 func (cli *dmsManagerClient) CreateDMS(ctx context.Context, input services.CreateDMSInput) (*models.DMS, error) {
-	response, err := Post[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms", resources.CreateDMSBody{
+	response, err := cli.post[*models.DMS](ctx, "/v1/dms", resources.CreateDMSBody{
 		ID:       input.ID,
 		Name:     input.Name,
 		Metadata: input.Metadata,
@@ -46,7 +45,7 @@ func (cli *dmsManagerClient) CreateDMS(ctx context.Context, input services.Creat
 }
 
 func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.UpdateDMSInput) (*models.DMS, error) {
-	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.DMS.ID, input.DMS, map[int][]error{})
+	response, err := cli.put[*models.DMS](ctx, "/v1/dms/"+input.DMS.ID, input.DMS, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +54,7 @@ func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.Updat
 }
 
 func (cli *dmsManagerClient) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
-	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID+"/metadata", resources.UpdateDMSMetadataBody{
+	response, err := cli.put[*models.DMS](ctx, "/v1/dms/"+input.ID+"/metadata", resources.UpdateDMSMetadataBody{
 		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
@@ -66,7 +65,7 @@ func (cli *dmsManagerClient) UpdateDMSMetadata(ctx context.Context, input servic
 }
 
 func (cli *dmsManagerClient) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID, map[int][]error{
+	err := cli.delete(ctx, "/v1/dms/"+input.ID, map[int][]error{
 		404: {
 			errs.ErrDMSNotFound,
 		},
@@ -82,15 +81,15 @@ func (cli *dmsManagerClient) DeleteDMS(ctx context.Context, input services.Delet
 }
 
 func (cli *dmsManagerClient) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
-	url := cli.baseUrl + "/v1/dms/" + input.ID
-	resp, err := Get[models.DMS](ctx, cli.httpClient, url, nil, map[int][]error{})
+	path := "/v1/dms/" + input.ID
+	resp, err := cli.get[models.DMS](ctx, path, nil, map[int][]error{})
 	return &resp, err
 }
 
 func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllInput) (string, error) {
-	url := cli.baseUrl + "/v1/dms"
+	path := "/v1/dms"
 
-	return IterGet[models.DMS, *resources.GetDMSsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	return cli.iterGet[models.DMS, *resources.GetDMSsResponse](ctx, path, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *dmsManagerClient) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
@@ -105,12 +104,12 @@ func (cli *dmsManagerClient) Reenroll(ctx context.Context, csr *x509.Certificate
 	return nil, fmt.Errorf("not supported, use the estCli instead")
 }
 
-func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
 	return nil, nil, fmt.Errorf("not supported, use the estCli instead")
 }
 
 func (cli *dmsManagerClient) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
-	response, err := Post[*models.BindIdentityToDeviceOutput](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/bind-identity", resources.BindIdentityToDeviceBody{
+	response, err := cli.post[*models.BindIdentityToDeviceOutput](ctx, "/v1/dms/bind-identity", resources.BindIdentityToDeviceBody{
 		BindMode:                input.BindMode,
 		DeviceID:                input.DeviceID,
 		CertificateSerialNumber: input.CertificateSerialNumber,

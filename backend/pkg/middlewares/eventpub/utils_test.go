@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -15,7 +15,7 @@ type CloudEventPublisherMock struct {
 	mock.Mock
 }
 
-func (m *CloudEventPublisherMock) PublishCloudEvent(ctx context.Context, payload interface{}) {
+func (m *CloudEventPublisherMock) PublishCloudEvent(ctx context.Context, payload any) {
 	m.Called(ctx, payload)
 }
 
@@ -69,7 +69,7 @@ func WithoutErrors[S any, M any, E any, O any](
 			// Use type assertion to get the underlying mock.Mock
 			mockPtr := reflect.ValueOf(mockService).Interface()
 			if mocker, ok := mockPtr.(interface {
-				On(string, ...interface{}) *mock.Call
+				On(string, ...any) *mock.Call
 			}); ok {
 				mocker.On(method, mock.Anything, mock.Anything).Return(expectedOutput, nil)
 			}
@@ -109,7 +109,7 @@ func WithErrors[S any, M any, E any, O any](
 			// Use type assertion to get the underlying mock.Mock
 			mockPtr := reflect.ValueOf(mockService).Interface()
 			if mocker, ok := mockPtr.(interface {
-				On(string, ...interface{}) *mock.Call
+				On(string, ...any) *mock.Call
 			}); ok {
 				mocker.On(method, mock.Anything, mock.Anything).Return(expectedOutput, errors.New("some error"))
 			}
@@ -148,7 +148,7 @@ func WithoutErrorsSingleResult[S any, M any, E any](
 			// Use type assertion to get the underlying mock.Mock
 			mockPtr := reflect.ValueOf(mockService).Interface()
 			if mocker, ok := mockPtr.(interface {
-				On(string, ...interface{}) *mock.Call
+				On(string, ...any) *mock.Call
 			}); ok {
 				mocker.On(method, mock.Anything, mock.Anything).Return(nil)
 			}
@@ -187,7 +187,7 @@ func WithErrorsSingleResult[S any, M any, E any](
 			// Use type assertion to get the underlying mock.Mock
 			mockPtr := reflect.ValueOf(mockService).Interface()
 			if mocker, ok := mockPtr.(interface {
-				On(string, ...interface{}) *mock.Call
+				On(string, ...any) *mock.Call
 			}); ok {
 				mocker.On(method, mock.Anything, mock.Anything).Return(errors.New("some error"))
 			}

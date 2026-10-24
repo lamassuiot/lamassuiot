@@ -5,7 +5,7 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/kaptinlin/jsonschema"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 func RegisterJSONSchemaFilter() {
@@ -26,7 +26,7 @@ func filterJSONSchema(event cloudevents.Event, schemaCondition string) (bool, er
 		return false, err
 	}
 
-	var data map[string]interface{}
+	var data map[string]any
 	err = json.Unmarshal(encoded, &data)
 	if err != nil {
 		return false, err

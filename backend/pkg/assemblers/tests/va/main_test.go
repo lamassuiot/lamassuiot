@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )
@@ -37,7 +37,7 @@ func TestBaseCRL(t *testing.T) {
 			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
-				for i := 0; i < crtsToIssue; i++ {
+				for range crtsToIssue {
 					crt, err := generateCertificate(caSDK)
 					if err != nil {
 						return nil, err
@@ -70,7 +70,7 @@ func TestBaseCRL(t *testing.T) {
 			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
-				for i := 0; i < crtsToIssue; i++ {
+				for range crtsToIssue {
 					crt, err := generateCertificate(caSDK)
 					if err != nil {
 						return nil, err
@@ -102,7 +102,6 @@ func TestBaseCRL(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()
@@ -155,7 +154,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	crtsToIssue := 10
 	issuedCertsSNs := []string{}
 	var oneCrt *models.Certificate
-	for i := 0; i < crtsToIssue; i++ {
+	for range crtsToIssue {
 		crt, err := generateCertificate(vaTestServer.HttpCASDK)
 		oneCrt = crt
 		if err != nil {
@@ -311,7 +310,6 @@ func TestPostOCSP(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err := serverTest.BeforeEach()

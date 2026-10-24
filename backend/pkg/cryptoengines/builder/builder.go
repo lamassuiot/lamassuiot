@@ -3,11 +3,11 @@ package builder
 import (
 	"fmt"
 
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/filesystem"
 )
 
 func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngineConfig) (cryptoengines.CryptoEngine, error) {

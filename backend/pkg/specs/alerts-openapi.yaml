@@ -168,7 +168,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Subscription'
         '400':
-          description: Invalid request body or user identifier
+          description: Invalid request body, user identifier or channel config (webhook_url not an absolute http or https URL, unsupported webhook_method or invalid http_client)
           content:
             application/json:
               schema:
@@ -258,7 +258,7 @@ components:
           $ref: '#/components/schemas/ConditionType'
         condition:
           type: string
-          description: Condition expression (JSON Schema, JSONPath, or JavaScript)
+          description: Condition expression (JSON Schema, JSONPath, or JavaScript). JavaScript execution is limited to 100 milliseconds.
 
     SubscribeBody:
       type: object
@@ -302,6 +302,8 @@ components:
         webhook_url:
           type: string
           format: uri
+        http_client:
+          $ref: '#/components/schemas/NotificationHTTPClient'
 
     WebhookChannelConfig:
       type: object
@@ -309,9 +311,57 @@ components:
         webhook_url:
           type: string
           format: uri
+        http_client:
+          $ref: '#/components/schemas/NotificationHTTPClient'
         webhook_method:
           type: string
-          enum: [GET, POST, PUT, PATCH, DELETE]
+          enum: [POST, PUT]
+
+    NotificationHTTPClient:
+      type: object
+      description: Optional client authentication for notification webhooks. HTTPS server certificates are always verified against the system trust store. Existing URL-secret webhooks require no additional authentication. Options that reference files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file) are rejected, as is an mtls_options.cert_content/key_content pair that does not decode to a matching certificate and private key. Redirects are not followed, so webhook_url must be the final URL. Credentials are sent regardless of the URL scheme. With an http:// webhook_url the API key or bearer token travels in cleartext, and mTLS has no effect. For jwt, the OIDC client secret is sent to the token_endpoint advertised by the oidc_well_known discovery document. It travels in cleartext if that endpoint is http://, and an http:// oidc_well_known lets an on-path attacker replace the token_endpoint. Use https:// for webhook_url, oidc_well_known and the token endpoint when configuring authentication.
+      properties:
+        insecure_skip_verify:
+          type: boolean
+          enum: [false]
+          default: false
+          description: Always enforced as false, including when omitted or set to true.
+        auth_mode:
+          type: string
+          enum: [noauth, apikey, jwt, mtls]
+          default: noauth
+        call_timeout:
+          type: string
+          description: Maximum duration of a notification call (for example "10s"). Capped at 30s.
+        apikey_options:
+          type: object
+          required: [key, header]
+          properties:
+            key:
+              type: string
+            header:
+              type: string
+        jwt_options:
+          type: object
+          required: [oidc_client_id, oidc_client_secret, oidc_well_known]
+          properties:
+            oidc_client_id:
+              type: string
+            oidc_client_secret:
+              type: string
+            oidc_well_known:
+              type: string
+              format: uri
+        mtls_options:
+          type: object
+          required: [cert_content, key_content]
+          properties:
+            cert_content:
+              type: string
+              description: Base64-encoded PEM client certificate, like certificates elsewhere in the API. Plain PEM is also accepted.
+            key_content:
+              type: string
+              description: Base64-encoded PEM private key. Plain PEM is also accepted.
 
     AlertLatestEvent:
       type: object

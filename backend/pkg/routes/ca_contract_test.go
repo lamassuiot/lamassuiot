@@ -10,11 +10,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	authzcore "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/core"
-	middleware "github.com/lamassuiot/lamassuiot/connectors/authz/v3/sdk/gin-middleware"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	authzcore "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
+	middleware "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gin-middleware"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +23,7 @@ func TestCAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	// Client construction is local; this test never sends requests to authz or a CA.
-	client := config.AuthzClient{HTTPClient: cconfig.HTTPClient{HTTPConnection: cconfig.HTTPConnection{Protocol: "http", BasePath: "/api/authz", BasicConnection: cconfig.BasicConnection{Hostname: "localhost", Port: 8080}}}}
+	client := config.AuthzClient{Protocol: "http", BasePath: "/api/authz", Hostname: "localhost", Port: 8080}
 	contract := registerCARoutes(router.Group("/api/ca"), nil, newRemoteAuthzEngine(client, models.CASource, logrus.NewEntry(logrus.New())), logrus.NewEntry(logrus.New()))
 	require.NotEmpty(t, contract.Declarations())
 	// Catch direct Gin registrations that bypass permission recording.
@@ -48,7 +47,7 @@ func TestCAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 func TestCreateCertificateContractDetectsAnOtherwiseValidWrongAction(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	client := config.AuthzClient{HTTPClient: cconfig.HTTPClient{HTTPConnection: cconfig.HTTPConnection{Protocol: "http", BasePath: "/api/authz", BasicConnection: cconfig.BasicConnection{Hostname: "localhost", Port: 8080}}}}
+	client := config.AuthzClient{Protocol: "http", BasePath: "/api/authz", Hostname: "localhost", Port: 8080}
 	contract := registerCARoutes(router.Group("/api/ca"), nil, newRemoteAuthzEngine(client, models.CASource, logrus.NewEntry(logrus.New())), logrus.NewEntry(logrus.New()))
 	spec, err := os.ReadFile("../specs/ca-openapi.yaml")
 	require.NoError(t, err)

@@ -1,16 +1,18 @@
 package migrationstest
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/assert"
 
-	_ "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/dmsmanager"
+	_ "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -26,7 +28,7 @@ func migrationTest_DMS_00000000000001_create_table(t *testing.T, logger *logrus.
 		VALUES('iot1', 'IoTThings', '{}', '2024-11-25 10:46:28.914', '{"server_keygen_settings":{"enabled":true,"key":{"type":"RSA","bits":4096}},"enrollment_settings":{"protocol":"EST_RFC7030","est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["9beebc5b-ba8d-4fc0-9e97-58299d30ae9f"],"chain_level_validation":-1,"allow_expired":false}},"device_provisioning_profile":{"icon":"CgBatteryFull","icon_color":"#37d67a-#333333","metadata":{},"tags":["iot"]},"enrollment_ca":"fd10a299-7cc0-47de-9f48-cdc9d79a711c","enable_replaceable_enrollment":false,"registration_mode":"JITP"},"reenrollment_settings":{"additional_validation_cas":[],"reenrollment_delta":"14w2d","enable_expired_renewal":false,"preventive_delta":"4w3d","critical_delta":"1w"},"ca_distribution_settings":{"include_system_ca":true,"include_enrollment_ca":false,"managed_cas":[]}}');
 	`)
 
-	var result map[string]interface{}
+	var result map[string]any
 	tx := con.Raw("SELECT * FROM dms").Scan(&result)
 	if tx.RowsAffected != 1 {
 		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
@@ -55,7 +57,7 @@ func migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 	ApplyMigration(t, logger, con, dmsDBName)
 
 	var result string
-	var config map[string]interface{}
+	var config map[string]any
 
 	// Select iot1, should have the new keygen settings enabled and reenrollment_settings.revoke_on_reenrollment set to false
 	tx = con.Table("dms").Where("id = 'iot1'").Select("settings").Find(&result)
@@ -67,8 +69,8 @@ func migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 		log.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
 
-	assert.Equal(t, true, config["server_keygen_settings"].(map[string]interface{})["enabled"])
-	assert.Equal(t, false, config["reenrollment_settings"].(map[string]interface{})["revoke_on_reenrollment"])
+	assert.Equal(t, true, config["server_keygen_settings"].(map[string]any)["enabled"])
+	assert.Equal(t, false, config["reenrollment_settings"].(map[string]any)["revoke_on_reenrollment"])
 
 	// Select iot2, should have the new keygen settings set to false and reenrollment_settings.revoke_on_reenrollment set to false
 	tx = con.Table("dms").Where("id = 'iot2'").Select("settings").Find(&result)
@@ -80,8 +82,8 @@ func migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 		log.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
 
-	assert.Equal(t, false, config["server_keygen_settings"].(map[string]interface{})["enabled"])
-	assert.Equal(t, false, config["reenrollment_settings"].(map[string]interface{})["revoke_on_reenrollment"])
+	assert.Equal(t, false, config["server_keygen_settings"].(map[string]any)["enabled"])
+	assert.Equal(t, false, config["reenrollment_settings"].(map[string]any)["revoke_on_reenrollment"])
 }
 
 func migrationTest_DMS_20250612100530_est_verify_csr_signature(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -166,6 +168,16 @@ func TestDMSMigrations(t *testing.T) {
 	migrationTest_DMS_20260604110000_reenroll_auth_settings(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260604110000_reenroll_auth_settings")
+	}
+
+	migrationTest_DMS_20261021120000_webhook_http_client_config(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261021120000_webhook_http_client_config")
+	}
+
+	migrationTest_DMS_20261022120000_reenroll_validation_cas(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261022120000_reenroll_validation_cas")
 	}
 }
 
@@ -295,4 +307,191 @@ func migrationTest_DMS_20260604110000_reenroll_auth_settings(t *testing.T, logge
 		t.Fatalf("failed to query existing reenroll auth mode: %v", tx.Error)
 	}
 	assert.Equal(t, "CLIENT_CERTIFICATE", existingAuth)
+}
+
+func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-jwt', 'DMS Webhook JWT', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":false,"log_level":"debug","auth_mode":"jwt","call_timeout":"5s","oidc":{"client_id":"id","client_secret":"s3cret","well_known":"https://idp/.well-known/openid-configuration"},"apikey":{"key":"","header":""},"mtls":{"cert":"","key":""}}}}},"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"apikey","oidc":{},"apikey":{"key":"k","header":"X-API-Key"},"mtls":{}}}}}}');
+	`)
+
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls', 'DMS Webhook mTLS', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n","key":"-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n"}}}}},"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"/certs/client.crt","key":"/certs/client.key"}}}}}}');
+	`)
+
+	// Certificate as PEM but key as a file path: must not be split into content/file halves.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls-mixed', 'DMS Webhook mTLS mixed', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"validate_server_cert":true,"auth_mode":"mtls","oidc":{},"apikey":{},"mtls":{"cert":"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n","key":"/certs/client.key"}}}}}}');
+	`)
+
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	webhookConfig := func(id, section string) map[string]any {
+		var raw string
+		tx := con.Raw("SELECT settings->'"+section+"'->'est_rfc7030_settings'->'external_webhook_settings'->>'config' FROM dms WHERE id = ?", id).Scan(&raw)
+		if tx.Error != nil {
+			t.Fatalf("failed to query webhook config: %v", tx.Error)
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+			t.Fatalf("failed to unmarshal webhook config %q: %v", raw, err)
+		}
+		return cfg
+	}
+
+	jwt := webhookConfig("dms-webhook-jwt", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"insecure_skip_verify": true,
+		"log_level":            "debug",
+		"auth_mode":            "jwt",
+		"call_timeout":         "5s",
+		"jwt_options":          map[string]any{"oidc_client_id": "id", "oidc_client_secret": "s3cret", "oidc_well_known": "https://idp/.well-known/openid-configuration"},
+		"apikey_options":       map[string]any{"key": "", "header": ""},
+	}, jwt)
+
+	apikey := webhookConfig("dms-webhook-jwt", "reenrollment_settings")
+	assert.Equal(t, false, apikey["insecure_skip_verify"])
+	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, apikey["apikey_options"])
+	assert.NotContains(t, apikey, "oidc")
+	assert.NotContains(t, apikey, "apikey")
+	assert.NotContains(t, apikey, "mtls")
+
+	mtlsContent := webhookConfig("dms-webhook-mtls", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert_content": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key_content":  "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n",
+	}, mtlsContent["mtls_options"])
+
+	mtlsFiles := webhookConfig("dms-webhook-mtls", "reenrollment_settings")
+	assert.Equal(t, map[string]any{"cert_file": "/certs/client.crt", "key_file": "/certs/client.key"}, mtlsFiles["mtls_options"])
+
+	mtlsMixed := webhookConfig("dms-webhook-mtls-mixed", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert_file": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key_file":  "/certs/client.key",
+	}, mtlsMixed["mtls_options"])
+
+	// Down restores the legacy layout; up again leaves the schema at its latest version.
+	// A config saved after the up migration may carry base64-encoded PEM, which the legacy model cannot read.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls-b64', 'DMS Webhook mTLS base64', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"insecure_skip_verify":false,"auth_mode":"mtls","mtls_options":{"cert_content":"LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=","key_content":"LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUUKLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo="}}}}}}');
+	`)
+
+	// Content that is neither PEM nor base64 PEM is written back untouched.
+	con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-webhook-mtls-raw', 'DMS Webhook mTLS raw', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"est_rfc7030_settings":{"auth_mode":"EXTERNAL_WEBHOOK","external_webhook_settings":{"name":"hook","url":"https://example.com","config":{"insecure_skip_verify":false,"auth_mode":"mtls","mtls_options":{"cert_content":"/certs/client.crt","key_content":"/certs/client.key"}}}}}}');
+	`)
+
+	migrator := postgres.NewMigrator(logger, con)
+	_, err := migrator.Goose.ApplyVersion(context.Background(), 20261021120000, false)
+	if err != nil {
+		t.Fatalf("could not revert migration: %s", err)
+	}
+
+	jwt = webhookConfig("dms-webhook-jwt", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"validate_server_cert": false,
+		"log_level":            "debug",
+		"auth_mode":            "jwt",
+		"call_timeout":         "5s",
+		"oidc":                 map[string]any{"client_id": "id", "client_secret": "s3cret", "well_known": "https://idp/.well-known/openid-configuration"},
+		"apikey":               map[string]any{"key": "", "header": ""},
+	}, jwt)
+
+	apikey = webhookConfig("dms-webhook-jwt", "reenrollment_settings")
+	assert.Equal(t, true, apikey["validate_server_cert"])
+	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, apikey["apikey"])
+	assert.NotContains(t, apikey, "insecure_skip_verify")
+	assert.NotContains(t, apikey, "apikey_options")
+
+	mtlsContent = webhookConfig("dms-webhook-mtls", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key":  "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n",
+	}, mtlsContent["mtls"])
+
+	mtlsFiles = webhookConfig("dms-webhook-mtls", "reenrollment_settings")
+	assert.Equal(t, map[string]any{"cert": "/certs/client.crt", "key": "/certs/client.key"}, mtlsFiles["mtls"])
+
+	mtlsB64 := webhookConfig("dms-webhook-mtls-b64", "enrollment_settings")
+	assert.Equal(t, map[string]any{
+		"cert": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"key":  "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n",
+	}, mtlsB64["mtls"])
+
+	mtlsRaw := webhookConfig("dms-webhook-mtls-raw", "enrollment_settings")
+	assert.Equal(t, map[string]any{"cert": "/certs/client.crt", "key": "/certs/client.key"}, mtlsRaw["mtls"])
+
+	_, err = migrator.Goose.ApplyVersion(context.Background(), 20261021120000, true)
+	if err != nil {
+		t.Fatalf("could not re-apply migration: %s", err)
+	}
+	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, webhookConfig("dms-webhook-jwt", "reenrollment_settings")["apikey_options"])
+}
+
+func migrationTest_DMS_20261022120000_reenroll_validation_cas(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	insertDMS := func(id, settings string) {
+		tx := con.Exec(`INSERT INTO dms (id, "name", metadata, creation_date, settings) VALUES(?, ?, '{}', '2024-11-25 10:46:28.914', ?)`, id, id, settings)
+		if tx.Error != nil {
+			t.Fatalf("failed to insert dms %s: %v", id, tx.Error)
+		}
+	}
+
+	queryJSON := func(id, path string) string {
+		var out *string
+		tx := con.Raw("SELECT (settings #> ?::text[])::text FROM dms WHERE id = ?", path, id).Scan(&out)
+		if tx.Error != nil {
+			t.Fatalf("failed to query %s for dms %s: %v", path, id, tx.Error)
+		}
+		if out == nil {
+			return ""
+		}
+		return *out
+	}
+
+	const reenrollValidationCAsPath = "{reenrollment_settings,est_rfc7030_settings,client_certificate_settings,validation_cas}"
+	const enrollmentESTPath = "{enrollment_settings,est_rfc7030_settings}"
+	const enrollmentEST = `{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["bootstrap-ca"],"chain_level_validation":-1,"allow_expired":false}}`
+
+	// Old key present: it replaces the (previously unused) nested list.
+	insertDMS("dms-reenroll-cas-moved", `{"enrollment_settings":{"est_rfc7030_settings":`+enrollmentEST+`},"reenrollment_settings":{"additional_validation_cas":["ca-1","ca-2"],"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["enroll-copy"],"chain_level_validation":-1}}}}`)
+	// Old key present but no EST block: the nested objects are created.
+	insertDMS("dms-reenroll-cas-no-est", `{"reenrollment_settings":{"additional_validation_cas":["ca-3"]}}`)
+	// Old key null: the nested list becomes empty.
+	insertDMS("dms-reenroll-cas-null", `{"reenrollment_settings":{"additional_validation_cas":null,"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["stale-ca"]}}}}`)
+	// Old key missing: the stale nested list must not become trusted.
+	insertDMS("dms-reenroll-cas-missing", `{"reenrollment_settings":{"est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["stale-ca"]}}}}`)
+	// No re-enrollment settings at all: the row is left untouched.
+	insertDMS("dms-reenroll-cas-no-reenroll", `{"enrollment_settings":{"est_rfc7030_settings":`+enrollmentEST+`}}`)
+
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	assert.JSONEq(t, `["ca-1","ca-2"]`, queryJSON("dms-reenroll-cas-moved", reenrollValidationCAsPath))
+	assert.Equal(t, "-1", queryJSON("dms-reenroll-cas-moved", "{reenrollment_settings,est_rfc7030_settings,client_certificate_settings,chain_level_validation}"))
+	assert.JSONEq(t, enrollmentEST, queryJSON("dms-reenroll-cas-moved", enrollmentESTPath))
+	assert.JSONEq(t, `["ca-3"]`, queryJSON("dms-reenroll-cas-no-est", reenrollValidationCAsPath))
+	assert.JSONEq(t, `[]`, queryJSON("dms-reenroll-cas-null", reenrollValidationCAsPath))
+	assert.JSONEq(t, `[]`, queryJSON("dms-reenroll-cas-missing", reenrollValidationCAsPath))
+	assert.JSONEq(t, `{"enrollment_settings":{"est_rfc7030_settings":`+enrollmentEST+`}}`, queryJSON("dms-reenroll-cas-no-reenroll", "{}"))
+
+	var oldKeyCount int
+	tx := con.Raw("SELECT count(*) FROM dms WHERE settings->'reenrollment_settings' ? 'additional_validation_cas'").Scan(&oldKeyCount)
+	if tx.Error != nil {
+		t.Fatalf("failed to query old key: %v", tx.Error)
+	}
+	assert.Equal(t, 0, oldKeyCount)
+
+	// Down migration copies the re-enrollment validation CAs back into additional_validation_cas.
+	RollbackMigration(t, logger, con, dmsDBName, "20261022120000_reenroll_validation_cas")
+
+	assert.JSONEq(t, `["ca-1","ca-2"]`, queryJSON("dms-reenroll-cas-moved", "{reenrollment_settings,additional_validation_cas}"))
+	assert.JSONEq(t, `["ca-3"]`, queryJSON("dms-reenroll-cas-no-est", "{reenrollment_settings,additional_validation_cas}"))
+	assert.JSONEq(t, `[]`, queryJSON("dms-reenroll-cas-null", "{reenrollment_settings,additional_validation_cas}"))
+	assert.Equal(t, "", queryJSON("dms-reenroll-cas-no-reenroll", "{reenrollment_settings}"))
+
+	ApplyMigration(t, logger, con, dmsDBName)
 }

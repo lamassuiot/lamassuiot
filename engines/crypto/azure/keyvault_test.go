@@ -5,16 +5,16 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	lazure "github.com/lamassuiot/lamassuiot/shared/azure/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	lazure "github.com/lamassuiot/lamassuiot/v4/shared/azure"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewAzureKeyVaultEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAzureKeyVaultEngine")
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"key1": "value1",
 		"key2": "value2",
 	}
@@ -102,7 +102,7 @@ func prepareKeyVaultCryptoEngine(t *testing.T) (func() error, cryptoengines.Cryp
 
 	logger := logrus.New().WithField("test", "KeyVault")
 
-	metadata := map[string]interface{}{}
+	metadata := map[string]any{}
 
 	credential, err := lazure.GetAzureCredential(*conf)
 	if err != nil {

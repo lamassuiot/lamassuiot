@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/globalsign/est"
-	"github.com/google/uuid"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +55,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 
 	// Create DMS
 	dms, err := dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{
-		ID:       uuid.NewString(),
+		ID:       uuid.NewV7().String(),
 		Name:     "TestDMS",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
@@ -83,7 +83,6 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 					AuthMode: models.ESTAuthModeClientCertificate,
 				},
-				AdditionalValidationCAs:     []string{},
 				ReEnrollmentDelta:           models.TimeDuration(24 * 365 * time.Hour), // Allow re-enrollment any time within a year
 				EnableExpiredRenewal:        true,
 				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -118,7 +117,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 	}
 
 	t.Run("FirstEnrollment_SetsExpirationDate", func(t *testing.T) {
-		deviceID := fmt.Sprintf("device-%s", uuid.NewString())
+		deviceID := fmt.Sprintf("device-%s", uuid.NewV7().String())
 		enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -150,7 +149,7 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 	})
 
 	t.Run("ReEnrollment_UpdatesExpirationDate", func(t *testing.T) {
-		deviceID := fmt.Sprintf("device-%s", uuid.NewString())
+		deviceID := fmt.Sprintf("device-%s", uuid.NewV7().String())
 		enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
@@ -239,7 +238,7 @@ func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
 
 	// Create DMS
 	dms, err := dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{
-		ID:       uuid.NewString(),
+		ID:       uuid.NewV7().String(),
 		Name:     "TestDMS",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
@@ -260,7 +259,7 @@ func TestBindIdentityToDevice_DirectBinding_SetsExpirationDate(t *testing.T) {
 	require.NoError(t, err, "could not create DMS")
 
 	// Create device
-	deviceID := uuid.NewString()
+	deviceID := uuid.NewV7().String()
 	device, err := testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        deviceID,
 		Alias:     "test-device",
@@ -332,7 +331,7 @@ func TestBindIdentityToDevice_MultipleBindings_TracksLatestExpiration(t *testing
 
 	// Create DMS
 	dms, err := dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{
-		ID:       uuid.NewString(),
+		ID:       uuid.NewV7().String(),
 		Name:     "TestDMS",
 		Metadata: map[string]any{},
 		Settings: models.DMSSettings{
@@ -353,7 +352,7 @@ func TestBindIdentityToDevice_MultipleBindings_TracksLatestExpiration(t *testing
 	require.NoError(t, err, "could not create DMS")
 
 	// Create device
-	deviceID := uuid.NewString()
+	deviceID := uuid.NewV7().String()
 	device, err := testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
 		ID:        deviceID,
 		Alias:     "test-device",

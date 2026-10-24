@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,17 +17,17 @@ import (
 	"syscall"
 
 	"github.com/fatih/color"
-	authzconfig "github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
-	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/eventbus/inmemory"
-	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg/sampledata"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
-	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/monolithic/pkg"
+	"github.com/lamassuiot/lamassuiot/v4/monolithic/pkg/eventbus/inmemory"
+	"github.com/lamassuiot/lamassuiot/v4/monolithic/pkg/sampledata"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
+	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
+	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/subsystems"
 	mobycontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	mobyclient "github.com/moby/moby/client"
@@ -295,7 +296,7 @@ func main() {
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
-		pkcs11SubsystemBuilder.Prepare(map[string]interface{}{"hsmModulePath": hsmModulePath})
+		pkcs11SubsystemBuilder.Prepare(map[string]any{"hsmModulePath": hsmModulePath})
 		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch SoftHSM: %s", err)
@@ -322,7 +323,7 @@ func main() {
 		LogLevel: cconfig.Trace,
 		Enabled:  false,
 		Provider: cconfig.Amqp,
-		Config:   make(map[string]interface{}),
+		Config:   make(map[string]any),
 	}
 
 	dlqEventBus := eventBus
@@ -333,11 +334,11 @@ func main() {
 			LogLevel: cconfig.Trace,
 			Enabled:  true,
 			Provider: "inmemory", // Custom provider for monolithic
-			Config:   make(map[string]interface{}),
+			Config:   make(map[string]any),
 		}
 
 		dlqEventBus = eventBus
-		dlqEventBus.Config = make(map[string]interface{})
+		dlqEventBus.Config = make(map[string]any)
 
 		fmt.Println(" 	-- inmemory eventbus: ephemeral GoChannel pub/sub")
 	} else if !*disableEventbus && !*useAwsEventbus {
@@ -351,7 +352,7 @@ func main() {
 		// make a copy for DLQ using deep copy
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
-		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
+		basicAuth := eventBus.Config["basic_auth"].(map[string]any)
 
 		dlqEventBus = eventBus
 		dlqEventBus.Config = deepCopy(eventBus.Config)
@@ -470,7 +471,7 @@ func main() {
 	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
 		kmsCryptoEngine := cconfig.CryptoEngineConfig{
 			ID:       "dockertest-localstack-kms",
-			Metadata: make(map[string]interface{}),
+			Metadata: make(map[string]any),
 			Type:     cconfig.AWSKMSProvider,
 			Config:   awsBaseCryptoEngine.Config,
 		}
@@ -481,7 +482,7 @@ func main() {
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
 		secretsManagerCryptoEngine := cconfig.CryptoEngineConfig{
 			ID:       "dockertest-localstack-smngr",
-			Metadata: make(map[string]interface{}),
+			Metadata: make(map[string]any),
 			Type:     cconfig.AWSSecretsManagerProvider,
 			Config:   awsBaseCryptoEngine.Config,
 		}
@@ -493,9 +494,9 @@ func main() {
 		engineId := "filesystem-test-1"
 		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngineConfig{
 			ID:       engineId,
-			Metadata: make(map[string]interface{}),
+			Metadata: make(map[string]any),
 			Type:     cconfig.FilesystemProvider,
-			Config: map[string]interface{}{
+			Config: map[string]any{
 				"storage_directory": "/tmp/gotest",
 			},
 		})
@@ -511,7 +512,7 @@ func main() {
 	if _, ok := cryptoengineOptionsMap[AzureKeyVaultSecrets]; ok {
 		azureSecretsEngine := cconfig.CryptoEngineConfig{
 			ID:       "azure-keyvault-secrets-1",
-			Metadata: make(map[string]interface{}),
+			Metadata: make(map[string]any),
 			Type:     cconfig.AzureKeyVaultSecretsProvider,
 			Config:   azureBaseCryptoEngine.Config,
 		}
@@ -610,7 +611,7 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	options = strings.ToLower(options)
 
 	opts := make(map[CryptoEngineOption]struct{})
-	for _, opt := range strings.Split(options, ",") {
+	for opt := range strings.SplitSeq(options, ",") {
 		switch CryptoEngineOption(opt) {
 		case AwsSecretsManager, AwsKms, Vault, Pkcs11, Filesystem, AzureKeyVaultSecrets:
 			opts[CryptoEngineOption(opt)] = struct{}{}
@@ -628,20 +629,18 @@ func printWColor(str string, fg, bg color.Attribute) {
 	color.Unset()
 }
 
-func deepCopy(src map[string]interface{}) map[string]interface{} {
+func deepCopy(src map[string]any) map[string]any {
 	if src == nil {
 		return nil
 	}
-	dst := make(map[string]interface{}, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
+	dst := make(map[string]any, len(src))
+	maps.Copy(dst, src)
 	return dst
 }
 
 func splitCommaSeparated(value string) []string {
 	out := []string{}
-	for _, item := range strings.Split(value, ",") {
+	for item := range strings.SplitSeq(value, ",") {
 		if item = strings.TrimSpace(item); item != "" {
 			out = append(out, item)
 		}
@@ -706,7 +705,7 @@ func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine
 		},
 		HTTPSchemas: func() []string {
 			var out []string
-			for _, p := range strings.Split(httpSchemas, ",") {
+			for p := range strings.SplitSeq(httpSchemas, ",") {
 				if p = strings.TrimSpace(p); p != "" {
 					out = append(out, p)
 				}

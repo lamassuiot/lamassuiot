@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	ampq "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/config"
-	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	ampq "github.com/lamassuiot/lamassuiot/v4/engines/eventbus/amqp/config"
+	dockerrunner "github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
 	"github.com/moby/moby/api/types/network"
 	"github.com/ory/dockertest/v4"
 	"github.com/sirupsen/logrus"
@@ -68,12 +68,10 @@ func RunRabbitMQDocker(exposeAsStandardPort bool) (func() error, *ampq.AMQPConne
 	}
 
 	return containerCleanup, &ampq.AMQPConnection{
-		Protocol: ampq.AMQP,
-		BasicConnection: cconfig.BasicConnection{
-			Hostname:  "127.0.0.1",
-			Port:      p,
-			TLSConfig: cconfig.TLSConfig{},
-		},
+		Protocol:  ampq.AMQP,
+		Hostname:  "127.0.0.1",
+		Port:      p,
+		TLSConfig: cconfig.TLSConfig{},
 		BasicAuth: ampq.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
 		Exchange:  "lamassu",
 	}, adminPort, nil

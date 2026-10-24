@@ -3,25 +3,25 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/specs"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
-	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
+	auditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/handlers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 )
 
@@ -149,7 +149,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 				// Caveat: queues are declared durable by the eventbus layer, so
 				// queues from crashed/replaced instances linger until cleaned up
 				// out-of-band (operator tooling or RabbitMQ TTL policies).
-				sseServiceID := fmt.Sprintf("%s-sse-%s", serviceID, uuid.NewString())
+				sseServiceID := fmt.Sprintf("%s-sse-%s", serviceID, uuid.NewV7().String())
 				sseSubscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, sseServiceID, lSSE)
 				if err != nil {
 					lSSE.Errorf("could not generate SSE Event Bus Subscriber: %s", err)

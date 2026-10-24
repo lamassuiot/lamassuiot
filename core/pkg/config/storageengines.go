@@ -3,8 +3,8 @@ package config
 type PluggableStorageEngine struct {
 	LogLevel LogLevel `mapstructure:"log_level"`
 
-	Provider StorageProvider        `mapstructure:"provider"`
-	Config   map[string]interface{} `mapstructure:"config,remain"`
+	Provider StorageProvider `mapstructure:"provider"`
+	Config   map[string]any  `mapstructure:"config,remain"`
 }
 
 type StorageProvider string

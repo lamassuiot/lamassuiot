@@ -5,18 +5,17 @@ import (
 	"crypto/x509"
 	"net/http"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	external_clients "github.com/lamassuiot/lamassuiot/sdk/v3/external"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	external_clients "github.com/lamassuiot/lamassuiot/v4/sdk/external"
 	"golang.org/x/crypto/ocsp"
 )
 
 type VAClient services.VAService
 
 type httpVAClient struct {
-	httpClient *http.Client
-	baseUrl    string
+	restClient
 }
 
 func NewHttpVAClient(client *http.Client, url string) services.VAService {
@@ -42,13 +41,13 @@ func (cli *httpVAClient) GetOCSPResponsePost(ctx context.Context, input services
 }
 
 func (cli *httpVAClient) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
-	url := cli.baseUrl + "/roles"
-	return IterGet[models.VARole, *resources.GetItemsResponse[models.VARole]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	path := "/roles"
+	return cli.iterGet[models.VARole, *resources.GetItemsResponse[models.VARole]](ctx, path, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpVAClient) GetVARoleByID(ctx context.Context, input services.GetVARoleInput) (*models.VARole, error) {
-	url := cli.baseUrl + "/roles/" + input.CASubjectKeyID
-	role, err := Get[*models.VARole](ctx, cli.httpClient, url, nil, map[int][]error{})
+	path := "/roles/" + input.CASubjectKeyID
+	role, err := cli.get[*models.VARole](ctx, path, nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +56,7 @@ func (cli *httpVAClient) GetVARoleByID(ctx context.Context, input services.GetVA
 }
 
 func (cli *httpVAClient) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
-	response, err := Put[*models.VARole](ctx, cli.httpClient, cli.baseUrl+"/roles/"+input.CASubjectKeyID, input.CRLRole, map[int][]error{})
+	response, err := cli.put[*models.VARole](ctx, "/roles/"+input.CASubjectKeyID, input.CRLRole, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}

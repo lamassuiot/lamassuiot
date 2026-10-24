@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type dmsEventPublisher struct {
@@ -138,7 +138,7 @@ func (mw dmsEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateR
 	return mw.next.Reenroll(ctx, csr, aps)
 }
 
-func (mw dmsEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (mw dmsEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
 	return mw.next.ServerKeyGen(ctx, csr, aps)
 }
 

@@ -8,13 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/engine"
-	"github.com/lamassuiot/lamassuiot/connectors/authz/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
 
 // OIDCMatcher matches principals against JWT/OIDC auth material.
@@ -30,7 +31,7 @@ type X509Matcher struct{}
 
 // Match filters principals whose AuthConfig claim conditions all pass for the given JWT material.
 // authMaterial accepts: string (Bearer token or raw JWT), jwt.MapClaims, map[string]interface{}.
-func (m OIDCMatcher) Match(principals []models.Principal, authMaterial interface{}) ([]string, error) {
+func (m OIDCMatcher) Match(principals []models.Principal, authMaterial any) ([]string, error) {
 	claims, err := m.extractOIDCClaims(authMaterial)
 	if err != nil {
 		return nil, err
@@ -51,7 +52,7 @@ func (m OIDCMatcher) Match(principals []models.Principal, authMaterial interface
 
 // Match filters principals whose AuthConfig matches the given certificate material.
 // authMaterial accepts: *x509.Certificate or string (PEM-encoded certificate).
-func (X509Matcher) Match(principals []models.Principal, authMaterial interface{}) ([]string, error) {
+func (X509Matcher) Match(principals []models.Principal, authMaterial any) ([]string, error) {
 	cert, err := extractX509Cert(authMaterial)
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func DefaultMatchService(store engine.PrincipalStore, jwkURL string, insecureSki
 
 // MatchPrincipals loads active principals of authType from the store and returns those
 // whose AuthConfig matches authMaterial.
-func (ms *MatchService) MatchPrincipals(ctx context.Context, authMaterial interface{}, authType string) ([]string, error) {
+func (ms *MatchService) MatchPrincipals(ctx context.Context, authMaterial any, authType string) ([]string, error) {
 	matcher, ok := ms.matchers[authType]
 	if !ok {
 		return nil, fmt.Errorf("unsupported auth type: %s", authType)
@@ -125,7 +126,7 @@ func (ms *MatchService) MatchPrincipals(ctx context.Context, authMaterial interf
 // subjects for the matched principals. The returned attributes are neutral
 // domain values derived from principal auth_config and, optionally, auth-type
 // adapters; authorization code never consumes auth-specific fields directly.
-func (ms *MatchService) MatchSubjects(ctx context.Context, authMaterial interface{}, authType string) ([]engine.ResolvedSubject, error) {
+func (ms *MatchService) MatchSubjects(ctx context.Context, authMaterial any, authType string) ([]engine.ResolvedSubject, error) {
 	matcher, ok := ms.matchers[authType]
 	if !ok {
 		return nil, fmt.Errorf("unsupported auth type: %s", authType)
@@ -157,9 +158,7 @@ func (ms *MatchService) MatchSubjects(ctx context.Context, authMaterial interfac
 			if err != nil {
 				return nil, fmt.Errorf("resolve subject attributes for principal %s: %w", principal.ID, err)
 			}
-			for key, value := range derived {
-				attributes[key] = value
-			}
+			maps.Copy(attributes, derived)
 		}
 		subjects = append(subjects, engine.ResolvedSubject{
 			PrincipalID: principal.ID,
@@ -170,7 +169,7 @@ func (ms *MatchService) MatchSubjects(ctx context.Context, authMaterial interfac
 }
 
 type subjectAttributeResolver interface {
-	ResolveSubjectAttributes(principal models.Principal, authMaterial interface{}) (map[string]string, error)
+	ResolveSubjectAttributes(principal models.Principal, authMaterial any) (map[string]string, error)
 }
 
 func staticSubjectAttributes(authConfig models.AuthConfig) map[string]string {
@@ -182,10 +181,8 @@ func staticSubjectAttributes(authConfig models.AuthConfig) map[string]string {
 
 	switch values := raw.(type) {
 	case map[string]string:
-		for key, value := range values {
-			attributes[key] = value
-		}
-	case map[string]interface{}:
+		maps.Copy(attributes, values)
+	case map[string]any:
 		for key, value := range values {
 			attributes[key] = fmt.Sprintf("%v", value)
 		}
@@ -202,10 +199,8 @@ func subjectAttributeMappings(authConfig models.AuthConfig) map[string]string {
 	mappings := make(map[string]string)
 	switch values := raw.(type) {
 	case map[string]string:
-		for key, value := range values {
-			mappings[key] = value
-		}
-	case map[string]interface{}:
+		maps.Copy(mappings, values)
+	case map[string]any:
 		for key, value := range values {
 			if str, ok := value.(string); ok {
 				mappings[key] = str
@@ -217,7 +212,7 @@ func subjectAttributeMappings(authConfig models.AuthConfig) map[string]string {
 
 // --- OIDC helpers ---
 
-func (m OIDCMatcher) extractOIDCClaims(authMaterial interface{}) (jwt.MapClaims, error) {
+func (m OIDCMatcher) extractOIDCClaims(authMaterial any) (jwt.MapClaims, error) {
 	switch v := authMaterial.(type) {
 	case string:
 		v = strings.TrimPrefix(v, "Bearer ")
@@ -243,7 +238,7 @@ func (m OIDCMatcher) extractOIDCClaims(authMaterial interface{}) (jwt.MapClaims,
 
 // ResolveSubjectAttributes maps auth-specific OIDC claim values to neutral
 // subject attributes requested by the principal's auth_config.
-func (m OIDCMatcher) ResolveSubjectAttributes(principal models.Principal, authMaterial interface{}) (map[string]string, error) {
+func (m OIDCMatcher) ResolveSubjectAttributes(principal models.Principal, authMaterial any) (map[string]string, error) {
 	mappings := subjectAttributeMappings(principal.AuthConfig)
 	attributes := make(map[string]string, len(mappings))
 	if len(mappings) == 0 {
@@ -270,12 +265,12 @@ func (m OIDCMatcher) ResolveSubjectAttributes(principal models.Principal, authMa
 }
 
 func matchOIDCClaims(p *models.Principal, claims jwt.MapClaims) (bool, error) {
-	claimConditions, ok := p.AuthConfig["claims"].([]interface{})
+	claimConditions, ok := p.AuthConfig["claims"].([]any)
 	if !ok {
 		return false, fmt.Errorf("missing or invalid claims in auth_config for principal %s", p.ID)
 	}
 	for _, ci := range claimConditions {
-		condition, ok := ci.(map[string]interface{})
+		condition, ok := ci.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -289,15 +284,15 @@ func matchOIDCClaims(p *models.Principal, claims jwt.MapClaims) (bool, error) {
 	return true, nil
 }
 
-func getNestedClaim(claims jwt.MapClaims, claimPath string) (interface{}, bool) {
+func getNestedClaim(claims jwt.MapClaims, claimPath string) (any, bool) {
 	parts := strings.Split(claimPath, ".")
-	var current interface{} = claims
+	var current any = claims
 	for _, part := range parts {
-		var currentMap map[string]interface{}
+		var currentMap map[string]any
 		switch v := current.(type) {
 		case jwt.MapClaims:
 			currentMap = v
-		case map[string]interface{}:
+		case map[string]any:
 			currentMap = v
 		default:
 			return nil, false
@@ -311,7 +306,7 @@ func getNestedClaim(claims jwt.MapClaims, claimPath string) (interface{}, bool) 
 	return current, true
 }
 
-func evaluateClaim(claims jwt.MapClaims, claimName, operator string, expectedValue interface{}) bool {
+func evaluateClaim(claims jwt.MapClaims, claimName, operator string, expectedValue any) bool {
 	actualValue, exists := getNestedClaim(claims, claimName)
 	if !exists {
 		return false
@@ -320,7 +315,7 @@ func evaluateClaim(claims jwt.MapClaims, claimName, operator string, expectedVal
 	case "equals":
 		return fmt.Sprintf("%v", actualValue) == fmt.Sprintf("%v", expectedValue)
 	case "contains":
-		if arr, ok := actualValue.([]interface{}); ok {
+		if arr, ok := actualValue.([]any); ok {
 			expectedStr := fmt.Sprintf("%v", expectedValue)
 			for _, item := range arr {
 				if fmt.Sprintf("%v", item) == expectedStr {
@@ -340,7 +335,7 @@ func evaluateClaim(claims jwt.MapClaims, claimName, operator string, expectedVal
 
 // --- X.509 helpers ---
 
-func extractX509Cert(authMaterial interface{}) (*x509.Certificate, error) {
+func extractX509Cert(authMaterial any) (*x509.Certificate, error) {
 	switch v := authMaterial.(type) {
 	case *x509.Certificate:
 		return v, nil
@@ -365,7 +360,7 @@ func extractX509Cert(authMaterial interface{}) (*x509.Certificate, error) {
 
 // ResolveSubjectAttributes maps auth-specific certificate values to neutral
 // subject attributes requested by the principal's auth_config.
-func (X509Matcher) ResolveSubjectAttributes(principal models.Principal, authMaterial interface{}) (map[string]string, error) {
+func (X509Matcher) ResolveSubjectAttributes(principal models.Principal, authMaterial any) (map[string]string, error) {
 	mappings := subjectAttributeMappings(principal.AuthConfig)
 	attributes := make(map[string]string, len(mappings))
 	if len(mappings) == 0 {
@@ -464,12 +459,12 @@ func checkCA(p *models.Principal, cert *x509.Certificate) (bool, error) {
 	}
 }
 
-func getX509CATrustConfig(authConfig map[string]interface{}) (*x509CATrustConfig, error) {
+func getX509CATrustConfig(authConfig map[string]any) (*x509CATrustConfig, error) {
 	caTrustRaw, ok := authConfig["ca_trust"]
 	if !ok {
 		return nil, fmt.Errorf("missing ca_trust in auth_config")
 	}
-	caTrustMap, ok := caTrustRaw.(map[string]interface{})
+	caTrustMap, ok := caTrustRaw.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("invalid ca_trust in auth_config")
 	}

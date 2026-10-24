@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
@@ -22,7 +22,7 @@ func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
 		ID:        "device-prod",
 		Alias:     "Production Device",
 		Tags:      []string{"prod"},
-		Metadata:  map[string]interface{}{},
+		Metadata:  map[string]any{},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#FF0000",
@@ -35,7 +35,7 @@ func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
 		ID:        "device-dev",
 		Alias:     "Development Device",
 		Tags:      []string{"dev"},
-		Metadata:  map[string]interface{}{},
+		Metadata:  map[string]any{},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#00FF00",
@@ -48,7 +48,7 @@ func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
 		ID:        "device-stage",
 		Alias:     "Staging Device",
 		Tags:      []string{"staging"},
-		Metadata:  map[string]interface{}{},
+		Metadata:  map[string]any{},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#0000FF",
@@ -58,7 +58,7 @@ func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for device-prod
-	ud1 := make(map[string]interface{})
+	ud1 := make(map[string]any)
 	ud1["environment"] = "prod"
 	ud1["priority"] = 10
 	ud1["deployed_at"] = "2025-06-15T10:00:00Z"
@@ -73,7 +73,7 @@ func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for device-dev
-	ud2 := make(map[string]interface{})
+	ud2 := make(map[string]any)
 	ud2["environment"] = "dev"
 	ud2["priority"] = 20
 	ud2["deployed_at"] = "2026-01-10T08:00:00Z"
@@ -88,7 +88,7 @@ func TestGetDevicesSortByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for device-stage
-	ud3 := make(map[string]interface{})
+	ud3 := make(map[string]any)
 	ud3["environment"] = "stage"
 	ud3["priority"] = 5
 	ud3["deployed_at"] = "2025-12-20T14:30:00Z"
@@ -403,7 +403,7 @@ func TestGetDevicesSortSQLInjection(t *testing.T) {
 		ID:        "device-001",
 		Alias:     "First Device",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"env": "prod"},
+		Metadata:  map[string]any{"env": "prod"},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#FF0000",
@@ -416,7 +416,7 @@ func TestGetDevicesSortSQLInjection(t *testing.T) {
 		ID:        "device-002",
 		Alias:     "Second Device",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"env": "dev"},
+		Metadata:  map[string]any{"env": "dev"},
 		DMSID:     "test-dms",
 		Icon:      "device",
 		IconColor: "#00FF00",
