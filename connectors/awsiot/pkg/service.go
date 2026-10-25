@@ -1101,7 +1101,6 @@ func (svc *AWSCloudConnectorServiceBackend) connectThingOverMqttWss(ctx context.
 	}
 
 	requestUrl := fmt.Sprintf("wss://%s%s?%s", host, canonicalUri, canonicalQuerystring)
-	fmt.Println(requestUrl)
 
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(requestUrl)
