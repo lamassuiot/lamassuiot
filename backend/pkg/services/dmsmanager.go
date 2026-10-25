@@ -356,8 +356,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx cont
 		return lFunc, errs.ErrDMSEnrollInvalidCert
 	}
 
-	issuer := leafIssuer(leafClientCert, (*x509.Certificate)(validationCA.Certificate.Certificate), clientCerts[1:])
-	if err := svc.verifyCertificateNotRevoked(ctx, lFunc, leafClientCert, issuer, mtlsOpts.AllowUnverifiableRevocation, "enrollment"); err != nil {
+	if err := svc.verifyCertificateNotRevoked(ctx, lFunc, leafClientCert, (*x509.Certificate)(validationCA.Certificate.Certificate), mtlsOpts.AllowUnverifiableRevocation, "enrollment"); err != nil {
 		return lFunc, err
 	}
 
@@ -398,17 +397,6 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 	}
 
 	return lFunc, nil
-}
-
-// leafIssuer returns the certificate that directly signed leaf: one of the presented intermediates or, if none
-// did, the validation CA. OCSP requests and CRL/OCSP signature checks for leaf must use this issuer.
-func leafIssuer(leaf, validationCA *x509.Certificate, intermediates []*x509.Certificate) *x509.Certificate {
-	for _, candidate := range intermediates {
-		if bytes.Equal(leaf.RawIssuer, candidate.RawSubject) && leaf.CheckSignatureFrom(candidate) == nil {
-			return candidate
-		}
-	}
-	return validationCA
 }
 
 // verifyCertificateNotRevoked fails closed: it returns nil only when cert is known not to be revoked, or when

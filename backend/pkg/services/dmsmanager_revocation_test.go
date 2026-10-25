@@ -28,7 +28,7 @@ type revocationTestCA struct {
 	key  *ecdsa.PrivateKey
 }
 
-func newRevocationTestCA(t *testing.T, cn string, parent *revocationTestCA) *revocationTestCA {
+func newRevocationTestCA(t *testing.T, cn string) *revocationTestCA {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -46,12 +46,7 @@ func newRevocationTestCA(t *testing.T, cn string, parent *revocationTestCA) *rev
 		SubjectKeyId:          []byte(cn),
 	}
 
-	signerCert, signerKey := tmpl, key
-	if parent != nil {
-		signerCert, signerKey = parent.cert, parent.key
-	}
-
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, signerCert, &key.PublicKey, signerKey)
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
 		t.Fatalf("could not create CA certificate: %s", err)
 	}
@@ -163,8 +158,8 @@ func notInLamassu() DMSManagerServiceBackend {
 }
 
 func TestVerifyCertificateNotRevoked(t *testing.T) {
-	ca := newRevocationTestCA(t, "external-ca", nil)
-	otherCA := newRevocationTestCA(t, "other-ca", nil)
+	ca := newRevocationTestCA(t, "external-ca")
+	otherCA := newRevocationTestCA(t, "other-ca")
 
 	good := func(sn *big.Int) ocsp.Response {
 		return ocsp.Response{Status: ocsp.Good, SerialNumber: sn, ThisUpdate: time.Now().Add(-time.Minute), NextUpdate: time.Now().Add(time.Hour)}
@@ -469,21 +464,5 @@ func TestCheckRevocationFreshness(t *testing.T) {
 				t.Fatalf("expected not fresh. Got no error")
 			}
 		})
-	}
-}
-
-func TestLeafIssuer(t *testing.T) {
-	root := newRevocationTestCA(t, "root", nil)
-	intermediate := newRevocationTestCA(t, "intermediate", root)
-	unrelated := newRevocationTestCA(t, "unrelated", nil)
-
-	leafFromIntermediate := intermediate.issueLeaf(t, 1, nil, nil)
-	if got := leafIssuer(leafFromIntermediate, root.cert, []*x509.Certificate{unrelated.cert, intermediate.cert}); !got.Equal(intermediate.cert) {
-		t.Fatalf("expected intermediate as issuer. Got %s", got.Subject.CommonName)
-	}
-
-	leafFromRoot := root.issueLeaf(t, 2, nil, nil)
-	if got := leafIssuer(leafFromRoot, root.cert, []*x509.Certificate{intermediate.cert}); !got.Equal(root.cert) {
-		t.Fatalf("expected validation CA as issuer. Got %s", got.Subject.CommonName)
 	}
 }
