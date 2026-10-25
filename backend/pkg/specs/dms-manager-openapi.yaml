@@ -702,6 +702,14 @@ components:
           type: integer
         allow_expired:
           type: boolean
+        allow_unverifiable_revocation:
+          type: boolean
+          default: false
+          description: >-
+            Accept client certificates whose revocation status cannot be checked because they are not managed
+            by Lamassu and include no OCSP or CRL distribution point. When false (default), such certificates
+            are rejected. Certificates whose OCSP/CRL endpoints are unreachable, return invalid or stale
+            responses, or report an unknown status are always rejected.
 
     DeviceProvisionProfile:
       type: object

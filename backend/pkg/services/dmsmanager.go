@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -355,23 +356,11 @@ func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx cont
 		return lFunc, errs.ErrDMSEnrollInvalidCert
 	}
 
-	couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, leafClientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
-	if err != nil {
-		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. error while checking certificate revocation status: %s", err)
+	issuer := leafIssuer(leafClientCert, (*x509.Certificate)(validationCA.Certificate.Certificate), clientCerts[1:])
+	if err := svc.verifyCertificateNotRevoked(ctx, lFunc, leafClientCert, issuer, mtlsOpts.AllowUnverifiableRevocation, "enrollment"); err != nil {
 		return lFunc, err
 	}
 
-	if !couldCheckRevocation {
-		lFunc.Warnf("could not verify certificate revocation status. Assuming certificate as not-revoked")
-		return lFunc, nil
-	}
-
-	if isRevoked {
-		lFunc.WithField("auth-status", "failed").Errorf("aborting enrollment. certificate is revoked")
-		return lFunc, fmt.Errorf("certificate is revoked")
-	}
-
-	lFunc.Infof("certificate is not revoked")
 	return lFunc, nil
 }
 
@@ -403,24 +392,49 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 	}
 
 	lFunc.Infof("checking certificate revocation status")
-	couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, leafCert, validationCA)
-	if err != nil {
-		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. error while checking certificate revocation status: %s", err)
+	allowUnverifiable := reEnrollSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowUnverifiableRevocation
+	if err := svc.verifyCertificateNotRevoked(ctx, lFunc, leafCert, validationCA, allowUnverifiable, "reenrollment"); err != nil {
 		return lFunc, err
 	}
 
-	if !couldCheckRevocation {
-		lFunc.Infof("could not verify certificate revocation status. Assuming certificate as not revoked")
-		return lFunc, nil
-	}
-
-	if isRevoked {
-		lFunc.WithField("auth-status", "failed").Errorf("aborting reenrollment. certificate is revoked")
-		return lFunc, fmt.Errorf("certificate is revoked")
-	}
-
-	lFunc.Infof("certificate is not revoked")
 	return lFunc, nil
+}
+
+// leafIssuer returns the certificate that directly signed leaf: one of the presented intermediates or, if none
+// did, the validation CA. OCSP requests and CRL/OCSP signature checks for leaf must use this issuer.
+func leafIssuer(leaf, validationCA *x509.Certificate, intermediates []*x509.Certificate) *x509.Certificate {
+	for _, candidate := range intermediates {
+		if bytes.Equal(leaf.RawIssuer, candidate.RawSubject) && leaf.CheckSignatureFrom(candidate) == nil {
+			return candidate
+		}
+	}
+	return validationCA
+}
+
+// verifyCertificateNotRevoked fails closed: it returns nil only when cert is known not to be revoked, or when
+// there is no revocation source to consult at all and allowUnverifiable is set.
+func (svc DMSManagerServiceBackend) verifyCertificateNotRevoked(ctx context.Context, lFunc *logrus.Entry, cert, issuer *x509.Certificate, allowUnverifiable bool, operation string) error {
+	status, err := svc.checkCertificateRevocation(ctx, cert, issuer)
+	if err != nil {
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. could not verify certificate revocation status: %s", operation, err)
+		return fmt.Errorf("could not verify certificate revocation status: %w", err)
+	}
+
+	switch status {
+	case revocationStatusGood:
+		lFunc.Infof("certificate is not revoked")
+		return nil
+	case revocationStatusRevoked:
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. certificate is revoked", operation)
+		return fmt.Errorf("certificate is revoked")
+	default:
+		if allowUnverifiable {
+			lFunc.Warnf("certificate is not managed by Lamassu and has no OCSP/CRL endpoints. Accepting it because DMS allows unverifiable revocation status")
+			return nil
+		}
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. certificate is not managed by Lamassu and has no OCSP/CRL endpoints to check its revocation status", operation)
+		return fmt.Errorf("certificate revocation status cannot be verified: certificate is not managed by Lamassu and has no OCSP/CRL endpoints")
+	}
 }
 
 // findReenrollmentValidationCA tries the enrollment CA first, then each of the re-enrollment validation CAs.
@@ -1149,83 +1163,114 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 	return crt, privKey, nil
 }
 
-// returns if the given certificate COULD BE checked for revocation (true means that it could be checked), and if it is revoked (true) or not (false)
-func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, bool, error) {
+type revocationStatus int
+
+const (
+	revocationStatusGood revocationStatus = iota
+	revocationStatusRevoked
+	// revocationStatusNoSource means the certificate is not managed by Lamassu and carries no OCSP or CRL
+	// endpoint, so there is nothing to check its revocation status against.
+	revocationStatusNoSource
+)
+
+// checkCertificateRevocation determines the revocation status of cert, whose direct issuer is issuer.
+// If the certificate is managed by Lamassu its stored status is used. Otherwise the OCSP servers and then the CRL
+// distribution points listed in the certificate are consulted. An error is returned when the certificate lists
+// revocation endpoints but none of them produced a valid, fresh and conclusive answer.
+func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Context, cert *x509.Certificate, issuer *x509.Certificate) (revocationStatus, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	revocationChecked := false
-	revoked := true
 	clientSN := helpers.SerialNumberToHexString(cert.SerialNumber)
-	//check if revoked
-	//  If cert is in Lamassu: check status
-	//  If cert NOT in Lamassu (i.e. Issued Offline/Outside Lamassu), check if the certificate has CRL/OCSP in presented CRT.
 	lmsCrt, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: clientSN,
 	})
-	if err != nil {
-		if err != errs.ErrCertificateNotFound {
-			lFunc.Errorf("got unexpected error while searching certificate %s in Lamassu: %s", clientSN, err)
-			return false, true, err
-		}
-
-		//Not Stored In lamassu. Check if CRL/OCSP
-		if len(cert.OCSPServer) > 0 {
-			//OCSP first
-			for _, ocspInstance := range cert.OCSPServer {
-				ocspResp, err := external_clients.GetOCSPResponsePost(ocspInstance, cert, validationCA, nil, true)
-				if err != nil {
-					lFunc.Warnf("could not get or validate ocsp response from server %s specified in the presented client certificate: %s", err, clientSN)
-					lFunc.Warnf("checking with next ocsp server")
-					continue
-				}
-
-				lFunc.Infof("successfully validated OCSP response with external %s OCSP server. Checking OCSP response status for %s certificate", ocspInstance, clientSN)
-				if ocspResp.Status == ocsp.Revoked {
-					lFunc.Warnf("certificate was revoked at %s with %s revocation reason", ocspResp.RevokedAt.String(), models.RevocationReasonMap[ocspResp.RevocationReason])
-					return true, true, nil
-				} else {
-					lFunc.Infof("certificate is not revoked")
-					return true, false, nil
-				}
-			}
-		}
-
-		if !revocationChecked && len(cert.CRLDistributionPoints) > 0 {
-			//Try CRL
-			for _, crlDP := range cert.CRLDistributionPoints {
-				crl, err := external_clients.GetCRLResponse(crlDP, validationCA, nil, true)
-				if err != nil {
-					lFunc.Warnf("could not get or validate crl response from server %s specified in the presented client certificate: %s", err, clientSN)
-					lFunc.Warnf("checking with next crl server")
-					continue
-				}
-
-				idxClientCrt := slices.IndexFunc(crl.RevokedCertificateEntries, func(entry x509.RevocationListEntry) bool {
-					return entry.SerialNumber == cert.SerialNumber
-				})
-
-				if idxClientCrt >= 0 {
-					entry := crl.RevokedCertificateEntries[idxClientCrt]
-					lFunc.Warnf("certificate was revoked at %s with %s revocation reason", entry.RevocationTime.String(), models.RevocationReasonMap[entry.ReasonCode])
-					return true, true, nil
-				} else {
-					lFunc.Infof("certificate not revoked. Client certificate not in CRL: %s", clientSN)
-					revocationChecked = true
-					revoked = false
-					//don't return, check other CRLs
-				}
-			}
-		}
-	} else {
-		if lmsCrt.Status == models.StatusRevoked {
-			lFunc.Errorf("Client certificate %s is revoked", clientSN)
-			return true, true, nil
-		} else {
-			return true, false, nil
-		}
+	if err != nil && err != errs.ErrCertificateNotFound {
+		lFunc.Errorf("got unexpected error while searching certificate %s in Lamassu: %s", clientSN, err)
+		return revocationStatusRevoked, err
 	}
 
-	return revocationChecked, revoked, nil
+	if err == nil {
+		// Serial numbers are only unique per issuer: make sure the stored certificate is the presented one.
+		if lmsCrt.Certificate != nil && bytes.Equal(lmsCrt.Certificate.Raw, cert.Raw) {
+			if lmsCrt.Status == models.StatusRevoked {
+				lFunc.Errorf("client certificate %s is revoked", clientSN)
+				return revocationStatusRevoked, nil
+			}
+			return revocationStatusGood, nil
+		}
+		lFunc.Warnf("certificate with serial number %s stored in Lamassu differs from the presented one. Checking revocation using the presented certificate's OCSP/CRL endpoints", clientSN)
+	}
+
+	if len(cert.OCSPServer) == 0 && len(cert.CRLDistributionPoints) == 0 {
+		lFunc.Warnf("certificate %s is not managed by Lamassu and has no OCSP/CRL endpoints", clientSN)
+		return revocationStatusNoSource, nil
+	}
+
+	now := time.Now()
+
+	for _, ocspInstance := range cert.OCSPServer {
+		ocspResp, err := external_clients.GetOCSPResponsePost(ocspInstance, cert, issuer, nil, true)
+		if err != nil {
+			lFunc.Warnf("could not get or validate ocsp response from server %s for certificate %s: %s. Checking with next revocation source", ocspInstance, clientSN, err)
+			continue
+		}
+
+		if ocspResp.SerialNumber == nil || ocspResp.SerialNumber.Cmp(cert.SerialNumber) != 0 {
+			lFunc.Warnf("ocsp response from server %s does not match certificate %s. Checking with next revocation source", ocspInstance, clientSN)
+			continue
+		}
+
+		if ocspResp.Status == ocsp.Revoked {
+			lFunc.Warnf("certificate was revoked at %s with %s revocation reason", ocspResp.RevokedAt.String(), models.RevocationReasonMap[ocspResp.RevocationReason])
+			return revocationStatusRevoked, nil
+		}
+
+		if !ocspResp.NextUpdate.IsZero() && now.After(ocspResp.NextUpdate) {
+			lFunc.Warnf("ocsp response from server %s for certificate %s is stale (next update %s). Checking with next revocation source", ocspInstance, clientSN, ocspResp.NextUpdate)
+			continue
+		}
+
+		if ocspResp.Status != ocsp.Good {
+			lFunc.Warnf("ocsp server %s reports unknown status for certificate %s. Checking with next revocation source", ocspInstance, clientSN)
+			continue
+		}
+
+		lFunc.Infof("ocsp server %s reports certificate %s as not revoked", ocspInstance, clientSN)
+		return revocationStatusGood, nil
+	}
+
+	crlChecked := false
+	for _, crlDP := range cert.CRLDistributionPoints {
+		crl, err := external_clients.GetCRLResponse(crlDP, issuer, nil, true)
+		if err != nil {
+			lFunc.Warnf("could not get or validate crl from %s for certificate %s: %s. Checking with next revocation source", crlDP, clientSN, err)
+			continue
+		}
+
+		idxClientCrt := slices.IndexFunc(crl.RevokedCertificateEntries, func(entry x509.RevocationListEntry) bool {
+			return entry.SerialNumber != nil && entry.SerialNumber.Cmp(cert.SerialNumber) == 0
+		})
+		if idxClientCrt >= 0 {
+			entry := crl.RevokedCertificateEntries[idxClientCrt]
+			lFunc.Warnf("certificate was revoked at %s with %s revocation reason", entry.RevocationTime.String(), models.RevocationReasonMap[entry.ReasonCode])
+			return revocationStatusRevoked, nil
+		}
+
+		if !crl.NextUpdate.IsZero() && now.After(crl.NextUpdate) {
+			lFunc.Warnf("crl from %s is stale (next update %s). Checking with next revocation source", crlDP, crl.NextUpdate)
+			continue
+		}
+
+		lFunc.Infof("certificate not revoked. Client certificate %s not in CRL %s", clientSN, crlDP)
+		crlChecked = true
+		//don't return, check other CRLs
+	}
+
+	if crlChecked {
+		return revocationStatusGood, nil
+	}
+
+	return revocationStatusRevoked, fmt.Errorf("none of the OCSP/CRL endpoints of certificate %s returned a valid, fresh and conclusive response", clientSN)
 }
 
 func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {

@@ -80,6 +80,9 @@ type AuthOptionsClientCertificate struct {
 	ValidationCAs        []string `json:"validation_cas"`
 	ChainLevelValidation int      `json:"chain_level_validation"`
 	AllowExpired         bool     `json:"allow_expired"` // switch-like option that allows the use of expired certificates
+	// switch-like option that accepts certificates whose revocation status cannot be checked because they are not
+	// managed by Lamassu and carry no OCSP/CRL endpoint. Unreachable or invalid endpoints are always rejected.
+	AllowUnverifiableRevocation bool `json:"allow_unverifiable_revocation"`
 }
 
 type ReEnrollmentSettings struct {
