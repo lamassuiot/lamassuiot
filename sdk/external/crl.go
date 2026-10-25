@@ -25,7 +25,7 @@ func GetCRLResponse(crlServerURL string, issuer *x509.Certificate, serverCertifi
 
 	httpRequest.Header.Add("Host", crlURL.Host)
 
-	httpClient := &http.Client{}
+	httpClient := &http.Client{Timeout: revocationRequestTimeout}
 	if serverCertificate == nil {
 		logrus.Warn("using insecure server validation in CRL request")
 		httpClient.Transport = &http.Transport{
@@ -50,12 +50,13 @@ func GetCRLResponse(crlServerURL string, issuer *x509.Certificate, serverCertifi
 			err, httpRequest.Method, httpRequest.URL)
 	}
 
+	defer httpResponse.Body.Close()
+
 	// Check for a non-2xx status code (failure in request)
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
 		return nil, fmt.Errorf("CRL request failed with status code %d: %s; Request method: %s, URL: %s",
 			httpResponse.StatusCode, httpResponse.Status, httpRequest.Method, httpRequest.URL)
 	}
-	defer httpResponse.Body.Close()
 	output, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
 		return nil, fmt.Errorf("could not decode CRL response body: %s", err)

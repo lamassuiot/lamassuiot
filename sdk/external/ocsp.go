@@ -58,7 +58,7 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 	httpRequest.Header.Add("Accept", "application/ocsp-response")
 	httpRequest.Header.Add("Host", ocspUrl.Host)
 
-	httpClient := &http.Client{}
+	httpClient := &http.Client{Timeout: revocationRequestTimeout}
 	if serverCertificate == nil {
 		logrus.Warn("using insecure server validation in OCSP request")
 		httpClient.Transport = &http.Transport{
