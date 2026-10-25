@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
@@ -104,5 +105,26 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 		return nil, fmt.Errorf("could not parse OCSP response: %w", err)
 	}
 
+	if verifyOCSPResponse {
+		if err := checkDelegatedResponder(response, issuer); err != nil {
+			return nil, err
+		}
+	}
+
 	return response, nil
+}
+
+// checkDelegatedResponder enforces RFC 6960 4.2.2.2: a response signed by a certificate other than the issuer must
+// come from a delegated responder carrying the id-kp-OCSPSigning EKU. ocsp.ParseResponse only checks that the
+// responder certificate was signed by the issuer, which any end-entity certificate of that CA satisfies.
+func checkDelegatedResponder(response *ocsp.Response, issuer *x509.Certificate) error {
+	if response.Certificate == nil || response.Certificate.Equal(issuer) {
+		return nil
+	}
+
+	if !slices.Contains(response.Certificate.ExtKeyUsage, x509.ExtKeyUsageOCSPSigning) {
+		return fmt.Errorf("OCSP response signed by %q, which is not the issuer and is not authorized for OCSP signing", response.Certificate.Subject.CommonName)
+	}
+
+	return nil
 }
