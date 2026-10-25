@@ -12,9 +12,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
+// BuildTLSTransport returns a clone of http.DefaultTransport (keeping proxy
+// settings and timeouts) whose TLS config trusts the system CAs plus
+// cfg.CACertificateFile.
+func BuildTLSTransport(cfg config.TLSConfig) (*http.Transport, error) {
 	caPool := helpers.LoadSytemCACertPool()
-	tlsConfig := &tls.Config{}
+	tlsConfig := &tls.Config{
+		RootCAs: caPool,
+	}
 
 	if cfg.InsecureSkipVerify {
 		tlsConfig.InsecureSkipVerify = true
@@ -29,9 +34,19 @@ func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*htt
 		caPool.AddCert(cert)
 	}
 
-	cli.Transport = &http.Transport{
-		TLSClientConfig: tlsConfig,
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsConfig
+
+	return transport, nil
+}
+
+func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
+	transport, err := BuildTLSTransport(cfg)
+	if err != nil {
+		return nil, err
 	}
+
+	cli.Transport = transport
 
 	return cli, nil
 }
