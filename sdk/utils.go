@@ -68,24 +68,10 @@ func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logg
 	var err error
 	client := &http.Client{}
 
-	caPool := chelpers.LoadSytemCACertPool()
-
-	tlsConfig := &tls.Config{}
-
-	if cfg.InsecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true
+	transport, err := hhelpers.BuildTLSTransport(cfg.TLSConfig)
+	if err != nil {
+		return nil, err
 	}
-
-	if cfg.CACertificateFile != "" {
-		cert, err := chelpers.ReadCertificateFromFile(cfg.CACertificateFile)
-		if err != nil {
-			return nil, err
-		}
-
-		caPool.AddCert(cert)
-	}
-
-	tlsConfig.RootCAs = caPool
 
 	switch cfg.AuthMode {
 	case config.MTLS:
@@ -108,10 +94,8 @@ func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logg
 			return nil, err
 		}
 
-		tlsConfig.Certificates = []tls.Certificate{cert}
-		client.Transport = &http.Transport{
-			TLSClientConfig: tlsConfig,
-		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
+		client.Transport = transport
 
 	case config.JWT:
 		authHttpCli, err := BuildHTTPClient(config.HTTPClient{
@@ -133,23 +117,17 @@ func BuildHTTPClientWithContext(ctx context.Context, cfg config.HTTPClient, logg
 			TokenURL:     wellKnown.TokenURL,
 		}
 
-		authHttpCli.Transport = &http.Transport{
-			TLSClientConfig: tlsConfig,
-		}
+		authHttpCli.Transport = transport
 
 		httpCtx := context.WithValue(ctx, oauth2.HTTPClient, authHttpCli)
 		client = clientConfig.Client(httpCtx)
 	case config.ApiKey:
-		client.Transport = &http.Transport{
-			TLSClientConfig: tlsConfig,
-		}
+		client.Transport = transport
 
 		client = HttpClientWithCustomHeaders(client, cfg.AuthApiKeyOptions.Header, cfg.AuthApiKeyOptions.Key)
 
 	default:
-		client.Transport = &http.Transport{
-			TLSClientConfig: tlsConfig,
-		}
+		client.Transport = transport
 	}
 
 	client.Transport = otelhttp.NewTransport(client.Transport)

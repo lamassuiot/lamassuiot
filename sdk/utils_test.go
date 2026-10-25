@@ -84,6 +84,55 @@ func TestBuildHTTPClientMTLSCertificateSources(t *testing.T) {
 	}
 }
 
+// Every auth mode must trust a server signed by the CA in ca_cert_file.
+func TestBuildHTTPClientTrustsCACertificateFile(t *testing.T) {
+	certPEM, keyPEM := selfSignedClientPEM(t)
+
+	var srv *httptest.Server
+	srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"token_endpoint":"` + srv.URL + `/token"}`))
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"token","token_type":"Bearer","expires_in":3600}`))
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	srv.TLS = &tls.Config{ClientAuth: tls.RequestClientCert}
+	srv.StartTLS()
+	defer srv.Close()
+
+	caFile := filepath.Join(t.TempDir(), "ca.crt")
+	require.NoError(t, os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600))
+
+	for name, cfg := range map[string]config.HTTPClient{
+		"no auth": {AuthMode: config.NoAuth},
+		"api key": {AuthMode: config.ApiKey, AuthApiKeyOptions: config.AuthApiKeyOptions{Header: "x-api-key", Key: "key"}},
+		"mtls":    {AuthMode: config.MTLS, AuthMTLSOptions: config.AuthMTLSOptions{CertContent: string(certPEM), KeyContent: string(keyPEM)}},
+		"jwt": {AuthMode: config.JWT, AuthJWTOptions: config.AuthJWTOptions{
+			ClientID:         "client",
+			ClientSecret:     "secret",
+			OIDCWellKnownURL: srv.URL + "/.well-known/openid-configuration",
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg.HTTPConnection = config.HTTPConnection{BasicConnection: config.BasicConnection{
+				TLSConfig: config.TLSConfig{CACertificateFile: caFile},
+			}}
+			cli, err := BuildHTTPClient(cfg, logrus.NewEntry(logrus.New()))
+			require.NoError(t, err)
+
+			res, err := cli.Get(srv.URL)
+			require.NoError(t, err)
+			res.Body.Close()
+			require.Equal(t, http.StatusOK, res.StatusCode)
+		})
+	}
+}
+
 func TestBuildHTTPClientJWTDiscoverySizeCap(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,9 +2,12 @@ package helpers
 
 import (
 	"bytes"
+	"encoding/pem"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -41,6 +44,42 @@ func TestBuildHTTPClientWithTLSOptions(t *testing.T) {
 	tlsConfig = client.Transport.(*http.Transport).TLSClientConfig
 	if tlsConfig.InsecureSkipVerify {
 		t.Error("BuildHTTPClientWithTLSOptions is set InsecureSkipVerify to true")
+	}
+}
+
+// A server whose certificate is signed by a private CA must be trusted once
+// that CA is supplied through CACertificateFile.
+func TestBuildHTTPClientWithTLSOptionsTrustsCACertificateFile(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+
+	caFile := filepath.Join(t.TempDir(), "ca.crt")
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(caFile, caPEM, 0o600); err != nil {
+		t.Fatalf("could not write CA file: %v", err)
+	}
+
+	client, err := BuildHTTPClientWithTLSOptions(&http.Client{}, cconfig.TLSConfig{})
+	if err != nil {
+		t.Fatalf("BuildHTTPClientWithTLSOptions failed with error: %v", err)
+	}
+	if _, err := client.Get(srv.URL); err == nil {
+		t.Fatal("request to a server signed by an untrusted CA succeeded")
+	}
+
+	client, err = BuildHTTPClientWithTLSOptions(&http.Client{}, cconfig.TLSConfig{CACertificateFile: caFile})
+	if err != nil {
+		t.Fatalf("BuildHTTPClientWithTLSOptions failed with error: %v", err)
+	}
+	res, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("request failed despite CACertificateFile: %v", err)
+	}
+	res.Body.Close()
+
+	// The transport must keep the defaults (proxy from environment, timeouts).
+	if client.Transport.(*http.Transport).Proxy == nil {
+		t.Error("BuildHTTPClientWithTLSOptions dropped the default proxy settings")
 	}
 }
 
