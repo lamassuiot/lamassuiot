@@ -78,8 +78,35 @@ func (ca *revocationTestCA) issueLeaf(t *testing.T, serial int64, ocspURLs, crlU
 	return cert
 }
 
+// issueEndEntity issues a non-CA certificate with the given EKUs and returns it together with its key.
+func (ca *revocationTestCA) issueEndEntity(t *testing.T, cn string, ekus []x509.ExtKeyUsage) *revocationTestCA {
+	t.Helper()
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject:      pkix.Name{CommonName: cn},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  ekus,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, &key.PublicKey, ca.key)
+	if err != nil {
+		t.Fatalf("could not create end-entity certificate: %s", err)
+	}
+	cert, _ := x509.ParseCertificate(der)
+	return &revocationTestCA{cert: cert, key: key}
+}
+
 // newTestOCSPResponder serves a response for whatever serial respond returns; status/nextUpdate are taken from respond too.
 func newTestOCSPResponder(t *testing.T, ca *revocationTestCA, respond func(reqSerial *big.Int) ocsp.Response) *httptest.Server {
+	t.Helper()
+	return newTestDelegatedOCSPResponder(t, ca, ca, respond)
+}
+
+// newTestDelegatedOCSPResponder is like newTestOCSPResponder but signs with responder, embedding its certificate
+// in the response whenever it differs from ca.
+func newTestDelegatedOCSPResponder(t *testing.T, ca, responder *revocationTestCA, respond func(reqSerial *big.Int) ocsp.Response) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -89,7 +116,10 @@ func newTestOCSPResponder(t *testing.T, ca *revocationTestCA, respond func(reqSe
 			return
 		}
 		tmpl := respond(req.SerialNumber)
-		resp, err := ocsp.CreateResponse(ca.cert, ca.cert, tmpl, ca.key)
+		if responder != ca {
+			tmpl.Certificate = responder.cert
+		}
+		resp, err := ocsp.CreateResponse(ca.cert, responder.cert, tmpl, responder.key)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -253,6 +283,39 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 				return notInLamassu(), ca.issueLeaf(t, 25, []string{srv.URL}, nil)
 			},
 			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			name: "OK/OCSPDelegatedResponderWithOCSPSigningEKU",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				responder := ca.issueEndEntity(t, "ocsp-responder", []x509.ExtKeyUsage{x509.ExtKeyUsageOCSPSigning})
+				srv := newTestDelegatedOCSPResponder(t, ca, responder, good)
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 27, []string{srv.URL}, nil)
+			},
+		},
+		{
+			// A revoked device forging a "good" response with its own (or a sibling device's) certificate and key.
+			name: "Err/OCSPSignedBySiblingCertificateWithoutOCSPSigningEKU",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				sibling := ca.issueEndEntity(t, "sibling-device", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+				srv := newTestDelegatedOCSPResponder(t, ca, sibling, good)
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 28, []string{srv.URL}, nil)
+			},
+			allowUnverifiable: true,
+			expectedErr:       "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/OCSPForgedGoodDoesNotMaskCRLRevocation",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				sibling := ca.issueEndEntity(t, "sibling-device", nil)
+				ocspSrv := newTestDelegatedOCSPResponder(t, ca, sibling, good)
+				crlSrv := crlServer(t, ca, time.Now().Add(time.Hour), big.NewInt(29))
+				t.Cleanup(ocspSrv.Close)
+				t.Cleanup(crlSrv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 29, []string{ocspSrv.URL}, []string{crlSrv.URL})
+			},
+			expectedErr: "certificate is revoked",
 		},
 		{
 			name: "OK/OCSPUnreachableFallsBackToCRL",
