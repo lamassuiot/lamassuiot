@@ -415,13 +415,16 @@ func (svc DMSManagerServiceBackend) verifyCertificateNotRevoked(ctx context.Cont
 	case revocationStatusRevoked:
 		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. certificate is revoked", operation)
 		return fmt.Errorf("certificate is revoked")
-	default:
+	case revocationStatusNoSource:
 		if allowUnverifiable {
 			lFunc.Warnf("certificate is not managed by Lamassu and has no OCSP/CRL endpoints. Accepting it because DMS allows unverifiable revocation status")
 			return nil
 		}
 		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. certificate is not managed by Lamassu and has no OCSP/CRL endpoints to check its revocation status", operation)
 		return fmt.Errorf("certificate revocation status cannot be verified: certificate is not managed by Lamassu and has no OCSP/CRL endpoints")
+	default:
+		lFunc.WithField("auth-status", "failed").Errorf("aborting %s. unexpected revocation status %d", operation, status)
+		return fmt.Errorf("could not verify certificate revocation status: unexpected revocation status %d", status)
 	}
 }
 
