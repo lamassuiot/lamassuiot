@@ -285,6 +285,50 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			expectedErr: "could not verify certificate revocation status",
 		},
 		{
+			name: "OK/OCSPWithoutNextUpdateRecent",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := newTestOCSPResponder(t, ca, func(sn *big.Int) ocsp.Response {
+					return ocsp.Response{Status: ocsp.Good, SerialNumber: sn, ThisUpdate: time.Now().Add(-time.Minute)}
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 40, []string{srv.URL}, nil)
+			},
+		},
+		{
+			// An old "good" response without nextUpdate, recorded before revocation and replayed afterwards.
+			name: "Err/OCSPWithoutNextUpdateReplayed",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := newTestOCSPResponder(t, ca, func(sn *big.Int) ocsp.Response {
+					return ocsp.Response{Status: ocsp.Good, SerialNumber: sn, ThisUpdate: time.Now().Add(-48 * time.Hour)}
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 41, []string{srv.URL}, nil)
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/OCSPThisUpdateInFuture",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := newTestOCSPResponder(t, ca, func(sn *big.Int) ocsp.Response {
+					return ocsp.Response{Status: ocsp.Good, SerialNumber: sn, ThisUpdate: time.Now().Add(time.Hour), NextUpdate: time.Now().Add(2 * time.Hour)}
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 42, []string{srv.URL}, nil)
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/OCSPStaleRevokedStillHonored",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := newTestOCSPResponder(t, ca, func(sn *big.Int) ocsp.Response {
+					return ocsp.Response{Status: ocsp.Revoked, SerialNumber: sn, ThisUpdate: time.Now().Add(-48 * time.Hour), RevokedAt: time.Now().Add(-72 * time.Hour)}
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 43, []string{srv.URL}, nil)
+			},
+			expectedErr: "certificate is revoked",
+		},
+		{
 			name: "OK/OCSPDelegatedResponderWithOCSPSigningEKU",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				responder := ca.issueEndEntity(t, "ocsp-responder", []x509.ExtKeyUsage{x509.ExtKeyUsageOCSPSigning})
@@ -392,6 +436,37 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.expectedErr) {
 				t.Fatalf("expected error containing '%s'. Got %s", tc.expectedErr, err)
+			}
+		})
+	}
+}
+
+func TestCheckRevocationFreshness(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name       string
+		thisUpdate time.Time
+		nextUpdate time.Time
+		fresh      bool
+	}{
+		{"OK/WithinWindow", now.Add(-time.Hour), now.Add(time.Hour), true},
+		{"OK/NextUpdateJustPassedWithinSkew", now.Add(-time.Hour), now.Add(-time.Minute), true},
+		{"OK/ThisUpdateSlightlyAheadWithinSkew", now.Add(time.Minute), now.Add(time.Hour), true},
+		{"OK/NoNextUpdateRecent", now.Add(-time.Hour), time.Time{}, true},
+		{"Err/MissingThisUpdate", time.Time{}, now.Add(time.Hour), false},
+		{"Err/ThisUpdateInFuture", now.Add(time.Hour), now.Add(2 * time.Hour), false},
+		{"Err/NextUpdatePassed", now.Add(-2 * time.Hour), now.Add(-time.Hour), false},
+		{"Err/NoNextUpdateTooOld", now.Add(-25 * time.Hour), time.Time{}, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkRevocationFreshness(tc.thisUpdate, tc.nextUpdate, now)
+			if tc.fresh && err != nil {
+				t.Fatalf("expected fresh. Got %s", err)
+			}
+			if !tc.fresh && err == nil {
+				t.Fatalf("expected not fresh. Got no error")
 			}
 		})
 	}

@@ -1173,6 +1173,39 @@ const (
 	revocationStatusNoSource
 )
 
+const (
+	// revocationClockSkew tolerates small clock differences with OCSP responders and CRL issuers.
+	revocationClockSkew = 5 * time.Minute
+	// revocationMaxAgeWithoutNextUpdate bounds the age of an OCSP response or CRL that omits nextUpdate, so an old
+	// "not revoked" answer cannot be replayed indefinitely.
+	revocationMaxAgeWithoutNextUpdate = 24 * time.Hour
+)
+
+// checkRevocationFreshness returns an error unless now falls within the validity window of an OCSP response or CRL.
+// Callers only apply it to "not revoked" answers; a "revoked" answer is honored regardless of its age.
+func checkRevocationFreshness(thisUpdate, nextUpdate, now time.Time) error {
+	if thisUpdate.IsZero() {
+		return fmt.Errorf("missing thisUpdate")
+	}
+
+	if thisUpdate.After(now.Add(revocationClockSkew)) {
+		return fmt.Errorf("thisUpdate %s is in the future", thisUpdate.UTC().Format(time.RFC3339))
+	}
+
+	if nextUpdate.IsZero() {
+		if now.Sub(thisUpdate) > revocationMaxAgeWithoutNextUpdate {
+			return fmt.Errorf("no nextUpdate and thisUpdate %s is older than %s", thisUpdate.UTC().Format(time.RFC3339), revocationMaxAgeWithoutNextUpdate)
+		}
+		return nil
+	}
+
+	if now.After(nextUpdate.Add(revocationClockSkew)) {
+		return fmt.Errorf("nextUpdate %s has passed", nextUpdate.UTC().Format(time.RFC3339))
+	}
+
+	return nil
+}
+
 // checkCertificateRevocation determines the revocation status of cert, whose direct issuer is issuer.
 // If the certificate is managed by Lamassu its stored status is used. Otherwise the OCSP servers and then the CRL
 // distribution points listed in the certificate are consulted. An error is returned when the certificate lists
@@ -1225,8 +1258,8 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 			return revocationStatusRevoked, nil
 		}
 
-		if !ocspResp.NextUpdate.IsZero() && now.After(ocspResp.NextUpdate) {
-			lFunc.Warnf("ocsp response from server %s for certificate %s is stale (next update %s). Checking with next revocation source", ocspInstance, clientSN, ocspResp.NextUpdate)
+		if err := checkRevocationFreshness(ocspResp.ThisUpdate, ocspResp.NextUpdate, now); err != nil {
+			lFunc.Warnf("ocsp response from server %s for certificate %s is not fresh: %s. Checking with next revocation source", ocspInstance, clientSN, err)
 			continue
 		}
 
@@ -1256,8 +1289,8 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 			return revocationStatusRevoked, nil
 		}
 
-		if !crl.NextUpdate.IsZero() && now.After(crl.NextUpdate) {
-			lFunc.Warnf("crl from %s is stale (next update %s). Checking with next revocation source", crlDP, crl.NextUpdate)
+		if err := checkRevocationFreshness(crl.ThisUpdate, crl.NextUpdate, now); err != nil {
+			lFunc.Warnf("crl from %s is not fresh: %s. Checking with next revocation source", crlDP, err)
 			continue
 		}
 
