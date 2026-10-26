@@ -523,6 +523,7 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
         metadata:
           type: object
           nullable: true
@@ -536,6 +537,7 @@ components:
           type: string
         name:
           type: string
+          minLength: 1
         metadata:
           type: object
           additionalProperties: true
