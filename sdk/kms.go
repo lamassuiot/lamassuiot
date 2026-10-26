@@ -51,6 +51,24 @@ func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput
 	return &response, nil
 }
 
+func (cli *httpKMSClient) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	if input.PublicKey == nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	keyPem, err := helpers.PublicKeyToPEM(input.PublicKey)
+	if err != nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	return cli.post[[]*models.Key](ctx, "/v1/keys/lookup", resources.GetKeysByPublicKeyBody{
+		PublicKey: base64.StdEncoding.EncodeToString([]byte(keyPem)),
+		EngineID:  input.EngineID,
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest},
+	})
+}
+
 func (cli *httpKMSClient) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
 	path := "/v1/stats"
 

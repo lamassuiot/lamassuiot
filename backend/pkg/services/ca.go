@@ -480,10 +480,9 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
-	engineID := ""
+	engineID, keyID := "", ""
 	if key != nil {
-		engineID = key.EngineID
-		keyID := key.KeyID
+		engineID, keyID = key.EngineID, key.KeyID
 		key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
 			ID: keyID,
 			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
@@ -520,6 +519,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			Type:                importType,
 			IssuerCAMetadata:    issuerMeta,
 			EngineID:            engineID,
+			KeyID:               keyID,
 			IsCA:                true,
 		},
 	}
@@ -865,6 +865,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			Metadata:            map[string]any{},
 			Type:                models.CertificateTypeManaged,
 			EngineID:            key.EngineID,
+			KeyID:               key.KeyID,
 			IsCA:                true,
 		},
 	}
@@ -1624,11 +1625,11 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 
 	// Detect whether the subject key is managed in the KMS and, if so, bind it to this certificate.
 	certType := models.CertificateTypeImportedWithoutKey
-	engineID := ""
+	engineID, keyID := "", ""
 	subjectKey, getKeyErr := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: ski})
 	if getKeyErr == nil && subjectKey.HasPrivateKey {
 		certType = models.CertificateTypeManaged
-		engineID = subjectKey.EngineID
+		engineID, keyID = subjectKey.EngineID, subjectKey.KeyID
 		_, bindErr := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
 			ID: subjectKey.KeyID,
 			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
@@ -1662,6 +1663,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		SubjectKeyID:        ski,
 		AuthorityKeyID:      aki,
 		EngineID:            engineID,
+		KeyID:               keyID,
 	}
 
 	// CAs get inserted into the CA storage engine by the CreateCA method. Don't insert them here.

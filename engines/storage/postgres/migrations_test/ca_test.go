@@ -686,6 +686,59 @@ func MigrationTest_CA_20261008120000_unique_ca_id(t *testing.T, logger *logrus.E
 	}
 }
 
+func MigrationTest_CA_20261027100000_certificate_key_id(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Copies the ECS-Manufacturing certificate stored by an earlier migration test.
+	insert := func(serial, certificate, engineID string) {
+		t.Helper()
+		err := con.Exec(`INSERT INTO certificates
+			(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, is_ca)
+			SELECT ?, '{}', ?, 'x', 0, 'ACTIVE', `+certificate+`, 'RSA', 4096, 'HIGH', 'KeyID', '', '', '', '', '', valid_from, valid_to, revocation_timestamp, 'Unspecified', 'MANAGED', ?, false
+			FROM certificates WHERE serial_number = '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79'`,
+			serial, serial, engineID).Error
+		if err != nil {
+			t.Fatalf("failed to insert certificate %s: %v", serial, err)
+		}
+	}
+	insert("key-id-held", "certificate", "filesystem-1")
+	insert("key-id-no-engine", "certificate", "")
+	insert("key-id-empty-certificate", "''", "filesystem-1")
+	insert("key-id-garbage-certificate", "'not-a-certificate'", "filesystem-1")
+	insert("key-id-null-certificate", "NULL", "filesystem-1")
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	keyID := func(serial string) string {
+		var id string
+		if err := con.Raw(`SELECT key_id FROM certificates WHERE serial_number = ?`, serial).Scan(&id).Error; err != nil {
+			t.Fatalf("failed to read the key_id of %s: %v", serial, err)
+		}
+		return id
+	}
+
+	// SHA-256 of the certificate's SubjectPublicKeyInfo, computed with openssl.
+	assert.Equal(t, "315c6949fc35bf94b92447e0319835f1427be63799a5dfdab017ac21521fc7c3", keyID("key-id-held"))
+	assert.Equal(t, "", keyID("key-id-no-engine"), "a certificate without engine has no key in the KMS")
+	// Unreadable certificates are skipped rather than failing the migration.
+	assert.Equal(t, "", keyID("key-id-empty-certificate"))
+	assert.Equal(t, "", keyID("key-id-garbage-certificate"))
+	assert.Equal(t, "", keyID("key-id-null-certificate"))
+
+	keyIDColumns := func() int64 {
+		var count int64
+		if err := con.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'certificates' AND column_name = 'key_id'`).Scan(&count).Error; err != nil {
+			t.Fatalf("failed to check the key_id column: %v", err)
+		}
+		return count
+	}
+	RollbackMigration(t, logger, con, CADBName, "20261027100000_certificate_key_id")
+	assert.Equal(t, int64(0), keyIDColumns(), "rollback must drop key_id")
+
+	// Leave the schema at the latest version for any later migration test.
+	ApplyMigration(t, logger, con, CADBName)
+	assert.Equal(t, int64(1), keyIDColumns())
+	assert.Equal(t, "315c6949fc35bf94b92447e0319835f1427be63799a5dfdab017ac21521fc7c3", keyID("key-id-held"))
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -793,5 +846,10 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20261008120000_unique_ca_id(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261008120000_unique_ca_id")
+	}
+
+	MigrationTest_CA_20261027100000_certificate_key_id(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261027100000_certificate_key_id")
 	}
 }
