@@ -82,7 +82,7 @@ func TestUpdateDMS(t *testing.T) {
 
 	dms.Name = "MyIotFleet2"
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: *dms})
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dms.ID, Name: dms.Name, Metadata: dms.Metadata, Settings: &dms.Settings})
 	if err != nil {
 		t.Fatalf("could not update DMS: %s", err)
 	}
@@ -93,6 +93,28 @@ func TestUpdateDMS(t *testing.T) {
 	}
 
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
+}
+
+func TestUpdateDMSRejectsNilSettings(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), services.CreateDMSInput{ID: dmsID, Name: "MyIotFleet"})
+	if err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dms.ID, Name: "renamed"})
+	assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
+
+	dmsFromDB, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dms.ID})
+	if err != nil {
+		t.Fatalf("could not get DMS by ID: %s", err)
+	}
+	assert.Equal(t, dms.Name, dmsFromDB.Name)
+	assert.Equal(t, dms.Settings, dmsFromDB.Settings)
 }
 
 func TestCreateDMSWebhookConfig(t *testing.T) {
@@ -256,12 +278,150 @@ func TestUpdateMissingDMSShouldFail(t *testing.T) {
 		Name: "MyIotFleet",
 	}
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: dmsSample})
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dmsSample.ID, Name: dmsSample.Name, Metadata: dmsSample.Metadata, Settings: &dmsSample.Settings})
 	if err == nil {
 		t.Fatalf("Update DMS should fail")
 	}
 
 	assert.ErrorIs(t, err, errs.ErrDMSNotFound)
+}
+
+// The DMS to update is the one in the URL path (the one authz evaluates); an `id`
+// or any other server-managed field in the body must never be honoured.
+func TestUpdateDMSIgnoresBodyID(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	for _, id := range []string{"dms-a", "dms-b"} {
+		if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: id, Name: "original-" + id}); err != nil {
+			t.Fatalf("could not create DMS %s: %s", id, err)
+		}
+	}
+
+	dmsABefore, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-a: %s", err)
+	}
+	dmsBBefore, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-b"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-b: %s", err)
+	}
+
+	body := `{"id":"dms-b","name":"hijacked","settings":{},"creation_ts":"2001-01-01T00:00:00Z"}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("could not build request: %s", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := tests.NewTestHTTPClientInsecure().Do(req)
+	if err != nil {
+		t.Fatalf("PUT failed: %s", err)
+	}
+	res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	dmsA, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-a: %s", err)
+	}
+	assert.Equal(t, "hijacked", dmsA.Name, "the DMS in the URL must be the one updated")
+	assert.Equal(t, dmsABefore.CreationDate, dmsA.CreationDate, "server-managed fields in the body must be ignored")
+
+	dmsBAfter, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-b"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-b: %s", err)
+	}
+	assert.Equal(t, dmsBBefore, dmsBAfter, "the DMS in the body must not be touched")
+	assert.Equal(t, dmsBBefore.CreationDate, dmsBAfter.CreationDate)
+}
+
+func TestUpdateDMSRejectsIncompleteBody(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "dms-a", Name: "original"}); err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+	before, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+
+	for name, body := range map[string]string{
+		"empty body":       `{}`,
+		"missing settings": `{"name":"renamed"}`,
+		"missing name":     `{"settings":{}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+			if err != nil {
+				t.Fatalf("could not build request: %s", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			res, err := tests.NewTestHTTPClientInsecure().Do(req)
+			if err != nil {
+				t.Fatalf("PUT failed: %s", err)
+			}
+			res.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+
+			after, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+			if err != nil {
+				t.Fatalf("could not get DMS: %s", err)
+			}
+			assert.Equal(t, before, after, "a rejected update must not modify the DMS")
+		})
+	}
+}
+
+func TestUpdateDMSMetadataSemantics(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "dms-a", Name: "original", Metadata: map[string]any{"k": "v"}}); err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+
+	put := func(body string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("could not build request: %s", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := tests.NewTestHTTPClientInsecure().Do(req)
+		if err != nil {
+			t.Fatalf("PUT failed: %s", err)
+		}
+		res.Body.Close()
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	}
+
+	put(`{"name":"renamed","settings":{}}`)
+	dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+	assert.Equal(t, "renamed", dms.Name)
+	assert.Equal(t, map[string]any{"k": "v"}, dms.Metadata, "omitted metadata must keep the stored one")
+
+	put(`{"name":"renamed","settings":{},"metadata":{}}`)
+	dms, err = dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+	assert.Empty(t, dms.Metadata, "an empty metadata object must clear it")
 }
 
 func TestGetMissingDMSShouldFail(t *testing.T) {
@@ -1458,7 +1618,10 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -3634,7 +3797,10 @@ func TestESTReEnroll(t *testing.T) {
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{oldEnrollCAID}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -3884,7 +4050,10 @@ func TestESTReEnroll(t *testing.T) {
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = append(dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not create update DMS: %s", err)
@@ -3943,7 +4112,10 @@ func TestESTReEnroll(t *testing.T) {
 				}
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not create update DMS: %s", err)
@@ -3993,7 +4165,10 @@ func TestESTReEnroll(t *testing.T) {
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -4272,7 +4447,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
@@ -4330,7 +4508,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
@@ -4385,7 +4566,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4442,7 +4626,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4500,7 +4687,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4561,7 +4751,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4637,7 +4830,10 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not clear reenroll auth settings: %s", err)

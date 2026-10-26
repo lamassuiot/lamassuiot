@@ -43,13 +43,13 @@ func (mw dmsEventPublisher) CreateDMS(ctx context.Context, input services.Create
 
 func (mw dmsEventPublisher) UpdateDMS(ctx context.Context, input services.UpdateDMSInput) (output *models.DMS, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("dms/%s", input.DMS.ID))
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("dms/%s", input.ID))
 
 	prev, err := mw.GetDMSByID(ctx, services.GetDMSByIDInput{
-		ID: input.DMS.ID,
+		ID: input.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get DMS %s: %w", input.DMS.ID, err)
+		return nil, fmt.Errorf("mw error: could not get DMS %s: %w", input.ID, err)
 	}
 	defer func() {
 		if err == nil {

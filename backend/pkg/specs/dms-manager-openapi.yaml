@@ -139,7 +139,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateDMSBody'
+              $ref: '#/components/schemas/UpdateDMSBody'
       responses:
         '200':
           description: Updated DMS
@@ -513,6 +513,23 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
+    UpdateDMSBody:
+      type: object
+      description: |
+        Full replacement of the DMS name and settings. The DMS ID is taken from the URL path;
+        any `id` in the body is ignored. An omitted or `null` `metadata` keeps the stored
+        metadata; send an empty object (`{}`) to clear it.
+      required: [name, settings]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+        settings:
+          $ref: '#/components/schemas/DMSSettings'
     CreateDMSBody:
       type: object
       properties:
@@ -520,6 +537,7 @@ components:
           type: string
         name:
           type: string
+          minLength: 1
         metadata:
           type: object
           additionalProperties: true
