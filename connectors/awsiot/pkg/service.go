@@ -1030,7 +1030,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 		ID:       dms.ID,
 		Name:     dms.Name,
 		Metadata: dms.Metadata,
-		Settings: dms.Settings,
+		Settings: &dms.Settings,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while updating DMS metadata: %s", err)

@@ -131,7 +131,7 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
-	if err := validateDMSWebhooks(input.Settings); err != nil {
+	if err := validateDMSWebhooks(*input.Settings); err != nil {
 		lFunc.Errorf("webhook validation error: %s", err)
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		dms.Metadata = input.Metadata
 	}
 	dms.Name = input.Name
-	dms.Settings = input.Settings
+	dms.Settings = *input.Settings
 
 	lFunc.Debugf("updating DMS %s", input.ID)
 	return svc.dmsStorage.Update(ctx, dms)

@@ -82,7 +82,7 @@ func TestUpdateDMS(t *testing.T) {
 
 	dms.Name = "MyIotFleet2"
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dms.ID, Name: dms.Name, Metadata: dms.Metadata, Settings: dms.Settings})
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dms.ID, Name: dms.Name, Metadata: dms.Metadata, Settings: &dms.Settings})
 	if err != nil {
 		t.Fatalf("could not update DMS: %s", err)
 	}
@@ -93,6 +93,28 @@ func TestUpdateDMS(t *testing.T) {
 	}
 
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
+}
+
+func TestUpdateDMSRejectsNilSettings(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), services.CreateDMSInput{ID: dmsID, Name: "MyIotFleet"})
+	if err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dms.ID, Name: "renamed"})
+	assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
+
+	dmsFromDB, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dms.ID})
+	if err != nil {
+		t.Fatalf("could not get DMS by ID: %s", err)
+	}
+	assert.Equal(t, dms.Name, dmsFromDB.Name)
+	assert.Equal(t, dms.Settings, dmsFromDB.Settings)
 }
 
 func TestCreateDMSWebhookConfig(t *testing.T) {
@@ -256,7 +278,7 @@ func TestUpdateMissingDMSShouldFail(t *testing.T) {
 		Name: "MyIotFleet",
 	}
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dmsSample.ID, Name: dmsSample.Name, Metadata: dmsSample.Metadata, Settings: dmsSample.Settings})
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dmsSample.ID, Name: dmsSample.Name, Metadata: dmsSample.Metadata, Settings: &dmsSample.Settings})
 	if err == nil {
 		t.Fatalf("Update DMS should fail")
 	}
@@ -1599,7 +1621,7 @@ func TestESTEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -3778,7 +3800,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -4031,7 +4053,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not create update DMS: %s", err)
@@ -4093,7 +4115,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not create update DMS: %s", err)
@@ -4146,7 +4168,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -4428,7 +4450,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
@@ -4489,7 +4511,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
@@ -4547,7 +4569,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4607,7 +4629,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4668,7 +4690,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4732,7 +4754,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4811,7 +4833,7 @@ func TestESTReEnroll(t *testing.T) {
 					ID:       dms.ID,
 					Name:     dms.Name,
 					Metadata: dms.Metadata,
-					Settings: dms.Settings,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not clear reenroll auth settings: %s", err)
