@@ -7,6 +7,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -1172,6 +1174,62 @@ const (
 	revocationMaxAgeWithoutNextUpdate = 24 * time.Hour
 )
 
+var (
+	oidExtensionIssuingDistributionPoint = asn1.ObjectIdentifier{2, 5, 29, 28}
+	oidExtensionDeltaCRLIndicator        = asn1.ObjectIdentifier{2, 5, 29, 27}
+)
+
+// issuingDistributionPoint mirrors the IssuingDistributionPoint extension of RFC 5280 5.2.5.
+type issuingDistributionPoint struct {
+	DistributionPoint          issuingDistributionPointName `asn1:"optional,tag:0"`
+	OnlyContainsUserCerts      bool                         `asn1:"optional,tag:1"`
+	OnlyContainsCACerts        bool                         `asn1:"optional,tag:2"`
+	OnlySomeReasons            asn1.BitString               `asn1:"optional,tag:3"`
+	IndirectCRL                bool                         `asn1:"optional,tag:4"`
+	OnlyContainsAttributeCerts bool                         `asn1:"optional,tag:5"`
+}
+
+type issuingDistributionPointName struct {
+	FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
+	RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
+}
+
+// checkCRLScope returns an error unless the absence of an end-entity certificate from crl, downloaded from crlURL,
+// proves it is not revoked. Delta CRLs only list changes since a base CRL, and an IssuingDistributionPoint may limit
+// the CRL to CA certificates, some revocation reasons, another issuer's certificates or another partition. Without
+// this check, a validly signed CRL of narrower scope from the same CA could stand in for the complete one.
+func checkCRLScope(crl *x509.RevocationList, crlURL string) error {
+	for _, ext := range crl.Extensions {
+		switch {
+		case ext.Id.Equal(oidExtensionDeltaCRLIndicator):
+			return fmt.Errorf("delta CRL")
+		case ext.Id.Equal(oidExtensionIssuingDistributionPoint):
+			var idp issuingDistributionPoint
+			if rest, err := asn1.Unmarshal(ext.Value, &idp); err != nil || len(rest) > 0 {
+				return fmt.Errorf("malformed issuing distribution point extension")
+			}
+
+			if idp.OnlyContainsCACerts || idp.OnlyContainsAttributeCerts || idp.IndirectCRL || idp.OnlySomeReasons.BitLength > 0 {
+				return fmt.Errorf("issuing distribution point restricts the CRL scope")
+			}
+
+			if len(idp.DistributionPoint.FullName) == 0 && len(idp.DistributionPoint.RelativeName) == 0 {
+				continue
+			}
+
+			// GeneralName uniformResourceIdentifier is [6] IA5String.
+			matchesURL := slices.ContainsFunc(idp.DistributionPoint.FullName, func(name asn1.RawValue) bool {
+				return name.Class == asn1.ClassContextSpecific && name.Tag == 6 && string(name.Bytes) == crlURL
+			})
+			if !matchesURL {
+				return fmt.Errorf("issuing distribution point does not match %s", crlURL)
+			}
+		}
+	}
+
+	return nil
+}
+
 // checkRevocationFreshness returns an error unless now falls within the validity window of an OCSP response or CRL.
 // Callers only apply it to "not revoked" answers; a "revoked" answer is honored regardless of its age.
 func checkRevocationFreshness(thisUpdate, nextUpdate, now time.Time) error {
@@ -1282,6 +1340,11 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 
 		if err := checkRevocationFreshness(crl.ThisUpdate, crl.NextUpdate, now); err != nil {
 			lFunc.Warnf("crl from %s is not fresh: %s. Checking with next revocation source", crlDP, err)
+			continue
+		}
+
+		if err := checkCRLScope(crl, crlDP); err != nil {
+			lFunc.Warnf("crl from %s does not cover certificate %s: %s. Checking with next revocation source", crlDP, clientSN, err)
 			continue
 		}
 

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"io"
 	"math/big"
 	"net/http"
@@ -125,23 +126,51 @@ func newTestDelegatedOCSPResponder(t *testing.T, ca, responder *revocationTestCA
 
 func crlServer(t *testing.T, signer *revocationTestCA, nextUpdate time.Time, revoked ...*big.Int) *httptest.Server {
 	t.Helper()
+	return crlServerWithExtensions(t, signer, nextUpdate, nil, revoked...)
+}
+
+// crlServerWithExtensions serves a CRL carrying the extensions returned by exts, which receives the server URL so
+// that extensions such as IssuingDistributionPoint can reference it.
+func crlServerWithExtensions(t *testing.T, signer *revocationTestCA, nextUpdate time.Time, exts func(srvURL string) []pkix.Extension, revoked ...*big.Int) *httptest.Server {
+	t.Helper()
 	entries := []x509.RevocationListEntry{}
 	for _, sn := range revoked {
 		// Use a distinct big.Int instance so that pointer comparisons cannot match by accident.
 		entries = append(entries, x509.RevocationListEntry{SerialNumber: new(big.Int).Set(sn), RevocationTime: time.Now().Add(-time.Minute)})
 	}
-	der, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
-		Number:                    big.NewInt(1),
-		ThisUpdate:                time.Now().Add(-2 * time.Hour),
-		NextUpdate:                nextUpdate,
-		RevokedCertificateEntries: entries,
-	}, signer.cert, signer.key)
-	if err != nil {
-		t.Fatalf("could not create CRL: %s", err)
-	}
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tmpl := &x509.RevocationList{
+			Number:                    big.NewInt(1),
+			ThisUpdate:                time.Now().Add(-2 * time.Hour),
+			NextUpdate:                nextUpdate,
+			RevokedCertificateEntries: entries,
+		}
+		if exts != nil {
+			tmpl.ExtraExtensions = exts(srv.URL)
+		}
+		der, err := x509.CreateRevocationList(rand.Reader, tmpl, signer.cert, signer.key)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.Write(der)
 	}))
+	return srv
+}
+
+func idpExtension(t *testing.T, idp issuingDistributionPoint) []pkix.Extension {
+	t.Helper()
+	value, err := asn1.Marshal(idp)
+	if err != nil {
+		t.Fatalf("could not marshal issuing distribution point: %s", err)
+	}
+	return []pkix.Extension{{Id: oidExtensionIssuingDistributionPoint, Critical: true, Value: value}}
+}
+
+func uriDistributionPoint(uri string) issuingDistributionPointName {
+	return issuingDistributionPointName{FullName: []asn1.RawValue{{Class: asn1.ClassContextSpecific, Tag: 6, Bytes: []byte(uri)}}}
 }
 
 func newRevocationTestService(stored *models.Certificate, lookupErr error) DMSManagerServiceBackend {
@@ -393,6 +422,114 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 				return notInLamassu(), ca.issueLeaf(t, 32, nil, []string{first.URL, second.URL})
 			},
 			expectedErr: "certificate is revoked",
+		},
+		{
+			// CRLs produced by Lamassu's own VA carry a critical IssuingDistributionPoint with only the URL.
+			name: "OK/CRLWithLamassuIssuingDistributionPoint",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					ext, err := CRLServiceBackend{vaDomains: []string{strings.TrimPrefix(srvURL, "http://")}}.getDistributionPointExtension("aki")
+					if err != nil {
+						t.Errorf("could not build Lamassu issuing distribution point: %s", err)
+						return nil
+					}
+					return []pkix.Extension{*ext}
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 50, nil, []string{srv.URL + "/crl/aki"})
+			},
+		},
+		{
+			name: "OK/CRLOnlyContainsUserCerts",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsUserCerts: true})
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 51, nil, []string{srv.URL})
+			},
+		},
+		{
+			name: "Err/DeltaCRL",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
+					baseCRLNumber, _ := asn1.Marshal(big.NewInt(1))
+					return []pkix.Extension{{Id: oidExtensionDeltaCRLIndicator, Critical: true, Value: baseCRLNumber}}
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 52, nil, []string{srv.URL})
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/DeltaCRLListingCertificateIsStillRevoked",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
+					baseCRLNumber, _ := asn1.Marshal(big.NewInt(1))
+					return []pkix.Extension{{Id: oidExtensionDeltaCRLIndicator, Critical: true, Value: baseCRLNumber}}
+				}, big.NewInt(53))
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 53, nil, []string{srv.URL})
+			},
+			expectedErr: "certificate is revoked",
+		},
+		{
+			name: "Err/CRLOnlyContainsCACerts",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsCACerts: true})
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 54, nil, []string{srv.URL})
+			},
+			allowUnverifiable: true,
+			expectedErr:       "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/CRLOnlySomeReasons",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					keyCompromiseOnly := asn1.BitString{Bytes: []byte{0x40}, BitLength: 2}
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlySomeReasons: keyCompromiseOnly})
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 55, nil, []string{srv.URL})
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/CRLIndirect",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), IndirectCRL: true})
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 56, nil, []string{srv.URL})
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			// A validly signed CRL for another partition of the same CA served in place of the one in the certificate.
+			name: "Err/CRLForAnotherPartition",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL + "/partition-2")})
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 57, nil, []string{srv.URL + "/partition-1"})
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/CRLMalformedIssuingDistributionPoint",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
+					return []pkix.Extension{{Id: oidExtensionIssuingDistributionPoint, Critical: true, Value: []byte{0x30, 0x03, 0x01}}}
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 58, nil, []string{srv.URL})
+			},
+			expectedErr: "could not verify certificate revocation status",
 		},
 		{
 			name: "Err/CRLStale",
