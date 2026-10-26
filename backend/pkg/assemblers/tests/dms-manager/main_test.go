@@ -3775,7 +3775,10 @@ func TestESTReEnroll(t *testing.T) {
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{oldEnrollCAID}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -4087,7 +4090,10 @@ func TestESTReEnroll(t *testing.T) {
 				}
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not create update DMS: %s", err)
@@ -4137,7 +4143,10 @@ func TestESTReEnroll(t *testing.T) {
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
