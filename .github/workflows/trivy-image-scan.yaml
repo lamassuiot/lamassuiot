@@ -37,6 +37,7 @@ jobs:
           image-ref: ${{ inputs.image-ref }}
           format: sarif
           output: trivy-results.sarif
+          vuln-type: os
           severity: CRITICAL,HIGH,MEDIUM
           exit-code: '0'
 
