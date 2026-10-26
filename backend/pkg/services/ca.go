@@ -1882,6 +1882,41 @@ func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, i
 	return cert, nil
 }
 
+func (svc *CAServiceBackend) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := caValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("GetCertificateKeyInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	cert, err := svc.service.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: input.SerialNumber})
+	if err != nil {
+		return nil, err
+	}
+
+	if cert.EngineID == "" {
+		lFunc.Infof("the KMS does not hold the key of certificate %s", input.SerialNumber)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	key, err := findCertificateKey(ctx, svc.kmsService, cert.Certificate.PublicKey, cert.EngineID, cert.KeyID)
+	if err != nil {
+		lFunc.Infof("could not find the key of certificate %s in crypto engine %s: %s", input.SerialNumber, cert.EngineID, err)
+		return nil, err
+	}
+
+	return &models.CertificateKey{
+		KeyID:     key.KeyID,
+		EngineID:  key.EngineID,
+		PKCS11URI: kmsKeyIdentifier(key),
+		Algorithm: key.Algorithm,
+		Size:      key.Size,
+		PublicKey: key.PublicKey,
+	}, nil
+}
+
 func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	return svc.certStorage.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,

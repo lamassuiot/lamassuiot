@@ -154,6 +154,13 @@ func (mw CAOTelTracer) GetCertificateBySerialNumber(ctx context.Context, input s
 	return mw.next.GetCertificateBySerialNumber(ctx, input)
 }
 
+func (mw CAOTelTracer) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.GetCertificateKey(ctx, input)
+}
+
 func (mw CAOTelTracer) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
