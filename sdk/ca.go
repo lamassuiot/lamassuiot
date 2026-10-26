@@ -197,6 +197,8 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 			errs.ErrCAIssuanceExpiration,
 			errs.ErrCAIncompatibleValidity,
 			errs.ErrCAValidCertAndPrivKey,
+			errs.ErrCAKeyInOtherEngine,
+			errs.ErrKeyEngineRequired,
 		},
 		404: {
 			errs.ErrIssuanceProfileNotFound,
