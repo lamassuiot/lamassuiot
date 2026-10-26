@@ -30,6 +30,18 @@ func NewKMSCryptoSigner(ctx context.Context, kms models.Key, kmsSDK services.KMS
 	}
 }
 
+// kmsKeyIdentifier addresses a key by (keyID, engineID): the keyID alone stops resolving as soon as
+// another engine holds a copy of the key.
+func kmsKeyIdentifier(key *models.Key) string {
+	if key.PKCS11URI != "" {
+		return key.PKCS11URI
+	}
+	if key.EngineID != "" {
+		return buildPKCS11ID(key.EngineID, key.KeyID, "private")
+	}
+	return key.KeyID
+}
+
 func (s *kmsCryptoSigner) Public() crypto.PublicKey {
 	b, err := base64.StdEncoding.DecodeString(s.key.PublicKey)
 	if err != nil {
@@ -107,17 +119,8 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 		return nil, fmt.Errorf("unsupported key algorithm: %s", kmsKeyAlg)
 	}
 
-	// Sign the digest using the KMS service. The key is addressed by (keyID, engineID): the keyID alone
-	// stops resolving as soon as another engine holds a copy of the key.
-	identifier := s.key.PKCS11URI
-	if identifier == "" && s.key.EngineID != "" {
-		identifier = buildPKCS11ID(s.key.EngineID, s.key.KeyID, "private")
-	}
-	if identifier == "" {
-		identifier = s.key.KeyID
-	}
 	response, err := s.sdk.SignMessage(s.ctx, services.SignMessageInput{
-		Identifier:  identifier,
+		Identifier:  kmsKeyIdentifier(&s.key),
 		Algorithm:   signAlg,
 		Message:     digest,
 		MessageType: models.Hashed,

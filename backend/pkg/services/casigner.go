@@ -5,10 +5,13 @@ import (
 	"crypto"
 	"crypto/x509"
 	"io"
+	"slices"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/sirupsen/logrus"
 )
 
 type certSignerImpl struct {
@@ -70,4 +73,53 @@ func findCertificateKey(ctx context.Context, kms services.KMSService, pub crypto
 	default:
 		return nil, errs.ErrKeyEngineRequired
 	}
+}
+
+// discoverCertificateKey looks, in every crypto engine, for the private key of a certificate not yet
+// linked to one. It prefers the requested engine, then the default one, then any engine holding it,
+// and returns nil when there is none: a lookup failure only means the certificate stays keyless.
+func discoverCertificateKey(ctx context.Context, lFunc *logrus.Entry, kms services.KMSService, pub crypto.PublicKey, preferredEngineID string) *models.Key {
+	keys, err := kms.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: pub})
+	if err != nil {
+		lFunc.Warnf("could not look up the certificate key in the KMS: %s", err)
+		return nil
+	}
+
+	candidates := slices.DeleteFunc(keys, func(key *models.Key) bool { return !key.HasPrivateKey })
+	if len(candidates) == 0 {
+		return nil
+	}
+	slices.SortFunc(candidates, func(a, b *models.Key) int { return strings.Compare(a.EngineID, b.EngineID) })
+
+	inEngine := func(engineID string) *models.Key {
+		if i := slices.IndexFunc(candidates, func(key *models.Key) bool { return key.EngineID == engineID }); i >= 0 {
+			return candidates[i]
+		}
+		return nil
+	}
+
+	if preferredEngineID != "" {
+		if key := inEngine(preferredEngineID); key != nil {
+			return key
+		}
+	}
+
+	chosen := candidates[0]
+	if engines, err := kms.GetCryptoEngineProvider(ctx); err != nil {
+		lFunc.Warnf("could not get the default crypto engine: %s", err)
+	} else {
+		for _, engine := range engines {
+			if engine.Default {
+				if key := inEngine(engine.ID); key != nil {
+					chosen = key
+				}
+				break
+			}
+		}
+	}
+
+	if preferredEngineID != "" {
+		lFunc.Warnf("the key is not in crypto engine %s, linking the copy in crypto engine %s", preferredEngineID, chosen.EngineID)
+	}
+	return chosen
 }

@@ -105,6 +105,12 @@ func (kms *importCAKMS) GetKey(context.Context, coreservices.GetKeyInput) (*mode
 	return nil, errs.ErrKeyNotFound
 }
 
+// GetKeysByPublicKey is how ImportCA looks for the key of a CA imported without one.
+func (kms *importCAKMS) GetKeysByPublicKey(context.Context, coreservices.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	kms.getKeyCalls++
+	return nil, nil
+}
+
 func (kms *importCAKMS) ImportKey(context.Context, coreservices.ImportKeyInput) (*models.Key, error) {
 	kms.importKeyCalls++
 	if kms.importedKey == nil {
@@ -317,11 +323,25 @@ func TestImportCAKeepsImportedKeyWhenInsertFails(t *testing.T) {
 			svc, repo := newImportCAService(t)
 			kms := svc.kmsService.(*importCAKMS)
 			kms.importedKey = &models.Key{KeyID: "imported", EngineID: "engine", PKCS11URI: "pkcs11:token-id=engine;id=imported;type=private"}
+			// ImportCA rejects a key that does not match the certificate before importing it.
 			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			require.NoError(t, err)
+			template := &x509.Certificate{
+				SerialNumber:          big.NewInt(1),
+				Subject:               pkix.Name{CommonName: "root"},
+				NotBefore:             time.Now().Add(-time.Hour),
+				NotAfter:              time.Now().Add(time.Hour),
+				BasicConstraintsValid: true,
+				IsCA:                  true,
+				KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+			}
+			der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+			require.NoError(t, err)
+			cert, err := x509.ParseCertificate(der)
 			require.NoError(t, err)
 			repo.insertErr = insertErr
 			_, err = svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "root", CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]), Key: key,
+				ID: "root", CACertificate: (*models.X509Certificate)(cert), Key: key,
 			})
 			require.ErrorIs(t, err, insertErr)
 			require.Equal(t, 1, kms.importKeyCalls)
