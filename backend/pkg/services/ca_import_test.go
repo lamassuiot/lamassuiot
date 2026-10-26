@@ -7,7 +7,9 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"io"
 	"math/big"
@@ -103,6 +105,11 @@ type importCAKMS struct {
 func (kms *importCAKMS) GetKey(context.Context, coreservices.GetKeyInput) (*models.Key, error) {
 	kms.getKeyCalls++
 	return nil, errs.ErrKeyNotFound
+}
+
+// GetKeys backs the public-key fallback of ResolveCertificateKey; no key matches.
+func (kms *importCAKMS) GetKeys(context.Context, coreservices.GetKeysInput) (string, error) {
+	return "", nil
 }
 
 func (kms *importCAKMS) ImportKey(context.Context, coreservices.ImportKeyInput) (*models.Key, error) {
@@ -316,12 +323,32 @@ func TestImportCAKeepsImportedKeyWhenInsertFails(t *testing.T) {
 		t.Run(insertErr.Error(), func(t *testing.T) {
 			svc, repo := newImportCAService(t)
 			kms := svc.kmsService.(*importCAKMS)
-			kms.importedKey = &models.Key{KeyID: "imported", EngineID: "engine", PKCS11URI: "pkcs11:token-id=engine;id=imported;type=private"}
+			// ImportCA rejects a key that does not match the certificate, both
+			// before importing it and against the KMS copy.
 			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 			require.NoError(t, err)
+			template := &x509.Certificate{
+				SerialNumber:          big.NewInt(1),
+				Subject:               pkix.Name{CommonName: "root"},
+				NotBefore:             time.Now().Add(-time.Hour),
+				NotAfter:              time.Now().Add(time.Hour),
+				BasicConstraintsValid: true,
+				IsCA:                  true,
+				KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+			}
+			der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+			require.NoError(t, err)
+			cert, err := x509.ParseCertificate(der)
+			require.NoError(t, err)
+			publicKeyDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+			require.NoError(t, err)
+			kms.importedKey = &models.Key{
+				KeyID: "imported", EngineID: "engine", PKCS11URI: "pkcs11:token-id=engine;id=imported;type=private", HasPrivateKey: true,
+				PublicKey: base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyDER})),
+			}
 			repo.insertErr = insertErr
 			_, err = svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "root", CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]), Key: key,
+				ID: "root", CACertificate: (*models.X509Certificate)(cert), Key: key,
 			})
 			require.ErrorIs(t, err, insertErr)
 			require.Equal(t, 1, kms.importKeyCalls)
