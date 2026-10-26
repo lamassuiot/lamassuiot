@@ -57,6 +57,7 @@ func MigrateDatabase(logger *log.Entry, config lconfig.PostgresPSEConfig, databa
 // MigrateAllSchemas applies all pending migrations for all Lamassu schemas in the pki database
 func MigrateAllSchemas(logger *log.Entry, config lconfig.PostgresPSEConfig) error {
 	schemas := []string{
+		"controlplane",
 		"ca",
 		"devicemanager",
 		"dmsmanager",

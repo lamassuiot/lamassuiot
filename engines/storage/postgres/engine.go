@@ -7,6 +7,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 func Register() {
@@ -22,18 +23,21 @@ func Register() {
 const (
 	MAIN_DB_NAME = "pki"
 
-	CA_SCHEMA     = "ca"
-	DEVICE_SCHEMA = "devicemanager"
-	DMS_SCHEMA    = "dmsmanager"
-	ALERTS_SCHEMA = "alerts"
-	VA_SCHEMA     = "va"
-	KMS_SCHEMA    = "kms"
+	CA_SCHEMA           = "ca"
+	DEVICE_SCHEMA       = "devicemanager"
+	DMS_SCHEMA          = "dmsmanager"
+	ALERTS_SCHEMA       = "alerts"
+	VA_SCHEMA           = "va"
+	KMS_SCHEMA          = "kms"
+	CONTROLPLANE_SCHEMA = "controlplane"
 )
 
 type PostgresStorageEngine struct {
 	storage.CommonStorageEngine
-	Config lconfig.PostgresPSEConfig
-	logger *log.Entry
+	Config                 lconfig.PostgresPSEConfig
+	logger                 *log.Entry
+	controlPlaneDB         *gorm.DB
+	controlPlaneMembership storage.ControlPlaneMembershipRepo
 }
 
 func NewStorageEngine(logger *log.Entry, config lconfig.PostgresPSEConfig) (storage.StorageEngine, error) {
@@ -211,4 +215,25 @@ func (s *PostgresStorageEngine) GetKMSStorage() (storage.KMSKeysRepo, error) {
 		s.KMS = kmsStore
 	}
 	return s.KMS, nil
+}
+
+func (s *PostgresStorageEngine) initializeControlPlaneStorage() error {
+	if s.controlPlaneDB == nil {
+		db, err := CreatePostgresDBConnection(s.logger, s.Config, CONTROLPLANE_SCHEMA)
+		if err != nil {
+			return fmt.Errorf("could not create control plane postgres client: %w", err)
+		}
+		s.controlPlaneDB = db
+	}
+	if s.controlPlaneMembership == nil {
+		s.controlPlaneMembership = NewControlPlaneMembershipRepository(s.controlPlaneDB)
+	}
+	return nil
+}
+
+func (s *PostgresStorageEngine) GetControlPlaneMembershipStorage() (storage.ControlPlaneMembershipRepo, error) {
+	if err := s.initializeControlPlaneStorage(); err != nil {
+		return nil, err
+	}
+	return s.controlPlaneMembership, nil
 }

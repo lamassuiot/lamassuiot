@@ -31,7 +31,7 @@ func init() {
 		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=pki search_path=alerts port=5432 sslmode=disable" status`)
 		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=pki search_path=devicemanager port=5432 sslmode=disable" up-to 5`)
 		log.Println()
-		log.Println("Valid schemas: ca, devicemanager, dmsmanager, alerts, va, kms")
+		log.Println("Valid schemas: ca, devicemanager, dmsmanager, alerts, va, kms, controlplane")
 		log.Println()
 		log.Println("Commands:")
 		log.Println("  up                   Migrate the DB to the most recent version available")
@@ -68,7 +68,7 @@ func main() {
 	}
 
 	// Validate schema name
-	validSchemas := []string{"ca", "devicemanager", "dmsmanager", "alerts", "va", "kms"}
+	validSchemas := []string{"ca", "devicemanager", "dmsmanager", "alerts", "va", "kms", "controlplane"}
 	if !contains(validSchemas, schemaName) {
 		log.Fatalf("goose-lamassu: invalid schema: %s. Must be one of: %s", schemaName, strings.Join(validSchemas, ", "))
 	}
