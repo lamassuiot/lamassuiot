@@ -392,6 +392,13 @@ func (cli *httpCAClient) SignatureVerify(ctx context.Context, input services.Sig
 	return response.Valid, nil
 }
 
+func (cli *httpCAClient) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	return cli.get[*models.CertificateKey](ctx, "/v1/certificates/"+input.SerialNumber+"/key", nil, map[int][]error{
+		400: {errs.ErrValidateBadRequest, errs.ErrKeyEngineRequired},
+		404: {errs.ErrCertificateNotFound, errs.ErrKeyNotFound},
+	})
+}
+
 func (cli *httpCAClient) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	response, err := cli.get[*models.Certificate](ctx, "/v1/certificates/"+input.SerialNumber, nil, map[int][]error{
 		404: {

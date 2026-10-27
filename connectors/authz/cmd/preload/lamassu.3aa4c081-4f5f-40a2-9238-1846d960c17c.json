@@ -22,6 +22,7 @@
       "entity_type": "certificate",
       "actions": [
         "read",
+        "read-key",
         "ui"
       ],
       "relations": [],
