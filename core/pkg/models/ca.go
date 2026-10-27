@@ -46,7 +46,10 @@ type Certificate struct {
 	RevocationReason    RevocationReason      `json:"revocation_reason" gorm:"serializer:text"`
 	Type                CertificateType       `json:"type"`
 	EngineID            string                `json:"engine_id"`
-	IsCA                bool                  `json:"is_ca"`
+	// KeyID is the ID of the certificate's key in the KMS, empty when the KMS does not hold it.
+	// With EngineID it identifies the key.
+	KeyID string `json:"key_id"`
+	IsCA  bool   `json:"is_ca"`
 }
 
 type CertificateExtensions struct {

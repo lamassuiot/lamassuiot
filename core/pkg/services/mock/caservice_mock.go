@@ -116,6 +116,10 @@ func (m *MockCAService) GetCertificateBySerialNumber(ctx context.Context, input 
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.Certificate), args.Error(1)
 }
+func (m *MockCAService) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CertificateKey), args.Error(1)
+}
 func (m *MockCAService) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	args := m.Called(ctx, input)
 	return args.String(0), args.Error(1)

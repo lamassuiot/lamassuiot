@@ -37,6 +37,10 @@ func (mw KMSAuditEventPublisher) GetKey(ctx context.Context, input services.GetK
 	return mw.next.GetKey(ctx, input)
 }
 
+func (mw KMSAuditEventPublisher) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	return mw.next.GetKeysByPublicKey(ctx, input)
+}
+
 func (mw KMSAuditEventPublisher) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
 	return mw.next.GetKeyStats(ctx, input)
 }

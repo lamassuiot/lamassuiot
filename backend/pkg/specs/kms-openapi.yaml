@@ -241,6 +241,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /keys/lookup:
+    post:
+      tags:
+        - Keys
+      summary: Find keys by public key
+      description: |
+        Returns the keys of a key pair, found by its public key. Without engine_id it returns the
+        copy held by every crypto engine; with it, at most the copy held by that engine. Only keys
+        the caller can list are returned.
+      operationId: getKeysByPublicKey
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        check: filter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetKeysByPublicKeyBody'
+      responses:
+        '200':
+          description: Matching keys, possibly none
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - missing or malformed public key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /keys/{id}:
     get:
       tags:
@@ -774,6 +817,21 @@ components:
           example:
             purpose: "data-encryption"
             owner: "admin"
+
+    GetKeysByPublicKeyBody:
+      type: object
+      required:
+        - public_key
+      properties:
+        public_key:
+          type: string
+          format: byte
+          description: Base64 encoded PEM PUBLIC KEY
+          example: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0..."
+        engine_id:
+          type: string
+          description: Only return the copy held by this crypto engine
+          example: "vault-1"
 
     ImportKeyBody:
       type: object

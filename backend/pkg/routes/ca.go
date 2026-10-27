@@ -54,6 +54,7 @@ func registerCARoutes(parentRouterGroup *gin.RouterGroup, svc services.CAService
 	rv1.GET("/certificates/status/:status", certAuthzMw.List(), routes.GetCertificatesByStatus)
 	rv1.GET("/certificates/expiration", certAuthzMw.List(), routes.GetCertificatesByExpirationDate)
 	rv1.GET("/certificates/:sn", certAuthzMw.Resource("read", certSNKey), routes.GetCertificateBySerialNumber)
+	rv1.GET("/certificates/:sn/key", certAuthzMw.Resource("read-key", certSNKey), routes.GetCertificateKey)
 	rv1.PUT("/certificates/:sn/status", certAuthzMw.Resource("status-update", certSNKey), routes.UpdateCertificateStatus)
 	rv1.PUT("/certificates/:sn/metadata", certAuthzMw.Resource("metadata-update", certSNKey), routes.UpdateCertificateMetadata)
 	rv1.PATCH("/certificates/:sn/metadata", certAuthzMw.Resource("metadata-update", certSNKey), routes.UpdateCertificateMetadata)

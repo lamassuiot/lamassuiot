@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
@@ -12,6 +13,7 @@ type KMSService interface {
 
 	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
 	GetKey(ctx context.Context, input GetKeyInput) (*models.Key, error)
+	GetKeysByPublicKey(ctx context.Context, input GetKeysByPublicKeyInput) ([]*models.Key, error)
 	GetKeyStats(ctx context.Context, input GetKeyStatsInput) (*models.KeyStats, error)
 
 	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
@@ -39,6 +41,14 @@ type GetKeyInput struct {
 
 type GetKeysInput struct {
 	resources.ListInput[models.Key]
+}
+
+// GetKeysByPublicKeyInput finds the keys of a key pair from its public key, which is what links a
+// certificate to its key: a certificate's SKI is whatever its issuer wrote. Without EngineID it
+// returns every engine's copy of the key.
+type GetKeysByPublicKeyInput struct {
+	PublicKey crypto.PublicKey `validate:"required"`
+	EngineID  string
 }
 
 type CreateKeyInput struct {
