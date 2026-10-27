@@ -253,6 +253,7 @@ func main() {
 		*rdsDataAPIDatabase,
 		*rdsDataAPIRegion,
 		*disableWFX,
+		*enableAuthz,
 	); err != nil {
 		log.Fatalf("invalid PostgreSQL transport configuration: %s", err)
 	}
@@ -649,13 +650,16 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	return opts, nil
 }
 
-func validatePostgresTransport(transport, resourceARN, secretARN, database, region string, disableWFX bool) error {
+func validatePostgresTransport(transport, resourceARN, secretARN, database, region string, disableWFX, enableAuthz bool) error {
 	switch postgresconfig.PostgresTransport(transport) {
 	case "", postgresconfig.PostgresTransportDirect:
 		return nil
 	case postgresconfig.PostgresTransportRDSDataAPI:
 		if !disableWFX {
 			return fmt.Errorf("RDS Data API transport requires -disable-wfx because WFX needs a direct PostgreSQL connection")
+		}
+		if enableAuthz {
+			return fmt.Errorf("RDS Data API transport does not support -authz because the authz service requires a direct PostgreSQL connection")
 		}
 		for _, required := range []struct {
 			name  string

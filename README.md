@@ -77,7 +77,9 @@ go run ./monolithic/cmd/development/main.go
 To use an existing PostgreSQL database through the RDS Data API instead of launching the
 PostgreSQL container, provide the cluster/instance ARN, Secrets Manager secret ARN, database,
 and AWS region. The AWS SDK default credential chain supplies credentials. WFX requires a direct
-PostgreSQL connection, so disable it when selecting the Data API transport:
+PostgreSQL connection, so disable it when selecting the Data API transport. The monolithic authz
+service also currently requires a direct PostgreSQL connection, so `-authz` cannot be combined
+with `-postgres-transport=rds_data_api`:
 
 ```bash
 go run ./monolithic/cmd/development/main.go \
