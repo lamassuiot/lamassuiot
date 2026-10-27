@@ -2,6 +2,7 @@ package migrationstest
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"testing"
 	"time"
@@ -704,6 +705,8 @@ func MigrationTest_CA_20261027100000_certificate_key_id(t *testing.T, logger *lo
 	insert("key-id-empty-certificate", "''", "filesystem-1")
 	insert("key-id-garbage-certificate", "'not-a-certificate'", "filesystem-1")
 	insert("key-id-null-certificate", "NULL", "filesystem-1")
+	// A CA certificate issued by OpenSSL: its SKI is the SHA-1 of its key, not the key ID.
+	insert("key-id-openssl", "'"+base64.StdEncoding.EncodeToString([]byte(opensslCACertPEM))+"'", "filesystem-1")
 
 	ApplyMigration(t, logger, con, CADBName)
 
@@ -722,6 +725,7 @@ func MigrationTest_CA_20261027100000_certificate_key_id(t *testing.T, logger *lo
 	assert.Equal(t, "", keyID("key-id-empty-certificate"))
 	assert.Equal(t, "", keyID("key-id-garbage-certificate"))
 	assert.Equal(t, "", keyID("key-id-null-certificate"))
+	assert.Equal(t, opensslCAKeyID, keyID("key-id-openssl"), "the key ID, not the OpenSSL SKI "+opensslCASKI)
 
 	keyIDColumns := func() int64 {
 		var count int64

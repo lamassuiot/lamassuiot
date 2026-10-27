@@ -1295,7 +1295,7 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 
 	// Only the copy held by this CA's engine, not every engine's copy of the same key.
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
-	key, err := findCertificateKey(ctx, svc.kmsService, caCert.PublicKey, ca.Certificate.EngineID, ca.Certificate.KeyID)
+	key, err := findCertificateKey(ctx, svc.kmsService, caCert, ca.Certificate.EngineID, ca.Certificate.KeyID)
 	if err != nil {
 		lFunc.Warnf("could not find the private key of CA %s in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
 		return
@@ -1908,7 +1908,7 @@ func (svc *CAServiceBackend) GetCertificateKey(ctx context.Context, input servic
 		return nil, errs.ErrKeyNotFound
 	}
 
-	key, err := findCertificateKey(ctx, svc.kmsService, cert.Certificate.PublicKey, cert.EngineID, cert.KeyID)
+	key, err := findCertificateKey(ctx, svc.kmsService, (*x509.Certificate)(cert.Certificate), cert.EngineID, cert.KeyID)
 	if err != nil {
 		lFunc.Infof("could not find the key of certificate %s in crypto engine %s: %s", input.SerialNumber, cert.EngineID, err)
 		return nil, err

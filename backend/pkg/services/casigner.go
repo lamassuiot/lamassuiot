@@ -4,11 +4,15 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
+	"errors"
 	"io"
 	"slices"
 	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -39,7 +43,7 @@ func (s *certSignerImpl) Public() crypto.PublicKey {
 }
 
 func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	key, err := findCertificateKey(s.ctx, s.sdk, s.cert.PublicKey, s.engineID, s.keyID)
+	key, err := findCertificateKey(s.ctx, s.sdk, s.cert, s.engineID, s.keyID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +55,31 @@ func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerO
 // findCertificateKey returns the KMS key of a certificate. A key is identified by (keyID, engineID);
 // certificates stored before they recorded their keyID find it by public key instead, since their
 // SKI is whatever their issuer wrote.
-func findCertificateKey(ctx context.Context, kms services.KMSService, pub crypto.PublicKey, engineID, keyID string) (*models.Key, error) {
+//
+// Crypto engines before the KMS renamed an imported CA's key to its certificate's SKI, and
+// ca-to-kms-migration registered it under that name, so a key not found otherwise is looked up by
+// SKI in the certificate's engine. It is only used when its public key is the certificate's.
+func findCertificateKey(ctx context.Context, kms services.KMSService, cert *x509.Certificate, engineID, keyID string) (*models.Key, error) {
+	key, err := findKeyByIDOrPublicKey(ctx, kms, cert.PublicKey, engineID, keyID)
+	if !errors.Is(err, errs.ErrKeyNotFound) || engineID == "" || len(cert.SubjectKeyId) == 0 {
+		return key, err
+	}
+
+	ski := hex.EncodeToString(cert.SubjectKeyId)
+	if ski == keyID {
+		return nil, err
+	}
+	renamed, skiErr := kms.GetKey(ctx, services.GetKeyInput{Identifier: buildPKCS11ID(engineID, ski, "private")})
+	if skiErr != nil {
+		return nil, err
+	}
+	if !holdsPublicKey(renamed, cert.PublicKey) {
+		return nil, err
+	}
+	return renamed, nil
+}
+
+func findKeyByIDOrPublicKey(ctx context.Context, kms services.KMSService, pub crypto.PublicKey, engineID, keyID string) (*models.Key, error) {
 	if keyID != "" {
 		identifier := keyID
 		if engineID != "" {
@@ -73,6 +101,20 @@ func findCertificateKey(ctx context.Context, kms services.KMSService, pub crypto
 	default:
 		return nil, errs.ErrKeyEngineRequired
 	}
+}
+
+// holdsPublicKey reports whether the KMS key is the key pair of the given public key.
+func holdsPublicKey(key *models.Key, pub crypto.PublicKey) bool {
+	pemKey, err := base64.StdEncoding.DecodeString(key.PublicKey)
+	if err != nil {
+		return false
+	}
+	keyPub, err := chelpers.ParsePublicKey(pemKey)
+	if err != nil {
+		return false
+	}
+	equal, ok := keyPub.(interface{ Equal(crypto.PublicKey) bool })
+	return ok && equal.Equal(pub)
 }
 
 // discoverCertificateKey looks, in every crypto engine, for the private key of a certificate not yet
