@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"testing"
-	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -114,44 +113,6 @@ func TestDeleteKeyInUse(t *testing.T) {
 			require.NoError(t, svc.DeleteKeyByID(ctx, services.GetKeyInput{Identifier: id}))
 			_, err = kmsTest.Service.GetKey(ctx, services.GetKeyInput{Identifier: id})
 			require.ErrorIs(t, err, errs.ErrKeyNotFound)
-		})
-	}
-}
-
-func TestReconcileCertificateBindings(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t)
-	require.NoError(t, err)
-	ctx := context.Background()
-
-	for name, svc := range map[string]services.KMSService{"service": kmsTest.Service, "http": kmsTest.HttpKMSSDK} {
-		t.Run(name, func(t *testing.T) {
-			priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-			require.NoError(t, err)
-			key, err := kmsTest.Service.ImportKey(ctx, services.ImportKeyInput{PrivateKey: priv, EngineID: "filesystem-1", Name: "reconcile " + name})
-			require.NoError(t, err)
-			id := key.PKCS11URI
-			// Serials are namespaced per run so both runs share the server without overlapping.
-			serial := func(s string) string { return name + "-" + s }
-
-			_, err = kmsTest.Service.BindKeyResource(ctx, services.KeyResourceBindingInput{Identifier: id, Resource: certificateResource(serial("stale"))})
-			require.NoError(t, err)
-
-			stats, err := svc.ReconcileCertificateBindings(ctx, services.ReconcileCertificateBindingsInput{
-				After: name + "-", UpTo: name + "-~",
-				Bindings: []models.CertificateKeyRef{
-					{SerialNumber: serial("kept"), KeyID: key.KeyID, EngineID: key.EngineID},
-					{SerialNumber: serial("orphan"), KeyID: "missing", EngineID: key.EngineID},
-				},
-			})
-			require.NoError(t, err)
-			require.Equal(t, &models.ReconcileStats{Added: 1, Removed: 1, MissingKeys: 1}, stats)
-
-			bindings, err := kmsTest.Service.GetKeyBindings(ctx, services.GetKeyInput{Identifier: id})
-			require.NoError(t, err)
-			require.Equal(t, []string{serial("kept")}, boundSerialsOf(t, bindings))
-
-			_, err = svc.ReconcileCertificateBindings(ctx, services.ReconcileCertificateBindingsInput{After: name + "-", MinAge: -time.Minute})
-			require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 		})
 	}
 }

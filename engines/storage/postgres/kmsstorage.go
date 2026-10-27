@@ -165,64 +165,6 @@ func (db *PostgresKMSStore) DeleteWith(ctx context.Context, keyID, engineID stri
 	})
 }
 
-func (db *PostgresKMSStore) ReconcileCertificateBindings(ctx context.Context, input storage.ReconcileCertificateBindingsInput) (models.ReconcileStats, error) {
-	stats := models.ReconcileStats{}
-	type ref struct{ keyID, engineID, serial string }
-	desired := map[ref]bool{}
-	for _, b := range input.Bindings {
-		desired[ref{b.KeyID, b.EngineID, b.SerialNumber}] = true
-	}
-
-	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		inRange := tx.Table(kmsBindingsTableName).
-			// Byte order, like the CA's paging: a locale collation could order the range differently
-			// and leave serials between batches.
-			Where(`resource_type = ? AND resource_id COLLATE "C" > ? AND created_at < now() - make_interval(secs => ?)`,
-				models.KMSBindResourceTypeCertificate, input.After, input.MinAge.Seconds())
-		if input.UpTo != "" {
-			inRange = inRange.Where(`resource_id COLLATE "C" <= ?`, input.UpTo)
-		}
-		var current []models.KeyBinding
-		if err := inRange.Find(&current).Error; err != nil {
-			return err
-		}
-
-		for _, b := range current {
-			if desired[ref{b.KeyID, b.EngineID, b.ResourceID}] {
-				continue
-			}
-			removed, err := unbindResource(tx, b.KeyID, b.EngineID, models.KMSBindResource{ResourceType: b.ResourceType, ResourceID: b.ResourceID})
-			if err != nil {
-				return err
-			}
-			if removed {
-				stats.Removed++
-			}
-		}
-
-		for _, b := range input.Bindings {
-			// A savepoint per insert: a missing key must not abort the whole transaction.
-			err := tx.Transaction(func(sp *gorm.DB) error {
-				created, err := bindResource(sp, b.KeyID, b.EngineID, models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: b.SerialNumber})
-				if created {
-					stats.Added++
-				}
-				return err
-			})
-			if errors.Is(err, errs.ErrKeyNotFound) {
-				stats.MissingKeys++
-				continue
-			}
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	return stats, err
-}
-
 func bindResource(tx *gorm.DB, keyID, engineID string, resource models.KMSBindResource) (bool, error) {
 	res := tx.Table(kmsBindingsTableName).Clauses(clause.OnConflict{DoNothing: true}).Create(&models.KeyBinding{
 		KeyID: keyID, EngineID: engineID, ResourceType: resource.ResourceType, ResourceID: resource.ResourceID,

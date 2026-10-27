@@ -171,13 +171,6 @@ type RebindKeyBody struct {
 	To   KeyBindingBody `json:"to"`
 }
 
-type ReconcileCertificateBindingsBody struct {
-	After         string                     `json:"after"`
-	UpTo          string                     `json:"up_to"`
-	MinAgeSeconds int                        `json:"min_age_seconds"`
-	Bindings      []models.CertificateKeyRef `json:"bindings"`
-}
-
 // KeyBindingChangeResponse tells whether binding or unbinding changed the key's bindings.
 type KeyBindingChangeResponse struct {
 	Changed bool `json:"changed"`

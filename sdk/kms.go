@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -236,10 +235,4 @@ func (cli *httpKMSClient) RebindKeyResource(ctx context.Context, input services.
 		To:   resources.KeyBindingBody{ResourceType: input.To.ResourceType, ResourceID: input.To.ResourceID},
 	}, keyBindingErrors)
 	return err
-}
-
-func (cli *httpKMSClient) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
-	return cli.post[*models.ReconcileStats](ctx, "/v1/bindings/reconcile", resources.ReconcileCertificateBindingsBody{
-		After: input.After, UpTo: input.UpTo, MinAgeSeconds: int(input.MinAge / time.Second), Bindings: input.Bindings,
-	}, map[int][]error{400: {errs.ErrValidateBadRequest}})
 }

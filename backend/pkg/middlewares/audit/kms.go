@@ -133,7 +133,3 @@ func (mw KMSAuditEventPublisher) UnbindKeyResource(ctx context.Context, input se
 func (mw KMSAuditEventPublisher) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
 	return mw.next.RebindKeyResource(ctx, input)
 }
-
-func (mw KMSAuditEventPublisher) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
-	return mw.next.ReconcileCertificateBindings(ctx, input)
-}

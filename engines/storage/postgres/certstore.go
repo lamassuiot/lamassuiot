@@ -127,18 +127,3 @@ func (db *PostgresCertificateStorage) CountByCA(ctx context.Context, CAID string
 		{Query: "issuer_meta_id = ?", AdditionalWhere: []any{CAID}},
 	})
 }
-
-func (db *PostgresCertificateStorage) SelectKeyUsersAfter(ctx context.Context, after string, limit int) ([]models.CertificateKeyRef, error) {
-	refs := []models.CertificateKeyRef{}
-	// A CA certificate keeps its key in use only while it is the current certificate of a CA:
-	// reissued and deleted CAs leave their certificates behind. Paging uses byte order, like the
-	// KMS reconciliation ranges.
-	tx := db.db.WithContext(ctx).Raw(`
-		SELECT c.serial_number, c.key_id, c.engine_id
-		FROM certificates AS c
-		WHERE c.key_id <> '' AND c.engine_id <> '' AND c.serial_number COLLATE "C" > ?
-		  AND (c.is_ca = false OR EXISTS (SELECT 1 FROM ca_certificates AS ca WHERE ca.serial_number = c.serial_number))
-		ORDER BY c.serial_number COLLATE "C"
-		LIMIT ?`, after, limit).Scan(&refs)
-	return refs, tx.Error
-}

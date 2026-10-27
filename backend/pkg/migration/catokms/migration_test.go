@@ -186,9 +186,6 @@ func (m *mockKMSStorage) RebindResource(context.Context, string, string, models.
 func (m *mockKMSStorage) SelectBindings(context.Context, string, string) ([]models.KeyBinding, error) {
 	return nil, nil
 }
-func (m *mockKMSStorage) ReconcileCertificateBindings(context.Context, storage.ReconcileCertificateBindingsInput) (models.ReconcileStats, error) {
-	return models.ReconcileStats{}, nil
-}
 
 // controlledKMSStorage wraps mockKMSStorage but fails Insert after failAfter successful calls.
 type controlledKMSStorage struct {
@@ -242,9 +239,6 @@ func (c *controlledKMSStorage) RebindResource(ctx context.Context, keyID, engine
 }
 func (c *controlledKMSStorage) SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error) {
 	return c.inner.SelectBindings(ctx, keyID, engineID)
-}
-func (c *controlledKMSStorage) ReconcileCertificateBindings(ctx context.Context, input storage.ReconcileCertificateBindingsInput) (models.ReconcileStats, error) {
-	return c.inner.ReconcileCertificateBindings(ctx, input)
 }
 
 // ---------------------------------------------------------------------------

@@ -147,7 +147,6 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			PublisherEventBus:        conf.PublisherEventBus,
 			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
-			KMSBindingsReconcileJob:  cconfig.MonitoringJob{Enabled: true, Frequency: "24h"},
 			VAServerDomains:          vaDomains,
 			AuthzClient:              authzClientConf,
 		}, kmsSDKBuilder("KMS", models.KMSSource), apiInfo)

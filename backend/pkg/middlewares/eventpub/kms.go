@@ -229,7 +229,3 @@ func (mw KMSEventPublisher) RebindKeyResource(ctx context.Context, input service
 	}
 	return err
 }
-
-func (mw KMSEventPublisher) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
-	return mw.Next.ReconcileCertificateBindings(ctx, input)
-}

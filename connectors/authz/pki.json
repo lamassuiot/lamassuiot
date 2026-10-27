@@ -285,8 +285,7 @@
     ],
     "global_actions": [
       "create",
-      "ui",
-      "manage-bindings"
+      "ui"
     ],
     "relations": [],
     "schema_name": "kms",

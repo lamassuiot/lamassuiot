@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"crypto"
-	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
@@ -31,7 +30,6 @@ type KMSService interface {
 	BindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
 	UnbindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
 	RebindKeyResource(ctx context.Context, input RebindKeyResourceInput) error
-	ReconcileCertificateBindings(ctx context.Context, input ReconcileCertificateBindingsInput) (*models.ReconcileStats, error)
 
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
 	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
@@ -104,17 +102,6 @@ type RebindKeyResourceInput struct {
 	Identifier string                 `validate:"required"`
 	From       models.KMSBindResource `validate:"required"`
 	To         models.KMSBindResource `validate:"required"`
-}
-
-// ReconcileCertificateBindingsInput makes the certificate bindings whose serial number is in
-// (After, UpTo] exactly Bindings. An empty UpTo leaves the range open. Bindings younger than MinAge
-// are kept, so a run never undoes a binding made after the caller read its certificates; their age
-// is measured with the KMS database clock.
-type ReconcileCertificateBindingsInput struct {
-	After    string
-	UpTo     string
-	MinAge   time.Duration `validate:"min=0"`
-	Bindings []models.CertificateKeyRef
 }
 
 type UpdateKeyMetadataInput struct {

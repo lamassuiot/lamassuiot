@@ -1055,22 +1055,3 @@ func (svc *KMSServiceBackend) RebindKeyResource(ctx context.Context, input servi
 
 	return svc.kmsStorage.RebindResource(ctx, key.KeyID, key.EngineID, input.From, input.To)
 }
-
-func (svc *KMSServiceBackend) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	if err := kmsValidator.Struct(input); err != nil {
-		lFunc.Errorf("ReconcileCertificateBindingsInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	stats, err := svc.kmsStorage.ReconcileCertificateBindings(ctx, storage.ReconcileCertificateBindingsInput{
-		After: input.After, UpTo: input.UpTo, MinAge: input.MinAge, Bindings: input.Bindings,
-	})
-	if err != nil {
-		lFunc.Errorf("could not reconcile certificate bindings in (%s, %s]: %s", input.After, input.UpTo, err)
-		return nil, err
-	}
-
-	return &stats, nil
-}

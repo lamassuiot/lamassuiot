@@ -153,10 +153,3 @@ func (mw KMSOTelTracer) RebindKeyResource(ctx context.Context, input services.Re
 
 	return mw.next.RebindKeyResource(ctx, input)
 }
-
-func (mw KMSOTelTracer) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
-	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
-	defer span.End()
-
-	return mw.next.ReconcileCertificateBindings(ctx, input)
-}

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
@@ -38,16 +37,4 @@ type KMSKeysRepo interface {
 	// RebindResource replaces the binding of one resource with another, atomically.
 	RebindResource(ctx context.Context, keyID, engineID string, from, to models.KMSBindResource) error
 	SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error)
-	// ReconcileCertificateBindings makes the certificate bindings whose serial number is in
-	// (After, UpTo] exactly the given ones, in one transaction. An empty UpTo leaves the range open.
-	// Bindings younger than MinAge, by the database clock, are kept: their certificates may postdate
-	// the caller's snapshot.
-	ReconcileCertificateBindings(ctx context.Context, input ReconcileCertificateBindingsInput) (models.ReconcileStats, error)
-}
-
-type ReconcileCertificateBindingsInput struct {
-	After    string
-	UpTo     string
-	MinAge   time.Duration
-	Bindings []models.CertificateKeyRef
 }

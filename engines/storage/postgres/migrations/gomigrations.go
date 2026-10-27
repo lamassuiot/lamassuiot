@@ -28,5 +28,6 @@ func RegisterGoMigrations(dbname string) {
 		dmsmanager.Register20261022120000ReenrollValidationCAs()
 	case "kms":
 		kms.Register20261027110100MoveLegacyKeyBindings()
+		kms.Register20261027110200BackfillCertificateKeyBindings()
 	}
 }

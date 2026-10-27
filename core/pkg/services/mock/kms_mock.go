@@ -102,12 +102,6 @@ func (m *MockKMSService) RebindKeyResource(ctx context.Context, input services.R
 	return args.Error(0)
 }
 
-// ReconcileCertificateBindings makes the certificate bindings in a range match the given ones
-func (m *MockKMSService) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
-	args := m.Called(ctx, input)
-	return args.Get(0).(*models.ReconcileStats), args.Error(1)
-}
-
 // DeleteKeyByID deletes a key by identifier
 func (m *MockKMSService) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
 	args := m.Called(ctx, input)

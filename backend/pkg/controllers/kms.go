@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/base64"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -527,25 +526,4 @@ func (r *kmsHttpRoutes) RebindKeyResource(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, gin.H{})
-}
-
-func (r *kmsHttpRoutes) ReconcileCertificateBindings(ctx *gin.Context) {
-	var requestBody resources.ReconcileCertificateBindingsBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
-		return
-	}
-
-	stats, err := r.svc.ReconcileCertificateBindings(ctx.Request.Context(), services.ReconcileCertificateBindingsInput{
-		After:    requestBody.After,
-		UpTo:     requestBody.UpTo,
-		MinAge:   time.Duration(requestBody.MinAgeSeconds) * time.Second,
-		Bindings: requestBody.Bindings,
-	})
-	if err != nil {
-		r.handleError(ctx, err)
-		return
-	}
-
-	ctx.JSON(200, stats)
 }

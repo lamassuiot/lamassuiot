@@ -141,20 +141,6 @@ type KMSBindResource struct {
 	ResourceID   string `json:"resource_id"`
 }
 
-// CertificateKeyRef names the KMS key a certificate uses.
-type CertificateKeyRef struct {
-	SerialNumber string `json:"serial_number"`
-	KeyID        string `json:"key_id"`
-	EngineID     string `json:"engine_id"`
-}
-
-// ReconcileStats counts what a reconciliation of key bindings changed.
-type ReconcileStats struct {
-	Added       int `json:"added"`
-	Removed     int `json:"removed"`
-	MissingKeys int `json:"missing_keys"`
-}
-
 // KeyBinding records that a resource uses one engine's copy of a key. A key with bindings cannot be
 // deleted.
 type KeyBinding struct {

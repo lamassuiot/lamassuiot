@@ -85,6 +85,5 @@ func registerKMSRoutes(parentRouterGroup *gin.RouterGroup, svc services.KMSServi
 	rv1.POST("/keys/:id/bindings", kmsAuthzMw.ResourceCustom("manage-bindings", "id", keyIDExtractor), routes.BindKeyResource)
 	rv1.POST("/keys/:id/bindings/rebind", kmsAuthzMw.ResourceCustom("manage-bindings", "id", keyIDExtractor), routes.RebindKeyResource)
 	rv1.DELETE("/keys/:id/bindings/:resource_type/:resource_id", kmsAuthzMw.ResourceCustom("manage-bindings", "id", keyIDExtractor), routes.UnbindKeyResource)
-	rv1.POST("/bindings/reconcile", kmsAuthzMw.Global("manage-bindings"), routes.ReconcileCertificateBindings)
 	return rv1
 }
