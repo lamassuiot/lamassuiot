@@ -8,6 +8,7 @@ import (
 
 type Subscription struct {
 	ID               string                  `json:"id" gorm:"primaryKey"`
+	TenantID         string                  `json:"tenant_id" gorm:"index;not null"`
 	UserID           string                  `json:"user_id"`
 	EventType        EventType               `json:"event_type"`
 	SubscriptionDate time.Time               `json:"subscription_ts"`
@@ -58,6 +59,7 @@ type WebhookChannelConfig struct {
 }
 
 type AlertLatestEvent struct {
+	TenantID  string            `json:"tenant_id" gorm:"primaryKey;not null"`
 	EventType EventType         `json:"event_type" gorm:"primaryKey"`
 	Event     cloudevents.Event `json:"event" gorm:"serializer:json"`
 	LastSeen  time.Time         `json:"seen_at"`
