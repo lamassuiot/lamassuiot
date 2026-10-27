@@ -12,9 +12,9 @@ require (
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
 	github.com/ThreeDotsLabs/watermill-aws v1.0.3
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
-	github.com/aws/aws-sdk-go-v2 v1.47.3
-	github.com/aws/aws-sdk-go-v2/config v1.33.9
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
+	github.com/aws/aws-sdk-go-v2 v1.47.4
+	github.com/aws/aws-sdk-go-v2/config v1.33.11
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.11
 	github.com/aws/aws-sdk-go-v2/service/iot v1.84.5
 	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.40.4
 	github.com/aws/aws-sdk-go-v2/service/kms v1.61.5
@@ -22,7 +22,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.5
 	github.com/aws/aws-sdk-go-v2/service/sns v1.47.5
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.5
-	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4
+	github.com/aws/aws-sdk-go-v2/service/sts v1.51.5
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/eclipse-keypont/crypto11 v1.6.8
 	github.com/eclipse/paho.mqtt.golang v1.5.1
@@ -36,6 +36,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/kaptinlin/jsonschema v0.9.10
+	github.com/krotscheck/go-rds-driver v0.0.0-20261027142311-393874c3b33d
 	github.com/miekg/pkcs11 v1.1.2
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
@@ -87,19 +88,20 @@ require (
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/andybalholm/brotli v1.2.6 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.22 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.3 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.4.17 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.21 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.7 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.7 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.22 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.10.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.38.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.4 // indirect
-	github.com/aws/smithy-go v1.28.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/rdsdata v1.40.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.11.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.38.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.5 // indirect
+	github.com/aws/smithy-go v1.28.6 // indirect
 	github.com/bitfield/gotestdox v0.2.3 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/bytedance/sonic v1.15.4 // indirect
@@ -235,3 +237,5 @@ require (
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 
 tool gotest.tools/gotestsum
+
+replace github.com/krotscheck/go-rds-driver => github.com/lamassuiot/go-rds-driver v0.0.0-20261027142311-393874c3b33d
