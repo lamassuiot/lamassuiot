@@ -239,7 +239,9 @@ type TestServer struct {
 	DMSManager    *DMSManagerTestServer
 	Alerts        *AlertsTestServer
 
-	EventBus *TestEventBusConfig
+	EventBus      *TestEventBusConfig
+	Storage       *TestStorageEngineConfig
+	CryptoEngines *TestCryptoEngineConfig
 
 	BeforeEach func() error
 	AfterSuite func()
@@ -726,9 +728,11 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 	}
 
 	return &TestServer{
-		EventBus: eventBus,
-		KMS:      kmsTestServer,
-		CA:       caTestServer,
+		EventBus:      eventBus,
+		Storage:       storageEngine,
+		CryptoEngines: cryptoEngines,
+		KMS:           kmsTestServer,
+		CA:            caTestServer,
 		DeviceManager: func() *DeviceManagerTestServer {
 			if servicesMap[DEVICE_MANAGER] != nil {
 				return servicesMap[DEVICE_MANAGER].(*DeviceManagerTestServer)

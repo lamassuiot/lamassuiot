@@ -37,7 +37,9 @@ func upCertificateKeyID(ctx context.Context, tx *sql.Tx) error {
 }
 
 // backfillCertificateKeyIDs fills key_id for the certificates whose key the KMS holds (those with an
-// engine_id). Every crypto engine names a key after the SHA-256 of its SubjectPublicKeyInfo.
+// engine_id) with the SHA-256 of their SubjectPublicKeyInfo, the name crypto engines give a key.
+// Crypto engines before the KMS renamed an imported CA's key to its certificate's SKI instead: the KMS
+// migration that backfills certificate key bindings corrects those key_ids from the KMS.
 // Unreadable certificates are skipped: they keep an empty key_id and the migration goes on.
 func backfillCertificateKeyIDs(ctx context.Context, tx *sql.Tx) error {
 	logger := chelpers.SetupLogger("info", "CA", "Migrations")

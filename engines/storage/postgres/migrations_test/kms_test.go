@@ -219,14 +219,22 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	insertCert("ca-previous", "object", "legacy-engine", true, false)  // reissued as ca-current: bound
 	insertCert("ca-first", "object", "legacy-engine", true, false)     // reissued as ca-previous: bound
 	insertCert("ca-other-key", "string", "legacy-engine", true, false) // reissued from, with another key: not bound
-	reissuedFrom := func(serial, previous string) {
+	insertCert("ca-forger", "object", "legacy-engine", true, true)     // current CA certificate: bound
+	insertCert("ca-orphan", "object", "legacy-engine", true, false)    // only a forged reissued-from points at it: not bound
+	setMetadata := func(serial, key, value string) {
 		t.Helper()
-		require.NoError(t, con.Exec(`UPDATE ca.certificates SET metadata = ?::jsonb WHERE serial_number = ?`,
-			`{"lamassu.io/ca/reissued-from": "`+previous+`"}`, serial).Error)
+		require.NoError(t, con.Exec(`UPDATE ca.certificates SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(?::text, ?::text) WHERE serial_number = ?`,
+			key, value, serial).Error)
 	}
-	reissuedFrom("ca-current", "ca-previous")
-	reissuedFrom("ca-previous", "ca-first")
-	reissuedFrom("ca-first", "ca-other-key")
+	reissued := func(previous, current string) {
+		t.Helper()
+		setMetadata(current, "lamassu.io/ca/reissued-from", previous)
+		setMetadata(previous, "lamassu.io/ca/reissued-as", current)
+	}
+	reissued("ca-previous", "ca-current")
+	reissued("ca-first", "ca-previous")
+	reissued("ca-other-key", "ca-first")
+	setMetadata("ca-forger", "lamassu.io/ca/reissued-from", "ca-orphan")
 	insertCert("leaf-new", "abc123", "online-1", false, false)             // never bound before: bound
 	insertCert("leaf-no-key", "not-in-kms", "legacy-engine", false, false) // key unknown to the KMS: skipped
 	insertCert("s4", "", "legacy-engine", false, false)                    // unreadable certificate: its binding is kept
@@ -276,8 +284,8 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	ApplyMigration(t, logger, con, kmsDBName)
 
 	assert.Equal(t, []string{"certificate/s1"}, bindingsOf("array", "legacy-engine"), "s2 is no longer a certificate")
-	assert.Equal(t, []string{"certificate/ca-current", "certificate/ca-first", "certificate/ca-previous"}, bindingsOf("object", "legacy-engine"),
-		"a CA's current certificate and the ones it reissued")
+	assert.Equal(t, []string{"certificate/ca-current", "certificate/ca-first", "certificate/ca-forger", "certificate/ca-previous"}, bindingsOf("object", "legacy-engine"),
+		"the current certificate of each CA and the ones it reissued, linked both ways")
 	assert.Equal(t, []string{"certificate/s4"}, bindingsOf("string", "legacy-engine"))
 	assert.Empty(t, bindingsOf("duplicated", "legacy-engine"))
 	assert.Equal(t, []string{"device/d1"}, bindingsOf("other-type", "legacy-engine"), "only certificate bindings are rebuilt")
@@ -285,6 +293,18 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	assert.Equal(t, []string{"certificate/imported-unbound"}, bindingsOf("ski-unbound", "legacy-engine"), "matched by public key")
 	assert.Equal(t, []string{"certificate/imported-bound"}, bindingsOf("ski-bound", "legacy-engine"), "a binding matched by public key is not stale")
 	assert.Equal(t, []string{"certificate/openssl-ca"}, bindingsOf(opensslCASKI, "legacy-engine"), "OpenSSL CA key registered under its SKI")
+
+	keyIDOf := func(serial string) string {
+		t.Helper()
+		var keyID string
+		require.NoError(t, con.Raw(`SELECT key_id FROM ca.certificates WHERE serial_number = ?`, serial).Scan(&keyID).Error)
+		return keyID
+	}
+	assert.Equal(t, "ski-unbound", keyIDOf("imported-unbound"), "the certificate records the name its key has in the KMS")
+	assert.Equal(t, "ski-bound", keyIDOf("imported-bound"))
+	assert.Equal(t, opensslCASKI, keyIDOf("openssl-ca"))
+	assert.Equal(t, "object", keyIDOf("ca-current"), "a key_id that names a key is kept")
+	assert.Equal(t, "not-in-kms", keyIDOf("leaf-no-key"), "a key the KMS does not hold leaves the key_id as it was")
 }
 
 func TestKMSMigrations(t *testing.T) {

@@ -194,6 +194,56 @@ func TestDeletingACAKeepsAKeyStillInUse(t *testing.T) {
 	require.ErrorIs(t, err, errs.ErrKeyNotFound, "the key of the last CA using it is deleted with it")
 }
 
+// The reissue history is certificate metadata a user can edit: pointing it at another CA must not
+// unbind that CA's certificates and delete the key it still uses.
+func TestDeletingACAWithAForgedReissueHistoryKeepsAKeyStillInUse(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	profile := newBindingsProfile(t)
+
+	setMetadata := func(t *testing.T, serial, key, value string) {
+		t.Helper()
+		_, err := caSvc.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
+			SerialNumber: serial,
+			Patches:      chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(key), value).Build(),
+		})
+		require.NoError(t, err)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		previous func(previous, current string) string
+		linkBack bool // also forge the reissued-as link back from the targeted certificate
+	}{
+		{name: "pointing at the current certificate of another CA", previous: func(_, current string) string { return current }},
+		{name: "pointing at a certificate another CA reissued", previous: func(previous, _ string) string { return previous }},
+		{name: "linking both ways with the current certificate of another CA", previous: func(_, current string) string { return current }, linkBack: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			victim := createBindingsCA(t, "bindings-forged-victim", profile.ID, "")
+			victimPrevious := victim.Certificate.SerialNumber
+			victim = reissueCA(t, victim.ID)
+			forgedPrevious := tc.previous(victimPrevious, victim.Certificate.SerialNumber)
+
+			forger := createBindingsCA(t, "bindings-forged-forger", profile.ID, keyURI(&victim.Certificate))
+			setMetadata(t, forger.Certificate.SerialNumber, models.CAMetadataReissuedFromKey, forgedPrevious)
+			if tc.linkBack {
+				setMetadata(t, forgedPrevious, models.CAMetadataReissuedAsKey, forger.Certificate.SerialNumber)
+			}
+
+			revokeCA(t, caSvc, forger.ID)
+			require.NoError(t, caSvc.DeleteCA(ctx, services.DeleteCAInput{CAID: forger.ID}))
+
+			require.ElementsMatch(t, []string{victimPrevious, victim.Certificate.SerialNumber}, boundSerials(t, &victim.Certificate))
+			_, err := caSvc.CreateCertificate(ctx, services.CreateCertificateInput{
+				CAID: victim.ID, KeySpec: services.CertificateKeySpec{Type: models.KeyType(x509.ECDSA), Bits: 256}, Subject: models.Subject{CommonName: "bindings-after-forged-delete"},
+			})
+			require.NoError(t, err, "the CA whose history was forged still signs")
+		})
+	}
+}
+
 func TestDeletingAnImportedCADeletesItsKey(t *testing.T) {
 	require.NoError(t, serverTest.BeforeEach())
 	ctx := context.Background()

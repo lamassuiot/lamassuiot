@@ -20,7 +20,9 @@ This tool performs a one-shot, idempotent migration that reads the CA database a
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA database.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
 5. Inserts the record into the KMS `kms_keys` table.
-6. Binds the key to the serial number of every CA certificate that uses it, in the KMS `key_bindings` table. A key with bindings cannot be deleted.
+6. Tries to bind the key to the serial number of every CA certificate that uses it, in the KMS `key_bindings` table. When the tool runs as the recommended pre-upgrade hook, that table does not exist yet: each bind is logged as a warning (`relation "key_bindings" does not exist`) and the run still succeeds. This is expected. The KMS migrations, which run next, bind every certificate to its key, and a key with bindings cannot be deleted.
+
+The tool must run **before** the KMS migrations. One of them makes each certificate's `key_id` the name its key has in the KMS: before the KMS existed, crypto engines renamed an imported CA's key to its certificate's SKI, which is the name this tool registers. A key registered after that migration has run is not linked to its certificates: its CA cannot sign until the key is registered and the KMS migration `20261027110200_backfill_certificate_key_bindings` is applied again.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
 

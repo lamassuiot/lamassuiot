@@ -1290,8 +1290,10 @@ func (svc *CAServiceBackend) bindCertificateKey(ctx context.Context, lFunc *logr
 }
 
 // caCertificateHistory returns a CA's current certificate and the ones it reissued, following each
-// certificate's reissued-from link back. The walk stops at a certificate that is missing or uses
-// another key, so a broken link only leaves older certificates out.
+// certificate's reissued-from link back. The links are metadata users can edit, so a link is only
+// followed to a certificate that links back with reissued-as, uses the same key and is not the current
+// certificate of a CA: a forged link cannot reach the certificates of another CA sharing the key. The
+// walk stops at the first link it does not follow, so a broken link only leaves older certificates out.
 func (svc *CAServiceBackend) caCertificateHistory(ctx context.Context, current *models.Certificate, lFunc *logrus.Entry) []*models.Certificate {
 	history := []*models.Certificate{current}
 	seen := map[string]bool{current.SerialNumber: true}
@@ -1306,6 +1308,17 @@ func (svc *CAServiceBackend) caCertificateHistory(ctx context.Context, current *
 			return history
 		}
 		if !exists || prev.KeyID != current.KeyID || prev.EngineID != current.EngineID {
+			return history
+		}
+		if reissuedAs, _ := prev.Metadata[models.CAMetadataReissuedAsKey].(string); reissuedAs != cert.SerialNumber {
+			return history
+		}
+		isCurrent, _, err := svc.caStorage.SelectExistsBySerialNumber(ctx, previous)
+		if err != nil {
+			lFunc.Warnf("could not check whether certificate %s is the current certificate of a CA: %s", previous, err)
+			return history
+		}
+		if isCurrent {
 			return history
 		}
 		history = append(history, prev)
