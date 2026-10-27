@@ -177,14 +177,6 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 
-		bindedResources := make([]models.KMSBindResource, len(entry.serials))
-		for i, sn := range entry.serials {
-			bindedResources[i] = models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   sn,
-			}
-		}
-
 		key := &models.Key{
 			KeyID:         entry.keyID,
 			EngineID:      entry.engineID,
@@ -196,9 +188,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			PublicKey:     entry.publicKey,
 			CreationTS:    entry.creationTS,
 			Tags:          []string{},
-			Metadata: map[string]any{
-				models.KMSBindResourceKey: bindedResources,
-			},
+			Metadata:      map[string]any{},
 		}
 
 		logger.Infof("key %s — engine=%s alg=%s bits=%d binds=%d",
@@ -215,6 +205,15 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 		inserted++
+
+		// The certificates using the key keep it from being deleted. A failed binding is only
+		// logged: the CA's bindings reconciliation restores it.
+		for _, sn := range entry.serials {
+			resource := models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: sn}
+			if _, err := kmsStorage.BindResource(ctx, entry.keyID, entry.engineID, resource); err != nil {
+				logger.Warnf("could not bind certificate %s to key %s: %s", sn, entry.keyID, err)
+			}
+		}
 	}
 
 	action := "inserted"

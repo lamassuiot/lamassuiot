@@ -14,6 +14,9 @@ type CAConfig struct {
 	KMSClient                KMSClient                      `mapstructure:"kms_client"`
 	AuthzClient              AuthzClient                    `mapstructure:"authz_client"`
 	CertificateMonitoringJob cconfig.MonitoringJob          `mapstructure:"certificate_monitoring_job"`
-	VAServerDomains          []string                       `mapstructure:"va_server_domains"`
-	AllowCascadeDelete       bool                           `mapstructure:"allow_cascade_delete"`
+	// KMSBindingsReconcileJob repairs the KMS key bindings of the certificates. It also runs once at
+	// startup.
+	KMSBindingsReconcileJob cconfig.MonitoringJob `mapstructure:"kms_bindings_reconcile_job"`
+	VAServerDomains         []string              `mapstructure:"va_server_domains"`
+	AllowCascadeDelete      bool                  `mapstructure:"allow_cascade_delete"`
 }

@@ -117,3 +117,23 @@ func (mw KMSAuditEventPublisher) VerifySignature(ctx context.Context, input serv
 
 	return mw.next.VerifySignature(ctx, input)
 }
+
+func (mw KMSAuditEventPublisher) GetKeyBindings(ctx context.Context, input services.GetKeyInput) ([]models.KeyBinding, error) {
+	return mw.next.GetKeyBindings(ctx, input)
+}
+
+func (mw KMSAuditEventPublisher) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	return mw.next.BindKeyResource(ctx, input)
+}
+
+func (mw KMSAuditEventPublisher) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	return mw.next.UnbindKeyResource(ctx, input)
+}
+
+func (mw KMSAuditEventPublisher) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
+	return mw.next.RebindKeyResource(ctx, input)
+}
+
+func (mw KMSAuditEventPublisher) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
+	return mw.next.ReconcileCertificateBindings(ctx, input)
+}

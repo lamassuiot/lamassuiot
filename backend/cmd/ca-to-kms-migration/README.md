@@ -7,7 +7,7 @@ The KMS service was introduced as an independent service in version 3.7.0 of Lam
 When upgrading from an older installation, each CA certificate of type `MANAGED` or `IMPORTED_WITH_KEY` has a private key stored in the crypto engine under its `subject_key_id`. That key has no corresponding row in the `kms_keys` table of the KMS database. As a result:
 
 - The KMS service is unaware of those keys and cannot manage, list, or bind them.
-- The `lamassu.io/kms/binded-resources` metadata — which records which CA certificates are bound to a given key — is absent.
+- The KMS does not know which CA certificates use each key, so it cannot keep a key in use from being deleted.
 
 This tool performs a one-shot, idempotent migration that reads the CA database and writes the missing records into the KMS database.
 
@@ -19,8 +19,8 @@ This tool performs a one-shot, idempotent migration that reads the CA database a
 4. For each unique key not already present in the KMS database:
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA database.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
-   - Populates `metadata["lamassu.io/kms/binded-resources"]` with the serial numbers of all CA certificates that use the key.
 5. Inserts the record into the KMS `kms_keys` table.
+6. Binds the key to the serial number of every CA certificate that uses it, in the KMS `key_bindings` table. A key with bindings cannot be deleted.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
 

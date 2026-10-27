@@ -161,6 +161,28 @@ type ImportKeyBody struct {
 	Metadata   map[string]any `json:"metadata"`
 }
 
+type KeyBindingBody struct {
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+}
+
+type RebindKeyBody struct {
+	From KeyBindingBody `json:"from"`
+	To   KeyBindingBody `json:"to"`
+}
+
+type ReconcileCertificateBindingsBody struct {
+	After         string                     `json:"after"`
+	UpTo          string                     `json:"up_to"`
+	MinAgeSeconds int                        `json:"min_age_seconds"`
+	Bindings      []models.CertificateKeyRef `json:"bindings"`
+}
+
+// KeyBindingChangeResponse tells whether binding or unbinding changed the key's bindings.
+type KeyBindingChangeResponse struct {
+	Changed bool `json:"changed"`
+}
+
 // GetKeysByPublicKeyBody carries a base64-encoded PEM PUBLIC KEY.
 type GetKeysByPublicKeyBody struct {
 	PublicKey string `json:"public_key"`

@@ -131,9 +131,36 @@ type CAAttachedToDevice struct {
 
 const (
 	KMSBindResourceKey = "lamassu.io/kms/binded-resources"
+
+	// KMSBindResourceTypeCertificate binds a certificate, CA or not, by its serial number.
+	KMSBindResourceTypeCertificate = "certificate"
 )
 
 type KMSBindResource struct {
 	ResourceType string `json:"resource_type"`
 	ResourceID   string `json:"resource_id"`
+}
+
+// CertificateKeyRef names the KMS key a certificate uses.
+type CertificateKeyRef struct {
+	SerialNumber string `json:"serial_number"`
+	KeyID        string `json:"key_id"`
+	EngineID     string `json:"engine_id"`
+}
+
+// ReconcileStats counts what a reconciliation of key bindings changed.
+type ReconcileStats struct {
+	Added       int `json:"added"`
+	Removed     int `json:"removed"`
+	MissingKeys int `json:"missing_keys"`
+}
+
+// KeyBinding records that a resource uses one engine's copy of a key. A key with bindings cannot be
+// deleted.
+type KeyBinding struct {
+	KeyID        string    `json:"key_id" gorm:"primaryKey"`
+	EngineID     string    `json:"engine_id" gorm:"primaryKey"`
+	ResourceType string    `json:"resource_type" gorm:"primaryKey"`
+	ResourceID   string    `json:"resource_id" gorm:"primaryKey"`
+	CreatedAt    time.Time `json:"created_at"`
 }

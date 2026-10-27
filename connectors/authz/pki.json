@@ -280,11 +280,13 @@
       "read",
       "update",
       "delete",
-      "sign"
+      "sign",
+      "manage-bindings"
     ],
     "global_actions": [
       "create",
-      "ui"
+      "ui",
+      "manage-bindings"
     ],
     "relations": [],
     "schema_name": "kms",

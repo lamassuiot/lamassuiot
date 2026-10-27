@@ -78,6 +78,36 @@ func (m *MockKMSService) UpdateKeyTags(ctx context.Context, input services.Updat
 	return args.Get(0).(*models.Key), args.Error(1)
 }
 
+// GetKeyBindings returns the resources bound to a key
+func (m *MockKMSService) GetKeyBindings(ctx context.Context, input services.GetKeyInput) ([]models.KeyBinding, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).([]models.KeyBinding), args.Error(1)
+}
+
+// BindKeyResource binds a resource to a key
+func (m *MockKMSService) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	args := m.Called(ctx, input)
+	return args.Bool(0), args.Error(1)
+}
+
+// UnbindKeyResource unbinds a resource from a key
+func (m *MockKMSService) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	args := m.Called(ctx, input)
+	return args.Bool(0), args.Error(1)
+}
+
+// RebindKeyResource moves a key binding from one resource to another
+func (m *MockKMSService) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
+}
+
+// ReconcileCertificateBindings makes the certificate bindings in a range match the given ones
+func (m *MockKMSService) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.ReconcileStats), args.Error(1)
+}
+
 // DeleteKeyByID deletes a key by identifier
 func (m *MockKMSService) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
 	args := m.Called(ctx, input)

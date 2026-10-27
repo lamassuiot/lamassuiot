@@ -581,6 +581,280 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /bindings/reconcile:
+    post:
+      tags:
+        - Keys
+      summary: Reconcile certificate key bindings
+      description: |
+        Managed by Lamassu; only the service principal may call it. Makes the certificate bindings whose
+        serial number is in (after, up_to] exactly the given ones, in one transaction. An empty up_to leaves
+        the range open. Bindings younger than min_age_seconds, by the KMS database clock, are kept: their
+        certificates may postdate the caller's snapshot.
+      operationId: reconcileCertificateBindings
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        action: manage-bindings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                after:
+                  type: string
+                up_to:
+                  type: string
+                min_age_seconds:
+                  type: integer
+                  minimum: 0
+                bindings:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      serial_number:
+                        type: string
+                      key_id:
+                        type: string
+                      engine_id:
+                        type: string
+      responses:
+        '200':
+          description: What the reconciliation changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: integer
+                  removed:
+                    type: integer
+                  missing_keys:
+                    type: integer
+                    description: Bindings not made because their key does not exist
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/bindings:
+    get:
+      tags:
+        - Keys
+      summary: List the resources bound to a key
+      description: Resources, such as certificates, that use the key. A key with bindings cannot be deleted.
+      operationId: getKeyBindings
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        action: read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier (PKCS#11 URI, alias or key ID)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Bindings of the key
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeyBinding'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Keys
+      summary: Bind a resource to a key
+      description: Managed by Lamassu; only the service principal may call it. Binding an already bound resource changes nothing.
+      operationId: bindKeyResource
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        action: manage-bindings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier (PKCS#11 URI, alias or key ID)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyBindingBody'
+      responses:
+        '200':
+          description: Whether the bindings changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyBindingChange'
+        '400':
+          description: Bad request - invalid resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/bindings/rebind:
+    post:
+      tags:
+        - Keys
+      summary: Move a key binding to another resource
+      description: Managed by Lamassu; only the service principal may call it. Used when a reissued CA certificate takes over its key.
+      operationId: rebindKeyResource
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        action: manage-bindings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier (PKCS#11 URI, alias or key ID)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from:
+                  $ref: '#/components/schemas/KeyBindingBody'
+                to:
+                  $ref: '#/components/schemas/KeyBindingBody'
+      responses:
+        '200':
+          description: Binding moved
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Bad request - invalid resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/bindings/{resource_type}/{resource_id}:
+    delete:
+      tags:
+        - Keys
+      summary: Unbind a resource from a key
+      description: Managed by Lamassu; only the service principal may call it. Unbinding a resource that is not bound changes nothing.
+      operationId: unbindKeyResource
+      x-authz:
+        namespace: pki
+        schema_name: kms
+        entity_type: kms_key
+        action: manage-bindings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier (PKCS#11 URI, alias or key ID)
+          schema:
+            type: string
+        - name: resource_type
+          in: path
+          required: true
+          schema:
+            type: string
+            example: certificate
+        - name: resource_id
+          in: path
+          required: true
+          description: For certificates, the serial number
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Whether the bindings changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyBindingChange'
+        '400':
+          description: Bad request - invalid resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /keys/{id}/sign:
     post:
       tags:
@@ -817,6 +1091,39 @@ components:
           example:
             purpose: "data-encryption"
             owner: "admin"
+
+    KeyBinding:
+      type: object
+      properties:
+        key_id:
+          type: string
+        engine_id:
+          type: string
+        resource_type:
+          type: string
+          example: certificate
+        resource_id:
+          type: string
+          description: For certificates, the serial number
+        created_at:
+          type: string
+          format: date-time
+
+    KeyBindingBody:
+      type: object
+      required: [resource_type, resource_id]
+      properties:
+        resource_type:
+          type: string
+          example: certificate
+        resource_id:
+          type: string
+
+    KeyBindingChange:
+      type: object
+      properties:
+        changed:
+          type: boolean
 
     GetKeysByPublicKeyBody:
       type: object

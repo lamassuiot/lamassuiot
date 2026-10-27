@@ -6,6 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -105,6 +106,63 @@ func migrationTest_KMS_20260909084500_kms_key_composite_pk(t *testing.T, logger 
 	assert.Error(t, dup.Error, "the same key_id must not be storable twice in one engine")
 }
 
+func migrationTest_KMS_20261027110000_key_bindings(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, kmsDBName)
+
+	// A key with bindings cannot be deleted.
+	require.NoError(t, con.Exec(`INSERT INTO key_bindings (key_id, engine_id, resource_type, resource_id) VALUES ('abc123', 'online-1', 'certificate', 'in-use')`).Error)
+	assert.Error(t, con.Exec(`DELETE FROM kms_keys WHERE key_id = 'abc123' AND engine_id = 'online-1'`).Error)
+	require.NoError(t, con.Exec(`DELETE FROM key_bindings WHERE resource_id = 'in-use'`).Error)
+}
+
+func migrationTest_KMS_20261027110100_move_legacy_key_bindings(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	insertKey := func(keyID, metadata string) {
+		t.Helper()
+		require.NoError(t, con.Exec(`INSERT INTO kms_keys
+			(key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, has_private_key)
+			VALUES(?, ?::jsonb, 'Legacy', 'ECDSA', 256, 'pub', '2026-01-01 00:00:00', 'legacy-engine', true)`, keyID, metadata).Error)
+	}
+	insertKey("array", `{"owner": "pki", "lamassu.io/kms/binded-resources": [{"resource_type": "certificate", "resource_id": "s1"}, {"resource_type": "certificate", "resource_id": "s2"}]}`)
+	insertKey("object", `{"lamassu.io/kms/binded-resources": {"resource_type": "certificate", "resource_id": "s3"}}`)
+	insertKey("string", `{"lamassu.io/kms/binded-resources": "[{\"resource_type\": \"certificate\", \"resource_id\": \"s4\"}]"}`)
+	insertKey("duplicated", `{"lamassu.io/kms/binded-resources": [{"resource_type": "certificate", "resource_id": "s5"}, {"resource_type": "certificate", "resource_id": "s5"}]}`)
+	insertKey("other-type", `{"lamassu.io/kms/binded-resources": [{"resource_type": "device", "resource_id": "d1"}, {"resource_type": "certificate", "resource_id": ""}]}`)
+	insertKey("unreadable", `{"lamassu.io/kms/binded-resources": "not bindings"}`)
+
+	ApplyMigration(t, logger, con, kmsDBName)
+
+	bindingsOf := func(keyID string) []string {
+		t.Helper()
+		var rows []string
+		require.NoError(t, con.Raw(`SELECT resource_type || '/' || resource_id FROM key_bindings WHERE key_id = ? AND engine_id = 'legacy-engine' ORDER BY 1`, keyID).Scan(&rows).Error)
+		return rows
+	}
+	metadataOf := func(keyID string) string {
+		t.Helper()
+		var metadata string
+		require.NoError(t, con.Raw(`SELECT metadata::text FROM kms_keys WHERE key_id = ? AND engine_id = 'legacy-engine'`, keyID).Scan(&metadata).Error)
+		return metadata
+	}
+
+	assert.Equal(t, []string{"certificate/s1", "certificate/s2"}, bindingsOf("array"))
+	assert.JSONEq(t, `{"owner": "pki"}`, metadataOf("array"), "the bindings leave the metadata, the rest stays")
+	assert.Equal(t, []string{"certificate/s3"}, bindingsOf("object"))
+	assert.JSONEq(t, `{}`, metadataOf("object"))
+	assert.Equal(t, []string{"certificate/s4"}, bindingsOf("string"))
+	assert.Equal(t, []string{"certificate/s5"}, bindingsOf("duplicated"))
+	assert.Equal(t, []string{"device/d1"}, bindingsOf("other-type"), "entries without a resource are dropped")
+	assert.Empty(t, bindingsOf("unreadable"))
+	assert.JSONEq(t, `{"lamassu.io/kms/binded-resources": "not bindings"}`, metadataOf("unreadable"), "unreadable bindings are left as they were")
+
+	RollbackMigration(t, logger, con, kmsDBName, "20261027110100_move_legacy_key_bindings")
+	assert.Empty(t, bindingsOf("array"))
+	assert.JSONEq(t, `{"owner": "pki", "lamassu.io/kms/binded-resources": [{"resource_type": "certificate", "resource_id": "s1"}, {"resource_type": "certificate", "resource_id": "s2"}]}`, metadataOf("array"))
+
+	// Leave the schema at the latest version for any later migration test.
+	ApplyMigration(t, logger, con, kmsDBName)
+	assert.Equal(t, []string{"certificate/s1", "certificate/s2"}, bindingsOf("array"))
+}
+
 func TestKMSMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Info, "test", "test")
 	cleanup, con := RunDB(t, logger, kmsDBName)
@@ -124,5 +182,15 @@ func TestKMSMigrations(t *testing.T) {
 	migrationTest_KMS_20260909084500_kms_key_composite_pk(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260909084500_kms_key_composite_pk")
+	}
+
+	migrationTest_KMS_20261027110000_key_bindings(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261027110000_key_bindings")
+	}
+
+	migrationTest_KMS_20261027110100_move_legacy_key_bindings(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261027110100_move_legacy_key_bindings")
 	}
 }

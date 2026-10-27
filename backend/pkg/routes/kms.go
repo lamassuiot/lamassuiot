@@ -78,5 +78,13 @@ func registerKMSRoutes(parentRouterGroup *gin.RouterGroup, svc services.KMSServi
 	rv1.DELETE("/keys/:id", kmsAuthzMw.ResourceCustom("delete", "id", keyIDExtractor), routes.DeleteKeyByID)
 	rv1.POST("/keys/:id/sign", kmsAuthzMw.ResourceCustom("sign", "id", keyIDExtractor), routes.SignMessage)
 	rv1.POST("/keys/:id/verify", kmsAuthzMw.ResourceCustom("read", "id", keyIDExtractor), routes.VerifySignature)
+
+	// Bindings are managed by Lamassu: only the service principal holds manage-bindings, so users
+	// cannot unbind a key in use and get it deleted.
+	rv1.GET("/keys/:id/bindings", kmsAuthzMw.ResourceCustom("read", "id", keyIDExtractor), routes.GetKeyBindings)
+	rv1.POST("/keys/:id/bindings", kmsAuthzMw.ResourceCustom("manage-bindings", "id", keyIDExtractor), routes.BindKeyResource)
+	rv1.POST("/keys/:id/bindings/rebind", kmsAuthzMw.ResourceCustom("manage-bindings", "id", keyIDExtractor), routes.RebindKeyResource)
+	rv1.DELETE("/keys/:id/bindings/:resource_type/:resource_id", kmsAuthzMw.ResourceCustom("manage-bindings", "id", keyIDExtractor), routes.UnbindKeyResource)
+	rv1.POST("/bindings/reconcile", kmsAuthzMw.Global("manage-bindings"), routes.ReconcileCertificateBindings)
 	return rv1
 }

@@ -194,3 +194,42 @@ func (mw KMSEventPublisher) VerifySignature(ctx context.Context, input services.
 	}()
 	return mw.Next.VerifySignature(ctx, input)
 }
+
+func (mw KMSEventPublisher) GetKeyBindings(ctx context.Context, input services.GetKeyInput) ([]models.KeyBinding, error) {
+	return mw.Next.GetKeyBindings(ctx, input)
+}
+
+// bindingEventContext tags the event of a binding change. Events are only published when the bindings
+// changed: binding an already bound resource, or unbinding one that is not bound, publishes nothing.
+func bindingEventContext(ctx context.Context, identifier string) context.Context {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateKMSKeyBindings)
+	return context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", identifier))
+}
+
+func (mw KMSEventPublisher) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	changed, err := mw.Next.BindKeyResource(ctx, input)
+	if err == nil && changed {
+		mw.eventMWPub.PublishCloudEvent(bindingEventContext(ctx, input.Identifier), input)
+	}
+	return changed, err
+}
+
+func (mw KMSEventPublisher) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	changed, err := mw.Next.UnbindKeyResource(ctx, input)
+	if err == nil && changed {
+		mw.eventMWPub.PublishCloudEvent(bindingEventContext(ctx, input.Identifier), input)
+	}
+	return changed, err
+}
+
+func (mw KMSEventPublisher) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
+	err := mw.Next.RebindKeyResource(ctx, input)
+	if err == nil {
+		mw.eventMWPub.PublishCloudEvent(bindingEventContext(ctx, input.Identifier), input)
+	}
+	return err
+}
+
+func (mw KMSEventPublisher) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
+	return mw.Next.ReconcileCertificateBindings(ctx, input)
+}

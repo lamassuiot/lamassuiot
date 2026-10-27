@@ -85,6 +85,47 @@ func TestPolicyManager_UpdatePolicy_RejectsSystemManagedPolicy(t *testing.T) {
 	}
 }
 
+// System policies only change through the preload, so syncing replaces the stored definition and
+// installations pick up the actions new versions add to them.
+func TestPolicyManager_SyncSystemPolicy(t *testing.T) {
+	ctx := context.Background()
+	manager := NewPolicyManager(store.NewInMemoryPolicyStore())
+
+	policy := &models.Policy{
+		ID:   SystemPolicyPrefix + "certificate-full-access",
+		Name: "Certificate - Full Access",
+		Rules: []*models.Rule{
+			{Namespace: "iot", SchemaName: "public", EntityType: "organization", Actions: []string{"read"}},
+		},
+	}
+
+	created, err := manager.SyncSystemPolicy(ctx, policy)
+	if err != nil || !created {
+		t.Fatalf("expected the policy to be created, got created=%v err=%v", created, err)
+	}
+
+	updatedPolicy := *policy
+	updatedPolicy.Rules = []*models.Rule{
+		{Namespace: "iot", SchemaName: "public", EntityType: "organization", Actions: []string{"read", "update"}},
+	}
+	created, err = manager.SyncSystemPolicy(ctx, &updatedPolicy)
+	if err != nil || created {
+		t.Fatalf("expected the policy to be updated, got created=%v err=%v", created, err)
+	}
+
+	stored, err := manager.GetPolicy(ctx, policy.ID)
+	if err != nil {
+		t.Fatalf("could not get synced policy: %v", err)
+	}
+	if got := stored.Rules[0].Actions; len(got) != 2 || got[1] != "update" {
+		t.Fatalf("expected the stored policy to have the new actions, got %v", got)
+	}
+
+	if _, err := manager.SyncSystemPolicy(ctx, &models.Policy{ID: "user-policy", Name: "User", Rules: policy.Rules}); err == nil {
+		t.Fatalf("expected syncing a user policy to fail")
+	}
+}
+
 func TestPolicyManager_SearchPolicies(t *testing.T) {
 	manager := NewPolicyManager(store.NewInMemoryPolicyStore())
 

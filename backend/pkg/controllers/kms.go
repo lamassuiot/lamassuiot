@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -27,6 +28,8 @@ func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
 		ctx.JSON(404, gin.H{"err": err.Error()})
 	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrValidateBadRequest:
 		ctx.JSON(400, gin.H{"err": err.Error()})
+	case errs.ErrKeyInUse:
+		ctx.JSON(409, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(500, gin.H{"err": err.Error()})
 	}
@@ -413,6 +416,131 @@ func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
 
 	stats, err := r.svc.GetKeyStats(ctx.Request.Context(), services.GetKeyStatsInput{
 		QueryParameters: queryParams,
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
+
+func (r *kmsHttpRoutes) GetKeyBindings(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	bindings, err := r.svc.GetKeyBindings(ctx.Request.Context(), services.GetKeyInput{Identifier: params.ID})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, bindings)
+}
+
+func (r *kmsHttpRoutes) BindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.KeyBindingBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	changed, err := r.svc.BindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   models.KMSBindResource{ResourceType: requestBody.ResourceType, ResourceID: requestBody.ResourceID},
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, resources.KeyBindingChangeResponse{Changed: changed})
+}
+
+func (r *kmsHttpRoutes) UnbindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID           string `uri:"id" binding:"required"`
+		ResourceType string `uri:"resource_type" binding:"required"`
+		ResourceID   string `uri:"resource_id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	changed, err := r.svc.UnbindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   models.KMSBindResource{ResourceType: params.ResourceType, ResourceID: params.ResourceID},
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, resources.KeyBindingChangeResponse{Changed: changed})
+}
+
+func (r *kmsHttpRoutes) RebindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.RebindKeyBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	err := r.svc.RebindKeyResource(ctx.Request.Context(), services.RebindKeyResourceInput{
+		Identifier: params.ID,
+		From:       models.KMSBindResource{ResourceType: requestBody.From.ResourceType, ResourceID: requestBody.From.ResourceID},
+		To:         models.KMSBindResource{ResourceType: requestBody.To.ResourceType, ResourceID: requestBody.To.ResourceID},
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, gin.H{})
+}
+
+func (r *kmsHttpRoutes) ReconcileCertificateBindings(ctx *gin.Context) {
+	var requestBody resources.ReconcileCertificateBindingsBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	stats, err := r.svc.ReconcileCertificateBindings(ctx.Request.Context(), services.ReconcileCertificateBindingsInput{
+		After:    requestBody.After,
+		UpTo:     requestBody.UpTo,
+		MinAge:   time.Duration(requestBody.MinAgeSeconds) * time.Second,
+		Bindings: requestBody.Bindings,
 	})
 	if err != nil {
 		r.handleError(ctx, err)

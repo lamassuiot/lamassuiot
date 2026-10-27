@@ -3,9 +3,9 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/jobs"
 	auditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
@@ -13,6 +13,7 @@ import (
 	otel "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
@@ -116,8 +117,21 @@ func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*servi
 		scheduler.Start()
 	}
 
+	if conf.KMSBindingsReconcileJob.Enabled {
+		lReconcile := helpers.SetupLogger(conf.Logs.Level, "CA", "KMS Bindings Reconciliation")
+		// Bindings younger than this are left alone: their certificates may postdate the batch read.
+		reconciler := jobs.NewKMSBindingsReconciler(certStorage, kmsSDK, lReconcile, kmsBindingsReconcileBatchSize, kmsBindingsReconcileMinAge)
+		go reconciler.Run()
+		jobs.NewJobScheduler(lReconcile, conf.KMSBindingsReconcileJob.Frequency, reconciler).Start()
+	}
+
 	return &svc, scheduler, nil
 }
+
+const (
+	kmsBindingsReconcileBatchSize = 500
+	kmsBindingsReconcileMinAge    = 5 * time.Minute
+)
 
 func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, storage.IssuanceProfileRepo, error) {
 	engine, err := builder.BuildStorageEngine(logger, conf)

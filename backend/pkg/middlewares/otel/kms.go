@@ -125,3 +125,38 @@ func (mw KMSOTelTracer) ImportKey(ctx context.Context, input services.ImportKeyI
 
 	return mw.next.ImportKey(ctx, input)
 }
+
+func (mw KMSOTelTracer) GetKeyBindings(ctx context.Context, input services.GetKeyInput) ([]models.KeyBinding, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.GetKeyBindings(ctx, input)
+}
+
+func (mw KMSOTelTracer) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.BindKeyResource(ctx, input)
+}
+
+func (mw KMSOTelTracer) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.UnbindKeyResource(ctx, input)
+}
+
+func (mw KMSOTelTracer) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.RebindKeyResource(ctx, input)
+}
+
+func (mw KMSOTelTracer) ReconcileCertificateBindings(ctx context.Context, input services.ReconcileCertificateBindingsInput) (*models.ReconcileStats, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.ReconcileCertificateBindings(ctx, input)
+}

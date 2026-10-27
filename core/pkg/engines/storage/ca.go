@@ -24,6 +24,10 @@ type CertificatesRepo interface {
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Delete(ctx context.Context, serialNumber string) error
+	// SelectKeyUsersAfter returns, by serial number and after the given one, up to limit certificates
+	// that keep a KMS key in use: the current certificate of each CA, and every other certificate
+	// whose key the KMS holds, whatever its status.
+	SelectKeyUsersAfter(ctx context.Context, after string, limit int) ([]models.CertificateKeyRef, error)
 }
 
 type CACertificatesRepo interface {
