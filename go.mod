@@ -13,8 +13,8 @@ require (
 	github.com/ThreeDotsLabs/watermill-aws v1.0.3
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/aws/aws-sdk-go-v2 v1.47.4
-	github.com/aws/aws-sdk-go-v2/config v1.33.10
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.10
+	github.com/aws/aws-sdk-go-v2/config v1.33.11
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.11
 	github.com/aws/aws-sdk-go-v2/service/iot v1.84.6
 	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.42.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.61.6
@@ -36,6 +36,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/kaptinlin/jsonschema v0.9.10
+	github.com/krotscheck/go-rds-driver v0.0.0-20261027142311-393874c3b33d
 	github.com/miekg/pkcs11 v1.1.2
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
@@ -96,7 +97,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.10.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/rdsdata v1.40.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.11.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.5 // indirect
 	github.com/aws/smithy-go v1.28.6 // indirect
@@ -235,3 +237,5 @@ require (
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 
 tool gotest.tools/gotestsum
+
+replace github.com/krotscheck/go-rds-driver => github.com/lamassuiot/go-rds-driver v0.0.0-20261027142311-393874c3b33d

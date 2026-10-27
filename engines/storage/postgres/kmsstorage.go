@@ -113,7 +113,7 @@ func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	tx := db.querier.Session(&gorm.Session{FullSaveAssociations: true}).Table(kmsTableName).WithContext(ctx).
+	tx := db.querier.Table(kmsTableName).Session(&gorm.Session{FullSaveAssociations: true}).WithContext(ctx).
 		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Save(kmsKey)
 	if tx.Error != nil {
 		return nil, tx.Error

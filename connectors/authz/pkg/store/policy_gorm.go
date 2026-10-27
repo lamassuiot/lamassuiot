@@ -109,8 +109,7 @@ func (s *GormPolicyStore) Search(ctx context.Context, query string) ([]*models.P
 
 	var records []models.PolicyRecord
 	lower := strings.ToLower(query)
-	if err := s.db.WithContext(ctx).
-		Table("policies").
+	if err := s.querier.Table("policies").WithContext(ctx).
 		Where("LOWER(id) LIKE ? OR LOWER(name) ILIKE ? OR LOWER(description) ILIKE ?",
 			"%"+lower+"%", "%"+lower+"%", "%"+lower+"%").
 		Find(&records).Error; err != nil {

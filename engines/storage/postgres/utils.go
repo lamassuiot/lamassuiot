@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	rds "github.com/krotscheck/go-rds-driver"
+	rdsgorm "github.com/krotscheck/go-rds-driver/gorm"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
@@ -43,14 +45,14 @@ func safeColumn(name string) (clause.Column, error) {
 	return clause.Column{Name: name}, nil
 }
 
-// columnEquals builds a "column = value" condition. The column goes through
-// safeColumn and is quoted, so it is never formatted into the SQL as is.
-func columnEquals(name string, value any) (clause.Expr, error) {
+// columnEquals builds a structured "column = value" condition so GORM plugins
+// can resolve the compared field from the model schema.
+func columnEquals(name string, value any) (clause.Eq, error) {
 	col, err := safeColumn(name)
 	if err != nil {
-		return clause.Expr{}, err
+		return clause.Eq{}, err
 	}
-	return clause.Expr{SQL: "? = ?", Vars: []any{col, value}}, nil
+	return clause.Eq{Column: col, Value: value}, nil
 }
 
 // plainOrderColumn builds a safe ORDER BY column clause for a plain column.
@@ -86,36 +88,129 @@ func RegisterGORMPlugin(p gorm.Plugin) {
 	registeredPlugins = append(registeredPlugins, p)
 }
 
+type postgresSchemaNamingStrategy struct {
+	schema.NamingStrategy
+	schemaName string
+}
+
+func newPostgresSchemaNamingStrategy(schemaName string) postgresSchemaNamingStrategy {
+	return postgresSchemaNamingStrategy{
+		NamingStrategy: schema.NamingStrategy{TablePrefix: schemaName + "."},
+		schemaName:     schemaName,
+	}
+}
+
+// NewPostgresSchemaNamingStrategy returns a naming strategy that qualifies GORM
+// table names with the supplied schema.
+func NewPostgresSchemaNamingStrategy(schemaName string) schema.Namer {
+	return newPostgresSchemaNamingStrategy(schemaName)
+}
+
+func qualifiedTableName(db *gorm.DB, tableName string) string {
+	if strings.Contains(tableName, ".") {
+		return tableName
+	}
+
+	switch namingStrategy := db.Config.NamingStrategy.(type) {
+	case postgresSchemaNamingStrategy:
+		return namingStrategy.schemaName + "." + tableName
+	case *postgresSchemaNamingStrategy:
+		return namingStrategy.schemaName + "." + tableName
+	default:
+		return tableName
+	}
+}
+
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, schema string) (*gorm.DB, error) {
+	if !identifierRegex.MatchString(schema) {
+		return nil, fmt.Errorf("invalid PostgreSQL schema %q", schema)
+	}
+
 	dbLogger := &GormLogger{
 		logger: logger,
 	}
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, cfg.Port, schema)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+	dialector, err := postgresDialector(cfg, dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	gormConfig := &gorm.Config{
 		Logger:         dbLogger,
 		TranslateError: true,
-	})
+	}
+	if cfg.Transport == lconfig.PostgresTransportRDSDataAPI {
+		gormConfig.NamingStrategy = newPostgresSchemaNamingStrategy(schema)
+	}
+
+	db, err := gorm.Open(dialector, gormConfig)
 
 	if err != nil {
 		return nil, err
 	}
 
-	// Set search_path for this connection
-	db.Exec(fmt.Sprintf("SET search_path TO %s", schema))
-
-	// Add OTel Tracing
-	if err = db.Use(tracing.NewPlugin()); err != nil {
-		return nil, err
-	}
-
-	for _, p := range registeredPlugins {
-		if err = db.Use(p); err != nil {
-			return nil, fmt.Errorf("register GORM plugin %q: %w", p.Name(), err)
+	if cfg.Transport != lconfig.PostgresTransportRDSDataAPI {
+		if err := db.Exec(fmt.Sprintf("SET search_path TO %s", schema)).Error; err != nil {
+			return nil, fmt.Errorf("set PostgreSQL search_path to schema %q: %w", schema, err)
 		}
 	}
 
+	if err = configurePostgresGORMPlugins(db, cfg.Transport); err != nil {
+		return nil, err
+	}
+
 	return db, nil
+}
+
+func postgresDialector(cfg lconfig.PostgresPSEConfig, directDSN string) (gorm.Dialector, error) {
+	switch cfg.Transport {
+	case "", lconfig.PostgresTransportDirect:
+		return postgres.Open(directDSN), nil
+	case lconfig.PostgresTransportRDSDataAPI:
+		dataAPI := cfg.RDSDataAPI
+		for _, required := range []struct {
+			name  string
+			value string
+		}{
+			{name: "resource_arn", value: dataAPI.ResourceARN},
+			{name: "secret_arn", value: dataAPI.SecretARN},
+			{name: "database", value: dataAPI.Database},
+			{name: "aws_region", value: dataAPI.AWSRegion},
+		} {
+			if strings.TrimSpace(required.value) == "" {
+				return nil, fmt.Errorf("RDS Data API transport requires %s", required.name)
+			}
+		}
+
+		driverConfig := rds.NewConfig(dataAPI.ResourceARN, dataAPI.SecretARN, dataAPI.Database, dataAPI.AWSRegion)
+		driverConfig.ParseTime = true
+		return postgres.New(postgres.Config{
+			DriverName: rds.DRIVERNAME,
+			DSN:        driverConfig.ToDSN(),
+		}), nil
+	default:
+		return nil, fmt.Errorf("unsupported PostgreSQL transport %q", cfg.Transport)
+	}
+}
+
+func configurePostgresGORMPlugins(db *gorm.DB, transport lconfig.PostgresTransport) error {
+	if err := db.Use(tracing.NewPlugin()); err != nil {
+		return fmt.Errorf("register PostgreSQL tracing plugin: %w", err)
+	}
+
+	if transport == lconfig.PostgresTransportRDSDataAPI {
+		if err := db.Use(rdsgorm.NewTypeHintPlugin()); err != nil {
+			return fmt.Errorf("register RDS Data API type hint plugin: %w", err)
+		}
+	}
+
+	for _, plugin := range registeredPlugins {
+		if err := db.Use(plugin); err != nil {
+			return fmt.Errorf("register GORM plugin %q: %w", plugin.Name(), err)
+		}
+	}
+	return nil
 }
 
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*DBQuerier[E], error) {
@@ -248,6 +343,10 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 		primaryKeyColumn: primaryKeyColumn,
 		uniqueColumns:    []string{primaryKeyColumn},
 	}
+}
+
+func (db *DBQuerier[E]) Table(name string, args ...interface{}) *gorm.DB {
+	return db.DB.Table(qualifiedTableName(db.DB, name), args...)
 }
 
 type GormExtraOps struct {
@@ -632,7 +731,7 @@ func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E,
 		return nil, err
 	}
 
-	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(cond).Save(elem)
+	tx := db.Table(db.tableName).Session(&gorm.Session{FullSaveAssociations: true}).WithContext(ctx).Where(cond).Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -650,7 +749,8 @@ func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
 		return err
 	}
 
-	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, cond)
+	var elem E
+	tx := db.Table(db.tableName).WithContext(ctx).Delete(&elem, cond)
 	if err := tx.Error; err != nil {
 		return err
 	}

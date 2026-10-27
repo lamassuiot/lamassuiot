@@ -68,10 +68,36 @@ There are 3 main repositories to consider when developing Lamassu
 
 ### Running services locally - Development
 
-Running all Lamassu Services all-in-one is as easy as running the following command. Bear in mind that `docker` is a requirement. The monolithic launcher runs and configures the required infrastructure (i.e. postgres, rabbitmq) as docker containers. To run it, exec the command:
+Running all Lamassu Services all-in-one is as easy as running the following command. Bear in mind that `docker` is a requirement. By default, the monolithic launcher runs and configures the required infrastructure (i.e. PostgreSQL, RabbitMQ) as Docker containers. To run it, exec the command:
 
 ```bash
 go run ./monolithic/cmd/development/main.go
+```
+
+To use an existing PostgreSQL database through the RDS Data API instead of launching the
+PostgreSQL container, provide the cluster/instance ARN, Secrets Manager secret ARN, database,
+and AWS region. The AWS SDK default credential chain supplies credentials. WFX requires a direct
+PostgreSQL connection, so disable it when selecting the Data API transport. Authz runtime queries
+can use the Data API, but Goose migrations require a separate direct PostgreSQL connection because
+they depend on PostgreSQL session semantics. When using `-authz`, provide that direct connection
+with the `-authz-migration-*` flags and set its password in `LAMASSU_AUTHZ_MIGRATION_PASSWORD`;
+the password is intentionally not accepted as a command-line argument:
+
+```bash
+export LAMASSU_AUTHZ_MIGRATION_PASSWORD='...'
+
+go run ./monolithic/cmd/development/main.go \
+  -postgres-transport=rds_data_api \
+  -rds-data-api-resource-arn=arn:aws:rds:us-east-1:123456789012:cluster:example \
+  -rds-data-api-secret-arn=arn:aws:secretsmanager:us-east-1:123456789012:secret:example \
+  -rds-data-api-database=pki \
+  -rds-data-api-region=us-east-1 \
+  -disable-wfx \
+  -authz \
+  -authz-migration-host=postgres.example.com \
+  -authz-migration-port=5432 \
+  -authz-migration-username=lamassu_migrator \
+  -authz-migration-database=pki
 ```
 
 Once the app is ready the following logs will appear:
