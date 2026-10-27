@@ -100,6 +100,12 @@ func newPostgresSchemaNamingStrategy(schemaName string) postgresSchemaNamingStra
 	}
 }
 
+// NewPostgresSchemaNamingStrategy returns a naming strategy that qualifies GORM
+// table names with the supplied schema.
+func NewPostgresSchemaNamingStrategy(schemaName string) schema.Namer {
+	return newPostgresSchemaNamingStrategy(schemaName)
+}
+
 func qualifiedTableName(db *gorm.DB, tableName string) string {
 	if strings.Contains(tableName, ".") {
 		return tableName

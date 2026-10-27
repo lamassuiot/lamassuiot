@@ -30,8 +30,11 @@ type AuthzConfig struct {
 	// Credentials holds per-schema engine Postgres connections (provider must be "postgres").
 	Credentials map[string]cconfig.PluggableStorageEngine `mapstructure:"credentials"`
 	// AuthzDB is the Postgres database for principals, grants, and policies.
-	AuthzDB    cconfig.PluggableStorageEngine `mapstructure:"authz_db"`
-	PreloadDir string                         `mapstructure:"preload_dir"`
+	AuthzDB cconfig.PluggableStorageEngine `mapstructure:"authz_db"`
+	// MigrationDB is an optional direct PostgreSQL connection used only for
+	// Goose migrations when AuthzDB uses a transport without session semantics.
+	MigrationDB cconfig.PluggableStorageEngine `mapstructure:"migration_db"`
+	PreloadDir  string                         `mapstructure:"preload_dir"`
 	// Bootstrap seeds principals and policy grants on startup. Idempotent.
 	Bootstrap []BootstrapEntry `mapstructure:"bootstrap"`
 	// URL to fetch JSON Web Key Sets for verifying JWT tokens.

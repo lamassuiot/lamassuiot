@@ -107,6 +107,10 @@ func main() {
 	rdsDataAPISecretARN := flag.String("rds-data-api-secret-arn", "", "Secrets Manager secret ARN for the database credentials")
 	rdsDataAPIDatabase := flag.String("rds-data-api-database", "pki", "database name used by the RDS Data API")
 	rdsDataAPIRegion := flag.String("rds-data-api-region", "", "AWS region for the RDS Data API")
+	authzMigrationHost := flag.String("authz-migration-host", "", "direct PostgreSQL host used only for Authz migrations with RDS Data API")
+	authzMigrationPort := flag.Int("authz-migration-port", 5432, "direct PostgreSQL port used only for Authz migrations")
+	authzMigrationUsername := flag.String("authz-migration-username", "", "direct PostgreSQL username used only for Authz migrations")
+	authzMigrationDatabase := flag.String("authz-migration-database", "pki", "direct PostgreSQL database used only for Authz migrations")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	disableSSE := flag.Bool("disable-sse", false, "disable SSE streaming on device events endpoint")
@@ -115,7 +119,7 @@ func main() {
 	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
 	disableWFX := flag.Bool("disable-wfx", false, "Disable WFX docker loading")
 	sampleData := flag.Bool("sample-data", false, "populate the server with sample data for manual testing")
-	enableAuthz := flag.Bool("authz", false, "enable authz service (requires Postgres)")
+	enableAuthz := flag.Bool("authz", false, "enable authz service")
 	authzPkiSchema := flag.String("authz-pki-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/pki.json", "path to PKI schema JSON file for authz service")
 	authzSchema := flag.String("authz-schema", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/authz.json", "path to Authz schema JSON file for authz service")
 	authzHTTPSchemas := flag.String("authz-http-schemas", "/home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json", "comma-separated list of HTTP schema JSON file paths for Envoy ext_authz (e.g. ./connectors/authz/examples/wfx/http-schema.json)")
@@ -254,6 +258,10 @@ func main() {
 		*rdsDataAPIRegion,
 		*disableWFX,
 		*enableAuthz,
+		*authzMigrationHost,
+		*authzMigrationUsername,
+		*authzMigrationDatabase,
+		os.Getenv("LAMASSU_AUTHZ_MIGRATION_PASSWORD"),
 	); err != nil {
 		log.Fatalf("invalid PostgreSQL transport configuration: %s", err)
 	}
@@ -578,7 +586,7 @@ func main() {
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
 		AuthzProxyPrefixes: splitCommaSeparated(*authzProxyPrefixes),
-		AuthzConfig:        buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas, *authzMigrationHost, *authzMigrationPort, *authzMigrationUsername, *authzMigrationDatabase, os.Getenv("LAMASSU_AUTHZ_MIGRATION_PASSWORD")),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -650,16 +658,13 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	return opts, nil
 }
 
-func validatePostgresTransport(transport, resourceARN, secretARN, database, region string, disableWFX, enableAuthz bool) error {
+func validatePostgresTransport(transport, resourceARN, secretARN, database, region string, disableWFX, enableAuthz bool, migrationHost, migrationUsername, migrationDatabase, migrationPassword string) error {
 	switch postgresconfig.PostgresTransport(transport) {
 	case "", postgresconfig.PostgresTransportDirect:
 		return nil
 	case postgresconfig.PostgresTransportRDSDataAPI:
 		if !disableWFX {
 			return fmt.Errorf("RDS Data API transport requires -disable-wfx because WFX needs a direct PostgreSQL connection")
-		}
-		if enableAuthz {
-			return fmt.Errorf("RDS Data API transport does not support -authz because the authz service requires a direct PostgreSQL connection")
 		}
 		for _, required := range []struct {
 			name  string
@@ -672,6 +677,21 @@ func validatePostgresTransport(transport, resourceARN, secretARN, database, regi
 		} {
 			if strings.TrimSpace(required.value) == "" {
 				return fmt.Errorf("%s is required with -postgres-transport=rds_data_api", required.name)
+			}
+		}
+		if enableAuthz {
+			for _, required := range []struct {
+				name  string
+				value string
+			}{
+				{name: "-authz-migration-host", value: migrationHost},
+				{name: "-authz-migration-username", value: migrationUsername},
+				{name: "-authz-migration-database", value: migrationDatabase},
+				{name: "LAMASSU_AUTHZ_MIGRATION_PASSWORD", value: migrationPassword},
+			} {
+				if strings.TrimSpace(required.value) == "" {
+					return fmt.Errorf("%s is required with -authz and -postgres-transport=rds_data_api", required.name)
+				}
 			}
 		}
 		return nil
@@ -722,7 +742,7 @@ func splitCommaSeparated(value string) []string {
 	return out
 }
 
-func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string) *authzconfig.AuthzConfig {
+func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas, migrationHost string, migrationPort int, migrationUsername, migrationDatabase, migrationPassword string) *authzconfig.AuthzConfig {
 	if !enabled {
 		return nil
 	}
@@ -758,6 +778,21 @@ func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine
 	pkiDB.Config["database"] = "pki"
 	pkiDB.Config["schema"] = "ca"
 
+	var migrationDB cconfig.PluggableStorageEngine
+	if storageConfig.Config["transport"] == string(postgresconfig.PostgresTransportRDSDataAPI) {
+		migrationDB = cconfig.PluggableStorageEngine{
+			Provider: cconfig.Postgres,
+			Config: map[string]any{
+				"hostname": migrationHost,
+				"port":     migrationPort,
+				"username": migrationUsername,
+				"password": cconfig.Password(migrationPassword),
+				"database": migrationDatabase,
+				"schema":   "authz",
+			},
+		}
+	}
+
 	return &authzconfig.AuthzConfig{
 		// Development/testing has no JWKS endpoint, so OIDC signatures are not verified.
 		InsecureSkipJWTVerify: true,
@@ -768,7 +803,8 @@ func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine
 			ListenAddress: "0.0.0.0",
 			Protocol:      cconfig.HTTP,
 		},
-		AuthzDB: authzDB,
+		AuthzDB:     authzDB,
+		MigrationDB: migrationDB,
 		Schemas: map[string]string{
 			"authz": authzSchema,
 			"pki":   pkiSchema,
