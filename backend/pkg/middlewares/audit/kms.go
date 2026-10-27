@@ -137,11 +137,3 @@ func (mw KMSAuditEventPublisher) UnbindKeyResource(ctx context.Context, input se
 
 	return mw.next.UnbindKeyResource(ctx, input)
 }
-
-func (mw KMSAuditEventPublisher) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) (changed bool, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateKMSKeyBindings, input, err, changed)
-	}()
-
-	return mw.next.RebindKeyResource(ctx, input)
-}

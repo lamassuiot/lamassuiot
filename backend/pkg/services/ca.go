@@ -1289,6 +1289,31 @@ func (svc *CAServiceBackend) bindCertificateKey(ctx context.Context, lFunc *logr
 	}
 }
 
+// caCertificateHistory returns a CA's current certificate and the ones it reissued, following each
+// certificate's reissued-from link back. The walk stops at a certificate that is missing or uses
+// another key, so a broken link only leaves older certificates out.
+func (svc *CAServiceBackend) caCertificateHistory(ctx context.Context, current *models.Certificate, lFunc *logrus.Entry) []*models.Certificate {
+	history := []*models.Certificate{current}
+	seen := map[string]bool{current.SerialNumber: true}
+	for cert := current; ; {
+		previous, ok := cert.Metadata[models.CAMetadataReissuedFromKey].(string)
+		if !ok || previous == "" || seen[previous] {
+			return history
+		}
+		exists, prev, err := svc.certStorage.SelectExistsBySerialNumber(ctx, previous)
+		if err != nil {
+			lFunc.Warnf("could not get certificate %s, reissued as %s: %s", previous, cert.SerialNumber, err)
+			return history
+		}
+		if !exists || prev.KeyID != current.KeyID || prev.EngineID != current.EngineID {
+			return history
+		}
+		history = append(history, prev)
+		seen[previous] = true
+		cert = prev
+	}
+}
+
 func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) {
 	if ca.Certificate.EngineID == "" {
 		lFunc.Debugf("no engine ID specified for CA %s, skipping private key deletion", ca.ID)
@@ -1304,10 +1329,13 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 	}
 	identifier := kmsKeyIdentifier(key)
 
-	_, err = svc.kmsService.UnbindKeyResource(ctx, services.KeyResourceBindingInput{Identifier: identifier, Resource: certificateKeyBinding(&ca.Certificate)})
-	if err != nil {
-		lFunc.Warnf("could not unbind CA %s from its key, keeping it in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
-		return
+	// The certificates stay, for the issuer's CRL and OCSP, but no longer use the key.
+	for _, cert := range svc.caCertificateHistory(ctx, &ca.Certificate, lFunc) {
+		_, err = svc.kmsService.UnbindKeyResource(ctx, services.KeyResourceBindingInput{Identifier: identifier, Resource: certificateKeyBinding(cert)})
+		if err != nil {
+			lFunc.Warnf("could not unbind certificate %s of CA %s from its key, keeping it in crypto engine %s: %s", cert.SerialNumber, ca.ID, ca.Certificate.EngineID, err)
+			return
+		}
 	}
 
 	// The KMS refuses to delete a key other resources are bound to, such as a cross-signed CA.
@@ -1515,17 +1543,8 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		return nil, err
 	}
 
-	// The new certificate takes over the key: the superseded one no longer keeps it in use.
-	if newCertificateRecord.KeyID != "" {
-		_, err = svc.kmsService.RebindKeyResource(ctx, services.RebindKeyResourceInput{
-			Identifier: buildPKCS11ID(newCertificateRecord.EngineID, newCertificateRecord.KeyID, "private"),
-			From:       models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: oldSerialNumber},
-			To:         certificateKeyBinding(&newCertificateRecord),
-		})
-		if err != nil {
-			lFunc.Warnf("could not move the key binding of CA %s to its new certificate %s: %s", input.CAID, newCertificateRecord.SerialNumber, err)
-		}
-	}
+	// The superseded certificate stays bound too: the CA unbinds all its certificates when deleted.
+	svc.bindCertificateKey(ctx, lFunc, &newCertificateRecord)
 
 	lFunc.Debugf("successfully reissued CA %s. New serial number: %s", input.CAID, newCertificateRecord.SerialNumber)
 

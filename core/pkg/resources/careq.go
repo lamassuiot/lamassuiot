@@ -166,11 +166,6 @@ type KeyBindingBody struct {
 	ResourceID   string `json:"resource_id"`
 }
 
-type RebindKeyBody struct {
-	From KeyBindingBody `json:"from"`
-	To   KeyBindingBody `json:"to"`
-}
-
 // KeyBindingChangeResponse tells whether binding or unbinding changed the key's bindings.
 type KeyBindingChangeResponse struct {
 	Changed bool `json:"changed"`

@@ -113,16 +113,60 @@ func TestCertificatesAreBoundToTheirKMSKey(t *testing.T) {
 	})
 }
 
-func TestReissuedCAMovesItsKeyBinding(t *testing.T) {
+func reissueCA(t *testing.T, caID string) *models.CACertificate {
+	t.Helper()
+	reissued, err := serverTest.CA.Service.ReissueCA(context.Background(), services.ReissueCAInput{CAID: caID})
+	require.NoError(t, err)
+	return reissued
+}
+
+func TestReissuedCAKeepsItsPreviousCertificatesBound(t *testing.T) {
 	require.NoError(t, serverTest.BeforeEach())
 	profile := newBindingsProfile(t)
 	ca := createBindingsCA(t, "bindings-reissue", profile.ID, "")
 
-	reissued, err := serverTest.CA.Service.ReissueCA(context.Background(), services.ReissueCAInput{CAID: ca.ID})
-	require.NoError(t, err)
-	require.NotEqual(t, ca.Certificate.SerialNumber, reissued.Certificate.SerialNumber)
+	second := reissueCA(t, ca.ID)
+	third := reissueCA(t, ca.ID)
 
-	require.Equal(t, []string{reissued.Certificate.SerialNumber}, boundSerials(t, &reissued.Certificate))
+	require.ElementsMatch(t, []string{ca.Certificate.SerialNumber, second.Certificate.SerialNumber, third.Certificate.SerialNumber},
+		boundSerials(t, &third.Certificate))
+}
+
+func TestDeletingAReissuedCADeletesItsKey(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	profile := newBindingsProfile(t)
+	ca := createBindingsCA(t, "bindings-delete-reissued", profile.ID, "")
+	second := reissueCA(t, ca.ID)
+	third := reissueCA(t, ca.ID)
+
+	revokeCA(t, caSvc, ca.ID)
+	require.NoError(t, caSvc.DeleteCA(ctx, services.DeleteCAInput{CAID: ca.ID}))
+
+	_, err := serverTest.KMS.Service.GetKey(ctx, services.GetKeyInput{Identifier: keyURI(&third.Certificate)})
+	require.ErrorIs(t, err, errs.ErrKeyNotFound)
+	for _, sn := range []string{ca.Certificate.SerialNumber, second.Certificate.SerialNumber, third.Certificate.SerialNumber} {
+		_, err := caSvc.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: sn})
+		require.NoError(t, err, "the certificates of a deleted CA stay for its issuer's CRL and OCSP")
+	}
+}
+
+func TestDeletingAReissuedCAKeepsTheBindingsOfACAWithTheSameKey(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	profile := newBindingsProfile(t)
+
+	first := createBindingsCA(t, "bindings-shared-reissued-1", profile.ID, "")
+	second := createBindingsCA(t, "bindings-shared-reissued-2", profile.ID, keyURI(&first.Certificate))
+	firstReissued := reissueCA(t, first.ID)
+	secondReissued := reissueCA(t, second.ID)
+
+	revokeCA(t, caSvc, first.ID)
+	require.NoError(t, caSvc.DeleteCA(ctx, services.DeleteCAInput{CAID: first.ID}))
+
+	require.ElementsMatch(t, []string{second.Certificate.SerialNumber, secondReissued.Certificate.SerialNumber}, boundSerials(t, &firstReissued.Certificate))
 }
 
 func TestDeletingACAKeepsAKeyStillInUse(t *testing.T) {

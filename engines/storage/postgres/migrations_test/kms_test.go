@@ -192,7 +192,7 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 
 	// The CA schema has not been migrated to key_id yet: the migration must not silently skip.
 	require.NoError(t, con.Exec(`CREATE SCHEMA ca`).Error)
-	require.NoError(t, con.Exec(`CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, certificate text, engine_id text NOT NULL DEFAULT '', is_ca boolean NOT NULL DEFAULT false)`).Error)
+	require.NoError(t, con.Exec(`CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, certificate text, engine_id text NOT NULL DEFAULT '', is_ca boolean NOT NULL DEFAULT false, metadata jsonb NULL)`).Error)
 	require.NoError(t, con.Exec(`CREATE TABLE ca.ca_certificates (serial_number text PRIMARY KEY)`).Error)
 	m := postgres.NewMigrator(logger, con)
 	var version int64
@@ -213,9 +213,20 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 			require.NoError(t, con.Exec(`INSERT INTO ca.ca_certificates (serial_number) VALUES (?)`, serial).Error)
 		}
 	}
-	insertCert("s1", "array", "legacy-engine", false, false)               // already bound: kept
-	insertCert("ca-current", "object", "legacy-engine", true, true)        // current CA certificate: bound
-	insertCert("ca-old", "object", "legacy-engine", true, false)           // reissued or deleted CA: not bound
+	insertCert("s1", "array", "legacy-engine", false, false)           // already bound: kept
+	insertCert("ca-current", "object", "legacy-engine", true, true)    // current CA certificate: bound
+	insertCert("ca-old", "object", "legacy-engine", true, false)       // deleted CA: not bound
+	insertCert("ca-previous", "object", "legacy-engine", true, false)  // reissued as ca-current: bound
+	insertCert("ca-first", "object", "legacy-engine", true, false)     // reissued as ca-previous: bound
+	insertCert("ca-other-key", "string", "legacy-engine", true, false) // reissued from, with another key: not bound
+	reissuedFrom := func(serial, previous string) {
+		t.Helper()
+		require.NoError(t, con.Exec(`UPDATE ca.certificates SET metadata = ?::jsonb WHERE serial_number = ?`,
+			`{"lamassu.io/ca/reissued-from": "`+previous+`"}`, serial).Error)
+	}
+	reissuedFrom("ca-current", "ca-previous")
+	reissuedFrom("ca-previous", "ca-first")
+	reissuedFrom("ca-first", "ca-other-key")
 	insertCert("leaf-new", "abc123", "online-1", false, false)             // never bound before: bound
 	insertCert("leaf-no-key", "not-in-kms", "legacy-engine", false, false) // key unknown to the KMS: skipped
 	insertCert("s4", "", "legacy-engine", false, false)                    // unreadable certificate: its binding is kept
@@ -265,7 +276,8 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	ApplyMigration(t, logger, con, kmsDBName)
 
 	assert.Equal(t, []string{"certificate/s1"}, bindingsOf("array", "legacy-engine"), "s2 is no longer a certificate")
-	assert.Equal(t, []string{"certificate/ca-current"}, bindingsOf("object", "legacy-engine"))
+	assert.Equal(t, []string{"certificate/ca-current", "certificate/ca-first", "certificate/ca-previous"}, bindingsOf("object", "legacy-engine"),
+		"a CA's current certificate and the ones it reissued")
 	assert.Equal(t, []string{"certificate/s4"}, bindingsOf("string", "legacy-engine"))
 	assert.Empty(t, bindingsOf("duplicated", "legacy-engine"))
 	assert.Equal(t, []string{"device/d1"}, bindingsOf("other-type", "legacy-engine"), "only certificate bindings are rebuilt")

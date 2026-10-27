@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
@@ -19,8 +20,8 @@ func Register20261027110200BackfillCertificateKeyBindings() {
 }
 
 // upBackfillCertificateKeyBindings makes the certificate bindings match the certificates that use each
-// key: the current certificate of each CA (reissued and deleted CAs leave their certificates behind)
-// and every other certificate whose key the KMS holds, whatever its status. Earlier versions only
+// key: the certificates of each CA, its current one and the ones it reissued (deleted CAs leave their
+// certificates behind), and every other certificate whose key the KMS holds, whatever its status. Earlier versions only
 // bound some of them, in the key metadata, and never unbound them. It only reads the CA schema, which
 // must be migrated first so that its certificates record their key_id.
 //
@@ -55,6 +56,23 @@ func upBackfillCertificateKeyBindings(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 
+	// The certificates of each CA: its current one and, following the reissued-from links back, the
+	// ones it reissued with the same key.
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TEMP TABLE ca_certificate_history ON COMMIT DROP AS
+		WITH RECURSIVE history (serial_number, key_id, engine_id, previous) AS (
+			SELECT c.serial_number, c.key_id, c.engine_id, c.metadata ->> $1
+			FROM ca.ca_certificates AS ca
+			JOIN ca.certificates AS c ON c.serial_number = ca.serial_number
+			UNION
+			SELECT p.serial_number, p.key_id, p.engine_id, p.metadata ->> $1
+			FROM history AS h
+			JOIN ca.certificates AS p ON p.serial_number = h.previous AND p.key_id = h.key_id AND p.engine_id = h.engine_id
+		)
+		SELECT DISTINCT serial_number FROM history`, models.CAMetadataReissuedFromKey); err != nil {
+		return err
+	}
+
 	// Certificates whose key_id names their key.
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO desired_certificate_bindings (key_id, engine_id, resource_id)
@@ -62,7 +80,7 @@ func upBackfillCertificateKeyBindings(ctx context.Context, tx *sql.Tx) error {
 		FROM ca.certificates AS c
 		JOIN kms_keys AS k ON k.key_id = c.key_id AND k.engine_id = c.engine_id
 		WHERE c.key_id <> '' AND c.engine_id <> ''
-		  AND (c.is_ca = false OR EXISTS (SELECT 1 FROM ca.ca_certificates AS ca WHERE ca.serial_number = c.serial_number))`); err != nil {
+		  AND (c.is_ca = false OR EXISTS (SELECT 1 FROM ca_certificate_history AS h WHERE h.serial_number = c.serial_number))`); err != nil {
 		return err
 	}
 
@@ -104,7 +122,7 @@ func bindCertificatesByPublicKey(ctx context.Context, tx *sql.Tx, warnf func(str
 		SELECT c.serial_number, c.engine_id, COALESCE(c.certificate, '')
 		FROM ca.certificates AS c
 		WHERE c.key_id <> '' AND c.engine_id <> ''
-		  AND (c.is_ca = false OR EXISTS (SELECT 1 FROM ca.ca_certificates AS ca WHERE ca.serial_number = c.serial_number))
+		  AND (c.is_ca = false OR EXISTS (SELECT 1 FROM ca_certificate_history AS h WHERE h.serial_number = c.serial_number))
 		  AND NOT EXISTS (SELECT 1 FROM kms_keys AS k WHERE k.key_id = c.key_id AND k.engine_id = c.engine_id)`)
 	if err != nil {
 		return 0, err

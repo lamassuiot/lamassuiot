@@ -680,63 +680,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /keys/{id}/bindings/rebind:
-    post:
-      tags:
-        - Keys
-      summary: Move a key binding to another resource
-      description: Managed by Lamassu; only the service principal may call it. Used when a reissued CA certificate takes over its key.
-      operationId: rebindKeyResource
-      x-authz:
-        namespace: pki
-        schema_name: kms
-        entity_type: kms_key
-        action: manage-bindings
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Key identifier (PKCS#11 URI, alias or key ID)
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [from, to]
-              properties:
-                from:
-                  $ref: '#/components/schemas/KeyBindingBody'
-                to:
-                  $ref: '#/components/schemas/KeyBindingBody'
-      responses:
-        '200':
-          description: Whether the bindings changed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/KeyBindingChange'
-        '400':
-          description: Bad request - invalid resource
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Key not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
   /keys/{id}/bindings/{resource_type}/{resource_id}:
     delete:
       tags:

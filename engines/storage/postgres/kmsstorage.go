@@ -196,20 +196,6 @@ func (db *PostgresKMSStore) UnbindResource(ctx context.Context, keyID, engineID 
 	return unbindResource(db.db.WithContext(ctx), keyID, engineID, resource)
 }
 
-func (db *PostgresKMSStore) RebindResource(ctx context.Context, keyID, engineID string, from, to models.KMSBindResource) (bool, error) {
-	changed := false
-	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		removed, err := unbindResource(tx, keyID, engineID, from)
-		if err != nil {
-			return err
-		}
-		created, err := bindResource(tx, keyID, engineID, to)
-		changed = removed || created
-		return err
-	})
-	return changed && err == nil, err
-}
-
 func (db *PostgresKMSStore) SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error) {
 	bindings := []models.KeyBinding{}
 	tx := db.db.WithContext(ctx).Table(kmsBindingsTableName).

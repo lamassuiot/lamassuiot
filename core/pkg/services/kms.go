@@ -29,7 +29,6 @@ type KMSService interface {
 	GetKeyBindings(ctx context.Context, input GetKeyInput) ([]models.KeyBinding, error)
 	BindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
 	UnbindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
-	RebindKeyResource(ctx context.Context, input RebindKeyResourceInput) (changed bool, err error)
 
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
 	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
@@ -94,14 +93,6 @@ type ImportKeyInput struct {
 type KeyResourceBindingInput struct {
 	Identifier string                 `validate:"required"`
 	Resource   models.KMSBindResource `validate:"required"`
-}
-
-// RebindKeyResourceInput moves the key's binding from one resource to another, as when a CA is
-// reissued and its new certificate takes over the key.
-type RebindKeyResourceInput struct {
-	Identifier string                 `validate:"required"`
-	From       models.KMSBindResource `validate:"required"`
-	To         models.KMSBindResource `validate:"required"`
 }
 
 type UpdateKeyMetadataInput struct {

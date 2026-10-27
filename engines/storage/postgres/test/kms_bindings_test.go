@@ -76,20 +76,6 @@ func TestKMSStoreKeyBindings(t *testing.T) {
 		require.ErrorIs(t, err, errs.ErrKeyNotFound)
 	})
 
-	t.Run("rebind moves the binding to another resource", func(t *testing.T) {
-		changed, err := store.RebindResource(ctx, "shared", "engine-a", certBinding("aa"), certBinding("bb"))
-		require.NoError(t, err)
-		require.True(t, changed)
-
-		changed, err = store.RebindResource(ctx, "shared", "engine-a", certBinding("aa"), certBinding("bb"))
-		require.NoError(t, err)
-		require.False(t, changed, "repeating a completed rebind changes nothing")
-
-		bindings, err := store.SelectBindings(ctx, "shared", "engine-a")
-		require.NoError(t, err)
-		require.Equal(t, []string{"bb"}, boundSerials(t, bindings))
-	})
-
 	t.Run("a bound key cannot be deleted", func(t *testing.T) {
 		err := store.Delete(ctx, "shared", "engine-a")
 		require.ErrorIs(t, err, errs.ErrKeyInUse)
@@ -116,11 +102,11 @@ func TestKMSStoreKeyBindings(t *testing.T) {
 	})
 
 	t.Run("unbind is idempotent and frees the key", func(t *testing.T) {
-		deleted, err := store.UnbindResource(ctx, "shared", "engine-a", certBinding("bb"))
+		deleted, err := store.UnbindResource(ctx, "shared", "engine-a", certBinding("aa"))
 		require.NoError(t, err)
 		require.True(t, deleted)
 
-		deleted, err = store.UnbindResource(ctx, "shared", "engine-a", certBinding("bb"))
+		deleted, err = store.UnbindResource(ctx, "shared", "engine-a", certBinding("aa"))
 		require.NoError(t, err)
 		require.False(t, deleted)
 

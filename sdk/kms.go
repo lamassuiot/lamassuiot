@@ -228,11 +228,3 @@ func (cli *httpKMSClient) UnbindKeyResource(ctx context.Context, input services.
 	response, err := cli.deleteWithBody[resources.KeyBindingChangeResponse](ctx, path, nil, keyBindingErrors)
 	return response.Changed, err
 }
-
-func (cli *httpKMSClient) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) (bool, error) {
-	response, err := cli.post[resources.KeyBindingChangeResponse](ctx, "/v1/keys/"+input.Identifier+"/bindings/rebind", resources.RebindKeyBody{
-		From: resources.KeyBindingBody{ResourceType: input.From.ResourceType, ResourceID: input.From.ResourceID},
-		To:   resources.KeyBindingBody{ResourceType: input.To.ResourceType, ResourceID: input.To.ResourceID},
-	}, keyBindingErrors)
-	return response.Changed, err
-}

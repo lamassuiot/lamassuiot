@@ -497,33 +497,3 @@ func (r *kmsHttpRoutes) UnbindKeyResource(ctx *gin.Context) {
 
 	ctx.JSON(200, resources.KeyBindingChangeResponse{Changed: changed})
 }
-
-func (r *kmsHttpRoutes) RebindKeyResource(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	var requestBody resources.RebindKeyBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
-		return
-	}
-
-	changed, err := r.svc.RebindKeyResource(ctx.Request.Context(), services.RebindKeyResourceInput{
-		Identifier: params.ID,
-		From:       models.KMSBindResource{ResourceType: requestBody.From.ResourceType, ResourceID: requestBody.From.ResourceID},
-		To:         models.KMSBindResource{ResourceType: requestBody.To.ResourceType, ResourceID: requestBody.To.ResourceID},
-	})
-	if err != nil {
-		r.handleError(ctx, err)
-		return
-	}
-
-	ctx.JSON(200, resources.KeyBindingChangeResponse{Changed: changed})
-}

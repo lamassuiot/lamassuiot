@@ -18,7 +18,6 @@ import (
 func TestKMSBindingWritesAreAudited(t *testing.T) {
 	resource := models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: "aa"}
 	bindingInput := services.KeyResourceBindingInput{Identifier: "pkcs11:token-id=e;id=k;type=private", Resource: resource}
-	rebindInput := services.RebindKeyResourceInput{Identifier: bindingInput.Identifier, From: resource, To: models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: "bb"}}
 	failure := errors.New("storage down")
 
 	call := map[string]func(services.KMSService) (bool, error){
@@ -28,11 +27,8 @@ func TestKMSBindingWritesAreAudited(t *testing.T) {
 		"UnbindKeyResource": func(svc services.KMSService) (bool, error) {
 			return svc.UnbindKeyResource(context.Background(), bindingInput)
 		},
-		"RebindKeyResource": func(svc services.KMSService) (bool, error) {
-			return svc.RebindKeyResource(context.Background(), rebindInput)
-		},
 	}
-	inputOf := map[string]any{"BindKeyResource": bindingInput, "UnbindKeyResource": bindingInput, "RebindKeyResource": rebindInput}
+	inputOf := map[string]any{"BindKeyResource": bindingInput, "UnbindKeyResource": bindingInput}
 
 	for method := range call {
 		for _, tc := range []struct {

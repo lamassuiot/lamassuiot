@@ -17,7 +17,6 @@ import (
 func TestKMSBindingEventsOnlyWhenBindingsChange(t *testing.T) {
 	resource := models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: "aa"}
 	bindingInput := services.KeyResourceBindingInput{Identifier: "pkcs11:token-id=e;id=k;type=private", Resource: resource}
-	rebindInput := services.RebindKeyResourceInput{Identifier: bindingInput.Identifier, From: resource, To: models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: "bb"}}
 	failure := errors.New("storage down")
 
 	call := map[string]func(services.KMSService) error{
@@ -27,10 +26,6 @@ func TestKMSBindingEventsOnlyWhenBindingsChange(t *testing.T) {
 		},
 		"UnbindKeyResource": func(svc services.KMSService) error {
 			_, err := svc.UnbindKeyResource(context.Background(), bindingInput)
-			return err
-		},
-		"RebindKeyResource": func(svc services.KMSService) error {
-			_, err := svc.RebindKeyResource(context.Background(), rebindInput)
 			return err
 		},
 	}
@@ -47,9 +42,6 @@ func TestKMSBindingEventsOnlyWhenBindingsChange(t *testing.T) {
 		{name: "failed bind", method: "BindKeyResource", err: failure, wantEvent: false},
 		{name: "unbind that removes a binding", method: "UnbindKeyResource", changed: true, wantEvent: true},
 		{name: "unbind of a resource that was not bound", method: "UnbindKeyResource", changed: false, wantEvent: false},
-		{name: "rebind that moves a binding", method: "RebindKeyResource", changed: true, wantEvent: true},
-		{name: "rebind that was already done", method: "RebindKeyResource", changed: false, wantEvent: false},
-		{name: "failed rebind", method: "RebindKeyResource", err: failure, wantEvent: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			next := new(svcmock.MockKMSService)

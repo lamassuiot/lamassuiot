@@ -60,17 +60,10 @@ func TestKeyBindings(t *testing.T) {
 			require.False(t, changed, "binding an already bound resource changes nothing")
 			require.Equal(t, []string{"aa"}, bound())
 
-			changed, err = svc.RebindKeyResource(ctx, services.RebindKeyResourceInput{
-				Identifier: id, From: certificateResource("aa"), To: certificateResource("bb"),
-			})
+			changed, err = unbind("aa")
 			require.NoError(t, err)
 			require.True(t, changed)
-			require.Equal(t, []string{"bb"}, bound())
-
-			changed, err = unbind("bb")
-			require.NoError(t, err)
-			require.True(t, changed)
-			changed, err = unbind("bb")
+			changed, err = unbind("aa")
 			require.NoError(t, err)
 			require.False(t, changed)
 			require.Empty(t, bound())
