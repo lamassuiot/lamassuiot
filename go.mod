@@ -13,15 +13,15 @@ require (
 	github.com/ThreeDotsLabs/watermill-aws v1.0.3
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/aws/aws-sdk-go-v2 v1.47.4
-	github.com/aws/aws-sdk-go-v2/config v1.33.11
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.11
-	github.com/aws/aws-sdk-go-v2/service/iot v1.84.5
-	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.40.4
-	github.com/aws/aws-sdk-go-v2/service/kms v1.61.5
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.3
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.5
-	github.com/aws/aws-sdk-go-v2/service/sns v1.47.5
-	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.5
+	github.com/aws/aws-sdk-go-v2/config v1.33.10
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.10
+	github.com/aws/aws-sdk-go-v2/service/iot v1.84.6
+	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.42.0
+	github.com/aws/aws-sdk-go-v2/service/kms v1.61.6
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.6
+	github.com/aws/aws-sdk-go-v2/service/sns v1.47.6
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.6
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.5
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/eclipse-keypont/crypto11 v1.6.8
@@ -87,18 +87,17 @@ require (
 	github.com/MicahParks/jwkset v0.11.3 // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/andybalholm/brotli v1.2.6 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.22 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.24 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.4.17 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.22 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/rdsdata v1.40.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.11.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.10.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.5 // indirect
 	github.com/aws/smithy-go v1.28.6 // indirect
