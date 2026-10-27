@@ -6,6 +6,7 @@ import (
 	"encoding"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -15,7 +16,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations"
@@ -121,6 +124,7 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*DBQuerier[E], error) {
 	schema.RegisterSerializer("text", TextSerializer{})
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
+	querier.logger = log
 	return &querier, nil
 }
 
@@ -238,7 +242,9 @@ type DBQuerier[E any] struct {
 	primaryKeyColumn string
 	// uniqueColumns identify a row and are appended to every paged ORDER BY so
 	// that offset pagination is deterministic. Defaults to the primary key.
-	uniqueColumns []string
+	uniqueColumns   []string
+	hasTenantColumn bool
+	logger          *logrus.Entry
 }
 
 func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) DBQuerier[E] {
@@ -247,7 +253,56 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
 		uniqueColumns:    []string{primaryKeyColumn},
+		hasTenantColumn:  isTenantScopedEntity[E]() && db.Migrator().HasColumn(tableName, tenantIDColumnName),
 	}
+}
+
+const tenantIDFieldName = "TenantID"
+
+const tenantIDColumnName = "tenant_id"
+
+func isTenantScopedEntity[E any]() bool {
+	var zero E
+	t := reflect.TypeOf(zero)
+	if t == nil || t.Kind() != reflect.Struct {
+		return false
+	}
+	_, found := t.FieldByName(tenantIDFieldName)
+	return found
+}
+
+func setTenantID(elem any, tenantID string) {
+	v := reflect.ValueOf(elem)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	field := v.FieldByName(tenantIDFieldName)
+	if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
+		field.SetString(tenantID)
+	}
+}
+
+func (db *DBQuerier[E]) tenantScope(ctx context.Context) (string, bool, error) {
+	if !db.hasTenantColumn {
+		return "", false, nil
+	}
+
+	tenantContext, err := core.RequireTenantContext(ctx)
+	if errors.Is(err, core.ErrTenantContextRequired) {
+		if db.logger != nil {
+			db.logger.Warnf("no tenant context for table %s: using the default tenant until fail-closed is enabled", db.tableName)
+		}
+		return models.DefaultTenantID, true, nil
+	}
+	if err != nil {
+		return "", true, err
+	}
+
+	return tenantContext.TenantID, true, nil
+}
+
+func (db *DBQuerier[E]) tenantIDColumn() string {
+	return db.tableName + "." + tenantIDColumnName
 }
 
 type GormExtraOps struct {
@@ -271,8 +326,16 @@ func applyExtraOpts(tx *gorm.DB, extraOpts []GormExtraOps) *gorm.DB {
 }
 
 func (db *DBQuerier[E]) Count(ctx context.Context, extraOpts []GormExtraOps) (int, error) {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return -1, err
+	}
+
 	var count int64
 	tx := db.Table(db.tableName).WithContext(ctx)
+	if scoped {
+		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
+	}
 
 	tx = applyExtraOpts(tx, extraOpts)
 
@@ -285,8 +348,16 @@ func (db *DBQuerier[E]) Count(ctx context.Context, extraOpts []GormExtraOps) (in
 }
 
 func (db *DBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.FilterOption, extraOpts []GormExtraOps) (int, error) {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return -1, err
+	}
+
 	var count int64
 	tx := db.Table(db.tableName).WithContext(ctx)
+	if scoped {
+		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
+	}
 
 	for _, filter := range filters {
 		tx = FilterOperandToWhereClause(filter, tx)
@@ -491,7 +562,16 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 	}
 	offset, limit := page.offset, page.limit
 
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return "", err
+	}
+
 	tx := db.Table(db.tableName)
+	if scoped {
+		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
+	}
+
 	for _, filter := range page.filters {
 		tx = FilterOperandToWhereClause(filter, tx)
 	}
@@ -604,8 +684,18 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 		return false, nil, err
 	}
 
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return false, nil, err
+	}
+
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, cond)
+	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1)
+	if scoped {
+		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
+	}
+	tx = tx.Find(&elem, cond)
+
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -618,6 +708,14 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 }
 
 func (db *DBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scoped {
+		setTenantID(elem, tenantID)
+	}
+
 	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -632,7 +730,20 @@ func (db *DBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E,
 		return nil, err
 	}
 
-	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(cond).Save(elem)
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scoped {
+		setTenantID(elem, tenantID)
+	}
+
+	q := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(cond)
+	if scoped {
+		q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+	}
+
+	tx := q.Select("*").Updates(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -650,7 +761,17 @@ func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
 		return err
 	}
 
-	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, cond)
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return err
+	}
+
+	q := db.Table(db.tableName).WithContext(ctx).Where(cond)
+	if scoped {
+		q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+	}
+
+	tx := q.Delete(nil)
 	if err := tx.Error; err != nil {
 		return err
 	}

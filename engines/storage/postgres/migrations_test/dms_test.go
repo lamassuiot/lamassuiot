@@ -9,6 +9,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/assert"
 
@@ -173,6 +174,16 @@ func TestDMSMigrations(t *testing.T) {
 	migrationTest_DMS_20261021120000_webhook_http_client_config(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261021120000_webhook_http_client_config")
+	}
+
+	migrationTest_DMS_20261026120000_backfill_default_tenant(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261026120000_backfill_default_tenant")
+	}
+
+	migrationTest_DMS_20261026130000_enforce_tenant_constraints(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261026130000_enforce_tenant_constraints")
 	}
 }
 
@@ -393,4 +404,46 @@ func migrationTest_DMS_20261021120000_webhook_http_client_config(t *testing.T, l
 		t.Fatalf("could not re-apply migration: %s", err)
 	}
 	assert.Equal(t, map[string]any{"key": "k", "header": "X-API-Key"}, webhookConfig("dms-webhook-jwt", "reenrollment_settings")["apikey_options"])
+}
+
+func migrationTest_DMS_20261026120000_backfill_default_tenant(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	var total, backfilled int64
+	tx := con.Raw("SELECT count(*) FROM dms").Scan(&total)
+	if tx.Error != nil {
+		t.Fatalf("failed to count dms rows: %v", tx.Error)
+	}
+	tx = con.Raw("SELECT count(*) FROM dms WHERE tenant_id = ?", models.DefaultTenantID).Scan(&backfilled)
+	if tx.Error != nil {
+		t.Fatalf("failed to count backfilled dms rows: %v", tx.Error)
+	}
+
+	assert.NotZero(t, total, "the test needs existing dms rows before the backfill")
+	assert.Equal(t, total, backfilled, "every existing dms must belong to the default tenant")
+}
+
+func migrationTest_DMS_20261026130000_enforce_tenant_constraints(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	tx := con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings)
+		VALUES('dms-without-tenant', 'DMS without tenant', '{}', '2024-11-25 10:46:28.914', '{}');
+	`)
+	assert.Error(t, tx.Error, "a dms without tenant_id must be rejected")
+
+	tx = con.Exec(`INSERT INTO dms
+		(id, "name", metadata, creation_date, settings, tenant_id)
+		VALUES('dms-with-tenant', 'DMS with tenant', '{}', '2024-11-25 10:46:28.914', '{}', ?);
+	`, models.DefaultTenantID)
+	if tx.Error != nil {
+		t.Fatalf("failed to insert a dms with tenant_id: %v", tx.Error)
+	}
+
+	var indexes int64
+	tx = con.Raw("SELECT count(*) FROM pg_indexes WHERE tablename = 'dms' AND indexname = 'dms_tenant_id_idx'").Scan(&indexes)
+	if tx.Error != nil {
+		t.Fatalf("failed to read dms indexes: %v", tx.Error)
+	}
+	assert.Equal(t, int64(1), indexes, "dms must have an index on tenant_id")
 }
