@@ -17,7 +17,7 @@ func Register20261027110100MoveLegacyKeyBindings() {
 
 // upMoveLegacyKeyBindings moves the bindings that earlier versions kept in each key's metadata into
 // the key_bindings table, and removes them from the metadata. Unreadable entries are left as they
-// are; reconciliation rebuilds the bindings from the certificates anyway.
+// are; the certificate bindings backfill that follows rebuilds the bindings from the certificates.
 func upMoveLegacyKeyBindings(ctx context.Context, tx *sql.Tx) error {
 	logger := chelpers.SetupLogger("info", "KMS", "Migrations")
 

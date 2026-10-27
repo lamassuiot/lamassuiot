@@ -207,7 +207,8 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 		inserted++
 
 		// The certificates using the key keep it from being deleted. A failed binding is only
-		// logged: the CA's bindings reconciliation restores it.
+		// logged: run as a pre-upgrade hook, before the KMS schema migrations, the key_bindings table
+		// does not exist yet, and the migration that backfills certificate bindings creates them.
 		for _, sn := range entry.serials {
 			resource := models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: sn}
 			if _, err := kmsStorage.BindResource(ctx, entry.keyID, entry.engineID, resource); err != nil {

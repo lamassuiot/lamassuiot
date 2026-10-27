@@ -1273,7 +1273,8 @@ func certificateKeyBinding(cert *models.Certificate) models.KMSBindResource {
 
 // bindCertificateKey records in the KMS that a stored certificate uses its key. It runs once the
 // certificate is stored, so a failed operation leaves no binding to a certificate that does not exist.
-// A failure is only logged: the certificate works, and reconciliation restores the binding.
+// A failure is only logged and not retried: the certificate works, but its key stays unprotected until
+// the binding is made by hand (POST /v1/keys/{id}/bindings as the service principal).
 func (svc *CAServiceBackend) bindCertificateKey(ctx context.Context, lFunc *logrus.Entry, cert *models.Certificate) {
 	if cert.KeyID == "" {
 		return
@@ -1283,7 +1284,8 @@ func (svc *CAServiceBackend) bindCertificateKey(ctx context.Context, lFunc *logr
 		Resource:   certificateKeyBinding(cert),
 	})
 	if err != nil {
-		lFunc.Warnf("could not bind certificate %s to its key %s: %s", cert.SerialNumber, cert.KeyID, err)
+		lFunc.Errorf("could not bind certificate %s to its key %s, which stays unprotected until bound by hand (POST /v1/keys/%s/bindings): %s",
+			cert.SerialNumber, cert.KeyID, buildPKCS11ID(cert.EngineID, cert.KeyID, "private"), err)
 	}
 }
 
@@ -2131,14 +2133,17 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 		return err
 	}
 
-	// The certificate no longer uses its key. A failure is only logged: reconciliation removes the binding.
+	// The certificate no longer uses its key. A failure is only logged and not retried: the binding
+	// outlives the certificate and keeps the key from being deleted until it is removed by hand
+	// (DELETE /v1/keys/{id}/bindings/certificate/{sn} as the service principal).
 	if cert.KeyID != "" {
 		_, err = svc.kmsService.UnbindKeyResource(ctx, services.KeyResourceBindingInput{
 			Identifier: buildPKCS11ID(cert.EngineID, cert.KeyID, "private"),
 			Resource:   certificateKeyBinding(cert),
 		})
 		if err != nil {
-			lFunc.Warnf("could not unbind deleted certificate %s from its key: %s", input.SerialNumber, err)
+			lFunc.Errorf("could not unbind deleted certificate %s from its key, which cannot be deleted until unbound by hand (DELETE /v1/keys/%s/bindings/certificate/%s): %s",
+				input.SerialNumber, buildPKCS11ID(cert.EngineID, cert.KeyID, "private"), input.SerialNumber, err)
 		}
 	}
 

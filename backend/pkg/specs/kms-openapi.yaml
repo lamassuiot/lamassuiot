@@ -713,11 +713,11 @@ paths:
                   $ref: '#/components/schemas/KeyBindingBody'
       responses:
         '200':
-          description: Binding moved
+          description: Whether the bindings changed
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/KeyBindingChange'
         '400':
           description: Bad request - invalid resource
           content:
