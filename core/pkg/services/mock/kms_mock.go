@@ -97,9 +97,9 @@ func (m *MockKMSService) UnbindKeyResource(ctx context.Context, input services.K
 }
 
 // RebindKeyResource moves a key binding from one resource to another
-func (m *MockKMSService) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
+func (m *MockKMSService) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) (bool, error) {
 	args := m.Called(ctx, input)
-	return args.Error(0)
+	return args.Bool(0), args.Error(1)
 }
 
 // DeleteKeyByID deletes a key by identifier

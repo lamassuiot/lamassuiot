@@ -222,10 +222,10 @@ func (mw KMSEventPublisher) UnbindKeyResource(ctx context.Context, input service
 	return changed, err
 }
 
-func (mw KMSEventPublisher) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
-	err := mw.Next.RebindKeyResource(ctx, input)
-	if err == nil {
+func (mw KMSEventPublisher) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) (bool, error) {
+	changed, err := mw.Next.RebindKeyResource(ctx, input)
+	if err == nil && changed {
 		mw.eventMWPub.PublishCloudEvent(bindingEventContext(ctx, input.Identifier), input)
 	}
-	return err
+	return changed, err
 }

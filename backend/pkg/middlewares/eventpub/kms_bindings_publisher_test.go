@@ -30,7 +30,8 @@ func TestKMSBindingEventsOnlyWhenBindingsChange(t *testing.T) {
 			return err
 		},
 		"RebindKeyResource": func(svc services.KMSService) error {
-			return svc.RebindKeyResource(context.Background(), rebindInput)
+			_, err := svc.RebindKeyResource(context.Background(), rebindInput)
+			return err
 		},
 	}
 
@@ -46,16 +47,13 @@ func TestKMSBindingEventsOnlyWhenBindingsChange(t *testing.T) {
 		{name: "failed bind", method: "BindKeyResource", err: failure, wantEvent: false},
 		{name: "unbind that removes a binding", method: "UnbindKeyResource", changed: true, wantEvent: true},
 		{name: "unbind of a resource that was not bound", method: "UnbindKeyResource", changed: false, wantEvent: false},
-		{name: "rebind", method: "RebindKeyResource", wantEvent: true},
+		{name: "rebind that moves a binding", method: "RebindKeyResource", changed: true, wantEvent: true},
+		{name: "rebind that was already done", method: "RebindKeyResource", changed: false, wantEvent: false},
 		{name: "failed rebind", method: "RebindKeyResource", err: failure, wantEvent: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			next := new(svcmock.MockKMSService)
-			if tc.method == "RebindKeyResource" {
-				next.On(tc.method, mock.Anything, mock.Anything).Return(tc.err)
-			} else {
-				next.On(tc.method, mock.Anything, mock.Anything).Return(tc.changed, tc.err)
-			}
+			next.On(tc.method, mock.Anything, mock.Anything).Return(tc.changed, tc.err)
 			pub := new(CloudEventPublisherMock)
 			pub.On("PublishCloudEvent", mock.Anything, mock.Anything).Return()
 

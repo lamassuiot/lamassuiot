@@ -1515,7 +1515,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	// The new certificate takes over the key: the superseded one no longer keeps it in use.
 	if newCertificateRecord.KeyID != "" {
-		err = svc.kmsService.RebindKeyResource(ctx, services.RebindKeyResourceInput{
+		_, err = svc.kmsService.RebindKeyResource(ctx, services.RebindKeyResourceInput{
 			Identifier: buildPKCS11ID(newCertificateRecord.EngineID, newCertificateRecord.KeyID, "private"),
 			From:       models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: oldSerialNumber},
 			To:         certificateKeyBinding(&newCertificateRecord),

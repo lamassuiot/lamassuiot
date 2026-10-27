@@ -515,7 +515,7 @@ func (r *kmsHttpRoutes) RebindKeyResource(ctx *gin.Context) {
 		return
 	}
 
-	err := r.svc.RebindKeyResource(ctx.Request.Context(), services.RebindKeyResourceInput{
+	changed, err := r.svc.RebindKeyResource(ctx.Request.Context(), services.RebindKeyResourceInput{
 		Identifier: params.ID,
 		From:       models.KMSBindResource{ResourceType: requestBody.From.ResourceType, ResourceID: requestBody.From.ResourceID},
 		To:         models.KMSBindResource{ResourceType: requestBody.To.ResourceType, ResourceID: requestBody.To.ResourceID},
@@ -525,5 +525,5 @@ func (r *kmsHttpRoutes) RebindKeyResource(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(200, gin.H{})
+	ctx.JSON(200, resources.KeyBindingChangeResponse{Changed: changed})
 }

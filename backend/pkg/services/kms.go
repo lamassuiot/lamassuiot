@@ -1040,17 +1040,17 @@ func (svc *KMSServiceBackend) UnbindKeyResource(ctx context.Context, input servi
 	return svc.kmsStorage.UnbindResource(ctx, key.KeyID, key.EngineID, input.Resource)
 }
 
-func (svc *KMSServiceBackend) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
+func (svc *KMSServiceBackend) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) (bool, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	if err := kmsValidator.Struct(input); err != nil || !validBindResource(input.From) || !validBindResource(input.To) {
 		lFunc.Errorf("RebindKeyResourceInput struct validation error: %v", err)
-		return errs.ErrValidateBadRequest
+		return false, errs.ErrValidateBadRequest
 	}
 
 	key, err := svc.GetKey(ctx, services.GetKeyInput{Identifier: input.Identifier})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	return svc.kmsStorage.RebindResource(ctx, key.KeyID, key.EngineID, input.From, input.To)

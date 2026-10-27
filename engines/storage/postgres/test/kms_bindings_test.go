@@ -77,7 +77,13 @@ func TestKMSStoreKeyBindings(t *testing.T) {
 	})
 
 	t.Run("rebind moves the binding to another resource", func(t *testing.T) {
-		require.NoError(t, store.RebindResource(ctx, "shared", "engine-a", certBinding("aa"), certBinding("bb")))
+		changed, err := store.RebindResource(ctx, "shared", "engine-a", certBinding("aa"), certBinding("bb"))
+		require.NoError(t, err)
+		require.True(t, changed)
+
+		changed, err = store.RebindResource(ctx, "shared", "engine-a", certBinding("aa"), certBinding("bb"))
+		require.NoError(t, err)
+		require.False(t, changed, "repeating a completed rebind changes nothing")
 
 		bindings, err := store.SelectBindings(ctx, "shared", "engine-a")
 		require.NoError(t, err)

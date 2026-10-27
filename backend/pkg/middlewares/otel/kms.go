@@ -147,7 +147,7 @@ func (mw KMSOTelTracer) UnbindKeyResource(ctx context.Context, input services.Ke
 	return mw.next.UnbindKeyResource(ctx, input)
 }
 
-func (mw KMSOTelTracer) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) error {
+func (mw KMSOTelTracer) RebindKeyResource(ctx context.Context, input services.RebindKeyResourceInput) (bool, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 

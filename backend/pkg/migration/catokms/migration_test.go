@@ -180,8 +180,8 @@ func (m *mockKMSStorage) BindResource(_ context.Context, keyID, engineID string,
 func (m *mockKMSStorage) UnbindResource(context.Context, string, string, models.KMSBindResource) (bool, error) {
 	return false, nil
 }
-func (m *mockKMSStorage) RebindResource(context.Context, string, string, models.KMSBindResource, models.KMSBindResource) error {
-	return nil
+func (m *mockKMSStorage) RebindResource(context.Context, string, string, models.KMSBindResource, models.KMSBindResource) (bool, error) {
+	return false, nil
 }
 func (m *mockKMSStorage) SelectBindings(context.Context, string, string) ([]models.KeyBinding, error) {
 	return nil, nil
@@ -234,7 +234,7 @@ func (c *controlledKMSStorage) BindResource(ctx context.Context, keyID, engineID
 func (c *controlledKMSStorage) UnbindResource(ctx context.Context, keyID, engineID string, r models.KMSBindResource) (bool, error) {
 	return c.inner.UnbindResource(ctx, keyID, engineID, r)
 }
-func (c *controlledKMSStorage) RebindResource(ctx context.Context, keyID, engineID string, from, to models.KMSBindResource) error {
+func (c *controlledKMSStorage) RebindResource(ctx context.Context, keyID, engineID string, from, to models.KMSBindResource) (bool, error) {
 	return c.inner.RebindResource(ctx, keyID, engineID, from, to)
 }
 func (c *controlledKMSStorage) SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error) {

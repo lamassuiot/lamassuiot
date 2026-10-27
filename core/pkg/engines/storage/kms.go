@@ -34,7 +34,8 @@ type KMSKeysRepo interface {
 	BindResource(ctx context.Context, keyID, engineID string, resource models.KMSBindResource) (created bool, err error)
 	// UnbindResource removes the binding; deleted is false if there was none.
 	UnbindResource(ctx context.Context, keyID, engineID string, resource models.KMSBindResource) (deleted bool, err error)
-	// RebindResource replaces the binding of one resource with another, atomically.
-	RebindResource(ctx context.Context, keyID, engineID string, from, to models.KMSBindResource) error
+	// RebindResource replaces the binding of one resource with another, atomically; changed is false
+	// if neither binding changed, as when repeating a completed rebind.
+	RebindResource(ctx context.Context, keyID, engineID string, from, to models.KMSBindResource) (changed bool, err error)
 	SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error)
 }

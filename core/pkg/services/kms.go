@@ -29,7 +29,7 @@ type KMSService interface {
 	GetKeyBindings(ctx context.Context, input GetKeyInput) ([]models.KeyBinding, error)
 	BindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
 	UnbindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
-	RebindKeyResource(ctx context.Context, input RebindKeyResourceInput) error
+	RebindKeyResource(ctx context.Context, input RebindKeyResourceInput) (changed bool, err error)
 
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
 	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
