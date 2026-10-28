@@ -25,7 +25,7 @@ jobs:
       security-events: write
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -37,11 +37,12 @@ jobs:
           image-ref: ${{ inputs.image-ref }}
           format: sarif
           output: trivy-results.sarif
+          vuln-type: os
           severity: CRITICAL,HIGH,MEDIUM
           exit-code: '0'
 
       - name: Upload Trivy results to code scanning
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: trivy-results.sarif
           category: ${{ inputs.category }}

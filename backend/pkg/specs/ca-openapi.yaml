@@ -765,6 +765,40 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /certificates/{sn}/key:
+    get:
+      tags: [Certificates]
+      summary: Get the KMS key of a certificate
+      description: |
+        Identifies the KMS key of the certificate's key pair and returns its public material only:
+        reading it does not grant access to the key's aliases, tags or metadata.
+      operationId: getCertificateKey
+      x-authz:
+        namespace: pki
+        schema_name: ca
+        entity_type: certificate
+        action: read-key
+      parameters:
+        - $ref: '#/components/parameters/SerialNumber'
+      responses:
+        '200':
+          description: Certificate key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateKey'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404':
+          description: Certificate not found, or the KMS does not hold its key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  err:
+                    type: string
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /certificates/{sn}/status:
     put:
       tags: [Certificates]
@@ -1349,6 +1383,28 @@ components:
           type: integer
         profile_id:
           type: string
+
+    CertificateKey:
+      type: object
+      properties:
+        key_id:
+          type: string
+          description: Hex SHA-256 of the key's SubjectPublicKeyInfo
+        engine_id:
+          type: string
+        pkcs11_uri:
+          type: string
+          example: "pkcs11:token-id=filesystem-1;id=315c69...;type=private"
+        algorithm:
+          type: string
+          example: ECDSA
+        size:
+          type: integer
+          example: 256
+        public_key:
+          type: string
+          format: byte
+          description: Base64 encoded PEM PUBLIC KEY
 
     Certificate:
       type: object

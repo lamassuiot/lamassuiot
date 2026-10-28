@@ -106,6 +106,37 @@ func (r *kmsHttpRoutes) GetKeyByID(ctx *gin.Context) {
 	ctx.JSON(200, key)
 }
 
+func (r *kmsHttpRoutes) GetKeysByPublicKey(ctx *gin.Context) {
+	var requestBody resources.GetKeysByPublicKeyBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	decodedKey, err := base64.StdEncoding.DecodeString(requestBody.PublicKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	pubKey, err := helpers.ParsePublicKey(decodedKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	keys, err := r.svc.GetKeysByPublicKey(ctx.Request.Context(), services.GetKeysByPublicKeyInput{
+		PublicKey: pubKey,
+		EngineID:  requestBody.EngineID,
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, keys)
+}
+
 func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
 	var requestBody resources.CreateKeyBody
 	if err := ctx.BindJSON(&requestBody); err != nil {

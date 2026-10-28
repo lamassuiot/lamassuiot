@@ -131,25 +131,24 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
-	if err := validateDMSWebhooks(input.DMS.Settings); err != nil {
+	if err := validateDMSWebhooks(*input.Settings); err != nil {
 		lFunc.Errorf("webhook validation error: %s", err)
 		return nil, err
 	}
-	lFunc.Debugf("checking if DMS '%s' exists", input.DMS.ID)
-	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.DMS.ID)
+
+	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{ID: input.ID})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.DMS.ID, err)
 		return nil, err
-	} else if !exists {
-		lFunc.Errorf("DMS '%s' does not exist in storage engine", input.DMS.ID)
-		return nil, errs.ErrDMSNotFound
 	}
 
-	dms.Metadata = input.DMS.Metadata
-	dms.Name = input.DMS.Name
-	dms.Settings = input.DMS.Settings
+	// nil means "not provided": keep the stored metadata. An empty map clears it.
+	if input.Metadata != nil {
+		dms.Metadata = input.Metadata
+	}
+	dms.Name = input.Name
+	dms.Settings = *input.Settings
 
-	lFunc.Debugf("updating DMS %s", input.DMS.ID)
+	lFunc.Debugf("updating DMS %s", input.ID)
 	return svc.dmsStorage.Update(ctx, dms)
 }
 
@@ -377,7 +376,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateEnrollment(ctx cont
 
 // validateClientCertificateReenrollment validates the presented client certificate for re-enrollment.
 // It checks that the certificate's CommonName matches the CSR subject, then checks against the
-// enrollment CA first, then falls back to additional validation CAs,
+// enrollment CA first, then falls back to the re-enrollment validation CAs,
 // and finally verifies expiry and revocation status.
 func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, clientCerts []*x509.Certificate, csrSubjectCN string) (*logrus.Entry, error) {
 	leafCert := clientCerts[0]
@@ -423,7 +422,7 @@ func (svc DMSManagerServiceBackend) validateClientCertificateReenrollment(ctx co
 	return lFunc, nil
 }
 
-// findReenrollmentValidationCA tries the enrollment CA first, then each additional validation CA.
+// findReenrollmentValidationCA tries the enrollment CA first, then each of the re-enrollment validation CAs.
 // Returns the matching CA's certificate, or nil if none validated the leaf.
 func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Context, lFunc *logrus.Entry, enrollCAID string, enrollCA *models.CACertificate, reEnrollSettings models.ReEnrollmentSettings, leafCert *x509.Certificate) *x509.Certificate {
 	enrollCACert := (*x509.Certificate)(enrollCA.Certificate.Certificate)
@@ -433,12 +432,13 @@ func (svc DMSManagerServiceBackend) findReenrollmentValidationCA(ctx context.Con
 		lFunc.Infof("certificate validated. Revocation and Expiration (if needed) check will be performed next")
 		return enrollCACert
 	}
-	lFunc.Warnf("invalid validation using enroll CA. Will try validating using Additional Validation CAs")
+	lFunc.Warnf("invalid validation using enroll CA. Will try validating using re-enrollment validation CAs")
 
-	aValCAsCtr := len(reEnrollSettings.AdditionalValidationCAs)
-	lFunc.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
+	validationCAs := reEnrollSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs
+	aValCAsCtr := len(validationCAs)
+	lFunc.Debugf("DMS has %d re-enrollment validation CAs", aValCAsCtr)
 
-	for idx, caID := range reEnrollSettings.AdditionalValidationCAs {
+	for idx, caID := range validationCAs {
 		lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
 		ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
 		if err != nil {

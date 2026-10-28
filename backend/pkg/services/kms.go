@@ -341,6 +341,42 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 	return key, nil
 }
 
+func (svc *KMSServiceBackend) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := kmsValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("GetKeysByPublicKeyInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Every crypto engine names its keys this way, so the keyID follows from the public key alone.
+	keyID, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(ctx, input.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not compute the key ID of the public key: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	if input.EngineID == "" {
+		keys, err := svc.kmsStorage.SelectByKeyID(ctx, keyID)
+		if err != nil {
+			lFunc.Errorf("something went wrong while looking up key '%s' in storage engine: %s", keyID, err)
+			return nil, err
+		}
+		return keys, nil
+	}
+
+	exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, input.EngineID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while looking up key '%s' in engine '%s': %s", keyID, input.EngineID, err)
+		return nil, err
+	}
+	if !exists {
+		return []*models.Key{}, nil
+	}
+	return []*models.Key{key}, nil
+}
+
 func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 

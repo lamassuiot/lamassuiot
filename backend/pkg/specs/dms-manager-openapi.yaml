@@ -139,7 +139,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateDMSBody'
+              $ref: '#/components/schemas/UpdateDMSBody'
       responses:
         '200':
           description: Updated DMS
@@ -513,6 +513,23 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
+    UpdateDMSBody:
+      type: object
+      description: |
+        Full replacement of the DMS name and settings. The DMS ID is taken from the URL path;
+        any `id` in the body is ignored. An omitted or `null` `metadata` keeps the stored
+        metadata; send an empty object (`{}`) to clear it.
+      required: [name, settings]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+        settings:
+          $ref: '#/components/schemas/DMSSettings'
     CreateDMSBody:
       type: object
       properties:
@@ -520,6 +537,7 @@ components:
           type: string
         name:
           type: string
+          minLength: 1
         metadata:
           type: object
           additionalProperties: true
@@ -650,7 +668,7 @@ components:
 
     WebhookCallHttpClient:
       type: object
-      description: HTTP client configuration for calls to the external webhook. It is invalid when it references files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file), sets a reserved API key header, or lacks the options its auth_mode needs (apikey_options.header and apikey_options.key for apikey, jwt_options.oidc_client_id, jwt_options.oidc_client_secret and an absolute http or https jwt_options.oidc_well_known for jwt, mtls_options.cert_content and mtls_options.key_content for mtls).
+      description: HTTP client configuration for calls to the external webhook. It is invalid when it references files on the server (ca_cert_file, mtls_options.cert_file, mtls_options.key_file), sets a reserved API key header, or lacks the options its auth_mode needs (apikey_options.header and apikey_options.key for apikey, jwt_options.oidc_client_id, jwt_options.oidc_client_secret and an absolute http or https jwt_options.oidc_well_known for jwt, mtls_options.cert_content and mtls_options.key_content for mtls), or has an mtls_options.cert_content/key_content pair that is not a matching certificate and private key.
       properties:
         log_level:
           type: string
@@ -686,10 +704,10 @@ components:
           properties:
             cert_content:
               type: string
-              description: PEM-encoded client certificate.
+              description: Base64-encoded PEM client certificate, like certificates elsewhere in the API. Plain PEM is also accepted.
             key_content:
               type: string
-              description: PEM-encoded private key.
+              description: Base64-encoded PEM private key. Plain PEM is also accepted.
 
     AuthOptionsClientCertificate:
       type: object
@@ -723,10 +741,6 @@ components:
       properties:
         est_rfc7030_settings:
           $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
-        additional_validation_cas:
-          type: array
-          items:
-            type: string
         revoke_on_reenrollment:
           type: boolean
         reenrollment_delta:

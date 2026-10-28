@@ -30,6 +30,11 @@ func (keylessImportKMS) GetKey(context.Context, services.GetKeyInput) (*models.K
 	return nil, errs.ErrKeyNotFound
 }
 
+// GetKeysByPublicKey is how ImportCA looks for the key of a CA imported without one.
+func (keylessImportKMS) GetKeysByPublicKey(context.Context, services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	return nil, nil
+}
+
 func postgresImportInput(t *testing.T, id string, serial int64) services.ImportCAInput {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

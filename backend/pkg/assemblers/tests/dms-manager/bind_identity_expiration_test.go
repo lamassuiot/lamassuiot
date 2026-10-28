@@ -83,7 +83,6 @@ func TestBindIdentityToDevice_SetsExpirationDate(t *testing.T) {
 				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 					AuthMode: models.ESTAuthModeClientCertificate,
 				},
-				AdditionalValidationCAs:     []string{},
 				ReEnrollmentDelta:           models.TimeDuration(24 * 365 * time.Hour), // Allow re-enrollment any time within a year
 				EnableExpiredRenewal:        true,
 				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),

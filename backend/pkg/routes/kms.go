@@ -69,6 +69,8 @@ func registerKMSRoutes(parentRouterGroup *gin.RouterGroup, svc services.KMSServi
 	rv1.GET("/keys/:id", kmsAuthzMw.ResourceCustom("read", "id", keyIDExtractor), routes.GetKeyByID)
 	rv1.POST("/keys", kmsAuthzMw.Global("create"), routes.CreateKey)
 	rv1.POST("/keys/import", kmsAuthzMw.Global("create"), routes.ImportKey)
+	// The authz list filter also scopes this lookup, so it only finds keys the caller can list.
+	rv1.POST("/keys/lookup", kmsAuthzMw.List(), routes.GetKeysByPublicKey)
 	rv1.PUT("/keys/:id/alias", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyAliases)
 	rv1.PUT("/keys/:id/name", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyName)
 	rv1.PUT("/keys/:id/tags", kmsAuthzMw.ResourceCustom("update", "id", keyIDExtractor), routes.UpdateKeyTags)

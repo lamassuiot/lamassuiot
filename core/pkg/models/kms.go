@@ -9,6 +9,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// CertificateKey identifies the KMS key of a certificate and carries only its public material:
+// reading a certificate does not grant access to the key's aliases, tags or metadata.
+type CertificateKey struct {
+	KeyID     string `json:"key_id"`
+	EngineID  string `json:"engine_id"`
+	PKCS11URI string `json:"pkcs11_uri"`
+	Algorithm string `json:"algorithm"`
+	Size      int    `json:"size"`
+	PublicKey string `json:"public_key"`
+}
+
 // KMS
 type Key struct {
 	PKCS11URI     string         `json:"pkcs11_uri" gorm:"-"`

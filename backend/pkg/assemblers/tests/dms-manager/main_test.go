@@ -82,7 +82,7 @@ func TestUpdateDMS(t *testing.T) {
 
 	dms.Name = "MyIotFleet2"
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: *dms})
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dms.ID, Name: dms.Name, Metadata: dms.Metadata, Settings: &dms.Settings})
 	if err != nil {
 		t.Fatalf("could not update DMS: %s", err)
 	}
@@ -93,6 +93,28 @@ func TestUpdateDMS(t *testing.T) {
 	}
 
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
+}
+
+func TestUpdateDMSRejectsNilSettings(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), services.CreateDMSInput{ID: dmsID, Name: "MyIotFleet"})
+	if err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dms.ID, Name: "renamed"})
+	assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
+
+	dmsFromDB, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dms.ID})
+	if err != nil {
+		t.Fatalf("could not get DMS by ID: %s", err)
+	}
+	assert.Equal(t, dms.Name, dmsFromDB.Name)
+	assert.Equal(t, dms.Settings, dmsFromDB.Settings)
 }
 
 func TestCreateDMSWebhookConfig(t *testing.T) {
@@ -256,12 +278,150 @@ func TestUpdateMissingDMSShouldFail(t *testing.T) {
 		Name: "MyIotFleet",
 	}
 
-	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: dmsSample})
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{ID: dmsSample.ID, Name: dmsSample.Name, Metadata: dmsSample.Metadata, Settings: &dmsSample.Settings})
 	if err == nil {
 		t.Fatalf("Update DMS should fail")
 	}
 
 	assert.ErrorIs(t, err, errs.ErrDMSNotFound)
+}
+
+// The DMS to update is the one in the URL path (the one authz evaluates); an `id`
+// or any other server-managed field in the body must never be honoured.
+func TestUpdateDMSIgnoresBodyID(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	for _, id := range []string{"dms-a", "dms-b"} {
+		if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: id, Name: "original-" + id}); err != nil {
+			t.Fatalf("could not create DMS %s: %s", id, err)
+		}
+	}
+
+	dmsABefore, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-a: %s", err)
+	}
+	dmsBBefore, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-b"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-b: %s", err)
+	}
+
+	body := `{"id":"dms-b","name":"hijacked","settings":{},"creation_ts":"2001-01-01T00:00:00Z"}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("could not build request: %s", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := tests.NewTestHTTPClientInsecure().Do(req)
+	if err != nil {
+		t.Fatalf("PUT failed: %s", err)
+	}
+	res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	dmsA, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-a: %s", err)
+	}
+	assert.Equal(t, "hijacked", dmsA.Name, "the DMS in the URL must be the one updated")
+	assert.Equal(t, dmsABefore.CreationDate, dmsA.CreationDate, "server-managed fields in the body must be ignored")
+
+	dmsBAfter, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-b"})
+	if err != nil {
+		t.Fatalf("could not get DMS dms-b: %s", err)
+	}
+	assert.Equal(t, dmsBBefore, dmsBAfter, "the DMS in the body must not be touched")
+	assert.Equal(t, dmsBBefore.CreationDate, dmsBAfter.CreationDate)
+}
+
+func TestUpdateDMSRejectsIncompleteBody(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "dms-a", Name: "original"}); err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+	before, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+
+	for name, body := range map[string]string{
+		"empty body":       `{}`,
+		"missing settings": `{"name":"renamed"}`,
+		"missing name":     `{"settings":{}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+			if err != nil {
+				t.Fatalf("could not build request: %s", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			res, err := tests.NewTestHTTPClientInsecure().Do(req)
+			if err != nil {
+				t.Fatalf("PUT failed: %s", err)
+			}
+			res.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+
+			after, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+			if err != nil {
+				t.Fatalf("could not get DMS: %s", err)
+			}
+			assert.Equal(t, before, after, "a rejected update must not modify the DMS")
+		})
+	}
+}
+
+func TestUpdateDMSMetadataSemantics(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	ctx := context.Background()
+	if _, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "dms-a", Name: "original", Metadata: map[string]any{"k": "v"}}); err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+
+	put := func(body string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("https://127.0.0.1:%d/v1/dms/dms-a", dmsMgr.Port), strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("could not build request: %s", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := tests.NewTestHTTPClientInsecure().Do(req)
+		if err != nil {
+			t.Fatalf("PUT failed: %s", err)
+		}
+		res.Body.Close()
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	}
+
+	put(`{"name":"renamed","settings":{}}`)
+	dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+	assert.Equal(t, "renamed", dms.Name)
+	assert.Equal(t, map[string]any{"k": "v"}, dms.Metadata, "omitted metadata must keep the stored one")
+
+	put(`{"name":"renamed","settings":{},"metadata":{}}`)
+	dms, err = dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "dms-a"})
+	if err != nil {
+		t.Fatalf("could not get DMS: %s", err)
+	}
+	assert.Empty(t, dms.Metadata, "an empty metadata object must clear it")
 }
 
 func TestGetMissingDMSShouldFail(t *testing.T) {
@@ -335,7 +495,6 @@ func TestESTEnroll(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -1459,7 +1618,10 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS: %s", err)
@@ -2764,7 +2926,6 @@ func TestESTGetCACerts(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -2996,7 +3157,6 @@ func TestESTServerKeyGen(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -3403,7 +3563,6 @@ func TestESTReEnroll(t *testing.T) {
 						AuthMode: models.ESTAuthModeClientCertificate,
 					},
 					RevokeOnReEnrollment:        true,
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -3530,6 +3689,150 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/EnrollCAWithoutValidationCAs",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = nil
+					},
+					"1m",
+				)
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while reenrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/EnrollCAWithValidationCAsDefined",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				otherCA, err := createCA(fmt.Sprintf("other-ca-%s", uuid.NewV7().String()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create validation CA: %s", err)
+				}
+
+				// The device certificate is issued by the enrollment CA, which is not listed in ValidationCAs.
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{otherCA.ID}
+					},
+					"1m",
+				)
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while reenrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/RAUpdate-ReenrollWithOldAndNewCerts",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				// 1. Regular enrollment: the device certificate is issued by the original enrollment CA.
+				dms, oldEnrollCA, oldDeviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+					},
+					"5m",
+				)
+				oldEnrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+
+				// 2. Create the new CA.
+				newCA, err := createCA(fmt.Sprintf("new-enroll-ca-%s", uuid.NewV7().String()), "5y", "5m")
+				if err != nil {
+					t.Fatalf("could not create new enrollment CA: %s", err)
+				}
+				newCACert := (*x509.Certificate)(newCA.Certificate.Certificate)
+
+				// 3. Switch the enrollment CA to the new CA and trust the old one for re-enrollment.
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{oldEnrollCAID}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS: %s", err)
+				}
+
+				reenroll := func(clientCrt *x509.Certificate) *x509.Certificate {
+					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: clientCrt.Subject.CommonName}, deviceKey)
+					estCli := est.Client{
+						Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+						AdditionalPathSegment: dms.ID,
+						Certificates:          []*x509.Certificate{clientCrt},
+						PrivateKey:            deviceKey,
+						InsecureSkipVerify:    true,
+					}
+					crt, err := estCli.Reenroll(context.Background(), csr)
+					if err != nil {
+						t.Fatalf("unexpected error while reenrolling with certificate issued by '%s': %s", clientCrt.Issuer.CommonName, err)
+					}
+					return crt
+				}
+
+				// Old certificate (issued by the old CA, validated through ValidationCAs).
+				if err := helpers.ValidateCertificate(oldEnrollCA, oldDeviceCrt, true); err != nil {
+					t.Fatalf("device certificate should be issued by the old enrollment CA: %s", err)
+				}
+				newDeviceCrt := reenroll(oldDeviceCrt)
+				checkReEnroll(t, newCACert, newDeviceCrt, deviceKey)
+
+				// New certificate (issued by the new enrollment CA).
+				renewedCrt := reenroll(newDeviceCrt)
+
+				return newCACert, renewedCrt, deviceKey, nil
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -3729,7 +4032,7 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/RotateCAWithAdditionalValCAs",
+			name: "OK/RotateCAWithValidationCAs",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
@@ -3744,10 +4047,13 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("could not create Rotational CA: %s", err)
 				}
 
-				dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = append(dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not create update DMS: %s", err)
@@ -3775,6 +4081,121 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("unexpected error: %s", err)
 				}
 				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/RotateCAWithMultipleValidationCAs",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+					},
+					"5m",
+				)
+
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewV7().String()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create Rotational CA: %s", err)
+				}
+
+				unrelatedCA, err := createCA(fmt.Sprintf("unrelated-ca-%s", uuid.NewV7().String()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create unrelated CA: %s", err)
+				}
+
+				// The issuing CA is listed last, after a CA that does not exist and a CA that did not issue the certificate.
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+					fmt.Sprintf("non-existent-ca-%s", uuid.NewV7().String()),
+					unrelatedCA.ID,
+					dms.Settings.EnrollmentSettings.EnrollmentCA,
+				}
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
+				})
+				if err != nil {
+					t.Fatalf("could not create update DMS: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(newCA.Certificate.Certificate), reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "Err/RotateCAWithoutValidationCAs",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+					},
+					"5m",
+				)
+
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewV7().String()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create Rotational CA: %s", err)
+				}
+
+				// The enrollment CA is rotated but the old one is NOT added to the re-enrollment ValidationCAs.
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{}
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS: %s", err)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "invalid certificate"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
 			},
 		},
 		{
@@ -4026,7 +4447,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
@@ -4084,7 +4508,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to webhook auth mode: %s", err)
@@ -4139,7 +4566,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4196,7 +4626,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4254,7 +4687,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4315,7 +4751,10 @@ func TestESTReEnroll(t *testing.T) {
 					Config: insecureWebhookTestClient(),
 				}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not update DMS to combined auth mode: %s", err)
@@ -4391,7 +4830,10 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.ReEnrollmentOptionsESTRFC7030 = models.EnrollmentOptionsESTRFC7030{}
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
-					DMS: *dms,
+					ID:       dms.ID,
+					Name:     dms.Name,
+					Metadata: dms.Metadata,
+					Settings: &dms.Settings,
 				})
 				if err != nil {
 					t.Fatalf("could not clear reenroll auth settings: %s", err)
@@ -4462,7 +4904,6 @@ func TestGetAllDMS(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),

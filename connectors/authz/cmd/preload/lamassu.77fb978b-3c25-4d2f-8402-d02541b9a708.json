@@ -29,6 +29,7 @@
       "actions": [
         "create",
         "read",
+        "read-key",
         "delete",
         "import",
         "ui",

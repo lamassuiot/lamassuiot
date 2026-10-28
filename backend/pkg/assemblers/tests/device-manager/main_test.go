@@ -889,7 +889,6 @@ func TestGetDevicesByDMS(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -1210,7 +1209,6 @@ func TestDecommissionDevice(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),

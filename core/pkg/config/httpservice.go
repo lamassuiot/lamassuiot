@@ -1,5 +1,12 @@
 package config
 
+import (
+	"bytes"
+	"encoding/base64"
+	"fmt"
+	"strings"
+)
+
 type HTTPConnection struct {
 	Protocol        HTTPProtocol `mapstructure:"protocol" json:"protocol,omitempty"`
 	BasePath        string       `mapstructure:"base_path" json:"base_path,omitempty"`
@@ -63,13 +70,38 @@ type AuthJWTOptions struct {
 }
 
 // AuthMTLSOptions loads the client certificate from CertContent/KeyContent
-// (PEM) when set, otherwise from CertFile/KeyFile. For backwards compatibility,
+// when set, otherwise from CertFile/KeyFile. For backwards compatibility,
 // CertFile/KeyFile may also hold PEM content directly.
+//
+// CertContent/KeyContent hold base64-encoded PEM, like certificates elsewhere
+// in the API. Plain PEM is also accepted, as written by earlier configs.
 type AuthMTLSOptions struct {
 	CertFile    string `mapstructure:"cert_file" json:"cert_file,omitempty"`
 	KeyFile     string `mapstructure:"key_file" json:"key_file,omitempty"`
 	CertContent string `mapstructure:"cert_content" json:"cert_content,omitempty"`
 	KeyContent  string `mapstructure:"key_content" json:"key_content,omitempty"`
+}
+
+// ContentPEM returns CertContent and KeyContent decoded to PEM.
+func (o AuthMTLSOptions) ContentPEM() (cert, key []byte, err error) {
+	if cert, err = decodePEMContent("cert_content", o.CertContent); err != nil {
+		return nil, nil, err
+	}
+	if key, err = decodePEMContent("key_content", o.KeyContent); err != nil {
+		return nil, nil, err
+	}
+	return cert, key, nil
+}
+
+func decodePEMContent(field, value string) ([]byte, error) {
+	if strings.Contains(value, "-----BEGIN") {
+		return []byte(value), nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(value))
+	if err != nil || !bytes.Contains(decoded, []byte("-----BEGIN")) {
+		return nil, fmt.Errorf("mtls_options.%s must be base64-encoded PEM", field)
+	}
+	return decoded, nil
 }
 
 type AuthApiKeyOptions struct {
