@@ -2,17 +2,10 @@ package migrationstest
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/sha256"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/pem"
 	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
-	"math/big"
 	"strings"
 	"testing"
 
@@ -120,27 +113,21 @@ func migrationTest_KMS_20260909084500_kms_key_composite_pk(t *testing.T, logger 
 }
 
 func migrationTest_KMS_20261027110000_key_bindings(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
-	ApplyMigration(t, logger, con, kmsDBName)
-
-	// A key with bindings cannot be deleted.
-	require.NoError(t, con.Exec(`INSERT INTO key_bindings (key_id, engine_id, resource_type, resource_id) VALUES ('abc123', 'online-1', 'certificate', 'in-use')`).Error)
-	assert.Error(t, con.Exec(`DELETE FROM kms_keys WHERE key_id = 'abc123' AND engine_id = 'online-1'`).Error)
-	require.NoError(t, con.Exec(`DELETE FROM key_bindings WHERE resource_id = 'in-use'`).Error)
-}
-
-func migrationTest_KMS_20261027110100_move_legacy_key_bindings(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	insertKey := func(keyID, metadata string) {
 		t.Helper()
 		require.NoError(t, con.Exec(`INSERT INTO kms_keys
 			(key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, has_private_key)
 			VALUES(?, ?::jsonb, 'Legacy', 'ECDSA', 256, 'pub', '2026-01-01 00:00:00', 'legacy-engine', true)`, keyID, metadata).Error)
 	}
-	insertKey("array", `{"owner": "pki", "lamassu.io/kms/binded-resources": [{"resource_type": "certificate", "resource_id": "s1"}, {"resource_type": "certificate", "resource_id": "s2"}]}`)
-	insertKey("object", `{"lamassu.io/kms/binded-resources": {"resource_type": "certificate", "resource_id": "s3"}}`)
-	insertKey("string", `{"lamassu.io/kms/binded-resources": "[{\"resource_type\": \"certificate\", \"resource_id\": \"s4\"}]"}`)
-	insertKey("duplicated", `{"lamassu.io/kms/binded-resources": [{"resource_type": "certificate", "resource_id": "s5"}, {"resource_type": "certificate", "resource_id": "s5"}]}`)
-	insertKey("other-type", `{"lamassu.io/kms/binded-resources": [{"resource_type": "device", "resource_id": "d1"}, {"resource_type": "certificate", "resource_id": ""}]}`)
-	insertKey("unreadable", `{"lamassu.io/kms/binded-resources": "not bindings"}`)
+	const legacyBindings = "lamassu.io/kms/binded-resources"
+
+	// Bindings earlier versions kept in the key metadata, in every format they used.
+	insertKey("array", `{"owner": "pki", "`+legacyBindings+`": [{"resource_type": "certificate", "resource_id": "s1"}, {"resource_type": "certificate", "resource_id": "s2"}]}`)
+	insertKey("object", `{"`+legacyBindings+`": {"resource_type": "certificate", "resource_id": "s3"}}`)
+	insertKey("string", `{"`+legacyBindings+`": "[{\"resource_type\": \"certificate\", \"resource_id\": \"s4\"}]"}`)
+	insertKey("duplicated", `{"`+legacyBindings+`": [{"resource_type": "certificate", "resource_id": "s5"}, {"resource_type": "certificate", "resource_id": "s5"}]}`)
+	insertKey("other-type", `{"`+legacyBindings+`": [{"resource_type": "device", "resource_id": "d1"}, {"resource_type": "certificate", "resource_id": ""}]}`)
+	insertKey("unreadable", `{"`+legacyBindings+`": "not bindings"}`)
 
 	ApplyMigration(t, logger, con, kmsDBName)
 
@@ -165,11 +152,13 @@ func migrationTest_KMS_20261027110100_move_legacy_key_bindings(t *testing.T, log
 	assert.Equal(t, []string{"certificate/s5"}, bindingsOf("duplicated"))
 	assert.Equal(t, []string{"device/d1"}, bindingsOf("other-type"), "entries without a resource are dropped")
 	assert.Empty(t, bindingsOf("unreadable"))
-	assert.JSONEq(t, `{"lamassu.io/kms/binded-resources": "not bindings"}`, metadataOf("unreadable"), "unreadable bindings are left as they were")
+	assert.JSONEq(t, `{"`+legacyBindings+`": "not bindings"}`, metadataOf("unreadable"), "unreadable bindings are left as they were")
 
-	RollbackMigration(t, logger, con, kmsDBName, "20261027110100_move_legacy_key_bindings")
-	assert.Empty(t, bindingsOf("array"))
-	assert.JSONEq(t, `{"owner": "pki", "lamassu.io/kms/binded-resources": [{"resource_type": "certificate", "resource_id": "s1"}, {"resource_type": "certificate", "resource_id": "s2"}]}`, metadataOf("array"))
+	// A key with bindings cannot be deleted.
+	assert.Error(t, con.Exec(`DELETE FROM kms_keys WHERE key_id = 'array' AND engine_id = 'legacy-engine'`).Error)
+
+	RollbackMigration(t, logger, con, kmsDBName, "20261027110000_key_bindings")
+	assert.JSONEq(t, `{"owner": "pki", "`+legacyBindings+`": [{"resource_type": "certificate", "resource_id": "s1"}, {"resource_type": "certificate", "resource_id": "s2"}]}`, metadataOf("array"))
 
 	// Leave the schema at the latest version for any later migration test.
 	ApplyMigration(t, logger, con, kmsDBName)
@@ -240,32 +229,7 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	insertCert("s4", "", "legacy-engine", false, false)                    // unreadable certificate: its binding is kept
 	insertCert("external", "", "", false, false)                           // key outside the KMS
 
-	// CAs whose keys ca-to-kms-migration stored under their SKI, which is not the digest of their public
-	// key: ca.certificates.key_id (the digest) does not name their kms_keys row. They are matched by
-	// public key instead.
-	importedCA := func(serial, kmsKeyID string) {
-		t.Helper()
-		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		require.NoError(t, err)
-		template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: serial}, IsCA: true, BasicConstraintsValid: true, SubjectKeyId: []byte{0xaa, 0xbb}}
-		der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-		require.NoError(t, err)
-		spki, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
-		require.NoError(t, err)
-		digest := sha256.Sum256(spki)
-		b64 := func(block *pem.Block) string { return base64.StdEncoding.EncodeToString(pem.EncodeToMemory(block)) }
-
-		require.NoError(t, con.Exec(`INSERT INTO kms_keys (key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, has_private_key)
-			VALUES (?, '{}'::jsonb, 'Imported', 'ECDSA', 256, ?, '2026-01-01 00:00:00', 'legacy-engine', true)`,
-			kmsKeyID, b64(&pem.Block{Type: "PUBLIC KEY", Bytes: spki})).Error)
-		require.NoError(t, con.Exec(`INSERT INTO ca.certificates (serial_number, certificate, key_id, engine_id, is_ca) VALUES (?, ?, ?, 'legacy-engine', true)`,
-			serial, b64(&pem.Block{Type: "CERTIFICATE", Bytes: der}), hex.EncodeToString(digest[:])).Error)
-		require.NoError(t, con.Exec(`INSERT INTO ca.ca_certificates (serial_number) VALUES (?)`, serial).Error)
-	}
-	importedCA("imported-unbound", "ski-unbound")
-
-	// The same for a CA issued by OpenSSL, registered the way ca-to-kms-migration does: under the SKI
-	// its key was renamed to, while the CA records the key ID.
+	// A CA issued by OpenSSL, whose SKI is not the key ID: it is bound by the key_id the CA records.
 	opensslCert := base64.StdEncoding.EncodeToString([]byte(opensslCACertPEM))
 	opensslBlock, _ := pem.Decode([]byte(opensslCACertPEM))
 	opensslX509, err := x509.ParseCertificate(opensslBlock.Bytes)
@@ -274,12 +238,10 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	require.NoError(t, err)
 	require.NoError(t, con.Exec(`INSERT INTO kms_keys (key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, has_private_key)
 		VALUES (?, '{}'::jsonb, 'OpenSSL CA', 'ECDSA', 256, ?, '2026-01-01 00:00:00', 'legacy-engine', true)`,
-		opensslCASKI, base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: opensslSPKI}))).Error)
+		opensslCAKeyID, base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: opensslSPKI}))).Error)
 	require.NoError(t, con.Exec(`INSERT INTO ca.certificates (serial_number, certificate, key_id, engine_id, is_ca) VALUES ('openssl-ca', ?, ?, 'legacy-engine', true)`,
 		opensslCert, opensslCAKeyID).Error)
 	require.NoError(t, con.Exec(`INSERT INTO ca.ca_certificates (serial_number) VALUES ('openssl-ca')`).Error)
-	importedCA("imported-bound", "ski-bound")
-	require.NoError(t, con.Exec(`INSERT INTO key_bindings (key_id, engine_id, resource_type, resource_id) VALUES ('ski-bound', 'legacy-engine', 'certificate', 'imported-bound')`).Error)
 
 	ApplyMigration(t, logger, con, kmsDBName)
 
@@ -290,21 +252,11 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	assert.Empty(t, bindingsOf("duplicated", "legacy-engine"))
 	assert.Equal(t, []string{"device/d1"}, bindingsOf("other-type", "legacy-engine"), "only certificate bindings are rebuilt")
 	assert.Equal(t, []string{"certificate/leaf-new"}, bindingsOf("abc123", "online-1"))
-	assert.Equal(t, []string{"certificate/imported-unbound"}, bindingsOf("ski-unbound", "legacy-engine"), "matched by public key")
-	assert.Equal(t, []string{"certificate/imported-bound"}, bindingsOf("ski-bound", "legacy-engine"), "a binding matched by public key is not stale")
-	assert.Equal(t, []string{"certificate/openssl-ca"}, bindingsOf(opensslCASKI, "legacy-engine"), "OpenSSL CA key registered under its SKI")
+	assert.Equal(t, []string{"certificate/openssl-ca"}, bindingsOf(opensslCAKeyID, "legacy-engine"), "bound by key_id, whatever the SKI")
 
-	keyIDOf := func(serial string) string {
-		t.Helper()
-		var keyID string
-		require.NoError(t, con.Raw(`SELECT key_id FROM ca.certificates WHERE serial_number = ?`, serial).Scan(&keyID).Error)
-		return keyID
-	}
-	assert.Equal(t, "ski-unbound", keyIDOf("imported-unbound"), "the certificate records the name its key has in the KMS")
-	assert.Equal(t, "ski-bound", keyIDOf("imported-bound"))
-	assert.Equal(t, opensslCASKI, keyIDOf("openssl-ca"))
-	assert.Equal(t, "object", keyIDOf("ca-current"), "a key_id that names a key is kept")
-	assert.Equal(t, "not-in-kms", keyIDOf("leaf-no-key"), "a key the KMS does not hold leaves the key_id as it was")
+	var keyID string
+	require.NoError(t, con.Raw(`SELECT key_id FROM ca.certificates WHERE serial_number = 'openssl-ca'`).Scan(&keyID).Error)
+	assert.Equal(t, opensslCAKeyID, keyID, "certificates keep the key_id the CA recorded")
 }
 
 func TestKMSMigrations(t *testing.T) {
@@ -331,11 +283,6 @@ func TestKMSMigrations(t *testing.T) {
 	migrationTest_KMS_20261027110000_key_bindings(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261027110000_key_bindings")
-	}
-
-	migrationTest_KMS_20261027110100_move_legacy_key_bindings(t, logger, con)
-	if t.Failed() {
-		t.Fatalf("failed while running migration v20261027110100_move_legacy_key_bindings")
 	}
 
 	migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t, logger, con)

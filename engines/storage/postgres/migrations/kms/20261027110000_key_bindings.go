@@ -11,14 +11,50 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-func Register20261027110100MoveLegacyKeyBindings() {
-	goose.AddMigrationContext(upMoveLegacyKeyBindings, downMoveLegacyKeyBindings)
+func Register20261027110000KeyBindings() {
+	goose.AddMigrationContext(upKeyBindings, downKeyBindings)
 }
 
-// upMoveLegacyKeyBindings moves the bindings that earlier versions kept in each key's metadata into
+// upKeyBindings makes the KMS the record of which resources use each key: it creates the key_bindings
+// table, whose foreign key keeps a bound key from being deleted, and moves there the bindings earlier
+// versions kept in the key metadata.
+func upKeyBindings(ctx context.Context, tx *sql.Tx) error {
+	for _, query := range []string{
+		// The resources that use each engine's copy of a key. A key with bindings cannot be deleted:
+		// the foreign key enforces it for every path, not only for the CA service.
+		`CREATE TABLE key_bindings (
+			key_id        text        NOT NULL,
+			engine_id     text        NOT NULL,
+			resource_type text        NOT NULL,
+			resource_id   text        NOT NULL,
+			created_at    timestamptz NOT NULL DEFAULT now(),
+			CONSTRAINT key_bindings_pkey PRIMARY KEY (key_id, engine_id, resource_type, resource_id),
+			CONSTRAINT key_bindings_key_fk FOREIGN KEY (key_id, engine_id)
+				REFERENCES kms_keys (key_id, engine_id) ON DELETE RESTRICT
+		)`,
+		`CREATE INDEX key_bindings_resource_idx ON key_bindings (resource_type, resource_id)`,
+	} {
+		if _, err := tx.ExecContext(ctx, query); err != nil {
+			return err
+		}
+	}
+	return moveLegacyKeyBindings(ctx, tx)
+}
+
+// downKeyBindings puts the bindings back in the key metadata, where earlier versions read them, and
+// drops the table.
+func downKeyBindings(ctx context.Context, tx *sql.Tx) error {
+	if err := restoreLegacyKeyBindings(ctx, tx); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `DROP TABLE key_bindings`)
+	return err
+}
+
+// moveLegacyKeyBindings moves the bindings that earlier versions kept in each key's metadata into
 // the key_bindings table, and removes them from the metadata. Unreadable entries are left as they
 // are; the certificate bindings backfill that follows rebuilds the bindings from the certificates.
-func upMoveLegacyKeyBindings(ctx context.Context, tx *sql.Tx) error {
+func moveLegacyKeyBindings(ctx context.Context, tx *sql.Tx) error {
 	logger := chelpers.SetupLogger("info", "KMS", "Migrations")
 
 	rows, err := tx.QueryContext(ctx, `SELECT key_id, engine_id, metadata -> $1 FROM kms_keys WHERE metadata ? $1`, models.KMSBindResourceKey)
@@ -93,9 +129,8 @@ func parseLegacyBindings(raw []byte) ([]models.KMSBindResource, bool) {
 	return nil, false
 }
 
-// downMoveLegacyKeyBindings puts the bindings back in each key's metadata, where earlier versions
-// read them, and empties the table.
-func downMoveLegacyKeyBindings(ctx context.Context, tx *sql.Tx) error {
+// restoreLegacyKeyBindings puts the bindings back in each key's metadata.
+func restoreLegacyKeyBindings(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, `
 		UPDATE kms_keys AS k
 		SET metadata = COALESCE(k.metadata, '{}'::jsonb) || jsonb_build_object($1::text, b.bindings)
@@ -107,10 +142,5 @@ func downMoveLegacyKeyBindings(ctx context.Context, tx *sql.Tx) error {
 		) AS b
 		WHERE k.key_id = b.key_id AND k.engine_id = b.engine_id
 	`, models.KMSBindResourceKey)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx, `DELETE FROM key_bindings`)
 	return err
 }

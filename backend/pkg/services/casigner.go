@@ -39,7 +39,7 @@ func (s *certSignerImpl) Public() crypto.PublicKey {
 }
 
 func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	key, err := findCertificateKey(s.ctx, s.sdk, s.cert, s.engineID, s.keyID)
+	key, err := findCertificateKey(s.ctx, s.sdk, s.cert.PublicKey, s.engineID, s.keyID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,10 +48,10 @@ func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerO
 	return kmsSigner.Sign(rand, digest, opts)
 }
 
-// findCertificateKey returns the KMS key of a certificate, identified by (keyID, engineID). Certificates
-// stored before they recorded their keyID find it by public key instead, since their SKI is whatever
-// their issuer wrote.
-func findCertificateKey(ctx context.Context, kms services.KMSService, cert *x509.Certificate, engineID, keyID string) (*models.Key, error) {
+// findCertificateKey returns the KMS key of a certificate. A key is identified by (keyID, engineID);
+// certificates stored before they recorded their keyID find it by public key instead, since their
+// SKI is whatever their issuer wrote.
+func findCertificateKey(ctx context.Context, kms services.KMSService, pub crypto.PublicKey, engineID, keyID string) (*models.Key, error) {
 	if keyID != "" {
 		identifier := keyID
 		if engineID != "" {
@@ -60,7 +60,7 @@ func findCertificateKey(ctx context.Context, kms services.KMSService, cert *x509
 		return kms.GetKey(ctx, services.GetKeyInput{Identifier: identifier})
 	}
 
-	keys, err := kms.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: cert.PublicKey, EngineID: engineID})
+	keys, err := kms.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: pub, EngineID: engineID})
 	if err != nil {
 		return nil, err
 	}

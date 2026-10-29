@@ -66,7 +66,7 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 // keyEntry accumulates all data needed to build a models.Key record.
 type keyEntry struct {
 	engineID    string
-	keyID       string // subject_key_id: the name the crypto engine holds the key under (Lamassu CAs: SHA-256 of the PKIX public key; imported CAs: their certificate's SKI)
+	keyID       string // subject_key_id == KMS key_id (SHA-256 hex of PKIX public key)
 	algorithm   string
 	size        int
 	publicKey   string // base64(PEM "PUBLIC KEY")
