@@ -2,10 +2,17 @@ package migrationstest
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -243,6 +250,32 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 		opensslCert, opensslCAKeyID).Error)
 	require.NoError(t, con.Exec(`INSERT INTO ca.ca_certificates (serial_number) VALUES ('openssl-ca')`).Error)
 
+	// CAs imported before the KMS: crypto engines renamed their keys to the certificate's SKI and
+	// ca-to-kms-migration registered them under it, while the CA records the key's digest. Their key is
+	// found by public key in the same engine, so it stays protected.
+	importedCA := func(serial, kmsKeyID string) {
+		t.Helper()
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: serial}, IsCA: true, BasicConstraintsValid: true, SubjectKeyId: []byte{0xaa, 0xbb}}
+		der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+		require.NoError(t, err)
+		spki, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+		require.NoError(t, err)
+		digest := sha256.Sum256(spki)
+		b64 := func(block *pem.Block) string { return base64.StdEncoding.EncodeToString(pem.EncodeToMemory(block)) }
+
+		require.NoError(t, con.Exec(`INSERT INTO kms_keys (key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, has_private_key)
+			VALUES (?, '{}'::jsonb, 'Imported', 'ECDSA', 256, ?, '2026-01-01 00:00:00', 'legacy-engine', true)`,
+			kmsKeyID, b64(&pem.Block{Type: "PUBLIC KEY", Bytes: spki})).Error)
+		require.NoError(t, con.Exec(`INSERT INTO ca.certificates (serial_number, certificate, key_id, engine_id, is_ca) VALUES (?, ?, ?, 'legacy-engine', true)`,
+			serial, b64(&pem.Block{Type: "CERTIFICATE", Bytes: der}), hex.EncodeToString(digest[:])).Error)
+		require.NoError(t, con.Exec(`INSERT INTO ca.ca_certificates (serial_number) VALUES (?)`, serial).Error)
+	}
+	importedCA("imported-unbound", "ski-unbound")
+	importedCA("imported-bound", "ski-bound")
+	require.NoError(t, con.Exec(`INSERT INTO key_bindings (key_id, engine_id, resource_type, resource_id) VALUES ('ski-bound', 'legacy-engine', 'certificate', 'imported-bound')`).Error)
+
 	ApplyMigration(t, logger, con, kmsDBName)
 
 	assert.Equal(t, []string{"certificate/s1"}, bindingsOf("array", "legacy-engine"), "s2 is no longer a certificate")
@@ -253,6 +286,8 @@ func migrationTest_KMS_20261027110200_backfill_certificate_key_bindings(t *testi
 	assert.Equal(t, []string{"device/d1"}, bindingsOf("other-type", "legacy-engine"), "only certificate bindings are rebuilt")
 	assert.Equal(t, []string{"certificate/leaf-new"}, bindingsOf("abc123", "online-1"))
 	assert.Equal(t, []string{"certificate/openssl-ca"}, bindingsOf(opensslCAKeyID, "legacy-engine"), "bound by key_id, whatever the SKI")
+	assert.Equal(t, []string{"certificate/imported-unbound"}, bindingsOf("ski-unbound", "legacy-engine"), "a key registered under its SKI is found by public key")
+	assert.Equal(t, []string{"certificate/imported-bound"}, bindingsOf("ski-bound", "legacy-engine"), "its existing binding is not stale")
 
 	var keyID string
 	require.NoError(t, con.Raw(`SELECT key_id FROM ca.certificates WHERE serial_number = 'openssl-ca'`).Scan(&keyID).Error)

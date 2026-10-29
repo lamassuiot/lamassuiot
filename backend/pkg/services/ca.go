@@ -1274,7 +1274,7 @@ func certificateKeyBinding(cert *models.Certificate) models.KMSBindResource {
 // bindCertificateKey records in the KMS that a stored certificate uses its key. It runs once the
 // certificate is stored, so a failed operation leaves no binding to a certificate that does not exist.
 // A failure is only logged and not retried: the certificate works, but its key stays unprotected until
-// the binding is made by hand (POST /v1/keys/{id}/bindings as the service principal).
+// the binding is made by hand (POST /v1/keys/{id}/bindings).
 func (svc *CAServiceBackend) bindCertificateKey(ctx context.Context, lFunc *logrus.Entry, cert *models.Certificate) {
 	if cert.KeyID == "" {
 		return
@@ -2166,7 +2166,7 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 
 	// The certificate no longer uses its key. A failure is only logged and not retried: the binding
 	// outlives the certificate and keeps the key from being deleted until it is removed by hand
-	// (DELETE /v1/keys/{id}/bindings/certificate/{sn} as the service principal).
+	// (DELETE /v1/keys/{id}/bindings/certificate/{sn}).
 	if cert.KeyID != "" {
 		_, err = svc.kmsService.UnbindKeyResource(ctx, services.KeyResourceBindingInput{
 			Identifier: buildPKCS11ID(cert.EngineID, cert.KeyID, "private"),

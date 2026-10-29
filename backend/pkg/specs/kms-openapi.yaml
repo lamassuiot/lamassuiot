@@ -634,7 +634,7 @@ paths:
       tags:
         - Keys
       summary: Bind a resource to a key
-      description: Managed by Lamassu; only the service principal may call it. Binding an already bound resource changes nothing.
+      description: Binding an already bound resource changes nothing.
       operationId: bindKeyResource
       x-authz:
         namespace: pki
@@ -685,7 +685,7 @@ paths:
       tags:
         - Keys
       summary: Unbind a resource from a key
-      description: Managed by Lamassu; only the service principal may call it. Unbinding a resource that is not bound changes nothing.
+      description: Unbinding a resource that is not bound changes nothing.
       operationId: unbindKeyResource
       x-authz:
         namespace: pki
