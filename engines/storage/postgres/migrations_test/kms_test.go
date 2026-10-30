@@ -164,6 +164,12 @@ func migrationTest_KMS_20261027110000_key_bindings(t *testing.T, logger *logrus.
 	// A key with bindings cannot be deleted.
 	assert.Error(t, con.Exec(`DELETE FROM kms_keys WHERE key_id = 'array' AND engine_id = 'legacy-engine'`).Error)
 
+	// Renaming a key carries its bindings along.
+	require.NoError(t, con.Exec(`UPDATE kms_keys SET key_id = 'array-renamed' WHERE key_id = 'array' AND engine_id = 'legacy-engine'`).Error)
+	assert.Equal(t, []string{"certificate/s1", "certificate/s2"}, bindingsOf("array-renamed"))
+	assert.Empty(t, bindingsOf("array"))
+	require.NoError(t, con.Exec(`UPDATE kms_keys SET key_id = 'array' WHERE key_id = 'array-renamed' AND engine_id = 'legacy-engine'`).Error)
+
 	RollbackMigration(t, logger, con, kmsDBName, "20261027110000_key_bindings")
 	assert.JSONEq(t, `{"owner": "pki", "`+legacyBindings+`": [{"resource_type": "certificate", "resource_id": "s1"}, {"resource_type": "certificate", "resource_id": "s2"}]}`, metadataOf("array"))
 
