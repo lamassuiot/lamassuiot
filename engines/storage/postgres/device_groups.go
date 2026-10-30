@@ -52,28 +52,39 @@ func (db *PostgresDeviceGroupsStore) SelectAncestors(ctx context.Context, id str
 	query := `
 		WITH RECURSIVE ancestor_chain AS (
 			-- Base case: start with the given group
-			SELECT id, name, description, parent_id, criteria, created_at, updated_at
+			SELECT id, tenant_id, name, description, parent_id, criteria, created_at, updated_at
 			FROM device_groups
-			WHERE id = ?
+			WHERE id = ? AND tenant_id = ?
 			
 			UNION ALL
 			
 			-- Recursive case: get parent of current group
-			SELECT dg.id, dg.name, dg.description, dg.parent_id, dg.criteria, dg.created_at, dg.updated_at
+			SELECT dg.id, dg.tenant_id, dg.name, dg.description, dg.parent_id, dg.criteria, dg.created_at, dg.updated_at
 			FROM device_groups dg
-			INNER JOIN ancestor_chain ac ON dg.id = ac.parent_id
+			INNER JOIN ancestor_chain ac ON dg.id = ac.parent_id AND dg.tenant_id = ac.tenant_id
 		)
-		SELECT id, name, description, parent_id, criteria, created_at, updated_at
+		SELECT id, tenant_id, name, description, parent_id, criteria, created_at, updated_at
 		FROM ancestor_chain
 		ORDER BY created_at ASC
 	`
 
-	result := db.db.WithContext(ctx).Raw(query, id).Scan(&ancestors)
-	if result.Error != nil {
-		return nil, result.Error
+	err := db.withTenantScope(ctx, func(tx *gorm.DB, tenantID string) error {
+		return tx.Raw(query, id, tenantID).Scan(&ancestors).Error
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return ancestors, nil
+}
+
+func (db *PostgresDeviceGroupsStore) withTenantScope(ctx context.Context, fn func(tx *gorm.DB, tenantID string) error) error {
+	tenantID, _, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return err
+	}
+
+	return fn(db.db.WithContext(ctx), tenantID)
 }
 
 // Insert creates a new device group with validation to prevent circular references
@@ -120,7 +131,7 @@ func (db *PostgresDeviceGroupsStore) validateNoCircularReference(ctx context.Con
 			-- Base case: start with the current group
 			SELECT id, parent_id
 			FROM device_groups
-			WHERE id = ?
+			WHERE id = ? AND tenant_id = ?
 			
 			UNION ALL
 			
@@ -128,13 +139,16 @@ func (db *PostgresDeviceGroupsStore) validateNoCircularReference(ctx context.Con
 			SELECT dg.id, dg.parent_id
 			FROM device_groups dg
 			INNER JOIN descendant_chain dc ON dg.parent_id = dc.id
+			WHERE dg.tenant_id = ?
 		)
 		SELECT COUNT(*) FROM descendant_chain WHERE id = ?
 	`
 
-	result := db.db.WithContext(ctx).Raw(query, groupID, parentID).Scan(&count)
-	if result.Error != nil {
-		return result.Error
+	err := db.withTenantScope(ctx, func(tx *gorm.DB, tenantID string) error {
+		return tx.Raw(query, groupID, tenantID, tenantID, parentID).Scan(&count).Error
+	})
+	if err != nil {
+		return err
 	}
 
 	if count > 0 {

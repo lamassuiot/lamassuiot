@@ -39,5 +39,15 @@ func (db *PostgresDeviceEventsStore) SelectByDeviceID(ctx context.Context, req s
 }
 
 func (db *PostgresDeviceEventsStore) DeleteByDeviceID(ctx context.Context, deviceID string) error {
-	return db.db.WithContext(ctx).Where("device_id = ?", deviceID).Delete(&models.DeviceEventRecord{}).Error
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return err
+	}
+
+	q := db.db.WithContext(ctx).Where("device_id = ?", deviceID)
+	if scoped {
+		q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
+	}
+
+	return q.Delete(&models.DeviceEventRecord{}).Error
 }

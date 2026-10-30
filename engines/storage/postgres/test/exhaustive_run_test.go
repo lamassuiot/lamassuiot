@@ -21,6 +21,7 @@ func TestDeviceExhaustiveRun(t *testing.T) {
 	defer suite.AfterSuite()
 
 	db := suite.DB["devicemanager"]
+	ctx := tenantTestContext("tenant-test", models.TenantActive)
 	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "Test")
 	postgres.NewMigrator(logger, db).MigrateToLatest()
 
@@ -33,6 +34,7 @@ func TestDeviceExhaustiveRun(t *testing.T) {
 		for i := range total {
 			d := models.Device{
 				ID:                fmt.Sprintf("device-%02d", i),
+				TenantID:          "tenant-test",
 				Status:            models.DeviceActive,
 				CreationTimestamp: time.Now(),
 				Metadata:          map[string]any{},
@@ -55,7 +57,7 @@ func TestDeviceExhaustiveRun(t *testing.T) {
 		insertDevices(t)
 
 		seen := map[string]int{}
-		_, err := repo.SelectAll(context.Background(), true, func(d models.Device) {
+		_, err := repo.SelectAll(ctx, true, func(d models.Device) {
 			seen[d.ID]++
 			require.NoError(t, db.Model(&models.Device{}).Where("id = ?", d.ID).Update("status", models.DeviceDecommissioned).Error)
 		}, &resources.QueryParameters{PageSize: 2, Filters: activeOnly}, nil)
@@ -71,7 +73,7 @@ func TestDeviceExhaustiveRun(t *testing.T) {
 		insertDevices(t)
 
 		var ids []string
-		_, err := repo.SelectAll(context.Background(), true, func(d models.Device) {
+		_, err := repo.SelectAll(ctx, true, func(d models.Device) {
 			ids = append(ids, d.ID)
 		}, &resources.QueryParameters{PageSize: total}, nil)
 		require.NoError(t, err)
@@ -82,7 +84,7 @@ func TestDeviceExhaustiveRun(t *testing.T) {
 		insertDevices(t)
 
 		var ids []string
-		_, err := repo.SelectAll(context.Background(), true, func(d models.Device) {
+		_, err := repo.SelectAll(ctx, true, func(d models.Device) {
 			ids = append(ids, d.ID)
 		}, &resources.QueryParameters{
 			PageSize: 2,

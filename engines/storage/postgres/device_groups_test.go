@@ -4,11 +4,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	postgrestest "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/test"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDeviceGroupsRepository(t *testing.T) {
@@ -229,4 +233,143 @@ func TestDeviceGroupsRepository(t *testing.T) {
 
 		_ = pgConfig // Just to avoid unused warning
 	})
+}
+
+func deviceGroupsTenantContext(tenantID string) context.Context {
+	return core.WithTenantContext(context.Background(), core.TenantContext{
+		OrganizationID: "organization",
+		TenantID:       tenantID,
+		ActorID:        "actor",
+		ActorType:      "user",
+		CorrelationID:  "correlation",
+		Source:         "test",
+		TenantStatus:   core.TenantActive,
+		Validated:      true,
+	})
+}
+
+func TestDeviceGroupsRepositoryTenantIsolation(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "device-groups-repo-tenant-isolation")
+
+	_, suite := postgrestest.BeforeSuite([]string{"devicemanager"}, false)
+	defer suite.AfterSuite()
+	suite.BeforeEach()
+
+	db := suite.DB["devicemanager"]
+	migrator := NewMigrator(logger, db)
+	migrator.MigrateToLatest()
+
+	repo, err := NewDeviceGroupsRepository(logger, db)
+	require.NoError(t, err)
+
+	tenantA := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000002")
+	tenantB := deviceGroupsTenantContext("00000000-0000-0000-0000-000000000003")
+
+	groupA, err := repo.Insert(tenantA, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000002",
+		TenantID: "attacker-supplied-tenant",
+		Name:     "Tenant A Group",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "00000000-0000-0000-0000-000000000002", groupA.TenantID)
+
+	_, err = repo.Insert(tenantB, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000003",
+		Name:     "Tenant B Group",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+	_, err = repo.Insert(tenantA, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000004",
+		Name:     "Tenant A Group 2",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+	_, err = repo.Insert(tenantB, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000005",
+		Name:     "Tenant B Group 2",
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.NoError(t, err)
+
+	exists, found, err := repo.SelectByID(tenantB, groupA.ID)
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.Nil(t, found)
+
+	exists, found, err = repo.SelectByID(tenantA, groupA.ID)
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, "Tenant A Group", found.Name)
+
+	ancestors, err := repo.SelectAncestors(tenantB, groupA.ID)
+	require.NoError(t, err)
+	require.Empty(t, ancestors)
+
+	ancestors, err = repo.SelectAncestors(tenantA, groupA.ID)
+	require.NoError(t, err)
+	require.Len(t, ancestors, 1)
+
+	parentFromA := groupA.ID
+	_, err = repo.Insert(tenantB, &models.DeviceGroup{
+		ID:       "40000000-0000-0000-0000-000000000006",
+		Name:     "Tenant B Child",
+		ParentID: &parentFromA,
+		Criteria: []models.DeviceGroupFilterOption{},
+	})
+	require.Error(t, err)
+
+	updated := *groupA
+	updated.Description = "hijacked"
+	_, err = repo.Update(tenantB, &updated)
+	require.Error(t, err)
+
+	err = repo.Delete(tenantB, groupA.ID)
+	require.Error(t, err)
+
+	exists, found, err = repo.SelectByID(tenantA, groupA.ID)
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, "Tenant A Group", found.Name)
+
+	countA, err := repo.Count(tenantA)
+	require.NoError(t, err)
+	require.Equal(t, 2, countA)
+
+	countB, err := repo.Count(tenantB)
+	require.NoError(t, err)
+	require.Equal(t, 2, countB)
+
+	query := &resources.QueryParameters{
+		PageSize: 1,
+		Sort: resources.SortOptions{
+			SortMode:  resources.SortModeAsc,
+			SortField: "id",
+		},
+	}
+	var tenantAPage []string
+	bookmark, err := repo.SelectAll(tenantA, storage.StorageListRequest[models.DeviceGroup]{
+		QueryParams: query,
+		ApplyFunc:   func(group models.DeviceGroup) { tenantAPage = append(tenantAPage, group.Name) },
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, bookmark)
+	require.Equal(t, []string{"Tenant A Group"}, tenantAPage)
+
+	tenantAPage = nil
+	_, err = repo.SelectAll(tenantA, storage.StorageListRequest[models.DeviceGroup]{
+		QueryParams: &resources.QueryParameters{NextBookmark: bookmark},
+		ApplyFunc:   func(group models.DeviceGroup) { tenantAPage = append(tenantAPage, group.Name) },
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Tenant A Group 2"}, tenantAPage)
+
+	var tenantBPage []string
+	_, err = repo.SelectAll(tenantB, storage.StorageListRequest[models.DeviceGroup]{
+		QueryParams: &resources.QueryParameters{NextBookmark: bookmark},
+		ApplyFunc:   func(group models.DeviceGroup) { tenantBPage = append(tenantBPage, group.Name) },
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Tenant B Group 2"}, tenantBPage)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -240,6 +241,16 @@ func TestDeviceManagerMigrations(t *testing.T) {
 	MigrationTest_DeviceManager_20260317120000_create_device_events(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260317120000_create_device_events")
+	}
+
+	MigrationTest_DeviceManager_20261029120000_backfill_default_tenant(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261029120000_backfill_default_tenant")
+	}
+
+	MigrationTest_DeviceManager_20261029130000_enforce_tenant_constraints(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261029130000_enforce_tenant_constraints")
 	}
 }
 
@@ -522,4 +533,65 @@ func MigrationTest_DeviceManager_20260317120000_create_device_events(t *testing.
 		t.Fatalf("failed to count events for device-without-events: %v", tx.Error)
 	}
 	assert.Equal(t, int64(0), noEventsCount)
+}
+
+func MigrationTest_DeviceManager_20261029120000_backfill_default_tenant(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	tx := con.Exec(`INSERT INTO device_groups (id, name, description, parent_id, criteria)
+		VALUES('d3eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'Legacy Group', 'A group created before tenants', NULL, '[]')`)
+	if tx.Error != nil {
+		t.Fatalf("failed to insert a device group: %v", tx.Error)
+	}
+
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+
+	for _, table := range []string{"devices", "device_groups", "device_events"} {
+		var total, backfilled int64
+		tx := con.Raw("SELECT count(*) FROM " + table).Scan(&total)
+		if tx.Error != nil {
+			t.Fatalf("failed to count %s rows: %v", table, tx.Error)
+		}
+		tx = con.Raw("SELECT count(*) FROM "+table+" WHERE tenant_id = ?", models.DefaultTenantID).Scan(&backfilled)
+		if tx.Error != nil {
+			t.Fatalf("failed to count backfilled %s rows: %v", table, tx.Error)
+		}
+
+		assert.NotZero(t, total, "the test needs existing %s rows before the backfill", table)
+		assert.Equal(t, total, backfilled, "every existing row of %s must belong to the default tenant", table)
+	}
+}
+
+func MigrationTest_DeviceManager_20261029130000_enforce_tenant_constraints(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+
+	tx := con.Exec(`INSERT INTO devices
+		(id, tags, status, icon, icon_color, creation_timestamp, metadata, dms_owner, identity_slot, extra_slots)
+		VALUES('device-without-tenant', '{}', 'ACTIVE', 'device', '#FF0000', '2026-03-17 10:00:00+00', '{}', 'test-dms', '{}', '{}');
+	`)
+	assert.Error(t, tx.Error, "a device without tenant_id must be rejected")
+
+	tx = con.Exec(`INSERT INTO device_groups (id, tenant_id, name, description, parent_id, criteria)
+		VALUES('e4eebc99-9c0b-4ef8-bb6d-6bb9bd380a55', 'tenant-b', 'Legacy Group', 'Same name in another tenant', NULL, '[]')`)
+	if tx.Error != nil {
+		t.Fatalf("the same group name must be storable for another tenant: %v", tx.Error)
+	}
+
+	tx = con.Exec(`INSERT INTO device_groups (id, tenant_id, name, description, parent_id, criteria)
+		VALUES('f5eebc99-9c0b-4ef8-bb6d-6bb9bd380a66', 'tenant-b', 'Legacy Group', 'Same name in the same tenant', NULL, '[]')`)
+	assert.Error(t, tx.Error, "a tenant cannot have two groups with the same name")
+
+	tx = con.Exec(`INSERT INTO device_groups (id, tenant_id, name, description, parent_id, criteria)
+		VALUES('a6eebc99-9c0b-4ef8-bb6d-6bb9bd380a77', 'tenant-b', 'Child Group', 'Parent from another tenant', 'd3eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', '[]')`)
+	assert.Error(t, tx.Error, "a group cannot have a parent from another tenant")
+
+	tx = con.Exec(`INSERT INTO device_events (id, tenant_id, device_id, event_ts, event_type)
+		VALUES('event-other-tenant', 'tenant-b', 'device-with-events', '2026-03-17 13:00:00+00', 'CREATED')`)
+	assert.Error(t, tx.Error, "an event cannot belong to a device of another tenant")
+
+	var indexes int64
+	tx = con.Raw(`SELECT count(*) FROM pg_indexes
+		WHERE indexname IN ('devices_tenant_id_idx', 'device_groups_tenant_id_idx', 'device_events_tenant_id_idx')`).Scan(&indexes)
+	if tx.Error != nil {
+		t.Fatalf("failed to read devicemanager indexes: %v", tx.Error)
+	}
+	assert.Equal(t, int64(3), indexes, "devices, device_groups and device_events must have an index on tenant_id")
 }
