@@ -183,6 +183,9 @@ func (m *mockKMSStorage) UnbindResource(context.Context, string, string, models.
 func (m *mockKMSStorage) SelectBindings(context.Context, string, string) ([]models.KeyBinding, error) {
 	return nil, nil
 }
+func (m *mockKMSStorage) RenameKey(context.Context, string, string, string, func() error) (bool, error) {
+	return false, nil
+}
 
 // controlledKMSStorage wraps mockKMSStorage but fails Insert after failAfter successful calls.
 type controlledKMSStorage struct {
@@ -233,6 +236,9 @@ func (c *controlledKMSStorage) UnbindResource(ctx context.Context, keyID, engine
 }
 func (c *controlledKMSStorage) SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error) {
 	return c.inner.SelectBindings(ctx, keyID, engineID)
+}
+func (c *controlledKMSStorage) RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, fn func() error) (bool, error) {
+	return c.inner.RenameKey(ctx, engineID, oldKeyID, newKeyID, fn)
 }
 
 // ---------------------------------------------------------------------------

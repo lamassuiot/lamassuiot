@@ -196,6 +196,38 @@ func (db *PostgresKMSStore) UnbindResource(ctx context.Context, keyID, engineID 
 	return unbindResource(db.db.WithContext(ctx), keyID, engineID, resource)
 }
 
+// RenameKey runs under a lock shared by every rename, so KMS instances starting at once do not rename the
+// same key twice. The bindings follow the key through their foreign key, which cascades updates.
+func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (bool, error) {
+	renamed := false
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext('lamassu.kms.rename-key'))`).Error; err != nil {
+			return err
+		}
+
+		var found int64
+		if err := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", oldKeyID, engineID).Count(&found).Error; err != nil {
+			return err
+		}
+		if found == 0 {
+			return nil
+		}
+
+		if err := renameInEngine(); err != nil {
+			return err
+		}
+
+		res := tx.Exec(`UPDATE kms_keys SET key_id = ?, aliases = COALESCE(aliases, '[]'::jsonb) || ?::jsonb
+			WHERE key_id = ? AND engine_id = ?`, newKeyID, jsonStringArray(oldKeyID), oldKeyID, engineID)
+		if res.Error != nil {
+			return res.Error
+		}
+		renamed = res.RowsAffected == 1
+		return nil
+	})
+	return renamed && err == nil, err
+}
+
 func (db *PostgresKMSStore) SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error) {
 	bindings := []models.KeyBinding{}
 	tx := db.db.WithContext(ctx).Table(kmsBindingsTableName).

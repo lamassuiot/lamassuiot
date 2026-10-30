@@ -142,6 +142,31 @@ migration:
 
 On the next `helm upgrade` the Job will run automatically before any Deployment rollout. If the Job fails (exit code 1), Helm will mark the upgrade as failed and roll back.
 
+## After the Upgrade: Rename Imported CA Keys to Their Digest
+
+The KMS identifies every key by the SHA-256 of its public key (its `key_id`), and the CA records that same value for each certificate. Crypto engines before the KMS renamed the key of an imported CA to its certificate's SKI instead, and this tool registers it under that name. Until such a key is renamed to its digest, its CA cannot sign and deleting the CA does not delete the key.
+
+The KMS renames these keys when it starts with `crypto_engines.migrate_keys_format` enabled. For each key whose `key_id` is not the digest of its public key, it:
+
+1. renames the key in its crypto engine;
+2. changes its `key_id` in the KMS to the digest, keeping the old name as an alias, so anything that still refers to the key by its SKI finds it;
+3. moves its bindings along.
+
+Keys already named by their digest, keys without a private key, keys whose engine is not configured, and keys the engine also holds under their digest are left as they are and logged.
+
+**Procedure**, once, after upgrading an installation that had imported CAs before 3.7:
+
+1. Run this tool and the database migrations, as above.
+2. Start the KMS with the option enabled:
+   ```yaml
+   crypto_engines:
+     migrate_keys_format: true
+   ```
+3. Check its log: it reports each renamed key (`renamed key <SKI> in engine <engine> to <digest>`) and how many it renamed, and warns about any key it left as it was.
+4. Disable the option again. Running it again is safe: it finds nothing to rename, and finishes a rename that was interrupted.
+
+A key left as it was keeps its name until the cause in the warning is fixed and the KMS starts again with the option enabled. If the engine also holds the key under its digest, remove one of the two copies by hand first.
+
 ## Running Tests
 
 ```bash

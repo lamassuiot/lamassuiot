@@ -35,4 +35,8 @@ type KMSKeysRepo interface {
 	// UnbindResource removes the binding; deleted is false if there was none.
 	UnbindResource(ctx context.Context, keyID, engineID string, resource models.KMSBindResource) (deleted bool, err error)
 	SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error)
+	// RenameKey changes the key_id of a key in one engine, keeping the old one as an alias, and moves its
+	// bindings along. renameInEngine renames the engine copy; the key only changes if it succeeds.
+	// renamed is false, and renameInEngine is not run, if no key has the old key_id.
+	RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (renamed bool, err error)
 }

@@ -16,8 +16,10 @@ type KMSConfig struct {
 }
 
 type CryptoEngines struct {
-	LogLevel          cconfig.LogLevel             `mapstructure:"log_level"`
-	DefaultEngine     string                       `mapstructure:"default_id"`
+	LogLevel      cconfig.LogLevel `mapstructure:"log_level"`
+	DefaultEngine string           `mapstructure:"default_id"`
+	// MigrateKeysFormat renames on startup the keys whose key_id is not the digest of their public key,
+	// such as the keys of CAs imported before the KMS, in their engine and in the KMS.
 	MigrateKeysFormat bool                         `mapstructure:"migrate_keys_format"`
 	CryptoEngines     []cconfig.CryptoEngineConfig `mapstructure:"engines"`
 }
