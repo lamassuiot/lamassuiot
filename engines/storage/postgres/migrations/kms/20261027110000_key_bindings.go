@@ -21,7 +21,8 @@ func Register20261027110000KeyBindings() {
 func upKeyBindings(ctx context.Context, tx *sql.Tx) error {
 	for _, query := range []string{
 		// The resources that use each engine's copy of a key. A key with bindings cannot be deleted:
-		// the foreign key enforces it for every path, not only for the CA service.
+		// the foreign key enforces it for every path, not only for the CA service. Renaming a key
+		// carries its bindings along.
 		`CREATE TABLE key_bindings (
 			key_id        text        NOT NULL,
 			engine_id     text        NOT NULL,
@@ -30,7 +31,7 @@ func upKeyBindings(ctx context.Context, tx *sql.Tx) error {
 			created_at    timestamptz NOT NULL DEFAULT now(),
 			CONSTRAINT key_bindings_pkey PRIMARY KEY (key_id, engine_id, resource_type, resource_id),
 			CONSTRAINT key_bindings_key_fk FOREIGN KEY (key_id, engine_id)
-				REFERENCES kms_keys (key_id, engine_id) ON DELETE RESTRICT
+				REFERENCES kms_keys (key_id, engine_id) ON DELETE RESTRICT ON UPDATE CASCADE
 		)`,
 		`CREATE INDEX key_bindings_resource_idx ON key_bindings (resource_type, resource_id)`,
 	} {
