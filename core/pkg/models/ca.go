@@ -30,6 +30,7 @@ const (
 
 type Certificate struct {
 	SerialNumber        string                `json:"serial_number" gorm:"primaryKey"`
+	TenantID            string                `json:"tenant_id" gorm:"index;not null"`
 	SubjectKeyID        string                `json:"subject_key_id"`
 	AuthorityKeyID      string                `json:"authority_key_id"`
 	Metadata            map[string]any        `json:"metadata" gorm:"serializer:json"`
@@ -76,6 +77,7 @@ type IssuerCAMetadata struct {
 
 type CACertificate struct {
 	ID                      string         `json:"id"`
+	TenantID                string         `json:"tenant_id" gorm:"index;not null"`
 	Certificate             Certificate    `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
 	CertificateSerialNumber string         `json:"serial_number" gorm:"column:serial_number"`
 	Metadata                map[string]any `json:"metadata" gorm:"serializer:json"`

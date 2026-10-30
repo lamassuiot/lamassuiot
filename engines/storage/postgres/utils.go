@@ -276,6 +276,20 @@ func setTenantID(elem any, tenantID string) {
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
+
+	if v.Kind() != reflect.Struct {
+		return
+	}
+
+	setTenantIDField(v, tenantID)
+	for i := 0; i < v.NumField(); i++ {
+		if nested := v.Field(i); nested.Kind() == reflect.Struct && nested.CanSet() && !nested.IsZero() {
+			setTenantIDField(nested, tenantID)
+		}
+	}
+}
+
+func setTenantIDField(v reflect.Value, tenantID string) {
 	field := v.FieldByName(tenantIDFieldName)
 	if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
 		field.SetString(tenantID)

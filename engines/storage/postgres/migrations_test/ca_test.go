@@ -8,6 +8,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 
 	"github.com/sirupsen/logrus"
@@ -852,4 +853,57 @@ func TestMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261027100000_certificate_key_id")
 	}
+
+	MigrationTest_CA_20261030120000_backfill_default_tenant(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261030120000_backfill_default_tenant")
+	}
+
+	MigrationTest_CA_20261030130000_enforce_tenant_constraints(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261030130000_enforce_tenant_constraints")
+	}
+}
+
+func MigrationTest_CA_20261030120000_backfill_default_tenant(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	tx := con.Exec(`INSERT INTO issuance_profiles (id, name, validity_type)
+		VALUES('profile-legacy', 'Legacy profile', 'Duration')`)
+	if tx.Error != nil {
+		t.Fatalf("failed to insert an issuance profile: %v", tx.Error)
+	}
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	for _, table := range []string{"certificates", "ca_certificates", "issuance_profiles"} {
+		var total, backfilled int64
+		tx := con.Raw("SELECT count(*) FROM " + table).Scan(&total)
+		if tx.Error != nil {
+			t.Fatalf("failed to count %s rows: %v", table, tx.Error)
+		}
+		tx = con.Raw("SELECT count(*) FROM "+table+" WHERE tenant_id = ?", models.DefaultTenantID).Scan(&backfilled)
+		if tx.Error != nil {
+			t.Fatalf("failed to count backfilled %s rows: %v", table, tx.Error)
+		}
+
+		assert.NotZero(t, total, "the test needs existing %s rows before the backfill", table)
+		assert.Equal(t, total, backfilled, "every existing row of %s must belong to the default tenant", table)
+	}
+}
+
+func MigrationTest_CA_20261030130000_enforce_tenant_constraints(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+
+	tx := con.Exec(`INSERT INTO certificates (serial_number) VALUES('certificate-without-tenant')`)
+	assert.Error(t, tx.Error, "a certificate without tenant_id must be rejected")
+
+	tx = con.Exec(`INSERT INTO issuance_profiles (id, name, validity_type) VALUES('profile-without-tenant', 'No tenant', 'Duration')`)
+	assert.Error(t, tx.Error, "an issuance profile without tenant_id must be rejected")
+
+	var indexes int64
+	tx = con.Raw(`SELECT count(*) FROM pg_indexes
+		WHERE indexname IN ('certificates_tenant_id_idx', 'ca_certificates_tenant_id_idx', 'issuance_profiles_tenant_id_idx')`).Scan(&indexes)
+	if tx.Error != nil {
+		t.Fatalf("failed to read ca indexes: %v", tx.Error)
+	}
+	assert.Equal(t, int64(3), indexes, "certificates, ca_certificates and issuance_profiles must have an index on tenant_id")
 }
