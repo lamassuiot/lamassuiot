@@ -28,7 +28,7 @@ const (
 
 type Device struct {
 	ID                string                    `json:"id" gorm:"primaryKey"`
-	TenantID          string                    `json:"tenant_id" gorm:"index; not null"`
+	TenantID          string                    `json:"tenant_id" gorm:"index;not null"`
 	Tags              []string                  `json:"tags" gorm:"serializer:json"`
 	Status            DeviceStatus              `json:"status"`
 	Icon              string                    `json:"icon"`
@@ -77,7 +77,7 @@ type DeviceEvent struct {
 
 type DeviceEventRecord struct {
 	ID               string         `json:"id" gorm:"primaryKey"`
-	TenantID         string         `json:"tenant_id" gorm:"index; not null"`
+	TenantID         string         `json:"tenant_id" gorm:"index;not null"`
 	DeviceID         string         `json:"device_id"`
 	EventTS          time.Time      `json:"event_ts"`
 	EventType        string         `json:"event_type"`
