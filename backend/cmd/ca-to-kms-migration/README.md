@@ -7,7 +7,7 @@ The KMS service was introduced as an independent service in version 3.7.0 of Lam
 When upgrading from an older installation, each CA certificate of type `MANAGED` or `IMPORTED_WITH_KEY` has a private key stored in the crypto engine under its `subject_key_id`. That key has no corresponding row in the `kms_keys` table of the KMS database. As a result:
 
 - The KMS service is unaware of those keys and cannot manage, list, or bind them.
-- The `lamassu.io/kms/binded-resources` metadata — which records which CA certificates are bound to a given key — is absent.
+- The KMS does not know which CA certificates use each key, so it cannot keep a key in use from being deleted.
 
 This tool performs a one-shot, idempotent migration that reads the CA database and writes the missing records into the KMS database.
 
@@ -19,8 +19,8 @@ This tool performs a one-shot, idempotent migration that reads the CA database a
 4. For each unique key not already present in the KMS database:
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA database.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
-   - Populates `metadata["lamassu.io/kms/binded-resources"]` with the serial numbers of all CA certificates that use the key.
 5. Inserts the record into the KMS `kms_keys` table.
+6. Tries to bind the key to the serial number of every CA certificate that uses it, in the KMS `key_bindings` table. When the tool runs as the recommended pre-upgrade hook, that table does not exist yet: each bind is logged as a warning (`relation "key_bindings" does not exist`) and the run still succeeds. This is expected. The KMS migrations, which run next, bind every certificate to its key, and a key with bindings cannot be deleted.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
 
@@ -141,6 +141,31 @@ migration:
 ```
 
 On the next `helm upgrade` the Job will run automatically before any Deployment rollout. If the Job fails (exit code 1), Helm will mark the upgrade as failed and roll back.
+
+## After the Upgrade: Rename Imported CA Keys to Their Digest
+
+The KMS identifies every key by the SHA-256 of its public key (its `key_id`), and the CA records that same value for each certificate. Crypto engines before the KMS renamed the key of an imported CA to its certificate's SKI instead, and this tool registers it under that name. Until such a key is renamed to its digest, its CA cannot sign and deleting the CA does not delete the key.
+
+The KMS renames these keys when it starts with `crypto_engines.migrate_keys_format` enabled. For each key whose `key_id` is not the digest of its public key, it:
+
+1. renames the key in its crypto engine;
+2. changes its `key_id` in the KMS to the digest, keeping the old name as an alias, so anything that still refers to the key by its SKI finds it;
+3. moves its bindings along.
+
+Keys already named by their digest, keys without a private key, keys whose engine is not configured, and keys the engine also holds under their digest are left as they are and logged.
+
+**Procedure**, once, after upgrading an installation that had imported CAs before 3.7:
+
+1. Run this tool and the database migrations, as above.
+2. Start the KMS with the option enabled:
+   ```yaml
+   crypto_engines:
+     migrate_keys_format: true
+   ```
+3. Check its log: it reports each renamed key (`renamed key <SKI> in engine <engine> to <digest>`) and how many it renamed, and warns about any key it left as it was.
+4. Disable the option again. Running it again is safe: it finds nothing to rename, and finishes a rename that was interrupted.
+
+A key left as it was keeps its name until the cause in the warning is fixed and the KMS starts again with the option enabled. If the engine also holds the key under its digest, remove one of the two copies by hand first.
 
 ## Running Tests
 

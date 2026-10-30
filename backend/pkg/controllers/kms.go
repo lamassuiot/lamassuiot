@@ -27,6 +27,8 @@ func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
 		ctx.JSON(404, gin.H{"err": err.Error()})
 	case errs.ErrKeyEngineRequired, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrValidateBadRequest:
 		ctx.JSON(400, gin.H{"err": err.Error()})
+	case errs.ErrKeyInUse:
+		ctx.JSON(409, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(500, gin.H{"err": err.Error()})
 	}
@@ -420,4 +422,78 @@ func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, stats)
+}
+
+func (r *kmsHttpRoutes) GetKeyBindings(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	bindings, err := r.svc.GetKeyBindings(ctx.Request.Context(), services.GetKeyInput{Identifier: params.ID})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, bindings)
+}
+
+func (r *kmsHttpRoutes) BindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.KeyBindingBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	changed, err := r.svc.BindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   models.KMSBindResource{ResourceType: requestBody.ResourceType, ResourceID: requestBody.ResourceID},
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, resources.KeyBindingChangeResponse{Changed: changed})
+}
+
+func (r *kmsHttpRoutes) UnbindKeyResource(ctx *gin.Context) {
+	type uriParams struct {
+		ID           string `uri:"id" binding:"required"`
+		ResourceType string `uri:"resource_type" binding:"required"`
+		ResourceID   string `uri:"resource_id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	changed, err := r.svc.UnbindKeyResource(ctx.Request.Context(), services.KeyResourceBindingInput{
+		Identifier: params.ID,
+		Resource:   models.KMSBindResource{ResourceType: params.ResourceType, ResourceID: params.ResourceID},
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, resources.KeyBindingChangeResponse{Changed: changed})
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/ca"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/devicemanager"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/kms"
 )
 
 // the order of the migrations is NOT IMPORTANT. It is only necessary to register them all
@@ -16,6 +17,7 @@ func RegisterGoMigrations(dbname string) {
 		ca.Register20250915090500UpdateSkiAki()
 		ca.Register20260331120000AddCertificateExtensions()
 		ca.Register20261027100000CertificateKeyID()
+		ca.Register20261027120000BackfillCertificateIssuer()
 	case "devicemanager":
 		devicemanager.Register20250925120000RemoveSerialHyphens()
 	case "dmsmanager":
@@ -24,5 +26,8 @@ func RegisterGoMigrations(dbname string) {
 		dmsmanager.Register20260604110000ReenrollAuthSettings()
 		dmsmanager.Register20261021120000WebhookHTTPClientConfig()
 		dmsmanager.Register20261022120000ReenrollValidationCAs()
+	case "kms":
+		kms.Register20261027110000KeyBindings()
+		kms.Register20261027110200BackfillCertificateKeyBindings()
 	}
 }

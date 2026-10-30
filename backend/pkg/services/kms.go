@@ -861,17 +861,18 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 		return fmt.Errorf("key not found")
 	}
 
-	err = engineInstance.DeleteKey(ctx, key.KeyID)
+	// The engine copy is only deleted once the row is: a key bound to a resource keeps both.
+	lFunc.Debugf("deleting key %s (engine %s)", key.KeyID, key.EngineID)
+	err = svc.kmsStorage.DeleteWith(ctx, key.KeyID, key.EngineID, func() error {
+		return engineInstance.DeleteKey(ctx, key.KeyID)
+	})
+	if errors.Is(err, errs.ErrKeyInUse) {
+		lFunc.Infof("key %s (engine %s) is in use, not deleting it", key.KeyID, key.EngineID)
+		return errs.ErrKeyInUse
+	}
 	if err != nil {
 		lFunc.Errorf("delete key error: %s", err)
-		return err
-	}
-
-	lFunc.Debugf("deleting key %s (engine %s) from storage engine", key.KeyID, key.EngineID)
-	err = svc.kmsStorage.Delete(ctx, key.KeyID, key.EngineID)
-	if err != nil {
-		lFunc.Errorf("delete by ID error: %s", err)
-		return fmt.Errorf("failed to delete key from storage: %w", err)
+		return fmt.Errorf("failed to delete key: %w", err)
 	}
 
 	lFunc.Infof("key %s deleted successfully", key.KeyID)
@@ -992,4 +993,49 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 			Valid: true,
 		}, nil
 	}
+}
+
+func validBindResource(resource models.KMSBindResource) bool {
+	return resource.ResourceType != "" && resource.ResourceID != ""
+}
+
+func (svc *KMSServiceBackend) GetKeyBindings(ctx context.Context, input services.GetKeyInput) ([]models.KeyBinding, error) {
+	key, err := svc.GetKey(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	return svc.kmsStorage.SelectBindings(ctx, key.KeyID, key.EngineID)
+}
+
+func (svc *KMSServiceBackend) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	if err := kmsValidator.Struct(input); err != nil || !validBindResource(input.Resource) {
+		lFunc.Errorf("KeyResourceBindingInput struct validation error: %v", err)
+		return false, errs.ErrValidateBadRequest
+	}
+
+	key, err := svc.GetKey(ctx, services.GetKeyInput{Identifier: input.Identifier})
+	if err != nil {
+		return false, err
+	}
+
+	return svc.kmsStorage.BindResource(ctx, key.KeyID, key.EngineID, input.Resource)
+}
+
+func (svc *KMSServiceBackend) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	if err := kmsValidator.Struct(input); err != nil || !validBindResource(input.Resource) {
+		lFunc.Errorf("KeyResourceBindingInput struct validation error: %v", err)
+		return false, errs.ErrValidateBadRequest
+	}
+
+	key, err := svc.GetKey(ctx, services.GetKeyInput{Identifier: input.Identifier})
+	if err != nil {
+		return false, err
+	}
+
+	return svc.kmsStorage.UnbindResource(ctx, key.KeyID, key.EngineID, input.Resource)
 }

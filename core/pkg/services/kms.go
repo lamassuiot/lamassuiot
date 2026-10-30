@@ -26,6 +26,10 @@ type KMSService interface {
 
 	DeleteKeyByID(ctx context.Context, input GetKeyInput) error
 
+	GetKeyBindings(ctx context.Context, input GetKeyInput) ([]models.KeyBinding, error)
+	BindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
+	UnbindKeyResource(ctx context.Context, input KeyResourceBindingInput) (changed bool, err error)
+
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
 	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
 }
@@ -82,6 +86,13 @@ type ImportKeyInput struct {
 	Name       string
 	Tags       []string
 	Metadata   map[string]any
+}
+
+// KeyResourceBindingInput records, or removes, that a resource uses the key. Identifier is resolved
+// like GetKeyInput's.
+type KeyResourceBindingInput struct {
+	Identifier string                 `validate:"required"`
+	Resource   models.KMSBindResource `validate:"required"`
 }
 
 type UpdateKeyMetadataInput struct {

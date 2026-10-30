@@ -161,6 +161,16 @@ type ImportKeyBody struct {
 	Metadata   map[string]any `json:"metadata"`
 }
 
+type KeyBindingBody struct {
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+}
+
+// KeyBindingChangeResponse tells whether binding or unbinding changed the key's bindings.
+type KeyBindingChangeResponse struct {
+	Changed bool `json:"changed"`
+}
+
 // GetKeysByPublicKeyBody carries a base64-encoded PEM PUBLIC KEY.
 type GetKeysByPublicKeyBody struct {
 	PublicKey string `json:"public_key"`

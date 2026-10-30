@@ -2,6 +2,7 @@ package migrationstest
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"testing"
 	"time"
@@ -704,6 +705,8 @@ func MigrationTest_CA_20261027100000_certificate_key_id(t *testing.T, logger *lo
 	insert("key-id-empty-certificate", "''", "filesystem-1")
 	insert("key-id-garbage-certificate", "'not-a-certificate'", "filesystem-1")
 	insert("key-id-null-certificate", "NULL", "filesystem-1")
+	// A CA certificate issued by OpenSSL: its SKI is the SHA-1 of its key, not the key ID.
+	insert("key-id-openssl", "'"+base64.StdEncoding.EncodeToString([]byte(opensslCACertPEM))+"'", "filesystem-1")
 
 	ApplyMigration(t, logger, con, CADBName)
 
@@ -722,6 +725,7 @@ func MigrationTest_CA_20261027100000_certificate_key_id(t *testing.T, logger *lo
 	assert.Equal(t, "", keyID("key-id-empty-certificate"))
 	assert.Equal(t, "", keyID("key-id-garbage-certificate"))
 	assert.Equal(t, "", keyID("key-id-null-certificate"))
+	assert.Equal(t, opensslCAKeyID, keyID("key-id-openssl"), "the key ID, not the OpenSSL SKI "+opensslCASKI)
 
 	keyIDColumns := func() int64 {
 		var count int64
@@ -737,6 +741,35 @@ func MigrationTest_CA_20261027100000_certificate_key_id(t *testing.T, logger *lo
 	ApplyMigration(t, logger, con, CADBName)
 	assert.Equal(t, int64(1), keyIDColumns())
 	assert.Equal(t, "315c6949fc35bf94b92447e0319835f1427be63799a5dfdab017ac21521fc7c3", keyID("key-id-held"))
+}
+
+func MigrationTest_CA_20261027120000_backfill_certificate_issuer(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// A certificate whose issuer was stored, which must be kept.
+	err := con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, issuer_common_name)
+		SELECT 'issuer-test-kept', '{}', 'issuer-test-kept', 'x', 0, 'ACTIVE', certificate, 'RSA', 4096, 'HIGH', 'Kept', '', '', '', '', '', valid_from, valid_to, revocation_timestamp, 'Unspecified', 'MANAGED', '', 'Stored Issuer'
+		FROM certificates WHERE serial_number = '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79'`).Error
+	if err != nil {
+		t.Fatalf("failed to insert certificate with an issuer: %v", err)
+	}
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	issuer := func(serial string) string {
+		var name string
+		if err := con.Raw(`SELECT COALESCE(issuer_common_name, '') FROM certificates WHERE serial_number = ?`, serial).Scan(&name).Error; err != nil {
+			t.Fatalf("failed to read the issuer of %s: %v", serial, err)
+		}
+		return name
+	}
+
+	// Stored without issuer: filled from its self-signed certificate.
+	assert.Equal(t, "ECS-Manufacturing", issuer("37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79"))
+	assert.Equal(t, "Stored Issuer", issuer("issuer-test-kept"))
+	// Unreadable certificates are skipped rather than failing the migration.
+	assert.Equal(t, "", issuer("key-id-garbage-certificate"))
+	assert.Equal(t, "", issuer("key-id-empty-certificate"))
+	assert.Equal(t, "", issuer("key-id-null-certificate"))
 }
 
 func TestMigrations(t *testing.T) {
@@ -851,5 +884,10 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20261027100000_certificate_key_id(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261027100000_certificate_key_id")
+	}
+
+	MigrationTest_CA_20261027120000_backfill_certificate_issuer(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261027120000_backfill_certificate_issuer")
 	}
 }

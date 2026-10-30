@@ -15,6 +15,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"math/big"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -115,6 +116,7 @@ type mockKMSStorage struct {
 	inserted  []*models.Key          // records inserted during test
 	insertErr error                  // optional error returned by Insert
 	existsErr error                  // optional error returned by SelectExistsByKeyID
+	bound     []string               // "keyID@engineID/type/serial" for each binding made
 }
 
 func newMockKMSStorage() *mockKMSStorage {
@@ -168,6 +170,22 @@ func (m *mockKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key
 	return key, nil
 }
 func (m *mockKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
+func (m *mockKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {
+	return fn()
+}
+func (m *mockKMSStorage) BindResource(_ context.Context, keyID, engineID string, r models.KMSBindResource) (bool, error) {
+	m.bound = append(m.bound, kmsKeyIndex(keyID, engineID)+"/"+r.ResourceType+"/"+r.ResourceID)
+	return true, nil
+}
+func (m *mockKMSStorage) UnbindResource(context.Context, string, string, models.KMSBindResource) (bool, error) {
+	return false, nil
+}
+func (m *mockKMSStorage) SelectBindings(context.Context, string, string) ([]models.KeyBinding, error) {
+	return nil, nil
+}
+func (m *mockKMSStorage) RenameKey(context.Context, string, string, string, func() error) (bool, error) {
+	return false, nil
+}
 
 // controlledKMSStorage wraps mockKMSStorage but fails Insert after failAfter successful calls.
 type controlledKMSStorage struct {
@@ -207,6 +225,21 @@ func (c *controlledKMSStorage) Update(_ context.Context, key *models.Key) (*mode
 	return key, nil
 }
 func (c *controlledKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
+func (c *controlledKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {
+	return fn()
+}
+func (c *controlledKMSStorage) BindResource(ctx context.Context, keyID, engineID string, r models.KMSBindResource) (bool, error) {
+	return c.inner.BindResource(ctx, keyID, engineID, r)
+}
+func (c *controlledKMSStorage) UnbindResource(ctx context.Context, keyID, engineID string, r models.KMSBindResource) (bool, error) {
+	return c.inner.UnbindResource(ctx, keyID, engineID, r)
+}
+func (c *controlledKMSStorage) SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error) {
+	return c.inner.SelectBindings(ctx, keyID, engineID)
+}
+func (c *controlledKMSStorage) RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, fn func() error) (bool, error) {
+	return c.inner.RenameKey(ctx, engineID, oldKeyID, newKeyID, fn)
+}
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -596,16 +629,11 @@ func TestRunMigration_InsertsNewKey(t *testing.T) {
 		t.Error("PublicKey field mismatch")
 	}
 
-	rawBindings, ok := got.Metadata[models.KMSBindResourceKey]
-	if !ok {
-		t.Fatalf("metadata missing key %q", models.KMSBindResourceKey)
+	if _, ok := got.Metadata[models.KMSBindResourceKey]; ok {
+		t.Errorf("bindings are kept in the key_bindings table, not in the metadata: %+v", got.Metadata)
 	}
-	bindings, ok := rawBindings.([]models.KMSBindResource)
-	if !ok {
-		t.Fatalf("metadata[%q] has wrong type %T", models.KMSBindResourceKey, rawBindings)
-	}
-	if len(bindings) != 1 || bindings[0].ResourceType != "certificate" || bindings[0].ResourceID != "serial-1" {
-		t.Errorf("unexpected binded-resources: %+v", bindings)
+	if want := []string{kmsKeyIndex(entry.keyID, "engine-a") + "/certificate/serial-1"}; !reflect.DeepEqual(kms.bound, want) {
+		t.Errorf("bindings: got %v, want %v", kms.bound, want)
 	}
 }
 
@@ -721,25 +749,12 @@ func TestRunMigration_MultipleSerials_AllInBindedResources(t *testing.T) {
 	if len(kms.inserted) != 1 {
 		t.Fatal("expected exactly 1 insert")
 	}
-	rawBindings := kms.inserted[0].Metadata[models.KMSBindResourceKey]
-	bindings, ok := rawBindings.([]models.KMSBindResource)
-	if !ok {
-		t.Fatalf("wrong binding type %T", rawBindings)
-	}
-	if len(bindings) != 3 {
-		t.Errorf("expected 3 binded-resources, got %d", len(bindings))
-	}
-	bySerial := map[string]bool{}
-	for _, b := range bindings {
-		bySerial[b.ResourceID] = true
-		if b.ResourceType != "certificate" {
-			t.Errorf("unexpected resource_type %q", b.ResourceType)
-		}
-	}
+	want := []string{}
 	for _, sn := range entry.serials {
-		if !bySerial[sn] {
-			t.Errorf("serial %q missing from binded-resources", sn)
-		}
+		want = append(want, kmsKeyIndex(entry.keyID, "engine-a")+"/certificate/"+sn)
+	}
+	if !reflect.DeepEqual(kms.bound, want) {
+		t.Errorf("bindings: got %v, want %v", kms.bound, want)
 	}
 }
 

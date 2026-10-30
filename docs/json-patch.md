@@ -59,9 +59,9 @@ Standard JSON Patch requires the parent path to exist before adding a child elem
 
 **Example**:
 If `metadata` is `{}` and you send:
-`{"op": "add", "path": "/lamassu.io/kms/binded-resources/0", "value": {"id": "123"}}`
+`{"op": "add", "path": "/example.com/owners/0", "value": {"id": "123"}}`
 
-The server will automatically create the `lamassu.io/kms` object and the `binded-resources` array.
+The server will automatically create the `example.com` object and the `owners` array.
 
 ---
 

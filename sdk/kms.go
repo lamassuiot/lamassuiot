@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http"
+	"net/url"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -164,7 +165,10 @@ func (cli *httpKMSClient) UpdateKeyTags(ctx context.Context, input services.Upda
 }
 
 func (cli *httpKMSClient) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
-	err := cli.delete(ctx, "/v1/keys/"+input.Identifier, map[int][]error{})
+	err := cli.delete(ctx, "/v1/keys/"+input.Identifier, map[int][]error{
+		404: {errs.ErrKeyNotFound},
+		409: {errs.ErrKeyInUse},
+	})
 	if err != nil {
 		return err
 	}
@@ -197,4 +201,30 @@ func (cli *httpKMSClient) VerifySignature(ctx context.Context, input services.Ve
 	}
 
 	return response, nil
+}
+
+var keyBindingErrors = map[int][]error{
+	400: {errs.ErrValidateBadRequest, errs.ErrKeyEngineRequired},
+	404: {errs.ErrKeyNotFound},
+}
+
+func (cli *httpKMSClient) GetKeyBindings(ctx context.Context, input services.GetKeyInput) ([]models.KeyBinding, error) {
+	return cli.get[[]models.KeyBinding](ctx, "/v1/keys/"+input.Identifier+"/bindings", nil, keyBindingErrors)
+}
+
+func (cli *httpKMSClient) BindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	response, err := cli.post[resources.KeyBindingChangeResponse](ctx, "/v1/keys/"+input.Identifier+"/bindings", resources.KeyBindingBody{
+		ResourceType: input.Resource.ResourceType,
+		ResourceID:   input.Resource.ResourceID,
+	}, keyBindingErrors)
+	return response.Changed, err
+}
+
+func (cli *httpKMSClient) UnbindKeyResource(ctx context.Context, input services.KeyResourceBindingInput) (bool, error) {
+	if input.Resource.ResourceType == "" || input.Resource.ResourceID == "" {
+		return false, errs.ErrValidateBadRequest
+	}
+	path := "/v1/keys/" + input.Identifier + "/bindings/" + url.PathEscape(input.Resource.ResourceType) + "/" + url.PathEscape(input.Resource.ResourceID)
+	response, err := cli.deleteWithBody[resources.KeyBindingChangeResponse](ctx, path, nil, keyBindingErrors)
+	return response.Changed, err
 }

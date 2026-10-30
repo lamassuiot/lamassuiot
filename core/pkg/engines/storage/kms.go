@@ -23,5 +23,20 @@ type KMSKeysRepo interface {
 
 	Insert(ctx context.Context, key *models.Key) (*models.Key, error)
 	Update(ctx context.Context, key *models.Key) (*models.Key, error)
+	// Delete fails with errs.ErrKeyInUse while resources are bound to the key.
 	Delete(ctx context.Context, keyID, engineID string) error
+	// DeleteWith deletes the key and runs fn in the same transaction, after the row is deleted: fn only
+	// runs for a key no resource is bound to, and an fn error keeps the row.
+	DeleteWith(ctx context.Context, keyID, engineID string, fn func() error) error
+
+	// BindResource records that a resource uses the key; created is false if it already did. It fails
+	// with errs.ErrKeyNotFound when the key does not exist.
+	BindResource(ctx context.Context, keyID, engineID string, resource models.KMSBindResource) (created bool, err error)
+	// UnbindResource removes the binding; deleted is false if there was none.
+	UnbindResource(ctx context.Context, keyID, engineID string, resource models.KMSBindResource) (deleted bool, err error)
+	SelectBindings(ctx context.Context, keyID, engineID string) ([]models.KeyBinding, error)
+	// RenameKey changes the key_id of a key in one engine, keeping the old one as an alias, and moves its
+	// bindings along. renameInEngine renames the engine copy; the key only changes if it succeeds.
+	// renamed is false, and renameInEngine is not run, if no key has the old key_id.
+	RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (renamed bool, err error)
 }

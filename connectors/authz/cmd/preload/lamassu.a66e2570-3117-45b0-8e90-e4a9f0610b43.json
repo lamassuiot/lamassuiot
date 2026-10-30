@@ -13,6 +13,7 @@
         "delete",
         "sign",
         "create",
+        "manage-bindings",
         "ui"
       ],
       "relations": [],

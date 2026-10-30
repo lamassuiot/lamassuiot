@@ -280,7 +280,8 @@
       "read",
       "update",
       "delete",
-      "sign"
+      "sign",
+      "manage-bindings"
     ],
     "global_actions": [
       "create",
