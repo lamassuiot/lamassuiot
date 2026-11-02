@@ -162,18 +162,25 @@ type ImportKeyBody struct {
 }
 
 type CreateUpdateIssuanceProfileBody struct {
-	Name                   string                                     `json:"name"`
-	Description            string                                     `json:"description"`
-	Validity               models.Validity                            `json:"validity"`
-	SignAsCA               bool                                       `json:"sign_as_ca"`
-	HonorKeyUsage          bool                                       `json:"honor_key_usage"`
-	KeyUsage               models.X509KeyUsage                        `json:"key_usage"`
-	HonorExtendedKeyUsages bool                                       `json:"honor_extended_key_usages"`
-	ExtendedKeyUsages      []models.X509ExtKeyUsage                   `json:"extended_key_usages"`
-	HonorSubject           bool                                       `json:"honor_subject"`
-	Subject                models.Subject                             `json:"subject"`
-	HonorExtensions        bool                                       `json:"honor_extensions"`
-	CryptoEnforcement      CreateIssuanceProfileCryptoEnforcementBody `json:"crypto_enforcement"`
+	Name                   string                                      `json:"name"`
+	Description            string                                      `json:"description"`
+	Validity               models.Validity                             `json:"validity"`
+	SignAsCA               bool                                        `json:"sign_as_ca"`
+	HonorKeyUsage          bool                                        `json:"honor_key_usage"`
+	KeyUsage               models.X509KeyUsage                         `json:"key_usage"`
+	HonorExtendedKeyUsages bool                                        `json:"honor_extended_key_usages"`
+	ExtendedKeyUsages      []models.X509ExtKeyUsage                    `json:"extended_key_usages"`
+	HonorSubject           bool                                        `json:"honor_subject"`
+	Subject                models.Subject                              `json:"subject"`
+	HonorExtensions        bool                                        `json:"honor_extensions"`
+	CryptoEnforcement      CreateIssuanceProfileCryptoEnforcementBody  `json:"crypto_enforcement"`
+	RelatedCertificate     CreateIssuanceProfileRelatedCertificateBody `json:"related_certificate"`
+}
+
+type CreateIssuanceProfileRelatedCertificateBody struct {
+	Enabled      bool                `json:"enabled"`
+	AllowedHosts []string            `json:"allowed_hosts"`
+	MaxAge       models.TimeDuration `json:"max_age,omitempty"`
 }
 
 type CreateIssuanceProfileCryptoEnforcementBody struct {

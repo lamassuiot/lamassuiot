@@ -1484,6 +1484,8 @@ components:
           type: boolean
         crypto_enforcement:
           $ref: '#/components/schemas/CreateIssuanceProfileCryptoEnforcementBody'
+        related_certificate:
+          $ref: '#/components/schemas/CreateIssuanceProfileRelatedCertificateBody'
 
     CreateUpdateIssuanceProfileBody:
       allOf:
@@ -1506,6 +1508,25 @@ components:
           type: array
           items:
             type: integer
+
+    CreateIssuanceProfileRelatedCertificateBody:
+      type: object
+      description: >-
+        RFC 9763 relatedCertRequest handling. When enabled, CSRs carrying the attribute are issued
+        a certificate bound to the related certificate; when disabled such CSRs are rejected.
+        Whoever can define a profile (stored or inline) is trusted to set allowed_hosts, since the
+        server fetches related certificates from those hosts.
+      properties:
+        enabled:
+          type: boolean
+        allowed_hosts:
+          type: array
+          description: Hosts from which http(s) related certificate URIs may be retrieved. data URIs are always accepted when enabled.
+          items:
+            type: string
+        max_age:
+          type: string
+          description: Maximum age of the relatedCertRequest attribute (e.g. "5m"). Defaults to 5m when empty.
 
     CAStats:
       type: object

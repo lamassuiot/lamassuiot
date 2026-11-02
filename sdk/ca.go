@@ -522,6 +522,11 @@ func (cli *httpCAClient) CreateIssuanceProfile(ctx context.Context, input servic
 			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
 			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
 		},
+		RelatedCertificate: resources.CreateIssuanceProfileRelatedCertificateBody{
+			Enabled:      input.Profile.RelatedCertificate.Enabled,
+			AllowedHosts: input.Profile.RelatedCertificate.AllowedHosts,
+			MaxAge:       input.Profile.RelatedCertificate.MaxAge,
+		},
 	}, map[int][]error{
 		400: {
 			errs.ErrValidateBadRequest,
@@ -553,6 +558,11 @@ func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input servic
 			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
 			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
 			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
+		},
+		RelatedCertificate: resources.CreateIssuanceProfileRelatedCertificateBody{
+			Enabled:      input.Profile.RelatedCertificate.Enabled,
+			AllowedHosts: input.Profile.RelatedCertificate.AllowedHosts,
+			MaxAge:       input.Profile.RelatedCertificate.MaxAge,
 		},
 	}, map[int][]error{
 		400: {
