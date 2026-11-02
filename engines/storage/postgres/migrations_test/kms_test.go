@@ -1,10 +1,13 @@
 package migrationstest
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/sirupsen/logrus"
@@ -125,4 +128,69 @@ func TestKMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260909084500_kms_key_composite_pk")
 	}
+
+	migrationTest_KMS_20261030140000_backfill_default_tenant(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261030140000_backfill_default_tenant")
+	}
+
+	migrationTest_KMS_20261030150000_enforce_tenant_constraints(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261030150000_enforce_tenant_constraints")
+	}
+}
+
+func migrationTest_KMS_20261030140000_backfill_default_tenant(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, kmsDBName)
+
+	var total, backfilled int64
+	tx := con.Raw("SELECT count(*) FROM kms_keys").Scan(&total)
+	if tx.Error != nil {
+		t.Fatalf("failed to count kms_keys rows: %v", tx.Error)
+	}
+	tx = con.Raw("SELECT count(*) FROM kms_keys WHERE tenant_id = ?", models.DefaultTenantID).Scan(&backfilled)
+	if tx.Error != nil {
+		t.Fatalf("failed to count backfilled kms_keys rows: %v", tx.Error)
+	}
+
+	assert.NotZero(t, total, "the test needs existing kms_keys rows before the backfill")
+	assert.Equal(t, total, backfilled, "every existing key must belong to the default tenant")
+}
+
+func migrationTest_KMS_20261030150000_enforce_tenant_constraints(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, kmsDBName)
+
+	insertKey := func(tenantID any) error {
+		return con.Exec(`INSERT INTO kms_keys
+			(key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, has_private_key, tenant_id)
+			VALUES('abc123', '{}', 'MyKey', 'RSA', 2048, 'pub', '2024-11-25 10:46:28.914', 'online-1', false, ?)`, tenantID).Error
+	}
+
+	assert.Error(t, insertKey(nil), "a key without tenant_id must be rejected")
+	assert.NoError(t, insertKey("tenant-b"), "the same key in the same engine must be storable for another tenant")
+	assert.Error(t, insertKey("tenant-b"), "a tenant cannot store the same key twice in one engine")
+
+	var pkCols string
+	tx := con.Raw(`
+		SELECT string_agg(a.attname, ',' ORDER BY k.ord)
+		FROM pg_constraint con
+		JOIN pg_class c ON c.oid = con.conrelid
+		JOIN unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+		JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+		WHERE c.relname = 'kms_keys' AND con.contype = 'p'`).Scan(&pkCols)
+	if tx.Error != nil {
+		t.Fatalf("failed to read primary key columns: %v", tx.Error)
+	}
+	assert.Equal(t, "tenant_id,key_id,engine_id", pkCols)
+
+	var indexes int64
+	tx = con.Raw("SELECT count(*) FROM pg_indexes WHERE tablename = 'kms_keys' AND indexname = 'kms_keys_tenant_id_idx'").Scan(&indexes)
+	if tx.Error != nil {
+		t.Fatalf("failed to read kms_keys indexes: %v", tx.Error)
+	}
+	assert.Equal(t, int64(1), indexes, "kms_keys must have an index on tenant_id")
+
+	m := postgres.NewMigrator(logger, con)
+	_, err := m.Goose.ApplyVersion(context.Background(), 20261030150000, false)
+	assert.Error(t, err, "the rollback must refuse keys held by more than one tenant")
 }

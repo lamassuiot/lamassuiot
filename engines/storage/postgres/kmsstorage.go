@@ -64,8 +64,13 @@ func (db *PostgresKMSStore) SelectAll(ctx context.Context, req storage.StorageLi
 // engines at once. DBQuerier addresses rows by a single column, so the composite-key
 // operations below build their own WHERE clauses instead of going through it.
 func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, keyID, engineID string) (bool, *models.Key, error) {
+	q, _, _, err := db.tenantTable(ctx)
+	if err != nil {
+		return false, nil, err
+	}
+
 	var elem models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("key_id = ? AND engine_id = ?", keyID, engineID).Limit(1).Find(&elem)
+	tx := q.Where("key_id = ? AND engine_id = ?", keyID, engineID).Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -78,8 +83,13 @@ func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, keyID, engi
 }
 
 func (db *PostgresKMSStore) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
+	q, _, _, err := db.tenantTable(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	var keys []*models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("key_id = ?", keyID).Order("engine_id").Find(&keys)
+	tx := q.Where("key_id = ?", keyID).Order("engine_id").Find(&keys)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -93,10 +103,13 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 }
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
+	q, _, _, err := db.tenantTable(ctx)
+	if err != nil {
+		return false, nil, err
+	}
+
 	var elem models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).
-		Where("aliases @> ?::jsonb", jsonStringArray(alias)).
-		Limit(1).Find(&elem)
+	tx := q.Where("aliases @> ?::jsonb", jsonStringArray(alias)).Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -113,8 +126,16 @@ func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	tx := db.querier.Session(&gorm.Session{FullSaveAssociations: true}).Table(kmsTableName).WithContext(ctx).
-		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Save(kmsKey)
+	q, tenantID, scoped, err := db.tenantTable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scoped {
+		setTenantID(kmsKey, tenantID)
+	}
+
+	tx := q.Session(&gorm.Session{FullSaveAssociations: true}).
+		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Select("*").Updates(kmsKey)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -127,8 +148,12 @@ func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) error {
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).
-		Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
+	q, _, _, err := db.tenantTable(ctx)
+	if err != nil {
+		return err
+	}
+
+	tx := q.Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -138,4 +163,18 @@ func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) 
 	}
 
 	return nil
+}
+
+func (db *PostgresKMSStore) tenantTable(ctx context.Context) (*gorm.DB, string, bool, error) {
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	q := db.querier.Table(kmsTableName).WithContext(ctx)
+	if scoped {
+		q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
+	}
+
+	return q, tenantID, scoped, nil
 }
