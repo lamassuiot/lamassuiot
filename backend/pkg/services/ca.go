@@ -1266,7 +1266,6 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 	return svc.revokeCertificatesIssuedByCA(ctx, ca, lFunc)
 }
 
-// deleteCAPrivateKey deletes the private key associated with a CA from its crypto engine
 func certificateKeyBinding(cert *models.Certificate) models.KMSBindResource {
 	return models.KMSBindResource{ResourceType: models.KMSBindResourceTypeCertificate, ResourceID: cert.SerialNumber}
 }
