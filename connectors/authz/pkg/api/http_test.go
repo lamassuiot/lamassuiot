@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -172,9 +173,10 @@ func TestRunHTTPRouterServesHealthAndOpenAPI(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := cconfig.HttpServer{ListenAddress: "127.0.0.1", Port: 0, HealthCheckLogging: false}
 	info := models.APIServiceInfo{Version: "v4.2.1"}
-	port, err := runHTTPRouter(logrus.NewEntry(logrus.New()), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), cfg, info, []byte("openapi: 3.0.0\ninfo:\n  version: template\n"))
+	port, shutdown, err := runHTTPRouterWithShutdown(logrus.NewEntry(logrus.New()), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), cfg, info, []byte("openapi: 3.0.0\ninfo:\n  version: template\n"))
 	require.NoError(t, err)
 	require.Positive(t, port)
+	t.Cleanup(shutdown)
 
 	client := &http.Client{Timeout: time.Second}
 	health, err := client.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/health")
@@ -202,4 +204,18 @@ func TestRunHTTPRouterRejectsInvalidHTTPSCredentials(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, -1, port)
 	require.ErrorContains(t, err, "load HTTPS server certificate and key")
+}
+
+func TestRunHTTPRouterRejectsOccupiedAddress(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer occupied.Close()
+
+	cfg := cconfig.HttpServer{
+		ListenAddress: "127.0.0.1",
+		Port:          occupied.Addr().(*net.TCPAddr).Port,
+	}
+	port, err := runHTTPRouter(logrus.NewEntry(logrus.New()), http.NewServeMux(), cfg, models.APIServiceInfo{}, nil)
+	require.Error(t, err)
+	require.Equal(t, -1, port)
 }

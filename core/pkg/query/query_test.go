@@ -52,11 +52,12 @@ func TestParseFilterOperands(t *testing.T) {
 		}
 	}
 	require.Equal(t, resources.UnspecifiedFilter, parseFilterOperand("unknown", resources.StringFilterFieldType))
+	require.Equal(t, resources.UnspecifiedFilter, parseFilterOperand("unknown", resources.StringArrayFilterFieldType))
 }
 
 func TestJSONPathValidation(t *testing.T) {
 	require.True(t, isValidJsonPath(`$.items[*] ? (@.name == "value")`))
-	for _, path := range []string{"", "items", "$.a]", "$.a[", "$.a(", "$.a)", "$.a;drop", "$.a...", "$.a===", "$.a&&&", "$.a|||", "$.a💥", strings.Repeat("a", 501)} {
+	for _, path := range []string{"", "items", "$.a]", "$.a[", "$.a(", "$.a)", "$.a;drop", "$.a...", "$.a===", "$.a&&&", "$.a|||", "$.a💥", "$" + strings.Repeat("a", 500)} {
 		require.False(t, isValidJsonPath(path), path)
 	}
 }
@@ -98,6 +99,8 @@ func TestConvertDeviceGroupCriteriaAndResponse(t *testing.T) {
 	require.Len(t, got, 1)
 	_, err = ConvertDeviceGroupCriteria([]resources.DeviceGroupFilterOptionRequest{{Field: "missing", Operand: "eq"}}, testFields)
 	require.Error(t, err)
+	require.Equal(t, "invalid filter field 'missing' at criteria index 0", (&InvalidFilterFieldError{Field: "missing", Index: 0}).Error())
+	require.Equal(t, "invalid operand 'bad' for field 'status' at criteria index 1", (&InvalidOperandError{Field: "status", Operand: "bad", Index: 1}).Error())
 	_, err = ConvertDeviceGroupCriteria([]resources.DeviceGroupFilterOptionRequest{{Field: "status", Operand: "bad"}}, testFields)
 	require.Error(t, err)
 

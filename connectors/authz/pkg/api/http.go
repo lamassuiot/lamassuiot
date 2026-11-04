@@ -147,6 +147,11 @@ func injectVersionIntoOpenAPI(openAPI []byte, version string) []byte {
 }
 
 func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpServer, info models.APIServiceInfo, openAPI []byte) (int, error) {
+	port, _, err := runHTTPRouterWithShutdown(logger, router, cfg, info, openAPI)
+	return port, err
+}
+
+func runHTTPRouterWithShutdown(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpServer, info models.APIServiceInfo, openAPI []byte) (int, func(), error) {
 	mux := http.NewServeMux()
 	mux.Handle("/", router)
 	mainLogger := logger
@@ -170,7 +175,7 @@ func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpSe
 	if cfg.Protocol == cconfig.HTTPS {
 		certificate, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
-			return -1, fmt.Errorf("load HTTPS server certificate and key: %w", err)
+			return -1, nil, fmt.Errorf("load HTTPS server certificate and key: %w", err)
 		}
 
 		if server.TLSConfig == nil {
@@ -183,7 +188,7 @@ func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpSe
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return -1, err
+		return -1, nil, err
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	var startup sync.WaitGroup
@@ -209,10 +214,15 @@ func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpSe
 
 	select {
 	case serveErr := <-serverErr:
-		return -1, serveErr
+		return -1, nil, serveErr
 	case <-readyContext.Done():
 		logger.Infof("HTTP server ready to accept requests")
 	}
 
-	return port, nil
+	shutdown := func() {
+		shutdownContext, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
+		defer shutdownCancel()
+		_ = server.Shutdown(shutdownContext)
+	}
+	return port, shutdown, nil
 }

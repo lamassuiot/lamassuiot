@@ -65,9 +65,28 @@ func TestEventBusConstructorsUseRegisteredEngine(t *testing.T) {
 	publisher, err := NewEventBusPublisher(conf, "service", logrus.NewEntry(logrus.New()))
 	require.NoError(t, err)
 	require.NotNil(t, publisher)
+
+	coreeventbus.RegisterEventBusEngine("test-pubsub-error", func(string, any, string, *logrus.Entry) (coreeventbus.EventBusEngine, error) {
+		return &errorEngine{}, nil
+	})
+	errorConf := cconfig.EventBusEngine{Provider: "test-pubsub-error"}
+	_, err = NewEventBusSubscriber(errorConf, "service", logrus.NewEntry(logrus.New()))
+	require.Error(t, err)
+	_, err = NewEventBusPublisher(errorConf, "service", logrus.NewEntry(logrus.New()))
+	require.Error(t, err)
 }
 
 type testEngine struct{}
 
 func (*testEngine) Subscriber() (message.Subscriber, error) { return nil, nil }
 func (*testEngine) Publisher() (message.Publisher, error)   { return &testPublisher{}, nil }
+
+type errorEngine struct{}
+
+func (*errorEngine) Subscriber() (message.Subscriber, error) {
+	return nil, errors.New("subscriber failed")
+}
+
+func (*errorEngine) Publisher() (message.Publisher, error) {
+	return nil, errors.New("publisher failed")
+}
