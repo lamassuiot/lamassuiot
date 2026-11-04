@@ -20,73 +20,67 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 
 	if len(r.URL.RawQuery) > 0 {
 		values := r.URL.Query()
-		for k, v := range values {
-			switch k {
-			case "sort_by":
-				value := v[len(v)-1] //only get last
-				sortQueryParam := value
-				sortField := strings.Trim(sortQueryParam, " ")
-
-				if before, after, ok := strings.Cut(sortField, "[jsonpath]"); ok {
-					fieldName := before
-					jsonPathExpr := after
-
-					if fieldType, exists := filterFieldMap[fieldName]; exists && fieldType == resources.JsonFilterFieldType {
-						// Validate JSONPath expression to prevent SQL injection
-						// If invalid, silently ignore the sort parameter (security measure)
-						if isValidJsonPath(jsonPathExpr) {
-							// Additional check for sorting: Only allow simple dot-separated paths
-							// Complex expressions with filters, comparisons, etc. are not supported for sorting
-							if isSimpleJsonPath(jsonPathExpr) {
-								queryParams.Sort.SortField = fieldName
-								queryParams.Sort.JsonPathExpr = jsonPathExpr
-							}
-						}
-					}
-				} else {
-					_, exists := filterFieldMap[sortField]
-					if exists {
-						queryParams.Sort.SortField = sortField
-					}
-				}
-
-			case "sort_mode":
-				value := v[len(v)-1] //only get last
-				sortQueryParam := value
-				sortMode := resources.SortModeAsc
-
-				if sortQueryParam == "desc" {
-					sortMode = resources.SortModeDesc
-				}
-
-				queryParams.Sort.SortMode = sortMode
-
-			case "page_size":
-				value := v[len(v)-1] //only get last
-				pageS, err := strconv.Atoi(value)
-				if err == nil {
-					queryParams.PageSize = min(pageS, resources.MaxPageSize)
-				}
-
-			case "bookmark":
-				value := v[len(v)-1] //only get last
-				queryParams.NextBookmark = value
-
-			case "filter":
-				for _, value := range v {
-					filter, err := parseFilterValue(value, filterFieldMap)
-					if err != nil {
-						return nil, err
-					}
-					if filter != nil {
-						queryParams.Filters = append(queryParams.Filters, *filter)
-					}
-				}
+		for key, values := range values {
+			if err := applyQueryParameter(&queryParams, key, values, filterFieldMap); err != nil {
+				return nil, err
 			}
 		}
 	}
 
 	return &queryParams, nil
+}
+
+func applyQueryParameter(queryParams *resources.QueryParameters, key string, values []string, filterFieldMap map[string]resources.FilterFieldType) error {
+	value := values[len(values)-1]
+	switch key {
+	case "sort_by":
+		applySortParameter(&queryParams.Sort, value, filterFieldMap)
+	case "sort_mode":
+		queryParams.Sort.SortMode = resources.SortModeAsc
+		if value == "desc" {
+			queryParams.Sort.SortMode = resources.SortModeDesc
+		}
+	case "page_size":
+		if pageSize, err := strconv.Atoi(value); err == nil {
+			queryParams.PageSize = min(pageSize, resources.MaxPageSize)
+		}
+	case "bookmark":
+		queryParams.NextBookmark = value
+	case "filter":
+		return appendFilterParameters(queryParams, values, filterFieldMap)
+	}
+	return nil
+}
+
+func applySortParameter(sort *resources.SortOptions, value string, filterFieldMap map[string]resources.FilterFieldType) {
+	sortField := strings.Trim(value, " ")
+	fieldName, jsonPathExpr, hasJSONPath := strings.Cut(sortField, "[jsonpath]")
+	if !hasJSONPath {
+		if _, exists := filterFieldMap[sortField]; exists {
+			sort.SortField = sortField
+		}
+		return
+	}
+	fieldType, exists := filterFieldMap[fieldName]
+	if !exists || fieldType != resources.JsonFilterFieldType ||
+		!isValidJsonPath(jsonPathExpr) || !isSimpleJsonPath(jsonPathExpr) {
+		return
+	}
+	sort.SortField = fieldName
+	sort.JsonPathExpr = jsonPathExpr
+}
+
+func appendFilterParameters(queryParams *resources.QueryParameters, values []string, filterFieldMap map[string]resources.FilterFieldType) error {
+	for _, value := range values {
+		filter, err := parseFilterValue(value, filterFieldMap)
+		if err != nil {
+			return err
+		}
+		if filter != nil {
+			queryParams.Filters = append(queryParams.Filters, *filter)
+		}
+	}
+	return nil
 }
 
 // isValidJsonPath validates a JSONPath expression to prevent SQL injection

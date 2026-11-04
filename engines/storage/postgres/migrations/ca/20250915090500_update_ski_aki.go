@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 
 	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
@@ -19,7 +18,7 @@ func Register20250915090500UpdateSkiAki() {
 func upUpdateSkiAki(ctx context.Context, tx *sql.Tx) error {
 	// This code is executed when the migration is applied.
 
-	logger := chelpers.SetupLogger("info", "CA", "Migrations")
+	logger := helpers.SetupLogger("info", "CA", "Migrations")
 
 	// 1. Get all CA certificates of type IMPORTED or EXTERNAL
 	rows, err := tx.QueryContext(ctx, `
