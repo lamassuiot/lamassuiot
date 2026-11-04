@@ -6,22 +6,22 @@ import (
 
 	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	coreeventpub "github.com/lamassuiot/lamassuiot/v4/core/pkg/eventpub"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
-	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
 )
 
 type policyEventPublisher struct {
 	next service.PolicyService
-	pub  beventpub.ICloudEventPublisher
+	pub  coreeventpub.ICloudEventPublisher
 }
 
 // NewPolicyEventPublisher returns a middleware that publishes cloud events for
 // mutating policy operations when they succeed.
-func NewPolicyEventPublisher(pub beventpub.ICloudEventPublisher) func(service.PolicyService) service.PolicyService {
+func NewPolicyEventPublisher(pub coreeventpub.ICloudEventPublisher) func(service.PolicyService) service.PolicyService {
 	return func(next service.PolicyService) service.PolicyService {
 		return &policyEventPublisher{
 			next: next,
-			pub:  beventpub.NewEventPublisherWithSourceMiddleware(pub, authzmodels.AuthzSource),
+			pub:  coreeventpub.NewEventPublisherWithSourceMiddleware(pub, authzmodels.AuthzSource),
 		}
 	}
 }
@@ -69,4 +69,3 @@ func (p *policyEventPublisher) ListPolicies(ctx context.Context, queryParams *re
 func (p *policyEventPublisher) SearchPolicies(ctx context.Context, query string) ([]*authzmodels.Policy, error) {
 	return p.next.SearchPolicies(ctx, query)
 }
-

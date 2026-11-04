@@ -7,23 +7,23 @@ import (
 	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
 	core "github.com/lamassuiot/lamassuiot/v4/core"
+	coreeventpub "github.com/lamassuiot/lamassuiot/v4/core/pkg/eventpub"
 	coremodels "github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
-	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
 )
 
 type principalEventPublisher struct {
 	next service.PrincipalService
-	pub  beventpub.ICloudEventPublisher
+	pub  coreeventpub.ICloudEventPublisher
 }
 
 // NewPrincipalEventPublisher returns a middleware that publishes cloud events for
 // mutating principal operations when they succeed.
-func NewPrincipalEventPublisher(pub beventpub.ICloudEventPublisher) func(service.PrincipalService) service.PrincipalService {
+func NewPrincipalEventPublisher(pub coreeventpub.ICloudEventPublisher) func(service.PrincipalService) service.PrincipalService {
 	return func(next service.PrincipalService) service.PrincipalService {
 		return &principalEventPublisher{
 			next: next,
-			pub:  beventpub.NewEventPublisherWithSourceMiddleware(pub, authzmodels.AuthzSource),
+			pub:  coreeventpub.NewEventPublisherWithSourceMiddleware(pub, authzmodels.AuthzSource),
 		}
 	}
 }

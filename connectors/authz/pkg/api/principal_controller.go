@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/query"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
@@ -72,7 +72,7 @@ func (ctrl *PrincipalController) GetPrincipal(c *gin.Context) {
 
 // ListPrincipals godoc
 func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
-	queryParams, err := controllers.FilterQuery(c.Request, PrincipalFilterableFields)
+	queryParams, err := query.FilterQuery(c.Request, PrincipalFilterableFields)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error:   "Invalid filter",
@@ -207,7 +207,7 @@ func (ctrl *PrincipalController) RevokePolicy(c *gin.Context) {
 func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 	id := c.Param("id")
 
-	queryParams, err := controllers.FilterQuery(c.Request, PrincipalPolicyFilterableFields)
+	queryParams, err := query.FilterQuery(c.Request, PrincipalPolicyFilterableFields)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error:   "Invalid filter",

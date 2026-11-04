@@ -5,24 +5,24 @@ import (
 
 	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	coreaudit "github.com/lamassuiot/lamassuiot/v4/core/pkg/audit"
+	coreeventpub "github.com/lamassuiot/lamassuiot/v4/core/pkg/eventpub"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
-	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
-	baudit "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
 )
 
 type principalAuditPublisher struct {
 	next     service.PrincipalService
-	auditPub baudit.AuditPublisher
+	auditPub coreaudit.AuditPublisher
 }
 
 // NewPrincipalAuditPublisher wraps a PrincipalService and publishes audit records for
 // every mutating call (success or failure).
-func NewPrincipalAuditPublisher(audit baudit.AuditPublisher) func(service.PrincipalService) service.PrincipalService {
+func NewPrincipalAuditPublisher(audit coreaudit.AuditPublisher) func(service.PrincipalService) service.PrincipalService {
 	return func(next service.PrincipalService) service.PrincipalService {
 		return &principalAuditPublisher{
 			next: next,
-			auditPub: baudit.AuditPublisher{
-				ICloudEventPublisher: beventpub.NewEventPublisherWithSourceMiddleware(audit, authzmodels.AuthzSource),
+			auditPub: coreaudit.AuditPublisher{
+				ICloudEventPublisher: coreeventpub.NewEventPublisherWithSourceMiddleware(audit, authzmodels.AuthzSource),
 			},
 		}
 	}

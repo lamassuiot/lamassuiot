@@ -17,11 +17,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
 	authzgorm "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gorm"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
-	bauditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
-	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
+	coreauditpub "github.com/lamassuiot/lamassuiot/v4/core/pkg/audit"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/eventbus"
+	coreeventpub "github.com/lamassuiot/lamassuiot/v4/core/pkg/eventpub"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
@@ -64,9 +63,9 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 			return nil, nil, nil, nil, -1, fmt.Errorf("could not create Event Bus publisher: %w", err)
 		}
 
-		cePub := &beventpub.CloudEventPublisher{Publisher: pub, ServiceID: serviceID, Logger: lMessaging}
-		auditCePub := &beventpub.CloudEventPublisher{Publisher: pub, ServiceID: serviceID, Logger: lAudit}
-		auditPub := *bauditpub.NewAuditPublisher(auditCePub)
+		cePub := &coreeventpub.CloudEventPublisher{Publisher: pub, ServiceID: serviceID, Logger: lMessaging}
+		auditCePub := &coreeventpub.CloudEventPublisher{Publisher: pub, ServiceID: serviceID, Logger: lAudit}
+		auditPub := *coreauditpub.NewAuditPublisher(auditCePub)
 
 		principalSvc = authzmw_eventpub.NewPrincipalEventPublisher(cePub)(principalManager)
 		principalSvc = authzmw_audit.NewPrincipalAuditPublisher(auditPub)(principalSvc)
@@ -77,7 +76,7 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 		lMessaging.Infof("Event Bus publisher enabled")
 	}
 
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := newGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	NewAuthzRoutes(httpGrp, authzEngine, principalSvc, eng, policySvc, resolver, lHttp)
 
@@ -86,7 +85,7 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 		openApiContent = specs.Authz
 	}
 
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
+	port, err := runHTTPRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, nil, nil, nil, -1, fmt.Errorf("failed to start Authz HTTP server: %w", err)
 	}

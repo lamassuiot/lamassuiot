@@ -1,0 +1,216 @@
+package api
+
+import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	basiclogger "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/basiclogger"
+	headerextractors "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/headerextractors"
+	identityextractors "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/identityextractors"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/utils/gindump"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"gopkg.in/yaml.v3"
+)
+
+const httpServerTimeout = 10 * time.Second
+
+func newGinEngine(logger *logrus.Entry) *gin.Engine {
+	gin.ForceConsoleColor()
+	gin.DebugPrintRouteFunc = func(method, path, handler string, count int) { logger.Debugf("Endpoint: %-6s %s", method, path) }
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowAllOrigins = true
+	corsConfig.AllowHeaders = []string{"*"}
+	router := gin.New()
+	router.Use(
+		cors.New(corsConfig),
+		otelgin.Middleware("gin-server"),
+		headerextractors.RequestMetadataToContextMiddleware(logger),
+		identityextractors.RequestMetadataToContextMiddleware(logger),
+		basiclogger.UseLogger(logger),
+		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
+			logger.Trace(dumpStr)
+		}),
+		gin.Recovery(),
+	)
+	return router
+}
+
+func serverTLSConfig(logger *logrus.Entry, authentication cconfig.HttpServerAuthentication) *tls.Config {
+	if !authentication.MutualTLS.Enabled {
+		return nil
+	}
+
+	clientCAs := x509.NewCertPool()
+	caCert, err := helpers.ReadCertificateFromFile(authentication.MutualTLS.CACertificateFile)
+	if err != nil {
+		logger.Warnf("could not load CA cert used while validating mTLS requests: %s", err)
+	} else {
+		clientCAs.AddCert(caCert)
+	}
+
+	clientAuth := tls.RequireAndVerifyClientCert
+	switch authentication.MutualTLS.ValidationMode {
+	case cconfig.Any:
+		clientAuth = tls.RequireAnyClientCert
+	case cconfig.Request:
+		clientAuth = tls.RequestClientCert
+	case cconfig.Strict, "":
+		if authentication.MutualTLS.ValidationMode == "" {
+			logger.Warnf("mutual TLS validation mode is empty. Defaulting to 'strict' validation")
+		}
+	default:
+		logger.Warnf("mutual TLS validation mode not recognized. Defaulting to 'strict' validation")
+	}
+
+	return &tls.Config{
+		ClientAuth: clientAuth,
+		ClientCAs:  clientCAs,
+		MaxVersion: tls.VersionTLS12,
+	}
+}
+
+func newHTTPServer(logger *logrus.Entry, addr string, handler http.Handler, authentication cconfig.HttpServerAuthentication) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadTimeout:       httpServerTimeout,
+		ReadHeaderTimeout: httpServerTimeout,
+		WriteTimeout:      httpServerTimeout,
+		TLSConfig:         serverTLSConfig(logger, authentication),
+	}
+}
+
+func healthGinHandler(info models.APIServiceInfo) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		context.JSON(http.StatusOK, gin.H{
+			"health":     true,
+			"version":    info.Version,
+			"build":      info.BuildSHA,
+			"build_time": info.BuildTime,
+		})
+	}
+}
+
+func openAPIGinHandler(openAPI []byte) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		context.Data(http.StatusOK, "application/yaml", openAPI)
+	}
+}
+
+func injectVersionIntoOpenAPI(openAPI []byte, version string) []byte {
+	if len(openAPI) == 0 || version == "" {
+		return openAPI
+	}
+
+	var spec map[string]any
+	if err := yaml.Unmarshal(openAPI, &spec); err != nil {
+		return openAPI
+	}
+
+	info, ok := spec["info"].(map[string]any)
+	if !ok {
+		return openAPI
+	}
+	info["version"] = version
+
+	modified, err := yaml.Marshal(spec)
+	if err != nil {
+		return openAPI
+	}
+	return modified
+}
+
+func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpServer, info models.APIServiceInfo, openAPI []byte) (int, error) {
+	port, _, err := runHTTPRouterWithShutdown(logger, router, cfg, info, openAPI)
+	return port, err
+}
+
+func runHTTPRouterWithShutdown(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpServer, info models.APIServiceInfo, openAPI []byte) (int, func(), error) {
+	mux := http.NewServeMux()
+	mux.Handle("/", router)
+	mainLogger := logger
+	if !cfg.HealthCheckLogging {
+		nooutLogger := logrus.New()
+		nooutLogger.Out = io.Discard
+		mainLogger = nooutLogger.WithField("", "")
+	}
+
+	healthEngine := newGinEngine(mainLogger)
+	healthEngine.GET("/health", healthGinHandler(info))
+	mux.Handle("/health", healthEngine)
+	if len(openAPI) > 0 {
+		openAPI = injectVersionIntoOpenAPI(openAPI, info.Version)
+		openAPIEngine := newGinEngine(mainLogger)
+		openAPIEngine.GET("/openapi", openAPIGinHandler(openAPI))
+		mux.Handle("/openapi", openAPIEngine)
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.ListenAddress, cfg.Port)
+	server := newHTTPServer(logger, addr, mux, cfg.Authentication)
+	if cfg.Protocol == cconfig.HTTPS {
+		certificate, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return -1, nil, fmt.Errorf("load HTTPS server certificate and key: %w", err)
+		}
+
+		if server.TLSConfig == nil {
+			server.TLSConfig = &tls.Config{}
+		} else {
+			server.TLSConfig = server.TLSConfig.Clone()
+		}
+		server.TLSConfig.Certificates = []tls.Certificate{certificate}
+	}
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return -1, nil, err
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	var startup sync.WaitGroup
+	startup.Add(1)
+	serverErr := make(chan error, 1)
+	go func() {
+		startup.Done()
+		var serveErr error
+		if cfg.Protocol == cconfig.HTTPS {
+			serveErr = server.ServeTLS(listener, "", "")
+		} else {
+			serveErr = server.Serve(listener)
+		}
+		if serveErr != nil && serveErr != http.ErrServerClosed {
+			logger.Errorf("could not start HTTP server: %s", serveErr)
+			serverErr <- serveErr
+		}
+	}()
+
+	startup.Wait()
+	readyContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	select {
+	case serveErr := <-serverErr:
+		return -1, nil, serveErr
+	case <-readyContext.Done():
+		logger.Infof("HTTP server ready to accept requests")
+	}
+
+	shutdown := func() {
+		shutdownContext, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
+		defer shutdownCancel()
+		_ = server.Shutdown(shutdownContext)
+	}
+	return port, shutdown, nil
+}

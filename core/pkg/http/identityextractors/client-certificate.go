@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	clientcertificateextractor "github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes/middlewares/identity-extractors/client-certificate-extractor"
 	"github.com/lamassuiot/lamassuiot/v4/core"
+	clientcertificateextractor "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/identityextractors/clientcertificateextractor"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
