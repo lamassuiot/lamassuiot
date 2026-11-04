@@ -13,8 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	basiclogger "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/basiclogger"
+	headerextractors "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/headerextractors"
 	identityextractors "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/identityextractors"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"gopkg.in/yaml.v3"
@@ -32,8 +35,12 @@ func newGinEngine(logger *logrus.Entry) *gin.Engine {
 	router.Use(
 		cors.New(corsConfig),
 		otelgin.Middleware("gin-server"),
+		headerextractors.RequestMetadataToContextMiddleware(logger),
 		identityextractors.RequestMetadataToContextMiddleware(logger),
-		gin.LoggerWithWriter(logger.Writer()),
+		basiclogger.UseLogger(logger),
+		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
+			logger.Trace(dumpStr)
+		}),
 		gin.Recovery(),
 	)
 	return router

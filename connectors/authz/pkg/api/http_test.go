@@ -43,6 +43,23 @@ func TestNewGinEngineExtractsBearerCredentials(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, response.Code)
 }
 
+func TestNewGinEnginePropagatesSourceHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newGinEngine(logrus.NewEntry(logrus.New()))
+	router.GET("/source", func(c *gin.Context) {
+		require.Equal(t, "service/ca", c.Request.Context().Value(core.LamassuContextKeySource))
+		c.Status(http.StatusNoContent)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/source", nil)
+	request.Header.Set("x-lms-source", "service/ca")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code)
+}
+
 func TestServerTLSConfigPreservesMutualTLSModes(t *testing.T) {
 	logger := logrus.NewEntry(logrus.New())
 
