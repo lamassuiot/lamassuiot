@@ -763,6 +763,12 @@ paths:
         '204': { description: Certificate deleted }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Certificate is referenced as the signer of a VA role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500': { $ref: '#/components/responses/InternalError' }
 
   /certificates/{sn}/key:
@@ -1447,6 +1453,12 @@ components:
           $ref: '#/components/schemas/CertificateType'
         engine_id:
           type: string
+        key_id:
+          type: string
+          description: ID of the certificate's key in the KMS, empty when the KMS does not hold it
+        has_private_key:
+          type: boolean
+          description: Derived at read time from the KMS; not a stored certificate field
         is_ca:
           type: boolean
 

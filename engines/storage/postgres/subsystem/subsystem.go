@@ -33,7 +33,7 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 	config := config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.Postgres, Config: configMap}
 	logger := helpers.SetupLogger(config.LogLevel, "storage", "postgres")
 
-	for _, schemaName := range p.schemas {
+	for _, schemaName := range postgres.OrderForMigration(p.schemas) {
 		m := postgres.NewMigrator(logger, postgresEngine.DB[schemaName])
 		if m != nil {
 			m.MigrateToLatest()

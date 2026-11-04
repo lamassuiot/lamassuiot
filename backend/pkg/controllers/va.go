@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -30,10 +31,10 @@ func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl servic
 }
 
 func (r *vaHttpRoutes) handleError(ctx *gin.Context, err error) {
-	switch err {
-	case errs.ErrVARoleNotFound, errs.ErrCANotFound:
+	switch {
+	case errors.Is(err, errs.ErrVARoleNotFound), errors.Is(err, errs.ErrCANotFound), errors.Is(err, errs.ErrCertificateNotFound):
 		ctx.JSON(http.StatusNotFound, gin.H{"err": err.Error()})
-	case errs.ErrValidateBadRequest:
+	case errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(http.StatusInternalServerError, gin.H{"err": err.Error()})

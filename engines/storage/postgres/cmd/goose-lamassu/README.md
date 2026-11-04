@@ -21,6 +21,8 @@ The `goose-lamassu` tool provides direct access to goose's migration commands wi
 - `va` - Validation Authority database
 - `kms` - Key Management Service database
 
+**Order matters:** migrate **`kms` → `ca` → `va`**: certificates reference KMS keys, and VA Roles reference their signer certificates. Both foreign keys validate existing rows; register legacy keys before the CA migration, and fix missing or ambiguous signer certificates before the VA migration. The `kms` schema must be fully migrated **before** `ca`. Run `kms` first and wait for it to finish; never in parallel with `ca`. The `ca` migration that adds the reference stops with `kms schema not found: migrate the kms schema before the ca schema` when `kms` has not been migrated.
+
 ## Building
 
 ### Local Binary
@@ -169,11 +171,23 @@ migrate-ca:
   only:
     - main
 
+migrate-kms:
+  stage: migrate-first
+  script:
+    - |
+      ./goose-lamassu \
+        "host=$POSTGRES_HOST user=$POSTGRES_USER password=$POSTGRES_PASSWORD dbname=kms port=5432 sslmode=disable" \
+        up
+  only:
+    - main
+
+# Run ca, then va, in a serial job after migrate-kms and legacy key registration.
+# Only independent schemas may run in parallel.
 migrate-all:
   stage: deploy
   parallel:
     matrix:
-      - DB: [ca, devicemanager, dmsmanager, alerts, va, kms]
+      - DB: [devicemanager, dmsmanager, alerts]
   script:
     - |
       ./goose-lamassu \

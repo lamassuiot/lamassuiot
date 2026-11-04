@@ -333,7 +333,7 @@ paths:
       tags:
         - Keys
       summary: Delete a key
-      description: Deletes a key from the KMS
+      description: Deletes a key from the KMS. A key a certificate references cannot be deleted.
       operationId: deleteKeyById
       x-authz:
         namespace: pki
@@ -366,6 +366,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Key is in use - a certificate references it
           content:
             application/json:
               schema:

@@ -317,7 +317,7 @@
     "filterable": [
       { "column": "crl_refresh_interval",      "type": "string"    },
       { "column": "crl_validity",              "type": "string"    },
-      { "column": "crl_subject_key_id_signer", "type": "string"    },
+      { "column": "crl_signer_certificate_serial_number", "type": "string"    },
       { "column": "crl_regenerate_on_revoke",  "type": "bool"      },
       { "column": "latest_crl_version",        "type": "float"     },
       { "column": "latest_crl_valid_from",     "type": "timestamp" },

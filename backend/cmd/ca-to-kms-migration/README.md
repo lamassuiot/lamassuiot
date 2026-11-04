@@ -6,8 +6,8 @@ The KMS service was introduced as an independent service in version 3.7.0 of Lam
 
 When upgrading from an older installation, each CA certificate of type `MANAGED` or `IMPORTED_WITH_KEY` has a private key stored in the crypto engine under its `subject_key_id`. That key has no corresponding row in the `kms_keys` table of the KMS database. As a result:
 
-- The KMS service is unaware of those keys and cannot manage, list, or bind them.
-- The `lamassu.io/kms/binded-resources` metadata — which records which CA certificates are bound to a given key — is absent.
+- The KMS service is unaware of those keys and cannot manage or list them.
+- The certificates of the CA cannot reference those keys in the database, so nothing keeps the KMS from deleting a key a CA still uses.
 
 This tool performs a one-shot, idempotent migration that reads the CA database and writes the missing records into the KMS database.
 
@@ -19,7 +19,6 @@ This tool performs a one-shot, idempotent migration that reads the CA database a
 4. For each unique key not already present in the KMS database:
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA database.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
-   - Populates `metadata["lamassu.io/kms/binded-resources"]` with the serial numbers of all CA certificates that use the key.
 5. Inserts the record into the KMS `kms_keys` table.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
@@ -77,9 +76,9 @@ The tool exits with code `0` on success and `1` if any key insertion failed, mak
 
 ```
 [INFO] found 3 unique keys across CA certificates
-[INFO] key a3f1... — engine=filesystem-1 alg=RSA bits=2048 binds=1
-[INFO] key 9c2b... — engine=filesystem-1 alg=ECDSA bits=256 binds=2
-[INFO] key 77de... — engine=pkcs11-slot-0 alg=RSA bits=4096 binds=1
+[INFO] key a3f1... — engine=filesystem-1 alg=RSA bits=2048 certificates=1
+[INFO] key 9c2b... — engine=filesystem-1 alg=ECDSA bits=256 certificates=2
+[INFO] key 77de... — engine=pkcs11-slot-0 alg=RSA bits=4096 certificates=1
 [INFO] migration complete: inserted=3 skipped=0 failed=0
 ```
 
@@ -141,6 +140,31 @@ migration:
 ```
 
 On the next `helm upgrade` the Job will run automatically before any Deployment rollout. If the Job fails (exit code 1), Helm will mark the upgrade as failed and roll back.
+
+## After the Upgrade: Rename Imported CA Keys to Their Digest
+
+The KMS identifies every key by the SHA-256 of its public key (its `key_id`), and each certificate of the CA references its key by that value (`certificates.key_id`), so the database keeps the KMS from deleting a key a certificate uses. Crypto engines before the KMS renamed the key of an imported CA to its certificate's SKI instead, and this tool registers it under that name. Run this tool before validating the certificate-to-key foreign key. The CA migration resolves legacy SKI-named keys by their public key, so their certificates reference the real KMS key ID and protect it from deletion. Subsequent renames cascade to those references. A missing KMS key aborts the migration; it is never silently detached from its certificates.
+
+The KMS renames these keys when it starts with `crypto_engines.migrate_keys_format` enabled. For each key whose `key_id` is not the digest of its public key, it:
+
+1. renames the key in its crypto engine;
+2. changes its `key_id` in the KMS to the digest, keeping the old name as an alias, so anything that still refers to the key by its SKI finds it;
+3. moves along the references of the certificates that use it.
+
+Keys already named by their digest, keys without a private key, keys whose engine is not configured, and keys the engine also holds under their digest are left as they are and logged.
+
+**Procedure**, once, after upgrading an installation that had imported CAs before 3.7:
+
+1. Migrate the `kms` schema first, then run this tool to register legacy CA keys. Apply the `ca` migrations only after every referenced key exists. If validation reports an unresolved certificate key, register the missing key or repair its reference and retry. Finally migrate `va`, whose Roles reference existing certificates. The required order is `kms` → legacy key registration → `ca` → `va`.
+2. Start the KMS with the option enabled:
+   ```yaml
+   crypto_engines:
+     migrate_keys_format: true
+   ```
+3. Check its log: it reports each renamed key (`renamed key <SKI> in engine <engine> to <digest>`) and how many it renamed, and warns about any key it left as it was.
+4. Disable the option again. Running it again is safe: it finds nothing to rename, and finishes a rename that was interrupted.
+
+A key left as it was keeps its name until the cause in the warning is fixed and the KMS starts again with the option enabled. If the engine also holds the key under its digest, remove one of the two copies by hand first.
 
 ## Running Tests
 
