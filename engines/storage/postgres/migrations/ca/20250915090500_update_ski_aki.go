@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+
 	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
