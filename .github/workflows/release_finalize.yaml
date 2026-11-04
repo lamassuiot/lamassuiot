@@ -5,7 +5,7 @@ permissions: {}
 
 on:
   push:
-    branches: [main]
+    branches: [v4]
     paths:
       - "CHANGELOG.md" # optional: run only when CHANGELOG.md changed
       - "RELEASE-NOTES.md" # optional: run only when RELEASE-NOTES.md changed
@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: v4
 
       - name: Print Release Info
         run: |
@@ -88,7 +88,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: v4
 
       - name: Create Tag
         run: |
@@ -168,15 +168,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: v${{ needs.finalize.outputs.major_version }}
-          token: ${{ secrets.PAT_RELEASER }}
+          ref: ${{ needs.finalize.outputs.release_version_with_v }}
           fetch-tags: true
-      - run: |
-          git config user.name "Lamassu IoT Bot"
-          git config user.email "lamassuiot@lamassu.io"
-          git fetch --unshallow
-          git merge origin/main -m "publishing ${{ needs.finalize.outputs.release_version_with_v }} version"
-          git push
+      - name: Verify release source
+        run: |
+          test "$(git describe --tags --exact-match HEAD)" = "${{ needs.finalize.outputs.release_version_with_v }}"
+          test "$(go list -m)" = "github.com/lamassuiot/lamassuiot/v4"
+          go mod verify
 
   build_docker_image:
     needs: [create_global_release, finalize]
