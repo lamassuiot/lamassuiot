@@ -62,11 +62,13 @@ func TestJSONPathValidation(t *testing.T) {
 }
 
 func TestFilterQueryIgnoresInvalidSortAndMalformedFilters(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/?sort_by=metadata%5Bjsonpath%5D%24.a%3Bdrop&filter=malformed", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?sort_by=unknown&sort_mode=invalid&page_size=invalid&filter=metadata%5Bjsonpath%5D%24.a%3Bdrop&filter=malformed&filter=unknown%5Beq%5Dx", nil)
 	got, err := FilterQuery(req, testFields)
 	require.NoError(t, err)
 	require.Empty(t, got.Sort.SortField)
-	require.Empty(t, got.Filters)
+	require.Len(t, got.Filters, 1)
+	require.Equal(t, resources.DefaultPageSize, got.PageSize)
+	require.Equal(t, resources.SortModeAsc, got.Sort.SortMode)
 }
 
 func TestFilterQueryWithPrefix(t *testing.T) {
@@ -76,6 +78,9 @@ func TestFilterQueryWithPrefix(t *testing.T) {
 	require.Len(t, got.Filters, 1)
 	require.Equal(t, "status", got.Filters[0].Field)
 	require.Nil(t, mustPrefix(http.MethodGet, "/?filter=x", "missing"))
+	require.Nil(t, mustPrefix(http.MethodGet, "/", "ca_filter"))
+	require.Nil(t, mustPrefix(http.MethodGet, "/?ca_filter=malformed", "ca_filter"))
+	require.Nil(t, mustPrefix(http.MethodGet, "/?ca_filter=unknown%5Beq%5Dx", "ca_filter"))
 }
 
 func mustPrefix(method, target, prefix string) *resources.QueryParameters {
@@ -84,6 +89,9 @@ func mustPrefix(method, target, prefix string) *resources.QueryParameters {
 }
 
 func TestConvertDeviceGroupCriteriaAndResponse(t *testing.T) {
+	empty, err := ConvertDeviceGroupCriteria(nil, testFields)
+	require.Empty(t, empty)
+	require.NoError(t, err)
 	criteria := []resources.DeviceGroupFilterOptionRequest{{Field: "status", Operand: "eq", Value: "ACTIVE"}}
 	got, err := ConvertDeviceGroupCriteria(criteria, testFields)
 	require.NoError(t, err)
@@ -97,8 +105,14 @@ func TestConvertDeviceGroupCriteriaAndResponse(t *testing.T) {
 	parent := "root"
 	response := ConvertDeviceGroupToResponse(&models.DeviceGroup{
 		ID: "g1", Name: "group", ParentID: &parent,
-		Criteria: []models.DeviceGroupFilterOption{{Field: "status", FilterOperation: int(resources.EnumEqual), Value: "ACTIVE"}},
-	}, 0)
+		Criteria: []models.DeviceGroupFilterOption{
+			{Field: "missing", FilterOperation: int(resources.EnumEqual), Value: "ignored"},
+			{Field: "status", FilterOperation: int(resources.EnumEqual), Value: "ACTIVE"},
+			{Field: "dms_owner", FilterOperation: int(resources.StringEqual), Value: "group"},
+		},
+	}, 1)
 	require.Equal(t, "root", response["parent_id"])
 	require.Len(t, response["inherited_criteria"], 1)
+	require.Len(t, response["criteria"], 1)
+	require.Contains(t, response["inherited_criteria"], resources.DeviceGroupFilterOptionRequest{Field: "status", Operand: "eq", Value: "ACTIVE"})
 }

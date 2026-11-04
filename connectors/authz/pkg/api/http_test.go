@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,12 @@ func TestServerTLSConfigPreservesMutualTLSModes(t *testing.T) {
 	}
 
 	require.Nil(t, serverTLSConfig(logger, cconfig.HttpServerAuthentication{}))
+
+	cfg := cconfig.HttpServerAuthentication{}
+	cfg.MutualTLS.Enabled = true
+	cfg.MutualTLS.ValidationMode = "unsupported"
+	cfg.MutualTLS.CACertificateFile = t.TempDir() + "/missing-ca.pem"
+	require.Equal(t, tls.RequireAndVerifyClientCert, serverTLSConfig(logger, cfg).ClientAuth)
 }
 
 func TestNewHTTPServerUsesBoundedTimeouts(t *testing.T) {
@@ -146,6 +153,39 @@ func TestInjectVersionIntoOpenAPI(t *testing.T) {
 
 	require.Contains(t, string(injectVersionIntoOpenAPI(openAPI, "v4.2.1")), "version: v4.2.1")
 	require.Contains(t, string(injectVersionIntoOpenAPI(openAPI, "")), "version: template")
+	require.Equal(t, "not yaml: [", string(injectVersionIntoOpenAPI([]byte("not yaml: ["), "v1")))
+	require.Equal(t, "title: Authz\n", string(injectVersionIntoOpenAPI([]byte("title: Authz\n"), "v1")))
+}
+
+func TestOpenAPIGinHandlerServesDocument(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/openapi", openAPIGinHandler([]byte("openapi: 3.0.0\n")))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/openapi", nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "application/yaml", response.Header().Get("Content-Type"))
+	require.Contains(t, response.Body.String(), "openapi")
+}
+
+func TestRunHTTPRouterServesHealthAndOpenAPI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := cconfig.HttpServer{ListenAddress: "127.0.0.1", Port: 0, HealthCheckLogging: false}
+	info := models.APIServiceInfo{Version: "v4.2.1"}
+	port, err := runHTTPRouter(logrus.NewEntry(logrus.New()), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), cfg, info, []byte("openapi: 3.0.0\ninfo:\n  version: template\n"))
+	require.NoError(t, err)
+	require.Positive(t, port)
+
+	client := &http.Client{Timeout: time.Second}
+	health, err := client.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/health")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, health.StatusCode)
+	require.NoError(t, health.Body.Close())
+	openAPI, err := client.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/openapi")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, openAPI.StatusCode)
+	require.Contains(t, openAPI.Header.Get("Content-Type"), "application/yaml")
+	require.NoError(t, openAPI.Body.Close())
 }
 
 func TestRunHTTPRouterRejectsInvalidHTTPSCredentials(t *testing.T) {
