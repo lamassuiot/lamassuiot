@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
+
 	"fmt"
 	"io"
 	"net"
@@ -91,18 +91,6 @@ func newHTTPServer(logger *logrus.Entry, addr string, handler http.Handler, auth
 		ReadHeaderTimeout: httpServerTimeout,
 		WriteTimeout:      httpServerTimeout,
 		TLSConfig:         serverTLSConfig(logger, authentication),
-	}
-}
-
-func healthHandler(info models.APIServiceInfo) http.HandlerFunc {
-	return func(writer http.ResponseWriter, _ *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(writer).Encode(map[string]any{
-			"health":     true,
-			"version":    info.Version,
-			"build":      info.BuildSHA,
-			"build_time": info.BuildTime,
-		})
 	}
 }
 

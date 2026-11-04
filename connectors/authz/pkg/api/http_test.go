@@ -3,7 +3,7 @@ package api
 import (
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/json"
+
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -106,31 +106,6 @@ func TestNewHTTPServerUsesBoundedTimeouts(t *testing.T) {
 	require.Equal(t, 10*time.Second, server.ReadTimeout)
 	require.Equal(t, 10*time.Second, server.ReadHeaderTimeout)
 	require.Equal(t, 10*time.Second, server.WriteTimeout)
-}
-
-func TestHealthHandlerPreservesBuildDetails(t *testing.T) {
-	response := httptest.NewRecorder()
-	info := models.APIServiceInfo{
-		Version:   "v4.2.1",
-		BuildSHA:  "abc123",
-		BuildTime: "2026-11-04T10:00:00Z",
-	}
-
-	healthHandler(info)(response, httptest.NewRequest(http.MethodGet, "/health", nil))
-
-	var body struct {
-		Health    bool   `json:"health"`
-		Version   string `json:"version"`
-		Build     string `json:"build"`
-		BuildTime string `json:"build_time"`
-	}
-	require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
-	require.Equal(t, http.StatusOK, response.Code)
-	require.Equal(t, "application/json", response.Header().Get("Content-Type"))
-	require.True(t, body.Health)
-	require.Equal(t, info.Version, body.Version)
-	require.Equal(t, info.BuildSHA, body.Build)
-	require.Equal(t, info.BuildTime, body.BuildTime)
 }
 
 func TestHealthGinHandlerUsesAuthzHTTPMiddleware(t *testing.T) {
