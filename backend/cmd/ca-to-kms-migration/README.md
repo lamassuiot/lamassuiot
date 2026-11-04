@@ -145,7 +145,7 @@ On the next `helm upgrade` the Job will run automatically before any Deployment 
 
 The KMS identifies every key by the SHA-256 of its public key (its `key_id`), and each certificate of the CA references its key by that value (`certificates.key_id`), so the database keeps the KMS from deleting a key a certificate uses. Crypto engines before the KMS renamed the key of an imported CA to its certificate's SKI instead, and this tool registers it under that name. Run this tool before validating the certificate-to-key foreign key. The CA migration resolves legacy SKI-named keys by their public key, so their certificates reference the real KMS key ID and protect it from deletion. Subsequent renames cascade to those references. A missing KMS key aborts the migration; it is never silently detached from its certificates.
 
-The KMS renames these keys when it starts with `crypto_engines.migrate_keys_format` enabled. For each key whose `key_id` is not the digest of its public key, it:
+The standalone KMS renames these keys when it starts with `crypto_engines.migrate_keys_format` enabled. This step applies only to the standalone KMS: the monolithic deployment does not support `migrate_keys_format` and does not run this rename. For each key whose `key_id` is not the digest of its public key, it:
 
 1. renames the key in its crypto engine;
 2. changes its `key_id` in the KMS to the digest, keeping the old name as an alias, so anything that still refers to the key by its SKI finds it;
@@ -156,7 +156,7 @@ Keys already named by their digest, keys without a private key, keys whose engin
 **Procedure**, once, after upgrading an installation that had imported CAs before 3.7:
 
 1. Migrate the `kms` schema first, then run this tool to register legacy CA keys. Apply the `ca` migrations only after every referenced key exists. If validation reports an unresolved certificate key, register the missing key or repair its reference and retry. Finally migrate `va`, whose Roles reference existing certificates. The required order is `kms` → legacy key registration → `ca` → `va`.
-2. Start the KMS with the option enabled:
+2. Start the standalone KMS with the option enabled:
    ```yaml
    crypto_engines:
      migrate_keys_format: true
