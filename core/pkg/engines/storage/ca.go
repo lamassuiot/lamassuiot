@@ -22,8 +22,12 @@ type CertificatesRepo interface {
 	SelectAll(ctx context.Context, req StorageListRequest[models.Certificate]) (string, error)
 	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
+	// Insert fails with errs.ErrKeyNotFound if the certificate references a key the KMS does not hold.
 	Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Delete(ctx context.Context, serialNumber string) error
+	// ReleaseKey makes the certificates stop referencing their KMS key, so the KMS can delete it once no
+	// other certificate does. They keep their engine.
+	ReleaseKey(ctx context.Context, serialNumbers []string) error
 }
 
 type CACertificatesRepo interface {

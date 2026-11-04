@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -143,10 +144,10 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
 		CASubjectKeyID: caSki,
 		CRLOptions: models.VACRLRole{
-			Validity:           models.TimeDuration(24 * time.Hour * 7),            // 1 week
-			RefreshInterval:    models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
-			RegenerateOnRevoke: true,
-			SubjectKeyIDSigner: caSki,
+			Validity:                      models.TimeDuration(24 * time.Hour * 7),            // 1 week
+			RefreshInterval:               models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
+			RegenerateOnRevoke:            true,
+			SignerCertificateSerialNumber: ca.Certificate.SerialNumber,
 		},
 		LatestCRL: models.LatestCRLMeta{
 			Version:   models.BigInt{Int: big.NewInt(0)},
@@ -191,30 +192,9 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, errs.ErrVARoleNotFound
 	}
 
-	var crlCA *models.CACertificate
-	_, err = svc.caSDK.GetCAs(ctx, services.GetCAsInput{
-		QueryParameters: &resources.QueryParameters{
-			Filters: []resources.FilterOption{
-				{
-					Field:           "subject_key_id",
-					Value:           input.CASubjectKeyID,
-					FilterOperation: resources.StringEqual,
-				},
-			},
-			PageSize: 1,
-		},
-		ApplyFunc: func(ca models.CACertificate) {
-			crlCA = &ca
-		},
-	})
+	crlCA, err := svc.crlIssuer(ctx, input.CASubjectKeyID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s: %s", input.CASubjectKeyID, err)
 		return nil, err
-	}
-
-	if crlCA == nil {
-		lFunc.Errorf("CA %s not found", input.CASubjectKeyID)
-		return nil, errs.ErrCANotFound
 	}
 
 	certList := []x509.RevocationListEntry{}
@@ -242,8 +222,12 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, err
 	}
 
-	crlSigner := NewCertificateSigner(ctx, &crlCA.Certificate, svc.kmsService)
-	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
+	signerCert, err := svc.crlSignerCertificate(ctx, crlCA, vaRole.CRLOptions.SignerCertificateSerialNumber)
+	if err != nil {
+		return nil, err
+	}
+	crlSigner := NewCertificateSigner(ctx, signerCert, svc.kmsService)
+	caCert := (*x509.Certificate)(signerCert.Certificate)
 
 	extensions := []pkix.Extension{}
 
@@ -337,6 +321,18 @@ func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.Up
 		return nil, err
 	}
 
+	if err := crlValidate.Struct(input); err != nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	issuer, err := svc.crlIssuer(ctx, input.CASubjectKeyID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := svc.crlSignerCertificate(ctx, issuer, input.CRLRole.SignerCertificateSerialNumber); err != nil {
+		return nil, err
+	}
+
 	role.CRLOptions = input.CRLRole
 
 	return svc.vaRepo.Update(ctx, role)
@@ -378,4 +374,45 @@ func (svc CRLServiceBackend) getDistributionPointExtension(aki string) (*pkix.Ex
 		Critical: true,
 		Value:    idp,
 	}, nil
+}
+
+func (svc CRLServiceBackend) crlIssuer(ctx context.Context, ski string) (*models.CACertificate, error) {
+	var issuer *models.CACertificate
+	_, err := svc.caSDK.GetCAs(ctx, services.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{
+			Filters:  []resources.FilterOption{{Field: "subject_key_id", Value: ski, FilterOperation: resources.StringEqual}},
+			PageSize: 1,
+		},
+		ApplyFunc: func(ca models.CACertificate) { issuer = &ca },
+	})
+	if err != nil {
+		return nil, err
+	}
+	if issuer == nil {
+		return nil, errs.ErrCANotFound
+	}
+	return issuer, nil
+}
+
+// crlSignerCertificate resolves the exact configured certificate. These are direct CRLs:
+// changing their issuer would require indirect-CRL support, not just a different signature.
+func (svc CRLServiceBackend) crlSignerCertificate(ctx context.Context, issuer *models.CACertificate, serial string) (*models.Certificate, error) {
+	cert, err := svc.caSDK.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: serial})
+	if err != nil {
+		return nil, err
+	}
+	signer := (*x509.Certificate)(cert.Certificate)
+	ca := (*x509.Certificate)(issuer.Certificate.Certificate)
+	signerKey, err := x509.MarshalPKIXPublicKey(signer.PublicKey)
+	if err != nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+	issuerKey, err := x509.MarshalPKIXPublicKey(ca.PublicKey)
+	if err != nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+	if !bytes.Equal(signer.RawSubject, ca.RawSubject) || !bytes.Equal(signerKey, issuerKey) || signer.KeyUsage&x509.KeyUsageCRLSign == 0 {
+		return nil, errs.ErrValidateBadRequest
+	}
+	return cert, nil
 }

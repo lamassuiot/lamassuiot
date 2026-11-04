@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -35,9 +36,17 @@ func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRe
 }
 
 func (db *PostgresVAStore) Update(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Update(ctx, role, role.CASubjectKeyID)
+	updated, err := db.querier.Update(ctx, role, role.CASubjectKeyID)
+	if isForeignKeyViolation(err, "va_role_signer_certificate_fk") {
+		return nil, errs.ErrCertificateNotFound
+	}
+	return updated, err
 }
 
 func (db *PostgresVAStore) Insert(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Insert(ctx, role, role.CASubjectKeyID)
+	inserted, err := db.querier.Insert(ctx, role, role.CASubjectKeyID)
+	if isForeignKeyViolation(err, "va_role_signer_certificate_fk") {
+		return nil, errs.ErrCertificateNotFound
+	}
+	return inserted, err
 }

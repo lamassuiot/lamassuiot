@@ -166,6 +166,9 @@ func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CAC
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return nil, errs.ErrCAAlreadyExists
 	}
+	if isCertificateKeyViolation(err) {
+		return nil, errs.ErrKeyNotFound
+	}
 	return ca, err
 }
 

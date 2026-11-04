@@ -1054,6 +1054,8 @@ func (r *caHttpRoutes) DeleteCertificate(ctx *gin.Context) {
 
 	if err != nil {
 		switch err {
+		case errs.ErrCertificateInUse:
+			ctx.JSON(409, gin.H{"err": err.Error()})
 		case errs.ErrCertificateNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCertificateIssuerCAExists:
