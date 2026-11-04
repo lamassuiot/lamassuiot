@@ -3,7 +3,13 @@ package postgrestest
 import (
 	"context"
 	"fmt"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
+	authzgorm "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gorm"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"testing"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -130,4 +136,66 @@ func TestCertificateViewFilterAndCount(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, count)
 	}
+}
+
+// Reading from a derived view must retain the physical table's row authorization.
+func TestCertificateViewPreservesAuthorization(t *testing.T) {
+	suite, kms, certs := newKMSAndCertStores(t)
+	require.NoError(t, suite.DB["ca"].Use(authzgorm.NewAuthzGormPlugin()))
+	insertTestKey(t, kms, "engine", "private")
+	allowed := newTestCertificate(t, 401, "engine", "private")
+	forbidden := newTestCertificate(t, 402, "engine", "private")
+	for _, cert := range []*models.Certificate{allowed, forbidden} {
+		_, err := certs.Insert(context.Background(), cert)
+		require.NoError(t, err)
+	}
+	require.NoError(t, suite.DB["ca"].Exec(`CREATE TABLE certificate_grants (serial_number text, owner text)`).Error)
+	require.NoError(t, suite.DB["ca"].Exec(`INSERT INTO certificate_grants VALUES (?, 'ca.certificates.owner')`, allowed.SerialNumber).Error)
+	for _, tc := range []struct {
+		name, sql string
+		want      int
+	}{
+		{"restricted", "SELECT * FROM ca.certificates WHERE ca.certificates.serial_number = '" + allowed.SerialNumber + "'", 1},
+		{"deny all", "SELECT * FROM ca.certificates WHERE 1 = 0", 0},
+		{"grant join and literal qualifier", `SELECT * FROM ca.certificates LEFT JOIN ca.certificate_grants AS j0_0 ON ca.certificates.serial_number = j0_0.serial_number WHERE j0_0.owner = 'ca.certificates.owner'`, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, tc.sql)
+			for _, exhaustive := range []bool{false, true} {
+				var serials []string
+				_, err := certs.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{ExhaustiveRun: exhaustive, ApplyFunc: func(c models.Certificate) { serials = append(serials, c.SerialNumber) }})
+				require.NoError(t, err)
+				assert.Len(t, serials, tc.want)
+				assert.NotContains(t, serials, forbidden.SerialNumber)
+			}
+			count, err := certs.Count(ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, count)
+			found, _, err := certs.SelectExistsBySerialNumber(ctx, forbidden.SerialNumber)
+			require.NoError(t, err)
+			assert.False(t, found)
+		})
+	}
+}
+
+func TestCAReadsCertificatePrivateKeyFromView(t *testing.T) {
+	suite, kms, _ := newKMSAndCertStores(t)
+	logger := helpers.SetupLogger(config.Info, "Test", "CA view")
+	cas, err := postgres.NewCAPostgresRepository(logger, suite.DB["ca"])
+	require.NoError(t, err)
+	insertTestKey(t, kms, "engine", "private")
+	cert := newTestCertificate(t, 501, "engine", "private")
+	_, err = cas.Insert(context.Background(), &models.CACertificate{ID: "ca-view", Certificate: *cert, Metadata: map[string]any{}, CreationTS: time.Now()})
+	require.NoError(t, err)
+	found, ca, err := cas.SelectExistsByID(context.Background(), "ca-view")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.True(t, ca.Certificate.HasPrivateKey)
+	seen := 0
+	_, err = cas.SelectAll(context.Background(), storage.StorageListRequest[models.CACertificate]{ApplyFunc: func(c models.CACertificate) {
+		seen++
+		assert.True(t, c.Certificate.HasPrivateKey)
+	}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, seen)
 }

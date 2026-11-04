@@ -21,6 +21,9 @@ type PostgresCertificateStorage struct {
 // certificateKeyForeignKey is the constraint of the certificates table that references the KMS keys.
 const certificateKeyForeignKey = "certificates_key_fk"
 
+// Keep the canonical table alias so authorization filters still target certificate reads.
+const certificateReadTable = "certificates_view AS certificates"
+
 // isCertificateKeyViolation tells whether err is a certificate referencing a key the KMS does not hold.
 // Other foreign keys, such as the one of a CA to its certificate, report as foreign-key violations too.
 func isCertificateKeyViolation(err error) bool {
@@ -33,7 +36,7 @@ func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB) (storage.Certif
 		return nil, err
 	}
 
-	readQuerier, err := TableQuery(logger, db, "certificates_view", "serial_number", models.Certificate{})
+	readQuerier, err := TableQuery(logger, db, certificateReadTable, "serial_number", models.Certificate{})
 	if err != nil {
 		return nil, err
 	}
