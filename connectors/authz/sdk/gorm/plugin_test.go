@@ -150,3 +150,18 @@ func TestAuthzGormPlugin_InjectsSingleHopFilterDeviceRevoke(t *testing.T) {
 	assert.Contains(t, sql, "j0_0.id = 'device-007'")
 	whereAfterLastJoin(t, sql)
 }
+
+func TestAuthzGormPlugin_PreservesRestrictionsForViewAlias(t *testing.T) {
+	db := testDB(t)
+	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
+	authzSQL := `SELECT * FROM ca.certificates LEFT JOIN ca.grants AS j0 ON ca.certificates.serial_number = j0.serial_number WHERE ca.certificates.subject_common_name = 'ca.certificates.serial_number' AND j0.owner = 'allowed'`
+	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
+	var dest []map[string]any
+	result := db.WithContext(ctx).Table("certificates_view AS certificates").Find(&dest)
+	require.NoError(t, result.Error)
+	sql := result.Statement.SQL.String()
+	assert.Contains(t, sql, "certificates.serial_number = j0.serial_number")
+	assert.Contains(t, sql, "certificates.subject_common_name = 'ca.certificates.serial_number'")
+	assert.NotContains(t, sql, "ON ca.certificates.serial_number")
+	assert.NotContains(t, sql, "WHERE ca.certificates.subject_common_name")
+}

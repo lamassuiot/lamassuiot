@@ -275,6 +275,15 @@ type DBQuerier[E any] struct {
 	// uniqueColumns identify a row and are appended to every paged ORDER BY so
 	// that offset pagination is deterministic. Defaults to the primary key.
 	uniqueColumns []string
+	// preload overrides default association reads for repositories with derived read models.
+	preload func(*gorm.DB) *gorm.DB
+}
+
+func (db *DBQuerier[E]) preloadAssociations(tx *gorm.DB) *gorm.DB {
+	if db.preload != nil {
+		return db.preload(tx)
+	}
+	return tx.Preload(clause.Associations)
 }
 
 func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) DBQuerier[E] {
@@ -549,7 +558,7 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 		return "", db.selectAllInBatches(ctx, tx, offset, limit, applyFunc)
 	} else {
 		tx = tx.Clauses(db.withUniqueOrder(orderBy)).Offset(offset).Limit(limit + 1)
-		rs := tx.WithContext(ctx).Preload(clause.Associations).Find(&elems)
+		rs := db.preloadAssociations(tx.WithContext(ctx)).Find(&elems)
 
 		if rs.Error != nil {
 			return "", rs.Error
@@ -596,7 +605,7 @@ func (db *DBQuerier[E]) selectAllInBatches(ctx context.Context, tx *gorm.DB, off
 	var last []any
 	for {
 		var batch []E
-		q := base.WithContext(ctx).Preload(clause.Associations).Clauses(order).Limit(batchSize)
+		q := db.preloadAssociations(base.WithContext(ctx)).Clauses(order).Limit(batchSize)
 		if last == nil {
 			q = q.Offset(offset)
 		} else {
@@ -635,13 +644,16 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 		searchCol = *queryCol
 	}
 
-	cond, err := columnEquals(searchCol, queryID)
+	column, err := safeColumn(searchCol)
 	if err != nil {
 		return false, nil, err
 	}
 
+	column.Table = clause.CurrentTable
+	cond := clause.Eq{Column: column, Value: queryID}
+
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, cond)
+	tx := db.preloadAssociations(db.Table(db.tableName).WithContext(ctx)).Limit(1).Find(&elem, cond)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
