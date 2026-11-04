@@ -164,6 +164,13 @@ func isValidJsonPath(jsonPath string) bool {
 	return true
 }
 
+// IsValidJSONPath reports whether a JSONPath expression is safe to use in a
+// query. It is exposed for legacy callers while the implementation remains
+// centralized in this package.
+func IsValidJSONPath(jsonPath string) bool {
+	return isValidJsonPath(jsonPath)
+}
+
 // isSimpleJsonPath checks if a JSONPath expression is a simple path suitable for
 // sorting (e.g., $.field, $.field.nested, $.tags[0], $.tags[last])
 // Complex expressions with filters, comparisons, etc. are not supported for sorting.
@@ -171,6 +178,11 @@ func isValidJsonPath(jsonPath string) bool {
 func isSimpleJsonPath(jsonPath string) bool {
 	_, err := resources.ParseSortJsonPath(jsonPath)
 	return err == nil
+}
+
+// IsSimpleJSONPath reports whether a JSONPath can be used for sorting.
+func IsSimpleJSONPath(jsonPath string) bool {
+	return isSimpleJsonPath(jsonPath)
 }
 
 // parseFilterOperand parses a filter operand string and returns the corresponding FilterOperation
