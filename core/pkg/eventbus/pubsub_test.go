@@ -74,6 +74,12 @@ func TestEventBusConstructorsUseRegisteredEngine(t *testing.T) {
 	require.Error(t, err)
 	_, err = NewEventBusPublisher(errorConf, "service", logrus.NewEntry(logrus.New()))
 	require.Error(t, err)
+
+	unknownConf := cconfig.EventBusEngine{Provider: "unregistered"}
+	_, err = NewEventBusSubscriber(unknownConf, "service", logrus.NewEntry(logrus.New()))
+	require.EqualError(t, err, `event bus provider "unregistered" is not registered`)
+	_, err = NewEventBusPublisher(unknownConf, "service", logrus.NewEntry(logrus.New()))
+	require.EqualError(t, err, `event bus provider "unregistered" is not registered`)
 }
 
 type testEngine struct{}

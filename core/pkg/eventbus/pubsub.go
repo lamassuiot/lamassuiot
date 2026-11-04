@@ -19,6 +19,11 @@ func NewEventBusSubscriber(conf cconfig.EventBusEngine, serviceID string, logger
 		logger.Errorf("could not generate Event Bus Subscriber: %s", err)
 		return nil, err
 	}
+	if engine == nil {
+		err := fmt.Errorf("event bus provider %q is not registered", conf.Provider)
+		logger.Error(err)
+		return nil, err
+	}
 
 	return engine.Subscriber()
 }
@@ -27,6 +32,11 @@ func NewEventBusPublisher(conf cconfig.EventBusEngine, serviceID string, logger 
 	engine, err := coreeventbus.GetEventBusEngine(string(conf.Provider), conf.Config, serviceID, logger)
 	if err != nil {
 		logger.Errorf("could not generate Event Bus Publisher: %s", err)
+		return nil, err
+	}
+	if engine == nil {
+		err := fmt.Errorf("event bus provider %q is not registered", conf.Provider)
+		logger.Error(err)
 		return nil, err
 	}
 
