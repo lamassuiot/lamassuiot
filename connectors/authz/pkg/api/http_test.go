@@ -125,6 +125,22 @@ func TestHealthHandlerPreservesBuildDetails(t *testing.T) {
 	require.Equal(t, info.BuildTime, body.BuildTime)
 }
 
+func TestHealthGinHandlerUsesAuthzHTTPMiddleware(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newGinEngine(logrus.NewEntry(logrus.New()))
+	router.GET("/health", healthGinHandler(models.APIServiceInfo{Version: "v4.2.1"}))
+
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://dashboard.example")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "*", response.Header().Get("Access-Control-Allow-Origin"))
+	require.Contains(t, response.Body.String(), `"health":true`)
+}
+
 func TestInjectVersionIntoOpenAPI(t *testing.T) {
 	openAPI := []byte("openapi: 3.0.0\ninfo:\n  title: Authz\n  version: template\n")
 

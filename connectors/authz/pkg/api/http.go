@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -103,6 +106,23 @@ func healthHandler(info models.APIServiceInfo) http.HandlerFunc {
 	}
 }
 
+func healthGinHandler(info models.APIServiceInfo) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		context.JSON(http.StatusOK, gin.H{
+			"health":     true,
+			"version":    info.Version,
+			"build":      info.BuildSHA,
+			"build_time": info.BuildTime,
+		})
+	}
+}
+
+func openAPIGinHandler(openAPI []byte) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		context.Data(http.StatusOK, "application/yaml", openAPI)
+	}
+}
+
 func injectVersionIntoOpenAPI(openAPI []byte, version string) []byte {
 	if len(openAPI) == 0 || version == "" {
 		return openAPI
@@ -129,13 +149,21 @@ func injectVersionIntoOpenAPI(openAPI []byte, version string) []byte {
 func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpServer, info models.APIServiceInfo, openAPI []byte) (int, error) {
 	mux := http.NewServeMux()
 	mux.Handle("/", router)
-	mux.Handle("/health", healthHandler(info))
+	mainLogger := logger
+	if !cfg.HealthCheckLogging {
+		nooutLogger := logrus.New()
+		nooutLogger.Out = io.Discard
+		mainLogger = nooutLogger.WithField("", "")
+	}
+
+	healthEngine := newGinEngine(mainLogger)
+	healthEngine.GET("/health", healthGinHandler(info))
+	mux.Handle("/health", healthEngine)
 	if len(openAPI) > 0 {
 		openAPI = injectVersionIntoOpenAPI(openAPI, info.Version)
-		mux.HandleFunc("/openapi", func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(openAPI)
-		})
+		openAPIEngine := newGinEngine(mainLogger)
+		openAPIEngine.GET("/openapi", openAPIGinHandler(openAPI))
+		mux.Handle("/openapi", openAPIEngine)
 	}
 	addr := fmt.Sprintf("%s:%d", cfg.ListenAddress, cfg.Port)
 	server := newHTTPServer(logger, addr, mux, cfg.Authentication)
@@ -158,7 +186,11 @@ func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpSe
 		return -1, err
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
+	var startup sync.WaitGroup
+	startup.Add(1)
+	serverErr := make(chan error, 1)
 	go func() {
+		startup.Done()
 		var serveErr error
 		if cfg.Protocol == cconfig.HTTPS {
 			serveErr = server.ServeTLS(listener, "", "")
@@ -167,8 +199,20 @@ func runHTTPRouter(logger *logrus.Entry, router http.Handler, cfg cconfig.HttpSe
 		}
 		if serveErr != nil && serveErr != http.ErrServerClosed {
 			logger.Errorf("could not start HTTP server: %s", serveErr)
+			serverErr <- serveErr
 		}
 	}()
-	_ = info
+
+	startup.Wait()
+	readyContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	select {
+	case serveErr := <-serverErr:
+		return -1, serveErr
+	case <-readyContext.Done():
+		logger.Infof("HTTP server ready to accept requests")
+	}
+
 	return port, nil
 }
