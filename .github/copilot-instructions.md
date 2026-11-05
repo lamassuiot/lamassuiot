@@ -29,7 +29,7 @@ Lamassu IoT is an IoT-first PKI (Public Key Infrastructure) designed for industr
 
 **Service Assembly Pattern**: Each service follows the assembler pattern in `backend/pkg/assemblers/`. Services are composed of:
 - Storage repos (Postgres via `engines/storage/postgres`)
-- Crypto engines (Software, PKCS11, AWS KMS, Vault)
+- Crypto engines (Software, PKCS11, AWS KMS, Azure Key Vault, Azure Secrets, Vault)
 - Event buses (AMQP/RabbitMQ, AWS EventBridge, in-memory)
 - HTTP routers with middleware chains
 - Background jobs (e.g., certificate monitoring)
@@ -316,14 +316,22 @@ RUN <use vendor/ if it has modules.txt, else go mod download>
 COPY {all source dirs} ...
 RUN --mount=type=cache,target=/root/.cache/go-build go build -ldflags="-X main.version=..."
 
-# Runtime stage: ubuntu:26.04 with non-root lamassu system user
-USER lamassu
+# Runtime stage: distroless non-root image
 CMD ["/app/service"]
 ```
 
 ### Service-Specific Notes
-- **CA Service**: Includes PKCS11 proxy and OpenSC for HSM
+- **CA, VA, Device Manager, DMS Manager and Alerts**: Build static binaries with
+  `CGO_ENABLED=0` and `-tags nopkcs11`, and use
+  `gcr.io/distroless/static-debian13:nonroot` at runtime.
+- **KMS Service**: Requires CGO and PKCS#11 support. Its runtime is
+  `gcr.io/distroless/cc-debian13:nonroot`; the PKCS#11 client libraries are
+  copied from an Ubuntu-based build stage.
+- **KMS PKCS#11 proxy**: Uses Ubuntu for the proxy stage because its p11-kit
+  libraries must match the SoftHSM image. This does not make Ubuntu the
+  general runtime image for the CA.
 - **AWS Connector**: Includes ca-certificates for TLS
+- **Authz**: Uses `ubuntu:26.04` as its runtime image.
 - **Monolithic**: Single container for dev/testing
 
 ## Anti-Patterns
