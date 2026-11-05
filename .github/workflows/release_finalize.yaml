@@ -252,10 +252,10 @@ jobs:
             BASE_IMAGE=alpine:3.14
             SHA1VER=${{ env.SHA1VER }}
             VERSION=${{ needs.finalize.outputs.release_version }}
+          # Keep latest owned by the current primary release line only.
           tags: |
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.finalize.outputs.release_version }}
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.finalize.outputs.major_version }}
-            # Keep latest owned by the current primary release line only.
             ${{ needs.finalize.outputs.major_version == '4' && format('ghcr.io/lamassuiot/lamassu-{0}:latest', matrix.service) || '' }}
           push: true
           sbom: true
