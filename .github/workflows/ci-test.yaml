@@ -21,7 +21,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # Saves the Go module and build caches once, so every test job restores them instead of racing to create them
       - name: Setup Go
@@ -61,10 +61,16 @@ jobs:
             tag: crypto-aws
           - path: engines/crypto/filesystem
             tag: crypto-filesystem
+          - path: engines/crypto/software
+            tag: crypto-software
           - path: engines/crypto/vaultkv2
             tag: crypto-vaultkv2
           - path: engines/crypto/azure
             tag: crypto-azure
+          - path: engines/fs-storage/localfs
+            tag: fs-storage-localfs
+          - path: engines/fs-storage/s3
+            tag: fs-storage-s3
           - path: engines/eventbus/amqp
             tag: eventbus-amqp
           - path: engines/eventbus/aws
@@ -86,7 +92,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -119,6 +125,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -182,7 +190,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -217,7 +225,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -244,7 +252,7 @@ jobs:
 
   codecov-notify:
     name: Codecov notifications
-    needs: [test, test-pkcs11, test-backend-assemblers, test-backend-rest]
+    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -252,7 +260,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # Uploads are held by Codecov (codecov.notify.manual_trigger) until every test job has finished
       - name: Send Codecov notifications
@@ -262,3 +270,33 @@ jobs:
           run_command: send-notifications
           fail_ci_if_error: true
           verbose: true
+
+  lint:
+    name: Go lint
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '^1.27.3'
+          cache-dependency-path: "**/*.sum"
+
+      - name: Check formatting
+        run: |
+          files=$(gofmt -l connectors/authz/schemas_test.go)
+          if [[ -n "$files" ]]; then
+            echo "The following Go files are not formatted:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./connectors/authz/... ./engines/crypto/... ./engines/fs-storage/... ./backend/pkg/jobs
