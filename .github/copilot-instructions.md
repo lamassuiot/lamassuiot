@@ -78,7 +78,7 @@ Access at `http://localhost:8080` or `https://localhost:8443`
 cd backend && go test ./... -timeout 900s
 
 # With coverage
-go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -coverprofile coverage.txt
+go tool gotestsum --format github-actions ./... -coverpkg=./... -coverprofile coverage.txt
 
 # Migration tests (require Docker)
 cd engines/storage/postgres && go test ./migrations_test/...
