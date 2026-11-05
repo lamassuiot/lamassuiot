@@ -8,6 +8,7 @@ on:
       release_version:
         type: string
         description: release version when building docker containers (example; 2.0.0)
+        required: true
 
 run-name: >-
   ${{ format('Open PR for release {0}', github.event.inputs.release_version) }}
@@ -17,6 +18,17 @@ jobs:
     name: "Open PR with release notes and changelog"
     runs-on: ubuntu-latest
     steps:
+      - name: Determine release branch
+        id: release-branch
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.release_version }}
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release version: $RELEASE_VERSION"
+            exit 1
+          fi
+          echo "branch=v${RELEASE_VERSION%%.*}" >> "$GITHUB_OUTPUT"
+
       - name: Create release bot token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: release-bot-token
@@ -34,9 +46,21 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.release-bot-token.outputs.token }}
 
+      - name: Verify release branch exists
+        env:
+          GH_TOKEN: ${{ steps.release-bot-token.outputs.token }}
+          RELEASE_BRANCH: ${{ steps.release-branch.outputs.branch }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git ls-remote --exit-code --heads "$remote" "$RELEASE_BRANCH" >/dev/null; then
+            echo "::error::Release branch '$RELEASE_BRANCH' does not exist. Create and protect it before running this workflow."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ steps.release-branch.outputs.branch }}
           token: ${{ steps.release-bot-token.outputs.token }}
           persist-credentials: false
           fetch-depth: 0
@@ -73,6 +97,7 @@ jobs:
           committer: ${{ steps.release-bot-token.outputs.app-slug }}[bot] <${{ steps.get-release-bot-user-id.outputs.release-bot-user-id }}+${{ steps.release-bot-token.outputs.app-slug }}[bot]@users.noreply.github.com>
           author: ${{ steps.release-bot-token.outputs.app-slug }}[bot] <${{ steps.get-release-bot-user-id.outputs.release-bot-user-id }}+${{ steps.release-bot-token.outputs.app-slug }}[bot]@users.noreply.github.com>
           commit-message: "chore: release: prepare release ${{ github.event.inputs.release_version }}"
+          base: ${{ steps.release-branch.outputs.branch }}
           branch: "release-${{ github.event.inputs.release_version }}"
           title: "chore: release: prepare release ${{ github.event.inputs.release_version }}"
           signoff: true
