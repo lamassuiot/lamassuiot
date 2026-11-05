@@ -141,6 +141,16 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 		return nil, errs.ErrCANotFound
 	}
 
+	// CAs sharing a key share the SKI, so the Role: the first of them created it and the others keep it.
+	exists, existing, err := svc.vaRepo.Get(ctx, caSki)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		lFunc.Infof("VA role for CA %s already exists, keeping it", caSki)
+		return existing, nil
+	}
+
 	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
 		CASubjectKeyID: caSki,
 		CRLOptions: models.VACRLRole{
@@ -192,7 +202,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, errs.ErrVARoleNotFound
 	}
 
-	crlCA, err := svc.crlIssuer(ctx, input.CASubjectKeyID)
+	crlCA, signerCert, err := svc.crlIssuer(ctx, input.CASubjectKeyID, vaRole.CRLOptions.SignerCertificateSerialNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -222,10 +232,6 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, err
 	}
 
-	signerCert, err := svc.crlSignerCertificate(ctx, crlCA, vaRole.CRLOptions.SignerCertificateSerialNumber)
-	if err != nil {
-		return nil, err
-	}
 	crlSigner := NewCertificateSigner(ctx, signerCert, svc.kmsService)
 	caCert := (*x509.Certificate)(signerCert.Certificate)
 
@@ -325,11 +331,7 @@ func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.Up
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	issuer, err := svc.crlIssuer(ctx, input.CASubjectKeyID)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := svc.crlSignerCertificate(ctx, issuer, input.CRLRole.SignerCertificateSerialNumber); err != nil {
+	if _, _, err := svc.crlIssuer(ctx, input.CASubjectKeyID, input.CRLRole.SignerCertificateSerialNumber); err != nil {
 		return nil, err
 	}
 
@@ -376,43 +378,64 @@ func (svc CRLServiceBackend) getDistributionPointExtension(aki string) (*pkix.Ex
 	}, nil
 }
 
-func (svc CRLServiceBackend) crlIssuer(ctx context.Context, ski string) (*models.CACertificate, error) {
-	var issuer *models.CACertificate
-	_, err := svc.caSDK.GetCAs(ctx, services.GetCAsInput{
-		QueryParameters: &resources.QueryParameters{
-			Filters:  []resources.FilterOption{{Field: "subject_key_id", Value: ski, FilterOperation: resources.StringEqual}},
-			PageSize: 1,
-		},
-		ApplyFunc: func(ca models.CACertificate) { issuer = &ca },
-	})
-	if err != nil {
-		return nil, err
-	}
-	if issuer == nil {
-		return nil, errs.ErrCANotFound
-	}
-	return issuer, nil
-}
-
-// crlSignerCertificate resolves the exact configured certificate. These are direct CRLs:
-// changing their issuer would require indirect-CRL support, not just a different signature.
-func (svc CRLServiceBackend) crlSignerCertificate(ctx context.Context, issuer *models.CACertificate, serial string) (*models.Certificate, error) {
+// crlIssuer resolves the configured signer certificate and the CA that issues the CRL of the Role of an SKI.
+// These are direct CRLs: the signer has the issuer's subject and key, since changing the issuer would require
+// indirect-CRL support, not just a different signature. CAs sharing a key share the SKI, so the issuer is the
+// CA of the signer, never whichever of them a lookup by SKI finds: the CA whose current certificate the signer
+// is or, for a superseded certificate, the oldest CA with its subject and key, as the VA migration chooses.
+func (svc CRLServiceBackend) crlIssuer(ctx context.Context, ski, serial string) (*models.CACertificate, *models.Certificate, error) {
 	cert, err := svc.caSDK.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: serial})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	signer := (*x509.Certificate)(cert.Certificate)
-	ca := (*x509.Certificate)(issuer.Certificate.Certificate)
 	signerKey, err := x509.MarshalPKIXPublicKey(signer.PublicKey)
+	if err != nil || signer.KeyUsage&x509.KeyUsageCRLSign == 0 {
+		return nil, nil, errs.ErrValidateBadRequest
+	}
+
+	found := false
+	var issuer *models.CACertificate
+	_, err = svc.caSDK.GetCAs(ctx, services.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{
+			Filters: []resources.FilterOption{{Field: "subject_key_id", Value: ski, FilterOperation: resources.StringEqual}},
+		},
+		ExhaustiveRun: true,
+		ApplyFunc: func(ca models.CACertificate) {
+			found = true
+			caCert := (*x509.Certificate)(ca.Certificate.Certificate)
+			caKey, err := x509.MarshalPKIXPublicKey(caCert.PublicKey)
+			if err != nil || !bytes.Equal(caCert.RawSubject, signer.RawSubject) || !bytes.Equal(caKey, signerKey) {
+				return
+			}
+			if issuer == nil || crlIssuerPrecedes(ca, *issuer, serial) {
+				issuer = &ca
+			}
+		},
+	})
 	if err != nil {
-		return nil, errs.ErrValidateBadRequest
+		return nil, nil, err
 	}
-	issuerKey, err := x509.MarshalPKIXPublicKey(ca.PublicKey)
-	if err != nil {
-		return nil, errs.ErrValidateBadRequest
+	if !found {
+		return nil, nil, errs.ErrCANotFound
 	}
-	if !bytes.Equal(signer.RawSubject, ca.RawSubject) || !bytes.Equal(signerKey, issuerKey) || signer.KeyUsage&x509.KeyUsageCRLSign == 0 {
-		return nil, errs.ErrValidateBadRequest
+	if issuer == nil {
+		return nil, nil, errs.ErrValidateBadRequest
 	}
-	return cert, nil
+	return issuer, cert, nil
+}
+
+// crlIssuerPrecedes tells whether a is preferred over b as the issuer of the signer with that serial: the CA
+// whose current certificate it is, then the oldest, CAs without creation time last, then the lowest serial.
+func crlIssuerPrecedes(a, b models.CACertificate, serial string) bool {
+	if aCurrent, bCurrent := a.Certificate.SerialNumber == serial, b.Certificate.SerialNumber == serial; aCurrent != bCurrent {
+		return aCurrent
+	}
+	if a.CreationTS.IsZero() != b.CreationTS.IsZero() {
+		return b.CreationTS.IsZero()
+	}
+	if !a.CreationTS.Equal(b.CreationTS) {
+		return a.CreationTS.Before(b.CreationTS)
+	}
+	return a.Certificate.SerialNumber < b.Certificate.SerialNumber
 }

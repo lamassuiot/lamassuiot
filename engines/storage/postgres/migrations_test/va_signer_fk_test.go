@@ -12,11 +12,14 @@ import (
 
 func TestVARoleSignerMigration(t *testing.T) {
 	for _, tc := range []struct{ name, certificates, current, want, wantErr string }{
-		{"current CA after reissue", "('old', 'ski'), ('current', 'ski')", "('current')", "current", ""},
+		{"current CA after reissue", "('old', 'ski'), ('current', 'ski')", "('current', now())", "current", ""},
 		{"unique standalone certificate", "('standalone', 'ski')", "", "standalone", ""},
 		{"missing signer", "('unrelated', 'other')", "", "", "cannot resolve signer certificate"},
-		{"ambiguous historical certificates", "('old', 'ski'), ('new', 'ski')", "", "", "cannot resolve signer certificate"},
-		{"ambiguous current CAs", "('first', 'ski'), ('second', 'ski')", "('first'), ('second')", "", "cannot resolve signer certificate"},
+		{"ambiguous historical certificates", "('old', 'ski'), ('new', 'ski')", "", "", "candidates: new, old"},
+		// CAs sharing a key share the Role: the oldest CA created it, so it is the signer.
+		{"current CAs sharing a key", "('newer', 'ski'), ('older', 'ski')", "('newer', '2021-01-01'), ('older', '2020-01-01')", "older", ""},
+		{"current CAs sharing a key and creation time", "('b', 'ski'), ('a', 'ski')", "('b', '2020-01-01'), ('a', '2020-01-01')", "a", ""},
+		{"current CAs sharing a key without creation time", "('dated', 'ski'), ('undated', 'ski')", "('dated', '2021-01-01'), ('undated', NULL)", "dated", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := helpers.SetupLogger(config.Info, "test", "VA migration")
@@ -25,7 +28,7 @@ func TestVARoleSignerMigration(t *testing.T) {
 			m := postgres.NewMigrator(logger, con)
 			_, err := m.Goose.UpTo(context.Background(), 1)
 			require.NoError(t, err)
-			require.NoError(t, con.Exec(`CREATE SCHEMA ca; CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, subject_key_id text); CREATE TABLE ca.ca_certificates (serial_number text PRIMARY KEY)`).Error)
+			require.NoError(t, con.Exec(`CREATE SCHEMA ca; CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, subject_key_id text); CREATE TABLE ca.ca_certificates (serial_number text PRIMARY KEY, creation_ts timestamptz)`).Error)
 			require.NoError(t, con.Exec(`INSERT INTO ca.certificates VALUES `+tc.certificates).Error)
 			if tc.current != "" {
 				require.NoError(t, con.Exec(`INSERT INTO ca.ca_certificates VALUES `+tc.current).Error)
