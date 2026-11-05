@@ -291,7 +291,11 @@ jobs:
 
       - name: Check formatting
         run: |
-          files=$(gofmt -l connectors/authz/schemas_test.go)
+          files=$(gofmt -l \
+            ./connectors/authz \
+            ./engines/crypto \
+            ./engines/fs-storage \
+            ./backend/pkg/jobs)
           if [[ -n "$files" ]]; then
             echo "The following Go files are not formatted:"
             echo "$files"
