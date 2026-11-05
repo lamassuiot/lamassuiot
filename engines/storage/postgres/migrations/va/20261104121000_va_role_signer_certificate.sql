@@ -10,16 +10,23 @@ BEGIN
  END IF;
  ALTER TABLE va_role ADD COLUMN crl_signer_certificate_serial_number TEXT;
  FOR role_record IN SELECT ca_ski, crl_subject_key_id_signer FROM va_role ORDER BY ca_ski LOOP
-  SELECT array_agg(DISTINCT c.serial_number) INTO candidates
+  -- CAs sharing a key share the Role, which the oldest of them created: it signs, as the CRL service resolves.
+  SELECT array_agg(c.serial_number ORDER BY a.creation_ts ASC NULLS LAST, c.serial_number) INTO candidates
    FROM ca.certificates c JOIN ca.ca_certificates a ON a.serial_number = c.serial_number
    WHERE c.subject_key_id = role_record.crl_subject_key_id_signer;
+  IF COALESCE(cardinality(candidates), 0) > 1 THEN
+   RAISE WARNING 'VA role %, SKI %: CAs % share the key, signing with the oldest, %',
+    role_record.ca_ski, role_record.crl_subject_key_id_signer, array_to_string(candidates, ', '), candidates[1];
+   candidates := candidates[1:1];
+  END IF;
   IF COALESCE(cardinality(candidates), 0) = 0 THEN
-   SELECT array_agg(c.serial_number) INTO candidates FROM ca.certificates c
+   SELECT array_agg(c.serial_number ORDER BY c.serial_number) INTO candidates FROM ca.certificates c
     WHERE c.subject_key_id = role_record.crl_subject_key_id_signer;
   END IF;
   IF COALESCE(cardinality(candidates), 0) <> 1 THEN
-   RAISE EXCEPTION 'cannot resolve signer certificate for VA role %, SKI %: % candidates',
-    role_record.ca_ski, role_record.crl_subject_key_id_signer, COALESCE(cardinality(candidates), 0);
+   RAISE EXCEPTION 'cannot resolve signer certificate for VA role %, SKI %: % candidates: %',
+    role_record.ca_ski, role_record.crl_subject_key_id_signer, COALESCE(cardinality(candidates), 0),
+    COALESCE(array_to_string(candidates, ', '), 'none');
   END IF;
   UPDATE va_role SET crl_signer_certificate_serial_number = candidates[1] WHERE ca_ski = role_record.ca_ski;
  END LOOP;
