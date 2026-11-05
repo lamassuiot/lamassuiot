@@ -21,3 +21,8 @@ testdata
 
 # CodeGraph local index
 .codegraph/
+
+# Local development tools and scratch directories
+.serena/
+/spike/
+/tmp/
