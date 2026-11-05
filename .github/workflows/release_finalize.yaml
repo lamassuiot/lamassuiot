@@ -238,7 +238,6 @@ jobs:
             vendor=./vendor
           platforms: linux/amd64,linux/arm64
           build-args: |
-            BASE_IMAGE=alpine:3.14
             SHA1VER=${{ env.SHA1VER }}
             VERSION=${{ needs.finalize.outputs.release_version }}
           tags: |
