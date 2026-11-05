@@ -123,7 +123,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 			// Existing handler: react to certificate events to update device identity slots
 			eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManager-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
 			if err != nil {
 				return nil, nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 			}
