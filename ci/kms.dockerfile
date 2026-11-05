@@ -91,10 +91,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends p11-kit-modules
       arm64) TRIPLET=aarch64-linux-gnu ;; \
       *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac && \
-    mkdir -p /out/usr/lib/${TRIPLET}/pkcs11 && \
-    cp -L /usr/lib/${TRIPLET}/libffi.so.8 /out/usr/lib/ && \
-    cp -L /usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so /out/usr/lib/${TRIPLET}/pkcs11/ && \
-    for lib in /out/usr/lib/libffi.so.8 /out/usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so; do \
+    mkdir -p "/out/usr/lib/${TRIPLET}/pkcs11" "/out/usr/lib/x86_64-linux-gnu/pkcs11" && \
+    cp -L "/usr/lib/${TRIPLET}/libffi.so.8" /out/usr/lib/ && \
+    cp -L "/usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so" "/out/usr/lib/${TRIPLET}/pkcs11/" && \
+    cp -L "/usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so" /out/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so && \
+    for lib in /out/usr/lib/libffi.so.8 "/out/usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so" /out/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so; do \
       required=$(grep -aoE 'GLIBC_2\.[0-9]+' "$lib" | sed 's/^GLIBC_//' | sort -uV | tail -n1); \
       printf '%s\n%s\n' "$required" "$RUNTIME_GLIBC" | sort -V -C || \
         { echo "$lib requires glibc $required, runtime image provides $RUNTIME_GLIBC" >&2; exit 1; }; \
@@ -105,8 +106,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends p11-kit-modules
 # p11-kit-client.so and libffi are copied from the pkcs11-client-proxy stage
 # since they are not included in the distroless image.
 # The staging image preserves the target architecture's Debian library path
-# (x86_64-linux-gnu or aarch64-linux-gnu) so both multi-arch image variants
-# receive the module in the path expected by their dynamic loader.
+# (x86_64-linux-gnu or aarch64-linux-gnu). It also keeps the historical
+# x86_64-linux-gnu path as a compatibility alias for existing configurations.
 FROM gcr.io/distroless/cc-debian13:nonroot
 COPY --from=pkcs11-client-proxy /out/usr/lib/ /usr/lib/
 COPY --from=builder /app/kms /kms
