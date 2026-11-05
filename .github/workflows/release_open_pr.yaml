@@ -46,6 +46,17 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.release-bot-token.outputs.token }}
 
+      - name: Verify release branch exists
+        env:
+          GH_TOKEN: ${{ steps.release-bot-token.outputs.token }}
+          RELEASE_BRANCH: ${{ steps.release-branch.outputs.branch }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git ls-remote --exit-code --heads "$remote" "$RELEASE_BRANCH" >/dev/null; then
+            echo "::error::Release branch '$RELEASE_BRANCH' does not exist. Create and protect it before running this workflow."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
