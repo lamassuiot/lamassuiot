@@ -100,6 +100,26 @@ func TestUpdateCACertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	mockService.AssertCalled(t, "UpdateCAStatus", mock.Anything, mock.Anything)
 	mockService.AssertNotCalled(t, "UpdateCAMetadata", mock.Anything, mock.Anything)
 }
+
+func TestUpdateCACertificateIfNeededWithoutCertificateData(t *testing.T) {
+	mockService := new(svcmock.MockCAService)
+	cryptoMonitor := NewCryptoMonitor(mockService, nil)
+
+	ca := models.CACertificate{
+		ID: "123456",
+		Certificate: models.Certificate{
+			Status:  models.StatusActive,
+			ValidTo: time.Now().AddDate(0, 0, 1),
+		},
+	}
+
+	assert.NotPanics(t, func() {
+		cryptoMonitor.updateCAIfNeeded(ca, time.Now(), context.Background())
+	})
+	mockService.AssertNotCalled(t, "UpdateCAStatus", mock.Anything, mock.Anything)
+	mockService.AssertNotCalled(t, "UpdateCAMetadata", mock.Anything, mock.Anything)
+}
+
 func TestShouldUpdateMonitoringDeltas(t *testing.T) {
 	svc := NewCryptoMonitor(nil, nil)
 
