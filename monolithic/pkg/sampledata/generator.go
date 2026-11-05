@@ -75,7 +75,7 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 		Subject: models.Subject{
 			CommonName:       "Sample Generated Root CA",
 			Organization:     "LamassuIoT Sample",
-			OrganizationUnit: "Development",
+			OrganizationUnit: "IoT",
 			Country:          "ES",
 			State:            "Gipuzkoa",
 			Locality:         "Arrasate",
@@ -1070,7 +1070,7 @@ func importKeyAndCreateCA(ctx context.Context, logger *logrus.Entry, kmsService 
 		Subject: models.Subject{
 			CommonName:       "Sample Imported Root CA",
 			Organization:     "LamassuIoT Sample",
-			OrganizationUnit: "Development",
+			OrganizationUnit: "IoT",
 			State:            "Gipuzkoa",
 			Locality:         "Arrasate",
 		},

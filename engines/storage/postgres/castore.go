@@ -26,6 +26,14 @@ func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertific
 		return nil, err
 	}
 
+	// Association reads use the same derived fields as direct certificate reads.
+	// This hook is only applied by the querier's SELECT paths; association writes keep their table.
+	querier.preload = func(tx *gorm.DB) *gorm.DB {
+		return tx.Preload("Certificate", func(association *gorm.DB) *gorm.DB {
+			return association.Table(certificateReadTable)
+		})
+	}
+
 	return &PostgresCAStore{
 		db:      db,
 		querier: querier,
@@ -165,6 +173,9 @@ func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CAC
 	ca, err := db.querier.Insert(ctx, caCertificate, caCertificate.ID)
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return nil, errs.ErrCAAlreadyExists
+	}
+	if isCertificateKeyViolation(err) {
+		return nil, errs.ErrKeyNotFound
 	}
 	return ca, err
 }

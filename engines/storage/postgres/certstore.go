@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -12,8 +13,21 @@ import (
 )
 
 type PostgresCertificateStorage struct {
-	db      *gorm.DB
-	querier *DBQuerier[models.Certificate]
+	db          *gorm.DB
+	querier     *DBQuerier[models.Certificate]
+	readQuerier *DBQuerier[models.Certificate]
+}
+
+// certificateKeyForeignKey is the constraint of the certificates table that references the KMS keys.
+const certificateKeyForeignKey = "certificates_key_fk"
+
+// Keep the canonical table alias so authorization filters still target certificate reads.
+const certificateReadTable = "certificates_view AS certificates"
+
+// isCertificateKeyViolation tells whether err is a certificate referencing a key the KMS does not hold.
+// Other foreign keys, such as the one of a CA to its certificate, report as foreign-key violations too.
+func isCertificateKeyViolation(err error) bool {
+	return isForeignKeyViolation(err, certificateKeyForeignKey)
 }
 
 func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB) (storage.CertificatesRepo, error) {
@@ -22,14 +36,20 @@ func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB) (storage.Certif
 		return nil, err
 	}
 
+	readQuerier, err := TableQuery(logger, db, certificateReadTable, "serial_number", models.Certificate{})
+	if err != nil {
+		return nil, err
+	}
+
 	return &PostgresCertificateStorage{
-		db:      db,
-		querier: querier,
+		db:          db,
+		querier:     querier,
+		readQuerier: readQuerier,
 	}, nil
 }
 
 func (db *PostgresCertificateStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []GormExtraOps{})
+	return db.readQuerier.Count(ctx, []GormExtraOps{})
 }
 
 func (db *PostgresCertificateStorage) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
@@ -37,7 +57,7 @@ func (db *PostgresCertificateStorage) CountWithFilters(ctx context.Context, quer
 		return db.Count(ctx)
 	}
 
-	return db.querier.CountFiltered(ctx, queryParams.Filters, []GormExtraOps{})
+	return db.readQuerier.CountFiltered(ctx, queryParams.Filters, []GormExtraOps{})
 }
 
 func (db *PostgresCertificateStorage) CountByCAIDWithFilters(ctx context.Context, caID string, queryParams *resources.QueryParameters) (int, error) {
@@ -46,10 +66,10 @@ func (db *PostgresCertificateStorage) CountByCAIDWithFilters(ctx context.Context
 	}
 
 	if queryParams == nil {
-		return db.querier.Count(ctx, opts)
+		return db.readQuerier.Count(ctx, opts)
 	}
 
-	return db.querier.CountFiltered(ctx, queryParams.Filters, opts)
+	return db.readQuerier.CountFiltered(ctx, queryParams.Filters, opts)
 }
 
 func (db *PostgresCertificateStorage) CountByCAIDAndStatus(ctx context.Context, caID string, status models.CertificateStatus) (int, error) {
@@ -57,26 +77,30 @@ func (db *PostgresCertificateStorage) CountByCAIDAndStatus(ctx context.Context, 
 		{Query: "issuer_meta_id = ?", AdditionalWhere: []any{caID}},
 		{Query: "status = ?", AdditionalWhere: []any{status}},
 	}
-	return db.querier.Count(ctx, opts)
+	return db.readQuerier.Count(ctx, opts)
 }
 
 func (db *PostgresCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := []GormExtraOps{
 		{Query: "type = ?", AdditionalWhere: []any{CAType}},
 	}
-	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
+	return db.readQuerier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCertificateStorage) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Certificate]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
+	return db.readQuerier.SelectAll(ctx, req.QueryParams, []GormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
-	return db.querier.SelectExists(ctx, id, nil)
+	return db.readQuerier.SelectExists(ctx, id, nil)
 }
 
 func (db *PostgresCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
-	return db.querier.Insert(ctx, certificate, certificate.SerialNumber)
+	inserted, err := db.querier.Insert(ctx, certificate, certificate.SerialNumber)
+	if isCertificateKeyViolation(err) {
+		return nil, errs.ErrKeyNotFound
+	}
+	return inserted, err
 }
 
 func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
@@ -84,14 +108,26 @@ func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *m
 }
 
 func (db *PostgresCertificateStorage) Delete(ctx context.Context, serialNumber string) error {
-	return db.querier.Delete(ctx, serialNumber)
+	err := db.querier.Delete(ctx, serialNumber)
+	if isForeignKeyViolation(err, "va_role_signer_certificate_fk") {
+		return errs.ErrCertificateInUse
+	}
+	return err
+}
+
+func (db *PostgresCertificateStorage) ReleaseKey(ctx context.Context, serialNumbers []string) error {
+	if len(serialNumbers) == 0 {
+		return nil
+	}
+
+	return db.db.WithContext(ctx).Table("certificates").Where("serial_number IN ?", serialNumbers).Update("key_id", nil).Error
 }
 
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := []GormExtraOps{
 		{Query: "issuer_meta_id = ?", AdditionalWhere: []any{caID}},
 	}
-	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
+	return db.readQuerier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, req storage.StorageListRequest[models.Certificate]) (string, error) {
@@ -102,7 +138,7 @@ func (db *PostgresCertificateStorage) SelectByExpirationDate(ctx context.Context
 		{Query: "status != ?", AdditionalWhere: []any{models.StatusRevoked}},
 	}
 
-	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
+	return db.readQuerier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, req storage.StorageListRequest[models.Certificate]) (string, error) {
@@ -111,7 +147,7 @@ func (db *PostgresCertificateStorage) SelectByCAIDAndStatus(ctx context.Context,
 		{Query: "issuer_meta_id = ?", AdditionalWhere: []any{CAID}},
 	}
 
-	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
+	return db.readQuerier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, req storage.StorageListRequest[models.Certificate]) (string, error) {
@@ -119,11 +155,11 @@ func (db *PostgresCertificateStorage) SelectByStatus(ctx context.Context, status
 		{Query: "status = ?", AdditionalWhere: []any{status}},
 	}
 
-	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
+	return db.readQuerier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCertificateStorage) CountByCA(ctx context.Context, CAID string) (int, error) {
-	return db.querier.Count(ctx, []GormExtraOps{
+	return db.readQuerier.Count(ctx, []GormExtraOps{
 		{Query: "issuer_meta_id = ?", AdditionalWhere: []any{CAID}},
 	})
 }

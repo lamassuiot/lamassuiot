@@ -478,14 +478,14 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be true, got %t", role.CRLOptions.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SubjectKeyIDSigner != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CRLOptions.SubjectKeyIDSigner)
+	if role.CRLOptions.SignerCertificateSerialNumber != ca.Certificate.SerialNumber {
+		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.CRLOptions.SignerCertificateSerialNumber)
 	}
 
 	//Now Update the role
 
 	role.CRLOptions.RegenerateOnRevoke = false
-	role.CRLOptions.SubjectKeyIDSigner = "123"
+	role.CRLOptions.SignerCertificateSerialNumber = ca.Certificate.SerialNumber
 	role.CRLOptions.Validity = models.TimeDuration(time.Hour * 2)
 
 	role, err = serverTest.VA.CRLService.UpdateVARole(context.Background(), services.UpdateVARoleInput{
@@ -509,8 +509,8 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be false, got %t", role.CRLOptions.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SubjectKeyIDSigner != "123" {
-		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be 123, got %s", role.CRLOptions.SubjectKeyIDSigner)
+	if role.CRLOptions.SignerCertificateSerialNumber != ca.Certificate.SerialNumber {
+		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.CRLOptions.SignerCertificateSerialNumber)
 	}
 
 	//Now get all roles

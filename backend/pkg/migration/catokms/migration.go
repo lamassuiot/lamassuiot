@@ -177,14 +177,6 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 
-		bindedResources := make([]models.KMSBindResource, len(entry.serials))
-		for i, sn := range entry.serials {
-			bindedResources[i] = models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   sn,
-			}
-		}
-
 		key := &models.Key{
 			KeyID:         entry.keyID,
 			EngineID:      entry.engineID,
@@ -196,12 +188,10 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			PublicKey:     entry.publicKey,
 			CreationTS:    entry.creationTS,
 			Tags:          []string{},
-			Metadata: map[string]any{
-				models.KMSBindResourceKey: bindedResources,
-			},
+			Metadata:      map[string]any{},
 		}
 
-		logger.Infof("key %s — engine=%s alg=%s bits=%d binds=%d",
+		logger.Infof("key %s — engine=%s alg=%s bits=%d certificates=%d",
 			entry.keyID, entry.engineID, entry.algorithm, entry.size, len(entry.serials))
 
 		if dryRun {

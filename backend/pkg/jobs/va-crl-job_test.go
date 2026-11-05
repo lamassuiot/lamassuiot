@@ -31,9 +31,9 @@ func TestCreatePeriodicCRLExpired(t *testing.T) {
 				ValidUntil: now.Add(-time.Second * 1),
 			},
 			CRLOptions: models.VACRLRole{
-				Validity:           models.TimeDuration(10 * time.Second),
-				SubjectKeyIDSigner: "123456",
-				RegenerateOnRevoke: false,
+				Validity:                      models.TimeDuration(10 * time.Second),
+				SignerCertificateSerialNumber: "123456",
+				RegenerateOnRevoke:            false,
 			},
 		},
 	}
@@ -66,9 +66,9 @@ func TestCreatePeriodicCRLValid(t *testing.T) {
 				ValidUntil: now.Add(time.Second * 10000),
 			},
 			CRLOptions: models.VACRLRole{
-				Validity:           models.TimeDuration(10 * time.Second),
-				SubjectKeyIDSigner: "123456",
-				RegenerateOnRevoke: false,
+				Validity:                      models.TimeDuration(10 * time.Second),
+				SignerCertificateSerialNumber: "123456",
+				RegenerateOnRevoke:            false,
 			},
 		},
 	}

@@ -53,7 +53,7 @@ func postgresImportInput(t *testing.T, id string, serial int64) services.ImportC
 }
 
 func TestCAStoreUniqueIDPostgres(t *testing.T) {
-	_, suite := postgrestest.BeforeSuite([]string{"ca"}, false)
+	_, suite := postgrestest.BeforeSuite([]string{"kms", "ca"}, false)
 	t.Cleanup(suite.AfterSuite)
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
@@ -62,6 +62,8 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 	pool, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, pool.Close()) })
+	// the CA schema references the KMS one, which is migrated first
+	NewMigrator(log, suite.DB["kms"]).MigrateToLatest()
 	NewMigrator(log, db).MigrateToLatest()
 	repo, err := NewCAPostgresRepository(log, db)
 	require.NoError(t, err)

@@ -807,3 +807,17 @@ pg_restore -h localhost -U postgres -d lamassu -n ca ca_dump.backup
 
 # Repeat for each database...
 ```
+
+## Migration Order
+
+The schemas are not independent: the certificates of the `ca` schema reference the keys of the `kms` schema (`ca.certificates (engine_id, key_id)` references `kms.kms_keys`), so the database refuses to delete a key a certificate uses. The `kms` schema must therefore be fully migrated **before** the `ca` one (also when restoring dumps: restore `kms` first).
+
+`MigrateSchema` and `MigrateAllSchemas` already do it: migrating `ca` migrates `kms` first. When running `goose-lamassu` by hand, once per schema, run it for `kms` first; the `ca` migration that adds the reference stops with `kms schema not found: migrate the kms schema before the ca schema` otherwise.
+
+Both foreign keys are validated, including existing rows. Register legacy keys with `ca-to-kms-migration` after migrating `kms` and before migrating `ca`; a missing referenced key aborts the migration. Certificates without a managed key may keep a NULL `key_id`. Migrate `va` after `ca`: each VA Role stores `crl_signer_certificate_serial_number`, referencing `ca.certificates(serial_number)`. Each signer SKI resolves to the current certificate of the CA with that SKI. CAs sharing a key share the Role, so it gets the certificate of the oldest of them (a warning lists the others), which is also the CA whose CRL the VA then serves. Without a current CA certificate, the SKI must match exactly one certificate; a missing or ambiguous signer aborts the VA migration, listing the candidate serials. Clients must send `signer_certificate_serial_number` instead of `subject_key_id_signer` when updating a Role. A certificate referenced by a Role cannot be deleted (HTTP 409).
+
+CRLs remain direct CRLs: a configured signer certificate must have the same subject and public key as the Role's CA, with cRLSign key usage. Reissued certificates with that identity are supported. Unrelated/delegated signers are rejected (HTTP 400). Update custom authorization policies filtering `crl_subject_key_id_signer` to use `crl_signer_certificate_serial_number`, with concrete certificate serials as filter values; SKI filter values cannot be renamed mechanically.
+
+## Derived fields
+
+`ca.certificates_view` is a view over `ca.certificates` that LEFT JOINs `kms.kms_keys` to expose the derived `has_private_key` column (true when the referenced KMS key holds a private key). It is read-only by construction; all reads of certificates go through it, writes go to the table. Future changes to the columns of `certificates` (`c.*`) must keep the view in sync: Postgres expands `c.*` when creating the view, so added, removed or renamed columns require refreshing the view definition with a migration (migration `20261104130000_certificates_view.sql`).
