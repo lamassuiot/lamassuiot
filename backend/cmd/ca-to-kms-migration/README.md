@@ -4,26 +4,36 @@
 
 The KMS service was introduced as an independent service in version 3.7.0 of Lamassu IoT. In earlier versions, private keys were managed exclusively by the crypto engine (filesystem, PKCS#11, Vault KV2, AWS KMS, etc.) and there was no separate KMS database table to track them.
 
-When upgrading from an older installation, each CA certificate of type `MANAGED` or `IMPORTED_WITH_KEY` has a private key stored in the crypto engine under its `subject_key_id`. That key has no corresponding row in the `kms_keys` table of the KMS database. As a result:
+When upgrading from an older installation, each CA certificate of type `MANAGED` or `IMPORTED_WITH_KEY` has a private key stored in the crypto engine under its `subject_key_id`. That key has no corresponding row in the `kms_keys` table of the KMS storage (the `kms` schema of the `pki` database in 4.0.0). As a result:
 
 - The KMS service is unaware of those keys and cannot manage or list them.
 - The certificates of the CA cannot reference those keys in the database, so nothing keeps the KMS from deleting a key a CA still uses.
 
-This tool performs a one-shot, idempotent migration that reads the CA database and writes the missing records into the KMS database.
+This tool performs a one-shot, idempotent migration that reads CA certificates
+and writes the missing records into the KMS.
+
+> **Note (4.0.0)**: Since 4.0.0, Lamassu stores all services in the single
+> `pki` PostgreSQL database, using one schema per service. This tool reads the
+> `ca` schema and writes the `kms` schema of the `pki` database
+> (`engines/storage/postgres` hardcodes `dbname=pki`). If your installation is
+> still on 3.8.0 with per-service databases, transfer the data to the `pki`
+> schemas first (see the upgrade guide) and run this tool only afterwards.
 
 ## What It Does
 
-1. Connects to the CA Postgres database (read-only).
-2. Scans all CA certificates of type `MANAGED` and `IMPORTED_WITH_KEY`.
+1. Connects to the PostgreSQL database using the standard storage config.
+2. Reads all CA certificates of type `MANAGED` and `IMPORTED_WITH_KEY` from the
+   `ca` schema.
 3. Groups certificates that share the same public key (same `subject_key_id`).
-4. For each unique key not already present in the KMS database:
-   - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA database.
+4. For each unique key not already present in the KMS storage:
+   - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA schema.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
 5. Inserts the record into the KMS `kms_keys` table.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
 
-The operation is **idempotent**: if a key already exists in the KMS database it is skipped, so the tool can be run multiple times safely.
+The operation is **idempotent**: if a key already exists in the KMS storage it is
+skipped, so the tool can be run multiple times safely.
 
 ## Configuration
 
@@ -42,7 +52,9 @@ storage:
   password: <password>
 ```
 
-The CA and KMS databases are assumed to live on the same Postgres server. The tool connects to each database automatically — `ca` for reading CA certificates and `kms` for writing key records — so only one connection config is needed.
+In 4.0.0 the `ca` and `kms` schemas live in the same `pki` database, so one
+connection config is enough. The tool reads CA certificates from the `ca` schema
+and writes key records to the `kms` schema.
 
 > **Note**: The `hostname` field (not `host`) must be used.
 
@@ -56,7 +68,8 @@ go build -o ca-to-kms-migration ./backend/cmd/ca-to-kms-migration/
 
 ### Dry run (no writes)
 
-Run with `--dry-run` first to inspect what would be migrated without modifying the KMS database:
+Run with `--dry-run` first to inspect what would be migrated without modifying
+the KMS storage:
 
 ```bash
 LAMASSU_CONFIG_FILE=migrate.yaml ./ca-to-kms-migration --dry-run
