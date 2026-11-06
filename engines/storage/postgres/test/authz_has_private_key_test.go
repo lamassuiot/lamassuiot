@@ -49,7 +49,9 @@ func newHasPrivateKeyFixture(t *testing.T) hasPrivateKeyFixture {
 	f := hasPrivateKeyFixture{db: db, certs: certs, cas: cas, caWithKey: "ca-with-key", caWithoutKey: "ca-without-key",
 		withKey: newTestCertificate(t, 601, "engine", "private"), withoutKey: newTestCertificate(t, 602, "engine", "public")}
 	for id, cert := range map[string]*models.Certificate{f.caWithKey: f.withKey, f.caWithoutKey: f.withoutKey} {
-		_, err := cas.Insert(context.Background(), &models.CACertificate{ID: id, Certificate: *cert, Metadata: map[string]any{}, CreationTS: time.Now()})
+		_, err := certs.Insert(context.Background(), cert)
+		require.NoError(t, err)
+		_, err = cas.Insert(context.Background(), &models.CACertificate{ID: id, CertificateSerialNumber: cert.SerialNumber, Certificate: *cert, Metadata: map[string]any{}, CreationTS: time.Now()})
 		require.NoError(t, err)
 	}
 	return f

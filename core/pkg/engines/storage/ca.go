@@ -46,6 +46,8 @@ type CACertificatesRepo interface {
 	SelectBySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req StorageListRequest[models.CACertificate]) (string, error)
 	SelectByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req StorageListRequest[models.CACertificate]) (string, error)
 
+	// Insert and Update write only CA fields. The referenced certificate must already exist;
+	// certificate changes must be saved through CertificatesRepo.
 	Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
 	Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
 	Delete(ctx context.Context, caID string) error
