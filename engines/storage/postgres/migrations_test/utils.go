@@ -13,6 +13,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	postgres_test "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/test"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	postgresDriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -137,4 +138,79 @@ func CleanAllTables(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 			t.Fatalf("could not truncate tables: %s", err)
 		}
 	}
+}
+
+func assertTenantRLSEnabled(t *testing.T, con *gorm.DB, schema string, table string, policy string) {
+	t.Helper()
+
+	var isSuperuser, bypassRLS bool
+	if err := con.Raw("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'lamassu_app'").Row().Scan(&isSuperuser, &bypassRLS); err != nil {
+		t.Fatalf("could not read lamassu_app role: %s", err)
+	}
+	assert.False(t, isSuperuser, "lamassu_app must not be a superuser")
+	assert.False(t, bypassRLS, "lamassu_app must not bypass RLS")
+
+	assert.True(t, hasSchemaUsage(t, con, schema), "lamassu_app must have USAGE on schema %s", schema)
+	for _, privilege := range []string{"SELECT", "INSERT", "UPDATE", "DELETE"} {
+		assert.True(t, hasTablePrivilege(t, con, schema, table, privilege), "lamassu_app must have %s on %s.%s", privilege, schema, table)
+	}
+
+	enabled, forced := tableRLSStatus(t, con, schema, table)
+	assert.True(t, enabled, "row level security must be enabled on %s.%s", schema, table)
+	assert.False(t, forced, "row level security must not be forced on %s.%s", schema, table)
+
+	var roles, command string
+	if err := con.Raw("SELECT array_to_string(roles, ','), cmd FROM pg_policies WHERE schemaname = ? AND tablename = ? AND policyname = ?", schema, table, policy).Row().Scan(&roles, &command); err != nil {
+		t.Fatalf("could not read policy %s on %s.%s: %s", policy, schema, table, err)
+	}
+	assert.Equal(t, "lamassu_app", roles, "policy %s must only apply to lamassu_app", policy)
+	assert.Equal(t, "ALL", command, "policy %s must apply to every command", policy)
+}
+
+func assertTenantRLSDisabled(t *testing.T, con *gorm.DB, schema string, table string, policy string) {
+	t.Helper()
+
+	assert.False(t, hasSchemaUsage(t, con, schema), "lamassu_app must not have USAGE on schema %s", schema)
+	for _, privilege := range []string{"SELECT", "INSERT", "UPDATE", "DELETE"} {
+		assert.False(t, hasTablePrivilege(t, con, schema, table, privilege), "lamassu_app must not have %s on %s.%s", privilege, schema, table)
+	}
+
+	enabled, _ := tableRLSStatus(t, con, schema, table)
+	assert.False(t, enabled, "row level security must be disabled on %s.%s", schema, table)
+
+	var policies int64
+	if err := con.Raw("SELECT count(*) FROM pg_policies WHERE schemaname = ? AND tablename = ? AND policyname = ?", schema, table, policy).Row().Scan(&policies); err != nil {
+		t.Fatalf("could not count policies on %s.%s: %s", schema, table, err)
+	}
+	assert.Zero(t, policies, "policy %s must not exist on %s.%s", policy, schema, table)
+}
+
+func hasSchemaUsage(t *testing.T, con *gorm.DB, schema string) bool {
+	t.Helper()
+
+	var granted bool
+	if err := con.Raw("SELECT has_schema_privilege('lamassu_app', ?, 'USAGE')", schema).Row().Scan(&granted); err != nil {
+		t.Fatalf("could not check USAGE on schema %s: %s", schema, err)
+	}
+	return granted
+}
+
+func hasTablePrivilege(t *testing.T, con *gorm.DB, schema string, table string, privilege string) bool {
+	t.Helper()
+
+	var granted bool
+	if err := con.Raw("SELECT has_table_privilege('lamassu_app', ?, ?)", schema+"."+table, privilege).Row().Scan(&granted); err != nil {
+		t.Fatalf("could not check %s on %s.%s: %s", privilege, schema, table, err)
+	}
+	return granted
+}
+
+func tableRLSStatus(t *testing.T, con *gorm.DB, schema string, table string) (bool, bool) {
+	t.Helper()
+
+	var enabled, forced bool
+	if err := con.Raw("SELECT c.relrowsecurity, c.relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = ? AND c.relname = ?", schema, table).Row().Scan(&enabled, &forced); err != nil {
+		t.Fatalf("could not read row level security status of %s.%s: %s", schema, table, err)
+	}
+	return enabled, forced
 }

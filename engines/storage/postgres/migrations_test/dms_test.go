@@ -190,6 +190,11 @@ func TestDMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261026130000_enforce_tenant_constraints")
 	}
+
+	migrationTest_DMS_20261105120000_enable_tenant_rls(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261105120000_enable_tenant_rls")
+	}
 }
 
 func migrationTest_DMS_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -547,4 +552,15 @@ func migrationTest_DMS_20261026130000_enforce_tenant_constraints(t *testing.T, l
 		t.Fatalf("failed to read dms indexes: %v", tx.Error)
 	}
 	assert.Equal(t, int64(1), indexes, "dms must have an index on tenant_id")
+}
+
+func migrationTest_DMS_20261105120000_enable_tenant_rls(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, dmsDBName)
+	assertTenantRLSEnabled(t, con, dmsDBName, "dms", "dms_tenant_isolation")
+
+	RollbackMigration(t, logger, con, dmsDBName, "20261105120000_enable_tenant_rls")
+	assertTenantRLSDisabled(t, con, dmsDBName, "dms", "dms_tenant_isolation")
+
+	ApplyMigration(t, logger, con, dmsDBName)
+	assertTenantRLSEnabled(t, con, dmsDBName, "dms", "dms_tenant_isolation")
 }

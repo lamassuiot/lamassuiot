@@ -252,6 +252,11 @@ func TestDeviceManagerMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261029130000_enforce_tenant_constraints")
 	}
+
+	MigrationTest_DeviceManager_20261105120000_enable_tenant_rls(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261105120000_enable_tenant_rls")
+	}
 }
 
 func MigrationTest_DeviceManager_20251217120000_metadata_text_to_jsonb(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -594,4 +599,21 @@ func MigrationTest_DeviceManager_20261029130000_enforce_tenant_constraints(t *te
 		t.Fatalf("failed to read devicemanager indexes: %v", tx.Error)
 	}
 	assert.Equal(t, int64(3), indexes, "devices, device_groups and device_events must have an index on tenant_id")
+}
+
+func MigrationTest_DeviceManager_20261105120000_enable_tenant_rls(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+	assertTenantRLSEnabled(t, con, DeviceManagerDBName, "devices", "devices_tenant_isolation")
+	assertTenantRLSEnabled(t, con, DeviceManagerDBName, "device_groups", "device_groups_tenant_isolation")
+	assertTenantRLSEnabled(t, con, DeviceManagerDBName, "device_events", "device_events_tenant_isolation")
+
+	RollbackMigration(t, logger, con, DeviceManagerDBName, "20261105120000_enable_tenant_rls")
+	assertTenantRLSDisabled(t, con, DeviceManagerDBName, "devices", "devices_tenant_isolation")
+	assertTenantRLSDisabled(t, con, DeviceManagerDBName, "device_groups", "device_groups_tenant_isolation")
+	assertTenantRLSDisabled(t, con, DeviceManagerDBName, "device_events", "device_events_tenant_isolation")
+
+	ApplyMigration(t, logger, con, DeviceManagerDBName)
+	assertTenantRLSEnabled(t, con, DeviceManagerDBName, "devices", "devices_tenant_isolation")
+	assertTenantRLSEnabled(t, con, DeviceManagerDBName, "device_groups", "device_groups_tenant_isolation")
+	assertTenantRLSEnabled(t, con, DeviceManagerDBName, "device_events", "device_events_tenant_isolation")
 }

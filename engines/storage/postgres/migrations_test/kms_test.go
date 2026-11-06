@@ -138,6 +138,11 @@ func TestKMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261030150000_enforce_tenant_constraints")
 	}
+
+	migrationTest_KMS_20261105120000_enable_tenant_rls(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261105120000_enable_tenant_rls")
+	}
 }
 
 func migrationTest_KMS_20261030140000_backfill_default_tenant(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -193,4 +198,15 @@ func migrationTest_KMS_20261030150000_enforce_tenant_constraints(t *testing.T, l
 	m := postgres.NewMigrator(logger, con)
 	_, err := m.Goose.ApplyVersion(context.Background(), 20261030150000, false)
 	assert.Error(t, err, "the rollback must refuse keys held by more than one tenant")
+}
+
+func migrationTest_KMS_20261105120000_enable_tenant_rls(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, kmsDBName)
+	assertTenantRLSEnabled(t, con, kmsDBName, "kms_keys", "kms_keys_tenant_isolation")
+
+	RollbackMigration(t, logger, con, kmsDBName, "20261105120000_enable_tenant_rls")
+	assertTenantRLSDisabled(t, con, kmsDBName, "kms_keys", "kms_keys_tenant_isolation")
+
+	ApplyMigration(t, logger, con, kmsDBName)
+	assertTenantRLSEnabled(t, con, kmsDBName, "kms_keys", "kms_keys_tenant_isolation")
 }

@@ -117,4 +117,23 @@ func TestAlertsMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261027130000_enforce_tenant_constraints")
 	}
+
+	migrationTest_Alerts_20261105120000_enable_tenant_rls(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261105120000_enable_tenant_rls")
+	}
+}
+
+func migrationTest_Alerts_20261105120000_enable_tenant_rls(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, alertsDBName)
+	assertTenantRLSEnabled(t, con, alertsDBName, "subscriptions", "subscriptions_tenant_isolation")
+	assertTenantRLSEnabled(t, con, alertsDBName, "events", "events_tenant_isolation")
+
+	RollbackMigration(t, logger, con, alertsDBName, "20261105120000_enable_tenant_rls")
+	assertTenantRLSDisabled(t, con, alertsDBName, "subscriptions", "subscriptions_tenant_isolation")
+	assertTenantRLSDisabled(t, con, alertsDBName, "events", "events_tenant_isolation")
+
+	ApplyMigration(t, logger, con, alertsDBName)
+	assertTenantRLSEnabled(t, con, alertsDBName, "subscriptions", "subscriptions_tenant_isolation")
+	assertTenantRLSEnabled(t, con, alertsDBName, "events", "events_tenant_isolation")
 }

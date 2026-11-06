@@ -863,6 +863,11 @@ func TestMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261030130000_enforce_tenant_constraints")
 	}
+
+	MigrationTest_CA_20261105120000_enable_tenant_rls(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261105120000_enable_tenant_rls")
+	}
 }
 
 func MigrationTest_CA_20261030120000_backfill_default_tenant(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -906,4 +911,21 @@ func MigrationTest_CA_20261030130000_enforce_tenant_constraints(t *testing.T, lo
 		t.Fatalf("failed to read ca indexes: %v", tx.Error)
 	}
 	assert.Equal(t, int64(3), indexes, "certificates, ca_certificates and issuance_profiles must have an index on tenant_id")
+}
+
+func MigrationTest_CA_20261105120000_enable_tenant_rls(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+	assertTenantRLSEnabled(t, con, CADBName, "ca_certificates", "ca_certificates_tenant_isolation")
+	assertTenantRLSEnabled(t, con, CADBName, "certificates", "certificates_tenant_isolation")
+	assertTenantRLSEnabled(t, con, CADBName, "issuance_profiles", "issuance_profiles_tenant_isolation")
+
+	RollbackMigration(t, logger, con, CADBName, "20261105120000_enable_tenant_rls")
+	assertTenantRLSDisabled(t, con, CADBName, "ca_certificates", "ca_certificates_tenant_isolation")
+	assertTenantRLSDisabled(t, con, CADBName, "certificates", "certificates_tenant_isolation")
+	assertTenantRLSDisabled(t, con, CADBName, "issuance_profiles", "issuance_profiles_tenant_isolation")
+
+	ApplyMigration(t, logger, con, CADBName)
+	assertTenantRLSEnabled(t, con, CADBName, "ca_certificates", "ca_certificates_tenant_isolation")
+	assertTenantRLSEnabled(t, con, CADBName, "certificates", "certificates_tenant_isolation")
+	assertTenantRLSEnabled(t, con, CADBName, "issuance_profiles", "issuance_profiles_tenant_isolation")
 }
