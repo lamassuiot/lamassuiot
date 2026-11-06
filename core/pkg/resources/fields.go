@@ -37,6 +37,7 @@ var CAFilterableFields = map[string]FilterFieldType{
 	"extensions.key_usage":          StringArrayFilterFieldType,
 	"extensions.extended_key_usage": StringArrayFilterFieldType,
 	"is_ca":                         EnumFilterFieldType,
+	"has_private_key":               EnumFilterFieldType,
 }
 
 var KMSFilterableFields = map[string]FilterFieldType{
