@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 	"uuid"
@@ -1520,7 +1521,11 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	// Update the CA to point to the new certificate
 	ca.CertificateSerialNumber = newCertificateRecord.SerialNumber
 	ca.Certificate = newCertificateRecord // Update the Certificate field to point to new certificate
-	ca.Metadata = newMetadata
+	// Keep the CA's own metadata; only add or refresh the reissuance keys.
+	if ca.Metadata == nil {
+		ca.Metadata = map[string]any{}
+	}
+	maps.Copy(ca.Metadata, newMetadata)
 
 	updatedCA, err := svc.caStorage.Update(ctx, ca)
 	if err != nil {
