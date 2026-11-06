@@ -681,9 +681,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		input.Metadata = map[string]any{}
 	}
 
-	var err error
 	caValidator.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
-	err = caValidator.Struct(input)
+	err := caValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("CreateCAInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -753,11 +752,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	signer := NewKMSCryptoSigner(ctx, *key, svc.kmsService)
 	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
 
-	var akid, skid string
-	skid = key.KeyID
+	var akid string
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
-		// Generate Key Pair to be used by the new CA
 		akid = key.KeyID
 
 		// Root CA. Root CAs can be generate directly
@@ -844,15 +841,10 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		}
 	}
 
-	if err != nil {
-		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
-		return nil, err
-	}
-
 	if certificate == nil {
 		// Root creation signs directly with the new CA's key.
 		certificate, err = svc.certStorage.Insert(ctx, &models.Certificate{
-			SubjectKeyID:   skid,
+			SubjectKeyID:   key.KeyID,
 			AuthorityKeyID: akid,
 			Certificate:    (*models.X509Certificate)(ca),
 			Extensions:     certificateExtensionsFromX509(ca),
@@ -1448,72 +1440,31 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		lFunc.Debugf("Duration is not provided. Preserved current CA validity duration")
 	}
 
-	var newCert *x509.Certificate
-	var newAKID, newSKID string
-
-	// Check if this is a root CA or subordinate CA
-	if ca.Certificate.SubjectKeyID == ca.Certificate.AuthorityKeyID {
-		// Root CA - reissue as self-signed using CSR approach for consistency
-		lFunc.Debugf("reissuing root CA %s", input.CAID)
-
-		// Create a CSR for the root CA with the existing key using the certificate as template
-		csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
-		if err != nil {
-			lFunc.Errorf("could not create CSR for reissued root CA: %s", err)
-			return nil, err
-		}
-
-		// Sign the CSR with itself (self-signed)
-		signedCert, err := svc.signCertificate(ctx, services.SignCertificateInput{
-			CAID:            input.CAID,
-			CertRequest:     (*models.X509CertificateRequest)(csr),
-			IssuanceProfile: profile,
-		}, subjectKey)
-		if err != nil {
-			lFunc.Errorf("could not sign reissued root CA certificate: %s", err)
-			return nil, err
-		}
-
-		newCert = (*x509.Certificate)(signedCert.Certificate)
-		newSKID = signedCert.SubjectKeyID
-		newAKID = signedCert.AuthorityKeyID
-	} else {
-		// Subordinate CA - need to sign with parent CA
-		lFunc.Debugf("reissuing subordinate CA %s", input.CAID)
-
-		// Get parent CA
-		exists, parentCA, err := svc.caStorage.SelectExistsByID(ctx, ca.Certificate.IssuerCAMetadata.ID)
-		if err != nil {
-			lFunc.Errorf("could not get parent CA %s: %s", ca.Certificate.IssuerCAMetadata.ID, err)
-			return nil, err
-		}
-		if !exists {
-			lFunc.Errorf("parent CA %s not found", ca.Certificate.IssuerCAMetadata.ID)
-			return nil, errs.ErrCANotFound
-		}
-
-		// Create a CSR for the subordinate CA with the existing key
-		csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
-		if err != nil {
-			lFunc.Errorf("could not create CSR for reissued subordinate CA: %s", err)
-			return nil, err
-		}
-
-		// Sign the CSR with the parent CA, using the resolved issuance profile
-		signedCert, err := svc.signCertificate(ctx, services.SignCertificateInput{
-			CAID:            parentCA.ID,
-			CertRequest:     (*models.X509CertificateRequest)(csr),
-			IssuanceProfile: profile,
-		}, subjectKey)
-		if err != nil {
-			lFunc.Errorf("could not sign reissued subordinate CA certificate: %s", err)
-			return nil, err
-		}
-
-		newCert = (*x509.Certificate)(signedCert.Certificate)
-		newSKID = signedCert.SubjectKeyID
-		newAKID = signedCert.AuthorityKeyID
+	// A root CA signs its own reissue; a subordinate CA is signed by its parent.
+	// signCertificate returns ErrCANotFound if the issuing CA does not exist.
+	issuerCAID := input.CAID
+	if ca.Certificate.SubjectKeyID != ca.Certificate.AuthorityKeyID {
+		issuerCAID = ca.Certificate.IssuerCAMetadata.ID
 	}
+	lFunc.Debugf("reissuing CA %s signed by CA %s", input.CAID, issuerCAID)
+
+	// Create a CSR with the existing key using the current certificate as template
+	csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
+	if err != nil {
+		lFunc.Errorf("could not create CSR for reissued CA: %s", err)
+		return nil, err
+	}
+
+	signedCert, err := svc.signCertificate(ctx, services.SignCertificateInput{
+		CAID:            issuerCAID,
+		CertRequest:     (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: profile,
+	}, subjectKey)
+	if err != nil {
+		lFunc.Errorf("could not sign reissued CA certificate: %s", err)
+		return nil, err
+	}
+	newCert := (*x509.Certificate)(signedCert.Certificate)
 
 	// Get old serial number for linking metadata
 	oldSerialNumber := ca.Certificate.SerialNumber
@@ -1540,8 +1491,8 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	// Create the new certificate record
 	newCertificateRecord := models.Certificate{
 		SerialNumber:     helpers.SerialNumberToHexString(newCert.SerialNumber),
-		SubjectKeyID:     newSKID,
-		AuthorityKeyID:   newAKID,
+		SubjectKeyID:     signedCert.SubjectKeyID,
+		AuthorityKeyID:   signedCert.AuthorityKeyID,
 		Metadata:         newMetadata,
 		Status:           models.StatusActive,
 		Certificate:      (*models.X509Certificate)(newCert),

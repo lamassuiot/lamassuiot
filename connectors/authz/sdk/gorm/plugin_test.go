@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,17 +195,40 @@ func TestAuthzGormPlugin_InjectsSingleHopFilterDeviceRevoke(t *testing.T) {
 	whereAfterLastJoin(t, sql)
 }
 
-func TestAuthzGormPlugin_PreservesRestrictionsForViewAlias(t *testing.T) {
+func TestAuthzGormPlugin_AppliesEngineGeneratedPolicyToAliasedViewQuery(t *testing.T) {
+	// Contract between the engine and the plugin: the FullSQL the engine really generates
+	// for an entity read through a view table must reach the query the certificate store
+	// issues ("certificates_view AS certificates"). If the engine's FROM alias, its column
+	// qualifier or the plugin's table matching drift apart, the plugin stops injecting the
+	// policy and the listing is no longer restricted (fail open).
+	schemas := engine.NewSchemaRegistry()
+	require.NoError(t, schemas.Load("../../pki.json", "pki"))
+	policies := engine.NewPolicyRegistry()
+	require.NoError(t, policies.AddPolicy(&models.Policy{ID: "keyed", Name: "keyed", Rules: []*models.Rule{{
+		Namespace: "pki", SchemaName: "ca", EntityType: "certificate", Actions: []string{"read"},
+		ColumnFilters: []models.ColumnFilter{{Column: "has_private_key", Type: "bool", Operator: "eq", Value: true}},
+		Relations:     []models.RelationRule{{ToSchemaName: "ca", ToEntityType: "ca_certificate", To: "ca.ca_certificate", Via: "serial_number", Actions: []string{"read"}}},
+	}}}))
+	fg, err := engine.NewFilterGenerator(schemas, policies)
+	require.NoError(t, err)
+
+	filter, err := fg.GenerateListFilter("read", "ca", "certificate")
+	require.NoError(t, err)
+	require.NotEmpty(t, filter.Conditions)
+
 	db := testDB(t)
 	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
-	authzSQL := `SELECT * FROM ca.certificates LEFT JOIN ca.grants AS j0 ON ca.certificates.serial_number = j0.serial_number WHERE ca.certificates.subject_common_name = 'ca.certificates.serial_number' AND j0.owner = 'allowed'`
-	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
+	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, filter.FullSQL)
 	var dest []map[string]any
 	result := db.WithContext(ctx).Table("certificates_view AS certificates").Find(&dest)
 	require.NoError(t, result.Error)
 	sql := result.Statement.SQL.String()
-	assert.Contains(t, sql, "certificates.serial_number = j0.serial_number")
-	assert.Contains(t, sql, "certificates.subject_common_name = 'ca.certificates.serial_number'")
-	assert.NotContains(t, sql, "ON ca.certificates.serial_number")
-	assert.NotContains(t, sql, "WHERE ca.certificates.subject_common_name")
+
+	for _, join := range filter.Joins {
+		assert.Contains(t, sql, join)
+	}
+	assert.Contains(t, sql, "WHERE "+strings.Join(filter.Conditions, " AND "))
+	// Column references use the alias; the physical relation is not in scope under the alias,
+	// so a schema-qualified reference would make the database reject the query.
+	assert.NotContains(t, sql, "ca.certificates.")
 }
