@@ -6,6 +6,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
 	"testing"
 	"time"
 
@@ -71,6 +73,49 @@ func TestImportCAWithKey(t *testing.T) {
 		require.Equal(t, defaultEngine, ca.Certificate.EngineID)
 		require.Equal(t, kmsKeyIDOf(t, &key.PublicKey), ca.Certificate.KeyID)
 	})
+}
+
+// ImportCA must refuse a certificate that is not a CA (basicConstraints CA:FALSE or absent), and must do so
+// before its private key reaches the KMS.
+func TestImportCARejectsNonCACertificates(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	profile := newKeyRefsProfile(t)
+
+	selfSignedLeaf := func(t *testing.T, template *x509.Certificate) (*x509.Certificate, *ecdsa.PrivateKey) {
+		t.Helper()
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		template.SerialNumber = big.NewInt(time.Now().UnixNano())
+		template.NotBefore = time.Now().Add(-time.Hour)
+		template.NotAfter = time.Now().Add(24 * time.Hour)
+		der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+		require.NoError(t, err)
+		cert, err := x509.ParseCertificate(der)
+		require.NoError(t, err)
+		return cert, key
+	}
+
+	cases := map[string]*x509.Certificate{
+		"basicConstraints CA:FALSE":  {Subject: pkix.Name{CommonName: "not-ca-false"}, BasicConstraintsValid: true, IsCA: false, KeyUsage: x509.KeyUsageDigitalSignature},
+		"no basicConstraints at all": {Subject: pkix.Name{CommonName: "not-ca-absent"}, KeyUsage: x509.KeyUsageDigitalSignature},
+	}
+	for name, template := range cases {
+		t.Run(name, func(t *testing.T) {
+			cert, key := selfSignedLeaf(t, template)
+
+			_, err := caSvc.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, Key: key, CACertificate: (*models.X509Certificate)(cert)})
+			require.ErrorIs(t, err, errs.ErrCANotCA)
+
+			orphans, err := serverTest.KMS.Service.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: &key.PublicKey})
+			require.NoError(t, err)
+			require.Empty(t, orphans, "a rejected import must not leave its key in the KMS")
+
+			_, err = caSvc.ImportCA(ctx, services.ImportCAInput{CACertificate: (*models.X509Certificate)(cert)})
+			require.ErrorIs(t, err, errs.ErrCANotCA)
+		})
+	}
 }
 
 func engineIDsOf(keys []*models.Key) []string {
@@ -148,4 +193,80 @@ func TestSignCertificateLinksAKeyHeldBySeveralEngines(t *testing.T) {
 	require.Equal(t, models.CertificateTypeManaged, cert.Type)
 	require.Equal(t, defaultEngine, cert.EngineID)
 	require.Equal(t, kmsKeyIDOf(t, &key.PublicKey), cert.KeyID)
+}
+
+// subCAIssuedOutsideLamassu returns an intermediate CA certificate whose issuer is not in Lamassu.
+func subCAIssuedOutsideLamassu(t *testing.T, cn string) (*x509.Certificate, *ecdsa.PrivateKey) {
+	t.Helper()
+	root, rootKey := selfSignedCAWithForeignSKI(t, cn+" outside root")
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		Subject:               pkix.Name{CommonName: cn},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, root, &key.PublicKey, rootKey)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return cert, key
+}
+
+// DeleteCA keeps the certificate row (#815), and ImportCA reuses it when the same certificate is imported again.
+// The reused row must reference the key this import brings, or the CA comes back without one. The CA is an
+// intermediate because DeleteCA revokes the row of a self-signed CA, which is then reimported revoked.
+func TestReimportingADeletedKeylessCALinksTheKey(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	profile := newKeyRefsProfile(t)
+
+	importKeylessAndDelete := func(t *testing.T, cn string) (*x509.Certificate, *ecdsa.PrivateKey) {
+		t.Helper()
+		cert, key := subCAIssuedOutsideLamassu(t, cn)
+		ca, err := caSvc.ImportCA(ctx, services.ImportCAInput{CACertificate: (*models.X509Certificate)(cert)})
+		require.NoError(t, err)
+		require.Empty(t, ca.Certificate.KeyID)
+		require.NoError(t, caSvc.DeleteCA(ctx, services.DeleteCAInput{CAID: ca.ID}))
+		return cert, key
+	}
+
+	requireSigns := func(t *testing.T, ca *models.CACertificate, cn string) {
+		t.Helper()
+		_, err := caSvc.CreateCertificate(ctx, services.CreateCertificateInput{
+			CAID: ca.ID, KeySpec: services.CertificateKeySpec{Type: models.KeyType(x509.ECDSA), Bits: 256}, Subject: models.Subject{CommonName: cn},
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run("with its private key", func(t *testing.T) {
+		cert, key := importKeylessAndDelete(t, "reimport-with-key")
+
+		ca, err := caSvc.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, Key: key, CACertificate: (*models.X509Certificate)(cert)})
+		require.NoError(t, err)
+
+		require.Equal(t, models.CertificateTypeImportedWithKey, ca.Certificate.Type)
+		require.Equal(t, kmsKeyIDOf(t, &key.PublicKey), ca.Certificate.KeyID)
+		require.Equal(t, ca.Certificate.KeyID, storedKeyID(t, ca.Certificate.SerialNumber))
+		requireKeyInUse(t, &ca.Certificate)
+		requireSigns(t, ca, "reimport-with-key-leaf")
+	})
+
+	t.Run("without key, once the KMS holds it", func(t *testing.T) {
+		cert, key := importKeylessAndDelete(t, "reimport-key-in-kms")
+		importKeyInto(t, key, defaultEngine)
+
+		ca, err := caSvc.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, CACertificate: (*models.X509Certificate)(cert)})
+		require.NoError(t, err)
+
+		require.Equal(t, models.CertificateTypeManaged, ca.Certificate.Type)
+		require.Equal(t, defaultEngine, ca.Certificate.EngineID)
+		require.Equal(t, kmsKeyIDOf(t, &key.PublicKey), ca.Certificate.KeyID)
+		requireSigns(t, ca, "reimport-key-in-kms-leaf")
+	})
 }

@@ -300,6 +300,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	caCertX509 := (*x509.Certificate)(input.CACertificate)
 
+	// Checked before ImportKey: the certificate of a CA must assert basicConstraints cA=TRUE, and a
+	// rejected certificate must not leave its key in the KMS.
+	if !caCertX509.BasicConstraintsValid || !caCertX509.IsCA {
+		lFunc.Errorf("certificate %s - %s cannot be imported as a CA: basicConstraints cA flag is not set", caCertSN, caCert.Subject.CommonName)
+		return nil, errs.ErrCANotCA
+	}
+
 	skid, err := helpers.GetSubjectKeyID(ctx, lFunc, caCertX509)
 	if err != nil {
 		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", caCertX509.Subject.CommonName, err)
@@ -516,6 +523,19 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	if storedCertificate.Certificate == nil || !(*x509.Certificate)(storedCertificate.Certificate).Equal(caCertX509) {
 		return nil, errs.ErrValidateBadRequest
+	}
+	// A reused row may have no key, for example once DeleteCA released it. The key holds the certificate's
+	// public key, so this import links it; a row that already has one keeps it.
+	if exists && key != nil {
+		if storedCertificate.KeyID == "" {
+			storedCertificate.EngineID, storedCertificate.KeyID, storedCertificate.Type = key.EngineID, key.KeyID, importType
+			storedCertificate, err = svc.certStorage.Update(ctx, storedCertificate)
+			if err != nil {
+				return nil, err
+			}
+		} else if storedCertificate.EngineID != key.EngineID {
+			lFunc.Warnf("certificate %s already uses its key in crypto engine %s; the copy in %s is not used", caCertSN, storedCertificate.EngineID, key.EngineID)
+		}
 	}
 	ca.Certificate = *storedCertificate
 	ca.CertificateSerialNumber = storedCertificate.SerialNumber
