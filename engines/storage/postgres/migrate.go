@@ -41,8 +41,18 @@ func OrderForMigration(schemas []string) []string {
 // MigrateSchema applies all pending migrations for the specified schema, after the ones of the schemas
 // it depends on
 func MigrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema string) error {
+	return migrateSchema(logger, config, schema, map[string]bool{})
+}
+
+// migrateSchema skips the schemas already in migrated, so that a dependency shared by several schemas
+// is migrated only once, and adds the ones it migrates.
+func migrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema string, migrated map[string]bool) error {
+	if migrated[schema] {
+		return nil
+	}
+
 	for _, dependency := range schemaDependencies[schema] {
-		if err := MigrateSchema(logger.WithField("schema", dependency), config, dependency); err != nil {
+		if err := migrateSchema(logger.WithField("schema", dependency), config, dependency, migrated); err != nil {
 			return fmt.Errorf("failed to migrate schema %s, which %s depends on: %w", dependency, schema, err)
 		}
 	}
@@ -53,6 +63,10 @@ func MigrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema s
 	if err != nil {
 		return fmt.Errorf("could not create postgres connection: %w", err)
 	}
+	if sqlDB, err := psqlCli.DB(); err == nil {
+		defer sqlDB.Close()
+	}
+	migrated[schema] = true
 
 	// Ensure schema exists
 	psqlCli.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema))
@@ -95,9 +109,10 @@ func MigrateDatabase(logger *log.Entry, config lconfig.PostgresPSEConfig, databa
 func MigrateAllSchemas(logger *log.Entry, config lconfig.PostgresPSEConfig) error {
 	logger.Infof("Starting migration for all schemas in pki database")
 
+	migrated := map[string]bool{}
 	for _, schema := range MigrationSchemaOrder() {
 		schemaLogger := logger.WithField("schema", schema)
-		if err := MigrateSchema(schemaLogger, config, schema); err != nil {
+		if err := migrateSchema(schemaLogger, config, schema, migrated); err != nil {
 			return fmt.Errorf("failed to migrate schema %s: %w", schema, err)
 		}
 	}
