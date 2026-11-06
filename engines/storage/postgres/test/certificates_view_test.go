@@ -3,6 +3,8 @@ package postgrestest
 import (
 	"context"
 	"fmt"
+	authzengine "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
+	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	authzgorm "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gorm"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -139,29 +141,58 @@ func TestCertificateViewFilterAndCount(t *testing.T) {
 	}
 }
 
-// Reading from a derived view must retain the physical table's row authorization.
+// Reading from a derived view must retain the physical table's row authorization. The policies are
+// turned into SQL by the real authz engine, so the test covers the SQL shape that reaches the plugin.
 func TestCertificateViewPreservesAuthorization(t *testing.T) {
 	suite, kms, certs := newKMSAndCertStores(t)
-	require.NoError(t, suite.DB["ca"].Use(authzgorm.NewAuthzGormPlugin()))
+	db := suite.DB[postgres.CA_SCHEMA]
+	require.NoError(t, db.Use(authzgorm.NewAuthzGormPlugin()))
+	cas, err := postgres.NewCAPostgresRepository(helpers.SetupLogger(config.Info, "Test", "authz view"), db)
+	require.NoError(t, err)
 	insertTestKey(t, kms, "engine", "private")
+
+	// The allowed certificate is the self-signed certificate of CA "ca-allowed"; the forbidden one
+	// differs in serial number, subject and issuer.
 	allowed := newTestCertificate(t, 401, "engine", "private")
+	allowed.Subject.CommonName = "ca.certificates.owner" // a value that looks like a column qualifier
+	allowed.IssuerCAMetadata = models.IssuerCAMetadata{ID: "ca-allowed", SN: allowed.SerialNumber}
 	forbidden := newTestCertificate(t, 402, "engine", "private")
 	for _, cert := range []*models.Certificate{allowed, forbidden} {
 		_, err := certs.Insert(context.Background(), cert)
 		require.NoError(t, err)
 	}
-	require.NoError(t, suite.DB["ca"].Exec(`CREATE TABLE certificate_grants (serial_number text, owner text)`).Error)
-	require.NoError(t, suite.DB["ca"].Exec(`INSERT INTO certificate_grants VALUES (?, 'ca.certificates.owner')`, allowed.SerialNumber).Error)
+	_, err = cas.Insert(context.Background(), &models.CACertificate{ID: "ca-allowed", CertificateSerialNumber: allowed.SerialNumber,
+		Certificate: *allowed, Metadata: map[string]any{}, CreationTS: time.Now()})
+	require.NoError(t, err)
+
+	certificateRule := func(r authzmodels.Rule) *authzmodels.Rule {
+		r.Namespace, r.SchemaName, r.EntityType, r.Actions = "pki", "ca", "certificate", []string{"read"}
+		return &r
+	}
+	eng := newPKIAuthzEngine(t, db)
 	for _, tc := range []struct {
-		name, sql string
-		want      int
+		name  string
+		rules []*authzmodels.Rule
+		want  int
 	}{
-		{"restricted", "SELECT * FROM ca.certificates WHERE ca.certificates.serial_number = '" + allowed.SerialNumber + "'", 1},
-		{"deny all", "SELECT * FROM ca.certificates WHERE 1 = 0", 0},
-		{"grant join and literal qualifier", `SELECT * FROM ca.certificates LEFT JOIN ca.certificate_grants AS j0_0 ON ca.certificates.serial_number = j0_0.serial_number WHERE j0_0.owner = 'ca.certificates.owner'`, 1},
+		{"restricted", []*authzmodels.Rule{certificateRule(authzmodels.Rule{DirectGrants: []string{allowed.SerialNumber}})}, 1},
+		{"deny all", nil, 0},
+		{"literal qualifier", []*authzmodels.Rule{certificateRule(authzmodels.Rule{ColumnFilters: []authzmodels.ColumnFilter{
+			{Column: "subject_common_name", Type: "string", Operator: "eq", Value: "ca.certificates.owner"}}})}, 1},
+		{"join through the issuing CA", []*authzmodels.Rule{{Namespace: "pki", SchemaName: "ca", EntityType: "ca_certificate",
+			Actions: []string{"read"}, DirectGrants: []string{"ca-allowed"},
+			Relations: []authzmodels.RelationRule{{ToSchemaName: "ca", ToEntityType: "certificate", Via: "issuer_meta_id", Actions: []string{"read"}}}}}, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, tc.sql)
+			policies := authzengine.NewPolicyRegistry()
+			if tc.rules != nil {
+				require.NoError(t, policies.AddPolicy(&authzmodels.Policy{ID: "p", Name: "p", Rules: tc.rules}))
+			}
+			filter, err := eng.GetListFilter(context.Background(), policies, "pki", "ca", "certificate")
+			require.NoError(t, err)
+			require.Contains(t, filter, "FROM ca.certificates_view AS certificates", "the engine must read the entity through its view")
+
+			ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, filter)
 			for _, exhaustive := range []bool{false, true} {
 				var serials []string
 				_, err := certs.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{ExhaustiveRun: exhaustive, ApplyFunc: func(c models.Certificate) { serials = append(serials, c.SerialNumber) }})
