@@ -24,11 +24,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # Saves the Go module and build caches once, so every test job restores them instead of racing to create them
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Setup Go (PQC fork)
+        uses: ./.github/actions/setup-go-pqc
         with:
-          go-version: '^1.27.3'
-          cache-dependency-path: "**/*.sum"
+          save-cache: "true"
 
       - name: Install Dependencies
         run: |
@@ -94,11 +93,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '^1.27.3' # The Go version to download (if necessary) and use.
-          cache-dependency-path: "**/*.sum"
+      - name: Setup Go (PQC fork)
+        uses: ./.github/actions/setup-go-pqc
  
       - name: Install Dependencies
         run: go mod download
@@ -128,11 +124,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '^1.27.3' # The Go version to download (if necessary) and use.
-          cache-dependency-path: "**/*.sum"
+      - name: Setup Go (PQC fork)
+        uses: ./.github/actions/setup-go-pqc
       
       - name: Install PKCS11 Proxy Dependencies
         # v3 maps CKA_LABEL to NetHSM labels (max 32 bytes); Lamassu uses 64-byte key digests.
@@ -192,11 +185,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '^1.27.3'
-          cache-dependency-path: "**/*.sum"
+      - name: Setup Go (PQC fork)
+        uses: ./.github/actions/setup-go-pqc
  
       - name: Install Dependencies
         run: go mod download
@@ -227,11 +217,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '^1.27.3'
-          cache-dependency-path: "**/*.sum"
+      - name: Setup Go (PQC fork)
+        uses: ./.github/actions/setup-go-pqc
  
       - name: Install Dependencies
         run: go mod download

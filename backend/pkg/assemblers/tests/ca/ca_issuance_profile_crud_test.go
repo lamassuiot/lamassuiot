@@ -31,6 +31,11 @@ func TestCAIssuanceProfiles(t *testing.T) {
 			Duration: models.TimeDuration(365 * 24 * 60 * 60 * 1e9), // 1 year in nanoseconds
 		},
 		SignAsCA: false,
+		RelatedCertificate: models.IssuanceProfileRelatedCertificate{
+			Enabled:      true,
+			AllowedHosts: []string{"related.example.com"},
+			MaxAge:       models.TimeDuration(10 * 60 * 1e9),
+		},
 	}
 	createInput := services.CreateIssuanceProfileInput{Profile: *profile}
 	created, err := caSvc.CreateIssuanceProfile(ctx, createInput)
@@ -40,6 +45,7 @@ func TestCAIssuanceProfiles(t *testing.T) {
 	assert.Equal(t, profile.Validity.Type, created.Validity.Type)
 	assert.Equal(t, profile.Validity.Duration, created.Validity.Duration)
 	assert.Equal(t, profile.SignAsCA, created.SignAsCA)
+	assert.Equal(t, profile.RelatedCertificate, created.RelatedCertificate)
 
 	// Get IssuanceProfile by ID
 	getInput := services.GetIssuanceProfileByIDInput{ProfileID: created.ID}
@@ -51,6 +57,7 @@ func TestCAIssuanceProfiles(t *testing.T) {
 	assert.Equal(t, created.Validity.Type, fetched.Validity.Type)
 	assert.Equal(t, created.Validity.Duration, fetched.Validity.Duration)
 	assert.Equal(t, created.SignAsCA, fetched.SignAsCA)
+	assert.Equal(t, created.RelatedCertificate, fetched.RelatedCertificate)
 
 	// Update IssuanceProfile
 	created.Description = "Updated description"

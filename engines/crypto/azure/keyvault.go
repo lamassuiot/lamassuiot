@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/asn1"
@@ -189,6 +191,26 @@ func (p *AzureKeyVaultCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, c
 	return p.registerCreatedKey(ctx, resp.Key.KID)
 }
 
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) CreateSLHDSAPrivateKey(ctx context.Context, paramSet int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) CreateCompositeMLDSARSAPrivateKey(ctx context.Context, variant int) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (Ed25519)")
+}
+
 func (p *AzureKeyVaultCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	key.Precompute()
 
@@ -257,6 +279,26 @@ func (p *AzureKeyVaultCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, k
 	}
 
 	return keyID, signer, nil
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) ImportMLDSAPrivateKey(key *mldsa.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) ImportSLHDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (SLH-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) ImportCompositeMLDSARSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (Composite-ML-DSA-RSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AzureKeyVaultCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("azure keyvault: unsupported key type (Ed25519)")
 }
 
 // RenameKey is not supported by Azure Key Vault — key names are immutable once created.

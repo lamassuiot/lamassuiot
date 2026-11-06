@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"slices"
@@ -178,8 +179,24 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 
 	entropy := software.NewLamassuEntropy(ctx)
 
-	// Sign the certificate
-	certificateBytes, err := x509.CreateCertificate(entropy, &certificateTemplate, ca, csr.PublicKey, caSigner)
+	var certificateBytes []byte
+	if hasRelatedCertRequest(csr) {
+		if !profile.RelatedCertificate.Enabled {
+			lFunc.Errorf("CSR carries a relatedCertRequest attribute but the issuance profile does not enable related certificates")
+			return nil, errors.New("related certificates are not enabled by the issuance profile")
+		}
+
+		var related *x509.Certificate
+		related, err = resolveRelatedCertificate(ctx, csr, now, profile.RelatedCertificate)
+		if err != nil {
+			lFunc.Errorf("could not get the related certificate: %s", err)
+			return nil, err
+		}
+
+		certificateBytes, err = x509.CreateBoundCertificate(entropy, &certificateTemplate, ca, related.Raw, csr.PublicKey, caSigner)
+	} else {
+		certificateBytes, err = x509.CreateCertificate(entropy, &certificateTemplate, ca, csr.PublicKey, caSigner)
+	}
 	if err != nil {
 		lFunc.Errorf("could not sign certificate: %s", err)
 		return nil, err

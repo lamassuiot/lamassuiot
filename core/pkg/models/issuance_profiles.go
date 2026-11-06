@@ -20,6 +20,14 @@ type IssuanceProfile struct {
 	HonorExtensions bool `json:"honor_extensions"`
 
 	CryptoEnforcement IssuanceProfileCryptoEnforcement `json:"crypto_enforcement" gorm:"embedded;embeddedPrefix:crypto_enforcement_"`
+
+	RelatedCertificate IssuanceProfileRelatedCertificate `json:"related_certificate" gorm:"embedded;embeddedPrefix:related_cert_"`
+}
+
+type IssuanceProfileRelatedCertificate struct {
+	Enabled      bool         `json:"enabled"`
+	AllowedHosts []string     `json:"allowed_hosts" gorm:"type:text;serializer:json"`
+	MaxAge       TimeDuration `json:"max_age,omitempty" gorm:"serializer:text"`
 }
 
 type IssuanceProfileCryptoEnforcement struct {

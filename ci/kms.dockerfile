@@ -1,4 +1,4 @@
-ARG BUILDER=golang:1.27.3-bookworm
+ARG BUILDER=ghcr.io/lamassuiot/golang-pqc:latest
 
 # Optional pre-vendored dependencies. CI runs `go mod vendor` once and passes
 # the result with `--build-context vendor=./vendor`, which replaces this empty

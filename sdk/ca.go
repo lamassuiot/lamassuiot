@@ -1,8 +1,11 @@
 package sdk
 
 import (
+	circlSign "cloudflare/circl/sign"
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/mldsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -155,6 +158,9 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		409: {
 			errs.ErrCAAlreadyExists,
 		},
+		500: {
+			errs.ErrCAIncompatibleValidity,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -167,7 +173,7 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	var privKey string
 	if input.Key != nil {
 		switch input.Key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey:
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, circlSign.PrivateKey, *x509.CompositePrivateKey, *mldsa.PrivateKey:
 			bytes, err := x509.MarshalPKCS8PrivateKey(input.Key)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal private key: %w", err)
@@ -523,6 +529,11 @@ func (cli *httpCAClient) CreateIssuanceProfile(ctx context.Context, input servic
 			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
 			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
 		},
+		RelatedCertificate: resources.CreateIssuanceProfileRelatedCertificateBody{
+			Enabled:      input.Profile.RelatedCertificate.Enabled,
+			AllowedHosts: input.Profile.RelatedCertificate.AllowedHosts,
+			MaxAge:       input.Profile.RelatedCertificate.MaxAge,
+		},
 	}, map[int][]error{
 		400: {
 			errs.ErrValidateBadRequest,
@@ -554,6 +565,11 @@ func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input servic
 			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
 			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
 			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
+		},
+		RelatedCertificate: resources.CreateIssuanceProfileRelatedCertificateBody{
+			Enabled:      input.Profile.RelatedCertificate.Enabled,
+			AllowedHosts: input.Profile.RelatedCertificate.AllowedHosts,
+			MaxAge:       input.Profile.RelatedCertificate.MaxAge,
 		},
 	}, map[int][]error{
 		400: {

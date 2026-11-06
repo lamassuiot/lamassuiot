@@ -1178,6 +1178,11 @@ func (r *caHttpRoutes) CreateIssuanceProfile(ctx *gin.Context) {
 				AllowedRSAKeySizes:   requestBody.CryptoEnforcement.AllowedRSAKeySizes,
 				AllowedECDSAKeySizes: requestBody.CryptoEnforcement.AllowedECDSAKeySizes,
 			},
+			RelatedCertificate: models.IssuanceProfileRelatedCertificate{
+				Enabled:      requestBody.RelatedCertificate.Enabled,
+				AllowedHosts: requestBody.RelatedCertificate.AllowedHosts,
+				MaxAge:       requestBody.RelatedCertificate.MaxAge,
+			},
 		},
 	})
 
@@ -1231,6 +1236,11 @@ func (r *caHttpRoutes) UpdateIssuanceProfile(ctx *gin.Context) {
 				AllowECDSAKeys:       requestBody.CryptoEnforcement.AllowECDSAKeys,
 				AllowedRSAKeySizes:   requestBody.CryptoEnforcement.AllowedRSAKeySizes,
 				AllowedECDSAKeySizes: requestBody.CryptoEnforcement.AllowedECDSAKeySizes,
+			},
+			RelatedCertificate: models.IssuanceProfileRelatedCertificate{
+				Enabled:      requestBody.RelatedCertificate.Enabled,
+				AllowedHosts: requestBody.RelatedCertificate.AllowedHosts,
+				MaxAge:       requestBody.RelatedCertificate.MaxAge,
 			},
 		},
 	})
