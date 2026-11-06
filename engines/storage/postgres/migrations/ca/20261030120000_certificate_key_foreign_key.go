@@ -2,6 +2,8 @@ package ca
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
@@ -47,8 +49,9 @@ func validateCertificateKeyReferences(ctx context.Context, tx *sql.Tx) error {
 // not hold has no reference: a NULL key_id, which a foreign key does not check, replaces the empty string.
 // engine_id keeps its values, so the filters on it behave as before.
 //
-// Existing references are validated too: register legacy keys in the KMS before migrating.
-// Missing keys abort the migration without erasing certificate references.
+// Existing references are validated too: register legacy keys in the KMS before migrating. A missing
+// key that an existing CA uses aborts the migration without erasing certificate references; one that no
+// CA uses belonged to a deleted CA and is gone for good, so the KMS registers it with its public key only.
 //
 // The kms schema must be migrated first: the constraint refers to its kms_keys table.
 func upCertificateKeyForeignKey(ctx context.Context, tx *sql.Tx) error {
@@ -76,6 +79,11 @@ func upCertificateKeyForeignKey(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 
+	registered, err := registerPublicKeysOfDeletedCAs(ctx, tx)
+	if err != nil {
+		return err
+	}
+
 	if err := validateCertificateKeyReferences(ctx, tx); err != nil {
 		return err
 	}
@@ -88,6 +96,12 @@ func upCertificateKeyForeignKey(ctx context.Context, tx *sql.Tx) error {
 			FOREIGN KEY (engine_id, key_id) REFERENCES kms.kms_keys (engine_id, key_id)
 			ON DELETE RESTRICT ON UPDATE CASCADE;`); err != nil {
 		return err
+	}
+
+	// Reported only now: an aborted migration rolls these changes back.
+	logger := chelpers.SetupLogger("info", "CA", "Migrations")
+	for _, k := range registered {
+		logger.Warnf("key %s of engine %s: no CA uses it and the engine no longer holds it; registered in the KMS with its public key only", k[1], k[0])
 	}
 
 	return nil
@@ -169,6 +183,93 @@ func relinkCertificateKeys(ctx context.Context, tx *sql.Tx) error {
 
 	logger.Infof("pointed %d certificates at the KMS key holding their public key", relinked)
 	return nil
+}
+
+// registerPublicKeysOfDeletedCAs registers in the KMS, as a key without its private part, the key of each
+// certificate whose key the KMS does not hold and that no existing CA uses. Deleting a CA used to delete
+// its key from the engine and the KMS but keep its certificates, so there is no private key left to
+// register for them. Nothing is written to any crypto engine and the certificates keep their reference.
+// A missing key that an existing CA uses is left alone: registering the real key repairs the reference,
+// and validateCertificateKeyReferences reports it. Unreadable certificates and key types the KMS does not
+// support (only RSA and ECDSA) are skipped, so validateCertificateKeyReferences reports them too.
+//
+// It returns the engine and key ID of each key it registered.
+func registerPublicKeysOfDeletedCAs(ctx context.Context, tx *sql.Tx) ([][2]string, error) {
+	logger := chelpers.SetupLogger("info", "CA", "Migrations")
+
+	type orphan struct {
+		serialNumber, engineID, keyID, commonName string
+		certificate                               sql.NullString
+	}
+
+	// one certificate per missing key: all of them hold the same public key
+	rows, err := tx.QueryContext(ctx, `
+		SELECT DISTINCT ON (c.engine_id, c.key_id) c.serial_number, c.engine_id, c.key_id, COALESCE(c.subject_common_name, ''), c.certificate
+		FROM certificates AS c
+		WHERE c.key_id IS NOT NULL
+		  AND NOT EXISTS (SELECT 1 FROM kms.kms_keys AS k WHERE k.engine_id = c.engine_id AND k.key_id = c.key_id)
+		  AND NOT EXISTS (SELECT 1 FROM ca_certificates AS ca JOIN certificates AS cc ON cc.serial_number = ca.serial_number
+		                  WHERE cc.engine_id = c.engine_id AND cc.key_id = c.key_id)
+		ORDER BY c.engine_id, c.key_id, c.serial_number`)
+	if err != nil {
+		return nil, fmt.Errorf("find keys of deleted CAs: %w", err)
+	}
+	var orphans []orphan
+	for rows.Next() {
+		var o orphan
+		if err := rows.Scan(&o.serialNumber, &o.engineID, &o.keyID, &o.commonName, &o.certificate); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan key of deleted CA: %w", err)
+		}
+		orphans = append(orphans, o)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate keys of deleted CAs: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close keys of deleted CAs: %w", err)
+	}
+
+	var registered [][2]string
+	for _, o := range orphans {
+		certificate, err := mhelper.DecodeCertificate(o.certificate.String)
+		if err != nil {
+			logger.Warnf("cannot register the public key of certificate %s: could not decode it: %s", o.serialNumber, err)
+			continue
+		}
+		var algorithm string
+		var size int
+		switch pub := certificate.PublicKey.(type) {
+		case *rsa.PublicKey:
+			algorithm, size = "RSA", pub.N.BitLen()
+		case *ecdsa.PublicKey:
+			algorithm, size = "ECDSA", pub.Params().BitSize
+		default:
+			logger.Warnf("cannot register the public key of certificate %s: unsupported key type %T", o.serialNumber, certificate.PublicKey)
+			continue
+		}
+		spki, err := x509.MarshalPKIXPublicKey(certificate.PublicKey)
+		if err != nil {
+			logger.Warnf("cannot register the public key of certificate %s: %s", o.serialNumber, err)
+			continue
+		}
+		// the KMS stores public keys as the base64 of their PEM encoding
+		publicKey := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: spki}))
+		name := o.commonName
+		if name == "" {
+			name = o.serialNumber
+		}
+
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO kms.kms_keys (key_id, engine_id, name, algorithm, size, public_key, has_private_key, creation_ts, metadata, aliases, tags)
+			VALUES ($1, $2, $3, $4, $5, $6, false, now(), '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)`,
+			o.keyID, o.engineID, name, algorithm, size, publicKey); err != nil {
+			return nil, fmt.Errorf("register the public key of certificate %s: %w", o.serialNumber, err)
+		}
+		registered = append(registered, [2]string{o.engineID, o.keyID})
+	}
+	return registered, nil
 }
 
 func downCertificateKeyForeignKey(ctx context.Context, tx *sql.Tx) error {
