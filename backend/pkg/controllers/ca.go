@@ -33,6 +33,7 @@ func writeCACreationError(ctx *gin.Context, err error) {
 		{errs.ErrIssuanceProfileNotFound, http.StatusNotFound},
 		{errs.ErrValidateBadRequest, http.StatusBadRequest},
 		{errs.ErrCAType, http.StatusBadRequest},
+		{errs.ErrCANotCA, http.StatusBadRequest},
 		{errs.ErrCAIssuanceExpiration, http.StatusBadRequest},
 		{errs.ErrCAIncompatibleValidity, http.StatusBadRequest},
 	} {

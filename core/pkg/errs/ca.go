@@ -16,6 +16,7 @@ var (
 	ErrCAIssuanceExpiration   error = errors.New("issuance expiration greater than CA expiration")
 	ErrCAType                 error = errors.New("CA type inconsistent")
 	ErrCAValidCertAndPrivKey  error = errors.New("CA and the provided key don't match")
+	ErrCANotCA                error = errors.New("certificate is not a CA: basicConstraints cA flag is not set")
 
 	ErrValidateBadRequest error = errors.New("struct validation error")
 
