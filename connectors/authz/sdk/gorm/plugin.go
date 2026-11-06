@@ -56,22 +56,6 @@ func (p *AuthzGormPlugin) injectAuthzQuery(db *gorm.DB) {
 		}
 	}
 
-	// A read view may expose the canonical table as an alias. Qualified references in
-	// generated policy SQL must use that alias; the physical schema-qualified name
-	// is no longer visible once the FROM relation has been aliased.
-	if db.Statement.TableExpr != nil && strings.Contains(strings.ToUpper(db.Statement.TableExpr.SQL), " AS ") {
-		from := findWordPos(strings.ToUpper(queryStr), "FROM")
-		if from >= 0 {
-			fields := strings.Fields(queryStr[from+len("FROM"):])
-			if len(fields) > 0 {
-				parsed.where = replaceTableQualifier(parsed.where, fields[0], db.Statement.Table)
-				for i, join := range parsed.joins {
-					parsed.joins[i] = replaceTableQualifier(join, fields[0], db.Statement.Table)
-				}
-			}
-		}
-	}
-
 	AddASTToQuery(db, parsed)
 }
 
@@ -84,40 +68,4 @@ func tableNamesMatch(a, b string) bool {
 		return s
 	}
 	return unqualify(a) == unqualify(b)
-}
-
-// replaceTableQualifier changes identifier qualifiers in generated policy SQL,
-// preserving quoted filter values, including escaped quotes inside those values.
-func replaceTableQualifier(sql, from, to string) string {
-	if from == to {
-		return sql
-	}
-	prefix := from + "."
-	var out strings.Builder
-	for i := 0; i < len(sql); {
-		if sql[i] == '\'' {
-			start := i
-			i++
-			for i < len(sql) {
-				if sql[i] == '\'' {
-					i++
-					if i < len(sql) && sql[i] == '\'' {
-						i++
-						continue
-					}
-					break
-				}
-				i++
-			}
-			out.WriteString(sql[start:i])
-		} else if strings.HasPrefix(sql[i:], prefix) && (i == 0 || (!isIdentChar(sql[i-1]) && sql[i-1] != '.')) {
-			out.WriteString(to)
-			out.WriteByte('.')
-			i += len(prefix)
-		} else {
-			out.WriteByte(sql[i])
-			i++
-		}
-	}
-	return out.String()
 }
