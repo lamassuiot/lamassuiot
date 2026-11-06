@@ -2,6 +2,7 @@ package postgrestest
 
 import (
 	"context"
+	"gorm.io/gorm"
 	"testing"
 	"time"
 
@@ -47,8 +48,8 @@ func TestCertificateStoreReleaseKey(t *testing.T) {
 	require.NoError(t, certStore.ReleaseKey(ctx, nil), "releasing no certificate does nothing")
 }
 
-// A CA certificate for a key the KMS does not hold is refused as a certificate is.
-func TestCAStoreInsertWithUnknownKeyReturnsErrKeyNotFound(t *testing.T) {
+// CA storage requires an existing certificate and never creates it implicitly.
+func TestCAStoreInsertWithMissingCertificateIsRejected(t *testing.T) {
 	cfg, suite := BeforeSuite([]string{postgres.KMS_SCHEMA, postgres.CA_SCHEMA}, false)
 	defer suite.AfterSuite()
 
@@ -58,8 +59,8 @@ func TestCAStoreInsertWithUnknownKeyReturnsErrKeyNotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = caStore.Insert(context.Background(), &models.CACertificate{
-		ID: "ca-unknown-key", Metadata: map[string]any{}, CreationTS: time.Now(),
+		ID: "ca-missing-certificate", CertificateSerialNumber: "01", Metadata: map[string]any{}, CreationTS: time.Now(),
 		Certificate: *newTestCertificate(t, 1, "e1", "nope"),
 	})
-	require.ErrorIs(t, err, errs.ErrKeyNotFound)
+	require.ErrorIs(t, err, gorm.ErrForeignKeyViolated)
 }

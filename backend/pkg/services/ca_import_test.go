@@ -91,6 +91,29 @@ func (repo *importCARepo) SelectByIssuerAndAuthorityKeyID(ctx context.Context, i
 	}})
 }
 
+// Certificate persistence is independent of the CA test repository.
+type importCertificateRepo struct {
+	storage.CertificatesRepo
+	certificates map[string]models.Certificate
+}
+
+func (repo *importCertificateRepo) SelectExistsBySerialNumber(_ context.Context, serial string) (bool, *models.Certificate, error) {
+	cert, ok := repo.certificates[serial]
+	if !ok {
+		return false, nil, nil
+	}
+	return true, &cert, nil
+}
+
+func (repo *importCertificateRepo) Insert(_ context.Context, cert *models.Certificate) (*models.Certificate, error) {
+	repo.certificates[cert.SerialNumber] = *cert
+	return cert, nil
+}
+
+func (repo *importCertificateRepo) Update(ctx context.Context, cert *models.Certificate) (*models.Certificate, error) {
+	return repo.Insert(ctx, cert)
+}
+
 type importCAKMS struct {
 	coreservices.KMSService
 	// importedKey is returned by ImportKey; when nil, ImportKey fails.
@@ -135,7 +158,7 @@ func newImportCAService(t *testing.T) (*CAServiceBackend, *importCARepo) {
 	repo := &importCARepo{cas: make(map[string]models.CACertificate)}
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
-	return &CAServiceBackend{caStorage: repo, kmsService: &importCAKMS{}, logger: logrus.NewEntry(logger)}, repo
+	return &CAServiceBackend{caStorage: repo, certStorage: &importCertificateRepo{certificates: map[string]models.Certificate{}}, kmsService: &importCAKMS{}, logger: logrus.NewEntry(logger)}, repo
 }
 
 func importCAChain(t *testing.T, omitChildAKI bool) []*x509.Certificate {
@@ -316,8 +339,8 @@ func TestImportCAStopsOnInsertFailureAndAllowsRetry(t *testing.T) {
 }
 
 func TestImportCAKeepsImportedKeyWhenInsertFails(t *testing.T) {
-	// A concurrent import of the same certificate without a key can adopt the
-	// imported key, so a failed import must never delete it.
+	// The imported key may be referenced by other certificates, so a failed
+	// import must never delete it.
 	for _, insertErr := range []error{errs.ErrCAAlreadyExists, errors.New("insert failed")} {
 		t.Run(insertErr.Error(), func(t *testing.T) {
 			svc, repo := newImportCAService(t)
@@ -378,4 +401,18 @@ func TestImportCASucceedsWhenReparentingFails(t *testing.T) {
 			require.Equal(t, orphan, repo.cas["intermediate"], "a failed reparenting must not change the child")
 		})
 	}
+}
+
+func TestImportCARejectsDifferentCertificateWithAnExistingSerial(t *testing.T) {
+	svc, repo := newImportCAService(t)
+	original := importCAChain(t, false)[0]
+	stored, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{ID: "original", CACertificate: (*models.X509Certificate)(original)})
+	require.NoError(t, err)
+	collision := importCAChain(t, false)[0] // A different key/certificate with the same serial.
+	require.Equal(t, original.SerialNumber, collision.SerialNumber)
+	ca, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{ID: "collision", CACertificate: (*models.X509Certificate)(collision)})
+	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
+	require.Nil(t, ca)
+	require.NotContains(t, repo.cas, "collision")
+	require.Equal(t, *stored, repo.cas["original"])
 }

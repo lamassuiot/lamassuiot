@@ -100,11 +100,31 @@ func (db *PostgresCertificateStorage) Insert(ctx context.Context, certificate *m
 	if isCertificateKeyViolation(err) {
 		return nil, errs.ErrKeyNotFound
 	}
-	return inserted, err
+	if err != nil {
+		return nil, err
+	}
+	return db.reload(ctx, inserted)
 }
 
 func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
-	return db.querier.Update(ctx, certificate, certificate.SerialNumber)
+	updated, err := db.querier.Update(ctx, certificate, certificate.SerialNumber)
+	if err != nil {
+		return nil, err
+	}
+	return db.reload(ctx, updated)
+}
+
+// reload returns the persisted representation, including fields derived by the view.
+func (db *PostgresCertificateStorage) reload(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
+	found, stored, err := db.SelectExistsBySerialNumber(ctx, certificate.SerialNumber)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, gorm.ErrRecordNotFound
+	}
+	*certificate = *stored
+	return certificate, nil
 }
 
 func (db *PostgresCertificateStorage) Delete(ctx context.Context, serialNumber string) error {

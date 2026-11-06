@@ -16,8 +16,9 @@ const caDBName = "ca_certificates"
 const caJoinCaCertificatesAndCertificates = "JOIN " + certificateReadTable + " ON ca_certificates.serial_number = certificates.serial_number"
 
 type PostgresCAStore struct {
-	db      *gorm.DB
-	querier *DBQuerier[models.CACertificate]
+	db           *gorm.DB
+	querier      *DBQuerier[models.CACertificate]
+	writeQuerier *DBQuerier[models.CACertificate]
 }
 
 func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
@@ -34,9 +35,14 @@ func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertific
 		})
 	}
 
+	// CA writes only own the reference, never the associated certificate.
+	writer := *querier
+	writer.DB = db.Omit("Certificate").Session(&gorm.Session{})
+
 	return &PostgresCAStore{
-		db:      db,
-		querier: querier,
+		db:           db,
+		querier:      querier,
+		writeQuerier: &writer,
 	}, nil
 }
 
@@ -170,18 +176,35 @@ func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (boo
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	ca, err := db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	ca, err := db.writeQuerier.Insert(ctx, caCertificate, caCertificate.ID)
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return nil, errs.ErrCAAlreadyExists
 	}
-	if isCertificateKeyViolation(err) {
-		return nil, errs.ErrKeyNotFound
+	if err != nil {
+		return nil, err
 	}
-	return ca, err
+	return db.reload(ctx, ca)
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(ctx, caCertificate, caCertificate.ID)
+	updated, err := db.writeQuerier.Update(ctx, caCertificate, caCertificate.ID)
+	if err != nil {
+		return nil, err
+	}
+	return db.reload(ctx, updated)
+}
+
+// reload also refreshes the certificate association through certificates_view.
+func (db *PostgresCAStore) reload(ctx context.Context, ca *models.CACertificate) (*models.CACertificate, error) {
+	found, stored, err := db.SelectExistsByID(ctx, ca.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, gorm.ErrRecordNotFound
+	}
+	*ca = *stored
+	return ca, nil
 }
 
 func (db *PostgresCAStore) Delete(ctx context.Context, id string) error {

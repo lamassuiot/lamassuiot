@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func readCertificate(t *testing.T, store storage.CertificatesRepo, serial string) *models.Certificate {
@@ -179,13 +180,15 @@ func TestCertificateViewPreservesAuthorization(t *testing.T) {
 }
 
 func TestCAReadsCertificatePrivateKeyFromView(t *testing.T) {
-	suite, kms, _ := newKMSAndCertStores(t)
+	suite, kms, certs := newKMSAndCertStores(t)
 	logger := helpers.SetupLogger(config.Info, "Test", "CA view")
 	cas, err := postgres.NewCAPostgresRepository(logger, suite.DB["ca"])
 	require.NoError(t, err)
 	insertTestKey(t, kms, "engine", "private")
 	cert := newTestCertificate(t, 501, "engine", "private")
-	_, err = cas.Insert(context.Background(), &models.CACertificate{ID: "ca-view", Certificate: *cert, Metadata: map[string]any{}, CreationTS: time.Now()})
+	_, err = certs.Insert(context.Background(), cert)
+	require.NoError(t, err)
+	_, err = cas.Insert(context.Background(), &models.CACertificate{ID: "ca-view", CertificateSerialNumber: cert.SerialNumber, Certificate: *cert, Metadata: map[string]any{}, CreationTS: time.Now()})
 	require.NoError(t, err)
 	found, ca, err := cas.SelectExistsByID(context.Background(), "ca-view")
 	require.NoError(t, err)
@@ -198,4 +201,155 @@ func TestCAReadsCertificatePrivateKeyFromView(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	assert.Equal(t, 1, seen)
+}
+
+// F10: write responses must include the same derived fields as subsequent reads.
+func TestCertificateWriteResponsesMatchView(t *testing.T) {
+	_, kms, certs := newKMSAndCertStores(t)
+	ctx := context.Background()
+	insertTestKey(t, kms, "engine", "private")
+	_, err := kms.Insert(ctx, &models.Key{KeyID: "public", EngineID: "engine", PublicKey: "public", HasPrivateKey: false})
+	require.NoError(t, err)
+	for i, tc := range []struct {
+		name, engine, key string
+		want              bool
+	}{
+		{"private key", "engine", "private", true},
+		{"public key", "engine", "public", false},
+		{"no key", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cert := newTestCertificate(t, 601+i, tc.engine, tc.key)
+			cert.HasPrivateKey = !tc.want // Ignore the caller's value for this read-only field.
+			inserted, err := certs.Insert(ctx, cert)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, inserted.HasPrivateKey)
+			assert.Equal(t, readCertificate(t, certs, cert.SerialNumber), inserted)
+			assert.Same(t, cert, inserted)
+
+			cert.Status = models.StatusRevoked
+			cert.HasPrivateKey = !tc.want
+			updated, err := certs.Update(ctx, cert)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, updated.HasPrivateKey)
+			assert.Equal(t, readCertificate(t, certs, cert.SerialNumber), updated)
+			assert.Equal(t, models.StatusRevoked, updated.Status)
+			assert.Same(t, cert, updated)
+		})
+	}
+}
+
+func TestCAWriteResponsesMatchView(t *testing.T) {
+	suite, kms, certs := newKMSAndCertStores(t)
+	ctx := context.Background()
+	cas, err := postgres.NewCAPostgresRepository(helpers.SetupLogger(config.Info, "Test", "CA writes"), suite.DB["ca"])
+	require.NoError(t, err)
+	insertTestKey(t, kms, "engine", "private")
+	for i, tc := range []struct {
+		name, engine, key string
+		want              bool
+	}{
+		{"private key", "engine", "private", true},
+		{"no key", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cert := newTestCertificate(t, 701+i, tc.engine, tc.key)
+			cert.HasPrivateKey = !tc.want
+			_, err := certs.Insert(ctx, cert)
+			require.NoError(t, err)
+			ca := &models.CACertificate{ID: tc.name, CertificateSerialNumber: cert.SerialNumber, Certificate: *cert, Metadata: map[string]any{"source": "F10"}, CreationTS: time.Now()}
+			check := func(got *models.CACertificate) {
+				t.Helper()
+				found, read, err := cas.SelectExistsByID(ctx, ca.ID)
+				require.NoError(t, err)
+				require.True(t, found)
+				assert.Equal(t, tc.want, got.Certificate.HasPrivateKey)
+				assert.Equal(t, read, got)
+				assert.Same(t, ca, got)
+			}
+			inserted, err := cas.Insert(ctx, ca)
+			require.NoError(t, err)
+			check(inserted)
+			ca.Certificate.HasPrivateKey = !tc.want
+			ca.Certificate.Status = models.StatusRevoked
+			_, err = certs.Update(ctx, &ca.Certificate)
+			require.NoError(t, err)
+			updated, err := cas.Update(ctx, ca)
+			require.NoError(t, err)
+			check(updated)
+			assert.Equal(t, models.StatusRevoked, updated.Certificate.Status)
+		})
+	}
+}
+
+// Rehydration must retain the caller's read policy, even when the write succeeded.
+func TestWriteResponsesRespectReadAuthorization(t *testing.T) {
+	suite, kms, certs := newKMSAndCertStores(t)
+	ctx := context.Background()
+	require.NoError(t, suite.DB["ca"].Use(authzgorm.NewAuthzGormPlugin()))
+	insertTestKey(t, kms, "engine", "private")
+	cas, err := postgres.NewCAPostgresRepository(helpers.SetupLogger(config.Info, "Test", "CA writes"), suite.DB["ca"])
+	require.NoError(t, err)
+	t.Run("certificate", func(t *testing.T) {
+		denied := context.WithValue(ctx, authzsdk.AuthzQueryKey, "SELECT * FROM ca.certificates WHERE 1 = 0")
+		cert := newTestCertificate(t, 801, "engine", "private")
+		got, err := certs.Insert(denied, cert)
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		require.Nil(t, got)
+		cert = readCertificate(t, certs, cert.SerialNumber)
+		cert.Status = models.StatusRevoked
+		got, err = certs.Update(denied, cert)
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		require.Nil(t, got)
+	})
+	t.Run("CA", func(t *testing.T) {
+		denied := context.WithValue(ctx, authzsdk.AuthzQueryKey, "SELECT * FROM ca.ca_certificates WHERE 1 = 0")
+		cert := newTestCertificate(t, 802, "engine", "private")
+		_, err := certs.Insert(ctx, cert)
+		require.NoError(t, err)
+		ca := &models.CACertificate{ID: "denied-ca", CertificateSerialNumber: cert.SerialNumber, Certificate: *cert, CreationTS: time.Now()}
+		got, err := cas.Insert(denied, ca)
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		require.Nil(t, got)
+		found, ca, err := cas.SelectExistsByID(ctx, ca.ID)
+		require.NoError(t, err)
+		require.True(t, found)
+		ca.Certificate.Status = models.StatusRevoked
+		got, err = cas.Update(denied, ca)
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		require.Nil(t, got)
+	})
+}
+
+// A CA repository owns only CA rows, not the certificates they reference.
+func TestCAWritesDoNotWriteCertificates(t *testing.T) {
+	suite, kms, certs := newKMSAndCertStores(t)
+	ctx := context.Background()
+	cas, err := postgres.NewCAPostgresRepository(helpers.SetupLogger(config.Info, "Test", "CA ownership"), suite.DB["ca"])
+	require.NoError(t, err)
+	insertTestKey(t, kms, "engine", "private")
+	t.Run("missing certificate is rejected instead of inserted", func(t *testing.T) {
+		cert := newTestCertificate(t, 901, "engine", "private")
+		_, err := cas.Insert(ctx, &models.CACertificate{ID: "missing", CertificateSerialNumber: cert.SerialNumber, Certificate: *cert})
+		require.ErrorIs(t, err, gorm.ErrForeignKeyViolated)
+		found, _, err := certs.SelectExistsBySerialNumber(ctx, cert.SerialNumber)
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
+	t.Run("stale associations do not overwrite certificates", func(t *testing.T) {
+		cert, err := certs.Insert(ctx, newTestCertificate(t, 902, "engine", "private"))
+		require.NoError(t, err)
+		stale := *cert
+		stale.Status = models.StatusRevoked
+		ca, err := cas.Insert(ctx, &models.CACertificate{ID: "reference", CertificateSerialNumber: cert.SerialNumber, Certificate: stale})
+		require.NoError(t, err)
+		assert.Equal(t, cert, &ca.Certificate)
+		ca.Certificate.Status = models.StatusRevoked
+		ca.Metadata = map[string]any{"updated": true}
+		ca, err = cas.Update(ctx, ca)
+		require.NoError(t, err)
+		assert.Equal(t, cert, &ca.Certificate)
+		assert.Equal(t, cert, readCertificate(t, certs, cert.SerialNumber))
+		assert.Equal(t, true, ca.Metadata["updated"])
+	})
 }
