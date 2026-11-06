@@ -170,7 +170,7 @@ func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, 
 		return false, fmt.Errorf("failed to get database connection: %w", err)
 	}
 	var exists int
-	query := db.WithContext(ctx).Table(schema.QualifiedTableName())
+	query := db.WithContext(ctx).Table(schema.FromClause())
 	for _, join := range result.Joins {
 		query = query.Joins(join)
 	}

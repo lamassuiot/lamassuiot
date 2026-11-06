@@ -52,6 +52,48 @@ func TestAuthzGormPlugin_SkipsIfAuthzQueryNotAString(t *testing.T) {
 	assert.NotContains(t, strings.ToUpper(sql), "WHERE")
 }
 
+// viewTablePolicySQL is the shape the engine generates for an entity declared with a
+// view table: it reads the view under the entity's canonical table name.
+const viewTablePolicySQL = `SELECT * FROM ca.certificates_view AS certificates LEFT JOIN ca.grants AS j0 ON certificates.serial_number = j0.serial_number WHERE certificates.has_private_key = true AND j0.owner = 'allowed'`
+
+func TestAuthzGormPlugin_InjectsViewTablePolicyIntoAliasedViewQuery(t *testing.T) {
+	// The certificate store reads "certificates_view AS certificates". Skipping injection
+	// here would return every row (fail open).
+	db := testDB(t)
+	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
+	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, viewTablePolicySQL)
+	var dest []map[string]any
+	result := db.WithContext(ctx).Table("certificates_view AS certificates").Find(&dest)
+	require.NoError(t, result.Error)
+	sql := result.Statement.SQL.String()
+	assert.Contains(t, sql, "LEFT JOIN ca.grants AS j0 ON certificates.serial_number = j0.serial_number")
+	assert.Contains(t, sql, "certificates.has_private_key = true")
+	assert.Contains(t, sql, "j0.owner = 'allowed'")
+}
+
+func TestAuthzGormPlugin_InjectsViewTablePolicyIntoCanonicalTableQuery(t *testing.T) {
+	// A read of the canonical table must get the restriction too. If it names a column only
+	// the view has, the database rejects the query: it fails closed instead of listing everything.
+	db := testDB(t)
+	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
+	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, viewTablePolicySQL)
+	var dest []map[string]any
+	sql := db.WithContext(ctx).Table("certificates").Find(&dest).Statement.SQL.String()
+	assert.Contains(t, sql, "certificates.has_private_key = true")
+}
+
+func TestAuthzGormPlugin_SkipsOtherEntityPolicyForAliasedViewPreload(t *testing.T) {
+	// Listing CAs preloads their certificate from "certificates_view AS certificates" in the
+	// same context. The ca_certificate policy must not be injected into that preload.
+	db := testDB(t)
+	require.NoError(t, NewAuthzGormPlugin().Initialize(db))
+	authzSQL := `SELECT * FROM ca.ca_certificates WHERE ca_certificates.id = 'allowed'`
+	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, authzSQL)
+	var dest []map[string]any
+	sql := db.WithContext(ctx).Table("certificates_view AS certificates").Find(&dest).Statement.SQL.String()
+	assert.NotContains(t, strings.ToUpper(sql), "WHERE")
+}
+
 func TestAuthzGormPlugin_InjectsDenyAll(t *testing.T) {
 	// Deny-all filter (1 = 0) must be injected into the WHERE clause.
 	db := testDB(t)

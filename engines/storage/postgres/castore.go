@@ -13,7 +13,7 @@ import (
 )
 
 const caDBName = "ca_certificates"
-const caJoinCaCertificatesAndCertificates = "JOIN certificates ON ca_certificates.serial_number = certificates.serial_number"
+const caJoinCaCertificatesAndCertificates = "JOIN " + certificateReadTable + " ON ca_certificates.serial_number = certificates.serial_number"
 
 type PostgresCAStore struct {
 	db      *gorm.DB
