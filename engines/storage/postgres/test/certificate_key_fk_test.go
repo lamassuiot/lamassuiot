@@ -137,6 +137,18 @@ func TestCertificateKeyForeignKey(t *testing.T) {
 	})
 }
 
+// Callers such as ImportCA turn a concurrent insert of the same certificate into their own conflict error,
+// so the store must report it as one instead of a raw database error.
+func TestCertificateInsertReportsADuplicateSerialNumber(t *testing.T) {
+	_, _, certStore := newKMSAndCertStores(t)
+	cert := newTestCertificate(t, 1, "", "")
+	_, err := certStore.Insert(context.Background(), cert)
+	require.NoError(t, err)
+
+	_, err = certStore.Insert(context.Background(), newTestCertificate(t, 1, "", ""))
+	require.ErrorIs(t, err, errs.ErrCertificateAlreadyExists)
+}
+
 // DeleteWith deletes the key row and runs the engine delete in the same transaction, after the row: an
 // engine copy is never destroyed for a key a certificate uses.
 func TestKMSStoreDeleteWith(t *testing.T) {
