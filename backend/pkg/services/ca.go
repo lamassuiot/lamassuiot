@@ -299,7 +299,22 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	caCert := input.CACertificate
 	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
 
+	// Two CAs on one certificate row would share its status and key: revoking or deleting one would
+	// revoke the other and delete its key.
+	exists, owner, err := svc.caStorage.SelectExistsBySerialNumber(ctx, caCertSN)
+	if err != nil {
+		lFunc.Errorf("could not check if certificate %s belongs to a CA: %s", caCertSN, err)
+		return nil, err
+	}
 	caCertX509 := (*x509.Certificate)(input.CACertificate)
+	if exists {
+		if owner.Certificate.Certificate == nil || !(*x509.Certificate)(owner.Certificate.Certificate).Equal(caCertX509) {
+			lFunc.Errorf("certificate %s is a different certificate with the serial number of CA '%s'", caCertSN, owner.ID)
+			return nil, errs.ErrValidateBadRequest
+		}
+		lFunc.Errorf("cannot import duplicate CA. Certificate %s already belongs to CA '%s'", caCertSN, owner.ID)
+		return nil, errs.ErrCAAlreadyExists
+	}
 
 	// Checked before ImportKey: the certificate of a CA must assert basicConstraints cA=TRUE, and a
 	// rejected certificate must not leave its key in the KMS.

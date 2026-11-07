@@ -217,6 +217,38 @@ func subCAIssuedOutsideLamassu(t *testing.T, cn string) (*x509.Certificate, *ecd
 	return cert, key
 }
 
+// A second CA on the same certificate row would share its status and key: revoking or deleting it, for
+// example to clean up a retried import, would revoke the first CA and delete its key.
+func TestImportingTheCertificateOfAnExistingCAIsRejected(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSDK := serverTest.CA.HttpCASDK
+	profile := newKeyRefsProfile(t)
+
+	cert, key := selfSignedCAWithForeignSKI(t, "import-existing-ca")
+	existing, err := caSDK.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, Key: key, CACertificate: (*models.X509Certificate)(cert)})
+	require.NoError(t, err)
+
+	t.Run("without key", func(t *testing.T) {
+		_, err := caSDK.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, CACertificate: (*models.X509Certificate)(cert)})
+		require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
+	})
+
+	t.Run("with its key", func(t *testing.T) {
+		_, err := caSDK.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, Key: key, CACertificate: (*models.X509Certificate)(cert)})
+		require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
+	})
+
+	var ids []string
+	_, err = caSDK.GetCAsByCommonName(ctx, services.GetCAsByCommonNameInput{CommonName: "import-existing-ca", ExhaustiveRun: true, ApplyFunc: func(ca models.CACertificate) { ids = append(ids, ca.ID) }})
+	require.NoError(t, err)
+	require.Equal(t, []string{existing.ID}, ids)
+	stored, err := caSDK.GetCAByID(ctx, services.GetCAByIDInput{CAID: existing.ID})
+	require.NoError(t, err)
+	require.Equal(t, models.StatusActive, stored.Certificate.Status)
+	require.Equal(t, existing.Certificate.KeyID, stored.Certificate.KeyID)
+}
+
 // DeleteCA keeps the certificate row (#815), and ImportCA reuses it when the same certificate is imported again.
 // The reused row must reference the key this import brings, or the CA comes back without one. The CA is an
 // intermediate because DeleteCA revokes the row of a self-signed CA, which is then reimported revoked.

@@ -64,6 +64,18 @@ func (repo *importCARepo) SelectExistsByID(_ context.Context, id string) (bool, 
 	return true, &ca, nil
 }
 
+func (repo *importCARepo) SelectExistsBySerialNumber(_ context.Context, serialNumber string) (bool, *models.CACertificate, error) {
+	if repo.lookupErr != nil {
+		return false, nil, repo.lookupErr
+	}
+	for _, ca := range repo.cas {
+		if ca.Certificate.SerialNumber == serialNumber {
+			return true, &ca, nil
+		}
+	}
+	return false, nil, nil
+}
+
 func (repo *importCARepo) SelectAll(_ context.Context, req storage.StorageListRequest[models.CACertificate]) (string, error) {
 	for _, ca := range repo.cas {
 		req.ApplyFunc(ca)
