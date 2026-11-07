@@ -533,6 +533,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	if !exists {
 		storedCertificate, err = svc.certStorage.Insert(ctx, &ca.Certificate)
+		// A concurrent import stored the certificate after the checks above. Reusing that row could give
+		// two CAs the same certificate, so this import is the duplicate.
+		if errors.Is(err, errs.ErrCertificateAlreadyExists) {
+			lFunc.Errorf("cannot import duplicate CA. Certificate %s was stored by a concurrent import", caCertSN)
+			return nil, errs.ErrCAAlreadyExists
+		}
 		if err != nil {
 			return nil, err
 		}

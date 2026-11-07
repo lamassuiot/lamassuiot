@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
@@ -99,6 +100,9 @@ func (db *PostgresCertificateStorage) Insert(ctx context.Context, certificate *m
 	inserted, err := db.querier.Insert(ctx, certificate, certificate.SerialNumber)
 	if isCertificateKeyViolation(err) {
 		return nil, errs.ErrKeyNotFound
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return nil, errs.ErrCertificateAlreadyExists
 	}
 	if err != nil {
 		return nil, err

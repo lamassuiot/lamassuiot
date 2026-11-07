@@ -21,6 +21,7 @@ var (
 	ErrValidateBadRequest error = errors.New("struct validation error")
 
 	ErrCertificateNotFound                   error = errors.New("certificate not found")
+	ErrCertificateAlreadyExists              error = errors.New("certificate already exists")
 	ErrCertificateInUse                      error = errors.New("certificate is in use")
 	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
 	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
