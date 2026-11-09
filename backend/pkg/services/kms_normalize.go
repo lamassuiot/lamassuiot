@@ -58,6 +58,16 @@ func NormalizeKeyNames(ctx context.Context, logger *logrus.Entry, kmsStorage sto
 			logger.Warnf("leaving key %s in engine %s as it is: the engine also holds it as %s, remove one of them by hand", key.KeyID, key.EngineID, digest)
 			continue
 		}
+		// A key ID wins over an alias when resolving an identifier, so the rename would take over the alias.
+		aliased, owner, err := kmsStorage.SelectExistsByAlias(ctx, digest)
+		if err != nil {
+			logger.Warnf("leaving key %s in engine %s as it is: %s", key.KeyID, key.EngineID, err)
+			continue
+		}
+		if aliased && (owner.KeyID != key.KeyID || owner.EngineID != key.EngineID) {
+			logger.Warnf("leaving key %s in engine %s as it is: %s is an alias of key %s in engine %s, remove that alias by hand", key.KeyID, key.EngineID, digest, owner.KeyID, owner.EngineID)
+			continue
+		}
 
 		done, err := kmsStorage.RenameKey(ctx, key.EngineID, key.KeyID, digest, func() error {
 			return renameInEngine(ctx, engine.Service, key.KeyID, digest)

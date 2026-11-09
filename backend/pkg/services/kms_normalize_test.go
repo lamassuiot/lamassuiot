@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
+	"slices"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
@@ -64,6 +65,15 @@ func (s *keyRows) SelectAll(_ context.Context, req storage.StorageListRequest[mo
 func (s *keyRows) SelectExistsByKeyID(_ context.Context, keyID, engineID string) (bool, *models.Key, error) {
 	key, ok := s.keys[keyID+"@"+engineID]
 	return ok, key, nil
+}
+
+func (s *keyRows) SelectExistsByAlias(_ context.Context, alias string) (bool, *models.Key, error) {
+	for _, key := range s.keys {
+		if slices.Contains(key.Aliases, alias) {
+			return true, key, nil
+		}
+	}
+	return false, nil, nil
 }
 
 func (s *keyRows) RenameKey(_ context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (bool, error) {
@@ -143,6 +153,33 @@ func TestNormalizeKeyNames(t *testing.T) {
 		require.Equal(t, 0, NormalizeKeyNames(ctx, logrus.NewEntry(logger), rows, map[string]*Engine{"e": {Service: engine}}))
 		require.Empty(t, engine.renamed)
 		require.Len(t, rows.keys, 6)
+	})
+
+	// A key ID wins over an alias when resolving an identifier, so renaming a key to another key's alias
+	// would silently point that alias at the renamed key.
+	t.Run("a key whose digest is another key's alias is left as it is", func(t *testing.T) {
+		signer, publicKey, digest := newNamedKey(t)
+		_, otherPub, otherDigest := newNamedKey(t)
+		engine := &namedKeysEngine{keys: map[string]crypto.Signer{"ski": signer}}
+		other := row(otherDigest, "e", otherPub, true)
+		other.Aliases = []string{digest}
+		rows := &keyRows{keys: map[string]*models.Key{"ski@e": row("ski", "e", publicKey, true), otherDigest + "@e": other}}
+
+		require.Equal(t, 0, NormalizeKeyNames(ctx, logrus.NewEntry(logger), rows, map[string]*Engine{"e": {Service: engine}}))
+		require.Empty(t, engine.renamed)
+		require.Contains(t, rows.keys, "ski@e")
+		require.NotContains(t, rows.keys, digest+"@e")
+	})
+
+	t.Run("a key whose digest is already its own alias is renamed", func(t *testing.T) {
+		signer, publicKey, digest := newNamedKey(t)
+		engine := &namedKeysEngine{keys: map[string]crypto.Signer{"ski": signer}}
+		key := row("ski", "e", publicKey, true)
+		key.Aliases = []string{digest}
+		rows := &keyRows{keys: map[string]*models.Key{"ski@e": key}}
+
+		require.Equal(t, 1, NormalizeKeyNames(ctx, logrus.NewEntry(logger), rows, map[string]*Engine{"e": {Service: engine}}))
+		require.Contains(t, rows.keys, digest+"@e")
 	})
 
 	t.Run("a key that fails to rename does not stop the others", func(t *testing.T) {
