@@ -546,17 +546,21 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	if storedCertificate.Certificate == nil || !(*x509.Certificate)(storedCertificate.Certificate).Equal(caCertX509) {
 		return nil, errs.ErrValidateBadRequest
 	}
-	// A reused row may have no key, for example once DeleteCA released it. The key holds the certificate's
-	// public key, so this import links it; a row that already has one keeps it.
-	if exists && key != nil {
-		if storedCertificate.KeyID == "" {
-			storedCertificate.EngineID, storedCertificate.KeyID, storedCertificate.Type = key.EngineID, key.KeyID, importType
-			storedCertificate, err = svc.certStorage.Update(ctx, storedCertificate)
-			if err != nil {
-				return nil, err
+	// A reused row still holds the previous import's data, for example once DeleteCA released it: this import
+	// decides its type and names its own CA as the issuer of a self-signed certificate.
+	if exists {
+		storedCertificate.Type, storedCertificate.IssuerCAMetadata = importType, issuerMeta
+		// The key holds the certificate's public key, so this import links it; a row that already has one keeps it.
+		if key != nil {
+			if storedCertificate.KeyID == "" {
+				storedCertificate.EngineID, storedCertificate.KeyID = key.EngineID, key.KeyID
+			} else if storedCertificate.EngineID != key.EngineID {
+				lFunc.Warnf("certificate %s already uses its key in crypto engine %s; the copy in %s is not used", caCertSN, storedCertificate.EngineID, key.EngineID)
 			}
-		} else if storedCertificate.EngineID != key.EngineID {
-			lFunc.Warnf("certificate %s already uses its key in crypto engine %s; the copy in %s is not used", caCertSN, storedCertificate.EngineID, key.EngineID)
+		}
+		storedCertificate, err = svc.certStorage.Update(ctx, storedCertificate)
+		if err != nil {
+			return nil, err
 		}
 	}
 	ca.Certificate = *storedCertificate

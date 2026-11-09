@@ -249,6 +249,34 @@ func TestImportingTheCertificateOfAnExistingCAIsRejected(t *testing.T) {
 	require.Equal(t, existing.Certificate.KeyID, stored.Certificate.KeyID)
 }
 
+// The reused row is the previous import's data. A reimport that brings no key must not keep the type of the
+// import that did, nor name the deleted CA as the issuer of its own certificate.
+func TestReimportingADeletedCAAppliesTheNewImportToTheReusedRow(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	profile := newKeyRefsProfile(t)
+
+	cert, key := selfSignedCAWithForeignSKI(t, "reimport-stale-row")
+	first, err := caSvc.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, Key: key, CACertificate: (*models.X509Certificate)(cert)})
+	require.NoError(t, err)
+	require.Equal(t, models.CertificateTypeImportedWithKey, first.Certificate.Type)
+	_, err = caSvc.UpdateCAStatus(ctx, services.UpdateCAStatusInput{CAID: first.ID, Status: models.StatusRevoked, RevocationReason: models.RevocationReason(1)})
+	require.NoError(t, err)
+	require.NoError(t, caSvc.DeleteCA(ctx, services.DeleteCAInput{CAID: first.ID}))
+
+	second, err := caSvc.ImportCA(ctx, services.ImportCAInput{CACertificate: (*models.X509Certificate)(cert)})
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, second.ID)
+
+	stored, err := caSvc.GetCAByID(ctx, services.GetCAByIDInput{CAID: second.ID})
+	require.NoError(t, err)
+	for name, ca := range map[string]*models.CACertificate{"import response": second, "stored CA": stored} {
+		require.Equal(t, models.CertificateTypeImportedWithoutKey, ca.Certificate.Type, name)
+		require.Equal(t, second.ID, ca.Certificate.IssuerCAMetadata.ID, name)
+	}
+}
+
 // DeleteCA keeps the certificate row (#815), and ImportCA reuses it when the same certificate is imported again.
 // The reused row must reference the key this import brings, or the CA comes back without one. The CA is an
 // intermediate because DeleteCA revokes the row of a self-signed CA, which is then reimported revoked.
