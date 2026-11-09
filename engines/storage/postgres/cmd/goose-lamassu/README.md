@@ -52,6 +52,16 @@ GRANT SELECT, REFERENCES ON ca.certificates TO migration_user;
 GRANT SELECT ON ca.ca_certificates TO migration_user;
 ```
 
+The `ca` migration also creates the view `ca.certificates_view`, through which the CA service reads certificates and CAs. The view belongs to the user that ran the migration, so if the CA service connects as a different user, grant that user `SELECT` on the view after migrating `ca`. Without it, every certificate and CA read fails with `permission denied for table certificates_view`.
+
+```sql
+GRANT SELECT ON ca.certificates_view TO service_user;
+```
+
+The view reads `kms.kms_keys` with its owner's privileges, so the service user needs no privileges on the `kms` schema for this.
+
+To migrate every schema in order:
+
 ```bash
 for schema in kms ca va devicemanager dmsmanager alerts; do
   ./goose-lamassu \
