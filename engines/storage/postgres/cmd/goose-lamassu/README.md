@@ -35,6 +35,23 @@ Both foreign keys validate existing rows.
 
 `devicemanager`, `dmsmanager` and `alerts` are independent and can be migrated at any point.
 
+### Cross-schema privileges
+
+The `ca` and `va` migrations create foreign keys and read tables that belong to another schema. PostgreSQL checks privileges on those tables for the user that runs the migration, so it needs more than the privileges on its own schema (see [Troubleshooting](#troubleshooting)). If the same user owns every schema, nothing extra is needed.
+
+| Migration (`search_path`) | Other schema | Needs | Used for |
+|---|---|---|---|
+| `ca` | `kms` | `USAGE` on the schema; `SELECT` and `REFERENCES` on `kms.kms_keys`; `INSERT` on `kms.kms_keys` | The certificate-to-key foreign key, the `certificates_view` view, and the registration of the public keys of deleted CAs |
+| `va` | `ca` | `USAGE` on the schema; `SELECT` and `REFERENCES` on `ca.certificates`; `SELECT` on `ca.ca_certificates` | The VA role-to-signer-certificate foreign key and the lookup of each role's signer certificate |
+
+Without them the migration aborts, for example with `permission denied for table certificates` on the `va` foreign key. Earlier schemas are already migrated, so grant the missing privileges and run the failed schema again. For example, for the `va` migration:
+
+```sql
+GRANT USAGE ON SCHEMA ca TO migration_user;
+GRANT SELECT, REFERENCES ON ca.certificates TO migration_user;
+GRANT SELECT ON ca.ca_certificates TO migration_user;
+```
+
 ```bash
 for schema in kms ca va devicemanager dmsmanager alerts; do
   ./goose-lamassu \
@@ -66,4 +83,5 @@ docker run --rm lamassu/lamassu-db-migration:latest \
 - A failed migration: run `status` and check the `goose_db_version` table to see what was applied. Fix the database state before retrying.
 - "could not extract search_path from connection string" error: the connection string has no `search_path=<schema>`.
 - "invalid schema" error: `search_path` is not one of the supported schemas.
-- The PostgreSQL user needs `CREATE` on the database and `SELECT, INSERT, UPDATE, DELETE` on its tables. It also needs to be able to create `goose_db_version`.
+- The PostgreSQL user needs `CREATE` on the database and `SELECT, INSERT, UPDATE, DELETE` on the tables of the schema it migrates. It also needs to be able to create `goose_db_version`. The `ca` and `va` migrations need additional privileges on the `kms` and `ca` schemas: see [Cross-schema privileges](#cross-schema-privileges).
+- `permission denied for table certificates` or `permission denied for table kms_keys` during the `va` or `ca` migration: the user lacks `REFERENCES` or `SELECT` on the table of the other schema. Grant it and run that schema again.
