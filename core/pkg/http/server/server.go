@@ -191,6 +191,11 @@ func RunHTTPRouterWithShutdown(logger *logrus.Entry, router nethttp.Handler, cfg
 	startup.Add(1)
 	serverErr := make(chan error, 1)
 	go func() {
+		if cfg.Protocol == cconfig.HTTPS {
+			logger.Infof("HTTPS server listening on %s:%d %s", cfg.ListenAddress, port, mtlsStartupLog(cfg.Authentication))
+		} else {
+			logger.Infof("HTTP server listening on %s:%d", cfg.ListenAddress, port)
+		}
 		startup.Done()
 		var serveErr error
 		if cfg.Protocol == cconfig.HTTPS {
@@ -220,4 +225,21 @@ func RunHTTPRouterWithShutdown(logger *logrus.Entry, router nethttp.Handler, cfg
 		_ = httpServer.Shutdown(shutdownContext)
 	}
 	return port, shutdown, nil
+}
+
+func mtlsStartupLog(authentication cconfig.HttpServerAuthentication) string {
+	if !authentication.MutualTLS.Enabled {
+		return ""
+	}
+
+	switch authentication.MutualTLS.ValidationMode {
+	case cconfig.Any:
+		return "with mTLS enabled using 'any' validation mode (at least one client certificate MUST be sent but wont be validated)"
+	case cconfig.Request:
+		return "with mTLS enabled using 'request' validation mode (client certificate will be request although not mandatory to be sent. Behaves like optional mTLS)"
+	case cconfig.Strict, "":
+		return "with mTLS enabled using 'strict' validation mode"
+	default:
+		return "with mTLS enabled using 'strict' validation mode"
+	}
 }
