@@ -14,6 +14,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -24,10 +25,15 @@ type Result struct {
 	Failed   int
 }
 
+// CALister lists the CAs of a type; storage.CACertificatesRepo is one.
+type CALister interface {
+	SelectByType(ctx context.Context, caType models.CertificateType, req storage.StorageListRequest[models.CACertificate]) (string, error)
+}
+
 // Migrate runs the migration using pre-built storage instances.
 // This is the primary entry point for programmatic callers (e.g. Lambda handlers)
 // that manage their own storage connections.
-func Migrate(ctx context.Context, logger *log.Entry, caStorage storage.CACertificatesRepo, kmsStorage storage.KMSKeysRepo, dryRun bool) (Result, error) {
+func Migrate(ctx context.Context, logger *log.Entry, caStorage CALister, kmsStorage storage.KMSKeysRepo, dryRun bool) (Result, error) {
 	keyMap, err := collectKeys(ctx, logger, caStorage)
 	if err != nil {
 		return Result{}, fmt.Errorf("collect keys: %w", err)
@@ -42,12 +48,23 @@ func Migrate(ctx context.Context, logger *log.Entry, caStorage storage.CACertifi
 // migration. Both databases ("ca" and "kms") are expected on the same server; the engine
 // connects to each automatically. Pass the KMSConfig.Storage field from the standard
 // Lamassu service config.
+//
+// CAs are read from the ca tables, not through the CA repository: the tool runs before the ca
+// migrations, which need the keys it registers, and the repository reads what they create.
 func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconfig.PluggableStorageEngine, dryRun bool) (Result, error) {
 	engine, err := storagebuilder.BuildStorageEngine(logger, storageConf)
 	if err != nil {
 		return Result{}, fmt.Errorf("build storage engine: %w", err)
 	}
-	caStorage, err := engine.GetCAStorage()
+	pg, ok := engine.(*postgres.PostgresStorageEngine)
+	if !ok {
+		return Result{}, fmt.Errorf("unsupported storage provider %s: only postgres is supported", storageConf.Provider)
+	}
+	caDB, err := postgres.CreatePostgresDBConnection(logger, pg.Config, postgres.CA_SCHEMA)
+	if err != nil {
+		return Result{}, fmt.Errorf("connect to CA storage: %w", err)
+	}
+	caStorage, err := postgres.NewCATableReader(logger, caDB)
 	if err != nil {
 		return Result{}, fmt.Errorf("get CA storage: %w", err)
 	}
@@ -77,7 +94,7 @@ type keyEntry struct {
 }
 
 // collectKeys scans MANAGED and IMPORTED_WITH_KEY CA certs and groups them by key.
-func collectKeys(ctx context.Context, logger *log.Entry, caStorage storage.CACertificatesRepo) (map[string]*keyEntry, error) {
+func collectKeys(ctx context.Context, logger *log.Entry, caStorage CALister) (map[string]*keyEntry, error) {
 	keyMap := map[string]*keyEntry{}
 
 	collect := func(ca models.CACertificate) {
