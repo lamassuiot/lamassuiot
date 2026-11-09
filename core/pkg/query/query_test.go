@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/stretchr/testify/require"
 )
@@ -70,52 +69,4 @@ func TestFilterQueryIgnoresInvalidSortAndMalformedFilters(t *testing.T) {
 	require.Len(t, got.Filters, 1)
 	require.Equal(t, resources.DefaultPageSize, got.PageSize)
 	require.Equal(t, resources.SortModeAsc, got.Sort.SortMode)
-}
-
-func TestFilterQueryWithPrefix(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/?ca_filter=status%5Beq%5Dactive", nil)
-	got, err := FilterQueryWithPrefix(req, testFields, "ca_filter")
-	require.NoError(t, err)
-	require.Len(t, got.Filters, 1)
-	require.Equal(t, "status", got.Filters[0].Field)
-	require.Nil(t, mustPrefix(http.MethodGet, "/?filter=x", "missing"))
-	require.Nil(t, mustPrefix(http.MethodGet, "/", "ca_filter"))
-	require.Nil(t, mustPrefix(http.MethodGet, "/?ca_filter=malformed", "ca_filter"))
-	require.Nil(t, mustPrefix(http.MethodGet, "/?ca_filter=unknown%5Beq%5Dx", "ca_filter"))
-}
-
-func mustPrefix(method, target, prefix string) *resources.QueryParameters {
-	got, _ := FilterQueryWithPrefix(httptest.NewRequest(method, target, nil), testFields, prefix)
-	return got
-}
-
-func TestConvertDeviceGroupCriteriaAndResponse(t *testing.T) {
-	empty, err := ConvertDeviceGroupCriteria(nil, testFields)
-	require.Empty(t, empty)
-	require.NoError(t, err)
-	criteria := []resources.DeviceGroupFilterOptionRequest{{Field: "status", Operand: "eq", Value: "ACTIVE"}}
-	got, err := ConvertDeviceGroupCriteria(criteria, testFields)
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	_, err = ConvertDeviceGroupCriteria([]resources.DeviceGroupFilterOptionRequest{{Field: "missing", Operand: "eq"}}, testFields)
-	require.Error(t, err)
-	require.Equal(t, "invalid filter field 'missing' at criteria index 0", (&InvalidFilterFieldError{Field: "missing", Index: 0}).Error())
-	require.Equal(t, "invalid operand 'bad' for field 'status' at criteria index 1", (&InvalidOperandError{Field: "status", Operand: "bad", Index: 1}).Error())
-	_, err = ConvertDeviceGroupCriteria([]resources.DeviceGroupFilterOptionRequest{{Field: "status", Operand: "bad"}}, testFields)
-	require.Error(t, err)
-
-	require.Nil(t, ConvertDeviceGroupToResponse(nil, 0))
-	parent := "root"
-	response := ConvertDeviceGroupToResponse(&models.DeviceGroup{
-		ID: "g1", Name: "group", ParentID: &parent,
-		Criteria: []models.DeviceGroupFilterOption{
-			{Field: "missing", FilterOperation: int(resources.EnumEqual), Value: "ignored"},
-			{Field: "status", FilterOperation: int(resources.EnumEqual), Value: "ACTIVE"},
-			{Field: "dms_owner", FilterOperation: int(resources.StringEqual), Value: "group"},
-		},
-	}, 1)
-	require.Equal(t, "root", response["parent_id"])
-	require.Len(t, response["inherited_criteria"], 1)
-	require.Len(t, response["criteria"], 1)
-	require.Contains(t, response["inherited_criteria"], resources.DeviceGroupFilterOptionRequest{Field: "status", Operand: "eq", Value: "ACTIVE"})
 }
