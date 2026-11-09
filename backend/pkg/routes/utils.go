@@ -2,193 +2,45 @@ package routes
 
 import (
 	"bytes"
-	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"strings"
-	"sync"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
-	basiclogger "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/basiclogger"
-	headerextractors "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/headerextractors"
-	identityextractors "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/identityextractors"
+	httpserver "github.com/lamassuiot/lamassuiot/v4/core/pkg/http/server"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"gopkg.in/yaml.v3"
 )
 
 func NewGinEngine(logger *logrus.Entry) *gin.Engine {
-	gin.ForceConsoleColor()
-	gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, nuHandlers int) {
-		logger.Debugf("Endpoint: %-6s %s", httpMethod, absolutePath)
-	}
-
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowAllOrigins = true
-	corsConfig.AllowHeaders = []string{"*"}
-
-	router := gin.New()
-	router.Use(
-		cors.New(corsConfig),
-		otelgin.Middleware("gin-server"),
-		headerextractors.RequestMetadataToContextMiddleware(logger),
-		identityextractors.RequestMetadataToContextMiddleware(logger),
-		basiclogger.UseLogger(logger),
-		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
-			logger.Trace(dumpStr)
-		}),
-	)
-
-	return router
+	return httpserver.NewGinEngine(logger, httpserver.Options{})
 }
 
 func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCfg cconfig.HttpServer, apiInfo models.APIServiceInfo, openApiContent []byte) (int, error) {
-	hCheckRoute := controllers.NewHealthCheckRoute(apiInfo)
-	mainLogger := logger
-	if !httpServerCfg.HealthCheckLogging {
-		nooutLogger := logrus.New()
-		nooutLogger.Out = io.Discard
+	return httpserver.RunHTTPRouter(logger, routerEngine, httpServerCfg, apiInfo, openApiContent, httpserver.Options{})
+}
 
-		mainLogger = nooutLogger.WithField("", "")
-	}
-
-	healthEngine := NewGinEngine(mainLogger)
-	healthEngine.GET("/health", hCheckRoute.HealthCheck)
-
-	mainEngine := http.NewServeMux()
-	mainEngine.Handle("/", routerEngine)
-	mainEngine.Handle("/health", healthEngine)
-
-	if len(openApiContent) > 0 {
-		// Inject the service version into the OpenAPI spec
-		openApiContent = InjectVersionIntoOpenAPI(openApiContent, apiInfo.Version)
-
-		openApiEngine := NewGinEngine(mainLogger)
-		openApiEngine.GET("/openapi", func(ctx *gin.Context) {
-			ctx.Data(http.StatusOK, "application/yaml", openApiContent)
-		})
-		mainEngine.Handle("/openapi", openApiEngine)
-	}
-
-	addr := fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port)
-
-	t := time.Second * 10
-	server := http.Server{
-		Addr:         addr,
-		Handler:      mainEngine,
-		ReadTimeout:  t,
-		WriteTimeout: t,
-	}
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port))
-	if err != nil {
-		return -1, err
-	}
-
-	usedPort := listener.Addr().(*net.TCPAddr).Port
-
-	wg := new(sync.WaitGroup)
-	wg.Add(1) // add `1` goroutines to finish
-	startLaunching := func() {
-		wg.Done()
-	}
-
-	httpErrChan := make(chan error, 1)
-
-	if strings.HasSuffix(addr, ":0") {
-		addr = strings.ReplaceAll(addr, ":0", "")
-	}
-
-	go func() {
-		if httpServerCfg.Protocol == cconfig.HTTPS {
-			srvExtraLog := ""
-			if httpServerCfg.Authentication.MutualTLS.Enabled {
-				srvExtraLog = "with mTLS enabled"
-
-				valCAPool := x509.NewCertPool()
-
-				vaCert, err := helpers.ReadCertificateFromFile(httpServerCfg.Authentication.MutualTLS.CACertificateFile)
-				if err != nil {
-					logger.Warnf("could not load CA cert used while validating mTLS requests: %s", err)
-				} else {
-					valCAPool.AddCert(vaCert)
-				}
-
-				var clientAuth tls.ClientAuthType
-				if httpServerCfg.Authentication.MutualTLS.ValidationMode == cconfig.Any {
-					clientAuth = tls.RequireAnyClientCert
-					srvExtraLog = srvExtraLog + " using 'any' validation mode (at least one client certificate MUST be sent but wont be validated)"
-				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == cconfig.Strict {
-					clientAuth = tls.RequireAndVerifyClientCert
-					srvExtraLog = srvExtraLog + " using 'strict' validation mode"
-				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == cconfig.Request {
-					clientAuth = tls.RequestClientCert
-					srvExtraLog = srvExtraLog + " using 'request' validation mode (client certificate will be request although not mandatory to be sent. Behaves like optional mTLS)"
-				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == "" {
-					logger.Warnf("mutual TLS validation mode is empty. Defaulting to 'strict' validation")
-					srvExtraLog = srvExtraLog + " using 'strict' validation mode"
-					clientAuth = tls.RequireAndVerifyClientCert
-				} else {
-					logger.Warnf("mutual TLS validation mode not recognized. Defaulting to 'strict' validation")
-					clientAuth = tls.RequireAndVerifyClientCert
-					srvExtraLog = srvExtraLog + " using 'strict' validation mode"
-				}
-
-				if clientAuth == tls.RequireAndVerifyClientCert {
-					logger.Debugf("mTLS requests will be accepted when client presents a certificate issued by CA with subject '%s'", vaCert.Subject.String())
-				}
-
-				server.TLSConfig = &tls.Config{
-					ClientAuth: clientAuth,
-					ClientCAs:  valCAPool,
-					MaxVersion: tls.VersionTLS12,
-				}
-			}
-
-			logger.Infof("HTTPS server listening on %s:%d %s", addr, usedPort, srvExtraLog)
-			startLaunching()
-			err := server.ServeTLS(listener, httpServerCfg.CertFile, httpServerCfg.KeyFile)
-			if err != nil {
-				logger.Errorf("could not start http server: %s", err)
-				httpErrChan <- err
-			}
-		} else {
-			logger.Infof("HTTP server listening on %s:%d", addr, usedPort)
-			startLaunching()
-			err := server.Serve(listener)
-			if err != nil {
-				logger.Errorf("could not start http server: %s", err)
-				httpErrChan <- err
-			}
+func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rbw := &respBodyWriter{
+			body:           &bytes.Buffer{},
+			ResponseWriter: c.Writer,
 		}
-	}()
+		c.Writer = rbw
 
-	// Create a context with a timeout of 3 seconds. If in 3 seconds of starting the HTTP server
-	// no error is received, we will mark the HTTP server as RUNNING
-	ctxTimeout, cancel := context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
+		start := time.Now()
+		c.Next()
 
-	wg.Wait()
-
-	select {
-	case <-ctxTimeout.Done():
-		logger.Info("HTTP server ready to accept requests")
-	case err := <-httpErrChan:
-		return -1, err
+		fields := make(map[string]any)
+		logger.WithFields(fields).Infof("[Request] %v |%3d| %13v | %15s |%-7s %s",
+			start.Format("2006/01/02 - 15:04:05"),
+			c.Writer.Status(),
+			time.Since(start),
+			c.ClientIP(),
+			c.Request.Method,
+			c.Request.URL.Path,
+		)
 	}
-
-	return usedPort, nil
 }
 
 type respBodyWriter struct {
@@ -201,60 +53,6 @@ func (w respBodyWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		rbw := &respBodyWriter{
-			body:           bytes.NewBufferString(""),
-			ResponseWriter: c.Writer,
-		}
-		c.Writer = rbw
-
-		start := time.Now()
-
-		c.Next()
-
-		latency := time.Since(start)
-		fields := make(map[string]any)
-
-		logger.WithFields(fields).Infof("[Request] %v |%3d| %13v | %15s |%-7s %s",
-			start.Format("2006/01/02 - 15:04:05"),
-			c.Writer.Status(),
-			latency,
-			c.ClientIP(),
-			c.Request.Method,
-			c.Request.URL.Path,
-		)
-	}
-}
-
-// InjectVersionIntoOpenAPI dynamically replaces the version field in the OpenAPI spec
-// with the actual service version from APIServiceInfo using proper YAML parsing
 func InjectVersionIntoOpenAPI(openApiContent []byte, version string) []byte {
-	if len(openApiContent) == 0 || version == "" {
-		return openApiContent
-	}
-
-	// Parse the YAML content
-	var spec map[string]any
-	if err := yaml.Unmarshal(openApiContent, &spec); err != nil {
-		// If parsing fails, return the original content
-		return openApiContent
-	}
-
-	// Navigate to info.version and update it
-	if info, ok := spec["info"].(map[string]any); ok {
-		info["version"] = version
-	} else {
-		// If info section doesn't exist, return original content
-		return openApiContent
-	}
-
-	// Marshal back to YAML
-	modifiedContent, err := yaml.Marshal(spec)
-	if err != nil {
-		// If marshaling fails, return the original content
-		return openApiContent
-	}
-
-	return modifiedContent
+	return httpserver.InjectVersionIntoOpenAPI(openApiContent, version)
 }
