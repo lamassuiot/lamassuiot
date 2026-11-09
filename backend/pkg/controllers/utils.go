@@ -8,85 +8,12 @@ import (
 	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	corequery "github.com/lamassuiot/lamassuiot/v4/core/pkg/query"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) (*resources.QueryParameters, error) {
-	queryParams := resources.QueryParameters{
-		NextBookmark: "",
-		Filters:      []resources.FilterOption{},
-		PageSize:     resources.DefaultPageSize,
-	}
-
-	if len(r.URL.RawQuery) > 0 {
-		values := r.URL.Query()
-		for k, v := range values {
-			switch k {
-			case "sort_by":
-				value := v[len(v)-1] //only get last
-				sortQueryParam := value
-				sortField := strings.Trim(sortQueryParam, " ")
-
-				if before, after, ok := strings.Cut(sortField, "[jsonpath]"); ok {
-					fieldName := before
-					jsonPathExpr := after
-
-					if fieldType, exists := filterFieldMap[fieldName]; exists && fieldType == resources.JsonFilterFieldType {
-						// Validate JSONPath expression to prevent SQL injection
-						// If invalid, silently ignore the sort parameter (security measure)
-						if isValidJsonPath(jsonPathExpr) {
-							// Additional check for sorting: Only allow simple dot-separated paths
-							// Complex expressions with filters, comparisons, etc. are not supported for sorting
-							if isSimpleJsonPath(jsonPathExpr) {
-								queryParams.Sort.SortField = fieldName
-								queryParams.Sort.JsonPathExpr = jsonPathExpr
-							}
-						}
-					}
-				} else {
-					_, exists := filterFieldMap[sortField]
-					if exists {
-						queryParams.Sort.SortField = sortField
-					}
-				}
-
-			case "sort_mode":
-				value := v[len(v)-1] //only get last
-				sortQueryParam := value
-				sortMode := resources.SortModeAsc
-
-				if sortQueryParam == "desc" {
-					sortMode = resources.SortModeDesc
-				}
-
-				queryParams.Sort.SortMode = sortMode
-
-			case "page_size":
-				value := v[len(v)-1] //only get last
-				pageS, err := strconv.Atoi(value)
-				if err == nil {
-					queryParams.PageSize = min(pageS, resources.MaxPageSize)
-				}
-
-			case "bookmark":
-				value := v[len(v)-1] //only get last
-				queryParams.NextBookmark = value
-
-			case "filter":
-				for _, value := range v {
-					filter, err := parseFilterValue(value, filterFieldMap)
-					if err != nil {
-						return nil, err
-					}
-					if filter != nil {
-						queryParams.Filters = append(queryParams.Filters, *filter)
-					}
-				}
-			}
-		}
-	}
-
-	return &queryParams, nil
+	return corequery.FilterQuery(r, filterFieldMap)
 }
 
 // isValidJsonPath validates a JSONPath expression to prevent SQL injection
