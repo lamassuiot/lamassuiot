@@ -7,8 +7,10 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"io"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,7 +55,7 @@ func postgresImportInput(t *testing.T, id string, serial int64) services.ImportC
 }
 
 func TestCAStoreUniqueIDPostgres(t *testing.T) {
-	_, suite := postgrestest.BeforeSuite([]string{"ca"}, false)
+	_, suite := postgrestest.BeforeSuite([]string{"kms", "ca"}, false)
 	t.Cleanup(suite.AfterSuite)
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
@@ -62,10 +64,14 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 	pool, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, pool.Close()) })
+	// the CA schema references the KMS one, which is migrated first
+	NewMigrator(log, suite.DB["kms"]).MigrateToLatest()
 	NewMigrator(log, db).MigrateToLatest()
 	repo, err := NewCAPostgresRepository(log, db)
 	require.NoError(t, err)
-	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{CAStorage: repo, KMSService: keylessImportKMS{}, Logger: log})
+	certRepo, err := NewCertificateRepository(log, db)
+	require.NoError(t, err)
+	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{CAStorage: repo, CertificateStorage: certRepo, KMSService: keylessImportKMS{}, Logger: log})
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -100,7 +106,7 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		require.NotErrorIs(t, err, errs.ErrCAAlreadyExists)
 	})
 
-	t.Run("concurrent inserts roll back the losing certificate", func(t *testing.T) {
+	t.Run("concurrent CA inserts reference existing certificates", func(t *testing.T) {
 		exists, original, err := repo.SelectExistsByID(ctx, "shared")
 		require.NoError(t, err)
 		require.True(t, exists)
@@ -109,8 +115,10 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		for _, serial := range []string{"aa", "bb"} {
 			ca := *original
 			ca.ID = "direct-insert"
-			ca.CertificateSerialNumber = ""
 			ca.Certificate.SerialNumber = serial
+			_, err := certRepo.Insert(ctx, &ca.Certificate)
+			require.NoError(t, err)
+			ca.CertificateSerialNumber = serial
 			go func() {
 				<-start
 				_, err := repo.Insert(ctx, &ca)
@@ -131,6 +139,69 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		require.Equal(t, 1, succeeded)
 		require.Equal(t, 1, duplicated)
 		countRows("ca_certificates", 3)
-		countRows("certificates", 3)
+		countRows("certificates", 4)
 	})
+}
+
+// Force both imports to observe the certificate as absent before either inserts it.
+type simultaneousImportCertificates struct {
+	storage.CertificatesRepo
+	mu      sync.Mutex
+	lookups int
+	ready   chan struct{}
+}
+
+func (repo *simultaneousImportCertificates) SelectExistsBySerialNumber(ctx context.Context, serial string) (bool, *models.Certificate, error) {
+	found, cert, err := repo.CertificatesRepo.SelectExistsBySerialNumber(ctx, serial)
+	repo.mu.Lock()
+	repo.lookups++
+	n := repo.lookups
+	if n == 2 {
+		close(repo.ready)
+	}
+	repo.mu.Unlock()
+	if n <= 2 {
+		select {
+		case <-repo.ready:
+		case <-ctx.Done():
+			return false, nil, ctx.Err()
+		}
+	}
+	return found, cert, err
+}
+
+func TestConcurrentCAImportsKeepDuplicateIDError(t *testing.T) {
+	_, suite := postgrestest.BeforeSuite([]string{"kms", "ca"}, false)
+	t.Cleanup(suite.AfterSuite)
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	log := logrus.NewEntry(logger)
+	NewMigrator(log, suite.DB["kms"]).MigrateToLatest()
+	NewMigrator(log, suite.DB["ca"]).MigrateToLatest()
+	cas, err := NewCAPostgresRepository(log, suite.DB["ca"])
+	require.NoError(t, err)
+	certs, err := NewCertificateRepository(log, suite.DB["ca"])
+	require.NoError(t, err)
+	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{Logger: log, CAStorage: cas,
+		CertificateStorage: &simultaneousImportCertificates{CertificatesRepo: certs, ready: make(chan struct{})}, KMSService: keylessImportKMS{}})
+	require.NoError(t, err)
+	input := postgresImportInput(t, "concurrent-import", 9001)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results := make(chan error, 2)
+	for range 2 {
+		go func() { _, err := svc.ImportCA(ctx, input); results <- err }()
+	}
+	var successes, duplicates int
+	for range 2 {
+		err := <-results
+		if err == nil {
+			successes++
+		} else {
+			require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
+			duplicates++
+		}
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, 1, duplicates)
 }

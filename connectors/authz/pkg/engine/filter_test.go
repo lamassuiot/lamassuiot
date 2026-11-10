@@ -1208,3 +1208,40 @@ func TestBuildPathFilter_UsesOwnedEntityAliasForMultiHopPath(t *testing.T) {
 		t.Fatalf("expected condition not to use intermediate alias j0_0, got: %s", whereClause)
 	}
 }
+
+func TestGenerateListFilter_ReadsEntityThroughViewTableUnderCanonicalName(t *testing.T) {
+	// The certificate entity is read through certificates_view (which adds has_private_key),
+	// aliased to its canonical table name so column references stay "certificates.<col>".
+	schemas := NewSchemaRegistry()
+	if err := schemas.Load("../../pki.json", "pki"); err != nil {
+		t.Fatalf("Failed to load schemas: %v", err)
+	}
+	policies := NewPolicyRegistry()
+	if err := policies.AddPolicy(&models.Policy{ID: "keyed", Name: "keyed", Rules: []*models.Rule{{
+		Namespace: "pki", SchemaName: "ca", EntityType: "certificate", Actions: []string{"read"},
+		ColumnFilters: []models.ColumnFilter{{Column: "has_private_key", Type: "bool", Operator: "eq", Value: true}},
+		Relations:     []models.RelationRule{{ToSchemaName: "ca", ToEntityType: "ca_certificate", To: "ca.ca_certificate", Via: "serial_number", Actions: []string{"read"}}},
+	}}}); err != nil {
+		t.Fatalf("Failed to add policy: %v", err)
+	}
+	fg := mustNewFilterGenerator(t, schemas, policies)
+
+	certs, err := fg.GenerateListFilter("read", "ca", "certificate")
+	if err != nil {
+		t.Fatalf("GenerateListFilter(certificate) failed: %v", err)
+	}
+	if !strings.HasPrefix(certs.FullSQL, "SELECT * FROM ca.certificates_view AS certificates ") {
+		t.Errorf("expected FROM ca.certificates_view AS certificates, got: %s", certs.FullSQL)
+	}
+	if !strings.Contains(certs.FullSQL, "certificates.has_private_key = true") {
+		t.Errorf("expected condition on certificates.has_private_key, got: %s", certs.FullSQL)
+	}
+
+	cas, err := fg.GenerateListFilter("read", "ca", "ca_certificate")
+	if err != nil {
+		t.Fatalf("GenerateListFilter(ca_certificate) failed: %v", err)
+	}
+	if !strings.Contains(cas.FullSQL, "LEFT JOIN ca.certificates_view AS j0_0 ON ca_certificates.serial_number = j0_0.serial_number") {
+		t.Errorf("expected the cascade to join certificates_view, got: %s", cas.FullSQL)
+	}
+}

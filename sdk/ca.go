@@ -197,6 +197,7 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 			errs.ErrCAIssuanceExpiration,
 			errs.ErrCAIncompatibleValidity,
 			errs.ErrCAValidCertAndPrivKey,
+			errs.ErrCANotCA,
 		},
 		404: {
 			errs.ErrIssuanceProfileNotFound,
@@ -474,6 +475,7 @@ func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input se
 
 func (cli *httpCAClient) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
 	err := cli.delete(ctx, "/v1/certificates/"+input.SerialNumber, map[int][]error{
+		409: {errs.ErrCertificateInUse},
 		404: {
 			errs.ErrCertificateNotFound,
 		},

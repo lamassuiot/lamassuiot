@@ -1,268 +1,97 @@
-# Lamassu PostgreSQL Migration Tool (goose-lamassu)
+# goose-lamassu
 
-This is a custom goose binary for managing Lamassu PostgreSQL database migrations independently, without needing to start the full services. It uses the [pressly/goose](https://github.com/pressly/goose) migration framework with embedded SQL and Go migrations.
+Standalone [goose](https://github.com/pressly/goose) binary that applies the Lamassu PostgreSQL migrations (embedded SQL and Go migrations), without starting the services.
 
-**Based on**: [goose go-migrations example](https://github.com/pressly/goose/blob/main/examples/go-migrations/main.go)
-
-## Overview
-
-The `goose-lamassu` tool provides direct access to goose's migration commands with Lamassu-specific embedded migrations. It:
-- Uses the standard goose command-line interface
-- Supports all goose migration commands
-- Embeds SQL and Go migrations for all Lamassu databases
-- Validates database names against Lamassu's supported databases
-
-## Supported Databases
-
-- `ca` - Certificate Authority database
-- `devicemanager` - Device Manager database
-- `dmsmanager` - DMS Manager database
-- `alerts` - Alerts database
-- `va` - Validation Authority database
-- `kms` - Key Management Service database
-
-## Building
-
-### Local Binary
-
-From this directory:
-
-```bash
-cd engines/storage/postgres/cmd/goose-lamassu
-go build -o goose-lamassu
-```
-
-Or from the repository root:
-
-```bash
-go build -o goose-lamassu ./engines/storage/postgres/cmd/goose-lamassu
-```
+In deployments the migrations are run by the Helm chart as a Kubernetes Job. This document only describes how to apply them with the tool.
 
 ## Usage
-
-The tool follows the standard goose command-line pattern:
 
 ```bash
 goose-lamassu DBSTRING COMMAND [ARGS...]
 ```
 
-Where:
-- `DBSTRING` - PostgreSQL connection string (must include `dbname` parameter)
-- `COMMAND` - Goose migration command (up, down, status, etc.)
-- `ARGS` - Optional arguments for the command (e.g., version number for up-to)
-
-### Available Commands
-
-- `up` - Migrate the DB to the most recent version available
-- `up-by-one` - Migrate the DB up by 1
-- `up-to VERSION` - Migrate the DB to a specific VERSION
-- `down` - Roll back the version by 1
-- `down-to VERSION` - Roll back to a specific VERSION
-- `redo` - Re-run the latest migration
-- `reset` - Roll back all migrations
-- `status` - Dump the migration status for the current DB
-- `version` - Print the current version of the database
-
-## Examples
-
-### Migrate Up to Latest Version
+- `DBSTRING`: PostgreSQL connection string. Since 4.0.0 all services share the `pki` database and each one has its own schema, so it must include `dbname=pki` and `search_path=<schema>`, where `<schema>` is one of the supported schemas below. The tool exits if `search_path` is missing or is not a supported schema. It does not validate `dbname`, so check it before running the command.
+- `COMMAND`: a goose command. The most useful are `up`, `up-to VERSION`, `down`, `status` and `version`.
 
 ```bash
 ./goose-lamassu \
-  "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" \
+  "host=localhost user=postgres password=test dbname=pki search_path=ca port=5432 sslmode=disable" \
   up
 ```
 
-### Check Migration Status
+## Supported schemas
 
-```bash
-./goose-lamassu \
-  "host=localhost user=postgres password=test dbname=alerts port=5432 sslmode=disable" \
-  status
+`ca`, `devicemanager`, `dmsmanager`, `alerts`, `va`, `kms`
+
+## Migration order
+
+Migrate **`kms` → `ca` → `va`**, one at a time. Never run them in parallel.
+
+1. `kms`
+2. `ca`: certificates reference KMS keys. If `kms` is not migrated yet, it fails with `kms schema not found: migrate the kms schema before the ca schema`. Register legacy keys in KMS before running it with [`ca-to-kms-migration`](../../../../../backend/cmd/ca-to-kms-migration/README.md), which runs on the `ca` schema of earlier versions.
+3. `va`: VA roles reference their signer certificates, so it needs `ca` migrated. Fix VA roles whose signer certificate is missing before running it. When several CAs share the signer's key, the migration logs a warning and uses the oldest of them. If `va` is not migrated, VA role and CRL requests fail with `column "crl_signer_certificate_serial_number" of relation "va_role" does not exist`.
+
+Both foreign keys validate existing rows.
+
+`devicemanager`, `dmsmanager` and `alerts` are independent and can be migrated at any point.
+
+### Cross-schema privileges
+
+The `ca` and `va` migrations create foreign keys and read tables that belong to another schema. PostgreSQL checks privileges on those tables for the user that runs the migration, so it needs more than the privileges on its own schema (see [Troubleshooting](#troubleshooting)). If the same user owns every schema, nothing extra is needed.
+
+| Migration (`search_path`) | Other schema | Needs | Used for |
+|---|---|---|---|
+| `ca` | `kms` | `USAGE` on the schema; `SELECT` and `REFERENCES` on `kms.kms_keys`; `INSERT` on `kms.kms_keys` | The certificate-to-key foreign key, the `certificates_view` view, and the registration of the public keys of deleted CAs |
+| `va` | `ca` | `USAGE` on the schema; `SELECT` and `REFERENCES` on `ca.certificates`; `SELECT` on `ca.ca_certificates` | The VA role-to-signer-certificate foreign key and the lookup of each role's signer certificate |
+
+Without them the migration aborts, for example with `permission denied for table certificates` on the `va` foreign key. Earlier schemas are already migrated, so grant the missing privileges and run the failed schema again. For example, for the `va` migration:
+
+```sql
+GRANT USAGE ON SCHEMA ca TO migration_user;
+GRANT SELECT, REFERENCES ON ca.certificates TO migration_user;
+GRANT SELECT ON ca.ca_certificates TO migration_user;
 ```
 
-### Migrate to Specific Version
+The `ca` migration also creates the view `ca.certificates_view`, through which the CA service reads certificates and CAs. The view belongs to the user that ran the migration, so if the CA service connects as a different user, grant that user `SELECT` on the view after migrating `ca`. Without it, every certificate and CA read fails with `permission denied for table certificates_view`.
 
-```bash
-./goose-lamassu \
-  "host=localhost user=postgres password=test dbname=devicemanager port=5432 sslmode=disable" \
-  up-to 5
+```sql
+GRANT SELECT ON ca.certificates_view TO service_user;
 ```
 
-### Roll Back One Migration
+The view reads `kms.kms_keys` with its owner's privileges, so the service user needs no privileges on the `kms` schema for this.
+
+To migrate every schema in order:
 
 ```bash
-./goose-lamassu \
-  "host=localhost user=postgres password=test dbname=va port=5432 sslmode=disable" \
-  down
+for schema in kms ca va devicemanager dmsmanager alerts; do
+  ./goose-lamassu \
+    "host=$DB_HOST user=$DB_USER password=$DB_PASS dbname=pki search_path=$schema port=5432 sslmode=disable" \
+    up || break
+done
 ```
 
-### Get Current Version
+## Build
+
+From the repository root:
 
 ```bash
-./goose-lamassu \
-  "host=localhost user=postgres password=test dbname=dmsmanager port=5432 sslmode=disable" \
-  version
+go build -o goose-lamassu ./engines/storage/postgres/cmd/goose-lamassu
 ```
 
-### Using Environment Variables for Connection String
+Or the container image (also from the repository root):
 
 ```bash
-export DB_HOST=localhost
-export DB_USER=postgres
-export DB_PASS=test
-export DB_PORT=5432
-
-./goose-lamassu \
-  "host=$DB_HOST user=$DB_USER password=$DB_PASS dbname=ca port=$DB_PORT sslmode=disable" \
-  up
-```
-
-## Docker
-
-### Build the Image
-
-The Docker image is built from the **repository root** using the Dockerfile in the `ci` folder:
-
-```bash
-cd /path/to/lamassuiot
 docker build -f ci/lamassu-db-migration.dockerfile -t lamassu/lamassu-db-migration:latest .
-```
 
-### Run with Docker
-
-```bash
-docker run --rm \
-  lamassu/lamassu-db-migration:latest \
-  "host=postgres-host user=postgres password=secret dbname=ca port=5432 sslmode=disable" \
+docker run --rm lamassu/lamassu-db-migration:latest \
+  "host=postgres-host user=postgres password=secret dbname=pki search_path=kms port=5432 sslmode=disable" \
   up
 ```
-
-### Docker Compose Example
-
-```yaml
-version: '3.8'
-services:
-  migrate:
-    image: lamassu/lamassu-db-migration:latest
-    command: >
-      "host=postgres user=postgres password=secret dbname=ca port=5432 sslmode=disable"
-      up
-    depends_on:
-      - postgres
-```
-
-## Integration with CI/CD
-
-You can integrate this tool into your CI/CD pipeline to apply migrations before deploying services.
-
-### GitLab CI/CD Example
-
-```yaml
-migrate-ca:
-  stage: deploy
-  script:
-    - |
-      ./goose-lamassu \
-        "host=$POSTGRES_HOST user=$POSTGRES_USER password=$POSTGRES_PASSWORD dbname=ca port=5432 sslmode=disable" \
-        up
-  only:
-    - main
-
-migrate-all:
-  stage: deploy
-  parallel:
-    matrix:
-      - DB: [ca, devicemanager, dmsmanager, alerts, va, kms]
-  script:
-    - |
-      ./goose-lamassu \
-        "host=$POSTGRES_HOST user=$POSTGRES_USER password=$POSTGRES_PASSWORD dbname=$DB port=5432 sslmode=disable" \
-        up
-  only:
-    - main
-```
-
-### GitHub Actions Example
-
-```yaml
-- name: Run Database Migrations
-  run: |
-    ./goose-lamassu \
-      "host=${{ secrets.POSTGRES_HOST }} user=${{ secrets.POSTGRES_USER }} password=${{ secrets.POSTGRES_PASSWORD }} dbname=ca port=5432 sslmode=disable" \
-      up
-```
-
-## Direct Goose Usage
-
-Since this tool uses goose directly via `goose.RunContext()`, you have access to all standard goose functionality:
-
-- Migration tracking via `goose_db_version` table
-- Transaction support for SQL migrations
-- Go migrations with custom logic
-- Detailed migration logging
-- Rollback capabilities
-
-For more information on goose features and commands, see the [goose documentation](https://github.com/pressly/goose).
-
-## Migration Safety
-
-This tool provides safe migration management:
-
-- Only applies pending migrations (controlled by goose)
-- Uses transactions where applicable
-- Provides clear logging of all operations
-- Shows migration status before applying
-- Is idempotent - running it multiple times is safe
-- Tracks applied migrations in `goose_db_version` table
 
 ## Troubleshooting
 
-### Connection Issues
-
-If you can't connect to PostgreSQL:
-
-1. Verify the hostname and port are correct
-2. Check that PostgreSQL is accepting connections
-3. Ensure the user has proper permissions
-4. Verify network connectivity
-5. Check that the database exists
-
-### Permission Issues
-
-The PostgreSQL user needs:
-
-- CREATE permission on the database
-- SELECT, INSERT, UPDATE, DELETE permissions on tables
-- Ability to create the `goose_db_version` table
-
-### Invalid Database Name
-
-The tool validates that the database name is one of the supported Lamassu databases. If you see an "invalid database" error, ensure the `dbname` parameter in your connection string matches one of: ca, devicemanager, dmsmanager, alerts, va, kms.
-
-### Migration Failures
-
-If a migration fails:
-
-1. Check the logs for specific error messages
-2. Verify the database schema state
-3. Check the `goose_db_version` table to see which migrations have been applied
-4. You may need to manually fix the database state before retrying
-5. Use the `status` command to see the current migration state
-
-## Differences from Standard Goose
-
-This custom binary differs from the standard goose CLI in a few ways:
-
-- Automatically registers Go migrations for the specified Lamassu database
-- Validates database names against Lamassu's supported databases
-- Uses embedded migrations (no need for migration files on disk)
-- Extracts the database name from the connection string
-
-## Support
-
-For issues or questions:
-
-- Check the [goose documentation](https://github.com/pressly/goose) for command help
-- Refer to the main Lamassu documentation
-- Open an issue in the Lamassu repository
+- A failed migration: run `status` and check the `goose_db_version` table to see what was applied. Fix the database state before retrying.
+- "could not extract search_path from connection string" error: the connection string has no `search_path=<schema>`.
+- "invalid schema" error: `search_path` is not one of the supported schemas.
+- The PostgreSQL user needs `CREATE` on the database and `SELECT, INSERT, UPDATE, DELETE` on the tables of the schema it migrates. It also needs to be able to create `goose_db_version`. The `ca` and `va` migrations need additional privileges on the `kms` and `ca` schemas: see [Cross-schema privileges](#cross-schema-privileges).
+- `permission denied for table certificates` or `permission denied for table kms_keys` during the `va` or `ca` migration: the user lacks `REFERENCES` or `SELECT` on the table of the other schema. Grant it and run that schema again.
