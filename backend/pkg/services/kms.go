@@ -351,7 +351,7 @@ func (svc *KMSServiceBackend) GetKeysByPublicKey(ctx context.Context, input serv
 	}
 
 	// Every crypto engine names its keys this way, so the keyID follows from the public key alone.
-	keyID, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(ctx, input.PublicKey)
+	keyID, err := chelpers.PublicKeyDigest(input.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not compute the key ID of the public key: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -861,17 +861,18 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 		return fmt.Errorf("key not found")
 	}
 
-	err = engineInstance.DeleteKey(ctx, key.KeyID)
+	// The engine copy is only deleted once the row is: a key a certificate references keeps both.
+	lFunc.Debugf("deleting key %s (engine %s)", key.KeyID, key.EngineID)
+	err = svc.kmsStorage.DeleteWith(ctx, key.KeyID, key.EngineID, func() error {
+		return engineInstance.DeleteKey(ctx, key.KeyID)
+	})
+	if errors.Is(err, errs.ErrKeyInUse) {
+		lFunc.Infof("key %s (engine %s) is in use, not deleting it", key.KeyID, key.EngineID)
+		return errs.ErrKeyInUse
+	}
 	if err != nil {
 		lFunc.Errorf("delete key error: %s", err)
-		return err
-	}
-
-	lFunc.Debugf("deleting key %s (engine %s) from storage engine", key.KeyID, key.EngineID)
-	err = svc.kmsStorage.Delete(ctx, key.KeyID, key.EngineID)
-	if err != nil {
-		lFunc.Errorf("delete by ID error: %s", err)
-		return fmt.Errorf("failed to delete key from storage: %w", err)
+		return fmt.Errorf("failed to delete key: %w", err)
 	}
 
 	lFunc.Infof("key %s deleted successfully", key.KeyID)

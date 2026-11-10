@@ -386,7 +386,7 @@ func TestSelectExistsUpdateDelete_QuoteColumn(t *testing.T) {
 		t.Fatalf("Delete: unexpected error: %v", err)
 	}
 
-	want := []string{`WHERE "serial_number" = 'x'`, `WHERE "id" = 'x'`, `WHERE "id" = 'x'`}
+	want := []string{`WHERE "filter_test_rows"."serial_number" = 'x'`, `WHERE "id" = 'x'`, `WHERE "id" = 'x'`}
 	if len(capture.sqls) != len(want) {
 		t.Fatalf("captured %d statements, want %d: %q", len(capture.sqls), len(want), capture.sqls)
 	}

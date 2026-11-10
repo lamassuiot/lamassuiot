@@ -81,6 +81,7 @@
   {
     "entity_type": "certificate",
     "table_name": "certificates",
+    "view_tables": ["certificates_view"],
     "primary_key": "serial_number",
     "atomic_actions": [
       "read",
@@ -140,6 +141,7 @@
       { "column": "engine_id",                 "type": "string"    },
       { "column": "subject_key_id",            "type": "string"    },
       { "column": "is_ca",                     "type": "bool"      },
+      { "column": "has_private_key",           "type": "bool"      },
       { "column": "authority_key_id",          "type": "string"    },
       { "column": "issuer_common_name",        "type": "string"    },
       { "column": "issuer_organization",       "type": "string"    },
@@ -317,7 +319,7 @@
     "filterable": [
       { "column": "crl_refresh_interval",      "type": "string"    },
       { "column": "crl_validity",              "type": "string"    },
-      { "column": "crl_subject_key_id_signer", "type": "string"    },
+      { "column": "crl_signer_certificate_serial_number", "type": "string"    },
       { "column": "crl_regenerate_on_revoke",  "type": "bool"      },
       { "column": "latest_crl_version",        "type": "float"     },
       { "column": "latest_crl_valid_from",     "type": "timestamp" },

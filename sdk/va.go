@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"net/http"
 
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
@@ -46,7 +47,7 @@ func (cli *httpVAClient) GetVARoles(ctx context.Context, input services.GetVARol
 }
 
 func (cli *httpVAClient) GetVARoleByID(ctx context.Context, input services.GetVARoleInput) (*models.VARole, error) {
-	path := "/roles/" + input.CASubjectKeyID
+	path := "/v1/roles/" + input.CASubjectKeyID
 	role, err := cli.get[*models.VARole](ctx, path, nil, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -56,7 +57,10 @@ func (cli *httpVAClient) GetVARoleByID(ctx context.Context, input services.GetVA
 }
 
 func (cli *httpVAClient) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
-	response, err := cli.put[*models.VARole](ctx, "/roles/"+input.CASubjectKeyID, input.CRLRole, map[int][]error{})
+	response, err := cli.put[*models.VARole](ctx, "/v1/roles/"+input.CASubjectKeyID, input.CRLRole, map[int][]error{
+		404: {errs.ErrVARoleNotFound, errs.ErrCertificateNotFound},
+		400: {errs.ErrValidateBadRequest},
+	})
 	if err != nil {
 		return nil, err
 	}
