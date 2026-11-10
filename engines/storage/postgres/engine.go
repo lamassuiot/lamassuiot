@@ -160,7 +160,7 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 	return s.DMS, nil
 }
 
-func (s *PostgresStorageEngine) GetEnventsStorage() (storage.EventRepository, error) {
+func (s *PostgresStorageEngine) GetEventsStorage() (storage.EventRepository, error) {
 	if s.Events == nil {
 		s.initialiceSubscriptionsStorage()
 	}
