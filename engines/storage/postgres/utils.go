@@ -319,6 +319,13 @@ func (db *DBQuerier[E]) tenantIDColumn() string {
 	return db.tableName + "." + tenantIDColumnName
 }
 
+func (db *DBQuerier[E]) withTenantScopedTx(ctx context.Context, tenantID string, scoped bool, fn func(tx *gorm.DB) error) error {
+	if scoped {
+		return withTenantIDTransaction(ctx, db.DB, tenantID, fn)
+	}
+	return fn(db.DB.WithContext(ctx))
+}
+
 type GormExtraOps struct {
 	Query           any
 	AdditionalWhere []any
@@ -346,15 +353,15 @@ func (db *DBQuerier[E]) Count(ctx context.Context, extraOpts []GormExtraOps) (in
 	}
 
 	var count int64
-	tx := db.Table(db.tableName).WithContext(ctx)
-	if scoped {
-		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
-	}
-
-	tx = applyExtraOpts(tx, extraOpts)
-
-	tx.Count(&count)
-	if err := tx.Error; err != nil {
+	err = db.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		q = applyExtraOpts(q, extraOpts)
+		return q.Count(&count).Error
+	})
+	if err != nil {
 		return -1, err
 	}
 
@@ -368,19 +375,18 @@ func (db *DBQuerier[E]) CountFiltered(ctx context.Context, filters []resources.F
 	}
 
 	var count int64
-	tx := db.Table(db.tableName).WithContext(ctx)
-	if scoped {
-		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
-	}
-
-	for _, filter := range filters {
-		tx = FilterOperandToWhereClause(filter, tx)
-	}
-
-	tx = applyExtraOpts(tx, extraOpts)
-
-	tx.Count(&count)
-	if err := tx.Error; err != nil {
+	err = db.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		for _, filter := range filters {
+			q = FilterOperandToWhereClause(filter, q)
+		}
+		q = applyExtraOpts(q, extraOpts)
+		return q.Count(&count).Error
+	})
+	if err != nil {
 		return -1, err
 	}
 
@@ -568,6 +574,29 @@ func (db *DBQuerier[E]) withUniqueOrder(orderBy *clause.OrderBy) clause.OrderBy 
 }
 
 func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []GormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
+	tenantID, scoped, err := db.tenantScope(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var bookmark string
+	err = db.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		base := tx.Table(db.tableName)
+		if scoped {
+			base = base.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		var innerErr error
+		bookmark, innerErr = db.selectAllBody(ctx, base, queryParams, extraOpts, exhaustiveRun, applyFunc)
+		return innerErr
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return bookmark, nil
+}
+
+func (db *DBQuerier[E]) selectAllBody(ctx context.Context, tx *gorm.DB, queryParams *resources.QueryParameters, extraOpts []GormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 
 	page, err := newPageState(queryParams)
@@ -575,16 +604,6 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 		return "", err
 	}
 	offset, limit := page.offset, page.limit
-
-	tenantID, scoped, err := db.tenantScope(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	tx := db.Table(db.tableName)
-	if scoped {
-		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
-	}
 
 	for _, filter := range page.filters {
 		tx = FilterOperandToWhereClause(filter, tx)
@@ -704,17 +723,21 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 	}
 
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1)
-	if scoped {
-		tx = tx.Where(db.tenantIDColumn()+" = ?", tenantID)
+	var rowsAffected int64
+	err = db.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName).Preload(clause.Associations).Limit(1)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		result := q.Find(&elem, cond)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	if err != nil {
+		return false, nil, err
 	}
-	tx = tx.Find(&elem, cond)
 
-	if tx.Error != nil {
-		return false, nil, tx.Error
-	}
-
-	if tx.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return false, nil, nil // No record found, but no error
 	}
 
@@ -730,8 +753,10 @@ func (db *DBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E,
 		setTenantID(elem, tenantID)
 	}
 
-	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
-	if err := tx.Error; err != nil {
+	err = db.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		return tx.Table(db.tableName).Create(elem).Error
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -780,17 +805,21 @@ func (db *DBQuerier[E]) Delete(ctx context.Context, elemID string) error {
 		return err
 	}
 
-	q := db.Table(db.tableName).WithContext(ctx).Where(cond)
-	if scoped {
-		q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
-	}
-
-	tx := q.Delete(nil)
-	if err := tx.Error; err != nil {
+	var rowsAffected int64
+	err = db.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(db.tableName).Where(cond)
+		if scoped {
+			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
+		}
+		result := q.Delete(nil)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	if err != nil {
 		return err
 	}
 
-	if tx.RowsAffected != 1 {
+	if rowsAffected != 1 {
 		return gorm.ErrRecordNotFound
 	}
 
