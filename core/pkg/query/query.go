@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
@@ -172,6 +173,14 @@ func isSimpleJsonPath(jsonPath string) bool {
 	return err == nil
 }
 
+func IsValidJSONPath(jsonPath string) bool {
+	return isValidJsonPath(jsonPath)
+}
+
+func IsSimpleJSONPath(jsonPath string) bool {
+	return isSimpleJsonPath(jsonPath)
+}
+
 // parseFilterOperand parses a filter operand string and returns the corresponding FilterOperation
 // based on the field type. Returns UnspecifiedFilter if the operand is not recognized.
 func parseFilterOperand(operand string, fieldType resources.FilterFieldType) resources.FilterOperation {
@@ -260,6 +269,10 @@ func parseFilterOperand(operand string, fieldType resources.FilterFieldType) res
 	return resources.UnspecifiedFilter
 }
 
+func ParseFilterOperand(operand string, fieldType resources.FilterFieldType) resources.FilterOperation {
+	return parseFilterOperand(operand, fieldType)
+}
+
 // parseFilterValue parses a single filter value string and returns a FilterOption.
 // Returns nil if the filter is invalid or the field doesn't exist in filterFieldMap.
 // Returns an error if the filter operand is not recognized for the field type.
@@ -296,4 +309,124 @@ func parseFilterValue(value string, filterFieldMap map[string]resources.FilterFi
 		FilterOperation: filterOperand,
 		Value:           arg,
 	}, nil
+}
+
+func ParseFilterValue(value string, filterFieldMap map[string]resources.FilterFieldType) (*resources.FilterOption, error) {
+	return parseFilterValue(value, filterFieldMap)
+}
+
+func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.FilterFieldType, prefix string) (*resources.QueryParameters, error) {
+	if len(r.URL.RawQuery) == 0 {
+		return nil, nil
+	}
+
+	filterValues := r.URL.Query()[prefix]
+	if len(filterValues) == 0 {
+		return nil, nil
+	}
+
+	queryParams := resources.QueryParameters{
+		NextBookmark: "",
+		Filters:      []resources.FilterOption{},
+		PageSize:     resources.DefaultPageSize,
+	}
+	for _, value := range filterValues {
+		filter, err := parseFilterValue(value, filterFieldMap)
+		if err != nil {
+			return nil, err
+		}
+		if filter != nil {
+			queryParams.Filters = append(queryParams.Filters, *filter)
+		}
+	}
+	if len(queryParams.Filters) == 0 {
+		return nil, nil
+	}
+	return &queryParams, nil
+}
+
+func ConvertDeviceGroupCriteria(requestCriteria []resources.DeviceGroupFilterOptionRequest, filterFieldMap map[string]resources.FilterFieldType) ([]models.DeviceGroupFilterOption, error) {
+	if len(requestCriteria) == 0 {
+		return []models.DeviceGroupFilterOption{}, nil
+	}
+
+	modelCriteria := make([]models.DeviceGroupFilterOption, 0, len(requestCriteria))
+	for i, criteria := range requestCriteria {
+		fieldType, exists := filterFieldMap[criteria.Field]
+		if !exists {
+			return nil, &InvalidFilterFieldError{Field: criteria.Field, Index: i}
+		}
+		filterOp := resources.ParseOperandName(criteria.Operand, fieldType)
+		if filterOp == resources.UnspecifiedFilter {
+			return nil, &InvalidOperandError{Field: criteria.Field, Operand: criteria.Operand, FieldType: fieldType, Index: i}
+		}
+		modelCriteria = append(modelCriteria, models.DeviceGroupFilterOption{
+			Field:           criteria.Field,
+			FilterOperation: int(filterOp),
+			Value:           criteria.Value,
+		})
+	}
+	return modelCriteria, nil
+}
+
+type InvalidFilterFieldError struct {
+	Field string
+	Index int
+}
+
+func (e *InvalidFilterFieldError) Error() string {
+	return "invalid filter field '" + e.Field + "' at criteria index " + strconv.Itoa(e.Index)
+}
+
+type InvalidOperandError struct {
+	Field     string
+	Operand   string
+	FieldType resources.FilterFieldType
+	Index     int
+}
+
+func (e *InvalidOperandError) Error() string {
+	return "invalid operand '" + e.Operand + "' for field '" + e.Field + "' at criteria index " + strconv.Itoa(e.Index)
+}
+
+func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount int) map[string]any {
+	if group == nil {
+		return nil
+	}
+
+	totalCriteria := len(group.Criteria)
+	inheritedCount := max(totalCriteria-ownCriteriaCount, 0)
+	inheritedCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, inheritedCount)
+	for i := range inheritedCount {
+		criterion := group.Criteria[i]
+		fieldType, exists := resources.DeviceFilterableFields[criterion.Field]
+		if !exists {
+			continue
+		}
+		inheritedCriteria = append(inheritedCriteria, resources.DeviceGroupFilterOptionRequest{
+			Field: criterion.Field, Operand: resources.FormatOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType), Value: criterion.Value,
+		})
+	}
+
+	ownCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, ownCriteriaCount)
+	for i := inheritedCount; i < totalCriteria; i++ {
+		criterion := group.Criteria[i]
+		fieldType, exists := resources.DeviceFilterableFields[criterion.Field]
+		if !exists {
+			continue
+		}
+		ownCriteria = append(ownCriteria, resources.DeviceGroupFilterOptionRequest{
+			Field: criterion.Field, Operand: resources.FormatOperandName(resources.FilterOperation(criterion.FilterOperation), fieldType), Value: criterion.Value,
+		})
+	}
+
+	response := map[string]any{
+		"id": group.ID, "name": group.Name, "description": group.Description,
+		"criteria": ownCriteria, "inherited_criteria": inheritedCriteria,
+		"created_at": group.CreatedAt, "updated_at": group.UpdatedAt,
+	}
+	if group.ParentID != nil {
+		response["parent_id"] = *group.ParentID
+	}
+	return response
 }
