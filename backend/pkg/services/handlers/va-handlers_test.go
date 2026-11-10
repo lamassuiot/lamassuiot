@@ -125,6 +125,82 @@ func TestReissueCAHandlerIgnoresCAWithoutVARole(t *testing.T) {
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
+func revokedCertificateEvent(t *testing.T) *event.Event {
+	t.Helper()
+
+	crt, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, time.Hour, "revoked-cert")
+	assert.NoError(t, err)
+
+	certWithStatus := func(status models.CertificateStatus) models.Certificate {
+		return models.Certificate{
+			SerialNumber:   "cert-serial",
+			SubjectKeyID:   "cert-ski",
+			AuthorityKeyID: reissueTestSKI,
+			Status:         status,
+			Certificate:    (*models.X509Certificate)(crt),
+		}
+	}
+
+	e := event.New()
+	e.SetType(string(models.EventUpdateCertificateStatusKey))
+	err = e.SetData(event.ApplicationJSON, models.UpdateModel[models.Certificate]{
+		Previous: certWithStatus(models.StatusActive),
+		Updated:  certWithStatus(models.StatusRevoked),
+	})
+	assert.NoError(t, err)
+
+	return &e
+}
+
+func dispatchRevocation(t *testing.T, svc services.CRLService) error {
+	t.Helper()
+
+	h := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc)
+	handler, ok := h.DispatchMap[string(models.EventUpdateCertificateStatusKey)]
+	if !assert.True(t, ok, "VA must handle %s events", models.EventUpdateCertificateStatusKey) {
+		return nil
+	}
+
+	return handler(context.Background(), revokedCertificateEvent(t))
+}
+
+func TestRevocationHandlerRegeneratesCRLOfIssuerCA(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return(&x509.RevocationList{}, nil)
+
+	err := dispatchRevocation(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+}
+
+// An issuer CA without a VA role has no CRL to regenerate. Failing the event would make the event bus retry it
+// (2s + 6s + 10s) while holding back every later certificate event, and the retries cannot succeed.
+func TestRevocationHandlerIgnoresIssuerCAWithoutVARole(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return((*models.VARole)(nil), errs.ErrVARoleNotFound)
+
+	err := dispatchRevocation(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestRevocationHandlerReturnsUnexpectedGetRoleError(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	getErr := errors.New("storage down")
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return((*models.VARole)(nil), getErr)
+
+	err := dispatchRevocation(t, svc)
+
+	assert.Error(t, err, "other errors must still be retried by the event bus")
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
 func TestReissueCAHandlerReturnsUnexpectedUpdateError(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 	updateErr := errors.New("storage down")

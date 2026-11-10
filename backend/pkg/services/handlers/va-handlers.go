@@ -140,6 +140,12 @@ func updateCertificateStatus(ctx context.Context, event *event.Event, crlSvc ser
 		role, err := crlSvc.GetVARole(ctx, services.GetVARoleInput{
 			CASubjectKeyID: aki,
 		})
+		if errors.Is(err, errs.ErrVARoleNotFound) {
+			// No role means no CRL to regenerate. Failing here only makes the event bus retry (2s + 6s + 10s),
+			// holding back every later certificate event, and the retries cannot succeed.
+			lMessaging.Warnf("issuer CA %s has no VA role: no CRL to regenerate for certificate %s %s", aki, cn, ski)
+			return nil
+		}
 		if err != nil {
 			err = fmt.Errorf("could not get VA role for certificate %s %s - %s %s: %s", cn, ski, icn, aki, err)
 			lMessaging.Error(err)
