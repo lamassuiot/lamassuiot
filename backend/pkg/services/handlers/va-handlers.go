@@ -52,28 +52,32 @@ func reissueCAHandler(ctx context.Context, event *event.Event, crlSvc services.C
 		return err
 	}
 
-	if role.CRLOptions.SignerCertificateSerialNumber != prevSN {
+	switch role.CRLOptions.SignerCertificateSerialNumber {
+	case newSN:
+		// A retry of this event after a failed CRL generation: the signer is already moved, only the CRL is missing.
+		lMessaging.Infof("VA role %s CRL signer is already the reissued certificate %s", ski, newSN)
+	case prevSN:
+		crlOptions := role.CRLOptions
+		crlOptions.SignerCertificateSerialNumber = newSN
+		_, err = crlSvc.UpdateVARole(ctx, services.UpdateVARoleInput{
+			CASubjectKeyID: ski,
+			CRLRole:        crlOptions,
+		})
+		if errors.Is(err, errs.ErrValidateBadRequest) {
+			lMessaging.Warnf("reissued certificate %s of CA %s cannot sign CRLs (it needs the cRLSign key usage): VA role %s keeps signer %s", newSN, ca.Updated.ID, ski, prevSN)
+			return nil
+		}
+		if err != nil {
+			err = fmt.Errorf("could not update CRL signer of VA role %s to certificate %s: %w", ski, newSN, err)
+			lMessaging.Error(err)
+			return err
+		}
+
+		lMessaging.Infof("VA role %s CRL signer moved from certificate %s to reissued certificate %s", ski, prevSN, newSN)
+	default:
 		lMessaging.Infof("VA role %s is signed by certificate %s, not by the reissued certificate %s of CA %s: keeping its CRL signer", ski, role.CRLOptions.SignerCertificateSerialNumber, prevSN, ca.Updated.ID)
 		return nil
 	}
-
-	crlOptions := role.CRLOptions
-	crlOptions.SignerCertificateSerialNumber = newSN
-	_, err = crlSvc.UpdateVARole(ctx, services.UpdateVARoleInput{
-		CASubjectKeyID: ski,
-		CRLRole:        crlOptions,
-	})
-	if errors.Is(err, errs.ErrValidateBadRequest) {
-		lMessaging.Warnf("reissued certificate %s of CA %s cannot sign CRLs (it needs the cRLSign key usage): VA role %s keeps signer %s", newSN, ca.Updated.ID, ski, prevSN)
-		return nil
-	}
-	if err != nil {
-		err = fmt.Errorf("could not update CRL signer of VA role %s to certificate %s: %w", ski, newSN, err)
-		lMessaging.Error(err)
-		return err
-	}
-
-	lMessaging.Infof("VA role %s CRL signer moved from certificate %s to reissued certificate %s", ski, prevSN, newSN)
 
 	_, err = crlSvc.CalculateCRL(ctx, services.CalculateCRLInput{CASubjectKeyID: ski})
 	if err != nil {

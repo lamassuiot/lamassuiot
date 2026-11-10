@@ -101,6 +101,34 @@ func TestReissueCAHandlerKeepsSignerThatIsNotThePreviousCertificate(t *testing.T
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
+// A retry of a reissue event whose CRL generation failed finds the signer already moved: it must still regenerate
+// the CRL, or the event is acknowledged while the VA keeps serving the CRL signed by the superseded certificate.
+func TestReissueCAHandlerRegeneratesCRLWhenSignerAlreadyMoved(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestNewSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return(&x509.RevocationList{}, nil)
+
+	err := dispatchReissue(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+	svc.AssertNotCalled(t, "UpdateVARole", mock.Anything, mock.Anything)
+}
+
+func TestReissueCAHandlerReturnsCRLGenerationError(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	crlErr := errors.New("bucket down")
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
+	svc.On("UpdateVARole", mock.Anything, mock.Anything).Return(vaRoleWithSigner(reissueTestNewSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return((*x509.RevocationList)(nil), crlErr)
+
+	err := dispatchReissue(t, svc)
+
+	assert.ErrorIs(t, err, crlErr)
+}
+
 func TestReissueCAHandlerKeepsSignerWhenNewCertificateIsRejected(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
