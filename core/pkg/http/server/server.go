@@ -68,6 +68,7 @@ func ServerTLSConfig(logger *logrus.Entry, authentication cconfig.HttpServerAuth
 		logger.Warnf("could not load CA cert used while validating mTLS requests: %s", err)
 	} else {
 		clientCAs.AddCert(caCert)
+		logger.Debugf("mTLS requests will be accepted when client presents a certificate issued by CA with subject '%s'", caCert.Subject.String())
 	}
 
 	clientAuth := tls.RequireAndVerifyClientCert

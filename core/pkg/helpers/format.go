@@ -31,5 +31,7 @@ func GetSubjectKeyID(_ context.Context, logger *logrus.Entry, cert *x509.Certifi
 		return "", err
 	}
 	digest := sha256.Sum256(pub)
-	return hex.EncodeToString(digest[:]), nil
+	digestHex := hex.EncodeToString(digest[:])
+	logger.Debugf("public key digest (hex encoded bytes): %s", digestHex)
+	return digestHex, nil
 }
