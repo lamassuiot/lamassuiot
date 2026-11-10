@@ -91,14 +91,19 @@ func ServerTLSConfig(logger *logrus.Entry, authentication cconfig.HttpServerAuth
 	}
 }
 
-func NewHTTPServer(logger *logrus.Entry, addr string, handler nethttp.Handler, authentication cconfig.HttpServerAuthentication, options Options) *nethttp.Server {
+func NewHTTPServer(logger *logrus.Entry, addr string, handler nethttp.Handler, protocol cconfig.HTTPProtocol, authentication cconfig.HttpServerAuthentication, options Options) *nethttp.Server {
+	var tlsConfig *tls.Config
+	if protocol == cconfig.HTTPS {
+		tlsConfig = ServerTLSConfig(logger, authentication)
+	}
+
 	return &nethttp.Server{
 		Addr:              addr,
 		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
 		ReadHeaderTimeout: options.ReadHeaderTimeout,
 		WriteTimeout:      10 * time.Second,
-		TLSConfig:         ServerTLSConfig(logger, authentication),
+		TLSConfig:         tlsConfig,
 	}
 }
 
@@ -168,7 +173,7 @@ func RunHTTPRouterWithShutdown(logger *logrus.Entry, router nethttp.Handler, cfg
 	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.ListenAddress, cfg.Port)
-	httpServer := NewHTTPServer(logger, addr, mux, cfg.Authentication, options)
+	httpServer := NewHTTPServer(logger, addr, mux, cfg.Protocol, cfg.Authentication, options)
 	if cfg.Protocol == cconfig.HTTPS {
 		certificate, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if err != nil {

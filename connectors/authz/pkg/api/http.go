@@ -28,7 +28,7 @@ func serverTLSConfig(logger *logrus.Entry, authentication cconfig.HttpServerAuth
 }
 
 func newHTTPServer(logger *logrus.Entry, addr string, handler http.Handler, authentication cconfig.HttpServerAuthentication) *http.Server {
-	return httpserver.NewHTTPServer(logger, addr, handler, authentication, authzHTTPOptions)
+	return httpserver.NewHTTPServer(logger, addr, handler, cconfig.HTTP, authentication, authzHTTPOptions)
 }
 
 func healthGinHandler(info models.APIServiceInfo) gin.HandlerFunc {

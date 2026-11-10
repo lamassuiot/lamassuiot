@@ -1,9 +1,11 @@
 package server
 
 import (
+	"net/http"
 	"testing"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,4 +31,21 @@ func TestMTLSStartupLog(t *testing.T) {
 	}
 
 	require.Empty(t, mtlsStartupLog(cconfig.HttpServerAuthentication{}))
+}
+
+func TestNewHTTPServerDoesNotBuildTLSForHTTP(t *testing.T) {
+	authentication := cconfig.HttpServerAuthentication{}
+	authentication.MutualTLS.Enabled = true
+	authentication.MutualTLS.CACertificateFile = t.TempDir() + "/missing-ca.pem"
+
+	server := NewHTTPServer(
+		logrus.NewEntry(logrus.New()),
+		":0",
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		cconfig.HTTP,
+		authentication,
+		Options{},
+	)
+
+	require.Nil(t, server.TLSConfig)
 }
