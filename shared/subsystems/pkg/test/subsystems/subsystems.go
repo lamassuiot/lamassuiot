@@ -1,5 +1,7 @@
 package subsystems
 
+import "sync"
+
 type SubsystemBackend struct {
 	Config     any
 	Extra      *map[string]any
@@ -33,12 +35,22 @@ const (
 	Azure    SubsystemProvider = "azure"
 )
 
-var subsystemsMap map[SubsystemProvider]Subsystem = make(map[SubsystemProvider]Subsystem)
+var (
+	subsystemsMapMu sync.RWMutex
+	subsystemsMap   = make(map[SubsystemProvider]Subsystem)
+)
 
 func RegisterSubsystemBuilder(name SubsystemProvider, subsystem Subsystem) {
+	subsystemsMapMu.Lock()
+	defer subsystemsMapMu.Unlock()
+
 	subsystemsMap[name] = subsystem
 }
 
 func GetSubsystemBuilder[E Subsystem](name SubsystemProvider) E {
-	return subsystemsMap[name].(E)
+	subsystemsMapMu.RLock()
+	subsystem := subsystemsMap[name]
+	subsystemsMapMu.RUnlock()
+
+	return subsystem.(E)
 }

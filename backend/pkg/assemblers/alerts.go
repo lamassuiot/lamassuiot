@@ -7,9 +7,9 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/handlers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
@@ -109,7 +109,7 @@ func createAlertsStorageInstance(logger *log.Entry, conf cconfig.PluggableStorag
 		return nil, nil, fmt.Errorf("could not get subscriptions storage: %s", err)
 	}
 
-	eventsStore, err := engine.GetEnventsStorage()
+	eventsStore, err := engine.GetEventsStorage()
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not get event storage: %s", err)
 	}
