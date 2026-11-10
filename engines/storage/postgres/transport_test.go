@@ -16,7 +16,7 @@ type schemaQualifiedTestModel struct {
 }
 
 func TestPostgresDialectorDefaultsToDirectTransport(t *testing.T) {
-	dialector, err := postgresDialector(lconfig.PostgresPSEConfig{}, "direct postgres DSN")
+	dialector, err := NewPostgresDialector(lconfig.PostgresPSEConfig{}, "direct postgres DSN")
 	require.NoError(t, err)
 
 	postgresDialector, ok := dialector.(*pgdialector.Dialector)
@@ -38,7 +38,7 @@ func TestPostgresDialectorConfiguresRDSDataAPITransport(t *testing.T) {
 	cfg, err := config.DecodeStruct[lconfig.PostgresPSEConfig](input)
 	require.NoError(t, err)
 
-	dialector, err := postgresDialector(cfg, "unused direct DSN")
+	dialector, err := NewPostgresDialector(cfg, "unused direct DSN")
 	require.NoError(t, err)
 	postgresDialector, ok := dialector.(*pgdialector.Dialector)
 	require.True(t, ok)
@@ -54,12 +54,12 @@ func TestPostgresDialectorConfiguresRDSDataAPITransport(t *testing.T) {
 }
 
 func TestPostgresDialectorRejectsInvalidRDSDataAPIConfig(t *testing.T) {
-	_, err := postgresDialector(lconfig.PostgresPSEConfig{
+	_, err := NewPostgresDialector(lconfig.PostgresPSEConfig{
 		Transport: lconfig.PostgresTransportRDSDataAPI,
 	}, "unused direct DSN")
 	require.ErrorContains(t, err, "requires resource_arn")
 
-	_, err = postgresDialector(lconfig.PostgresPSEConfig{
+	_, err = NewPostgresDialector(lconfig.PostgresPSEConfig{
 		Transport: "unsupported",
 	}, "unused direct DSN")
 	require.ErrorContains(t, err, "unsupported PostgreSQL transport")

@@ -18,6 +18,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iot v1.84.6
 	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.42.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.61.6
+	github.com/aws/aws-sdk-go-v2/service/rds v1.131.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.6
 	github.com/aws/aws-sdk-go-v2/service/sns v1.47.6
@@ -36,7 +37,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/kaptinlin/jsonschema v0.9.10
-	github.com/krotscheck/go-rds-driver v0.0.0-20261027142311-393874c3b33d
+	github.com/krotscheck/go-rds-driver v0.0.0-20261029154945-a30398edfb5b
 	github.com/miekg/pkcs11 v1.1.2
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
@@ -238,4 +239,4 @@ replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-2019020
 
 tool gotest.tools/gotestsum
 
-replace github.com/krotscheck/go-rds-driver => github.com/lamassuiot/go-rds-driver v0.0.0-20261027142311-393874c3b33d
+replace github.com/krotscheck/go-rds-driver => github.com/lamassuiot/go-rds-driver v0.0.0-20261029154945-a30398edfb5b

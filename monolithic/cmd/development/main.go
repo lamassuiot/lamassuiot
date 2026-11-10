@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
@@ -103,14 +104,10 @@ func main() {
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
 	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem', 'azure-keyvault-secrets']")
 	postgresTransport := flag.String("postgres-transport", "direct", "PostgreSQL transport: direct or rds_data_api")
-	rdsDataAPIResourceARN := flag.String("rds-data-api-resource-arn", "", "RDS cluster or instance resource ARN")
+	rdsDataAPIResourceARN := flag.String("rds-data-api-resource-arn", "", "RDS DB cluster resource ARN")
 	rdsDataAPISecretARN := flag.String("rds-data-api-secret-arn", "", "Secrets Manager secret ARN for the database credentials")
 	rdsDataAPIDatabase := flag.String("rds-data-api-database", "pki", "database name used by the RDS Data API")
 	rdsDataAPIRegion := flag.String("rds-data-api-region", "", "AWS region for the RDS Data API")
-	authzMigrationHost := flag.String("authz-migration-host", "", "direct PostgreSQL host used only for Authz migrations with RDS Data API")
-	authzMigrationPort := flag.Int("authz-migration-port", 5432, "direct PostgreSQL port used only for Authz migrations")
-	authzMigrationUsername := flag.String("authz-migration-username", "", "direct PostgreSQL username used only for Authz migrations")
-	authzMigrationDatabase := flag.String("authz-migration-database", "pki", "direct PostgreSQL database used only for Authz migrations")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	disableSSE := flag.Bool("disable-sse", false, "disable SSE streaming on device events endpoint")
@@ -257,11 +254,6 @@ func main() {
 		*rdsDataAPIDatabase,
 		*rdsDataAPIRegion,
 		*disableWFX,
-		*enableAuthz,
-		*authzMigrationHost,
-		*authzMigrationUsername,
-		*authzMigrationDatabase,
-		os.Getenv("LAMASSU_AUTHZ_MIGRATION_PASSWORD"),
 	); err != nil {
 		log.Fatalf("invalid PostgreSQL transport configuration: %s", err)
 	}
@@ -293,6 +285,22 @@ func main() {
 	}
 
 	storageConfig.LogLevel = cconfig.Trace
+	var authzMigrationDB cconfig.PluggableStorageEngine
+	if *enableAuthz && *postgresTransport == string(postgresconfig.PostgresTransportRDSDataAPI) {
+		migrationCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		authzMigrationDB, err = resolveAuthzMigrationDBConfig(
+			migrationCtx,
+			*rdsDataAPIResourceARN,
+			*rdsDataAPISecretARN,
+			*rdsDataAPIDatabase,
+			*rdsDataAPIRegion,
+		)
+		cancel()
+		if err != nil {
+			log.Fatalf("could not resolve direct PostgreSQL settings for Authz migrations: %s", err)
+		}
+		fmt.Println(">> resolved direct PostgreSQL endpoint and credentials for Authz migrations")
+	}
 	fmt.Println("Crypto Engines")
 
 	var vaultCryptoEngine cconfig.CryptoEngineConfig
@@ -586,7 +594,7 @@ func main() {
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
 		AuthzProxyPrefixes: splitCommaSeparated(*authzProxyPrefixes),
-		AuthzConfig:        buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas, *authzMigrationHost, *authzMigrationPort, *authzMigrationUsername, *authzMigrationDatabase, os.Getenv("LAMASSU_AUTHZ_MIGRATION_PASSWORD")),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas, authzMigrationDB),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -658,7 +666,7 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	return opts, nil
 }
 
-func validatePostgresTransport(transport, resourceARN, secretARN, database, region string, disableWFX, enableAuthz bool, migrationHost, migrationUsername, migrationDatabase, migrationPassword string) error {
+func validatePostgresTransport(transport, resourceARN, secretARN, database, region string, disableWFX bool) error {
 	switch postgresconfig.PostgresTransport(transport) {
 	case "", postgresconfig.PostgresTransportDirect:
 		return nil
@@ -677,21 +685,6 @@ func validatePostgresTransport(transport, resourceARN, secretARN, database, regi
 		} {
 			if strings.TrimSpace(required.value) == "" {
 				return fmt.Errorf("%s is required with -postgres-transport=rds_data_api", required.name)
-			}
-		}
-		if enableAuthz {
-			for _, required := range []struct {
-				name  string
-				value string
-			}{
-				{name: "-authz-migration-host", value: migrationHost},
-				{name: "-authz-migration-username", value: migrationUsername},
-				{name: "-authz-migration-database", value: migrationDatabase},
-				{name: "LAMASSU_AUTHZ_MIGRATION_PASSWORD", value: migrationPassword},
-			} {
-				if strings.TrimSpace(required.value) == "" {
-					return fmt.Errorf("%s is required with -authz and -postgres-transport=rds_data_api", required.name)
-				}
 			}
 		}
 		return nil
@@ -742,7 +735,7 @@ func splitCommaSeparated(value string) []string {
 	return out
 }
 
-func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas, migrationHost string, migrationPort int, migrationUsername, migrationDatabase, migrationPassword string) *authzconfig.AuthzConfig {
+func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine, publisherEventBus, dlqEventBus cconfig.EventBusEngine, authzSchema, pkiSchema, preloadDir, bootstrapJSON, httpSchemas string, migrationDB cconfig.PluggableStorageEngine) *authzconfig.AuthzConfig {
 	if !enabled {
 		return nil
 	}
@@ -777,21 +770,6 @@ func buildAuthzConfig(enabled bool, storageConfig cconfig.PluggableStorageEngine
 	pkiDB.Config = deepCopy(storageConfig.Config)
 	pkiDB.Config["database"] = "pki"
 	pkiDB.Config["schema"] = "ca"
-
-	var migrationDB cconfig.PluggableStorageEngine
-	if storageConfig.Config["transport"] == string(postgresconfig.PostgresTransportRDSDataAPI) {
-		migrationDB = cconfig.PluggableStorageEngine{
-			Provider: cconfig.Postgres,
-			Config: map[string]any{
-				"hostname": migrationHost,
-				"port":     migrationPort,
-				"username": migrationUsername,
-				"password": cconfig.Password(migrationPassword),
-				"database": migrationDatabase,
-				"schema":   "authz",
-			},
-		}
-	}
 
 	return &authzconfig.AuthzConfig{
 		// Development/testing has no JWKS endpoint, so OIDC signatures are not verified.

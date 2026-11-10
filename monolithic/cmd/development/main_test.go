@@ -7,12 +7,10 @@ import (
 
 func TestValidatePostgresTransport(t *testing.T) {
 	tests := []struct {
-		name        string
-		transport   string
-		disableWFX  bool
-		enableAuthz bool
-		migration   bool
-		wantError   string
+		name       string
+		transport  string
+		disableWFX bool
+		wantError  string
 	}{
 		{
 			name:      "direct transport allows authz",
@@ -24,18 +22,9 @@ func TestValidatePostgresTransport(t *testing.T) {
 			wantError: "-disable-wfx",
 		},
 		{
-			name:        "Data API requires direct migration settings for authz",
-			transport:   "rds_data_api",
-			disableWFX:  true,
-			enableAuthz: true,
-			wantError:   "-authz-migration-host",
-		},
-		{
-			name:        "Data API allows authz with direct migration settings",
-			transport:   "rds_data_api",
-			disableWFX:  true,
-			enableAuthz: true,
-			migration:   true,
+			name:       "Data API allows authz",
+			transport:  "rds_data_api",
+			disableWFX: true,
 		},
 		{
 			name:       "Data API is allowed without incompatible services",
@@ -53,11 +42,6 @@ func TestValidatePostgresTransport(t *testing.T) {
 				"database",
 				"region",
 				test.disableWFX,
-				test.enableAuthz,
-				migrationValue(test.migration, "postgres.example.com"),
-				migrationValue(test.migration, "migrator"),
-				migrationValue(test.migration, "pki"),
-				migrationValue(test.migration, "secret"),
 			)
 			if test.wantError == "" {
 				if err != nil {
@@ -70,11 +54,4 @@ func TestValidatePostgresTransport(t *testing.T) {
 			}
 		})
 	}
-}
-
-func migrationValue(enabled bool, value string) string {
-	if !enabled {
-		return ""
-	}
-	return value
 }

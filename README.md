@@ -79,13 +79,14 @@ PostgreSQL container, provide the cluster/instance ARN, Secrets Manager secret A
 and AWS region. The AWS SDK default credential chain supplies credentials. WFX requires a direct
 PostgreSQL connection, so disable it when selecting the Data API transport. Authz runtime queries
 can use the Data API, but Goose migrations require a separate direct PostgreSQL connection because
-they depend on PostgreSQL session semantics. When using `-authz`, provide that direct connection
-with the `-authz-migration-*` flags and set its password in `LAMASSU_AUTHZ_MIGRATION_PASSWORD`;
-the password is intentionally not accepted as a command-line argument:
+they depend on PostgreSQL session semantics. For the monolithic launcher only, enabling `-authz`
+automatically resolves the cluster endpoint with `rds:DescribeDBClusters` and reads the database
+credentials from the supplied secret with `secretsmanager:GetSecretValue`. The launcher therefore
+needs those AWS permissions and direct network access to the PostgreSQL endpoint for migrations;
+it requires TLS for that migration connection and does not need separate `-authz-migration-*`
+parameters. Other deployment modes should configure a dedicated direct migration connection.
 
 ```bash
-export LAMASSU_AUTHZ_MIGRATION_PASSWORD='...'
-
 go run ./monolithic/cmd/development/main.go \
   -postgres-transport=rds_data_api \
   -rds-data-api-resource-arn=arn:aws:rds:us-east-1:123456789012:cluster:example \
@@ -93,11 +94,7 @@ go run ./monolithic/cmd/development/main.go \
   -rds-data-api-database=pki \
   -rds-data-api-region=us-east-1 \
   -disable-wfx \
-  -authz \
-  -authz-migration-host=postgres.example.com \
-  -authz-migration-port=5432 \
-  -authz-migration-username=lamassu_migrator \
-  -authz-migration-database=pki
+  -authz
 ```
 
 Once the app is ready the following logs will appear:

@@ -131,7 +131,7 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	}
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=%s sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, cfg.Port, schema)
-	dialector, err := postgresDialector(cfg, dsn)
+	dialector, err := NewPostgresDialector(cfg, dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,9 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	return db, nil
 }
 
-func postgresDialector(cfg lconfig.PostgresPSEConfig, directDSN string) (gorm.Dialector, error) {
+// NewPostgresDialector constructs the GORM dialector for the configured
+// PostgreSQL transport. directDSN is used only for direct PostgreSQL transport.
+func NewPostgresDialector(cfg lconfig.PostgresPSEConfig, directDSN string) (gorm.Dialector, error) {
 	switch cfg.Transport {
 	case "", lconfig.PostgresTransportDirect:
 		return postgres.Open(directDSN), nil
@@ -199,10 +201,8 @@ func configurePostgresGORMPlugins(db *gorm.DB, transport lconfig.PostgresTranspo
 		return fmt.Errorf("register PostgreSQL tracing plugin: %w", err)
 	}
 
-	if transport == lconfig.PostgresTransportRDSDataAPI {
-		if err := db.Use(rdsgorm.NewTypeHintPlugin()); err != nil {
-			return fmt.Errorf("register RDS Data API type hint plugin: %w", err)
-		}
+	if err := ConfigurePostgresTypeHintPlugin(db, transport); err != nil {
+		return err
 	}
 
 	for _, plugin := range registeredPlugins {
@@ -211,6 +211,21 @@ func configurePostgresGORMPlugins(db *gorm.DB, transport lconfig.PostgresTranspo
 		}
 	}
 	return nil
+}
+
+// ConfigurePostgresTypeHintPlugin registers the RDS Data API parameter type
+// hint plugin when the selected transport requires it.
+func ConfigurePostgresTypeHintPlugin(db *gorm.DB, transport lconfig.PostgresTransport) error {
+	if transport == lconfig.PostgresTransportRDSDataAPI {
+		if err := db.Use(rdsgorm.NewTypeHintPlugin()); err != nil {
+			return fmt.Errorf("register RDS Data API type hint plugin: %w", err)
+		}
+		return nil
+	}
+	if transport == "" || transport == lconfig.PostgresTransportDirect {
+		return nil
+	}
+	return fmt.Errorf("unsupported PostgreSQL transport %q", transport)
 }
 
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*DBQuerier[E], error) {

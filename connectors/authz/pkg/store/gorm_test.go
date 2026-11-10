@@ -6,10 +6,27 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/testutil"
+	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	pgdialector "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
+
+func TestGormPrincipalStoreQualifiesTablesForRDSDataAPI(t *testing.T) {
+	db, err := gorm.Open(pgdialector.Open(""), &gorm.Config{
+		DisableAutomaticPing: true,
+		DryRun:               true,
+		NamingStrategy:       postgres.NewPostgresSchemaNamingStrategy("authz"),
+	})
+	require.NoError(t, err)
+
+	store, err := NewGormPrincipalStore(db)
+	require.NoError(t, err)
+	assert.Equal(t, `"authz"."principals"`, store.principalTableExpr)
+	assert.Equal(t, `"authz"."principal_policies"`, store.principalPoliciesTableExpr)
+}
 
 func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
 	container, err := testutil.RunPostgresEmpty()

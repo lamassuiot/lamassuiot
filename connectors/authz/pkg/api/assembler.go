@@ -6,10 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
-	rds "github.com/krotscheck/go-rds-driver"
-	rdsgorm "github.com/krotscheck/go-rds-driver/gorm"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
 	bauditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
 	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
@@ -33,7 +32,6 @@ import (
 	"github.com/sirupsen/logrus"
 	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
 )
 
 const serviceID = "authz"
@@ -198,13 +196,9 @@ func preloadPolicies(ctx context.Context, pm *service.PolicyManager, dir string,
 
 // postgresDBConfig holds the fields extracted from a PluggableStorageEngine config map.
 type postgresDBConfig struct {
-	Transport  postgresconfig.PostgresTransport `mapstructure:"transport"`
-	Hostname   string                           `mapstructure:"hostname"`
-	Port       int                              `mapstructure:"port"`
-	Username   string                           `mapstructure:"username"`
-	Password   cconfig.Password                 `mapstructure:"password"`
-	Database   string                           `mapstructure:"database"`
-	RDSDataAPI postgresconfig.RDSDataAPIConfig  `mapstructure:"rds_data_api"`
+	postgresconfig.PostgresPSEConfig `mapstructure:",squash"`
+	Database                         string `mapstructure:"database"`
+	SSLMode                          string `mapstructure:"sslmode"`
 	// Schema sets the PostgreSQL search_path. Used when all services share one
 	// database (e.g. monolithic mode where schemas live inside the "pki" DB).
 	Schema string `mapstructure:"schema"`
@@ -223,19 +217,21 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageE
 		return nil, fmt.Errorf("postgres config is missing required field 'database'")
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable",
-		dbCfg.Hostname, dbCfg.Username, string(dbCfg.Password), dbCfg.Database, dbCfg.Port)
+	dsn, err := postgresDSN(dbCfg)
+	if err != nil {
+		return nil, err
+	}
 	if dbCfg.Transport != postgresconfig.PostgresTransportRDSDataAPI && dbCfg.Schema != "" {
 		dsn += " search_path=" + dbCfg.Schema
 	}
-	dialector, namingStrategy, err := postgresDialector(dbCfg, dsn)
+	dialector, err := storagepostgres.NewPostgresDialector(dbCfg.PostgresPSEConfig, dsn)
 	if err != nil {
 		return nil, err
 	}
 
 	gormConfig := &gorm.Config{Logger: NewGormLogger(log)}
-	if namingStrategy != nil {
-		gormConfig.NamingStrategy = namingStrategy
+	if dbCfg.Transport == postgresconfig.PostgresTransportRDSDataAPI && dbCfg.Schema != "" {
+		gormConfig.NamingStrategy = storagepostgres.NewPostgresSchemaNamingStrategy(dbCfg.Schema)
 	}
 	db, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
@@ -245,10 +241,8 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageE
 	if err := db.Use(authzgorm.NewAuthzGormPlugin()); err != nil {
 		return nil, fmt.Errorf("failed to register authz gorm plugin: %w", err)
 	}
-	if dbCfg.Transport == postgresconfig.PostgresTransportRDSDataAPI {
-		if err := db.Use(rdsgorm.NewTypeHintPlugin()); err != nil {
-			return nil, fmt.Errorf("failed to register RDS Data API type hint plugin: %w", err)
-		}
+	if err := storagepostgres.ConfigurePostgresTypeHintPlugin(db, dbCfg.Transport); err != nil {
+		return nil, err
 	}
 
 	sqlDB, err := db.DB()
@@ -266,46 +260,6 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageE
 		log.Infof("Connected to PostgreSQL database: %s@%s:%d/%s", dbCfg.Username, dbCfg.Hostname, dbCfg.Port, dbCfg.Database)
 	}
 	return db, nil
-}
-
-func postgresDialector(dbCfg postgresDBConfig, dsn string) (gorm.Dialector, schema.Namer, error) {
-	switch dbCfg.Transport {
-	case "", postgresconfig.PostgresTransportDirect:
-		return gormpostgres.Open(dsn), nil, nil
-	case postgresconfig.PostgresTransportRDSDataAPI:
-		for _, required := range []struct {
-			name  string
-			value string
-		}{
-			{name: "resource_arn", value: dbCfg.RDSDataAPI.ResourceARN},
-			{name: "secret_arn", value: dbCfg.RDSDataAPI.SecretARN},
-			{name: "database", value: dbCfg.RDSDataAPI.Database},
-			{name: "aws_region", value: dbCfg.RDSDataAPI.AWSRegion},
-		} {
-			if required.value == "" {
-				return nil, nil, fmt.Errorf("RDS Data API authz connection requires %s", required.name)
-			}
-		}
-
-		driverConfig := rds.NewConfig(
-			dbCfg.RDSDataAPI.ResourceARN,
-			dbCfg.RDSDataAPI.SecretARN,
-			dbCfg.RDSDataAPI.Database,
-			dbCfg.RDSDataAPI.AWSRegion,
-		)
-		driverConfig.ParseTime = true
-		dialector := gormpostgres.New(gormpostgres.Config{
-			DriverName: rds.DRIVERNAME,
-			DSN:        driverConfig.ToDSN(),
-		})
-		var namingStrategy schema.Namer
-		if dbCfg.Schema != "" {
-			namingStrategy = storagepostgres.NewPostgresSchemaNamingStrategy(dbCfg.Schema)
-		}
-		return dialector, namingStrategy, nil
-	default:
-		return nil, nil, fmt.Errorf("unsupported PostgreSQL transport %q", dbCfg.Transport)
-	}
 }
 
 func postgresMigrationConfig(conf authzconfig.AuthzConfig) (cconfig.PluggableStorageEngine, error) {
@@ -335,8 +289,10 @@ func CreatePostgresMigrationDBConnection(log *logrus.Entry, cfg cconfig.Pluggabl
 		return nil, fmt.Errorf("postgres migration config is missing required field 'database'")
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable",
-		dbCfg.Hostname, dbCfg.Username, string(dbCfg.Password), dbCfg.Database, dbCfg.Port)
+	dsn, err := postgresDSN(dbCfg)
+	if err != nil {
+		return nil, err
+	}
 	if dbCfg.Schema != "" {
 		dsn += " search_path=" + dbCfg.Schema
 	}
@@ -345,6 +301,21 @@ func CreatePostgresMigrationDBConnection(log *logrus.Entry, cfg cconfig.Pluggabl
 		return nil, fmt.Errorf("failed to connect to PostgreSQL for Authz migrations: %w", err)
 	}
 	return db, nil
+}
+
+func postgresDSN(dbCfg postgresDBConfig) (string, error) {
+	sslMode := strings.ToLower(strings.TrimSpace(dbCfg.SSLMode))
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+	switch sslMode {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+	default:
+		return "", fmt.Errorf("unsupported PostgreSQL SSL mode %q", dbCfg.SSLMode)
+	}
+
+	return fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",
+		dbCfg.Hostname, dbCfg.Username, string(dbCfg.Password), dbCfg.Database, dbCfg.Port, sslMode), nil
 }
 
 func runConfiguredStorageMigrations(conf authzconfig.AuthzConfig, logger *logrus.Entry) error {
