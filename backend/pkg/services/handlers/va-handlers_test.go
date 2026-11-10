@@ -1,0 +1,139 @@
+package handlers
+
+import (
+	"context"
+	"crypto/x509"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	svcmock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+const (
+	reissueTestSKI       = "ca-ski"
+	reissueTestOldSerial = "old-serial"
+	reissueTestNewSerial = "new-serial"
+)
+
+func reissueEvent(t *testing.T) *event.Event {
+	t.Helper()
+
+	caWithSerial := func(sn string) models.CACertificate {
+		return models.CACertificate{
+			ID:                      "ca-id",
+			CertificateSerialNumber: sn,
+			Certificate: models.Certificate{
+				SerialNumber: sn,
+				SubjectKeyID: reissueTestSKI,
+			},
+		}
+	}
+
+	e := event.New()
+	e.SetType(string(models.EventReissueCAKey))
+	err := e.SetData(event.ApplicationJSON, models.UpdateModel[models.CACertificate]{
+		Previous: caWithSerial(reissueTestOldSerial),
+		Updated:  caWithSerial(reissueTestNewSerial),
+	})
+	assert.NoError(t, err)
+
+	return &e
+}
+
+func vaRoleWithSigner(serial string) *models.VARole {
+	return &models.VARole{
+		CASubjectKeyID: reissueTestSKI,
+		CRLOptions: models.VACRLRole{
+			RefreshInterval:               models.TimeDuration(24 * time.Hour),
+			Validity:                      models.TimeDuration(48 * time.Hour),
+			SignerCertificateSerialNumber: serial,
+			RegenerateOnRevoke:            true,
+		},
+	}
+}
+
+func dispatchReissue(t *testing.T, svc services.CRLService) error {
+	t.Helper()
+
+	h := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc)
+	handler, ok := h.DispatchMap[string(models.EventReissueCAKey)]
+	if !assert.True(t, ok, "VA must handle %s events", models.EventReissueCAKey) {
+		return nil
+	}
+
+	return handler(context.Background(), reissueEvent(t))
+}
+
+func TestReissueCAHandlerRotatesSignerFromPreviousCertificate(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	role := vaRoleWithSigner(reissueTestOldSerial)
+
+	expectedOptions := role.CRLOptions
+	expectedOptions.SignerCertificateSerialNumber = reissueTestNewSerial
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(role, nil)
+	svc.On("UpdateVARole", mock.Anything, services.UpdateVARoleInput{CASubjectKeyID: reissueTestSKI, CRLRole: expectedOptions}).Return(vaRoleWithSigner(reissueTestNewSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return(&x509.RevocationList{}, nil)
+
+	err := dispatchReissue(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+}
+
+func TestReissueCAHandlerKeepsSignerThatIsNotThePreviousCertificate(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner("other-serial"), nil)
+
+	err := dispatchReissue(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertNotCalled(t, "UpdateVARole", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestReissueCAHandlerKeepsSignerWhenNewCertificateIsRejected(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
+	svc.On("UpdateVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), errs.ErrValidateBadRequest)
+
+	err := dispatchReissue(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestReissueCAHandlerIgnoresCAWithoutVARole(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return((*models.VARole)(nil), errs.ErrVARoleNotFound)
+
+	err := dispatchReissue(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertNotCalled(t, "UpdateVARole", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestReissueCAHandlerReturnsUnexpectedUpdateError(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	updateErr := errors.New("storage down")
+
+	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
+	svc.On("UpdateVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), updateErr)
+
+	err := dispatchReissue(t, svc)
+
+	assert.ErrorIs(t, err, updateErr)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}

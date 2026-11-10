@@ -41,10 +41,16 @@ func (svc *VACrlMonitor) processVARoles(ctx context.Context, lFunc *logrus.Entry
 			lFunc.Infof("checking VA Role %s", v.CASubjectKeyID)
 			// Check if CRL is still valid
 			crlRemainDuration := v.LatestCRL.ValidUntil.Sub(now)
+			refreshInterval := time.Duration(v.CRLOptions.RefreshInterval)
+			refreshDue := refreshInterval > 0 && now.Sub(v.LatestCRL.ValidFrom) >= refreshInterval
 
-			if crlRemainDuration < svc.blindPeriod {
-				// CRL is not valid anymore or will expire during the validityWindow, calculate new CRL
-				lFunc.Infof("CRL for CA %s expired at %s (%s)", v.CASubjectKeyID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
+			if crlRemainDuration < svc.blindPeriod || refreshDue {
+				// CRL is not valid anymore, will expire during the blind period, or its refresh interval has elapsed: calculate new CRL
+				if refreshDue {
+					lFunc.Infof("CRL for CA %s issued at %s reached its refresh interval (%s)", v.CASubjectKeyID, v.LatestCRL.ValidFrom, v.CRLOptions.RefreshInterval)
+				} else {
+					lFunc.Infof("CRL for CA %s expired at %s (%s)", v.CASubjectKeyID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
+				}
 				input := services.CalculateCRLInput{
 					CASubjectKeyID: v.CASubjectKeyID,
 				}

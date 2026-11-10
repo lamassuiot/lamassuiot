@@ -82,3 +82,73 @@ func TestCreatePeriodicCRLValid(t *testing.T) {
 
 	mockService.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
+
+func TestCreatePeriodicCRLRefreshIntervalElapsed(t *testing.T) {
+	mockService := new(svcmock.MockVAService)
+
+	log := helpers.SetupLogger("debug", "VA", "CRL Monitor")
+
+	job := NewVACrlMonitorJob(log, mockService, time.Duration(time.Second*1))
+
+	now := time.Now()
+	vaRoles := []*models.VARole{
+		{
+			CASubjectKeyID: "123456",
+			LatestCRL: models.LatestCRLMeta{
+				Version:    models.BigInt{Int: big.NewInt(1)},
+				ValidFrom:  now.Add(-time.Hour * 2),
+				ValidUntil: now.Add(time.Hour * 24 * 7),
+			},
+			CRLOptions: models.VACRLRole{
+				Validity:                      models.TimeDuration(24 * 7 * time.Hour),
+				RefreshInterval:               models.TimeDuration(time.Hour),
+				SignerCertificateSerialNumber: "123456",
+				RegenerateOnRevoke:            false,
+			},
+		},
+	}
+
+	newCRL := x509.RevocationList{}
+
+	mockService.On("CalculateCRL", mock.Anything, mock.Anything).Return(&newCRL, nil)
+	mockService.On("GetVARoles", mock.Anything, mock.Anything).Return(&vaRoles, nil)
+
+	job.processVARoles(context.TODO(), log)
+
+	mockService.AssertCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestCreatePeriodicCRLRefreshIntervalNotElapsed(t *testing.T) {
+	mockService := new(svcmock.MockVAService)
+
+	log := helpers.SetupLogger("debug", "VA", "CRL Monitor")
+
+	job := NewVACrlMonitorJob(log, mockService, time.Duration(time.Second*1))
+
+	now := time.Now()
+	vaRoles := []*models.VARole{
+		{
+			CASubjectKeyID: "123456",
+			LatestCRL: models.LatestCRLMeta{
+				Version:    models.BigInt{Int: big.NewInt(1)},
+				ValidFrom:  now.Add(-time.Minute * 30),
+				ValidUntil: now.Add(time.Hour * 24 * 7),
+			},
+			CRLOptions: models.VACRLRole{
+				Validity:                      models.TimeDuration(24 * 7 * time.Hour),
+				RefreshInterval:               models.TimeDuration(time.Hour),
+				SignerCertificateSerialNumber: "123456",
+				RegenerateOnRevoke:            false,
+			},
+		},
+	}
+
+	newCRL := x509.RevocationList{}
+
+	mockService.On("CalculateCRL", mock.Anything, mock.Anything).Return(&newCRL, nil)
+	mockService.On("GetVARoles", mock.Anything, mock.Anything).Return(&vaRoles, nil)
+
+	job.processVARoles(context.TODO(), log)
+
+	mockService.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
