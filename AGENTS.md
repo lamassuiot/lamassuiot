@@ -29,7 +29,7 @@ Lamassu IoT is an IoT-first PKI (Public Key Infrastructure) designed for industr
 
 **Service Assembly Pattern**: Each service follows the assembler pattern in `backend/pkg/assemblers/`. Services are composed of:
 - Storage repos (Postgres via `engines/storage/postgres`)
-- Crypto engines (Software, PKCS11, AWS KMS, Azure Key Vault, Azure Secrets, Vault)
+- Crypto engines (Software, PKCS11, AWS KMS, AWS Secrets, Azure Key Vault, Azure Secrets, Vault)
 - Event buses (AMQP/RabbitMQ, AWS EventBridge, in-memory)
 - HTTP routers with middleware chains
 - Background jobs (e.g., certificate monitoring)
