@@ -1,4 +1,4 @@
-# Lamassu IoT - Copilot Instructions
+# Lamassu IoT - Project Instructions
 
 Lamassu IoT is an IoT-first PKI (Public Key Infrastructure) designed for industrial scenarios. This is a Go-based microservices architecture with modular crypto engines, storage backends, and event systems.
 
