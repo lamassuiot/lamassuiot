@@ -251,7 +251,7 @@ jobs:
           flags: backend-rest
 
   test-oracle:
-    name: Oracle storage tests
+    name: Oracle full test suite
     needs: setup
     runs-on: ubuntu-latest
     permissions:
@@ -294,16 +294,20 @@ jobs:
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
-      - name: Run Oracle storage tests without CGO
+      - name: Install Dependencies
+        run: go mod download
+      - name: Run full test suite against Oracle
         env:
-          CGO_ENABLED: 0
+          LAMASSU_TEST_STORAGE_PROVIDER: oracle
           LAMASSU_TEST_ORACLE_CONNECT_STRING: localhost:1521/FREEPDB1
           LAMASSU_TEST_ORACLE_USERNAME: lamassu
           LAMASSU_TEST_ORACLE_PASSWORD: LamassuTest123
           LAMASSU_TEST_POSTGRES_HOSTNAME: localhost
           LAMASSU_TEST_POSTGRES_USERNAME: lamassu
           LAMASSU_TEST_POSTGRES_PASSWORD: LamassuTest123
-        run: go test -count=1 -timeout 10m ./engines/storage/oracle/... ./connectors/authz/pkg/api
+        run: |
+          mapfile -t packages < <(go list ./... | grep -vE '/engines/storage/postgres(/|$)|/backend/pkg/migration/catokms$')
+          go tool gotestsum --format github-actions -- -count=1 -p 1 -timeout 900s "${packages[@]}"
 
   codecov-notify:
     name: Codecov notifications
