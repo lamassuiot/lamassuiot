@@ -40,6 +40,7 @@ require (
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
 	github.com/mocktools/go-smtp-mock/v2 v2.5.4
+	github.com/oracle/go-oracledb/v26 v26.4.0
 	github.com/ory/dockertest/v4 v4.0.1
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/robertkrimen/otto v0.5.1
