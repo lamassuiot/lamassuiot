@@ -23,5 +23,6 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 	serverTest.AfterSuite()
+	tests.CleanupOracleForTest()
 	os.Exit(code)
 }
