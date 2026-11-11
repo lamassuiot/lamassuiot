@@ -50,6 +50,21 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	if err != nil {
 		return nil, err
 	}
+	// Oracle's Lamassu schema is owned by the connected application user and
+	// contains tables from several logical domains. Preserve each domain's
+	// SchemaName for policy matching, but remove its PostgreSQL-style table
+	// qualifier from SQL sent to Oracle.
+	for configSchema, db := range dbs {
+		if db == nil || db.Dialector.Name() != "oracle" {
+			continue
+		}
+		for _, schema := range schemas.schemas {
+			if schema.ConfigSchema == configSchema {
+				schema.physicalSchemaOverride = ""
+				schema.hasPhysicalSchemaOverride = true
+			}
+		}
+	}
 
 	e := &Engine{
 		dbs:         dbs,

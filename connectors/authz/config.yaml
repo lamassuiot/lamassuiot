@@ -29,8 +29,10 @@ authz_db:
   port: 5432
   database: authz
 
-# credentials: per-schema Postgres connections used by the authorization engine
-# to query entity data for policy evaluation.
+# credentials: per-schema database connections used by the authorization
+# engine to query entity data for policy evaluation. Omitted provider defaults
+# to Postgres; use provider: oracle with connect_string, username, and password
+# to evaluate entities stored by the Oracle Storage Engine.
 credentials:
   authz:
     username: postgres
