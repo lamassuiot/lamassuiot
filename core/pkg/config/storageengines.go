@@ -11,6 +11,7 @@ type StorageProvider string
 
 const (
 	Postgres StorageProvider = "postgres"
+	Oracle   StorageProvider = "oracle"
 	CouchDB  StorageProvider = "couch_db"
 	DynamoDB StorageProvider = "dynamo_db"
 )
