@@ -138,6 +138,7 @@ func TestReissueCAHandlerKeepsSignerWhenNewCertificateIsRejected(t *testing.T) {
 	err := dispatchReissue(t, svc)
 
 	assert.NoError(t, err)
+	svc.AssertExpectations(t)
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
