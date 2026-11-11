@@ -2,6 +2,8 @@ package migrationstest
 
 import (
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -200,6 +202,10 @@ func MigrationTest_DeviceManager_20250925120000_remove_serial_hyphens(t *testing
 }
 
 func TestDeviceManagerMigrations(t *testing.T) {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("LAMASSU_TEST_STORAGE_PROVIDER")), "oracle") {
+		t.Skip("PostgreSQL Device Manager migration test is not part of the Oracle storage suite")
+	}
+
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, DeviceManagerDBName)
 	defer cleanup()
