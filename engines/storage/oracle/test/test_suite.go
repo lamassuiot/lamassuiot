@@ -124,7 +124,7 @@ func clearApplicationRows(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	for _, table := range order {
-		if table == "LAMASSU_SCHEMA_MIGRATIONS" || table == "LAMASSU_MIGRATION_LOCK" {
+		if table == "LAMASSU_SCHEMA_MIGRATIONS" || table == "LAMASSU_MIGRATION_LOCK" || table == "LAMASSU_LOCKS" {
 			continue
 		}
 		if _, err := db.ExecContext(ctx, `DELETE FROM "`+strings.ReplaceAll(table, `"`, `""`)+`"`); err != nil {
