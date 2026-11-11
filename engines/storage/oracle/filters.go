@@ -51,6 +51,8 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 		value := filter.Value
 		_, isBooleanField := oracleBooleanFilterFields[field]
 		switch filter.FilterOperation {
+		case resources.UnspecifiedFilter:
+			continue
 		case resources.StringEqual, resources.EnumEqual:
 			var comparison any = value
 			if isBooleanField {
