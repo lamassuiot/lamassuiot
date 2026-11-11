@@ -107,7 +107,11 @@ func TestReissueCAService(t *testing.T) {
 					return "", err
 				}
 
-				time.Sleep(time.Second)
+				// Wait until the persisted expiration time has passed. A fixed sleep can
+				// race with certificate creation and database timestamp precision.
+				if err := waitForCAExpiration(caSDK, ca.ID); err != nil {
+					return "", err
+				}
 
 				// Mark the CA as expired
 				_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
@@ -744,7 +748,7 @@ func TestReissueCASDK(t *testing.T) {
 func createTestCA(caSDK services.CAService, commonName string, toExpire bool) (*models.CACertificate, error) {
 	var caDur models.TimeDuration
 	if toExpire {
-		caDur = models.TimeDuration(time.Second) // 1 second
+		caDur = models.TimeDuration(5 * time.Second)
 	} else {
 		caDur = models.TimeDuration(time.Hour * 24 * 365) // 1 year
 	}
@@ -773,6 +777,23 @@ func createTestCA(caSDK services.CAService, commonName string, toExpire bool) (*
 	}
 
 	return ca, nil
+}
+
+func waitForCAExpiration(caSDK services.CAService, caID string) error {
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		ca, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: caID})
+		if err != nil {
+			return fmt.Errorf("could not check CA expiration: %w", err)
+		}
+		if ca.Certificate.ValidTo.Before(time.Now()) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("CA %s did not expire before timeout (valid_to: %s)", caID, ca.Certificate.ValidTo)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // Helper function to create a subordinate CA
