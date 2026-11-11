@@ -165,14 +165,14 @@ func runOracleWithMigration(migrationPath string) (*DatabaseContainer, error) {
 		oracleTestDatabase.container = container
 	}
 	shared := oracleTestDatabase.container
+	oracleTestDatabase.Unlock()
+
 	if err := resetOracleSchema(shared.DB); err != nil {
-		oracleTestDatabase.Unlock()
 		return nil, fmt.Errorf("reset Oracle Authz test schema: %w", err)
 	}
 	if migrationPath != "" {
 		if err := applyOracleFixture(shared.DB, migrationPath); err != nil {
 			_ = resetOracleSchema(shared.DB)
-			oracleTestDatabase.Unlock()
 			return nil, err
 		}
 	}
@@ -184,7 +184,6 @@ func runOracleWithMigration(migrationPath string) (*DatabaseContainer, error) {
 		cleanup: func() error {
 			cleanupOnce.Do(func() {
 				cleanupErr = resetOracleSchema(shared.DB)
-				oracleTestDatabase.Unlock()
 			})
 			return cleanupErr
 		},
