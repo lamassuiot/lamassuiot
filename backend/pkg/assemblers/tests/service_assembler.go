@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -37,6 +38,11 @@ type TestServiceBuilder struct {
 	withSmtp             *config.SMTPServer
 	allowCascadeDelete   bool
 	cascadeDeleteExplSet bool
+}
+
+var oracleTestSubsystem struct {
+	sync.Mutex
+	backend *subsystems.SubsystemBackend
 }
 
 func (b TestServiceBuilder) WithEventBus() TestServiceBuilder {
@@ -104,6 +110,11 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 	storageConfig, err := PrepareStorageForTest(provider, b.withDatabase)
 	if err != nil {
 		t.Fatalf("could not prepare %s test storage server: %s", provider, err)
+	}
+	if provider == "oracle" && storageConfig.BeforeEach != nil {
+		if err := storageConfig.BeforeEach(); err != nil {
+			t.Fatalf("could not reset Oracle test database before building server: %s", err)
+		}
 	}
 
 	cryptoEngines := []CryptoEngine{GOLANG}
@@ -330,6 +341,12 @@ func configuredTestStorageProvider(provider string) (string, error) {
 }
 
 func PrepareOracleForTest() (*TestStorageEngineConfig, error) {
+	oracleTestSubsystem.Lock()
+	defer oracleTestSubsystem.Unlock()
+	if oracleTestSubsystem.backend != nil {
+		return oracleStorageConfig(oracleTestSubsystem.backend), nil
+	}
+
 	oracleSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Oracle)
 	if err := oracleSubsystem.Prepare(nil); err != nil {
 		return nil, err
@@ -339,11 +356,30 @@ func PrepareOracleForTest() (*TestStorageEngineConfig, error) {
 		return nil, err
 	}
 
+	oracleTestSubsystem.backend = backend
+	return oracleStorageConfig(backend), nil
+}
+
+func oracleStorageConfig(backend *subsystems.SubsystemBackend) *TestStorageEngineConfig {
 	return &TestStorageEngineConfig{
 		Config:     backend.Config.(cconfig.PluggableStorageEngine),
 		BeforeEach: backend.BeforeEach,
-		AfterSuite: backend.AfterSuite,
-	}, nil
+	}
+}
+
+// CleanupOracleForTest closes the Oracle test container cached for this test
+// package. Call it once from TestMain after the suite has finished.
+func CleanupOracleForTest() {
+	oracleTestSubsystem.Lock()
+	defer oracleTestSubsystem.Unlock()
+	if oracleTestSubsystem.backend == nil {
+		return
+	}
+	backend := oracleTestSubsystem.backend
+	oracleTestSubsystem.backend = nil
+	if backend.AfterSuite != nil {
+		backend.AfterSuite()
+	}
 }
 
 func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig {
