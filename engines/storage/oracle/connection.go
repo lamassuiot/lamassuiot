@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/config"
 	oracledb "github.com/oracle/go-oracledb/v26/oracle"
@@ -14,6 +16,40 @@ import (
 func openDB(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
+	}
+	return openDBWithOptions(ctx, ConnectionOptions{
+		ConnectString:   cfg.ConnectString,
+		Username:        cfg.Username,
+		Password:        string(cfg.Password),
+		MaxOpenConns:    cfg.MaxOpenConns,
+		MaxIdleConns:    cfg.MaxIdleConns,
+		ConnMaxLifetime: cfg.ConnMaxLifetime,
+	})
+}
+
+// ConnectionOptions describes the connection pool needed by consumers that
+// own their configuration model and use the Oracle storage engine for access.
+type ConnectionOptions struct {
+	ConnectString   string
+	Username        string
+	Password        string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
+
+func openDBWithOptions(ctx context.Context, cfg ConnectionOptions) (*sql.DB, error) {
+	if strings.TrimSpace(cfg.ConnectString) == "" {
+		return nil, fmt.Errorf("oracle connect_string is required")
+	}
+	if strings.TrimSpace(cfg.Username) == "" {
+		return nil, fmt.Errorf("oracle username is required")
+	}
+	if cfg.MaxOpenConns < 0 || cfg.MaxIdleConns < 0 || cfg.ConnMaxLifetime < 0 {
+		return nil, fmt.Errorf("oracle pool settings cannot be negative")
+	}
+	if cfg.MaxOpenConns > 0 && cfg.MaxIdleConns > cfg.MaxOpenConns {
+		return nil, fmt.Errorf("oracle max_idle_conns cannot exceed max_open_conns")
 	}
 	driverConfig := oracledb.NewOracleDriverConfig()
 	driverConfig.ConnectDescriptor = cfg.ConnectString
@@ -42,4 +78,10 @@ func openDB(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 // query an Oracle schema without constructing the full StorageEngine.
 func OpenDatabase(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 	return openDB(ctx, cfg)
+}
+
+// OpenDatabaseWithOptions opens an Oracle connection pool from connection
+// options, allowing callers to keep ownership of their configuration types.
+func OpenDatabaseWithOptions(ctx context.Context, cfg ConnectionOptions) (*sql.DB, error) {
+	return openDBWithOptions(ctx, cfg)
 }
