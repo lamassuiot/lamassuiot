@@ -3,6 +3,8 @@ package va
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
@@ -54,6 +56,11 @@ func TestVARoleUsesItsReferencedSignerCertificate(t *testing.T) {
 	reissued, err := caSvc.ReissueCA(ctx, services.ReissueCAInput{CAID: issuer.ID})
 	require.NoError(t, err)
 	require.NotEqual(t, issuer.Certificate.SerialNumber, reissued.Certificate.SerialNumber)
+	// The VA moves the signer to the reissued certificate asynchronously; wait for it so it cannot race the
+	// signer changes below.
+	waitForVARole(t, role.CASubjectKeyID, func(r *models.VARole) bool {
+		return r.CRLOptions.SignerCertificateSerialNumber == reissued.Certificate.SerialNumber
+	})
 	opts.SignerCertificateSerialNumber = reissued.Certificate.SerialNumber
 	updated, err := serverTest.VA.HttpVASDK.UpdateVARole(ctx, services.UpdateVARoleInput{CASubjectKeyID: role.CASubjectKeyID, CRLRole: opts})
 	require.NoError(t, err)
@@ -74,4 +81,58 @@ func TestVARoleUsesItsReferencedSignerCertificate(t *testing.T) {
 	require.NoError(t, db.Exec(`UPDATE va_role SET crl_signer_certificate_serial_number = ? WHERE ca_ski = ?`, signer.Certificate.SerialNumber, role.CASubjectKeyID).Error)
 	_, err = serverTest.VA.CRLService.CalculateCRL(ctx, services.CalculateCRLInput{CASubjectKeyID: role.CASubjectKeyID})
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
+}
+
+func TestVARoleSignerFollowsCAReissue(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	issuer, err := initCAForVA(caSvc)
+	require.NoError(t, err)
+	ski := issuer.Certificate.SubjectKeyID
+
+	before := waitForInitialCRL(t, ski)
+	require.Equal(t, issuer.Certificate.SerialNumber, before.CRLOptions.SignerCertificateSerialNumber)
+	versionBefore := new(big.Int).Set(before.LatestCRL.Version.Int)
+
+	reissued, err := caSvc.ReissueCA(ctx, services.ReissueCAInput{CAID: issuer.ID})
+	require.NoError(t, err)
+
+	after := waitForVARole(t, ski, func(r *models.VARole) bool {
+		return r.CRLOptions.SignerCertificateSerialNumber == reissued.Certificate.SerialNumber &&
+			r.LatestCRL.Version.Int.Cmp(versionBefore) > 0
+	})
+
+	// Only the signer changes; the rest of the CRL options are kept.
+	expectedOptions := before.CRLOptions
+	expectedOptions.SignerCertificateSerialNumber = reissued.Certificate.SerialNumber
+	require.Equal(t, expectedOptions, after.CRLOptions)
+
+	crl, err := serverTest.VA.HttpVASDK.GetCRL(ctx, services.GetCRLResponseInput{
+		CASubjectKeyID: ski,
+		Issuer:         (*x509.Certificate)(reissued.Certificate.Certificate),
+		VerifyResponse: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, after.LatestCRL.Version.Int.Cmp(crl.Number), "the served CRL is the one regenerated after the reissue")
+}
+
+// waitForVARole polls the VA role of an SKI until ready accepts it, since the VA updates roles from CA events.
+func waitForVARole(t *testing.T, ski string, ready func(*models.VARole) bool) *models.VARole {
+	t.Helper()
+
+	var role *models.VARole
+	require.NoError(t, tests.SleepRetry(5, 3*time.Second, func() error {
+		r, err := serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{CASubjectKeyID: ski})
+		if err != nil {
+			return err
+		}
+		if !ready(r) {
+			return fmt.Errorf("VA role %s is not in the expected state yet", ski)
+		}
+		role = r
+		return nil
+	}))
+
+	return role
 }
