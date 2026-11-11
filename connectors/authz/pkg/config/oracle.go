@@ -41,16 +41,16 @@ func DecodeOracleDBConfig(source map[string]any) (OracleDBConfig, error) {
 
 func (c OracleDBConfig) Validate() error {
 	if strings.TrimSpace(c.ConnectString) == "" {
-		return fmt.Errorf("Oracle Authz connect_string is required")
+		return fmt.Errorf("oracle connect_string is required")
 	}
 	if strings.TrimSpace(c.Username) == "" {
-		return fmt.Errorf("Oracle Authz username is required")
+		return fmt.Errorf("oracle username is required")
 	}
 	if c.MaxOpenConns < 0 || c.MaxIdleConns < 0 || c.ConnMaxLifetime < 0 {
-		return fmt.Errorf("Oracle Authz pool settings cannot be negative")
+		return fmt.Errorf("oracle pool settings cannot be negative")
 	}
 	if c.MaxOpenConns > 0 && c.MaxIdleConns > c.MaxOpenConns {
-		return fmt.Errorf("Oracle Authz max_idle_conns cannot exceed max_open_conns")
+		return fmt.Errorf("oracle max_idle_conns cannot exceed max_open_conns")
 	}
 	return nil
 }

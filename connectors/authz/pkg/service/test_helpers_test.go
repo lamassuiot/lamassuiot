@@ -11,14 +11,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupDBWithAuthzMigrations starts a Postgres container, mounts initSQLPath as the
-// Docker init script (for domain tables), then runs goose authz migrations so the
-// principals/principal_policies/policies tables exist before the test creates any stores.
+// setupDBWithAuthzMigrations starts the selected database, creates its domain
+// fixture, then runs Authz migrations before the test creates any stores.
 // Cleanup is registered via t.Cleanup — no explicit defer needed in the caller.
 func setupDBWithAuthzMigrations(t *testing.T, initSQLPath string) *gorm.DB {
 	t.Helper()
 
-	container, err := testutil.RunPostgresWithMigration(initSQLPath)
+	container, err := testutil.RunWithMigration(initSQLPath)
 	require.NoError(t, err)
 	t.Cleanup(func() { container.Cleanup() })
 
@@ -27,7 +26,7 @@ func setupDBWithAuthzMigrations(t *testing.T, initSQLPath string) *gorm.DB {
 
 	log := logrus.NewEntry(logrus.New())
 	log.Logger.SetOutput(io.Discard)
-	require.NoError(t, store.RunMigrations(sqlDB, "", log))
+	require.NoError(t, store.RunMigrationsForProvider(sqlDB, "", testutil.StorageProvider(), log))
 
 	return container.DB
 }
