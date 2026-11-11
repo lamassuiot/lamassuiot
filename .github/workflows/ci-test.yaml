@@ -250,6 +250,61 @@ jobs:
           verbose: true
           flags: backend-rest
 
+  test-oracle:
+    name: Oracle storage tests
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      oracle:
+        image: gvenzl/oracle-free:23.26.3-slim-faststart
+        env:
+          ORACLE_PASSWORD: LamassuTest123
+          APP_USER: lamassu
+          APP_USER_PASSWORD: LamassuTest123
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd /opt/oracle/healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 60
+          --health-start-period 60s
+      postgres:
+        image: postgres:16.15-bookworm
+        env:
+          POSTGRES_DB: pki
+          POSTGRES_USER: lamassu
+          POSTGRES_PASSWORD: LamassuTest123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lamassu -d pki"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '^1.27.3'
+          cache-dependency-path: "**/*.sum"
+      - name: Run Oracle storage tests without CGO
+        env:
+          CGO_ENABLED: 0
+          LAMASSU_TEST_ORACLE_CONNECT_STRING: localhost:1521/FREEPDB1
+          LAMASSU_TEST_ORACLE_USERNAME: lamassu
+          LAMASSU_TEST_ORACLE_PASSWORD: LamassuTest123
+          LAMASSU_TEST_POSTGRES_HOSTNAME: localhost
+          LAMASSU_TEST_POSTGRES_USERNAME: lamassu
+          LAMASSU_TEST_POSTGRES_PASSWORD: LamassuTest123
+        run: go test -count=1 -timeout 10m ./engines/storage/oracle/... ./connectors/authz/pkg/api
+
   codecov-notify:
     name: Codecov notifications
     needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest]
