@@ -105,6 +105,13 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 	return db, nil
 }
 
+// CompileJSONPathPredicate exposes the Oracle JSONPath translator to other
+// Lamassu components that need to evaluate JSON filters outside the storage
+// repositories, such as Authz's own policy store.
+func CompileJSONPathPredicate(expression string, column clause.Column) (clause.Expression, error) {
+	return compileJSONPredicate(expression, column)
+}
+
 func escapeLike(value string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
 }
