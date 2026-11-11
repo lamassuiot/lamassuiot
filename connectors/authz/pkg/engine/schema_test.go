@@ -1,9 +1,51 @@
 package engine
 
 import (
+	"database/sql"
 	"os"
 	"testing"
+
+	oracledialect "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/dialect"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
+
+func TestNewEngineUsesUnqualifiedOracleTablesAndKeepsLogicalSchemaNames(t *testing.T) {
+	oracleDB, err := gorm.Open(oracledialect.Dialector{Conn: &sql.DB{}}, &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng, err := NewEngine(map[string]*gorm.DB{"pki": oracleDB}, map[string]string{"pki": "../../pki.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, err := eng.schemas.GetBySchemaEntity("devicemanager", "device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if device.SchemaName != "devicemanager" || device.QualifiedEntityType() != "devicemanager.device" {
+		t.Fatalf("Oracle schema changed authorization identity: %+v", device)
+	}
+	if got := device.QualifiedTableName(); got != "devices" {
+		t.Fatalf("Oracle physical table = %q, want unqualified devices", got)
+	}
+
+	postgresDB, err := gorm.Open(postgres.New(postgres.Config{Conn: &sql.DB{}}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	postgresEngine, err := NewEngine(map[string]*gorm.DB{"pki": postgresDB}, map[string]string{"pki": "../../pki.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	postgresDevice, err := postgresEngine.schemas.GetBySchemaEntity("devicemanager", "device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := postgresDevice.QualifiedTableName(); got != "devicemanager.devices" {
+		t.Fatalf("Postgres physical table = %q, want schema-qualified table", got)
+	}
+}
 
 func TestLoadIoTSchemas(t *testing.T) {
 	registry := NewSchemaRegistry()
