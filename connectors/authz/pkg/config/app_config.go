@@ -28,10 +28,10 @@ type AuthzConfig struct {
 	SubscriberEventBus cconfig.EventBusEngine `mapstructure:"subscriber_event_bus"`
 	Schemas            map[string]string      `mapstructure:"schemas"`
 	// Credentials holds per-schema database connections. The provider may be
-	// "postgres" (the default for existing configs) or "oracle"; AuthzDB remains
-	// the PostgreSQL policy store.
+	// "postgres" (the default for existing configs) or "oracle".
 	Credentials map[string]cconfig.PluggableStorageEngine `mapstructure:"credentials"`
-	// AuthzDB is the Postgres database for principals, grants, and policies.
+	// AuthzDB stores principals, grants, and policies. Postgres remains the
+	// default; Oracle can be selected with provider: oracle.
 	AuthzDB    cconfig.PluggableStorageEngine `mapstructure:"authz_db"`
 	PreloadDir string                         `mapstructure:"preload_dir"`
 	// Bootstrap seeds principals and policy grants on startup. Idempotent.

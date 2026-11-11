@@ -20,9 +20,11 @@ schemas:
 http_schemas:
   - /home/ubuntu/dev/lamassu/lamassuiot/connectors/authz/examples/wfx/wfx.json
 
-# authz_db: Postgres connection for the authz service's own data
-# (principals, grants, policies).  Uses the dedicated "authz" database.
+# authz_db: database for the authz service's own data (principals, grants,
+# policies). Postgres is the default. For Oracle, set provider: oracle and
+# provide connect_string, username, and password in config.
 authz_db:
+  provider: postgres
   username: postgres
   password: test
   host: localhost
