@@ -307,11 +307,19 @@ jobs:
           LAMASSU_TEST_POSTGRES_PASSWORD: LamassuTest123
         run: |
           mapfile -t packages < <(go list ./... | grep -vE '/engines/storage/postgres(/|$)|/backend/pkg/migration/catokms$')
-          go tool gotestsum --format github-actions -- -count=1 -p 1 -timeout 900s "${packages[@]}"
+          go tool gotestsum --format github-actions -- -count=1 -p 1 -timeout 900s -coverpkg=./... -coverprofile coverage.txt -covermode=atomic "${packages[@]}"
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: storage-oracle
 
   codecov-notify:
     name: Codecov notifications
-    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest]
+    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest, test-oracle]
     runs-on: ubuntu-latest
     permissions:
       contents: read
