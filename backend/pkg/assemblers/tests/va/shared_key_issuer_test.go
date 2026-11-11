@@ -36,9 +36,12 @@ func TestCRLOfCAsSharingAKeyIsIssuedByTheCAOfTheRoleSigner(t *testing.T) {
 
 	requireCRLIssuedBy(t, role.CASubjectKeyID, owner)
 
-	// After a reissue the Role still references the owner's superseded certificate: same subject and key.
-	_, err = caSvc.ReissueCA(ctx, services.ReissueCAInput{CAID: owner.ID})
+	// After a reissue the Role moves to the owner's new certificate, and the CRL is still issued by the owner.
+	reissued, err := caSvc.ReissueCA(ctx, services.ReissueCAInput{CAID: owner.ID})
 	require.NoError(t, err)
+	waitForVARole(t, role.CASubjectKeyID, func(r *models.VARole) bool {
+		return r.CRLOptions.SignerCertificateSerialNumber == reissued.Certificate.SerialNumber
+	})
 	requireCRLIssuedBy(t, role.CASubjectKeyID, owner)
 }
 
