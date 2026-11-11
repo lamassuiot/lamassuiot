@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	oraclestorage "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
@@ -34,13 +35,19 @@ const (
 type DatabaseContainer struct {
 	DB      *gorm.DB
 	cleanup func() error
+	closeDB bool
+}
+
+var oracleTestDatabase struct {
+	sync.Mutex
+	container *DatabaseContainer
 }
 
 func (c *DatabaseContainer) Cleanup() error {
 	if c == nil || c.cleanup == nil {
 		return nil
 	}
-	if c.DB != nil {
+	if c.closeDB && c.DB != nil {
 		if sqlDB, err := c.DB.DB(); err == nil {
 			_ = sqlDB.Close()
 		}
@@ -122,7 +129,7 @@ func runPostgresWithMigration(migrationPath string) (*DatabaseContainer, error) 
 	if err != nil {
 		return nil, fmt.Errorf("start PostgreSQL test database: %w", err)
 	}
-	container := &DatabaseContainer{cleanup: cleanup}
+	container := &DatabaseContainer{cleanup: cleanup, closeDB: true}
 	port := resource.GetPort("5432/tcp")
 	if err := pool.Retry(context.Background(), 0, func() error {
 		dsn := fmt.Sprintf("host=localhost port=%s user=%s password=%s dbname=%s sslmode=disable",
@@ -148,6 +155,56 @@ func runPostgresWithMigration(migrationPath string) (*DatabaseContainer, error) 
 }
 
 func runOracleWithMigration(migrationPath string) (*DatabaseContainer, error) {
+	oracleTestDatabase.Lock()
+	if oracleTestDatabase.container == nil {
+		container, err := startOracleTestDatabase()
+		if err != nil {
+			oracleTestDatabase.Unlock()
+			return nil, err
+		}
+		oracleTestDatabase.container = container
+	}
+	shared := oracleTestDatabase.container
+	if err := resetOracleSchema(shared.DB); err != nil {
+		oracleTestDatabase.Unlock()
+		return nil, fmt.Errorf("reset Oracle Authz test schema: %w", err)
+	}
+	if migrationPath != "" {
+		if err := applyOracleFixture(shared.DB, migrationPath); err != nil {
+			_ = resetOracleSchema(shared.DB)
+			oracleTestDatabase.Unlock()
+			return nil, err
+		}
+	}
+
+	var cleanupOnce sync.Once
+	var cleanupErr error
+	return &DatabaseContainer{
+		DB: shared.DB,
+		cleanup: func() error {
+			cleanupOnce.Do(func() {
+				cleanupErr = resetOracleSchema(shared.DB)
+				oracleTestDatabase.Unlock()
+			})
+			return cleanupErr
+		},
+	}, nil
+}
+
+// CleanupOracleTestDatabase closes the package-scoped Oracle container after
+// all tests using the shared database have completed.
+func CleanupOracleTestDatabase() error {
+	oracleTestDatabase.Lock()
+	defer oracleTestDatabase.Unlock()
+	if oracleTestDatabase.container == nil {
+		return nil
+	}
+	container := oracleTestDatabase.container
+	oracleTestDatabase.container = nil
+	return container.Cleanup()
+}
+
+func startOracleTestDatabase() (*DatabaseContainer, error) {
 	cleanup, resource, pool, err := dockerrunner.RunDocker("gvenzl/oracle-free",
 		dockertest.WithTag(oracleImageTag),
 		dockertest.WithEnv([]string{
@@ -165,7 +222,7 @@ func runOracleWithMigration(migrationPath string) (*DatabaseContainer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start Oracle Authz test database: %w", err)
 	}
-	container := &DatabaseContainer{cleanup: cleanup}
+	container := &DatabaseContainer{cleanup: cleanup, closeDB: true}
 	connectString := fmt.Sprintf("localhost:%s/FREEPDB1", resource.GetPort("1521/tcp"))
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
@@ -192,22 +249,34 @@ func runOracleWithMigration(migrationPath string) (*DatabaseContainer, error) {
 		_ = container.Cleanup()
 		return nil, fmt.Errorf("connect to Oracle Authz test database: %w", err)
 	}
-	if migrationPath != "" {
-		content, err := os.ReadFile(migrationPath)
-		if err != nil {
-			_ = container.Cleanup()
-			return nil, fmt.Errorf("read Oracle test fixture: %w", err)
+	return container, nil
+}
+
+func applyOracleFixture(db *gorm.DB, migrationPath string) error {
+	content, err := os.ReadFile(migrationPath)
+	if err != nil {
+		return fmt.Errorf("read Oracle test fixture: %w", err)
+	}
+	for _, statement := range strings.Split(string(content), ";") {
+		statement = strings.TrimSpace(statement)
+		if statement == "" {
+			continue
 		}
-		for _, statement := range strings.Split(string(content), ";") {
-			statement = strings.TrimSpace(statement)
-			if statement == "" {
-				continue
-			}
-			if err := container.DB.Exec(statement).Error; err != nil {
-				_ = container.Cleanup()
-				return nil, fmt.Errorf("apply Oracle test fixture statement %q: %w", statement, err)
-			}
+		if err := db.Exec(statement).Error; err != nil {
+			return fmt.Errorf("apply Oracle test fixture statement %q: %w", statement, err)
 		}
 	}
-	return container, nil
+	return nil
+}
+
+func resetOracleSchema(db *gorm.DB) error {
+	const dropTables = `BEGIN
+		FOR test_table IN (SELECT table_name FROM user_tables) LOOP
+			EXECUTE IMMEDIATE 'DROP TABLE "' || REPLACE(test_table.table_name, '"', '""') || '" CASCADE CONSTRAINTS PURGE';
+		END LOOP;
+	END;`
+	if err := db.Exec(dropTables).Error; err != nil {
+		return fmt.Errorf("drop Oracle Authz test tables: %w", err)
+	}
+	return nil
 }
