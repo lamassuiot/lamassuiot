@@ -8,12 +8,13 @@ import (
 	"io/fs"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
 )
 
-//go:embed migrations/*.sql
+//go:embed migrations/*.sql oracle_migrations/*.sql
 var embedMigrations embed.FS
 
 var schemaNamePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -22,6 +23,12 @@ var schemaNamePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 // Must be called before any store is created. Idempotent — safe on every startup.
 func RunMigrations(db *sql.DB, schema string, logger *logrus.Entry) error {
 	return RunMigrationCommand(context.Background(), db, schema, "up", nil, logger)
+}
+
+// RunMigrationsForProvider applies the migration set for the selected Authz
+// persistence provider. An omitted provider retains PostgreSQL compatibility.
+func RunMigrationsForProvider(db *sql.DB, schema, provider string, logger *logrus.Entry) error {
+	return RunMigrationCommandForProvider(context.Background(), db, schema, "up", nil, provider, logger)
 }
 
 // RunMigrationCommand runs a single goose command against the authz database.
@@ -36,18 +43,32 @@ func RunMigrations(db *sql.DB, schema string, logger *logrus.Entry) error {
 // goose_db_version table and the migration DDL through search_path, which the
 // connection DSN already carries, so the schema only needs to exist beforehand.
 func RunMigrationCommand(ctx context.Context, db *sql.DB, schema, command string, args []string, logger *logrus.Entry) error {
-	if err := ensureSchema(ctx, db, schema, logger); err != nil {
-		return err
+	return RunMigrationCommandForProvider(ctx, db, schema, command, args, "postgres", logger)
+}
+
+// RunMigrationCommandForProvider runs a Goose command using provider-specific
+// migrations and version tracking.
+func RunMigrationCommandForProvider(ctx context.Context, db *sql.DB, schema, command string, args []string, provider string, logger *logrus.Entry) error {
+	provider = normalizeProvider(provider)
+	if provider != "postgres" && provider != "oracle" {
+		return fmt.Errorf("unsupported Authz migration provider %q (supported: postgres, oracle)", provider)
+	}
+	if provider != "oracle" {
+		if err := ensureSchema(ctx, db, schema, logger); err != nil {
+			return err
+		}
+	} else if schema != "" {
+		return fmt.Errorf("Oracle Authz migrations run in the connected user's schema; schema must be empty")
 	}
 
-	provider, err := newProvider(db)
+	gooseProvider, err := newProvider(db, provider)
 	if err != nil {
 		return err
 	}
 
 	switch command {
 	case "up":
-		results, err := provider.Up(ctx)
+		results, err := gooseProvider.Up(ctx)
 		logResults(results, logger)
 		return err
 
@@ -56,19 +77,19 @@ func RunMigrationCommand(ctx context.Context, db *sql.DB, schema, command string
 		if err != nil {
 			return err
 		}
-		results, err := provider.UpTo(ctx, version)
+		results, err := gooseProvider.UpTo(ctx, version)
 		logResults(results, logger)
 		return err
 
 	case "down":
-		result, err := provider.Down(ctx)
+		result, err := gooseProvider.Down(ctx)
 		if result != nil {
 			logResults([]*goose.MigrationResult{result}, logger)
 		}
 		return err
 
 	case "status":
-		statuses, err := provider.Status(ctx)
+		statuses, err := gooseProvider.Status(ctx)
 		if err != nil {
 			return fmt.Errorf("read migration status: %w", err)
 		}
@@ -82,7 +103,7 @@ func RunMigrationCommand(ctx context.Context, db *sql.DB, schema, command string
 		return nil
 
 	case "version":
-		version, err := provider.GetDBVersion(ctx)
+		version, err := gooseProvider.GetDBVersion(ctx)
 		if err != nil {
 			return fmt.Errorf("read database version: %w", err)
 		}
@@ -91,6 +112,15 @@ func RunMigrationCommand(ctx context.Context, db *sql.DB, schema, command string
 
 	default:
 		return fmt.Errorf("unknown migration command %q (supported: up, up-to, down, status, version)", command)
+	}
+}
+
+func normalizeProvider(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", "postgres", "postgresql":
+		return "postgres"
+	default:
+		return strings.ToLower(strings.TrimSpace(provider))
 	}
 }
 
@@ -133,16 +163,28 @@ func ensureSchema(ctx context.Context, db *sql.DB, schema string, logger *logrus
 	return nil
 }
 
-func newProvider(db *sql.DB) (*goose.Provider, error) {
-	sub, err := fs.Sub(embedMigrations, "migrations")
+func newProvider(db *sql.DB, provider string) (*goose.Provider, error) {
+	migrationDir := "migrations"
+	if provider == "oracle" {
+		migrationDir = "oracle_migrations"
+	}
+	sub, err := fs.Sub(embedMigrations, migrationDir)
 	if err != nil {
 		return nil, fmt.Errorf("prepare embedded migrations: %w", err)
 	}
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub)
+	if provider == "oracle" {
+		gooseProvider, err := goose.NewProvider(goose.DialectCustom, db, sub,
+			goose.WithStore(newOracleMigrationStore()), goose.WithIsolateDDL(true))
+		if err != nil {
+			return nil, fmt.Errorf("create Oracle goose provider: %w", err)
+		}
+		return gooseProvider, nil
+	}
+	gooseProvider, err := goose.NewProvider(goose.DialectPostgres, db, sub)
 	if err != nil {
 		return nil, fmt.Errorf("create goose provider: %w", err)
 	}
-	return provider, nil
+	return gooseProvider, nil
 }
 
 func versionArg(args []string) (int64, error) {
