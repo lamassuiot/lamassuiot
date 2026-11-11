@@ -44,10 +44,21 @@ clauses; literal values are bound and Oracle numeric Boolean columns are mapped
 to `0`/`1`.
 Unrecognized joins or predicate syntax, raw queries, and mutations are rejected
 with an error. As in the Authz GORM plugin, predicates are skipped for unrelated
-association preload tables. Authz schema connections now accept `provider: oracle`
-and use the Oracle driver when evaluating entity and relation checks; the Authz
-policy, principal, and grant store (`authz_db`) remains PostgreSQL-backed. This
-does not make Authz's own policy store portable to Oracle.
+association preload tables. Authz schema connections accept `provider: oracle`
+and use the Oracle driver when evaluating entity and relation checks. Authz's
+own `authz_db` can also use Oracle for principals, grants, and policies; its
+Oracle migrations create tables in the connected user's schema. Existing
+configurations continue to default to PostgreSQL.
+
+Example Oracle `authz_db` configuration:
+
+```yaml
+authz_db:
+  provider: oracle
+  connect_string: "dbhost:1521/FREEPDB1"
+  username: "AUTHZ"
+  password: "<secret>"
+```
 
 Configure the provider explicitly:
 
