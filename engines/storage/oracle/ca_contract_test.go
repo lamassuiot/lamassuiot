@@ -163,6 +163,12 @@ func testCAAndCertificateContracts(t *testing.T, ctx context.Context, repos ...c
 				t.Fatalf("update missing certificate: %v", err)
 			} else if repo.name == "postgres" && err != nil {
 				t.Fatalf("PostgreSQL update missing certificate: %v", err)
+			} else if repo.name == "postgres" {
+				// PostgreSQL's Save upserts an absent row. Remove that fixture
+				// immediately so it cannot affect the following CA/status counts.
+				if err := repo.cert.Delete(ctx, missingUpdate.SerialNumber); err != nil {
+					t.Fatalf("delete PostgreSQL upserted missing certificate: %v", err)
+				}
 			}
 			if n, err := repo.cert.CountByCAIDAndStatus(ctx, rootID, models.StatusRevoked); err != nil || n != 1 {
 				t.Fatalf("revoked certificates by CA count=%d error=%v", n, err)
