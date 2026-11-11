@@ -14,10 +14,11 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
+	oracleconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/config"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func TestCRLSettingsUseTheirReferencedSignerCertificate(t *testing.T) {
@@ -60,9 +61,7 @@ func TestCRLSettingsUseTheirReferencedSignerCertificate(t *testing.T) {
 	require.NoError(t, crl.CheckSignatureFrom((*x509.Certificate)(issuer.Certificate.Certificate)))
 
 	// The database only checks that the signer and its key exist, not that they fit the CA: generation checks it.
-	db := vaSchemaDB(t)
-	require.NoError(t, db.Exec(`UPDATE crl_settings s SET signer_serial_number = c.serial_number, signer_engine_id = c.engine_id,
-		signer_key_id = c.key_id FROM ca.certificates c WHERE c.serial_number = ? AND s.ca_id = ?`, signer.Certificate.SerialNumber, role.CAID).Error)
+	pointCRLSignerAt(t, ctx, role.CAID, signer.Certificate.SerialNumber)
 	_, err = serverTest.VA.CRLService.CalculateCRL(ctx, services.CalculateCRLInput{CAID: role.CAID})
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 }
@@ -119,15 +118,32 @@ func waitForCRLSettings(t *testing.T, caID string, ready func(*models.CRLSetting
 	return settings
 }
 
-// vaSchemaDB opens the VA schema of the test database, to set states the VA never reaches on its own.
-func vaSchemaDB(t *testing.T) *gorm.DB {
+// pointCRLSignerAt makes the CRL settings of a CA reference another signer certificate and its key directly in
+// the database, to set states the VA never reaches on its own.
+func pointCRLSignerAt(t *testing.T, ctx context.Context, caID, signerSerialNumber string) {
 	t.Helper()
-	cfg, err := cconfig.DecodeStruct[pconfig.PostgresPSEConfig](serverTest.Storage.Config.Config)
-	require.NoError(t, err)
-	db, err := postgres.CreatePostgresDBConnection(chelpers.SetupLogger(cconfig.Info, "Test", "VA"), cfg, postgres.VA_SCHEMA)
-	require.NoError(t, err)
-	pool, err := db.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pool.Close() })
-	return db
+	switch serverTest.Storage.Config.Provider {
+	case cconfig.Oracle:
+		cfg, err := cconfig.DecodeStruct[oracleconfig.Config](serverTest.Storage.Config.Config)
+		require.NoError(t, err)
+		db, err := oracle.OpenDatabase(ctx, cfg)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = db.Close() })
+		_, err = db.ExecContext(ctx, `UPDATE crl_settings s SET (signer_serial_number, signer_engine_id, signer_key_id) =
+			(SELECT c.serial_number, c.engine_id, c.key_id FROM certificates c WHERE c.serial_number = :1) WHERE s.ca_id = :2`,
+			signerSerialNumber, caID)
+		require.NoError(t, err)
+	case cconfig.Postgres, "":
+		cfg, err := cconfig.DecodeStruct[pconfig.PostgresPSEConfig](serverTest.Storage.Config.Config)
+		require.NoError(t, err)
+		db, err := postgres.CreatePostgresDBConnection(chelpers.SetupLogger(cconfig.Info, "Test", "VA"), cfg, postgres.VA_SCHEMA)
+		require.NoError(t, err)
+		pool, err := db.DB()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = pool.Close() })
+		require.NoError(t, db.Exec(`UPDATE crl_settings s SET signer_serial_number = c.serial_number, signer_engine_id = c.engine_id,
+			signer_key_id = c.key_id FROM ca.certificates c WHERE c.serial_number = ? AND s.ca_id = ?`, signerSerialNumber, caID).Error)
+	default:
+		t.Fatalf("unsupported storage provider for VA signer test: %s", serverTest.Storage.Config.Provider)
+	}
 }
