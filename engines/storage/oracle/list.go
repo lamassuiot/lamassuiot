@@ -13,7 +13,7 @@ import (
 
 // listRows shares deterministic offset and keyset pagination across repositories.
 // The input query contains repository-specific restrictions and the read alias.
-func listRows[T any](tx *gorm.DB, req storage.StorageListRequest[T], filterFields, sortFields map[string]struct{}, tables, aliases map[string]string, uniqueFields []string, lastKey func(T) []any) (string, error) {
+func listRows[T any](tx *gorm.DB, req storage.StorageListRequest[T], filterFields, sortFields map[string]struct{}, tables, aliases map[string]string, uniqueFields []string, lastKey func(T) []any, filterTransforms ...func([]resources.FilterOption) []resources.FilterOption) (string, error) {
 	page, err := pagination.New(req.QueryParams)
 	if err != nil {
 		return "", err
@@ -26,6 +26,9 @@ func listRows[T any](tx *gorm.DB, req storage.StorageListRequest[T], filterField
 		if name := aliases[filters[i].Field]; name != "" {
 			filters[i].Field = name
 		}
+	}
+	if len(filterTransforms) > 0 && filterTransforms[0] != nil {
+		filters = filterTransforms[0](filters)
 	}
 	tx, err = applyFiltersOn(tx, filters, filterFields, tables)
 	if err != nil {
