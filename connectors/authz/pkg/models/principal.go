@@ -13,7 +13,7 @@ type Principal struct {
 	Name        string     `gorm:"size:255;not null" json:"name"`
 	Description string     `gorm:"size:1024" json:"description,omitempty"`
 	Type        string     `gorm:"size:50;not null;index" json:"type"` // "oidc", "x509"
-	AuthConfig  AuthConfig `gorm:"type:jsonb" json:"auth_config"`
+	AuthConfig  AuthConfig `gorm:"type:json" json:"auth_config"`
 	Active      bool       `gorm:"default:true;not null" json:"active"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
@@ -27,7 +27,8 @@ type AuthConfig map[string]any
 
 // Value implements the driver.Valuer interface for GORM
 func (a AuthConfig) Value() (driver.Value, error) {
-	return json.Marshal(a)
+	data, err := json.Marshal(a)
+	return string(data), err
 }
 
 // Scan implements the sql.Scanner interface for GORM
@@ -37,12 +38,16 @@ func (a *AuthConfig) Scan(value any) error {
 		return nil
 	}
 
-	bytes, ok := value.([]byte)
-	if !ok {
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
 		return fmt.Errorf("failed to unmarshal AuthConfig value: %v", value)
 	}
-
-	return json.Unmarshal(bytes, a)
+	return json.Unmarshal(data, a)
 }
 
 // PrincipalPolicy represents the many-to-many association between principals and policies

@@ -21,6 +21,9 @@ type GormPolicyStore struct {
 
 // NewGormPolicyStore creates the store. Schema is managed by RunMigrations.
 func NewGormPolicyStore(db *gorm.DB) (*GormPolicyStore, error) {
+	if db.Dialector.Name() == "oracle" {
+		return &GormPolicyStore{db: db}, nil
+	}
 	q, err := postgres.TableQuery[models.PolicyRecord](nil, db, "policies", "id", models.PolicyRecord{})
 	if err != nil {
 		return nil, err
@@ -43,16 +46,34 @@ func (s *GormPolicyStore) Create(ctx context.Context, policy *models.Policy) err
 	if err != nil {
 		return err
 	}
-	_, err = s.querier.Insert(ctx, rec, rec.ID)
-	return err
+	if s.querier != nil {
+		_, err = s.querier.Insert(ctx, rec, rec.ID)
+		return err
+	}
+	return s.db.WithContext(ctx).Create(rec).Error
 }
 
 func (s *GormPolicyStore) Exists(ctx context.Context, id string) (bool, error) {
+	if s.querier == nil {
+		var count int64
+		err := s.db.WithContext(ctx).Model(&models.PolicyRecord{}).Where("id = ?", id).Count(&count).Error
+		return count > 0, err
+	}
 	found, _, err := s.querier.SelectExists(ctx, id, nil)
 	return found, err
 }
 
 func (s *GormPolicyStore) Get(ctx context.Context, id string) (*models.Policy, error) {
+	if s.querier == nil {
+		var rec models.PolicyRecord
+		if err := s.db.WithContext(ctx).First(&rec, "id = ?", id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return nil, fmt.Errorf("policy not found: %s", id)
+			}
+			return nil, fmt.Errorf("get policy %s: %w", id, err)
+		}
+		return rec.ToPolicy()
+	}
 	found, rec, err := s.querier.SelectExists(ctx, id, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get policy %s: %w", id, err)
@@ -75,8 +96,23 @@ func (s *GormPolicyStore) Update(ctx context.Context, policy *models.Policy) err
 	if err != nil {
 		return err
 	}
-	_, err = s.querier.Update(ctx, rec, rec.ID)
-	return err
+	if s.querier != nil {
+		_, err = s.querier.Update(ctx, rec, rec.ID)
+		return err
+	}
+	result := s.db.WithContext(ctx).Model(&models.PolicyRecord{}).Where("id = ?", rec.ID).Updates(map[string]any{
+		"name":        rec.Name,
+		"description": rec.Description,
+		"rules":       rec.Rules,
+		"http_rules":  rec.HTTPRules,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("policy not found: %s", rec.ID)
+	}
+	return nil
 }
 
 func (s *GormPolicyStore) Delete(ctx context.Context, id string) error {
@@ -87,11 +123,26 @@ func (s *GormPolicyStore) Delete(ctx context.Context, id string) error {
 	if !exists {
 		return fmt.Errorf("policy not found: %s", id)
 	}
-	return s.querier.Delete(ctx, id)
+	if s.querier != nil {
+		return s.querier.Delete(ctx, id)
+	}
+	return s.db.WithContext(ctx).Delete(&models.PolicyRecord{}, "id = ?", id).Error
 }
 
 func (s *GormPolicyStore) List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Policy, string, error) {
 	var policies []*models.Policy
+	if s.querier == nil {
+		bookmark, err := listAuthzRows(ctx, s.db, &models.PolicyRecord{}, "id", queryParams, nil, false, func(rec models.PolicyRecord) {
+			p, convErr := rec.ToPolicy()
+			if convErr == nil {
+				policies = append(policies, p)
+			}
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		return policies, bookmark, nil
+	}
 	nextBookmark, err := s.querier.SelectAll(ctx, queryParams, []postgres.GormExtraOps{}, false, func(rec models.PolicyRecord) {
 		p, convErr := rec.ToPolicy()
 		if convErr == nil {
@@ -111,7 +162,7 @@ func (s *GormPolicyStore) Search(ctx context.Context, query string) ([]*models.P
 	lower := strings.ToLower(query)
 	if err := s.db.WithContext(ctx).
 		Table("policies").
-		Where("LOWER(id) LIKE ? OR LOWER(name) ILIKE ? OR LOWER(description) ILIKE ?",
+		Where("LOWER(id) LIKE ? OR LOWER(name) LIKE ? OR LOWER(description) LIKE ?",
 			"%"+lower+"%", "%"+lower+"%", "%"+lower+"%").
 		Find(&records).Error; err != nil {
 		return nil, fmt.Errorf("search policies: %w", err)
