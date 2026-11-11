@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"regexp"
-	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -17,9 +16,7 @@ import (
 
 const kmsTableName = "kms_keys"
 
-// Oracle stores empty strings as NULL. Keep an explicit reversible encoding so
-// the NOT NULL name column can still represent the empty value used by Lamassu.
-const emptyKMSKeyName = "~lamassu-oracle-empty-kms-key-name~"
+var kmsEmptyNameNullFields = map[string]struct{}{"name": {}}
 
 type kmsStore struct{ db *gorm.DB }
 
@@ -52,10 +49,8 @@ func (s *kmsStore) countFiltered(ctx context.Context, engineID *string, params *
 		tx = tx.Where("engine_id = ?", *engineID)
 	}
 	if params != nil {
-		paramsCopy := *params
-		paramsCopy.Filters = encodeKMSNameFilters(params.Filters)
 		var err error
-		tx, err = applyFilters(tx, paramsCopy.Filters, kmsFilterFields)
+		tx, err = applyFilters(tx, params.Filters, kmsFilterFields, kmsEmptyNameNullFields)
 		if err != nil {
 			return -1, err
 		}
@@ -72,15 +67,8 @@ var kmsSortFields = map[string]struct{}{
 }
 
 func (s *kmsStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Key]) (string, error) {
-	apply := req.ApplyFunc
-	if apply != nil {
-		req.ApplyFunc = func(key models.Key) {
-			key.Name = decodeKMSKeyName(key.Name)
-			apply(key)
-		}
-	}
-	return listRows(s.db.WithContext(ctx).Table(kmsTableName), req, kmsFilterFields, kmsSortFields, nil, nil,
-		[]string{"key_id", "engine_id"}, func(key models.Key) []any { return []any{key.KeyID, key.EngineID} }, encodeKMSNameFilters)
+	return listRowsWithOptions(s.db.WithContext(ctx).Table(kmsTableName), req, kmsFilterFields, kmsSortFields, nil, nil,
+		[]string{"key_id", "engine_id"}, func(key models.Key) []any { return []any{key.KeyID, key.EngineID} }, kmsEmptyNameNullFields)
 }
 
 func (s *kmsStore) SelectExistsByKeyID(ctx context.Context, keyID, engineID string) (bool, *models.Key, error) {
@@ -92,16 +80,12 @@ func (s *kmsStore) SelectExistsByKeyID(ctx context.Context, keyID, engineID stri
 	if tx.RowsAffected == 0 {
 		return false, nil, nil
 	}
-	key.Name = decodeKMSKeyName(key.Name)
 	return true, &key, nil
 }
 
 func (s *kmsStore) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
 	var keys []*models.Key
 	err := s.db.WithContext(ctx).Table(kmsTableName).Where("key_id = ?", keyID).Order("engine_id").Find(&keys).Error
-	for _, key := range keys {
-		key.Name = decodeKMSKeyName(key.Name)
-	}
 	return keys, err
 }
 
@@ -114,13 +98,11 @@ func (s *kmsStore) SelectExistsByAlias(ctx context.Context, alias string) (bool,
 	if tx.RowsAffected == 0 {
 		return false, nil, nil
 	}
-	key.Name = decodeKMSKeyName(key.Name)
 	return true, &key, nil
 }
 
 func (s *kmsStore) Insert(ctx context.Context, key *models.Key) (*models.Key, error) {
 	persisted := *key
-	persisted.Name = encodeKMSKeyName(persisted.Name)
 	if err := s.db.WithContext(ctx).Table(kmsTableName).Create(&persisted).Error; err != nil {
 		return nil, err
 	}
@@ -129,7 +111,6 @@ func (s *kmsStore) Insert(ctx context.Context, key *models.Key) (*models.Key, er
 
 func (s *kmsStore) Update(ctx context.Context, key *models.Key) (*models.Key, error) {
 	persisted := *key
-	persisted.Name = encodeKMSKeyName(persisted.Name)
 	tx := s.db.WithContext(ctx).Table(kmsTableName).Where("key_id = ? AND engine_id = ?", key.KeyID, key.EngineID).Select("*").Updates(&persisted)
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -138,50 +119,6 @@ func (s *kmsStore) Update(ctx context.Context, key *models.Key) (*models.Key, er
 		return nil, gorm.ErrRecordNotFound
 	}
 	return key, nil
-}
-
-func encodeKMSKeyName(name string) string {
-	if name == "" {
-		return emptyKMSKeyName
-	}
-	if strings.HasPrefix(name, emptyKMSKeyName) {
-		return emptyKMSKeyName + name
-	}
-	return name
-}
-
-func decodeKMSKeyName(name string) string {
-	if name == emptyKMSKeyName {
-		return ""
-	}
-	if strings.HasPrefix(name, emptyKMSKeyName+emptyKMSKeyName) {
-		return strings.TrimPrefix(name, emptyKMSKeyName)
-	}
-	return name
-}
-
-func encodeKMSNameFilters(filters []resources.FilterOption) []resources.FilterOption {
-	filters = append([]resources.FilterOption(nil), filters...)
-	for i := range filters {
-		field := strings.ReplaceAll(filters[i].Field, ".", "_")
-		if field != "name" {
-			continue
-		}
-		switch filters[i].FilterOperation {
-		case resources.StringEqual, resources.StringEqualIgnoreCase, resources.EnumEqual,
-			resources.StringNotEqual, resources.StringNotEqualIgnoreCase, resources.EnumNotEqual:
-			filters[i].Value = encodeKMSKeyName(filters[i].Value)
-		case resources.StringIn, resources.StringInIgnoreCase, resources.StringNotIn, resources.StringNotInIgnoreCase, resources.EnumIn:
-			values := strings.Split(filters[i].Value, ",")
-			for j := range values {
-				if values[j] != "" {
-					values[j] = encodeKMSKeyName(values[j])
-				}
-			}
-			filters[i].Value = strings.Join(values, ",")
-		}
-	}
-	return filters
 }
 
 var certKeyConstraint = regexp.MustCompile(`(?i)\([^)]*\blamassu_cert_key_fk\)`)
