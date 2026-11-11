@@ -284,6 +284,10 @@ func CreateOracleAuthzDBConnection(log *logrus.Entry, cfg cconfig.PluggableStora
 		_ = pool.Close()
 		return nil, err
 	}
+	if err := db.Use(authzgorm.NewOracleAuthzGormPlugin()); err != nil {
+		_ = pool.Close()
+		return nil, fmt.Errorf("failed to register Oracle authz gorm plugin: %w", err)
+	}
 	db.Logger = NewGormLogger(log)
 	log.Infof("Connected to Oracle Authz database as %s", oracleCfg.Username)
 	return db, nil
