@@ -306,7 +306,7 @@ jobs:
           LAMASSU_TEST_POSTGRES_USERNAME: lamassu
           LAMASSU_TEST_POSTGRES_PASSWORD: LamassuTest123
         run: |
-          mapfile -t packages < <(go list ./... | grep -vE '/engines/storage/postgres(/|$)|/backend/pkg/migration/catokms$')
+          mapfile -t packages < <(go list ./... | grep -vE '/engines/storage/postgres(/|$)|/backend/pkg/migration/catokms$|/connectors/authz(/|$)')
           go tool gotestsum --format github-actions -- -count=1 -p 1 -timeout 900s -coverpkg=./... -coverprofile coverage.txt -covermode=atomic "${packages[@]}"
 
       - name: Upload coverage reports to Codecov
@@ -317,9 +317,42 @@ jobs:
           verbose: true
           flags: storage-oracle
 
+  test-oracle-authz:
+    name: Authz tests against Oracle
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '^1.27.3'
+          cache-dependency-path: "**/*.sum"
+      - name: Install Dependencies
+        run: go mod download
+      - name: Run Authz tests against Oracle
+        env:
+          LAMASSU_TEST_STORAGE_PROVIDER: oracle
+        run: |
+          mapfile -t packages < <(go list ./connectors/authz/...)
+          go tool gotestsum --format github-actions -- -count=1 -p 1 -timeout 900s -coverpkg=./... -coverprofile coverage.txt -covermode=atomic "${packages[@]}"
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: storage-oracle-authz
+
   codecov-notify:
     name: Codecov notifications
-    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest, test-oracle]
+    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest, test-oracle, test-oracle-authz]
     runs-on: ubuntu-latest
     permissions:
       contents: read
