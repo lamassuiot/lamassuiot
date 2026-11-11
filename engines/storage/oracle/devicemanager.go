@@ -17,7 +17,7 @@ var _ storage.DeviceEventsRepo = (*deviceEventStore)(nil)
 var devicePK = regexp.MustCompile(`(?i)\([^)]*\blamassu_device_pk\)`)
 var deviceEventPK = regexp.MustCompile(`(?i)\([^)]*\blamassu_device_event_pk\)`)
 var deviceFields = map[string]struct{}{"id": {}, "tags": {}, "status": {}, "icon": {}, "icon_color": {}, "creation_timestamp": {}, "metadata": {}, "dms_owner": {}, "identity_slot": {}, "extra_slots": {}}
-var deviceSortFields = map[string]struct{}{"id": {}, "status": {}, "icon_color": {}, "creation_timestamp": {}, "dms_owner": {}}
+var deviceSortFields = map[string]struct{}{"id": {}, "status": {}, "icon_color": {}, "creation_timestamp": {}, "dms_owner": {}, "metadata": {}}
 var deviceEventFields = map[string]struct{}{"id": {}, "device_id": {}, "event_ts": {}, "event_type": {}, "description": {}, "source": {}, "structured_fields": {}}
 var deviceEventSortFields = map[string]struct{}{"id": {}, "device_id": {}, "event_ts": {}, "event_type": {}, "source": {}}
 
