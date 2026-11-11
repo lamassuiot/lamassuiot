@@ -19,16 +19,19 @@ type authzToken struct {
 type authzEntity struct{ schema, table, primary, view string }
 
 var authzEntities = map[string]authzEntity{
-	"events":            {"alerts", "events", "event_type", ""},
-	"subscriptions":     {"alerts", "subscriptions", "id", ""},
-	"ca_certificates":   {"ca", "ca_certificates", "id", ""},
-	"certificates":      {"ca", "certificates", "serial_number", "certificates_view"},
-	"issuance_profiles": {"ca", "issuance_profiles", "id", ""},
-	"device_groups":     {"devicemanager", "device_groups", "id", ""},
-	"devices":           {"devicemanager", "devices", "id", ""},
-	"dms":               {"dmsmanager", "dms", "id", ""},
-	"kms_keys":          {"kms", "kms_keys", "key_id", ""},
-	"va_role":           {"va", "va_role", "ca_ski", ""},
+	"principals":         {"", "principals", "id", ""},
+	"policies":           {"", "policies", "id", ""},
+	"principal_policies": {"", "principal_policies", "id", ""},
+	"events":             {"alerts", "events", "event_type", ""},
+	"subscriptions":      {"alerts", "subscriptions", "id", ""},
+	"ca_certificates":    {"ca", "ca_certificates", "id", ""},
+	"certificates":       {"ca", "certificates", "serial_number", "certificates_view"},
+	"issuance_profiles":  {"ca", "issuance_profiles", "id", ""},
+	"device_groups":      {"devicemanager", "device_groups", "id", ""},
+	"devices":            {"devicemanager", "devices", "id", ""},
+	"dms":                {"dmsmanager", "dms", "id", ""},
+	"kms_keys":           {"kms", "kms_keys", "key_id", ""},
+	"va_role":            {"va", "va_role", "ca_ski", ""},
 }
 
 func authzTokens(input string) ([]authzToken, error) {

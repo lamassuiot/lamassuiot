@@ -10,9 +10,35 @@ import (
 
 	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/dialect"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+func TestOracleAuthzGormPluginReturnsNoPrincipalsWithoutGrants(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NewOracleAuthzGormPlugin().Initialize(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE principals (id TEXT PRIMARY KEY, auth_config TEXT)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO principals (id, auth_config) VALUES (?, ?)`, "registered", `{"secret":"identity-material"}`).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, `SELECT * FROM principals WHERE 1 = 0`)
+	var principals []map[string]any
+	if err := db.WithContext(ctx).Table("principals").Find(&principals).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(principals) != 0 {
+		t.Fatalf("principal without grants received %d principals: %v", len(principals), principals)
+	}
+}
 
 func TestAuthorizationParsing(t *testing.T) {
 	for _, tc := range []struct{ target, query string }{
