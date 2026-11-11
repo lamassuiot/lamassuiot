@@ -13,8 +13,8 @@ import (
 
 // applyFilters accepts only fields explicitly exposed by a repository. Values
 // are always bound, including those restored from a client bookmark.
-func applyFilters(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}) (*gorm.DB, error) {
-	return applyFiltersOn(db, filters, allowed, nil)
+func applyFilters(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}, nullAsEmptyFields ...map[string]struct{}) (*gorm.DB, error) {
+	return applyFiltersOn(db, filters, allowed, nil, nullAsEmptyFields...)
 }
 
 // Oracle stores booleans as NUMBER(1), so textual values from the shared query
@@ -37,7 +37,15 @@ func parseOracleBooleanFilter(field, value string) (int64, error) {
 	}
 }
 
-func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}, tables map[string]string) (*gorm.DB, error) {
+func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}, tables map[string]string, nullAsEmptyFields ...map[string]struct{}) (*gorm.DB, error) {
+	fieldUsesNullForEmpty := func(field string) bool {
+		for _, fields := range nullAsEmptyFields {
+			if _, ok := fields[field]; ok {
+				return true
+			}
+		}
+		return false
+	}
 	for _, filter := range filters {
 		field := strings.ReplaceAll(filter.Field, ".", "_")
 		if _, ok := allowed[field]; !ok {
@@ -50,10 +58,15 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 		col := clause.Column{Table: table, Name: field}
 		value := filter.Value
 		_, isBooleanField := oracleBooleanFilterFields[field]
+		nullAsEmpty := fieldUsesNullForEmpty(field) && !isBooleanField
 		switch filter.FilterOperation {
 		case resources.UnspecifiedFilter:
 			continue
 		case resources.StringEqual, resources.EnumEqual:
+			if nullAsEmpty && value == "" {
+				db = db.Where("? IS NULL", col)
+				continue
+			}
 			var comparison any = value
 			if isBooleanField {
 				booleanValue, err := parseOracleBooleanFilter(field, value)
@@ -64,6 +77,14 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 			}
 			db = db.Where("? = ?", col, comparison)
 		case resources.StringNotEqual, resources.EnumNotEqual:
+			if nullAsEmpty {
+				if value == "" {
+					db = db.Where("? IS NOT NULL", col)
+				} else {
+					db = db.Where("(? <> ? OR ? IS NULL)", col, value, col)
+				}
+				continue
+			}
 			var comparison any = value
 			if isBooleanField {
 				booleanValue, err := parseOracleBooleanFilter(field, value)
@@ -91,6 +112,20 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 					return nil, fmt.Errorf("string containment filter is unsupported for boolean field %s", field)
 				}
 			}
+			if nullAsEmpty && (filter.FilterOperation == resources.StringEqualIgnoreCase || filter.FilterOperation == resources.StringNotEqualIgnoreCase) {
+				if value == "" {
+					op := "IS NULL"
+					if filter.FilterOperation == resources.StringNotEqualIgnoreCase {
+						op = "IS NOT NULL"
+					}
+					db = db.Where("? "+op, col)
+				} else if filter.FilterOperation == resources.StringNotEqualIgnoreCase {
+					db = db.Where("(LOWER(?) <> ? OR ? IS NULL)", col, strings.ToLower(value), col)
+				} else {
+					db = db.Where("LOWER(?) = ?", col, strings.ToLower(value))
+				}
+				continue
+			}
 			pattern := escapeLike(filter.Value)
 			op, lhs := "LIKE", "?"
 			switch filter.FilterOperation {
@@ -109,6 +144,7 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 			db = db.Where(lhs+" "+op+` ? ESCAPE '\'`, col, pattern)
 		case resources.StringIn, resources.StringInIgnoreCase, resources.StringNotIn, resources.StringNotInIgnoreCase, resources.EnumIn:
 			var values []any
+			hasEmptyValue := false
 			for _, item := range strings.Split(filter.Value, ",") {
 				if item != "" {
 					if isBooleanField {
@@ -120,9 +156,18 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 					} else {
 						values = append(values, item)
 					}
+				} else if nullAsEmpty {
+					hasEmptyValue = true
 				}
 			}
 			if len(values) == 0 {
+				if hasEmptyValue {
+					op := "IS NULL"
+					if filter.FilterOperation == resources.StringNotIn || filter.FilterOperation == resources.StringNotInIgnoreCase {
+						op = "IS NOT NULL"
+					}
+					db = db.Where("? "+op, col)
+				}
 				continue
 			}
 			lhs, op := "?", "IN"
@@ -137,7 +182,17 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 			if filter.FilterOperation == resources.StringNotIn || filter.FilterOperation == resources.StringNotInIgnoreCase {
 				op = "NOT IN"
 			}
-			db = db.Where(lhs+" "+op+" ?", col, values)
+			if nullAsEmpty && (op == "IN" && hasEmptyValue) {
+				db = db.Where("("+lhs+" IN ? OR ? IS NULL)", col, values, col)
+			} else if nullAsEmpty && op == "NOT IN" {
+				if hasEmptyValue {
+					db = db.Where("("+lhs+" NOT IN ? AND ? IS NOT NULL)", col, values, col)
+				} else {
+					db = db.Where("("+lhs+" NOT IN ? OR ? IS NULL)", col, values, col)
+				}
+			} else {
+				db = db.Where(lhs+" "+op+" ?", col, values)
+			}
 		case resources.NumberEqual, resources.NumberNotEqual, resources.NumberLessThan, resources.NumberLessOrEqualThan, resources.NumberGreaterThan, resources.NumberGreaterOrEqualThan:
 			// The KMS numeric fields are integers. Do not round a 64-bit integer
 			// through float64; decimal filters require a separate exact binding.

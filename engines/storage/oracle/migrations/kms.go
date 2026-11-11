@@ -13,7 +13,7 @@ func KMSFoundation() Migration {
 			`CREATE TABLE kms_keys (
 				key_id VARCHAR2(512 CHAR) NOT NULL,
 				engine_id VARCHAR2(512 CHAR) NOT NULL,
-				name VARCHAR2(1000 CHAR) NOT NULL,
+				name VARCHAR2(1000 CHAR),
 				aliases JSON DEFAULT JSON('[]'),
 				has_private_key NUMBER(1) DEFAULT 1 CHECK (has_private_key IN (0, 1)),
 				algorithm VARCHAR2(255 CHAR) NOT NULL,
