@@ -311,7 +311,8 @@ components:
           description: |
             Whether to automatically regenerate the CRL when a certificate is revoked.
             If true, a new CRL is generated immediately upon certificate revocation.
-            If false, CRL is only regenerated based on the refresh_interval.
+            If false, revocations do not trigger regeneration: the CRL is still
+            regenerated before it expires and, unless it is "0", on refresh_interval.
           example: true
 
     VARoleUpdate:

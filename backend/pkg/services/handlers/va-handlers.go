@@ -75,7 +75,7 @@ func reissueCAHandler(ctx context.Context, event *event.Event, crlSvc services.C
 
 		lMessaging.Infof("VA role %s CRL signer moved from certificate %s to reissued certificate %s", ski, prevSN, newSN)
 	default:
-		lMessaging.Infof("VA role %s is signed by certificate %s, not by the reissued certificate %s of CA %s: keeping its CRL signer", ski, role.CRLOptions.SignerCertificateSerialNumber, prevSN, ca.Updated.ID)
+		lMessaging.Infof("VA role %s is signed by certificate %s, not by the superseded certificate %s of CA %s: keeping its CRL signer", ski, role.CRLOptions.SignerCertificateSerialNumber, prevSN, ca.Updated.ID)
 		return nil
 	}
 
