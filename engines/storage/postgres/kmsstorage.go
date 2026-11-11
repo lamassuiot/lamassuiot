@@ -64,18 +64,18 @@ func (db *PostgresKMSStore) SelectAll(ctx context.Context, req storage.StorageLi
 // engines at once. DBQuerier addresses rows by a single column, so the composite-key
 // operations below build their own WHERE clauses instead of going through it.
 func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, keyID, engineID string) (bool, *models.Key, error) {
-	q, _, _, err := db.tenantTable(ctx)
+	var elem models.Key
+	var rowsAffected int64
+	err := db.tenantTable(ctx, func(q *gorm.DB, _ string, _ bool) error {
+		result := q.Where("key_id = ? AND engine_id = ?", keyID, engineID).Limit(1).Find(&elem)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
 	if err != nil {
 		return false, nil, err
 	}
 
-	var elem models.Key
-	tx := q.Where("key_id = ? AND engine_id = ?", keyID, engineID).Limit(1).Find(&elem)
-	if tx.Error != nil {
-		return false, nil, tx.Error
-	}
-
-	if tx.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return false, nil, nil
 	}
 
@@ -83,15 +83,12 @@ func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, keyID, engi
 }
 
 func (db *PostgresKMSStore) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
-	q, _, _, err := db.tenantTable(ctx)
+	var keys []*models.Key
+	err := db.tenantTable(ctx, func(q *gorm.DB, _ string, _ bool) error {
+		return q.Where("key_id = ?", keyID).Order("engine_id").Find(&keys).Error
+	})
 	if err != nil {
 		return nil, err
-	}
-
-	var keys []*models.Key
-	tx := q.Where("key_id = ?", keyID).Order("engine_id").Find(&keys)
-	if tx.Error != nil {
-		return nil, tx.Error
 	}
 
 	return keys, nil
@@ -103,18 +100,18 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 }
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
-	q, _, _, err := db.tenantTable(ctx)
+	var elem models.Key
+	var rowsAffected int64
+	err := db.tenantTable(ctx, func(q *gorm.DB, _ string, _ bool) error {
+		result := q.Where("aliases @> ?::jsonb", jsonStringArray(alias)).Limit(1).Find(&elem)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
 	if err != nil {
 		return false, nil, err
 	}
 
-	var elem models.Key
-	tx := q.Where("aliases @> ?::jsonb", jsonStringArray(alias)).Limit(1).Find(&elem)
-	if tx.Error != nil {
-		return false, nil, tx.Error
-	}
-
-	if tx.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return false, nil, nil // No record found, but no error
 	}
 
@@ -126,21 +123,21 @@ func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	q, tenantID, scoped, err := db.tenantTable(ctx)
+	var rowsAffected int64
+	err := db.tenantTable(ctx, func(q *gorm.DB, tenantID string, scoped bool) error {
+		if scoped {
+			setTenantID(kmsKey, tenantID)
+		}
+		result := q.Session(&gorm.Session{FullSaveAssociations: true}).
+			Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Select("*").Updates(kmsKey)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
 	if err != nil {
 		return nil, err
 	}
-	if scoped {
-		setTenantID(kmsKey, tenantID)
-	}
 
-	tx := q.Session(&gorm.Session{FullSaveAssociations: true}).
-		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Select("*").Updates(kmsKey)
-	if tx.Error != nil {
-		return nil, tx.Error
-	}
-
-	if tx.RowsAffected != 1 {
+	if rowsAffected != 1 {
 		return nil, gorm.ErrRecordNotFound
 	}
 
@@ -148,33 +145,34 @@ func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) error {
-	q, _, _, err := db.tenantTable(ctx)
+	var rowsAffected int64
+	err := db.tenantTable(ctx, func(q *gorm.DB, _ string, _ bool) error {
+		result := q.Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
 	if err != nil {
 		return err
 	}
 
-	tx := q.Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
-	if tx.Error != nil {
-		return tx.Error
-	}
-
-	if tx.RowsAffected != 1 {
+	if rowsAffected != 1 {
 		return gorm.ErrRecordNotFound
 	}
 
 	return nil
 }
 
-func (db *PostgresKMSStore) tenantTable(ctx context.Context) (*gorm.DB, string, bool, error) {
+func (db *PostgresKMSStore) tenantTable(ctx context.Context, fn func(q *gorm.DB, tenantID string, scoped bool) error) error {
 	tenantID, scoped, err := db.querier.tenantScope(ctx)
 	if err != nil {
-		return nil, "", false, err
+		return err
 	}
 
-	q := db.querier.Table(kmsTableName).WithContext(ctx)
-	if scoped {
-		q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
-	}
-
-	return q, tenantID, scoped, nil
+	return db.querier.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		q := tx.Table(kmsTableName)
+		if scoped {
+			q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
+		}
+		return fn(q, tenantID, scoped)
+	})
 }

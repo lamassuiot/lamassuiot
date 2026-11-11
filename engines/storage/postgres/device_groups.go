@@ -79,12 +79,14 @@ func (db *PostgresDeviceGroupsStore) SelectAncestors(ctx context.Context, id str
 }
 
 func (db *PostgresDeviceGroupsStore) withTenantScope(ctx context.Context, fn func(tx *gorm.DB, tenantID string) error) error {
-	tenantID, _, err := db.querier.tenantScope(ctx)
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
 	if err != nil {
 		return err
 	}
 
-	return fn(db.db.WithContext(ctx), tenantID)
+	return db.querier.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		return fn(tx, tenantID)
+	})
 }
 
 // Insert creates a new device group with validation to prevent circular references

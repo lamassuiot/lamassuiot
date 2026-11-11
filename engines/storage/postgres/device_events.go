@@ -44,10 +44,12 @@ func (db *PostgresDeviceEventsStore) DeleteByDeviceID(ctx context.Context, devic
 		return err
 	}
 
-	q := db.db.WithContext(ctx).Where("device_id = ?", deviceID)
-	if scoped {
-		q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
-	}
+	return db.querier.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		q := tx.Where("device_id = ?", deviceID)
+		if scoped {
+			q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
+		}
 
-	return q.Delete(&models.DeviceEventRecord{}).Error
+		return q.Delete(&models.DeviceEventRecord{}).Error
+	})
 }
