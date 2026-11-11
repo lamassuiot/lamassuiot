@@ -4,9 +4,19 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	log "github.com/sirupsen/logrus"
 )
+
+func TestOracleBuilderRegisteredAndValidatesConfig(t *testing.T) {
+	if storage.GetEngineBuilder(config.Oracle) == nil {
+		t.Fatal("oracle storage builder is not registered")
+	}
+	if _, err := BuildStorageEngine(log.WithField("test", "oracle"), config.PluggableStorageEngine{Provider: config.Oracle, Config: map[string]any{}}); err == nil {
+		t.Fatal("oracle builder accepted missing connection configuration")
+	}
+}
 
 func TestBuildStorageEnginePostgres(t *testing.T) {
 	logger := log.WithField("test", "BuildStorageEngine_Postgres")

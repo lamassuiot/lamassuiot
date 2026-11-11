@@ -280,6 +280,23 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 
 }
 
+func PrepareOracleForTest() (*TestStorageEngineConfig, error) {
+	oracleSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Oracle)
+	if err := oracleSubsystem.Prepare(nil); err != nil {
+		return nil, err
+	}
+	backend, err := oracleSubsystem.Run(false)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TestStorageEngineConfig{
+		Config:     backend.Config.(cconfig.PluggableStorageEngine),
+		BeforeEach: backend.BeforeEach,
+		AfterSuite: backend.AfterSuite,
+	}, nil
+}
+
 func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig {
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
