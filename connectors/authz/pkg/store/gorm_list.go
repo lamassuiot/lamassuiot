@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,20 +64,40 @@ func listAuthzRows[T any](ctx context.Context, db *gorm.DB, model *T, primaryKey
 		}}
 	}
 	if exhaustive {
-		var offset = page.Offset
+		if base.Statement.Schema == nil {
+			if err := base.Statement.Parse(model); err != nil {
+				return "", err
+			}
+		}
+		primaryField := base.Statement.Schema.LookUpField(primary.Name)
+		if primaryField == nil {
+			return "", fmt.Errorf("Authz primary key column %q is not mapped to a model field", primary.Name)
+		}
+		keysetOrder := clause.OrderBy{Columns: []clause.OrderByColumn{{Column: primary}}}
+		offset := page.Offset
+		var lastKey any
 		for {
 			var batch []T
-			result := base.Session(&gorm.Session{}).Clauses(order).Offset(offset).Limit(page.Limit).Find(&batch)
+			query := base.Session(&gorm.Session{}).Clauses(keysetOrder).Limit(page.Limit)
+			if lastKey == nil {
+				query = query.Offset(offset)
+			} else {
+				query = query.Where(clause.Gt{Column: primary, Value: lastKey})
+			}
+			result := query.Find(&batch)
 			if result.Error != nil {
 				return "", result.Error
 			}
+			if len(batch) == 0 {
+				return "", nil
+			}
+			lastKey, _ = primaryField.ValueOf(ctx, reflect.ValueOf(batch[len(batch)-1]))
 			for _, row := range batch {
 				apply(row)
 			}
 			if len(batch) < page.Limit {
 				return "", nil
 			}
-			offset += len(batch)
 		}
 	}
 
