@@ -354,7 +354,7 @@ jobs:
 
   test-oracle-authz:
     name: Authz tests against Oracle
-    needs: setup
+    needs: [setup, test-oracle]
     runs-on: ubuntu-latest
     permissions:
       contents: read
