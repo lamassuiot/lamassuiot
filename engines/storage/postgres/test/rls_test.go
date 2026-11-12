@@ -336,3 +336,129 @@ func TestCATenantRLSPreventsCrossTenantAccess(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestDeviceGroupTenantRLSPreventsCrossTenantAccess(t *testing.T) {
+	cfg, suite := BeforeSuite([]string{postgresstorage.DEVICE_SCHEMA}, false)
+	defer suite.AfterSuite()
+
+	require.NoError(t, postgresstorage.MigrateDatabase(helpers.SetupLogger(config.Info, "PostgreSQL", "Device group RLS test"), cfg, postgresstorage.DEVICE_SCHEMA))
+
+	adminDB := suite.DB[postgresstorage.DEVICE_SCHEMA]
+	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'device-group-rls-test'").Error)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.DEVICE_SCHEMA, "device-group-rls-test")
+
+	const (
+		rootA  = "00000000-0000-0000-0000-0000000000a1"
+		childA = "00000000-0000-0000-0000-0000000000a2"
+		rootB  = "00000000-0000-0000-0000-0000000000b1"
+	)
+
+	require.NoError(t, adminDB.Exec("INSERT INTO device_groups (id, name, parent_id, tenant_id) VALUES (?, ?, NULL, ?), (?, ?, ?, ?), (?, ?, NULL, ?)",
+		rootA, "Factory", "tenant-a", childA, "Line 1", rootA, "tenant-a", rootB, "Factory", "tenant-b").Error)
+
+	countGroups := func(ctx context.Context) int64 {
+		var count int64
+		txErr := postgresstorage.WithTenantTransaction(ctx, appDB, func(tx *gorm.DB) error {
+			return tx.Raw("SELECT count(*) FROM device_groups").Scan(&count).Error
+		})
+		require.NoError(t, txErr)
+		return count
+	}
+
+	require.Equal(t, int64(2), countGroups(tenantTestContext("tenant-a", models.TenantActive)))
+	require.Equal(t, int64(1), countGroups(tenantTestContext("tenant-b", models.TenantActive)))
+
+	ancestorsOf := func(ctx context.Context, groupID string) []string {
+		var names []string
+		txErr := postgresstorage.WithTenantTransaction(ctx, appDB, func(tx *gorm.DB) error {
+			return tx.Raw(`
+				WITH RECURSIVE ancestor_chain AS (
+					SELECT id, tenant_id, name, parent_id FROM device_groups WHERE id = ?
+					UNION ALL
+					SELECT dg.id, dg.tenant_id, dg.name, dg.parent_id FROM device_groups dg
+					INNER JOIN ancestor_chain ac ON dg.id = ac.parent_id AND dg.tenant_id = ac.tenant_id
+				)
+				SELECT name FROM ancestor_chain
+			`, groupID).Scan(&names).Error
+		})
+		require.NoError(t, txErr)
+		return names
+	}
+
+	require.ElementsMatch(t, []string{"Factory", "Line 1"}, ancestorsOf(tenantTestContext("tenant-a", models.TenantActive), childA))
+	require.Empty(t, ancestorsOf(tenantTestContext("tenant-b", models.TenantActive), childA))
+
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+		return tx.Exec("INSERT INTO device_groups (name, tenant_id) VALUES (?, ?)", "Cross tenant", "tenant-b").Error
+	})
+	require.Error(t, err)
+
+	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+		return tx.Exec("INSERT INTO device_groups (name, parent_id, tenant_id) VALUES (?, ?, ?)", "Line under B", rootB, "tenant-a").Error
+	})
+	require.Error(t, err)
+
+	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+		result := tx.Exec("DELETE FROM device_groups WHERE id = ?", rootB)
+		require.NoError(t, result.Error)
+		require.Zero(t, result.RowsAffected)
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestDeviceEventTenantRLSPreventsCrossTenantAccess(t *testing.T) {
+	cfg, suite := BeforeSuite([]string{postgresstorage.DEVICE_SCHEMA}, false)
+	defer suite.AfterSuite()
+
+	require.NoError(t, postgresstorage.MigrateDatabase(helpers.SetupLogger(config.Info, "PostgreSQL", "Device event RLS test"), cfg, postgresstorage.DEVICE_SCHEMA))
+
+	adminDB := suite.DB[postgresstorage.DEVICE_SCHEMA]
+	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'device-event-rls-test'").Error)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.DEVICE_SCHEMA, "device-event-rls-test")
+
+	require.NoError(t, adminDB.Exec("INSERT INTO devices (id, tenant_id) VALUES (?, ?), (?, ?)",
+		"device-a", "tenant-a", "device-b", "tenant-b").Error)
+	require.NoError(t, adminDB.Exec("INSERT INTO device_events (id, device_id, event_ts, event_type, tenant_id) VALUES (?, ?, NOW(), ?, ?), (?, ?, NOW(), ?, ?)",
+		"event-a", "device-a", "created", "tenant-a", "event-b", "device-b", "created", "tenant-b").Error)
+
+	countEvents := func(ctx context.Context) int64 {
+		var count int64
+		txErr := postgresstorage.WithTenantTransaction(ctx, appDB, func(tx *gorm.DB) error {
+			return tx.Raw("SELECT count(*) FROM device_events").Scan(&count).Error
+		})
+		require.NoError(t, txErr)
+		return count
+	}
+
+	require.Equal(t, int64(1), countEvents(tenantTestContext("tenant-a", models.TenantActive)))
+	require.Equal(t, int64(1), countEvents(tenantTestContext("tenant-b", models.TenantActive)))
+
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+		return tx.Exec("INSERT INTO device_events (id, device_id, event_ts, event_type, tenant_id) VALUES (?, ?, NOW(), ?, ?)",
+			"event-cross", "device-b", "created", "tenant-b").Error
+	})
+	require.Error(t, err)
+
+	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+		return tx.Exec("INSERT INTO device_events (id, device_id, event_ts, event_type, tenant_id) VALUES (?, ?, NOW(), ?, ?)",
+			"event-a-on-b", "device-b", "created", "tenant-a").Error
+	})
+	require.Error(t, err)
+
+	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+		result := tx.Exec("DELETE FROM device_events WHERE device_id = ?", "device-b")
+		require.NoError(t, result.Error)
+		require.Zero(t, result.RowsAffected)
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-b", models.TenantActive), appDB, func(tx *gorm.DB) error {
+		result := tx.Exec("DELETE FROM device_events WHERE device_id = ?", "device-b")
+		require.NoError(t, result.Error)
+		require.Equal(t, int64(1), result.RowsAffected)
+		return nil
+	})
+	require.NoError(t, err)
+}
