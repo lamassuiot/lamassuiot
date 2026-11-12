@@ -4,9 +4,9 @@ name: "Gosec Security Scan"
 # The scheduled workflow runs every at 00:00 on Sunday UTC time.
 on:
   push:
-   branches: ["main"]
+   branches: ["main", "v[0-9]*", "release/v*"]
   pull_request:
-   branches: ["main"]
+   branches: ["main", "v[0-9]*", "release/v*"]
   schedule:
   - cron: '0 0 * * 0'
 
