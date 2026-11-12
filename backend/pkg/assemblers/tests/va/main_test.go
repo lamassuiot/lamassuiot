@@ -169,7 +169,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	var crl *x509.RevocationList
 	// Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
-		// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
+		// By Default, CRL settings are created for the CA automatically setting the CRL to be regenerated on revoke
 		// First get v1 CRL and check that it has 0 entries
 		crl, err = vaTestServer.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			ID:             oneCrt.IssuerCAMetadata.ID,
