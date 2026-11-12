@@ -329,7 +329,7 @@ func TestSelectAll_UniqueOrder(t *testing.T) {
 			`ORDER BY "name" DESC,"filter_test_rows"."id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
 		{"json path sort", nil,
 			&resources.QueryParameters{Sort: resources.SortOptions{SortField: "metadata", JsonPathExpr: "$.a"}},
-			`END ASC NULLS FIRST, "filter_test_rows"."id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
+			`END COLLATE "C" ASC NULLS FIRST, "filter_test_rows"."id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
 		{"composite unique columns", []string{"key_id", "engine_id"}, nil,
 			`ORDER BY "filter_test_rows"."key_id","filter_test_rows"."engine_id" LIMIT ` + strconv.Itoa(resources.DefaultPageSize+1)},
 	}
