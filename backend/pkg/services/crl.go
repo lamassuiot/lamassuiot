@@ -128,10 +128,24 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 		// CRLs published before the settings moved to the CA ID stay where they were written.
 		crlPem, err = svc.bucket.ReadAll(ctx, crlObjectKey(*settings.LegacySKI, versionStr))
 	}
+
+	// If the requested version is 0 (latest) and it is not found, try the previous version.
+	// This can happen if a CRL was generated but not published yet, and the request is made before
+	// the publish operation completes. This is a temporary workaround until the CRL generation and
+	// publishing process is improved.
+	if gcerrors.Code(err) == gcerrors.NotFound && input.CRLVersion.Sign() == 0 && settings.LatestCRL.Version.Int != nil && settings.LatestCRL.Version.Cmp(big.NewInt(1)) > 0 {
+		versionStr = new(big.Int).Sub(settings.LatestCRL.Version.Int, big.NewInt(1)).String()
+		crlPem, err = svc.bucket.ReadAll(ctx, crlObjectKey(settings.CAID, versionStr))
+		if gcerrors.Code(err) == gcerrors.NotFound && settings.LegacySKI != nil {
+			crlPem, err = svc.bucket.ReadAll(ctx, crlObjectKey(*settings.LegacySKI, versionStr))
+		}
+	}
+
 	if gcerrors.Code(err) == gcerrors.NotFound {
 		lFunc.Errorf("CRL %s of CA %s is not published", versionStr, settings.CAID)
 		return nil, errs.ErrCRLNotFound
 	}
+
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading CRL: %s", err)
 		return nil, err
@@ -329,6 +343,9 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	err = svc.bucket.Copy(ctx, finalKey, stagedKey, nil)
 	if err != nil {
 		lFunc.Errorf("something went wrong while publishing CRL: %s", err)
+		if rollbackErr := svc.vaRepo.UpdateLatestCRL(context.WithoutCancel(ctx), crlCA.ID, crl.Number, settings.LatestCRL); rollbackErr != nil {
+			lFunc.Errorf("could not restore previous CRL settings: %s", rollbackErr)
+		}
 		return nil, err
 	}
 
