@@ -13,6 +13,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
 	oracleconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/config"
 	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
+	mobycontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/ory/dockertest/v4"
 )
@@ -33,6 +34,9 @@ type OracleSuite struct {
 func BeforeSuite(exposeAsStandardPort bool) (oracleconfig.Config, *OracleSuite, error) {
 	options := []dockertest.RunOption{
 		dockertest.WithTag(oracleImageTag),
+		dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
+			cfg.ExposedPorts = network.PortSet{network.MustParsePort("1521/tcp"): {}}
+		}),
 		dockertest.WithEnv([]string{
 			"ORACLE_PASSWORD=" + oraclePassword,
 			"APP_USER=" + oracleUser,
@@ -54,11 +58,12 @@ func BeforeSuite(exposeAsStandardPort bool) (oracleconfig.Config, *OracleSuite, 
 	if err != nil {
 		return oracleconfig.Config{}, nil, err
 	}
-	connectString := fmt.Sprintf("localhost:%s/FREEPDB1", container.GetPort("1521/tcp"))
-	if strings.Contains(connectString, "localhost:/") {
+	port, err := dockerrunner.WaitForPublishedPort(context.Background(), dockerHost.Client(), container.ID(), "1521/tcp")
+	if err != nil {
 		_ = cleanup()
-		return oracleconfig.Config{}, nil, fmt.Errorf("Oracle test container did not publish port 1521")
+		return oracleconfig.Config{}, nil, fmt.Errorf("publish Oracle test port: %w", err)
 	}
+	connectString := fmt.Sprintf("localhost:%s/FREEPDB1", port)
 	cfg := oracleconfig.Config{
 		ConnectString: connectString,
 		Username:      oracleUser,

@@ -12,6 +12,7 @@ import (
 
 	oraclestorage "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
 	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
+	mobycontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/ory/dockertest/v4"
 	"gorm.io/driver/postgres"
@@ -206,6 +207,9 @@ func CleanupOracleTestDatabase() error {
 func startOracleTestDatabase() (*DatabaseContainer, error) {
 	cleanup, resource, pool, err := dockerrunner.RunDocker("gvenzl/oracle-free",
 		dockertest.WithTag(oracleImageTag),
+		dockertest.WithContainerConfig(func(cfg *mobycontainer.Config) {
+			cfg.ExposedPorts = network.PortSet{network.MustParsePort("1521/tcp"): {}}
+		}),
 		dockertest.WithEnv([]string{
 			"ORACLE_PASSWORD=" + oraclePassword,
 			"APP_USER=" + oracleUser,
@@ -222,7 +226,12 @@ func startOracleTestDatabase() (*DatabaseContainer, error) {
 		return nil, fmt.Errorf("start Oracle Authz test database: %w", err)
 	}
 	container := &DatabaseContainer{cleanup: cleanup, closeDB: true}
-	connectString := fmt.Sprintf("localhost:%s/FREEPDB1", resource.GetPort("1521/tcp"))
+	port, err := dockerrunner.WaitForPublishedPort(context.Background(), pool.Client(), resource.ID(), "1521/tcp")
+	if err != nil {
+		_ = container.Cleanup()
+		return nil, fmt.Errorf("publish Oracle Authz test port: %w", err)
+	}
+	connectString := fmt.Sprintf("localhost:%s/FREEPDB1", port)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 	err = pool.Retry(ctx, 3*time.Minute, func() error {

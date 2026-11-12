@@ -730,11 +730,13 @@ func buildJsonPathOrderExpr(field, jsonPath, sortMode string) (clause.Expression
 	// 1. Numbers - pad for proper text sorting
 	// 2. Dates/timestamps - cast to timestamp for proper chronological sorting
 	// 3. Text - use as-is
+	// Use binary collation so JSON sort order matches Oracle regardless of
+	// the PostgreSQL database's locale.
 	sql := "CASE " +
 		"WHEN jsonb_typeof(? #> ?::text[]) = 'number' THEN lpad(((? #> ?::text[])::numeric)::text, 20, '0') " +
 		"WHEN (? #>> ?::text[]) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN to_char(((? #>> ?::text[]))::timestamp, 'YYYY-MM-DD HH24:MI:SS.US') " +
 		"ELSE (? #>> ?::text[]) " +
-		"END"
+		`END COLLATE "C"`
 	if strings.EqualFold(sortMode, "desc") {
 		sql += " DESC NULLS LAST"
 	} else {
