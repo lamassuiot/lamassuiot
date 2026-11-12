@@ -37,6 +37,27 @@ type memCRLSettingsRepo struct {
 	conflict bool // makes UpdateLatestCRL fail, as if another writer had won
 }
 
+type removeStagedAfterClaimRepo struct {
+	*memCRLSettingsRepo
+	bucket *blob.Bucket
+}
+
+func (r *removeStagedAfterClaimRepo) UpdateLatestCRL(ctx context.Context, id string, expected *big.Int, latest models.LatestCRLMeta) error {
+	err := r.memCRLSettingsRepo.UpdateLatestCRL(ctx, id, expected, latest)
+	if err == nil {
+		files, _, listErr := r.bucket.ListPage(ctx, blob.FirstPageToken, 10, &blob.ListOptions{Prefix: crlObjectKey(id, latest.Version.String()) + "."})
+		if listErr != nil {
+			return listErr
+		}
+		for _, file := range files {
+			if err := r.bucket.Delete(ctx, file.Key); err != nil {
+				return err
+			}
+		}
+	}
+	return err
+}
+
 func newMemRepo(rows ...models.CRLSettings) *memCRLSettingsRepo {
 	r := &memCRLSettingsRepo{rows: map[string]models.CRLSettings{}}
 	for _, row := range rows {
@@ -395,6 +416,35 @@ func TestCalculateCRL(t *testing.T) {
 		_, err := f.svc.CalculateCRL(ctx, coreservices.CalculateCRLInput{CAID: "nope"})
 		require.ErrorIs(t, err, errs.ErrCRLSettingsNotFound)
 	})
+}
+
+func TestCalculateCRLRestoresMetadataWhenPublicationFails(t *testing.T) {
+	f := newCRLFixture(t)
+	a := f.addCA("ca-a", "Root")
+	f.repo.rows[a.ID] = f.settings(a, nil, models.CRLSettingsActive)
+	_, err := f.svc.CalculateCRL(context.Background(), coreservices.CalculateCRLInput{CAID: a.ID})
+	require.NoError(t, err)
+	previous := f.repo.rows[a.ID].LatestCRL
+	f.svc.vaRepo = &removeStagedAfterClaimRepo{memCRLSettingsRepo: f.repo, bucket: f.bucket}
+	_, err = f.svc.CalculateCRL(context.Background(), coreservices.CalculateCRLInput{CAID: a.ID})
+	require.Error(t, err)
+	require.Equal(t, previous, f.repo.rows[a.ID].LatestCRL)
+}
+
+func TestGetCRLFallsBackWhenLatestIsMissing(t *testing.T) {
+	f := newCRLFixture(t)
+	a := f.addCA("ca-a", "Root")
+	f.repo.rows[a.ID] = f.settings(a, nil, models.CRLSettingsActive)
+	previous, err := f.svc.CalculateCRL(context.Background(), coreservices.CalculateCRLInput{CAID: a.ID})
+	require.NoError(t, err)
+	row := f.repo.rows[a.ID]
+	row.LatestCRL.Version = models.BigInt{Int: big.NewInt(2)}
+	f.repo.rows[a.ID] = row
+	got, err := f.svc.GetCRL(context.Background(), coreservices.GetCRLInput{ID: a.ID, CRLVersion: big.NewInt(0)})
+	require.NoError(t, err)
+	require.Equal(t, previous.Raw, got.Raw)
+	_, err = f.svc.GetCRL(context.Background(), coreservices.GetCRLInput{ID: a.ID, CRLVersion: big.NewInt(2)})
+	require.ErrorIs(t, err, errs.ErrCRLNotFound)
 }
 
 func TestGetCRL(t *testing.T) {
