@@ -535,6 +535,7 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
+		VADomains:             []string{"dev.lamassu.test/api/va"},
 		SubscriberEventBus:    eventBus.Config,
 		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.Config),
 		PublisherEventBus:     eventBus.Config,

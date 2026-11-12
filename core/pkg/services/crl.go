@@ -12,33 +12,34 @@ import (
 type CRLService interface {
 	CalculateCRL(ctx context.Context, input CalculateCRLInput) (*x509.RevocationList, error)
 	GetCRL(ctx context.Context, input GetCRLInput) (*x509.RevocationList, error)
-	GetVARole(ctx context.Context, input GetVARoleInput) (*models.VARole, error)
-	GetVARoles(ctx context.Context, input GetVARolesInput) (string, error)
-	UpdateVARole(ctx context.Context, input UpdateVARoleInput) (*models.VARole, error)
-	InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error)
+	GetCRLSettings(ctx context.Context, input GetCRLSettingsInput) (*models.CRLSettings, error)
+	GetCRLSettingsList(ctx context.Context, input GetCRLSettingsListInput) (string, error)
+	UpdateCRLSettings(ctx context.Context, input UpdateCRLSettingsInput) (*models.CRLSettings, error)
+	InitCRLSettings(ctx context.Context, caID string) (*models.CRLSettings, error)
 }
 
 type GetCRLInput struct {
-	CASubjectKeyID string   `validate:"required"`
-	CRLVersion     *big.Int `validate:"required"`
+	// ID is the ID of a CA or, for the CDP of certificates issued before CRL settings moved to the CA ID, the SKI of its key.
+	ID         string   `validate:"required"`
+	CRLVersion *big.Int `validate:"required"`
 }
 
 type CalculateCRLInput struct {
-	CASubjectKeyID string
+	CAID string `validate:"required"`
 }
 
-type GetVARoleInput struct {
-	CASubjectKeyID string `validate:"required"`
+type GetCRLSettingsInput struct {
+	CAID string `validate:"required"`
 }
 
-type GetVARolesInput struct {
+type GetCRLSettingsListInput struct {
 	QueryParameters *resources.QueryParameters
 
 	ExhaustiveRun bool //wether to iter all elems
-	ApplyFunc     func(role models.VARole)
+	ApplyFunc     func(settings models.CRLSettings)
 }
 
-type UpdateVARoleInput struct {
-	CASubjectKeyID string           `validate:"required"`
-	CRLRole        models.VACRLRole `validate:"required"`
+type UpdateCRLSettingsInput struct {
+	CAID    string                    `validate:"required"`
+	Options models.CRLSettingsOptions `validate:"required"`
 }

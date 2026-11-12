@@ -3,5 +3,8 @@ package errs
 import "errors"
 
 var (
-	ErrVARoleNotFound error = errors.New("VA role not found")
+	ErrCRLSettingsNotFound  error = errors.New("CRL settings not found")
+	ErrCRLSettingsNotActive error = errors.New("CRL settings are not active")
+	ErrCRLNotFound          error = errors.New("CRL not found")
+	ErrCRLSettingsConflict  error = errors.New("CRL settings were modified concurrently")
 )

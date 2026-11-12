@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"net/url"
 	"slices"
 	"time"
 
@@ -40,7 +41,7 @@ func NewX509Engine(logger *logrus.Entry, vaDomains []string, kmsSDK services.KMS
 }
 
 // Validity is maintained for compatibility. Issuance profile takes precedence.
-func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity, profile models.IssuanceProfile) (*x509.Certificate, error) {
+func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, caID string, subject models.Subject, validity models.Validity, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	if err := engine.validateCryptoEnforcement(ctx, signer.Public(), profile.CryptoEnforcement); err != nil {
@@ -80,7 +81,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 	}
 
 	// Add OCSP and CRL distribution points
-	engine.addDistributionPoints(&template, rawHex)
+	engine.addDistributionPoints(&template, caID)
 
 	// Apply issuance profile to template
 	err := engine.applyIssuanceProfileToTemplate(ctx, &template, profile, time.Now())
@@ -106,7 +107,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 	return certificate, nil
 }
 
-func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
+func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caID string, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	// Validate CSR public key against crypto enforcement rules
@@ -167,7 +168,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	}
 
 	// Add OCSP and CRL distribution points
-	engine.addDistributionPoints(&certificateTemplate, ca.SubjectKeyId)
+	engine.addDistributionPoints(&certificateTemplate, caID)
 
 	// Apply issuance profile to template
 	err = engine.applyIssuanceProfileToTemplate(ctx, &certificateTemplate, profile, now)
@@ -244,11 +245,12 @@ func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validi
 //
 // Parameters:
 //   - template: x509.Certificate template to modify in-place
-//   - crlKeyID: key ID for CRL distribution point URLs
-func (engine X509Engine) addDistributionPoints(template *x509.Certificate, crlKeyID []byte) {
+//   - crlCAID: ID of the CA that issues the certificate: its CRL is served at /crl/<ID>. The ID is used, not the SKI of
+//     its key, because CAs sharing a key share the SKI but not the CRL.
+func (engine X509Engine) addDistributionPoints(template *x509.Certificate, crlCAID string) {
 	for _, domain := range engine.vaDomains {
 		template.OCSPServer = append(template.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, hex.EncodeToString(crlKeyID)))
+		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, url.PathEscape(crlCAID)))
 	}
 }
 

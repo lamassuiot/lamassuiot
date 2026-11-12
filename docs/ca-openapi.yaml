@@ -1151,9 +1151,8 @@ components:
   schemas:
     CreateCABody:
       type: object
+      description: The backend always generates a UUIDv7 for the CA. Any caller-supplied id is ignored.
       properties:
-        id:
-          type: string
         parent_id:
           type: string
         subject:
@@ -1179,9 +1178,8 @@ components:
 
     ImportCABody:
       type: object
+      description: The backend always generates a UUIDv7 for the CA. Any caller-supplied id is ignored.
       properties:
-        id:
-          type: string
         engine_id:
           type: string
         parent_id:

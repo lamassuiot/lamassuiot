@@ -5,7 +5,7 @@ info:
   description: |
     Validation Authority (VA) API for Lamassu IoT Platform.
     This API provides certificate validation services including OCSP (Online Certificate Status Protocol)
-    responses, CRL (Certificate Revocation List) distribution, and VA role management for certificate authorities.
+    responses, CRL (Certificate Revocation List) distribution, and the management of the CRL settings of each certificate authority.
   contact:
     name: Lamassu IoT
     url: https://github.com/lamassuiot/lamassuiot
@@ -22,8 +22,8 @@ tags:
     description: Online Certificate Status Protocol operations
   - name: CRL
     description: Certificate Revocation List operations
-  - name: VA Roles
-    description: VA role management operations
+  - name: CRL Settings
+    description: Management of how the CRL of each certificate authority is generated
 
 paths:
   /ocsp/{ocsp_request}:
@@ -110,26 +110,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /crl/{ca-ski}:
+  /crl/{id}:
     get:
       tags:
         - CRL
       summary: Get Certificate Revocation List
       description: |
-        Retrieves the Certificate Revocation List (CRL) for a specific Certificate Authority
-        identified by its Subject Key Identifier (SKI).
+        Retrieves the latest Certificate Revocation List (CRL) of a Certificate Authority.
+        `id` is the ID of the CA. The CDP of the certificates issued before the CRL settings moved to the
+        CA ID is `/crl/<ski>`, with the Subject Key Identifier of the CA key: that form keeps resolving to the
+        CRL of the CA it belonged to. An `id` that is the ID of a CA always takes precedence.
+        The latest CRL is served for CRL settings in any state, including archived ones.
       operationId: getCrl
       x-authz:
         check: public
       security: []
       parameters:
-        - name: ca-ski
+        - name: id
           in: path
           required: true
-          description: Certificate Authority Subject Key Identifier (hex encoded)
+          description: ID of the Certificate Authority, or Subject Key Identifier of its key (hex encoded) for certificates issued before CRL settings moved to the CA ID
           schema:
             type: string
-          example: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+          example: "018f2d6e-7b3a-7c1e-9a4b-0123456789ab"
       responses:
         '200':
           description: CRL data in DER format
@@ -140,13 +143,13 @@ paths:
                 format: binary
                 description: Binary CRL data in DER format
         '400':
-          description: Bad request - invalid CA SKI format
+          description: Bad request - invalid identifier
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: CRL not found for the specified CA
+          description: No CRL settings match the identifier, or no CRL was ever published
           content:
             application/json:
               schema:
@@ -158,43 +161,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /v1/roles/{ca-ski}:
+  /v1/crl-settings:
     get:
       tags:
-        - VA Roles
-      summary: Get VA role by CA SKI
+        - CRL Settings
+      summary: List CRL settings
       description: |
-        Retrieves the Validation Authority role configuration for a specific Certificate Authority
-        identified by its Subject Key Identifier (SKI).
-      operationId: getVaRoleById
+        Lists the CRL settings of the certificate authorities. Filterable at least by `ca_id`, `status` and `legacy_ski`.
+      operationId: getCrlSettingsList
       x-authz:
         namespace: pki
         schema_name: va
-        entity_type: va_role
-        action: read
+        entity_type: crl_settings
+        check: filter
       parameters:
-        - name: ca-ski
-          in: path
-          required: true
-          description: Certificate Authority Subject Key Identifier (hex encoded)
-          schema:
-            type: string
-          example: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
       responses:
         '200':
-          description: VA role configuration
+          description: Page of CRL settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VARole'
+                $ref: '#/components/schemas/IterableListCRLSettings'
         '400':
-          description: Bad request - invalid CA SKI format
+          description: Bad request - invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/crl-settings/{ca-id}:
+    get:
+      tags:
+        - CRL Settings
+      summary: Get CRL settings by CA ID
+      description: |
+        Retrieves the CRL settings of a Certificate Authority. `status`, `legacy_ski` and `latest_crl` are read-only.
+      operationId: getCrlSettingsById
+      x-authz:
+        namespace: pki
+        schema_name: va
+        entity_type: crl_settings
+        action: read
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      responses:
+        '200':
+          description: CRL settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CRLSettings'
+        '400':
+          description: Bad request - invalid CA ID
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: VA role or signer certificate not found
+          description: CRL settings not found
           content:
             application/json:
               schema:
@@ -208,46 +243,46 @@ paths:
 
     put:
       tags:
-        - VA Roles
-      summary: Update VA role
+        - CRL Settings
+      summary: Update CRL settings
       description: |
-        Updates the Validation Authority role configuration for a specific Certificate Authority.
-        This includes CRL generation settings and signing configuration.
-      operationId: updateVaRole
+        Replaces the editable CRL settings of a Certificate Authority. The signer is only validated when it changes.
+        It does not regenerate the CRL. Settings that are not `ACTIVE` cannot be updated.
+      operationId: updateCrlSettings
       x-authz:
         namespace: pki
         schema_name: va
-        entity_type: va_role
+        entity_type: crl_settings
         action: update
       parameters:
-        - name: ca-ski
-          in: path
-          required: true
-          description: Certificate Authority Subject Key Identifier (hex encoded)
-          schema:
-            type: string
-          example: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+        - $ref: '#/components/parameters/CAId'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VARoleUpdate'
+              $ref: '#/components/schemas/CRLSettingsUpdate'
       responses:
         '200':
-          description: VA role updated successfully
+          description: CRL settings updated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VARole'
+                $ref: '#/components/schemas/CRLSettings'
         '400':
-          description: Bad request - invalid input
+          description: Bad request - invalid input, or the signer certificate cannot sign the CRL of the CA
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: VA role or signer certificate not found
+          description: CRL settings or signer certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The CRL settings are not ACTIVE
           content:
             application/json:
               schema:
@@ -260,25 +295,84 @@ paths:
                 $ref: '#/components/schemas/Error'
 
 components:
+  parameters:
+    CAId:
+      name: ca-id
+      in: path
+      required: true
+      description: ID of the Certificate Authority
+      schema:
+        type: string
+      example: "018f2d6e-7b3a-7c1e-9a4b-0123456789ab"
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 25
+    Bookmark:
+      name: bookmark
+      in: query
+      required: false
+      schema:
+        type: string
+    SortBy:
+      name: sort_by
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Field to sort by
+    SortMode:
+      name: sort_mode
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+      description: Sort order
+    Filter:
+      name: filter
+      in: query
+      required: false
+      schema:
+        type: string
+      description: "Filter expression using field[operand]value, e.g. status[eq]=ACTIVE"
+
   schemas:
-    VARole:
+    CRLSettings:
       type: object
-      description: Validation Authority role configuration for a Certificate Authority
+      description: |
+        How the CRL of a Certificate Authority is generated, and the state of its latest CRL.
+        There is one per CA, even for CAs that share a key.
       properties:
-        ca_ski:
+        ca_id:
           type: string
-          description: Certificate Authority Subject Key Identifier (hex encoded)
+          description: ID of the Certificate Authority
+          example: "018f2d6e-7b3a-7c1e-9a4b-0123456789ab"
+        legacy_ski:
+          type: string
+          description: |
+            Subject Key Identifier the settings were keyed by before they moved to the CA ID. Only settings migrated
+            from the previous model have it: `/crl/<legacy_ski>` keeps resolving to them. Read-only.
           example: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
         crl_options:
-          $ref: '#/components/schemas/VACRLRole'
+          $ref: '#/components/schemas/CRLSettingsOptions'
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+          description: |
+            `ACTIVE` settings generate CRLs. `ARCHIVED` ones belong to a CA that no longer exists: their last CRL is
+            still served, but it is never regenerated. Read-only.
         latest_crl:
           $ref: '#/components/schemas/LatestCRLMeta'
 
-    VACRLRole:
+    CRLSettingsOptions:
       type: object
-      description: CRL generation and management configuration
+      description: Editable CRL generation settings
       required:
-        - signer_certificate_serial_number
+        - signer_serial_number
       properties:
         refresh_interval:
           type: string
@@ -296,7 +390,7 @@ components:
             Duration for which a generated CRL is valid (duration string format).
             Examples: "1h", "24h", "7d"
           example: "168h"
-        signer_certificate_serial_number:
+        signer_serial_number:
           type: string
           description: |
             Serial number of the existing certificate used to sign the CRL.
@@ -315,32 +409,24 @@ components:
             regenerated before it expires and, unless it is "0", on refresh_interval.
           example: true
 
-    VARoleUpdate:
+    CRLSettingsUpdate:
       type: object
-      description: Request body for updating VA role configuration
+      description: Request body for updating the CRL settings of a CA
       required:
         - refresh_interval
         - validity
-        - signer_certificate_serial_number
+        - signer_serial_number
         - regenerate_on_revoke
       properties:
         refresh_interval:
           type: string
-          description: |
-            Interval between automatic CRL regenerations (duration string format),
-            measured from the issuance of the latest CRL. A CRL is also regenerated
-            before it expires, regardless of this value. "0" disables interval-based
-            regeneration. Checked on each run of the CRL monitoring job, so the
-            effective granularity is bounded by the job frequency.
-            Examples: "1h", "24h", "7d"
+          description: Interval between automatic CRL regenerations (duration string format). "0" disables it.
           example: "24h"
         validity:
           type: string
-          description: |
-            Duration for which a generated CRL is valid (duration string format).
-            Examples: "1h", "24h", "7d"
+          description: Duration for which a generated CRL is valid (duration string format).
           example: "168h"
-        signer_certificate_serial_number:
+        signer_serial_number:
           type: string
           description: |
             Serial number of the existing certificate used to sign the CRL.
@@ -349,9 +435,19 @@ components:
           example: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
         regenerate_on_revoke:
           type: boolean
-          description: |
-            Whether to automatically regenerate the CRL when a certificate is revoked.
+          description: Whether to automatically regenerate the CRL when a certificate is revoked.
           example: true
+
+    IterableListCRLSettings:
+      type: object
+      properties:
+        next:
+          type: string
+          description: Pagination bookmark
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/CRLSettings'
 
     LatestCRLMeta:
       type: object
@@ -378,7 +474,7 @@ components:
         err:
           type: string
           description: Error message
-          example: "VA role not found"
+          example: "CRL settings not found"
 
   securitySchemes:
     BearerAuth:

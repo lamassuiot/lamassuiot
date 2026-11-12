@@ -133,7 +133,7 @@ func (db *PostgresCertificateStorage) reload(ctx context.Context, certificate *m
 
 func (db *PostgresCertificateStorage) Delete(ctx context.Context, serialNumber string) error {
 	err := db.querier.Delete(ctx, serialNumber)
-	if isForeignKeyViolation(err, "va_role_signer_certificate_fk") {
+	if isForeignKeyViolation(err, "crl_settings_signer_cert_fk") {
 		return errs.ErrCertificateInUse
 	}
 	return err

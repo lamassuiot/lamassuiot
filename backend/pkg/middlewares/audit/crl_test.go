@@ -83,15 +83,15 @@ func TestCRLAuditEventPublisher(t *testing.T) {
 		test func(t *testing.T)
 	}{
 		{
-			name: "UpdateVARole with errors - Audit event produced",
+			name: "UpdateCRLSettings with errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithErrors(t, "UpdateVARole", services.UpdateVARoleInput{}, models.EventUpdateVARole, &models.VARole{})
+				crlAuditWithErrors(t, "UpdateCRLSettings", services.UpdateCRLSettingsInput{}, models.EventUpdateCRLSettings, &models.CRLSettings{})
 			},
 		},
 		{
-			name: "UpdateVARole without errors - Audit event produced",
+			name: "UpdateCRLSettings without errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithoutErrors(t, "UpdateVARole", services.UpdateVARoleInput{}, models.EventUpdateVARole, &models.VARole{})
+				crlAuditWithoutErrors(t, "UpdateCRLSettings", services.UpdateCRLSettingsInput{}, models.EventUpdateCRLSettings, &models.CRLSettings{})
 			},
 		},
 		{
@@ -107,15 +107,15 @@ func TestCRLAuditEventPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "InitCRLRole with errors - Audit event produced",
+			name: "InitCRLSettings with errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithErrors(t, "InitCRLRole", "", models.EventInitCRLRole, &models.VARole{})
+				crlAuditWithErrors(t, "InitCRLSettings", "", models.EventInitCRLSettings, &models.CRLSettings{})
 			},
 		},
 		{
-			name: "InitCRLRole without errors - Audit event produced",
+			name: "InitCRLSettings without errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithoutErrors(t, "InitCRLRole", "", models.EventInitCRLRole, &models.VARole{})
+				crlAuditWithoutErrors(t, "InitCRLSettings", "", models.EventInitCRLSettings, &models.CRLSettings{})
 			},
 		},
 	}

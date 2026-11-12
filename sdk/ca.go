@@ -132,7 +132,6 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := cli.post[*models.CACertificate](ctx, "/v1/cas", resources.CreateCABody{
-		ID:                  input.ID,
 		Subject:             input.Subject,
 		KeyMetadata:         input.KeyMetadata,
 		ProfileID:           input.ProfileID,
@@ -184,7 +183,6 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	}
 
 	response, err := cli.post[*models.CACertificate](ctx, "/v1/cas/import", resources.ImportCABody{
-		ID:            input.ID,
 		ProfileID:     input.ProfileID,
 		CACertificate: input.CACertificate,
 		CAChain:       input.CAChain,
