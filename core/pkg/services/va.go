@@ -12,9 +12,9 @@ type VAService interface {
 	GetOCSPResponseGet(ctx context.Context, input GetOCSPResponseInput) (*ocsp.Response, error)
 	GetOCSPResponsePost(ctx context.Context, input GetOCSPResponseInput) (*ocsp.Response, error)
 	GetCRL(ctx context.Context, input GetCRLResponseInput) (*x509.RevocationList, error)
-	GetVARoles(ctx context.Context, input GetVARolesInput) (string, error)
-	GetVARoleByID(ctx context.Context, input GetVARoleInput) (*models.VARole, error)
-	UpdateVARole(ctx context.Context, input UpdateVARoleInput) (*models.VARole, error)
+	GetCRLSettingsList(ctx context.Context, input GetCRLSettingsListInput) (string, error)
+	GetCRLSettingsByID(ctx context.Context, input GetCRLSettingsInput) (*models.CRLSettings, error)
+	UpdateCRLSettings(ctx context.Context, input UpdateCRLSettingsInput) (*models.CRLSettings, error)
 }
 
 type GetOCSPResponseInput struct {
@@ -24,7 +24,8 @@ type GetOCSPResponseInput struct {
 }
 
 type GetCRLResponseInput struct {
-	CASubjectKeyID string
+	// ID is the ID of a CA or the SKI of its key (the CDP of certificates issued before CRL settings moved to the CA ID).
+	ID             string
 	Issuer         *x509.Certificate
 	VerifyResponse bool
 }

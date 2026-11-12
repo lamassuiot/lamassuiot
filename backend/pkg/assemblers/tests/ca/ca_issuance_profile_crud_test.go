@@ -140,7 +140,6 @@ func TestFilterCAsByProfileID(t *testing.T) {
 
 	// Create CA with profile1
 	ca1, err := caSvc.CreateCA(ctx, services.CreateCAInput{
-		ID:           "ca-with-profile1",
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "CA with Profile 1"},
 		CAExpiration: models.Validity{Type: "Duration", Duration: caDuration},
@@ -151,7 +150,6 @@ func TestFilterCAsByProfileID(t *testing.T) {
 
 	// Create another CA with profile1
 	ca2, err := caSvc.CreateCA(ctx, services.CreateCAInput{
-		ID:           "ca-with-profile1-2",
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "Second CA with Profile 1"},
 		CAExpiration: models.Validity{Type: "Duration", Duration: caDuration},
@@ -162,7 +160,6 @@ func TestFilterCAsByProfileID(t *testing.T) {
 
 	// Create CA with profile2
 	ca3, err := caSvc.CreateCA(ctx, services.CreateCAInput{
-		ID:           "ca-with-profile2",
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "CA with Profile 2"},
 		CAExpiration: models.Validity{Type: "Duration", Duration: caDuration},

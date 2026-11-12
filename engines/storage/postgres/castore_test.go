@@ -37,7 +37,7 @@ func (keylessImportKMS) GetKeysByPublicKey(context.Context, services.GetKeysByPu
 	return nil, nil
 }
 
-func postgresImportInput(t *testing.T, id string, serial int64) services.ImportCAInput {
+func postgresImportInput(t *testing.T, serial int64) services.ImportCAInput {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func postgresImportInput(t *testing.T, id string, serial int64) services.ImportC
 	require.NoError(t, err)
 	cert, err := x509.ParseCertificate(der)
 	require.NoError(t, err)
-	return services.ImportCAInput{ID: id, CACertificate: (*models.X509Certificate)(cert)}
+	return services.ImportCAInput{CACertificate: (*models.X509Certificate)(cert)}
 }
 
 func TestCAStoreUniqueIDPostgres(t *testing.T) {
@@ -82,13 +82,16 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		require.Equal(t, want, count, table)
 	}
 
-	_, err = svc.ImportCA(ctx, postgresImportInput(t, "shared", 1))
+	firstInput := postgresImportInput(t, 1)
+	first, err := svc.ImportCA(ctx, firstInput)
 	require.NoError(t, err)
-	_, err = svc.ImportCA(ctx, postgresImportInput(t, "other", 2))
+	second, err := svc.ImportCA(ctx, postgresImportInput(t, 2))
 	require.NoError(t, err)
 
-	t.Run("import with an existing ID", func(t *testing.T) {
-		ca, err := svc.ImportCA(ctx, postgresImportInput(t, "shared", 3))
+	require.NotEqual(t, first.ID, second.ID)
+
+	t.Run("import with an existing certificate", func(t *testing.T) {
+		ca, err := svc.ImportCA(ctx, firstInput)
 		require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
 		require.Nil(t, ca)
 		countRows("ca_certificates", 2)
@@ -96,9 +99,7 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 	})
 
 	t.Run("duplicates and foreign-key errors", func(t *testing.T) {
-		var serial string
-		require.NoError(t, db.Raw("SELECT serial_number FROM ca_certificates WHERE id = 'other'").Scan(&serial).Error)
-		_, err := repo.Insert(ctx, &models.CACertificate{ID: "shared", CertificateSerialNumber: serial})
+		_, err := repo.Insert(ctx, &models.CACertificate{ID: first.ID, CertificateSerialNumber: second.CertificateSerialNumber})
 		require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
 		// A foreign-key violation must not become a duplicate-ID error.
 		_, err = repo.Insert(ctx, &models.CACertificate{ID: "missing-cert", CertificateSerialNumber: "missing"})
@@ -107,7 +108,7 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 	})
 
 	t.Run("concurrent CA inserts reference existing certificates", func(t *testing.T) {
-		exists, original, err := repo.SelectExistsByID(ctx, "shared")
+		exists, original, err := repo.SelectExistsByID(ctx, first.ID)
 		require.NoError(t, err)
 		require.True(t, exists)
 		start := make(chan struct{})
@@ -185,7 +186,7 @@ func TestConcurrentCAImportsKeepDuplicateIDError(t *testing.T) {
 	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{Logger: log, CAStorage: cas,
 		CertificateStorage: &simultaneousImportCertificates{CertificatesRepo: certs, ready: make(chan struct{})}, KMSService: keylessImportKMS{}})
 	require.NoError(t, err)
-	input := postgresImportInput(t, "concurrent-import", 9001)
+	input := postgresImportInput(t, 9001)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	results := make(chan error, 2)

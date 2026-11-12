@@ -33,10 +33,10 @@ func (mw CAEventPublisher) GetStatsByCAID(ctx context.Context, input services.Ge
 
 func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCAKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.ID))
 
 	defer func() {
 		if err == nil {
+			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", output.ID))
 			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
@@ -45,10 +45,10 @@ func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCA
 
 func (mw CAEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventImportCAKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.ID))
 
 	defer func() {
 		if err == nil {
+			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", output.ID))
 			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()

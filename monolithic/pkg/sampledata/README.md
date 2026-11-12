@@ -8,12 +8,12 @@ The sample data generator creates:
 
 ### Certificate Authorities
 
-1. **Imported Root CA** (`sample-imported-root-ca`)
+1. **Imported Root CA** (`00000000-0000-7000-8000-000000000a02`)
    - Uses the embedded ECDSA P-256 private key from `ecdsa_p256_key.pem`
    - Self-signed certificate with 10-year validity
    - Imported into the system via the ImportCA API
 
-2. **Generated Root CA** (`sample-generated-root-ca`)
+2. **Generated Root CA** (`00000000-0000-7000-8000-000000000a01`)
    - Freshly generated ECDSA P-256 key pair
    - Self-signed certificate with 10-year validity
    - Created using the CreateCA API

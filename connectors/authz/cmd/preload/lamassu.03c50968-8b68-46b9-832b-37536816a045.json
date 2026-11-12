@@ -6,7 +6,7 @@
     {
       "namespace": "pki",
       "schema_name": "va",
-      "entity_type": "va_role",
+      "entity_type": "crl_settings",
       "actions": [
         "read",
         "update",

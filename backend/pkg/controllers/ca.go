@@ -54,7 +54,6 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 
 	ca, err := r.svc.CreateCA(ctx.Request.Context(), services.CreateCAInput{
 		ParentID:            requestBody.ParentID,
-		ID:                  requestBody.ID,
 		KeyMetadata:         requestBody.KeyMetadata,
 		Subject:             requestBody.Subject,
 		CAExpiration:        requestBody.CAExpiration,
@@ -162,7 +161,6 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.ImportCA(ctx.Request.Context(), services.ImportCAInput{
-		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
 		CACertificate: requestBody.CACertificate,
 		Key:           key,

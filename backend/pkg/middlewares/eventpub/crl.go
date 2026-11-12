@@ -29,29 +29,29 @@ func (mw *clrEventPublisher) GetCRL(ctx context.Context, input services.GetCRLIn
 	return mw.next.GetCRL(ctx, input)
 }
 
-func (mw *clrEventPublisher) GetVARole(ctx context.Context, input services.GetVARoleInput) (output *models.VARole, err error) {
-	return mw.next.GetVARole(ctx, input)
+func (mw *clrEventPublisher) GetCRLSettings(ctx context.Context, input services.GetCRLSettingsInput) (output *models.CRLSettings, err error) {
+	return mw.next.GetCRLSettings(ctx, input)
 }
 
-func (mw *clrEventPublisher) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
-	return mw.next.GetVARoles(ctx, input)
+func (mw *clrEventPublisher) GetCRLSettingsList(ctx context.Context, input services.GetCRLSettingsListInput) (string, error) {
+	return mw.next.GetCRLSettingsList(ctx, input)
 }
 
-func (mw *clrEventPublisher) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (output *models.VARole, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateVARole)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CASubjectKeyID))
+func (mw *clrEventPublisher) UpdateCRLSettings(ctx context.Context, input services.UpdateCRLSettingsInput) (output *models.CRLSettings, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateCRLSettings)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CAID))
 
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
-	return mw.next.UpdateVARole(ctx, input)
+	return mw.next.UpdateCRLSettings(ctx, input)
 }
 
 func (mw *clrEventPublisher) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (output *x509.RevocationList, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCRL)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CASubjectKeyID))
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CAID))
 
 	defer func() {
 		if err == nil {
@@ -61,14 +61,14 @@ func (mw *clrEventPublisher) CalculateCRL(ctx context.Context, input services.Ca
 	return mw.next.CalculateCRL(ctx, input)
 }
 
-func (mw *clrEventPublisher) InitCRLRole(ctx context.Context, caSki string) (output *models.VARole, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventInitCRLRole)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", caSki))
+func (mw *clrEventPublisher) InitCRLSettings(ctx context.Context, caID string) (output *models.CRLSettings, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventInitCRLSettings)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", caID))
 
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
-	return mw.next.InitCRLRole(ctx, caSki)
+	return mw.next.InitCRLSettings(ctx, caID)
 }

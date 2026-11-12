@@ -42,9 +42,10 @@ func setupVARouter(ocspService services.OCSPService, crlService services.CRLServ
 	logger := logrus.NewEntry(logrus.New())
 	vaRoutes := NewVAHttpRoutes(logger, ocspService, crlService)
 
-	router.GET("/va/crl/:ca-ski", vaRoutes.CRL)
-	router.GET("/va/role/:ca-ski", vaRoutes.GetRoleByID)
-	router.PUT("/va/role/:ca-ski", vaRoutes.UpdateRole)
+	router.GET("/va/crl/:id", vaRoutes.CRL)
+	router.GET("/va/crl-settings", vaRoutes.GetCRLSettingsList)
+	router.GET("/va/crl-settings/:ca-id", vaRoutes.GetCRLSettingsByID)
+	router.PUT("/va/crl-settings/:ca-id", vaRoutes.UpdateCRLSettings)
 
 	return router
 }
@@ -59,7 +60,7 @@ func TestCRL_Success(t *testing.T) {
 	}
 
 	mockCRLService.On("GetCRL", mock.Anything, mock.MatchedBy(func(input services.GetCRLInput) bool {
-		return input.CASubjectKeyID == "test-ca-ski"
+		return input.ID == "test-ca-ski"
 	})).Return(crl, nil)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
@@ -74,13 +75,13 @@ func TestCRL_Success(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestCRL_VARoleNotFound(t *testing.T) {
+func TestCRL_SettingsNotFound(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
 	mockCRLService.On("GetCRL", mock.Anything, mock.MatchedBy(func(input services.GetCRLInput) bool {
-		return input.CASubjectKeyID == "nonexistent-ca-ski"
-	})).Return((*x509.RevocationList)(nil), errs.ErrVARoleNotFound)
+		return input.ID == "nonexistent-ca-ski"
+	})).Return((*x509.RevocationList)(nil), errs.ErrCRLSettingsNotFound)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
@@ -93,7 +94,7 @@ func TestCRL_VARoleNotFound(t *testing.T) {
 	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "VA role not found", response["err"])
+	assert.Equal(t, "CRL settings not found", response["err"])
 	mockCRLService.AssertExpectations(t)
 }
 
@@ -134,31 +135,31 @@ func TestCRL_InternalServerError(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestGetRoleByID_Success(t *testing.T) {
+func TestGetCRLSettingsByID_Success(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
 	bigIntVersion := models.BigInt{Int: big.NewInt(1)}
-	vaRole := &models.VARole{
-		CASubjectKeyID: "test-ca-ski",
-		CRLOptions: models.VACRLRole{
-			Validity:                      models.TimeDuration(24 * time.Hour),
-			RefreshInterval:               models.TimeDuration(23 * time.Hour),
-			RegenerateOnRevoke:            true,
-			SignerCertificateSerialNumber: "test-ca-ski",
+	vaRole := &models.CRLSettings{
+		CAID: "test-ca-ski",
+		Options: models.CRLSettingsOptions{
+			Validity:           models.TimeDuration(24 * time.Hour),
+			RefreshInterval:    models.TimeDuration(23 * time.Hour),
+			RegenerateOnRevoke: true,
+			SignerSerialNumber: "test-ca-ski",
 		},
 		LatestCRL: models.LatestCRLMeta{
 			Version: bigIntVersion,
 		},
 	}
 
-	mockCRLService.On("GetVARole", mock.Anything, mock.MatchedBy(func(input services.GetVARoleInput) bool {
-		return input.CASubjectKeyID == "test-ca-ski"
+	mockCRLService.On("GetCRLSettings", mock.Anything, mock.MatchedBy(func(input services.GetCRLSettingsInput) bool {
+		return input.CAID == "test-ca-ski"
 	})).Return(vaRole, nil)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	req, _ := http.NewRequest("GET", "/va/role/test-ca-ski", nil)
+	req, _ := http.NewRequest("GET", "/va/crl-settings/test-ca-ski", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -168,21 +169,21 @@ func TestGetRoleByID_Success(t *testing.T) {
 	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "test-ca-ski", response["ca_ski"])
+	assert.Equal(t, "test-ca-ski", response["ca_id"])
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestGetRoleByID_VARoleNotFound(t *testing.T) {
+func TestGetCRLSettingsByID_SettingsNotFound(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
-	mockCRLService.On("GetVARole", mock.Anything, mock.MatchedBy(func(input services.GetVARoleInput) bool {
-		return input.CASubjectKeyID == "nonexistent-ca-ski"
-	})).Return((*models.VARole)(nil), errs.ErrVARoleNotFound)
+	mockCRLService.On("GetCRLSettings", mock.Anything, mock.MatchedBy(func(input services.GetCRLSettingsInput) bool {
+		return input.CAID == "nonexistent-ca-ski"
+	})).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	req, _ := http.NewRequest("GET", "/va/role/nonexistent-ca-ski", nil)
+	req, _ := http.NewRequest("GET", "/va/crl-settings/nonexistent-ca-ski", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -191,19 +192,19 @@ func TestGetRoleByID_VARoleNotFound(t *testing.T) {
 	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "VA role not found", response["err"])
+	assert.Equal(t, "CRL settings not found", response["err"])
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestGetRoleByID_ValidationError(t *testing.T) {
+func TestGetCRLSettingsByID_ValidationError(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
-	mockCRLService.On("GetVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), errs.ErrValidateBadRequest)
+	mockCRLService.On("GetCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), errs.ErrValidateBadRequest)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	req, _ := http.NewRequest("GET", "/va/role/invalid", nil)
+	req, _ := http.NewRequest("GET", "/va/crl-settings/invalid", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -216,15 +217,15 @@ func TestGetRoleByID_ValidationError(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestGetRoleByID_InternalServerError(t *testing.T) {
+func TestGetCRLSettingsByID_InternalServerError(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
-	mockCRLService.On("GetVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), assert.AnError)
+	mockCRLService.On("GetCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), assert.AnError)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	req, _ := http.NewRequest("GET", "/va/role/test-ca-ski", nil)
+	req, _ := http.NewRequest("GET", "/va/crl-settings/test-ca-ski", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -232,39 +233,39 @@ func TestGetRoleByID_InternalServerError(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestUpdateRole_Success(t *testing.T) {
+func TestUpdateCRLSettings_Success(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
 	bigIntVersion := models.BigInt{Int: big.NewInt(1)}
-	updatedRole := &models.VARole{
-		CASubjectKeyID: "test-ca-ski",
-		CRLOptions: models.VACRLRole{
-			Validity:                      models.TimeDuration(48 * time.Hour),
-			RefreshInterval:               models.TimeDuration(47 * time.Hour),
-			RegenerateOnRevoke:            false,
-			SignerCertificateSerialNumber: "test-ca-ski",
+	updatedRole := &models.CRLSettings{
+		CAID: "test-ca-ski",
+		Options: models.CRLSettingsOptions{
+			Validity:           models.TimeDuration(48 * time.Hour),
+			RefreshInterval:    models.TimeDuration(47 * time.Hour),
+			RegenerateOnRevoke: false,
+			SignerSerialNumber: "test-ca-ski",
 		},
 		LatestCRL: models.LatestCRLMeta{
 			Version: bigIntVersion,
 		},
 	}
 
-	mockCRLService.On("UpdateVARole", mock.Anything, mock.MatchedBy(func(input services.UpdateVARoleInput) bool {
-		return input.CASubjectKeyID == "test-ca-ski"
+	mockCRLService.On("UpdateCRLSettings", mock.Anything, mock.MatchedBy(func(input services.UpdateCRLSettingsInput) bool {
+		return input.CAID == "test-ca-ski"
 	})).Return(updatedRole, nil)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	updateBody := resources.VARoleUpdate{
-		Validity:                      models.TimeDuration(172800000000000),
-		RefreshInterval:               models.TimeDuration(169200000000000),
-		RegenerateOnRevoke:            false,
-		SignerCertificateSerialNumber: "test-ca-ski",
-	}
+	updateBody := resources.CRLSettingsUpdate{CRLSettingsOptions: models.CRLSettingsOptions{
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SignerSerialNumber: "test-ca-ski",
+	}}
 	bodyBytes, _ := json.Marshal(updateBody)
 
-	req, _ := http.NewRequest("PUT", "/va/role/test-ca-ski", bytes.NewBuffer(bodyBytes))
+	req, _ := http.NewRequest("PUT", "/va/crl-settings/test-ca-ski", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -275,7 +276,7 @@ func TestUpdateRole_Success(t *testing.T) {
 	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "test-ca-ski", response["ca_ski"])
+	assert.Equal(t, "test-ca-ski", response["ca_id"])
 
 	// Verify CRL options
 	crlOptions := response["crl_options"].(map[string]any)
@@ -284,25 +285,25 @@ func TestUpdateRole_Success(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestUpdateRole_VARoleNotFound(t *testing.T) {
+func TestUpdateCRLSettings_SettingsNotFound(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
-	mockCRLService.On("UpdateVARole", mock.Anything, mock.MatchedBy(func(input services.UpdateVARoleInput) bool {
-		return input.CASubjectKeyID == "nonexistent-ca-ski"
-	})).Return((*models.VARole)(nil), errs.ErrVARoleNotFound)
+	mockCRLService.On("UpdateCRLSettings", mock.Anything, mock.MatchedBy(func(input services.UpdateCRLSettingsInput) bool {
+		return input.CAID == "nonexistent-ca-ski"
+	})).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	updateBody := resources.VARoleUpdate{
-		Validity:                      models.TimeDuration(172800000000000),
-		RefreshInterval:               models.TimeDuration(169200000000000),
-		RegenerateOnRevoke:            false,
-		SignerCertificateSerialNumber: "test-ca-ski",
-	}
+	updateBody := resources.CRLSettingsUpdate{CRLSettingsOptions: models.CRLSettingsOptions{
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SignerSerialNumber: "test-ca-ski",
+	}}
 	bodyBytes, _ := json.Marshal(updateBody)
 
-	req, _ := http.NewRequest("PUT", "/va/role/nonexistent-ca-ski", bytes.NewBuffer(bodyBytes))
+	req, _ := http.NewRequest("PUT", "/va/crl-settings/nonexistent-ca-ski", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -312,27 +313,27 @@ func TestUpdateRole_VARoleNotFound(t *testing.T) {
 	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "VA role not found", response["err"])
+	assert.Equal(t, "CRL settings not found", response["err"])
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestUpdateRole_ValidationError(t *testing.T) {
+func TestUpdateCRLSettings_ValidationError(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
-	mockCRLService.On("UpdateVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), errs.ErrValidateBadRequest)
+	mockCRLService.On("UpdateCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), errs.ErrValidateBadRequest)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	updateBody := resources.VARoleUpdate{
-		Validity:                      models.TimeDuration(172800000000000),
-		RefreshInterval:               models.TimeDuration(169200000000000),
-		RegenerateOnRevoke:            false,
-		SignerCertificateSerialNumber: "test-ca-ski",
-	}
+	updateBody := resources.CRLSettingsUpdate{CRLSettingsOptions: models.CRLSettingsOptions{
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SignerSerialNumber: "test-ca-ski",
+	}}
 	bodyBytes, _ := json.Marshal(updateBody)
 
-	req, _ := http.NewRequest("PUT", "/va/role/invalid", bytes.NewBuffer(bodyBytes))
+	req, _ := http.NewRequest("PUT", "/va/crl-settings/invalid", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -346,23 +347,23 @@ func TestUpdateRole_ValidationError(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestUpdateRole_InternalServerError(t *testing.T) {
+func TestUpdateCRLSettings_InternalServerError(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
-	mockCRLService.On("UpdateVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), assert.AnError)
+	mockCRLService.On("UpdateCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), assert.AnError)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	updateBody := resources.VARoleUpdate{
-		Validity:                      models.TimeDuration(172800000000000),
-		RefreshInterval:               models.TimeDuration(169200000000000),
-		RegenerateOnRevoke:            false,
-		SignerCertificateSerialNumber: "test-ca-ski",
-	}
+	updateBody := resources.CRLSettingsUpdate{CRLSettingsOptions: models.CRLSettingsOptions{
+		Validity:           models.TimeDuration(172800000000000),
+		RefreshInterval:    models.TimeDuration(169200000000000),
+		RegenerateOnRevoke: false,
+		SignerSerialNumber: "test-ca-ski",
+	}}
 	bodyBytes, _ := json.Marshal(updateBody)
 
-	req, _ := http.NewRequest("PUT", "/va/role/test-ca-ski", bytes.NewBuffer(bodyBytes))
+	req, _ := http.NewRequest("PUT", "/va/crl-settings/test-ca-ski", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -371,16 +372,93 @@ func TestUpdateRole_InternalServerError(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
-func TestUpdateRole_InvalidJSON(t *testing.T) {
+func TestUpdateCRLSettings_InvalidJSON(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)
 
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
-	req, _ := http.NewRequest("PUT", "/va/role/test-ca-ski", bytes.NewBuffer([]byte("invalid-json")))
+	req, _ := http.NewRequest("PUT", "/va/crl-settings/test-ca-ski", bytes.NewBuffer([]byte("invalid-json")))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCRL_ServesByLegacySKIAndCAIDWithTheSameHandler(t *testing.T) {
+	crlService := new(svcmock.MockVAService)
+	crl := &x509.RevocationList{Raw: []byte("crl")}
+	for _, id := range []string{"018f2d6e-7b3a-7c1e-9a4b-0123456789ab", "3f9a1c"} {
+		crlService.On("GetCRL", mock.Anything, mock.MatchedBy(func(in services.GetCRLInput) bool { return in.ID == id })).Return(crl, nil)
+	}
+	router := setupVARouter(new(MockOCSPService), crlService)
+
+	for _, id := range []string{"018f2d6e-7b3a-7c1e-9a4b-0123456789ab", "3f9a1c"} {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/va/crl/"+id, nil)
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code, id)
+	}
+	crlService.AssertExpectations(t)
+}
+
+// A CRL that was never published is not a server failure.
+func TestCRL_NeverPublishedIsNotFound(t *testing.T) {
+	crlService := new(svcmock.MockVAService)
+	crlService.On("GetCRL", mock.Anything, mock.Anything).Return((*x509.RevocationList)(nil), errs.ErrCRLNotFound)
+	router := setupVARouter(new(MockOCSPService), crlService)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/va/crl/some-ca", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestUpdateCRLSettings_NotActiveIsConflict(t *testing.T) {
+	crlService := new(svcmock.MockVAService)
+	crlService.On("UpdateCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotActive)
+	router := setupVARouter(new(MockOCSPService), crlService)
+
+	body, _ := json.Marshal(resources.CRLSettingsUpdate{CRLSettingsOptions: models.CRLSettingsOptions{SignerSerialNumber: "sn"}})
+	req, _ := http.NewRequest("PUT", "/va/crl-settings/archived-ca", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), "not active")
+}
+
+func TestUpdateCRLSettings_BodyUsesSignerSerialNumber(t *testing.T) {
+	crlService := new(svcmock.MockVAService)
+	crlService.On("UpdateCRLSettings", mock.Anything, mock.MatchedBy(func(in services.UpdateCRLSettingsInput) bool {
+		return in.CAID == "ca-1" && in.Options.SignerSerialNumber == "sn-1" && in.Options.RegenerateOnRevoke
+	})).Return(&models.CRLSettings{CAID: "ca-1"}, nil)
+	router := setupVARouter(new(MockOCSPService), crlService)
+
+	req, _ := http.NewRequest("PUT", "/va/crl-settings/ca-1", bytes.NewBufferString(`{"signer_serial_number":"sn-1","validity":"1h","refresh_interval":"30m","regenerate_on_revoke":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	crlService.AssertExpectations(t)
+}
+
+func TestGetCRLSettingsList_ReturnsPage(t *testing.T) {
+	crlService := new(svcmock.MockVAService)
+	items := []*models.CRLSettings{{CAID: "a", Status: models.CRLSettingsActive}, {CAID: "b", Status: models.CRLSettingsArchived}}
+	crlService.On("GetCRLSettingsList", mock.Anything, mock.Anything).Return(&items, nil)
+	router := setupVARouter(new(MockOCSPService), crlService)
+
+	req, _ := http.NewRequest("GET", "/va/crl-settings?filter=status[eq]ACTIVE", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var page resources.GetItemsResponse[models.CRLSettings]
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	assert.Len(t, page.List, 2)
 }

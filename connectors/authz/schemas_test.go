@@ -17,11 +17,17 @@ func TestPKISchemasLoadsEmbeddedSchema(t *testing.T) {
 	}
 }
 
-func TestVARoleSignerColumnContract(t *testing.T) {
+func TestCRLSettingsColumnContract(t *testing.T) {
 	registry, err := PKISchemas()
 	require.NoError(t, err)
-	role, err := registry.GetBySchemaEntity("va", "va_role")
+	settings, err := registry.GetBySchemaEntity("va", "crl_settings")
 	require.NoError(t, err)
-	require.NotNil(t, role.GetFilterableField("crl_signer_certificate_serial_number"))
-	require.Nil(t, role.GetFilterableField("crl_subject_key_id_signer"))
+	require.Equal(t, []string{"ca_id"}, settings.PrimaryKeys)
+	for _, column := range []string{"ca_id", "status", "legacy_ski", "signer_serial_number"} {
+		require.NotNil(t, settings.GetFilterableField(column), column)
+	}
+	require.Nil(t, settings.GetFilterableField("crl_signer_certificate_serial_number"))
+
+	_, err = registry.GetBySchemaEntity("va", "va_role")
+	require.Error(t, err, "the va_role entity is gone")
 }

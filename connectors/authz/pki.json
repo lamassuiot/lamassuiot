@@ -303,9 +303,9 @@
     ]
   },
   {
-    "entity_type": "va_role",
-    "table_name": "va_role",
-    "primary_key": "ca_ski",
+    "entity_type": "crl_settings",
+    "table_name": "crl_settings",
+    "primary_key": "ca_id",
     "atomic_actions": [
       "read",
       "update"
@@ -317,13 +317,16 @@
     "relations": [],
     "schema_name": "va",
     "filterable": [
-      { "column": "crl_refresh_interval",      "type": "string"    },
-      { "column": "crl_validity",              "type": "string"    },
-      { "column": "crl_signer_certificate_serial_number", "type": "string"    },
-      { "column": "crl_regenerate_on_revoke",  "type": "bool"      },
-      { "column": "latest_crl_version",        "type": "float"     },
-      { "column": "latest_crl_valid_from",     "type": "timestamp" },
-      { "column": "latest_crl_valid_until",    "type": "timestamp" }
+      { "column": "ca_id",                      "type": "string"    },
+      { "column": "legacy_ski",                 "type": "string"    },
+      { "column": "status",                     "type": "string"    },
+      { "column": "refresh_interval",           "type": "string"    },
+      { "column": "validity",                   "type": "string"    },
+      { "column": "signer_serial_number",       "type": "string"    },
+      { "column": "regenerate_on_revoke",       "type": "bool"      },
+      { "column": "latest_crl_version",         "type": "float"     },
+      { "column": "latest_crl_valid_from",      "type": "timestamp" },
+      { "column": "latest_crl_valid_until",     "type": "timestamp" }
     ]
   }
 ]

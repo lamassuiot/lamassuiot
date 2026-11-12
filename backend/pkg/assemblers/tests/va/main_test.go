@@ -3,7 +3,6 @@ package va
 import (
 	"context"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -20,7 +19,10 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
-const DefaultCAID = "111"
+// DefaultCAID is the ID of the CA that initCAForVA creates. Every call creates a CA with a new ID: the VA works with
+// events delivered asynchronously and routes them by CA ID, so a late event of a previous test must not find the CA of
+// the next one.
+var DefaultCAID string
 
 func TestBaseCRL(t *testing.T) {
 	vaTestServer, err := StartVAServiceTestServer(t)
@@ -125,7 +127,7 @@ func TestBaseCRL(t *testing.T) {
 			var crl *x509.RevocationList
 			err = tests.SleepRetry(5, 5*time.Second, func() error {
 				crl, err = vaTestServer.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-					CASubjectKeyID: issuerCA.Certificate.AuthorityKeyID,
+					ID:             issuerCA.ID,
 					Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
 					VerifyResponse: true,
 				})
@@ -170,7 +172,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 		// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
 		// First get v1 CRL and check that it has 0 entries
 		crl, err = vaTestServer.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			ID:             oneCrt.IssuerCAMetadata.ID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
 		})
@@ -211,7 +213,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v2 CRL and check that it has 1 entry
 		crl, err = vaTestServer.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			ID:             oneCrt.IssuerCAMetadata.ID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
 		})
@@ -448,7 +450,7 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 	}
 }
 
-func TestVARole(t *testing.T) {
+func TestCRLSettings(t *testing.T) {
 	vaServerTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not start VA service test server: %s", err)
@@ -458,10 +460,10 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
 
-	var role *models.VARole
+	var role *models.CRLSettings
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
-		role, err = vaServerTest.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
+		role, err = vaServerTest.CRLService.GetCRLSettings(context.Background(), services.GetCRLSettingsInput{
+			CAID: ca.ID,
 		})
 
 		return err
@@ -470,57 +472,57 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get role: %s", err)
 	}
 
-	if role.CASubjectKeyID != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CASubjectKeyID should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	if role.CAID != ca.ID {
+		t.Fatalf("settings CAID should be %s, got %s", ca.ID, role.CAID)
 	}
 
-	if role.CRLOptions.RegenerateOnRevoke != true {
-		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be true, got %t", role.CRLOptions.RegenerateOnRevoke)
+	if role.Options.RegenerateOnRevoke != true {
+		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be true, got %t", role.Options.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SignerCertificateSerialNumber != ca.Certificate.SerialNumber {
-		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.CRLOptions.SignerCertificateSerialNumber)
+	if role.Options.SignerSerialNumber != ca.Certificate.SerialNumber {
+		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.Options.SignerSerialNumber)
 	}
 
 	//Now Update the role
 
-	role.CRLOptions.RegenerateOnRevoke = false
-	role.CRLOptions.SignerCertificateSerialNumber = ca.Certificate.SerialNumber
-	role.CRLOptions.Validity = models.TimeDuration(time.Hour * 2)
+	role.Options.RegenerateOnRevoke = false
+	role.Options.SignerSerialNumber = ca.Certificate.SerialNumber
+	role.Options.Validity = models.TimeDuration(time.Hour * 2)
 
-	role, err = serverTest.VA.CRLService.UpdateVARole(context.Background(), services.UpdateVARoleInput{
-		CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
-		CRLRole:        role.CRLOptions,
+	role, err = serverTest.VA.CRLService.UpdateCRLSettings(context.Background(), services.UpdateCRLSettingsInput{
+		CAID:    ca.ID,
+		Options: role.Options,
 	})
 
 	if err != nil {
 		t.Fatalf("could not update role: %s", err)
 	}
 
-	role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-		CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
+	role, err = serverTest.VA.CRLService.GetCRLSettings(context.Background(), services.GetCRLSettingsInput{
+		CAID: ca.ID,
 	})
 
 	if err != nil {
 		t.Fatalf("could not get role: %s", err)
 	}
 
-	if role.CRLOptions.RegenerateOnRevoke != false {
-		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be false, got %t", role.CRLOptions.RegenerateOnRevoke)
+	if role.Options.RegenerateOnRevoke != false {
+		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be false, got %t", role.Options.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SignerCertificateSerialNumber != ca.Certificate.SerialNumber {
-		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.CRLOptions.SignerCertificateSerialNumber)
+	if role.Options.SignerSerialNumber != ca.Certificate.SerialNumber {
+		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.Options.SignerSerialNumber)
 	}
 
 	//Now get all roles
 	ctr := 0
 	tests.SleepRetry(10, 3*time.Second, func() error {
 		ctr = 0
-		_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
+		_, err = serverTest.VA.CRLService.GetCRLSettingsList(context.Background(), services.GetCRLSettingsListInput{
 			ExhaustiveRun:   true,
 			QueryParameters: &resources.QueryParameters{},
-			ApplyFunc: func(role models.VARole) {
+			ApplyFunc: func(role models.CRLSettings) {
 				ctr++
 			},
 		})
@@ -549,7 +551,6 @@ func TestVARole(t *testing.T) {
 
 	//Create New CA and check if the role is created automatically
 	ca, err = serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-		ID:           "new-ca",
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "TestCA"},
 		CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
@@ -560,8 +561,8 @@ func TestVARole(t *testing.T) {
 	}
 
 	err = tests.SleepRetry(10, 3*time.Second, func() error {
-		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
+		role, err = serverTest.VA.CRLService.GetCRLSettings(context.Background(), services.GetCRLSettingsInput{
+			CAID: ca.ID,
 		})
 
 		return err
@@ -570,16 +571,16 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get role: %s", err)
 	}
 
-	if role.CASubjectKeyID != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CASubjectKeyID should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	if role.CAID != ca.ID {
+		t.Fatalf("settings CAID should be %s, got %s", ca.ID, role.CAID)
 	}
 
 	tests.SleepRetry(10, 3*time.Second, func() error {
 		ctr = 0
-		_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
+		_, err = serverTest.VA.CRLService.GetCRLSettingsList(context.Background(), services.GetCRLSettingsListInput{
 			ExhaustiveRun:   true,
 			QueryParameters: &resources.QueryParameters{},
-			ApplyFunc: func(role models.VARole) {
+			ApplyFunc: func(role models.CRLSettings) {
 				ctr++
 			},
 		})
@@ -641,7 +642,6 @@ func initCAForVA(caSvc services.CAService) (*models.CACertificate, error) {
 	}
 
 	ca, err := caSvc.CreateCA(context.Background(), services.CreateCAInput{
-		ID:           DefaultCAID,
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "TestCA"},
 		CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -651,6 +651,7 @@ func initCAForVA(caSvc services.CAService) (*models.CACertificate, error) {
 		return nil, err
 	}
 
+	DefaultCAID = ca.ID
 	return ca, nil
 }
 
@@ -678,7 +679,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// First get v1 CRL and check that it has 0 entries
 		crl, err = vaServerTest.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			ID:             oneCrt.IssuerCAMetadata.ID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
 		})
@@ -718,7 +719,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v2 CRL and check that it has 1 entry
 		crl, err = vaServerTest.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			ID:             oneCrt.IssuerCAMetadata.ID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
 		})
@@ -767,7 +768,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v3 CRL and check that it has 0 entries (certificate should be removed)
 		crl, err = vaServerTest.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			ID:             oneCrt.IssuerCAMetadata.ID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
 		})
