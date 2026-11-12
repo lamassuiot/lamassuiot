@@ -2,7 +2,6 @@ package postgrestest
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -10,7 +9,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	postgresstorage "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -22,12 +20,7 @@ func TestTenantRLSUsesTransactionTenantAsApplicationRole(t *testing.T) {
 
 	adminDB := suite.DB[postgresstorage.ALERTS_SCHEMA]
 	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'rls-test'").Error)
-
-	appDB, err := gorm.Open(postgres.Open(fmt.Sprintf(
-		"host=%s port=%d user=lamassu_app dbname=%s password=rls-test search_path=%s sslmode=disable",
-		cfg.Hostname, cfg.Port, postgresstorage.MAIN_DB_NAME, postgresstorage.ALERTS_SCHEMA,
-	)), &gorm.Config{})
-	require.NoError(t, err)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.ALERTS_SCHEMA, "rls-test")
 
 	require.NoError(t, adminDB.Exec("INSERT INTO subscriptions (id, tenant_id) VALUES (?, ?), (?, ?)",
 		"subscription-a", "tenant-a", "subscription-b", "tenant-b").Error)
@@ -48,7 +41,7 @@ func TestTenantRLSUsesTransactionTenantAsApplicationRole(t *testing.T) {
 	require.Equal(t, int64(1), countSubscriptions(tenantTestContext("tenant-a", models.TenantActive)))
 	require.Equal(t, int64(1), countSubscriptions(tenantTestContext("tenant-b", models.TenantActive)))
 
-	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
 		return tx.Exec("INSERT INTO subscriptions (id, tenant_id) VALUES (?, ?)", "subscription-cross-tenant", "tenant-b").Error
 	})
 	require.Error(t, err)
@@ -87,14 +80,10 @@ func TestTenantRLSScopesCountsAndPagination(t *testing.T) {
 		"subscription-a-1", "tenant-a", "a-1", "subscription-a-2", "tenant-a", "a-2",
 		"subscription-b-1", "tenant-b", "b-1", "subscription-b-2", "tenant-b", "b-2").Error)
 
-	appDB, err := gorm.Open(postgres.Open(fmt.Sprintf(
-		"host=%s port=%d user=lamassu_app dbname=%s password=rls-pagination-test search_path=%s sslmode=disable",
-		cfg.Hostname, cfg.Port, postgresstorage.MAIN_DB_NAME, postgresstorage.ALERTS_SCHEMA,
-	)), &gorm.Config{})
-	require.NoError(t, err)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.ALERTS_SCHEMA, "rls-pagination-test")
 
 	var channels []string
-	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
 		var count int64
 		if err := tx.Model(&struct{}{}).Table("subscriptions").Count(&count).Error; err != nil {
 			return err
@@ -121,12 +110,7 @@ func TestVATenantRLSUsesCompositeTenantKey(t *testing.T) {
 
 	adminDB := suite.DB[postgresstorage.VA_SCHEMA]
 	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'va-rls-test'").Error)
-
-	appDB, err := gorm.Open(postgres.Open(fmt.Sprintf(
-		"host=%s port=%d user=lamassu_app dbname=%s password=va-rls-test search_path=%s sslmode=disable",
-		cfg.Hostname, cfg.Port, postgresstorage.MAIN_DB_NAME, postgresstorage.VA_SCHEMA,
-	)), &gorm.Config{})
-	require.NoError(t, err)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.VA_SCHEMA, "va-rls-test")
 
 	require.NoError(t, adminDB.Exec("INSERT INTO va_role (tenant_id, ca_ski) VALUES (?, ?), (?, ?)",
 		"tenant-a", "shared-ca-ski", "tenant-b", "shared-ca-ski").Error)
@@ -143,7 +127,7 @@ func TestVATenantRLSUsesCompositeTenantKey(t *testing.T) {
 	require.Equal(t, int64(1), countRoles(tenantTestContext("tenant-a", models.TenantActive)))
 	require.Equal(t, int64(1), countRoles(tenantTestContext("tenant-b", models.TenantActive)))
 
-	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
 		return tx.Exec("INSERT INTO va_role (tenant_id, ca_ski) VALUES (?, ?)", "tenant-b", "cross-tenant-ca").Error
 	})
 	require.Error(t, err)
@@ -173,12 +157,7 @@ func TestDMSTenantRLSPreventsCrossTenantAccess(t *testing.T) {
 
 	adminDB := suite.DB[postgresstorage.DMS_SCHEMA]
 	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'dms-rls-test'").Error)
-
-	appDB, err := gorm.Open(postgres.Open(fmt.Sprintf(
-		"host=%s port=%d user=lamassu_app dbname=%s password=dms-rls-test search_path=%s sslmode=disable",
-		cfg.Hostname, cfg.Port, postgresstorage.MAIN_DB_NAME, postgresstorage.DMS_SCHEMA,
-	)), &gorm.Config{})
-	require.NoError(t, err)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.DMS_SCHEMA, "dms-rls-test")
 
 	require.NoError(t, adminDB.Exec("INSERT INTO dms (id, name, tenant_id) VALUES (?, ?, ?), (?, ?, ?)",
 		"dms-a", "DMS A", "tenant-a", "dms-b", "DMS B", "tenant-b").Error)
@@ -195,7 +174,7 @@ func TestDMSTenantRLSPreventsCrossTenantAccess(t *testing.T) {
 	require.Equal(t, int64(1), countDMS(tenantTestContext("tenant-a", models.TenantActive)))
 	require.Equal(t, int64(1), countDMS(tenantTestContext("tenant-b", models.TenantActive)))
 
-	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
 		return tx.Exec("INSERT INTO dms (id, name, tenant_id) VALUES (?, ?, ?)", "dms-cross", "Cross tenant", "tenant-b").Error
 	})
 	require.Error(t, err)
@@ -225,12 +204,7 @@ func TestKMSTenantRLSPreventsCrossTenantAccess(t *testing.T) {
 
 	adminDB := suite.DB[postgresstorage.KMS_SCHEMA]
 	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'kms-rls-test'").Error)
-
-	appDB, err := gorm.Open(postgres.Open(fmt.Sprintf(
-		"host=%s port=%d user=lamassu_app dbname=%s password=kms-rls-test search_path=%s sslmode=disable",
-		cfg.Hostname, cfg.Port, postgresstorage.MAIN_DB_NAME, postgresstorage.KMS_SCHEMA,
-	)), &gorm.Config{})
-	require.NoError(t, err)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.KMS_SCHEMA, "kms-rls-test")
 
 	require.NoError(t, adminDB.Exec("INSERT INTO kms_keys (key_id, engine_id, name, algorithm, size, public_key, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)",
 		"key-a", "engine-test", "Key A", "RSA", 2048, "public-a", "tenant-a", "key-b", "engine-test", "Key B", "RSA", 2048, "public-b", "tenant-b").Error)
@@ -247,7 +221,7 @@ func TestKMSTenantRLSPreventsCrossTenantAccess(t *testing.T) {
 	require.Equal(t, int64(1), countKeys(tenantTestContext("tenant-a", models.TenantActive)))
 	require.Equal(t, int64(1), countKeys(tenantTestContext("tenant-b", models.TenantActive)))
 
-	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
 		return tx.Exec("INSERT INTO kms_keys (key_id, engine_id, name, algorithm, size, public_key, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?)", "key-cross", "engine-test", "Cross tenant", "RSA", 2048, "public-cross", "tenant-b").Error
 	})
 	require.Error(t, err)
@@ -277,12 +251,7 @@ func TestDeviceTenantRLSPreventsCrossTenantAccess(t *testing.T) {
 
 	adminDB := suite.DB[postgresstorage.DEVICE_SCHEMA]
 	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'device-rls-test'").Error)
-
-	appDB, err := gorm.Open(postgres.Open(fmt.Sprintf(
-		"host=%s port=%d user=lamassu_app dbname=%s password=device-rls-test search_path=%s sslmode=disable",
-		cfg.Hostname, cfg.Port, postgresstorage.MAIN_DB_NAME, postgresstorage.DEVICE_SCHEMA,
-	)), &gorm.Config{})
-	require.NoError(t, err)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.DEVICE_SCHEMA, "device-rls-test")
 
 	require.NoError(t, adminDB.Exec("INSERT INTO devices (id, tenant_id) VALUES (?, ?), (?, ?)",
 		"device-a", "tenant-a", "device-b", "tenant-b").Error)
@@ -299,7 +268,7 @@ func TestDeviceTenantRLSPreventsCrossTenantAccess(t *testing.T) {
 	require.Equal(t, int64(1), countDevices(tenantTestContext("tenant-a", models.TenantActive)))
 	require.Equal(t, int64(1), countDevices(tenantTestContext("tenant-b", models.TenantActive)))
 
-	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
 		return tx.Exec("INSERT INTO devices (id, tenant_id) VALUES (?, ?)", "device-cross", "tenant-b").Error
 	})
 	require.Error(t, err)
@@ -327,12 +296,7 @@ func TestCATenantRLSPreventsCrossTenantAccess(t *testing.T) {
 
 	adminDB := suite.DB[postgresstorage.CA_SCHEMA]
 	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'ca-rls-test'").Error)
-
-	appDB, err := gorm.Open(postgres.Open(fmt.Sprintf(
-		"host=%s port=%d user=lamassu_app dbname=%s password=ca-rls-test search_path=%s sslmode=disable",
-		cfg.Hostname, cfg.Port, postgresstorage.MAIN_DB_NAME, postgresstorage.CA_SCHEMA,
-	)), &gorm.Config{})
-	require.NoError(t, err)
+	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.CA_SCHEMA, "ca-rls-test")
 
 	require.NoError(t, adminDB.Exec("INSERT INTO certificates (serial_number, tenant_id) VALUES (?, ?), (?, ?), (?, ?)",
 		"serial-a", "tenant-a", "serial-b", "tenant-b", "serial-cross", "tenant-b").Error)
@@ -351,7 +315,7 @@ func TestCATenantRLSPreventsCrossTenantAccess(t *testing.T) {
 	require.Equal(t, int64(1), countCAs(tenantTestContext("tenant-a", models.TenantActive)))
 	require.Equal(t, int64(1), countCAs(tenantTestContext("tenant-b", models.TenantActive)))
 
-	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
+	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
 		return tx.Exec("INSERT INTO ca_certificates (serial_number, id, tenant_id) VALUES (?, ?, ?)", "serial-cross", "ca-cross", "tenant-b").Error
 	})
 	require.Error(t, err)
