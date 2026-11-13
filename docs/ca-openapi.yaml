@@ -1470,7 +1470,7 @@ components:
         extended_key_usage:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/X509ExtKeyUsage'
 
     IssuerCAMetadata:
       type: object
@@ -1553,7 +1553,7 @@ components:
         extended_key_usages:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/X509ExtKeyUsage'
         honor_subject:
           type: boolean
         subject:
@@ -1622,9 +1622,42 @@ components:
             type: integer
 
     X509KeyUsage:
-      type: object
-      additionalProperties: true
-      description: X509 key usage bitmask representation
+      type: array
+      description: >-
+        X509 Key Usage extension, serialized as the list of enabled usages.
+        Requests also accept a single usage as a plain string.
+      items:
+        type: string
+        enum:
+          - DigitalSignature
+          - ContentCommitment
+          - KeyEncipherment
+          - DataEncipherment
+          - KeyAgreement
+          - CertSign
+          - CRLSign
+          - EncipherOnly
+          - DecipherOnly
+      example: [DigitalSignature, KeyEncipherment]
+
+    X509ExtKeyUsage:
+      type: string
+      description: X509 Extended Key Usage. Requests match the value case-insensitively.
+      enum:
+        - Any
+        - ServerAuth
+        - ClientAuth
+        - CodeSigning
+        - EmailProtection
+        - IPSECEndSystem
+        - IPSECTunnel
+        - IPSECUser
+        - TimeStamping
+        - OCSPSigning
+        - MicrosoftServerGatedCrypto
+        - NetscapeServerGatedCrypto
+        - MicrosoftCommercialCodeSigning
+        - MicrosoftKernelCodeSigning
 
     X509Certificate:
       type: object

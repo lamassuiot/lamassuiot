@@ -97,11 +97,6 @@
     ],
     "relations": [
       {
-        "name": "authority_key_id",
-        "target_entity": "kms_key",
-        "foreign_key": "authority_key_id"
-      },
-      {
         "name": "issuer_meta_id",
         "target_entity": "ca_certificate",
         "foreign_key": "issuer_meta_id"
@@ -154,7 +149,9 @@
       { "column": "issuer_organization_unit",  "type": "string"    },
       { "column": "issuer_country",            "type": "string"    },
       { "column": "issuer_state",              "type": "string"    },
-      { "column": "issuer_locality",           "type": "string"    }
+      { "column": "issuer_locality",           "type": "string"    },
+      { "column": "extensions_key_usage",          "type": "jsonb"  },
+      { "column": "extensions_extended_key_usage", "type": "jsonb"  }
     ]
   },
   {
