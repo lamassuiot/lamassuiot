@@ -18,6 +18,4 @@ type CRLSettingsRepo interface {
 	UpdateOptions(ctx context.Context, caID string, options models.CRLSettingsOptions) (*models.CRLSettings, error)
 	// UpdateLatestCRL writes the latest CRL only, and fails with errs.ErrCRLSettingsConflict if its version is no longer expectedVersion.
 	UpdateLatestCRL(ctx context.Context, caID string, expectedVersion *big.Int, latest models.LatestCRLMeta) error
-	// SetSigner moves the signer certificate only if it is still expectedSerial. It tells whether it moved.
-	SetSigner(ctx context.Context, caID, expectedSerial, newSerial string) (bool, error)
 }

@@ -130,18 +130,6 @@ func (r *memCRLSettingsRepo) UpdateLatestCRL(_ context.Context, id string, expec
 	return nil
 }
 
-func (r *memCRLSettingsRepo) SetSigner(_ context.Context, id, expected, next string) (bool, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	s := r.rows[id]
-	if s.Options.SignerSerialNumber != expected {
-		return false, nil
-	}
-	s.Options.SignerSerialNumber = next
-	r.rows[id] = s
-	return true, nil
-}
-
 // crlFixture is a software PKI: CAs, their certificates, revocations and a KMS that signs with the CA key.
 type crlFixture struct {
 	t        *testing.T
