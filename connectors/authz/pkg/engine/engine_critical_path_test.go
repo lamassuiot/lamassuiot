@@ -215,6 +215,7 @@ func TestGenerateListFilter_CascadeColumnFilter(t *testing.T) {
 
 	joinedJoins := strings.Join(result.Joins, " ")
 	assert.Contains(t, joinedJoins, "LEFT JOIN", "cascade path is expressed via LEFT JOINs")
+	assert.NotContains(t, joinedJoins, " AS ", "table aliases must be compatible with Oracle")
 	assert.Contains(t, joinedJoins, "organizations", "path must join up to the organizations table")
 }
 

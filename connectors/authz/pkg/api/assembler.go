@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
@@ -24,6 +25,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	oraclestorage "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -100,7 +102,7 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 
 	lDB := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "DB")
 
-	authzDB, err := CreatePostgresDBConnection(lDB, conf.AuthzDB)
+	authzDB, err := CreateAuthzDBConnection(lDB, conf.AuthzDB)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to connect to authz database: %w", err)
 	}
@@ -128,7 +130,7 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 	schemaDbs := make(map[string]*gorm.DB)
 	for schemaName, credentials := range conf.Credentials {
 		lDB.Infof("Creating database connection for schema: %s", schemaName)
-		db, err := CreatePostgresDBConnection(lDB, credentials)
+		db, err := CreateSchemaDBConnection(lDB, credentials)
 		if err != nil {
 			return nil, nil, nil, nil, fmt.Errorf("failed to create database connection for schema %s: %w", schemaName, err)
 		}
@@ -206,6 +208,17 @@ type postgresDBConfig struct {
 	Schema string `mapstructure:"schema"`
 }
 
+func CreateAuthzDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageEngine) (*gorm.DB, error) {
+	switch strings.ToLower(strings.TrimSpace(string(cfg.Provider))) {
+	case "", "postgres", "postgresql":
+		return CreatePostgresDBConnection(log, cfg)
+	case "oracle":
+		return CreateOracleAuthzDBConnection(log, cfg)
+	default:
+		return nil, fmt.Errorf("unsupported Authz database provider %q (supported: postgres, oracle)", cfg.Provider)
+	}
+}
+
 func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageEngine) (*gorm.DB, error) {
 	dbCfg, err := cconfig.DecodeStruct[postgresDBConfig](cfg.Config)
 	if err != nil {
@@ -244,4 +257,79 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageE
 
 	log.Infof("Connected to PostgreSQL database: %s@%s:%d/%s", dbCfg.Username, dbCfg.Hostname, dbCfg.Port, dbCfg.Database)
 	return db, nil
+}
+
+// CreateOracleAuthzDBConnection opens the Oracle database that stores Authz
+// principals, grants, and policies. Oracle's connected user owns this schema.
+func CreateOracleAuthzDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageEngine) (*gorm.DB, error) {
+	oracleCfg, err := authzconfig.DecodeOracleDBConfig(cfg.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode Oracle Authz database config: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool, err := oraclestorage.OpenDatabaseWithOptions(ctx, oraclestorage.ConnectionOptions{
+		ConnectString:   oracleCfg.ConnectString,
+		Username:        oracleCfg.Username,
+		Password:        oracleCfg.Password,
+		MaxOpenConns:    oracleCfg.MaxOpenConns,
+		MaxIdleConns:    oracleCfg.MaxIdleConns,
+		ConnMaxLifetime: oracleCfg.ConnMaxLifetime,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Oracle Authz database: %w", err)
+	}
+	db, err := oraclestorage.OpenGORM(pool)
+	if err != nil {
+		_ = pool.Close()
+		return nil, err
+	}
+	if err := db.Use(authzgorm.NewOracleAuthzGormPlugin()); err != nil {
+		_ = pool.Close()
+		return nil, fmt.Errorf("failed to register Oracle authz gorm plugin: %w", err)
+	}
+	db.Logger = NewGormLogger(log)
+	log.Infof("Connected to Oracle Authz database as %s", oracleCfg.Username)
+	return db, nil
+}
+
+// CreateSchemaDBConnection opens the database Authz uses to resolve entities
+// for one configured schema.
+func CreateSchemaDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageEngine) (*gorm.DB, error) {
+	provider := string(cfg.Provider)
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", "postgres", "postgresql":
+		return CreatePostgresDBConnection(log, cfg)
+	case "oracle":
+		oracleCfg, err := authzconfig.DecodeOracleDBConfig(cfg.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode oracle schema config: %w", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		pool, err := oraclestorage.OpenDatabaseWithOptions(ctx, oraclestorage.ConnectionOptions{
+			ConnectString:   oracleCfg.ConnectString,
+			Username:        oracleCfg.Username,
+			Password:        oracleCfg.Password,
+			MaxOpenConns:    oracleCfg.MaxOpenConns,
+			MaxIdleConns:    oracleCfg.MaxIdleConns,
+			ConnMaxLifetime: oracleCfg.ConnMaxLifetime,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to Oracle schema: %w", err)
+		}
+		db, err := oraclestorage.OpenGORM(pool)
+		if err != nil {
+			_ = pool.Close()
+			return nil, err
+		}
+		if err := db.Use(authzgorm.NewOracleAuthzGormPlugin()); err != nil {
+			_ = pool.Close()
+			return nil, fmt.Errorf("failed to register Oracle authz gorm plugin: %w", err)
+		}
+		log.Infof("Connected to Oracle schema as %s", oracleCfg.Username)
+		return db, nil
+	default:
+		return nil, fmt.Errorf("unsupported Authz schema database provider %q (supported: postgres, oracle)", cfg.Provider)
+	}
 }

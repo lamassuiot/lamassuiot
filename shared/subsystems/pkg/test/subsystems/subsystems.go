@@ -27,6 +27,7 @@ type SubsystemProvider string
 
 const (
 	Postgres SubsystemProvider = "postgres"
+	Oracle   SubsystemProvider = "oracle"
 	CouchDB  SubsystemProvider = "couchdb"
 	RabbitMQ SubsystemProvider = "rabbitmq"
 	Vault    SubsystemProvider = "vault"

@@ -64,12 +64,12 @@ For actions that require checking specific entity access:
 [AUTHZ]     Condition 3: j1_0.id = ?
 [AUTHZ]     Condition 4: j2_0.id = ?
 [AUTHZ]     Condition 5: iot_devices.device_id = ?
-[AUTHZ]     Join 1: LEFT JOIN organizations AS j0_0 ON iot_devices.organization_id = j0_0.id
-[AUTHZ]     Join 2: LEFT JOIN iot_gateways AS j0_1 ON j0_0.building_id = j0_1.id
-[AUTHZ]     Join 3: LEFT JOIN iot_devices AS j0_2 ON j0_1.gateway_id = j0_2.device_id
-[AUTHZ]     Join 4: LEFT JOIN buildings AS j1_0 ON iot_devices.building_id = j1_0.id
-[AUTHZ]     Join 5: LEFT JOIN iot_devices AS j1_1 ON j1_0.gateway_id = j1_1.device_id
-[AUTHZ]     Join 6: LEFT JOIN iot_gateways AS j2_0 ON iot_devices.gateway_id = j2_0.id
+[AUTHZ]     Join 1: LEFT JOIN organizations j0_0 ON iot_devices.organization_id = j0_0.id
+[AUTHZ]     Join 2: LEFT JOIN iot_gateways j0_1 ON j0_0.building_id = j0_1.id
+[AUTHZ]     Join 3: LEFT JOIN iot_devices j0_2 ON j0_1.gateway_id = j0_2.device_id
+[AUTHZ]     Join 4: LEFT JOIN buildings j1_0 ON iot_devices.building_id = j1_0.id
+[AUTHZ]     Join 5: LEFT JOIN iot_devices j1_1 ON j1_0.gateway_id = j1_1.device_id
+[AUTHZ]     Join 6: LEFT JOIN iot_gateways j2_0 ON iot_devices.gateway_id = j2_0.id
 [AUTHZ]   Executing database query on table 'iot_devices'
 [AUTHZ]   WHERE: iot_devices.device_id IN (?, ?) OR j0_0.id = ? OR j1_0.id = ? OR j2_0.id = ? OR iot_devices.device_id = ?
 [AUTHZ]   Args: [device-1 device-4 org-1 building-1 gateway-1 device-123]

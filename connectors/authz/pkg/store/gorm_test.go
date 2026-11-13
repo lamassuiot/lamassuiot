@@ -12,7 +12,7 @@ import (
 )
 
 func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
-	container, err := testutil.RunPostgresEmpty()
+	container, err := testutil.RunEmpty()
 	require.NoError(t, err)
 	defer container.Cleanup()
 
@@ -21,7 +21,7 @@ func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
 
 	log := logrus.NewEntry(logrus.New())
 	log.Logger.SetLevel(logrus.ErrorLevel)
-	require.NoError(t, RunMigrations(sqlDB, "", log))
+	require.NoError(t, RunMigrationsForProvider(sqlDB, "", testutil.StorageProvider(), log))
 
 	s, err := NewGormPrincipalStore(container.DB)
 	require.NoError(t, err)

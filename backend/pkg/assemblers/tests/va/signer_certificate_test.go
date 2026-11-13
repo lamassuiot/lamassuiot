@@ -14,6 +14,8 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
+	oracleconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/config"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"github.com/stretchr/testify/require"
@@ -71,14 +73,27 @@ func TestVARoleUsesItsReferencedSignerCertificate(t *testing.T) {
 	require.NoError(t, crl.CheckSignatureFrom((*x509.Certificate)(issuer.Certificate.Certificate)))
 
 	// FK existence alone cannot check cryptographic compatibility; generation must check it too.
-	cfg, err := cconfig.DecodeStruct[pconfig.PostgresPSEConfig](serverTest.Storage.Config.Config)
-	require.NoError(t, err)
-	db, err := postgres.CreatePostgresDBConnection(chelpers.SetupLogger(cconfig.Info, "Test", "VA signer"), cfg, postgres.VA_SCHEMA)
-	require.NoError(t, err)
-	pool, err := db.DB()
-	require.NoError(t, err)
-	defer pool.Close()
-	require.NoError(t, db.Exec(`UPDATE va_role SET crl_signer_certificate_serial_number = ? WHERE ca_ski = ?`, signer.Certificate.SerialNumber, role.CASubjectKeyID).Error)
+	switch serverTest.Storage.Config.Provider {
+	case cconfig.Oracle:
+		cfg, err := cconfig.DecodeStruct[oracleconfig.Config](serverTest.Storage.Config.Config)
+		require.NoError(t, err)
+		db, err := oracle.OpenDatabase(ctx, cfg)
+		require.NoError(t, err)
+		defer db.Close()
+		_, err = db.ExecContext(ctx, `UPDATE va_role SET crl_signer_certificate_serial_number = :1 WHERE ca_ski = :2`, signer.Certificate.SerialNumber, role.CASubjectKeyID)
+		require.NoError(t, err)
+	case cconfig.Postgres, "":
+		cfg, err := cconfig.DecodeStruct[pconfig.PostgresPSEConfig](serverTest.Storage.Config.Config)
+		require.NoError(t, err)
+		db, err := postgres.CreatePostgresDBConnection(chelpers.SetupLogger(cconfig.Info, "Test", "VA signer"), cfg, postgres.VA_SCHEMA)
+		require.NoError(t, err)
+		pool, err := db.DB()
+		require.NoError(t, err)
+		defer pool.Close()
+		require.NoError(t, db.Exec(`UPDATE va_role SET crl_signer_certificate_serial_number = ? WHERE ca_ski = ?`, signer.Certificate.SerialNumber, role.CASubjectKeyID).Error)
+	default:
+		t.Fatalf("unsupported storage provider for VA signer test: %s", serverTest.Storage.Config.Provider)
+	}
 	_, err = serverTest.VA.CRLService.CalculateCRL(ctx, services.CalculateCRLInput{CASubjectKeyID: role.CASubjectKeyID})
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 }

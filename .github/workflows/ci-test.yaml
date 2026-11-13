@@ -250,9 +250,167 @@ jobs:
           verbose: true
           flags: backend-rest
 
+  test-oracle:
+    name: Oracle assemblers (${{ matrix.service }})
+    needs: setup
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        service:
+          - ca
+          - kms
+          - va
+          - device-manager
+          - dms-manager
+          - alerts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Each assembler suite starts and cleans up its own Oracle container.
+      LAMASSU_TEST_STORAGE_PROVIDER: oracle
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '^1.27.3'
+          cache-dependency-path: "**/*.sum"
+      - name: Install Dependencies
+        run: go mod download
+      - name: Run Oracle assembler tests with coverage
+        working-directory: backend/pkg/assemblers/tests/${{ matrix.service }}
+        run: |
+          go tool gotestsum --format github-actions -- \
+            -count=1 \
+            -timeout=900s \
+            -coverpkg=github.com/lamassuiot/lamassuiot/v4/backend/... \
+            -coverprofile=coverage.txt \
+            -covermode=atomic \
+            ./...
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: backend-assemblers-oracle-${{ matrix.service }}
+
+  test-oracle-storage:
+    name: Oracle storage tests
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      oracle:
+        image: gvenzl/oracle-free:23.26.3-slim-faststart
+        env:
+          ORACLE_PASSWORD: LamassuTest123
+          APP_USER: lamassu
+          APP_USER_PASSWORD: LamassuTest123
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd /opt/oracle/healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 60
+          --health-start-period 60s
+      postgres:
+        image: postgres:16.15-bookworm
+        env:
+          POSTGRES_DB: pki
+          POSTGRES_USER: lamassu
+          POSTGRES_PASSWORD: LamassuTest123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lamassu -d pki"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '^1.27.3'
+          cache-dependency-path: "**/*.sum"
+      - name: Install Dependencies
+        run: go mod download
+      - name: Run Oracle storage tests with coverage
+        working-directory: engines/storage/oracle
+        env:
+          LAMASSU_TEST_ORACLE_CONNECT_STRING: localhost:1521/FREEPDB1
+          LAMASSU_TEST_ORACLE_USERNAME: lamassu
+          LAMASSU_TEST_ORACLE_PASSWORD: LamassuTest123
+          LAMASSU_TEST_POSTGRES_HOSTNAME: localhost
+          LAMASSU_TEST_POSTGRES_USERNAME: lamassu
+          LAMASSU_TEST_POSTGRES_PASSWORD: LamassuTest123
+        run: |
+          # Tests create and drop objects in the same disposable schema.
+          go tool gotestsum --format github-actions -- \
+            -count=1 \
+            -p=1 \
+            -timeout=900s \
+            -coverpkg=./... \
+            -coverprofile=coverage.txt \
+            -covermode=atomic \
+            ./...
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: storage-oracle
+
+  test-oracle-authz:
+    name: Authz tests against Oracle
+    needs: [setup, test-oracle]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '^1.27.3'
+          cache-dependency-path: "**/*.sum"
+      - name: Install Dependencies
+        run: go mod download
+      - name: Run Authz tests against Oracle
+        env:
+          LAMASSU_TEST_STORAGE_PROVIDER: oracle
+        run: |
+          mapfile -t packages < <(go list ./connectors/authz/...)
+          go tool gotestsum --format github-actions -- -count=1 -p 1 -timeout 900s -coverpkg=./... -coverprofile coverage.txt -covermode=atomic "${packages[@]}"
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: storage-oracle-authz
+
   codecov-notify:
     name: Codecov notifications
-    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest]
+    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest, test-oracle, test-oracle-storage, test-oracle-authz]
     runs-on: ubuntu-latest
     permissions:
       contents: read

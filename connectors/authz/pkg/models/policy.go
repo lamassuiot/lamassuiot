@@ -1,22 +1,48 @@
 package models
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 )
 
-// PolicyRecord is the GORM model that persists a Policy in the authz Postgres database.
-// The rules and http_rules slices are stored as JSONB. Schema is managed by RunMigrations.
+// JSONDocument stores JSON as text binds so both PostgreSQL JSONB and Oracle
+// native JSON columns can consume the same serialized representation.
+type JSONDocument []byte
+
+func (d JSONDocument) Value() (driver.Value, error) {
+	if len(d) == 0 {
+		return nil, nil
+	}
+	return string(d), nil
+}
+
+func (d *JSONDocument) Scan(value any) error {
+	switch v := value.(type) {
+	case nil:
+		*d = nil
+	case []byte:
+		*d = append((*d)[:0], v...)
+	case string:
+		*d = append((*d)[:0], v...)
+	default:
+		return fmt.Errorf("scan JSON document from %T", value)
+	}
+	return nil
+}
+
+// PolicyRecord is the GORM model persisted in the Authz database. Schema is
+// managed by provider-specific migrations.
 type PolicyRecord struct {
-	ID          string          `gorm:"primaryKey;size:255"          json:"id"`
-	Name        string          `gorm:"size:255;not null;index"       json:"name"`
-	Description string          `gorm:"size:1024;index"               json:"description,omitempty"`
-	Rules       json.RawMessage `gorm:"type:jsonb;not null"           json:"rules"`
-	HTTPRules   json.RawMessage `gorm:"column:http_rules;type:jsonb"  json:"http_rules,omitempty"`
-	CreatedAt   time.Time       `                                      json:"created_at"`
-	UpdatedAt   time.Time       `                                      json:"updated_at"`
+	ID          string       `gorm:"primaryKey;size:255"          json:"id"`
+	Name        string       `gorm:"size:255;not null;index"       json:"name"`
+	Description string       `gorm:"size:1024;index"               json:"description,omitempty"`
+	Rules       JSONDocument `gorm:"type:json;not null"             json:"rules"`
+	HTTPRules   JSONDocument `gorm:"column:http_rules;type:json"    json:"http_rules,omitempty"`
+	CreatedAt   time.Time    `                                      json:"created_at"`
+	UpdatedAt   time.Time    `                                      json:"updated_at"`
 }
 
 func (PolicyRecord) TableName() string { return "policies" }
@@ -24,13 +50,13 @@ func (PolicyRecord) TableName() string { return "policies" }
 // ToPolicy converts a PolicyRecord back into a Policy domain object.
 func (r *PolicyRecord) ToPolicy() (*Policy, error) {
 	var rules []*Rule
-	if err := json.Unmarshal(r.Rules, &rules); err != nil {
+	if err := json.Unmarshal([]byte(r.Rules), &rules); err != nil {
 		return nil, fmt.Errorf("unmarshal rules for policy %s: %w", r.ID, err)
 	}
 
 	var httpRules []*HTTPRule
-	if len(r.HTTPRules) > 0 && string(r.HTTPRules) != "null" {
-		if err := json.Unmarshal(r.HTTPRules, &httpRules); err != nil {
+	if len(r.HTTPRules) > 0 && strings.TrimSpace(string(r.HTTPRules)) != "null" {
+		if err := json.Unmarshal([]byte(r.HTTPRules), &httpRules); err != nil {
 			return nil, fmt.Errorf("unmarshal http_rules for policy %s: %w", r.ID, err)
 		}
 	}
@@ -70,8 +96,8 @@ func PolicyRecordFromPolicy(p *Policy) (*PolicyRecord, error) {
 		ID:          p.ID,
 		Name:        p.Name,
 		Description: p.Description,
-		Rules:       rawRules,
-		HTTPRules:   rawHTTPRules,
+		Rules:       JSONDocument(rawRules),
+		HTTPRules:   JSONDocument(rawHTTPRules),
 	}, nil
 }
 

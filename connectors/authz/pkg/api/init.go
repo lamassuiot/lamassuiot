@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
@@ -20,7 +21,7 @@ import (
 func InitializeStorage(ctx context.Context, conf authzconfig.AuthzConfig) error {
 	lDB := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "DB")
 
-	authzDB, err := CreatePostgresDBConnection(lDB, conf.AuthzDB)
+	authzDB, err := CreateAuthzDBConnection(lDB, conf.AuthzDB)
 	if err != nil {
 		return fmt.Errorf("failed to connect to authz database: %w", err)
 	}
@@ -53,7 +54,7 @@ func InitializeStorage(ctx context.Context, conf authzconfig.AuthzConfig) error 
 func RunMigrateCommand(ctx context.Context, conf authzconfig.AuthzConfig, command string, args []string) error {
 	lDB := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "DB")
 
-	authzDB, err := CreatePostgresDBConnection(lDB, conf.AuthzDB)
+	authzDB, err := CreateAuthzDBConnection(lDB, conf.AuthzDB)
 	if err != nil {
 		return fmt.Errorf("failed to connect to authz database: %w", err)
 	}
@@ -70,7 +71,7 @@ func RunMigrateCommand(ctx context.Context, conf authzconfig.AuthzConfig, comman
 	}
 
 	lMigrate := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Migrate")
-	return store.RunMigrationCommand(ctx, sqlDB, schema, command, args, lMigrate)
+	return store.RunMigrationCommandForProvider(ctx, sqlDB, schema, command, args, string(conf.AuthzDB.Provider), lMigrate)
 }
 
 // RunStorageMigrations applies all pending migrations to the authz database.
@@ -81,7 +82,7 @@ func RunStorageMigrations(conf authzconfig.AuthzConfig, sqlDB *sql.DB) error {
 	}
 
 	lMigrate := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "Migrate")
-	if err := store.RunMigrations(sqlDB, schema, lMigrate); err != nil {
+	if err := store.RunMigrationsForProvider(sqlDB, schema, string(conf.AuthzDB.Provider), lMigrate); err != nil {
 		return fmt.Errorf("database migration failed: %w", err)
 	}
 	return nil
@@ -108,6 +109,16 @@ func seedStorage(ctx context.Context, conf authzconfig.AuthzConfig, principalMan
 }
 
 func authzDBSchema(conf authzconfig.AuthzConfig) (string, error) {
+	if strings.EqualFold(string(conf.AuthzDB.Provider), "oracle") {
+		oracleCfg, err := authzconfig.DecodeOracleDBConfig(conf.AuthzDB.Config)
+		if err != nil {
+			return "", fmt.Errorf("failed to decode Oracle Authz database config: %w", err)
+		}
+		if schema, ok := conf.AuthzDB.Config["schema"].(string); ok && schema != "" && !strings.EqualFold(schema, oracleCfg.Username) {
+			return "", fmt.Errorf("Oracle Authz schema %q must match the configured username %q", schema, oracleCfg.Username)
+		}
+		return "", nil
+	}
 	dbCfg, err := cconfig.DecodeStruct[postgresDBConfig](conf.AuthzDB.Config)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode authz postgres config: %w", err)

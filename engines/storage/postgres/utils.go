@@ -3,8 +3,6 @@ package postgres
 import (
 	"context"
 	"embed"
-	"encoding"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,11 +10,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage/pagination"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage/serializers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
@@ -27,7 +26,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
-	"gorm.io/gorm/schema"
 	"gorm.io/plugin/opentelemetry/tracing"
 )
 
@@ -121,8 +119,7 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 }
 
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*DBQuerier[E], error) {
-	schema.RegisterSerializer("text", TextSerializer{})
-	schema.RegisterSerializer("nullstring", NullStringSerializer{})
+	serializers.Register()
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
 	return &querier, nil
 }
@@ -133,80 +130,9 @@ func isForeignKeyViolation(err error, constraint string) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == constraint
 }
 
-// NullStringSerializer stores the empty string as NULL. It is for the columns of a foreign key, which
-// does not check a NULL: the empty string would have to reference a row that does not exist.
-type NullStringSerializer struct{}
-
-func (NullStringSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue any) error {
-	var value string
-	switch v := dbValue.(type) {
-	case nil:
-	case string:
-		value = v
-	case []byte:
-		value = string(v)
-	default:
-		return fmt.Errorf("unsupported dbValue type: %T", dbValue)
-	}
-
-	field.ReflectValueOf(ctx, dst).SetString(value)
-	return nil
-}
-
-func (NullStringSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue any) (any, error) {
-	if value, _ := fieldValue.(string); value != "" {
-		return value, nil
-	}
-	return nil, nil
-}
-
-// TextSerializer string serializer
-type TextSerializer struct{}
-
-func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue any) (err error) {
-	// Create a new instance of the field type
-	fieldValue := reflect.New(field.FieldType).Interface()
-
-	// Check if the fieldValue implements encoding.TextUnmarshaler
-	unmarshaler, ok := fieldValue.(encoding.TextUnmarshaler)
-	if !ok {
-		return fmt.Errorf("field type does not implement encoding.TextUnmarshaler")
-	}
-
-	// Convert dbValue to a string or []byte
-	var textData []byte
-	switch v := dbValue.(type) {
-	case string:
-		textData = []byte(v)
-	case []byte:
-		textData = v
-	default:
-		return fmt.Errorf("unsupported dbValue type: %T", dbValue)
-	}
-
-	// Use the UnmarshalText method to populate the field
-	if err := unmarshaler.UnmarshalText(textData); err != nil {
-		return fmt.Errorf("failed to unmarshal text: %w", err)
-	}
-
-	// Set the value back to the destination
-	field.ReflectValueOf(ctx, dst).Set(reflect.ValueOf(fieldValue).Elem())
-	return nil
-}
-
-// Value implements serializer interface
-func (TextSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue any) (any, error) {
-	// Check if fieldValue implements encoding.TextMarshaler
-	if marshaler, ok := fieldValue.(encoding.TextMarshaler); ok {
-		text, err := marshaler.MarshalText()
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal text: %w", err)
-		}
-		return string(text), nil // Return the text representation as a string
-	}
-
-	return nil, fmt.Errorf("fieldValue does not implement encoding.TextMarshaler")
-}
+// Aliases retain the existing exported PostgreSQL serializer types.
+type NullStringSerializer = serializers.NullStringSerializer
+type TextSerializer = serializers.TextSerializer
 
 type migrator struct {
 	db     *gorm.DB
@@ -365,120 +291,22 @@ type pageSort struct {
 	jsonPath string
 }
 
-func newPageState(queryParams *resources.QueryParameters) (pageState, error) {
-	page := pageState{limit: resources.DefaultPageSize}
-	if queryParams == nil {
-		return page, nil
-	}
-	if queryParams.NextBookmark != "" {
-		return decodeBookmark(queryParams.NextBookmark)
-	}
+func fromSharedPage(p pagination.Page) pageState {
+	return pageState{offset: p.Offset, limit: p.Limit, filters: p.Filters, sort: pageSort{field: p.Sort.SortField, mode: string(p.Sort.SortMode), jsonPath: p.Sort.JsonPathExpr}}
+}
 
-	if queryParams.PageSize > 0 {
-		page.limit = min(queryParams.PageSize, resources.MaxPageSize)
-	}
-	if queryParams.Sort.SortField != "" {
-		page.sort = pageSort{
-			field:    queryParams.Sort.SortField,
-			mode:     string(queryParams.Sort.SortMode),
-			jsonPath: queryParams.Sort.JsonPathExpr,
-		}
-		if page.sort.mode == "" {
-			page.sort.mode = string(resources.SortModeAsc)
-		}
-	}
-	page.filters = queryParams.Filters
-	return page, nil
+func newPageState(params *resources.QueryParameters) (pageState, error) {
+	p, err := pagination.New(params)
+	return fromSharedPage(p), err
 }
 
 func decodeBookmark(bookmark string) (pageState, error) {
-	errInvalid := fmt.Errorf("not a valid bookmark")
-	page := pageState{limit: resources.DefaultPageSize}
-
-	decoded, err := base64.RawURLEncoding.DecodeString(bookmark)
-	if err != nil {
-		return page, errInvalid
-	}
-
-	for part := range strings.SplitSeq(string(decoded), ";") {
-		if part == "" {
-			continue
-		}
-		key, val, ok := strings.Cut(part, ":")
-		if !ok {
-			return page, errInvalid
-		}
-		switch key {
-		case "off":
-			page.offset, err = strconv.Atoi(val)
-			if err != nil || page.offset < 0 {
-				return page, errInvalid
-			}
-		case "lim":
-			page.limit, err = strconv.Atoi(val)
-			if err != nil || page.limit <= 0 {
-				return page, errInvalid
-			}
-			// bookmarks issued before the page size cap may carry a larger limit
-			page.limit = min(page.limit, resources.MaxPageSize)
-		case "sortM":
-			page.sort.mode = val
-		case "sortB":
-			page.sort.field = val
-		case "sortJP":
-			jp, err := base64.StdEncoding.DecodeString(val)
-			if err != nil {
-				return page, errInvalid
-			}
-			page.sort.jsonPath = string(jp)
-		case "filter":
-			filterSplit := strings.Split(val, "-")
-			if len(filterSplit) != 3 {
-				continue
-			}
-			field, err := base64.StdEncoding.DecodeString(filterSplit[0])
-			if err != nil {
-				continue
-			}
-			operand, err := strconv.Atoi(filterSplit[1])
-			if err != nil {
-				continue
-			}
-			value, err := base64.StdEncoding.DecodeString(filterSplit[2])
-			if err != nil {
-				continue
-			}
-			page.filters = append(page.filters, resources.FilterOption{
-				Field:           string(field),
-				FilterOperation: resources.FilterOperation(operand),
-				Value:           string(value),
-			})
-		}
-	}
-
-	// A sort is only meaningful with both a field and a mode
-	if page.sort.field == "" || page.sort.mode == "" {
-		page.sort = pageSort{}
-	}
-	return page, nil
+	p, err := pagination.Decode(bookmark)
+	return fromSharedPage(p), err
 }
 
-// nextBookmark encodes the bookmark pointing to the page after this one,
-// keeping the same sort and filters.
 func (p pageState) nextBookmark() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "off:%d;lim:%d;", p.offset+p.limit, p.limit)
-	if p.sort.field != "" {
-		fmt.Fprintf(&b, "sortM:%s;", p.sort.mode)
-		if p.sort.jsonPath != "" {
-			fmt.Fprintf(&b, "sortJP:%s;", base64.StdEncoding.EncodeToString([]byte(p.sort.jsonPath)))
-		}
-		fmt.Fprintf(&b, "sortB:%s;", p.sort.field)
-	}
-	for _, f := range p.filters {
-		fmt.Fprintf(&b, "filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(f.Field)), f.FilterOperation, base64.StdEncoding.EncodeToString([]byte(f.Value)))
-	}
-	return base64.RawURLEncoding.EncodeToString([]byte(b.String()))
+	return (pagination.Page{Offset: p.offset, Limit: p.limit, Filters: p.filters, Sort: resources.SortOptions{SortField: p.sort.field, SortMode: resources.SortMode(p.sort.mode), JsonPathExpr: p.sort.jsonPath}}).Next()
 }
 
 // orderBy builds the ORDER BY clause for the sort. Field and JSON path are
@@ -902,11 +730,13 @@ func buildJsonPathOrderExpr(field, jsonPath, sortMode string) (clause.Expression
 	// 1. Numbers - pad for proper text sorting
 	// 2. Dates/timestamps - cast to timestamp for proper chronological sorting
 	// 3. Text - use as-is
+	// Use binary collation so JSON sort order matches Oracle regardless of
+	// the PostgreSQL database's locale.
 	sql := "CASE " +
 		"WHEN jsonb_typeof(? #> ?::text[]) = 'number' THEN lpad(((? #> ?::text[])::numeric)::text, 20, '0') " +
 		"WHEN (? #>> ?::text[]) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN to_char(((? #>> ?::text[]))::timestamp, 'YYYY-MM-DD HH24:MI:SS.US') " +
 		"ELSE (? #>> ?::text[]) " +
-		"END"
+		`END COLLATE "C"`
 	if strings.EqualFold(sortMode, "desc") {
 		sql += " DESC NULLS LAST"
 	} else {

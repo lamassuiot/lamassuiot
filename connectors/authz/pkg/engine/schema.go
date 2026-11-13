@@ -19,10 +19,17 @@ type FilterableField struct {
 type SchemaDefinition struct {
 	PrimaryKeys []string // all PK columns; always len >= 1 after loading
 
+	// physicalSchemaOverride separates the schema's logical authorization name
+	// from its database owner. Oracle stores Lamassu domains under one user, so
+	// queries use unqualified table names while policies keep the configured
+	// logical SchemaName.
+	physicalSchemaOverride    string
+	hasPhysicalSchemaOverride bool
+
 	EntityType    string            `json:"entity_type"`
 	TableName     string            `json:"table_name"`
 	ViewTables    []string          `json:"view_tables,omitempty"` // Views over TableName that expose the entity (same rows, derived columns); the engine reads the first
-	SchemaName    string            `json:"schema_name,omitempty"` // PostgreSQL schema name (defaults to "public" if not specified)
+	SchemaName    string            `json:"schema_name,omitempty"` // Logical schema name; also the PostgreSQL owner by default
 	Relations     []RelationConfig  `json:"relations"`
 	AtomicActions []string          `json:"atomic_actions"`          // Actions that require an entity key (read, write, delete, etc.)
 	GlobalActions []string          `json:"global_actions"`          // Actions that don't require entity key (create, list, etc.)
@@ -376,11 +383,15 @@ func (s *SchemaDefinition) QualifiedTableName() string {
 	if len(s.ViewTables) > 0 {
 		table = s.ViewTables[0]
 	}
-	if s.SchemaName == "" || s.SchemaName == "public" {
+	schemaName := s.SchemaName
+	if s.hasPhysicalSchemaOverride {
+		schemaName = s.physicalSchemaOverride
+	}
+	if schemaName == "" || schemaName == "public" {
 		// For public schema or empty, just return table name (PostgreSQL default)
 		return table
 	}
-	return fmt.Sprintf("%s.%s", s.SchemaName, table)
+	return fmt.Sprintf("%s.%s", schemaName, table)
 }
 
 // FromClause returns the FROM target for a query on the entity itself. An entity read
@@ -391,7 +402,7 @@ func (s *SchemaDefinition) FromClause() string {
 	if len(s.ViewTables) == 0 {
 		return s.QualifiedTableName()
 	}
-	return fmt.Sprintf("%s AS %s", s.QualifiedTableName(), s.TableName)
+	return fmt.Sprintf("%s %s", s.QualifiedTableName(), s.TableName)
 }
 
 // ColumnQualifier returns the table name to use when qualifying column references in

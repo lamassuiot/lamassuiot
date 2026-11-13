@@ -11,6 +11,8 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -30,11 +32,17 @@ type TestServiceBuilder struct {
 	withEventBus         bool
 	withVault            bool
 	withDatabase         []string
+	storageProvider      string
 	withMonitor          bool
 	withService          []Service
 	withSmtp             *config.SMTPServer
 	allowCascadeDelete   bool
 	cascadeDeleteExplSet bool
+}
+
+var oracleTestSubsystem struct {
+	sync.Mutex
+	backend *subsystems.SubsystemBackend
 }
 
 func (b TestServiceBuilder) WithEventBus() TestServiceBuilder {
@@ -49,6 +57,14 @@ func (b TestServiceBuilder) WithVault() TestServiceBuilder {
 
 func (b TestServiceBuilder) WithDatabase(dbs ...string) TestServiceBuilder {
 	b.withDatabase = dbs
+	return b
+}
+
+// WithStorageProvider selects the database provider used by the test
+// assembler. When omitted, LAMASSU_TEST_STORAGE_PROVIDER is used, defaulting
+// to PostgreSQL.
+func (b TestServiceBuilder) WithStorageProvider(provider string) TestServiceBuilder {
+	b.storageProvider = provider
 	return b
 }
 
@@ -87,9 +103,18 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 		}
 	}
 
-	storageConfig, err := PreparePostgresForTest(b.withDatabase)
+	provider, err := configuredTestStorageProvider(b.storageProvider)
 	if err != nil {
-		t.Fatalf("could not prepare Postgres test server: %s", err)
+		t.Fatalf("could not configure test storage provider: %s", err)
+	}
+	storageConfig, err := PrepareStorageForTest(provider, b.withDatabase)
+	if err != nil {
+		t.Fatalf("could not prepare %s test storage server: %s", provider, err)
+	}
+	if provider == "oracle" && storageConfig.BeforeEach != nil {
+		if err := storageConfig.BeforeEach(); err != nil {
+			t.Fatalf("could not reset Oracle test database before building server: %s", err)
+		}
 	}
 
 	cryptoEngines := []CryptoEngine{GOLANG}
@@ -127,9 +152,13 @@ func (b TestServiceBuilder) BuildSuite() (*TestServer, error) {
 		}
 	}
 
-	storageConfig, err := PreparePostgresForTest(b.withDatabase)
+	provider, err := configuredTestStorageProvider(b.storageProvider)
 	if err != nil {
-		return nil, fmt.Errorf("could not prepare Postgres test server: %s", err)
+		return nil, fmt.Errorf("could not configure test storage provider: %w", err)
+	}
+	storageConfig, err := PrepareStorageForTest(provider, b.withDatabase)
+	if err != nil {
+		return nil, fmt.Errorf("could not prepare %s test storage server: %w", provider, err)
 	}
 
 	cryptoEngines := []CryptoEngine{GOLANG}
@@ -278,6 +307,79 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 		AfterSuite: backend.AfterSuite,
 	}, nil
 
+}
+
+// PrepareStorageForTest starts the selected database subsystem. An empty
+// provider reads LAMASSU_TEST_STORAGE_PROVIDER and defaults to PostgreSQL.
+func PrepareStorageForTest(provider string, dbs []string) (*TestStorageEngineConfig, error) {
+	provider, err := configuredTestStorageProvider(provider)
+	if err != nil {
+		return nil, err
+	}
+	switch provider {
+	case "postgres":
+		return PreparePostgresForTest(dbs)
+	case "oracle":
+		return PrepareOracleForTest()
+	default:
+		return nil, fmt.Errorf("unsupported test storage provider %q (supported: postgres, oracle)", provider)
+	}
+}
+
+func configuredTestStorageProvider(provider string) (string, error) {
+	if strings.TrimSpace(provider) == "" {
+		provider = os.Getenv("LAMASSU_TEST_STORAGE_PROVIDER")
+	}
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", "postgres", "postgresql":
+		return "postgres", nil
+	case "oracle":
+		return "oracle", nil
+	default:
+		return "", fmt.Errorf("unsupported test storage provider %q (supported: postgres, oracle)", provider)
+	}
+}
+
+func PrepareOracleForTest() (*TestStorageEngineConfig, error) {
+	oracleTestSubsystem.Lock()
+	defer oracleTestSubsystem.Unlock()
+	if oracleTestSubsystem.backend != nil {
+		return oracleStorageConfig(oracleTestSubsystem.backend), nil
+	}
+
+	oracleSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Oracle)
+	if err := oracleSubsystem.Prepare(nil); err != nil {
+		return nil, err
+	}
+	backend, err := oracleSubsystem.Run(false)
+	if err != nil {
+		return nil, err
+	}
+
+	oracleTestSubsystem.backend = backend
+	return oracleStorageConfig(backend), nil
+}
+
+func oracleStorageConfig(backend *subsystems.SubsystemBackend) *TestStorageEngineConfig {
+	return &TestStorageEngineConfig{
+		Config:     backend.Config.(cconfig.PluggableStorageEngine),
+		BeforeEach: backend.BeforeEach,
+	}
+}
+
+// CleanupOracleForTest closes the Oracle test container cached for this test
+// package. Call it once from TestMain after the suite has finished.
+func CleanupOracleForTest() {
+	oracleTestSubsystem.Lock()
+	defer oracleTestSubsystem.Unlock()
+	if oracleTestSubsystem.backend == nil {
+		return
+	}
+	backend := oracleTestSubsystem.backend
+	oracleTestSubsystem.backend = nil
+	if backend.AfterSuite != nil {
+		backend.AfterSuite()
+	}
 }
 
 func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig {

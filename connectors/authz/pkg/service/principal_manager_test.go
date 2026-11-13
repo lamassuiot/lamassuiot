@@ -152,6 +152,7 @@ func TestPrincipalManager_CreatePrincipal(t *testing.T) {
 		ID:          "user-1",
 		Name:        "John Doe",
 		Description: "Initial description",
+		Type:        "user",
 		Active:      true,
 	}
 
@@ -178,6 +179,7 @@ func TestPrincipalManager_UpdatePrincipalDescription(t *testing.T) {
 		ID:          "user-1",
 		Name:        "John Doe",
 		Description: "Before update",
+		Type:        "user",
 		Active:      true,
 	}
 	err = pm.CreatePrincipal(ctx, principal)
@@ -204,6 +206,7 @@ func TestPrincipalManager_GrantPolicy(t *testing.T) {
 	principal := &models.Principal{
 		ID:   "user-1",
 		Name: "John Doe",
+		Type: "user",
 	}
 	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
@@ -238,6 +241,7 @@ func TestPrincipalManager_RevokePolicy(t *testing.T) {
 	principal := &models.Principal{
 		ID:   "user-1",
 		Name: "John Doe",
+		Type: "user",
 	}
 	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
@@ -267,6 +271,7 @@ func TestPrincipalManager_GrantMultiplePolicies(t *testing.T) {
 	principal := &models.Principal{
 		ID:   "user-1",
 		Name: "John Doe",
+		Type: "user",
 	}
 	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
@@ -295,6 +300,7 @@ func TestPrincipalManager_GetPolicyPrincipals(t *testing.T) {
 		principal := &models.Principal{
 			ID:   "user-" + string(rune('0'+i)),
 			Name: "User " + string(rune('0'+i)),
+			Type: "user",
 		}
 		err = pm.CreatePrincipal(ctx, principal)
 		require.NoError(t, err)
@@ -329,6 +335,7 @@ func TestPrincipalManager_DeletePrincipal(t *testing.T) {
 	principal := &models.Principal{
 		ID:   "user-1",
 		Name: "John Doe",
+		Type: "user",
 	}
 	err = pm.CreatePrincipal(ctx, principal)
 	require.NoError(t, err)
@@ -362,6 +369,7 @@ func TestPrincipalManager_SetPrincipalActive(t *testing.T) {
 	principal := &models.Principal{
 		ID:     "user-1",
 		Name:   "John Doe",
+		Type:   "user",
 		Active: true,
 	}
 	err = pm.CreatePrincipal(ctx, principal)
@@ -398,6 +406,7 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 		principal := &models.Principal{
 			ID:     "user-" + string(rune('0'+i)),
 			Name:   "Active User " + string(rune('0'+i)),
+			Type:   "user",
 			Active: true,
 		}
 		err = pm.CreatePrincipal(ctx, principal)
@@ -408,6 +417,7 @@ func TestPrincipalManager_ListPrincipals(t *testing.T) {
 	inactive := &models.Principal{
 		ID:     "user-inactive",
 		Name:   "Inactive User",
+		Type:   "user",
 		Active: false,
 	}
 	err = pm.CreatePrincipal(ctx, inactive)
