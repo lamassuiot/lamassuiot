@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"reflect"
@@ -229,7 +230,7 @@ func TestImportCAPreservesAuthorityKeyID(t *testing.T) {
 			var imported []*models.CACertificate
 			for _, cert := range chain {
 				ca, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-					ID: cert.Subject.CommonName, CACertificate: (*models.X509Certificate)(cert),
+					CACertificate: (*models.X509Certificate)(cert),
 				})
 				require.NoError(t, err)
 				require.Equal(t, hex.EncodeToString(cert.AuthorityKeyId), ca.Certificate.AuthorityKeyID)
@@ -251,42 +252,31 @@ func TestImportCAPreservesAuthorityKeyID(t *testing.T) {
 func TestImportCAReparentsDescendants(t *testing.T) {
 	svc, repo := newImportCAService(t)
 	chain := importCAChain(t, false)
-	// The intermediate initially has no known parent. Import its child while
-	// the intermediate exists, then import the root to reconnect the subtree.
+	ids := map[int]string{}
 	for _, index := range []int{1, 2, 0} {
-		cert := chain[index]
-		_, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-			ID: cert.Subject.CommonName, CACertificate: (*models.X509Certificate)(cert),
-		})
+		ca, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{CACertificate: (*models.X509Certificate)(chain[index])})
 		require.NoError(t, err)
+		ids[index] = ca.ID
 	}
 	for level, cert := range chain {
-		ca := repo.cas[cert.Subject.CommonName]
+		ca := repo.cas[ids[level]]
 		require.Equal(t, level, ca.Level, "level of %s", ca.ID)
 		require.Equal(t, hex.EncodeToString(cert.AuthorityKeyId), ca.Certificate.AuthorityKeyID)
 		if level > 0 {
-			parent := repo.cas[chain[level-1].Subject.CommonName]
+			parent := repo.cas[ids[level-1]]
 			require.Equal(t, models.IssuerCAMetadata{ID: parent.ID, SN: parent.Certificate.SerialNumber, Level: parent.Level}, ca.Certificate.IssuerCAMetadata)
 		}
 	}
 }
 
-func TestImportCARejectsDuplicateID(t *testing.T) {
+func TestImportCARejectsDuplicateCertificateBeforeKMS(t *testing.T) {
 	for _, withKey := range []bool{false, true} {
-		name := "without key"
-		if withKey {
-			name = "with key"
-		}
-		t.Run(name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("withKey=%t", withKey), func(t *testing.T) {
 			svc, repo := newImportCAService(t)
-			chain := importCAChain(t, false)
-			original, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "existing-ca", CACertificate: (*models.X509Certificate)(chain[0]),
-			})
+			cert := (*models.X509Certificate)(importCAChain(t, false)[0])
+			original, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{CACertificate: cert})
 			require.NoError(t, err)
-			input := coreservices.ImportCAInput{
-				ID: original.ID, CACertificate: (*models.X509Certificate)(chain[1]),
-			}
+			input := coreservices.ImportCAInput{CACertificate: cert}
 			if withKey {
 				input.Key, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 				require.NoError(t, err)
@@ -299,7 +289,7 @@ func TestImportCARejectsDuplicateID(t *testing.T) {
 			require.Equal(t, 1, repo.insertCalls)
 			require.Len(t, repo.cas, 1)
 			require.Equal(t, *original, repo.cas[original.ID])
-			require.Equal(t, keyReads, kms.getKeyCalls, "duplicate rejection must precede KMS calls")
+			require.Equal(t, keyReads, kms.getKeyCalls)
 			require.Zero(t, kms.importKeyCalls)
 		})
 	}
@@ -309,7 +299,7 @@ func TestImportCAPropagatesIDLookupError(t *testing.T) {
 	svc, repo := newImportCAService(t)
 	repo.lookupErr = errors.New("CA storage unavailable")
 	ca, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-		ID: "new-ca", CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]),
+		CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]),
 	})
 	require.ErrorIs(t, err, repo.lookupErr)
 	require.Nil(t, ca)
@@ -337,7 +327,7 @@ func TestImportCAStopsOnInsertFailureAndAllowsRetry(t *testing.T) {
 	svc, repo := newImportCAService(t)
 	repo.insertErr = errors.New("insert failed")
 	input := coreservices.ImportCAInput{
-		ID: "retry-ca", CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]),
+		CACertificate: (*models.X509Certificate)(importCAChain(t, false)[0]),
 	}
 	ca, err := svc.ImportCA(context.Background(), input)
 	require.ErrorIs(t, err, repo.insertErr)
@@ -347,7 +337,7 @@ func TestImportCAStopsOnInsertFailureAndAllowsRetry(t *testing.T) {
 	repo.insertErr = nil
 	ca, err = svc.ImportCA(context.Background(), input)
 	require.NoError(t, err)
-	require.Equal(t, input.ID, ca.ID)
+	require.NotEmpty(t, ca.ID)
 }
 
 func TestImportCAKeepsImportedKeyWhenInsertFails(t *testing.T) {
@@ -376,7 +366,7 @@ func TestImportCAKeepsImportedKeyWhenInsertFails(t *testing.T) {
 			require.NoError(t, err)
 			repo.insertErr = insertErr
 			_, err = svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "root", CACertificate: (*models.X509Certificate)(cert), Key: key,
+				CACertificate: (*models.X509Certificate)(cert), Key: key,
 			})
 			require.ErrorIs(t, err, insertErr)
 			require.Equal(t, 1, kms.importKeyCalls)
@@ -399,18 +389,18 @@ func TestImportCASucceedsWhenReparentingFails(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, repo := newImportCAService(t)
 			chain := importCAChain(t, false)
-			_, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "intermediate", CACertificate: (*models.X509Certificate)(chain[1]),
+			intermediate, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
+				CACertificate: (*models.X509Certificate)(chain[1]),
 			})
 			require.NoError(t, err)
-			orphan := repo.cas["intermediate"]
+			orphan := repo.cas[intermediate.ID]
 			repo.childErr, repo.updateErr = tc.childErr, tc.updateErr
 			root, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{
-				ID: "root", CACertificate: (*models.X509Certificate)(chain[0]),
+				CACertificate: (*models.X509Certificate)(chain[0]),
 			})
 			require.NoError(t, err)
-			require.Equal(t, *root, repo.cas["root"])
-			require.Equal(t, orphan, repo.cas["intermediate"], "a failed reparenting must not change the child")
+			require.Equal(t, *root, repo.cas[root.ID])
+			require.Equal(t, orphan, repo.cas[intermediate.ID], "a failed reparenting must not change the child")
 		})
 	}
 }
@@ -418,13 +408,13 @@ func TestImportCASucceedsWhenReparentingFails(t *testing.T) {
 func TestImportCARejectsDifferentCertificateWithAnExistingSerial(t *testing.T) {
 	svc, repo := newImportCAService(t)
 	original := importCAChain(t, false)[0]
-	stored, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{ID: "original", CACertificate: (*models.X509Certificate)(original)})
+	stored, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{CACertificate: (*models.X509Certificate)(original)})
 	require.NoError(t, err)
 	collision := importCAChain(t, false)[0] // A different key/certificate with the same serial.
 	require.Equal(t, original.SerialNumber, collision.SerialNumber)
-	ca, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{ID: "collision", CACertificate: (*models.X509Certificate)(collision)})
+	ca, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{CACertificate: (*models.X509Certificate)(collision)})
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 	require.Nil(t, ca)
-	require.NotContains(t, repo.cas, "collision")
-	require.Equal(t, *stored, repo.cas["original"])
+	require.Len(t, repo.cas, 1)
+	require.Equal(t, *stored, repo.cas[stored.ID])
 }

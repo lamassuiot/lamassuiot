@@ -7,7 +7,6 @@ import (
 )
 
 type CreateCABody struct {
-	ID                  string                  `json:"id"`
 	ParentID            string                  `json:"parent_id"`
 	Subject             models.Subject          `json:"subject"`
 	KeyMetadata         models.KeyMetadata      `json:"key_metadata"`
@@ -28,7 +27,6 @@ type RequestCABody struct {
 }
 
 type ImportCABody struct {
-	ID            string                    `json:"id"`
 	EngineID      string                    `json:"engine_id"`
 	ParentID      string                    `json:"parent_id"`
 	CARequestID   string                    `json:"ca_request_id"`

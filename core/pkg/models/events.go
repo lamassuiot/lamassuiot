@@ -69,9 +69,10 @@ const (
 	EventUpdateDeviceGroupKey EventType = "device-group.update"
 	EventDeleteDeviceGroupKey EventType = "device-group.delete"
 
-	EventUpdateVARole EventType = "va.role.update"
-	EventInitCRLRole  EventType = "va.role.crl.init"
-	EventCreateCRL    EventType = "va.role.crl.create"
+	EventUpdateCRLSettings EventType = "va.crl-settings.update"
+	EventInitCRLSettings   EventType = "va.crl-settings.init"
+	// EventCreateCRL keeps its published name: it is part of the event contract consumers already use.
+	EventCreateCRL EventType = "va.role.crl.create"
 
 	EventAnyKey EventType = "any"
 )

@@ -44,6 +44,6 @@ func TestUniqueColumnsResolveToModelFields(t *testing.T) {
 	assertUniqueColumnsResolve(t, must(NewDeviceEventsRepository(log, db)).(*PostgresDeviceEventsStore).querier)
 	assertUniqueColumnsResolve(t, must(NewSubscriptionsPostgresRepository(log, db)).(*PostgresSubscriptionsStore).querier)
 	assertUniqueColumnsResolve(t, must(NewEventsPostgresRepository(log, db)).(*PostgresEventsStore).querier)
-	assertUniqueColumnsResolve(t, must(NewVARepository(log, db)).(*PostgresVAStore).querier)
+	assertUniqueColumnsResolve(t, must(NewCRLSettingsRepository(log, db)).(*PostgresCRLSettingsStore).querier)
 	assertUniqueColumnsResolve(t, must(NewIssuanceProfileRepository(log, db)).(*PostgresIssuanceStorage).querier)
 }

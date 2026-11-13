@@ -29,7 +29,7 @@ Migrate **`kms` → `ca` → `va`**, one at a time. Never run them in parallel.
 
 1. `kms`
 2. `ca`: certificates reference KMS keys. If `kms` is not migrated yet, it fails with `kms schema not found: migrate the kms schema before the ca schema`. Register legacy keys in KMS before running it with [`ca-to-kms-migration`](../../../../../backend/cmd/ca-to-kms-migration/README.md), which runs on the `ca` schema of earlier versions.
-3. `va`: VA roles reference their signer certificates, so it needs `ca` migrated. Fix VA roles whose signer certificate is missing before running it. When several CAs share the signer's key, the migration logs a warning and uses the oldest of them. If `va` is not migrated, VA role and CRL requests fail with `column "crl_signer_certificate_serial_number" of relation "va_role" does not exist`.
+3. `va`: CRL settings reference their signer certificates and are keyed by CA ID, so it needs `ca` migrated. Before running it, every SKI must belong to a single CA, every VA role must have a signer certificate with a key, and no CA ID may contain `/` or equal the SKI of another role; the migration fails and lists the affected rows otherwise. If `va` is not migrated, CRL settings and CRL requests fail with `relation "crl_settings" does not exist`.
 
 Both foreign keys validate existing rows.
 

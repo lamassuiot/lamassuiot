@@ -92,6 +92,7 @@ jobs:
             authz,
             lamassu-db-migration,
             ca-to-kms-migration,
+            upgrade-check,
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
@@ -132,9 +133,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate custom builder
-        # Only kms.dockerfile requires apt-get (CGO cross-toolchain install for
-        # arm64); other services build with CGO_ENABLED=0 and don't need it.
-        if: github.event.inputs.go == 'other' && matrix.service == 'kms'
+        # Only kms.dockerfile and upgrade-check.dockerfile require apt-get (CGO
+        # cross-toolchain install for arm64); other services build with
+        # CGO_ENABLED=0 and don't need it.
+        if: github.event.inputs.go == 'other' && (matrix.service == 'kms' || matrix.service == 'upgrade-check')
         env:
           BUILDER: ${{ github.event.inputs.other }}
         run: |

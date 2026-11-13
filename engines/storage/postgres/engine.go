@@ -127,16 +127,16 @@ func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, e
 	return s.Device, nil
 }
 
-func (s *PostgresStorageEngine) GetVARoleStorage() (storage.VARepo, error) {
-	if s.Device == nil {
+func (s *PostgresStorageEngine) GetCRLSettingsStorage() (storage.CRLSettingsRepo, error) {
+	if s.VA == nil {
 		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, VA_SCHEMA)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		store, err := NewVARepository(s.logger, psqlCli)
+		store, err := NewCRLSettingsRepository(s.logger, psqlCli)
 		if err != nil {
-			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
+			return nil, fmt.Errorf("could not initialize postgres CRL settings client: %s", err)
 		}
 		s.VA = store
 	}

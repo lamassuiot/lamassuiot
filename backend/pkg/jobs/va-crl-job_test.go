@@ -22,18 +22,19 @@ func TestCreatePeriodicCRLExpired(t *testing.T) {
 	job := NewVACrlMonitorJob(log, mockService, time.Duration(time.Second*1))
 
 	now := time.Now()
-	vaRoles := []*models.VARole{
+	settings := []*models.CRLSettings{
 		{
-			CASubjectKeyID: "123456",
+			CAID:   "123456",
+			Status: models.CRLSettingsActive,
 			LatestCRL: models.LatestCRLMeta{
 				Version:    models.BigInt{Int: big.NewInt(1)},
 				ValidFrom:  now.Add(-time.Second * 5),
 				ValidUntil: now.Add(-time.Second * 1),
 			},
-			CRLOptions: models.VACRLRole{
-				Validity:                      models.TimeDuration(10 * time.Second),
-				SignerCertificateSerialNumber: "123456",
-				RegenerateOnRevoke:            false,
+			Options: models.CRLSettingsOptions{
+				Validity:           models.TimeDuration(10 * time.Second),
+				SignerSerialNumber: "123456",
+				RegenerateOnRevoke: false,
 			},
 		},
 	}
@@ -41,9 +42,9 @@ func TestCreatePeriodicCRLExpired(t *testing.T) {
 	newCRL := x509.RevocationList{}
 
 	mockService.On("CalculateCRL", mock.Anything, mock.Anything).Return(&newCRL, nil)
-	mockService.On("GetVARoles", mock.Anything, mock.Anything).Return(&vaRoles, nil)
+	mockService.On("GetCRLSettingsList", mock.Anything, mock.Anything).Return(&settings, nil)
 
-	job.processVARoles(context.TODO(), log)
+	job.processCRLSettings(context.TODO(), log)
 
 	mockService.AssertCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
@@ -57,18 +58,19 @@ func TestCreatePeriodicCRLValid(t *testing.T) {
 	job := NewVACrlMonitorJob(log, mockService, time.Duration(time.Second*1))
 
 	now := time.Now()
-	vaRoles := []*models.VARole{
+	settings := []*models.CRLSettings{
 		{
-			CASubjectKeyID: "123456",
+			CAID:   "123456",
+			Status: models.CRLSettingsActive,
 			LatestCRL: models.LatestCRLMeta{
 				Version:    models.BigInt{Int: big.NewInt(1)},
 				ValidFrom:  now.Add(-time.Second * 5),
 				ValidUntil: now.Add(time.Second * 10000),
 			},
-			CRLOptions: models.VACRLRole{
-				Validity:                      models.TimeDuration(10 * time.Second),
-				SignerCertificateSerialNumber: "123456",
-				RegenerateOnRevoke:            false,
+			Options: models.CRLSettingsOptions{
+				Validity:           models.TimeDuration(10 * time.Second),
+				SignerSerialNumber: "123456",
+				RegenerateOnRevoke: false,
 			},
 		},
 	}
@@ -76,9 +78,9 @@ func TestCreatePeriodicCRLValid(t *testing.T) {
 	newCRL := x509.RevocationList{}
 
 	mockService.On("CalculateCRL", mock.Anything, mock.Anything).Return(&newCRL, nil)
-	mockService.On("GetVARoles", mock.Anything, mock.Anything).Return(&vaRoles, nil)
+	mockService.On("GetCRLSettingsList", mock.Anything, mock.Anything).Return(&settings, nil)
 
-	job.processVARoles(context.TODO(), log)
+	job.processCRLSettings(context.TODO(), log)
 
 	mockService.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
@@ -91,19 +93,20 @@ func TestCreatePeriodicCRLRefreshIntervalElapsed(t *testing.T) {
 	job := NewVACrlMonitorJob(log, mockService, time.Duration(time.Second*1))
 
 	now := time.Now()
-	vaRoles := []*models.VARole{
+	settings := []*models.CRLSettings{
 		{
-			CASubjectKeyID: "123456",
+			CAID:   "123456",
+			Status: models.CRLSettingsActive,
 			LatestCRL: models.LatestCRLMeta{
 				Version:    models.BigInt{Int: big.NewInt(1)},
 				ValidFrom:  now.Add(-time.Hour * 2),
 				ValidUntil: now.Add(time.Hour * 24 * 7),
 			},
-			CRLOptions: models.VACRLRole{
-				Validity:                      models.TimeDuration(24 * 7 * time.Hour),
-				RefreshInterval:               models.TimeDuration(time.Hour),
-				SignerCertificateSerialNumber: "123456",
-				RegenerateOnRevoke:            false,
+			Options: models.CRLSettingsOptions{
+				Validity:           models.TimeDuration(24 * 7 * time.Hour),
+				RefreshInterval:    models.TimeDuration(time.Hour),
+				SignerSerialNumber: "123456",
+				RegenerateOnRevoke: false,
 			},
 		},
 	}
@@ -111,9 +114,9 @@ func TestCreatePeriodicCRLRefreshIntervalElapsed(t *testing.T) {
 	newCRL := x509.RevocationList{}
 
 	mockService.On("CalculateCRL", mock.Anything, mock.Anything).Return(&newCRL, nil)
-	mockService.On("GetVARoles", mock.Anything, mock.Anything).Return(&vaRoles, nil)
+	mockService.On("GetCRLSettingsList", mock.Anything, mock.Anything).Return(&settings, nil)
 
-	job.processVARoles(context.TODO(), log)
+	job.processCRLSettings(context.TODO(), log)
 
 	mockService.AssertCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
@@ -126,19 +129,20 @@ func TestCreatePeriodicCRLRefreshIntervalNotElapsed(t *testing.T) {
 	job := NewVACrlMonitorJob(log, mockService, time.Duration(time.Second*1))
 
 	now := time.Now()
-	vaRoles := []*models.VARole{
+	settings := []*models.CRLSettings{
 		{
-			CASubjectKeyID: "123456",
+			CAID:   "123456",
+			Status: models.CRLSettingsActive,
 			LatestCRL: models.LatestCRLMeta{
 				Version:    models.BigInt{Int: big.NewInt(1)},
 				ValidFrom:  now.Add(-time.Minute * 30),
 				ValidUntil: now.Add(time.Hour * 24 * 7),
 			},
-			CRLOptions: models.VACRLRole{
-				Validity:                      models.TimeDuration(24 * 7 * time.Hour),
-				RefreshInterval:               models.TimeDuration(time.Hour),
-				SignerCertificateSerialNumber: "123456",
-				RegenerateOnRevoke:            false,
+			Options: models.CRLSettingsOptions{
+				Validity:           models.TimeDuration(24 * 7 * time.Hour),
+				RefreshInterval:    models.TimeDuration(time.Hour),
+				SignerSerialNumber: "123456",
+				RegenerateOnRevoke: false,
 			},
 		},
 	}
@@ -146,9 +150,34 @@ func TestCreatePeriodicCRLRefreshIntervalNotElapsed(t *testing.T) {
 	newCRL := x509.RevocationList{}
 
 	mockService.On("CalculateCRL", mock.Anything, mock.Anything).Return(&newCRL, nil)
-	mockService.On("GetVARoles", mock.Anything, mock.Anything).Return(&vaRoles, nil)
+	mockService.On("GetCRLSettingsList", mock.Anything, mock.Anything).Return(&settings, nil)
 
-	job.processVARoles(context.TODO(), log)
+	job.processCRLSettings(context.TODO(), log)
+
+	mockService.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestCreatePeriodicCRLSkipsNonActiveSettings(t *testing.T) {
+	mockService := new(svcmock.MockVAService)
+	log := helpers.SetupLogger("debug", "VA", "CRL Monitor")
+	job := NewVACrlMonitorJob(log, mockService, time.Second)
+
+	now := time.Now()
+	settings := []*models.CRLSettings{{
+		CAID:   "archived",
+		Status: models.CRLSettingsArchived,
+		LatestCRL: models.LatestCRLMeta{
+			Version:    models.BigInt{Int: big.NewInt(1)},
+			ValidFrom:  now.Add(-time.Hour * 24 * 30),
+			ValidUntil: now.Add(-time.Hour * 24),
+		},
+		Options: models.CRLSettingsOptions{RefreshInterval: models.TimeDuration(time.Hour)},
+	}}
+
+	mockService.On("CalculateCRL", mock.Anything, mock.Anything).Return(&x509.RevocationList{}, nil)
+	mockService.On("GetCRLSettingsList", mock.Anything, mock.Anything).Return(&settings, nil)
+
+	job.processCRLSettings(context.TODO(), log)
 
 	mockService.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }

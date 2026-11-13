@@ -281,10 +281,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 
 	// Reject duplicate IDs before importing or binding any private key.
-	caID := input.ID
-	if caID == "" {
-		caID = uuid.NewV7().String()
-	}
+	// Caller-supplied IDs are ignored: CA identity is always assigned here.
+	caID := uuid.NewV7().String()
 
 	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
 	if err != nil {
@@ -703,6 +701,7 @@ func (svc *CAServiceBackend) resolveCAIssuanceProfile(ctx context.Context, lFunc
 
 func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
 	if input.Metadata == nil {
 		input.Metadata = map[string]any{}
 	}
@@ -729,10 +728,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	}
 
 	// Check if CA already exists
-	caID := input.ID
-	if caID == "" {
-		caID = uuid.NewV7().String()
-	}
+	// Caller-supplied IDs are ignored: CA identity is always assigned here.
+	caID := uuid.NewV7().String()
 
 	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
 	if err != nil {
@@ -784,7 +781,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		akid = key.KeyID
 
 		// Root CA. Root CAs can be generate directly
-		ca, err = engine.CreateRootCA(ctx, signer, key.KeyID, input.Subject, input.CAExpiration, *caIssuanceProfile)
+		ca, err = engine.CreateRootCA(ctx, signer, key.KeyID, caID, input.Subject, input.CAExpiration, *caIssuanceProfile)
 		if err != nil {
 			lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -1663,7 +1660,7 @@ func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services
 	}
 
 	lFunc.Debugf("sign certificate request with %s CA", input.CAID)
-	x509Cert, err := engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, *profile)
+	x509Cert, err := engine.SignCertificateRequest(ctx, csr, caCert, ca.ID, caCertSigner, *profile)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
 		return nil, err

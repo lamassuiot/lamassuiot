@@ -42,7 +42,7 @@ func (m *MockStorageEngine) GetSubscriptionsStorage() (SubscriptionsRepository, 
 	return nil, nil
 }
 
-func (m *MockStorageEngine) GetVARoleStorage() (VARepo, error) {
+func (m *MockStorageEngine) GetCRLSettingsStorage() (CRLSettingsRepo, error) {
 	return nil, nil
 }
 

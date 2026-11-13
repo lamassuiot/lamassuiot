@@ -66,7 +66,7 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 					return fmt.Errorf("could not run reinitialize DMSManager tables: %s", err)
 				}
 			case "va":
-				_, err := postgres.NewVARepository(logger, postgresEngine.DB[schemaName])
+				_, err := postgres.NewCRLSettingsRepository(logger, postgresEngine.DB[schemaName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize VA tables: %s", err)
 				}

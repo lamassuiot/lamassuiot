@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -36,7 +37,6 @@ func TestGetStatsFiltered(t *testing.T) {
 	createCAWithMetadata := func(t *testing.T, id, commonName string, metadata map[string]any) *models.CACertificate {
 		profile := createProfile(t)
 		ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			ID:           id,
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 			Subject:      models.Subject{CommonName: commonName},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24 * 365)},
@@ -117,7 +117,7 @@ func TestGetStatsFiltered(t *testing.T) {
 			name: "OK/FilterCAsByEngineID",
 			before: func(svc services.CAService) error {
 				// Create an additional CA with the default engine (filesystem-1)
-				createCAWithMetadata(t, "ca-2", "CA2", map[string]any{"env": "production"})
+				createCAWithMetadata(t, uuid.NewV7().String(), "CA2", map[string]any{"env": "production"})
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CAStats, error) {

@@ -1,0 +1,116 @@
+ARG BUILDER=golang:1.27.3-bookworm
+
+# Optional pre-vendored dependencies. CI runs `go mod vendor` once and passes
+# the result with `--build-context vendor=./vendor`, which replaces this empty
+# stage; plain `docker build` falls back to downloading modules.
+FROM scratch AS vendor
+
+# Pinned to the runner platform: the binary is cross-compiled with an
+# installed arm64 toolchain instead of emulating the whole build with QEMU.
+FROM --platform=$BUILDPLATFORM ${BUILDER} AS builder
+WORKDIR /app
+# Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
+# this intermediate stage (in addition to the default final-stage scan).
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+
+# Dependencies are resolved before the sources are copied, so this layer is
+# reused across code changes, version bumps and target architectures. A
+# provided vendor tree is used as is (go build picks vendor/ up automatically);
+# otherwise the empty vendor stage is copied and modules are downloaded.
+COPY go.mod go.sum ./
+COPY --from=vendor / vendor/
+RUN if [ -f vendor/modules.txt ]; then \
+      echo "Using provided vendor directory"; \
+    else \
+      rm -rf vendor && go mod download; \
+    fi
+
+COPY core core
+COPY shared shared
+COPY sdk sdk
+COPY backend backend
+COPY engines engines
+COPY monolithic monolithic
+COPY connectors connectors
+
+# Declared after the dependency layer so they do not bust its cache.
+ARG TARGETARCH
+# Re-declared so the toolchain install step can report the selected builder.
+ARG BUILDER
+ARG SHA1VER= # set by build script
+ARG VERSION= # set by build script
+
+# upgrade-check mounts the configured crypto engines, PKCS#11 included, so it is
+# built like the KMS: CGO_ENABLED is required so miekg/pkcs11 and crypto11
+# compile and link correctly. The arm64 cross toolchain is installed only when
+# targeting arm64.
+#
+# Custom BUILDER images are only supported when Debian/Ubuntu-based (they must
+# ship apt-get, or have the cross toolchain preinstalled): the arm64 build
+# needs gcc-aarch64-linux-gnu, which is installed from the builder's apt repos.
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      if command -v aarch64-linux-gnu-gcc > /dev/null; then \
+        echo "arm64 cross toolchain already present"; \
+      elif command -v apt-get > /dev/null; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross && \
+        rm -rf /var/lib/apt/lists/*; \
+      else \
+        echo "BUILDER image '$BUILDER' must be Debian/Ubuntu-based (apt-get) or have aarch64-linux-gnu-gcc preinstalled for the arm64 upgrade-check build" >&2; \
+        exit 1; \
+      fi; \
+    fi
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+      export CC=aarch64-linux-gnu-gcc; \
+    fi && \
+    now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
+    CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH \
+    go build \
+      -ldflags "-w -s -X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" \
+      -o upgrade-check \
+      backend/cmd/upgrade-check/main.go
+
+# The p11-kit RPC protocol is not compatible across minor versions: a 0.24/0.25
+# client gets CKR_DEVICE_MEMORY from a 0.26 server on C_GenerateKeyPair. This
+# stage must therefore use the same base image as the SoftHSM image
+# (lamassuiot/helmchart ci/softhsm/dockerfile), not the runtime's Debian.
+FROM ubuntu:26.04 AS pkcs11-client-proxy
+# Instruct BuildKit's Syft scanner to also generate an SBOM attestation for
+# this intermediate stage (in addition to the default final-stage scan).
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+# This stage is NOT pinned to $BUILDPLATFORM: it must run for the target
+# architecture so that apt installs matching p11-kit libraries.
+ARG TARGETARCH
+# glibc shipped by the runtime image (cc-debian13). The copied libraries are
+# built against Ubuntu's newer glibc, so the build fails if they require any
+# symbol version above this one instead of failing at module load time.
+ARG RUNTIME_GLIBC=2.41
+RUN apt-get update && apt-get install -y --no-install-recommends p11-kit-modules && \
+    case "$TARGETARCH" in \
+      amd64) TRIPLET=x86_64-linux-gnu ;; \
+      arm64) TRIPLET=aarch64-linux-gnu ;; \
+      *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac && \
+    mkdir -p "/out/usr/lib/${TRIPLET}/pkcs11" "/out/usr/lib/x86_64-linux-gnu/pkcs11" && \
+    cp -L "/usr/lib/${TRIPLET}/libffi.so.8" /out/usr/lib/ && \
+    cp -L "/usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so" "/out/usr/lib/${TRIPLET}/pkcs11/" && \
+    cp -L "/usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so" /out/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so && \
+    for lib in /out/usr/lib/libffi.so.8 "/out/usr/lib/${TRIPLET}/pkcs11/p11-kit-client.so" /out/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so; do \
+      required=$(grep -aoE 'GLIBC_2\.[0-9]+' "$lib" | sed 's/^GLIBC_//' | sort -uV | tail -n1); \
+      printf '%s\n%s\n' "$required" "$RUNTIME_GLIBC" | sort -V -C || \
+        { echo "$lib requires glibc $required, runtime image provides $RUNTIME_GLIBC" >&2; exit 1; }; \
+    done
+
+# gcr.io/distroless/cc-debian13:nonroot provides glibc + libgcc (required for
+# the CGO-linked binary), CA certificates, and a non-root user (UID 65532).
+# p11-kit-client.so and libffi are copied from the pkcs11-client-proxy stage
+# since they are not included in the distroless image.
+# The staging image preserves the target architecture's Debian library path
+# (x86_64-linux-gnu or aarch64-linux-gnu). It also keeps the historical
+# x86_64-linux-gnu path as a compatibility alias for existing configurations.
+FROM gcr.io/distroless/cc-debian13:nonroot
+COPY --from=pkcs11-client-proxy /out/usr/lib/ /usr/lib/
+COPY --from=builder /app/upgrade-check /upgrade-check
+ENTRYPOINT ["/upgrade-check"]

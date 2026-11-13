@@ -62,7 +62,7 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
 
-	vaRoleRepo, err := storage.GetVARoleStorage()
+	crlSettingsRepo, err := storage.GetCRLSettingsStorage()
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not get device storage: %s", err)
 	}
@@ -76,7 +76,7 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 		Logger:    lSvc,
 		CAClient:  caService,
 		KMSClient: kmsService,
-		VARepo:    vaRoleRepo,
+		VARepo:    crlSettingsRepo,
 		VADomains: conf.VADomains,
 		Bucket:    (*blob.Bucket)(bucket),
 	})

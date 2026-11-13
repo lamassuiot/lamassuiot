@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"slices"
@@ -33,6 +32,10 @@ func setupX509TestSuite(t *testing.T) (services.KMSService, *x509engines.X509Eng
 	x509Engine := x509engines.NewX509Engine(log, []string{"ocsp.lamassu.io", "va.lamassu.io"}, serverTest.KMS.HttpKMSSDK)
 	return serverTest.KMS.HttpKMSSDK, &x509Engine, nil
 }
+
+// testIssuerCAID is the ID of the CA that issues every certificate in these tests: the CRL distribution point of a
+// certificate is the URL of the CRL of its issuer CA, which is identified by that ID and not by the SKI of its key.
+const testIssuerCAID = "018f2d6e-7b3a-7c1e-9a4b-0123456789ab"
 
 func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyType, tcExpirationTime time.Time) error {
 	if cert.Subject.CommonName != tcSubject.CommonName {
@@ -75,7 +78,7 @@ func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMet
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/ocsp")
 	}
 
-	v2CrlID := hex.EncodeToString(cert.AuthorityKeyId)
+	v2CrlID := testIssuerCAID
 	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/crl/"+v2CrlID)
 	}
@@ -104,7 +107,7 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/ocsp")
 	}
 
-	v2CrlID := hex.EncodeToString(ca.SubjectKeyId)
+	v2CrlID := testIssuerCAID
 	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/crl/"+v2CrlID)
 	}
@@ -188,7 +191,7 @@ func TestCreateRootCA(t *testing.T) {
 
 			caSigner := beservice.NewKMSCryptoSigner(ctx, *key, kms)
 
-			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
+			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, testIssuerCAID, tc.subject, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
 			}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
@@ -342,7 +345,7 @@ func TestRootCAExtendedKeyUsage(t *testing.T) {
 				profile.ExtendedKeyUsages = append(profile.ExtendedKeyUsages, models.X509ExtKeyUsage(eku))
 			}
 
-			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
+			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, testIssuerCAID, tc.subject, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
 			}, profile)
@@ -413,7 +416,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	caSignerRSA := beservice.NewKMSCryptoSigner(ctx, *keyRSA, kmsSvc)
-	rootCaCertRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
+	rootCaCertRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, testIssuerCAID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
@@ -434,7 +437,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	caSignerEC := beservice.NewKMSCryptoSigner(ctx, *keyEC, kmsSvc)
-	rootCaCertEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
+	rootCaCertEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, testIssuerCAID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
@@ -542,7 +545,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 				t.Fatalf("unexpected error in csr gen: %s", err)
 			}
 
-			cert, err := x509Engine.SignCertificateRequest(ctx, subCACSR, tc.rootCaCert, tc.parentCASigner, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+			cert, err := x509Engine.SignCertificateRequest(ctx, subCACSR, tc.rootCaCert, testIssuerCAID, tc.parentCASigner, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
 			}))
@@ -586,7 +589,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	}
 	caSignerRSA := beservice.NewKMSCryptoSigner(ctx, *keyRSA, kmsSvc)
 
-	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
+	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, testIssuerCAID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
@@ -608,7 +611,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	}
 	caSignerEC := beservice.NewKMSCryptoSigner(ctx, *keyEC, kmsSvc)
 
-	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
+	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, testIssuerCAID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
@@ -970,7 +973,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			csr, errCsr := chelpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.key())
-			cert, errSing := x509Engine.SignCertificateRequest(ctx, csr, tc.caCertificate, tc.caSigner, tc.profile)
+			cert, errSing := x509Engine.SignCertificateRequest(ctx, csr, tc.caCertificate, testIssuerCAID, tc.caSigner, tc.profile)
 			err := tc.check(cert, tc.subject, tc.keyType, expirationTime, errCsr, errSing)
 			if err != nil {
 				t.Errorf("unexpected result in test case: %s", err)

@@ -43,7 +43,7 @@ func TestVAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 3, public)
-	assert.Equal(t, 2, protected)
+	assert.Equal(t, 3, protected)
 	spec, err := os.Open("../specs/va-openapi.yaml")
 	require.NoError(t, err)
 	defer spec.Close()
@@ -71,7 +71,7 @@ func TestVAProtectedEndpointsRunTheirDeclaredGuard(t *testing.T) {
 				}
 				t.Run(route.Method+" "+route.Path, func(t *testing.T) {
 					engine.calls = 0
-					requestPath := strings.ReplaceAll(route.Path, ":ca-ski", "ca-123")
+					requestPath := strings.ReplaceAll(route.Path, ":ca-id", "ca-123")
 					response := httptest.NewRecorder()
 					router.ServeHTTP(response, httptest.NewRequest(route.Method, requestPath, nil))
 					if !authenticated {
@@ -79,10 +79,17 @@ func TestVAProtectedEndpointsRunTheirDeclaredGuard(t *testing.T) {
 						assert.Zero(t, engine.calls)
 						return
 					}
-					assert.Equal(t, http.StatusForbidden, response.Code)
+					// Permission checks deny with 403; failed filter computation stops with 500.
+					if route.Authz.Check == "filter" {
+						assert.Equal(t, http.StatusInternalServerError, response.Code)
+					} else {
+						assert.Equal(t, http.StatusForbidden, response.Code)
+					}
 					assert.Equal(t, 1, engine.calls)
 					assert.Equal(t, route.Authz, engine.declaration)
-					assert.Equal(t, map[string]string{"ca_ski": "ca-123"}, engine.key)
+					if strings.Contains(route.Path, ":ca-id") {
+						assert.Equal(t, map[string]string{"ca_id": "ca-123"}, engine.key)
+					}
 				})
 			}
 		})
@@ -134,7 +141,7 @@ func TestVAPublicEndpointsWorkWithoutAuthenticationOrAuthz(t *testing.T) {
 		}
 		t.Run(route.Method+" "+route.Path, func(t *testing.T) {
 			ocspService.calls, crlService.calls = 0, 0
-			requestPath := strings.NewReplacer(":ocsp_request", base64.URLEncoding.EncodeToString(requestDER), ":ca-ski", "ca-123").Replace(route.Path)
+			requestPath := strings.NewReplacer(":ocsp_request", base64.URLEncoding.EncodeToString(requestDER), ":id", "ca-123").Replace(route.Path)
 			request := httptest.NewRequest(route.Method, requestPath, bytes.NewReader(requestDER))
 			request.Header.Set("Content-Type", "application/ocsp-request")
 			response := httptest.NewRecorder()
@@ -150,7 +157,7 @@ func TestVAPublicEndpointsWorkWithoutAuthenticationOrAuthz(t *testing.T) {
 			} else {
 				assert.Equal(t, 1, crlService.calls)
 				assert.Zero(t, ocspService.calls)
-				assert.Equal(t, "ca-123", crlService.input.CASubjectKeyID)
+				assert.Equal(t, "ca-123", crlService.input.ID)
 				assert.Equal(t, "application/pkix-crl", response.Header().Get("Content-Type"))
 				assert.Equal(t, "test-crl-response", response.Body.String())
 			}
@@ -168,7 +175,7 @@ func TestVAContractDetectsPublicSecurityDriftAndUntrackedRoutes(t *testing.T) {
 		{"wrong base", "url: /api/va", "url: /api/va/v1", "does not match OpenAPI server"},
 		{"public requires authentication", "security: []", "security: [{BearerAuth: []}]", "must explicitly declare security: []"},
 		{"missing public declaration", "check: public", "check: filter", "authz contract mismatch"},
-		{"role uses wrong action", "action: read", "action: update", "authz contract mismatch"},
+		{"settings use wrong action", "action: read", "action: update", "authz contract mismatch"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.Contains(t, string(spec), test.old)
