@@ -438,7 +438,7 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
+			joinClause := fmt.Sprintf("LEFT JOIN %s %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
 				targetSchema.ColumnQualifier(),
@@ -453,7 +453,7 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
+			joinClause := fmt.Sprintf("LEFT JOIN %s %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
 				prevAlias,
@@ -512,7 +512,7 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 			if err != nil {
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
+			joinClause := fmt.Sprintf("LEFT JOIN %s %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
 				targetSchema.ColumnQualifier(),
@@ -526,7 +526,7 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 			if err != nil {
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
+			joinClause := fmt.Sprintf("LEFT JOIN %s %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
 				prevAlias,
@@ -618,7 +618,7 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
+			joinClause := fmt.Sprintf("LEFT JOIN %s %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
 				targetSchema.ColumnQualifier(),
@@ -633,7 +633,7 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
+			joinClause := fmt.Sprintf("LEFT JOIN %s %s ON %s.%s = %s.%s",
 				fromSchema.QualifiedTableName(),
 				alias,
 				prevAlias,

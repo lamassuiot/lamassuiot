@@ -402,7 +402,7 @@ func (s *SchemaDefinition) FromClause() string {
 	if len(s.ViewTables) == 0 {
 		return s.QualifiedTableName()
 	}
-	return fmt.Sprintf("%s AS %s", s.QualifiedTableName(), s.TableName)
+	return fmt.Sprintf("%s %s", s.QualifiedTableName(), s.TableName)
 }
 
 // ColumnQualifier returns the table name to use when qualifying column references in

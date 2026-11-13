@@ -45,6 +45,7 @@ func TestAuthorizationParsing(t *testing.T) {
 		{"devices", `SELECT * FROM devicemanager.devices WHERE devicemanager.devices.id IN ('a', 'b''c')`},
 		{"devices", `SELECT * FROM devicemanager.devices WHERE 1 = 0 OR devices.id IN ('a')`},
 		{"certificates", `SELECT * FROM ca.certificates_view AS certificates WHERE certificates.serial_number IN ('123')`},
+		{"certificates", `SELECT * FROM ca.certificates_view certificates LEFT JOIN devicemanager.devices j0_0 ON certificates.subject_common_name = j0_0.id WHERE j0_0.id IS NOT NULL`},
 		{"certificates_view certificates", `SELECT * FROM ca.certificates_view AS certificates WHERE certificates.serial_number IN ('123')`},
 	} {
 		if _, err := parseAuthorization(tc.query, tc.target); err != nil {
