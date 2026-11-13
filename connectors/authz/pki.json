@@ -115,6 +115,11 @@
         "name": "subject_common_name",
         "target_entity": "device",
         "foreign_key": "subject_common_name"
+      },
+      {
+        "name": "key_id",
+        "target_entity": "kms_key",
+        "foreign_key": "key_id"
       }
     ],
     "schema_name": "ca",
@@ -139,6 +144,7 @@
       { "column": "revocation_reason",         "type": "string"    },
       { "column": "type",                      "type": "string"    },
       { "column": "engine_id",                 "type": "string"    },
+      { "column": "key_id",                    "type": "string"    },
       { "column": "subject_key_id",            "type": "string"    },
       { "column": "is_ca",                     "type": "bool"      },
       { "column": "has_private_key",           "type": "bool"      },
@@ -205,7 +211,13 @@
       "create",
       "ui"
     ],
-    "relations": [],
+    "relations": [
+      {
+        "name": "parent_id",
+        "target_entity": "device_group",
+        "foreign_key": "parent_id"
+      }
+    ],
     "schema_name": "devicemanager",
     "filterable": [
       { "column": "name",        "type": "string"    },
@@ -313,7 +325,13 @@
       "create",
       "ui"
     ],
-    "relations": [],
+    "relations": [
+      {
+        "name": "crl_signer_certificate_serial_number",
+        "target_entity": "certificate",
+        "foreign_key": "crl_signer_certificate_serial_number"
+      }
+    ],
     "schema_name": "va",
     "filterable": [
       { "column": "crl_refresh_interval",      "type": "string"    },
