@@ -145,7 +145,7 @@ func findJoinPositions(upper string) []int {
 }
 
 // extractTableName returns the name a fragment such as "schema.table", "table" or
-// "schema.view AS table" exposes to the rest of the query: the alias when there is one,
+// "schema.view AS table" or "schema.view table" exposes to the rest of the query: the alias when there is one,
 // otherwise the unqualified table name. An entity read through one of its view_tables is
 // aliased to its canonical table name, which is what the statement it restricts is matched against.
 func extractTableName(s string) string {
@@ -156,6 +156,8 @@ func extractTableName(s string) string {
 	name := fields[0]
 	if len(fields) >= 3 && strings.EqualFold(fields[1], "AS") {
 		name = fields[2]
+	} else if len(fields) == 2 {
+		name = fields[1]
 	}
 	if idx := strings.LastIndex(name, "."); idx != -1 {
 		name = name[idx+1:]

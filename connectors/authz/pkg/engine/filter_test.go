@@ -636,6 +636,11 @@ func TestBuildPathFilterWildcard_TwoHop(t *testing.T) {
 	if len(result.Joins) != 2 {
 		t.Fatalf("expected 2 joins, got %d: %v", len(result.Joins), result.Joins)
 	}
+	for _, join := range result.Joins {
+		if strings.Contains(join, " AS ") {
+			t.Errorf("table alias must be compatible with Oracle: %s", join)
+		}
+	}
 	if len(result.Conditions) != 1 {
 		t.Fatalf("expected 1 condition, got %d: %v", len(result.Conditions), result.Conditions)
 	}
@@ -1230,8 +1235,8 @@ func TestGenerateListFilter_ReadsEntityThroughViewTableUnderCanonicalName(t *tes
 	if err != nil {
 		t.Fatalf("GenerateListFilter(certificate) failed: %v", err)
 	}
-	if !strings.HasPrefix(certs.FullSQL, "SELECT * FROM ca.certificates_view AS certificates ") {
-		t.Errorf("expected FROM ca.certificates_view AS certificates, got: %s", certs.FullSQL)
+	if !strings.HasPrefix(certs.FullSQL, "SELECT * FROM ca.certificates_view certificates ") {
+		t.Errorf("expected FROM ca.certificates_view certificates, got: %s", certs.FullSQL)
 	}
 	if !strings.Contains(certs.FullSQL, "certificates.has_private_key = true") {
 		t.Errorf("expected condition on certificates.has_private_key, got: %s", certs.FullSQL)
@@ -1241,7 +1246,7 @@ func TestGenerateListFilter_ReadsEntityThroughViewTableUnderCanonicalName(t *tes
 	if err != nil {
 		t.Fatalf("GenerateListFilter(ca_certificate) failed: %v", err)
 	}
-	if !strings.Contains(cas.FullSQL, "LEFT JOIN ca.certificates_view AS j0_0 ON ca_certificates.serial_number = j0_0.serial_number") {
+	if !strings.Contains(cas.FullSQL, "LEFT JOIN ca.certificates_view j0_0 ON ca_certificates.serial_number = j0_0.serial_number") {
 		t.Errorf("expected the cascade to join certificates_view, got: %s", cas.FullSQL)
 	}
 }
