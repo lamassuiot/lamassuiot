@@ -45,6 +45,11 @@ BEGIN
   IF COALESCE(cardinality(ca_ids), 0) = 0 THEN
    -- The CA was deleted (#841). Its own id cannot be recovered: the issuer metadata of a subordinate certificate is the
    -- id of its parent. The last published CRL stays reachable through the old URL.
+   -- Its synthetic id must not be the id of a live CA, or /crl/<id> of that CA would resolve to these settings.
+   IF EXISTS (SELECT 1 FROM ca.ca_certificates WHERE id = 'legacy-' || role_record.ca_ski) THEN
+    RAISE EXCEPTION 'VA role %: CA % has the id reserved for the archived settings of this role, whose CA was deleted. Recreate that CA with a different id before upgrading',
+     role_record.ca_ski, 'legacy-' || role_record.ca_ski;
+   END IF;
    INSERT INTO crl_settings (ca_id, legacy_ski, signer_serial_number, validity, refresh_interval, regenerate_on_revoke,
      status, latest_crl_version, latest_crl_valid_from, latest_crl_valid_until)
    VALUES ('legacy-' || role_record.ca_ski, role_record.ca_ski, NULL, role_record.crl_validity, role_record.crl_refresh_interval,
@@ -82,30 +87,7 @@ END $$;
 -- +goose StatementEnd
 
 -- +goose Down
--- +goose StatementBegin
--- Best effort: archived settings have no signer, so they cannot go back to va_role (their CRL files stay in the bucket).
-CREATE TABLE va_role (
- ca_ski TEXT,
- crl_refresh_interval TEXT,
- crl_validity TEXT,
- crl_regenerate_on_revoke BOOLEAN,
- latest_crl_version NUMERIC,
- latest_crl_valid_from TIMESTAMPTZ,
- latest_crl_valid_until TIMESTAMPTZ,
- crl_signer_certificate_serial_number TEXT NOT NULL,
- CONSTRAINT ca_ski_pkey PRIMARY KEY (ca_ski)
-);
-INSERT INTO va_role (ca_ski, crl_refresh_interval, crl_validity, crl_regenerate_on_revoke, latest_crl_version,
-  latest_crl_valid_from, latest_crl_valid_until, crl_signer_certificate_serial_number)
- SELECT DISTINCT ON (COALESCE(s.legacy_ski, c.subject_key_id)) COALESCE(s.legacy_ski, c.subject_key_id), s.refresh_interval, s.validity,
-   s.regenerate_on_revoke, s.latest_crl_version, s.latest_crl_valid_from, s.latest_crl_valid_until, s.signer_serial_number
- FROM crl_settings s
-  JOIN ca.certificates c ON c.serial_number = s.signer_serial_number
- WHERE s.signer_serial_number IS NOT NULL
- ORDER BY COALESCE(s.legacy_ski, c.subject_key_id), s.ca_id;
-ALTER TABLE va_role ADD CONSTRAINT va_role_signer_certificate_fk
- FOREIGN KEY (crl_signer_certificate_serial_number) REFERENCES ca.certificates(serial_number)
- ON DELETE RESTRICT ON UPDATE CASCADE;
-CREATE INDEX va_role_signer_certificate_idx ON va_role(crl_signer_certificate_serial_number);
-DROP TABLE crl_settings;
--- +goose StatementEnd
+-- BREAKING: this migration cannot be rolled back, so Down does nothing. CRLs generated after the upgrade are stored
+-- under the CA ID, where the previous version does not look for them, and archived settings have no signer to go
+-- back to va_role. To return to the previous version, restore the database and the CRL bucket from the backup taken
+-- before the upgrade.

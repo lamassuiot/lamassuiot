@@ -131,25 +131,6 @@ func TestCRLSettingsRepo(t *testing.T) {
 		require.Equal(t, models.TimeDuration(time.Hour), got.Options.Validity, "options untouched")
 	})
 
-	t.Run("the signer only moves from the expected certificate", func(t *testing.T) {
-		other := newTestCertificate(t, 102, "", "")
-		_, err := f.certs.Insert(ctx, other)
-		require.NoError(t, err)
-
-		moved, err := f.repo.SetSigner(ctx, "ca-a", f.signer.SerialNumber, other.SerialNumber)
-		require.NoError(t, err)
-		require.True(t, moved)
-		moved, err = f.repo.SetSigner(ctx, "ca-a", f.signer.SerialNumber, "whatever")
-		require.NoError(t, err)
-		require.False(t, moved)
-		_, got, err := f.repo.Get(ctx, "ca-a")
-		require.NoError(t, err)
-		require.Equal(t, other.SerialNumber, got.Options.SignerSerialNumber)
-
-		_, err = f.repo.SetSigner(ctx, "ca-a", other.SerialNumber, "missing")
-		require.ErrorIs(t, err, errs.ErrCertificateNotFound)
-	})
-
 	t.Run("the signer certificate cannot be deleted while it is referenced", func(t *testing.T) {
 		require.ErrorIs(t, f.certs.Delete(ctx, f.signer.SerialNumber), errs.ErrCertificateInUse, "still the signer of ca-b")
 	})

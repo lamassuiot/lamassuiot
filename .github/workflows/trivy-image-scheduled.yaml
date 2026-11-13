@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [kms, ca, devmanager, dmsmanager, va, alerts, aws-connector, authz, lamassu-db-migration, ca-to-kms-migration]
+        service: [kms, ca, devmanager, dmsmanager, va, alerts, aws-connector, authz, lamassu-db-migration, ca-to-kms-migration, upgrade-check]
         image-tag: [dev, latest]
     uses: ./.github/workflows/trivy-image-scan.yaml
     with:

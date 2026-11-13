@@ -85,16 +85,3 @@ func (db *PostgresCRLSettingsStore) UpdateLatestCRL(ctx context.Context, caID st
 	}
 	return nil
 }
-
-func (db *PostgresCRLSettingsStore) SetSigner(ctx context.Context, caID, expectedSerial, newSerial string) (bool, error) {
-	tx := db.db.WithContext(ctx).Table("crl_settings").
-		Where("ca_id = ? AND signer_serial_number = ?", caID, expectedSerial).
-		Update("signer_serial_number", newSerial)
-	if isForeignKeyViolation(tx.Error, crlSettingsSignerFK) {
-		return false, errs.ErrCertificateNotFound
-	}
-	if tx.Error != nil {
-		return false, tx.Error
-	}
-	return tx.RowsAffected > 0, nil
-}

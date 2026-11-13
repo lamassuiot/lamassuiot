@@ -119,14 +119,13 @@ func TestCRLSettingsMigration(t *testing.T) {
 		require.Equal(t, "c-a2", serial)
 	})
 
-	t.Run("rollback restores va_role for the roles that can sign", func(t *testing.T) {
+	t.Run("rollback does nothing: the migration is irreversible", func(t *testing.T) {
 		RollbackMigration(t, logger, con, postgres.VA_SCHEMA, "20261111120000_crl_settings")
-		var skis []string
-		require.NoError(t, con.Raw(`SELECT ca_ski FROM va_role ORDER BY ca_ski`).Scan(&skis).Error)
-		require.Equal(t, []string{"ski-a", "ski-b"}, skis)
-		var serial string
-		require.NoError(t, con.Raw(`SELECT crl_signer_certificate_serial_number FROM va_role WHERE ca_ski = 'ski-a'`).Scan(&serial).Error)
-		require.Equal(t, "c-a2", serial)
+		var vaRole, crlSettings *string
+		require.NoError(t, con.Raw(`SELECT to_regclass('va_role')::text`).Scan(&vaRole).Error)
+		require.Nil(t, vaRole, "va_role is not recreated")
+		require.NoError(t, con.Raw(`SELECT to_regclass('crl_settings')::text`).Scan(&crlSettings).Error)
+		require.NotNil(t, crlSettings, "crl_settings is kept")
 	})
 }
 
@@ -176,4 +175,20 @@ func TestCRLSettingsMigrationRefusesAmbiguousInstallations(t *testing.T) {
 			require.EqualValues(t, len(tc.roles), roles, "nothing is migrated when the installation is refused")
 		})
 	}
+}
+
+func TestCRLSettingsMigrationRefusesLegacyIDClash(t *testing.T) {
+	// ski-orph has no CA anymore, so its settings would be archived as legacy-ski-orph: an id a live CA already has.
+	m, con, cleanup := prepareVAMigration(t,
+		`('c-x','ski-x','key-x',NULL), ('c-orph','ski-orph','key-o',NULL)`,
+		`('legacy-ski-orph','c-x','2020-01-01')`,
+		"ski-orph")
+	defer cleanup()
+
+	_, err := m.ApplyVersion(context.Background(), crlSettingsMigrationVersion, true)
+	require.ErrorContains(t, err, "VA role ski-orph: CA legacy-ski-orph has the id reserved for the archived settings of this role, whose CA was deleted. Recreate that CA with a different id before upgrading")
+
+	var table *string
+	require.NoError(t, con.Raw(`SELECT to_regclass('va_role')::text`).Scan(&table).Error)
+	require.NotNil(t, table, "nothing is migrated when the installation is refused")
 }
