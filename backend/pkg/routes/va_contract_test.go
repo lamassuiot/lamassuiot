@@ -44,7 +44,7 @@ func TestVAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 	}
 	assert.Equal(t, 3, public)
 	assert.Equal(t, 2, protected)
-	spec, err := os.Open("../specs/va-openapi.yaml")
+	spec, err := os.Open("../../../docs/va-openapi.yaml")
 	require.NoError(t, err)
 	defer spec.Close()
 	require.NoError(t, contract.ValidateOpenAPI(spec))
@@ -162,7 +162,7 @@ func TestVAContractDetectsPublicSecurityDriftAndUntrackedRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	contract := registerVARoutes(logrus.NewEntry(logrus.New()), router.Group("/api/va"), nil, nil, &contractTestEngine{})
-	spec, err := os.ReadFile("../specs/va-openapi.yaml")
+	spec, err := os.ReadFile("../../../docs/va-openapi.yaml")
 	require.NoError(t, err)
 	for _, test := range []struct{ name, old, replacement, message string }{
 		{"wrong base", "url: /api/va", "url: /api/va/v1", "does not match OpenAPI server"},

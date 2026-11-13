@@ -1,4 +1,6 @@
-package specs
+// Package docs embeds the OpenAPI specifications served by each service.
+// The YAML files in this directory are the single source of truth for the HTTP APIs.
+package docs
 
 import _ "embed"
 
@@ -22,3 +24,6 @@ var Alerts []byte
 
 //go:embed enroll-reenroll-webhook-openapi.yaml
 var EnrollReenrollWebhook []byte
+
+//go:embed authz-openapi.yaml
+var Authz []byte

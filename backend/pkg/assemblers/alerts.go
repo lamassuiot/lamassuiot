@@ -9,7 +9,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/handlers"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
@@ -17,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/docs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 )
@@ -35,7 +35,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = specs.Alerts
+		openApiContent = docs.Alerts
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

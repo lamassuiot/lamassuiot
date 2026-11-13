@@ -2,6 +2,39 @@
 
 Lamassu IoT is an IoT-first PKI (Public Key Infrastructure) designed for industrial scenarios. This is a Go-based microservices architecture with modular crypto engines, storage backends, and event systems.
 
+## Workflow for Any Behavior Change
+
+Applies to features, bug fixes, refactors and migrations. Read-only questions and trivial edits (typos, comments, formatting) skip it; when in doubt, follow it.
+
+When the skill listed for a step is available in your tool, invoke it instead of paraphrasing it from memory. If it is not available, do the step by hand as described.
+
+| Step | What to do | Skill (when available) |
+|---|---|---|
+| Design | Clarify intent and explore options before writing code. | `superpowers:brainstorming` |
+| Plan | Short plan of small, verifiable steps; get agreement on non-trivial ones. | `superpowers:writing-plans` |
+| Implement | Failing test first, then the code. Minimal diff scoped to the request. | `superpowers:test-driven-development`, `andrej-karpathy-skills:karpathy-guidelines` |
+| Execute a plan | Run the plan step by step. | `superpowers:executing-plans`, or `superpowers:subagent-driven-development` when tasks are independent |
+| Parallel work | Split independent areas across parallel agents, each in its own git worktree. | `superpowers:dispatching-parallel-agents`, `superpowers:using-git-worktrees` |
+| Debug | Find the root cause before changing code. | `superpowers:systematic-debugging` |
+| Verify | Run the relevant build and tests (see [Running Tests](#running-tests)) and the [Contract Consistency](#contract-consistency-always-verify) checks. Report the real output; do not claim "done" without it. | `superpowers:verification-before-completion` |
+| Review | Review the diff before handing it over. | `superpowers:requesting-code-review`, `code-review`; `simplify` for cleanups |
+| Receive feedback | Verify review feedback technically before applying it. | `superpowers:receiving-code-review` |
+| Close | Leave the branch ready; the user decides on commit, merge or PR. | `superpowers:finishing-a-development-branch` |
+
+### Security-sensitive work
+
+Applies to any security request, and to changes touching KMS, key bindings, crypto engines, EST, authentication or authorization. Run it after the design step and again on the finished diff, in addition to the workflow above:
+
+1. Threat model of the change (STRIDE/DREAD): `anthropic-skills:stride-dread-threat-model`.
+2. Security review of the diff: `security-review`.
+3. Broader hardening scan (OWASP, CWE, CVEs, secrets, injection): `code-modernization:modernize-harden`. Only for audits or when asked to harden, not for every small change.
+
+Do not run it for unrelated changes.
+
+### Documentation
+
+Documentation tasks follow the `pki-documentation-suite` agents, when available: `pki-source-code-specialist` first, then `pki-documentation-author`, the PKI and crypto reviewers, and `final-quality-gate`. Load `lamassu-style-guide` and `lamassu-glossary` for any doc edit.
+
 ## Project Architecture
 
 ### Core Services
@@ -50,6 +83,27 @@ Example assembler flow:
 - `eventbus.EventBus` - Pub/sub messaging with CloudEvents
 
 **Configuration**: Uses mapstructure in `backend/pkg/config/` and `core/pkg/config/`. Each service embeds core configs for storage, event bus, crypto engines.
+
+## Contract Consistency (always verify)
+
+The same data model is described in three places. Whenever you change one, check the other two in the same change:
+
+1. **Go model**: structs in `core/pkg/models/` (`json` and `gorm` tags) plus the Postgres migrations in `engines/storage/postgres/migrations/`.
+2. **OpenAPI**: `docs/*-openapi.yaml`. This is the single copy of each spec: embedded by `docs/embed.go`, no symlinks or duplicates elsewhere. A new spec must also be added to `TestEveryOpenAPISpecHasAnAssignedSuite` in `backend/pkg/routes/spec_inventory_test.go`.
+3. **Authz schema**: `connectors/authz/pki.json`, one entry per entity.
+
+What must agree:
+- Fields: every API field exists in the OpenAPI schema and the model, and nothing removed from the model stays in the spec. This includes nested and embedded structs.
+- `pki.json` uses **database column names**, not API names (for example `last_seen` in the DB and `seen_at` in the API). Take names from the model's gorm column or the migration, and flatten embedded structs with their `embeddedPrefix`.
+- `filterable` lists the columns of the table, or of its `view_tables` entry when the entity has one (`certificates_view` exposes `c.*`). Drop columns that a migration drops and add columns it creates.
+- `relations` mirror the foreign keys of the migrations, including self-references and cross-schema ones. `primary_key` matches the table's primary key.
+- Column types in `filterable` match the database type.
+
+Verify before reporting done:
+```bash
+go test ./backend/pkg/routes/ ./backend/pkg/services/ -run OpenAPI   # OpenAPI contract tests
+cd connectors/authz && go test ./...                                 # loads pki.json
+```
 
 ## Development Workflows
 

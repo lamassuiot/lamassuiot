@@ -46,7 +46,7 @@ func TestRemainingBackendOpenAPIContracts(t *testing.T) {
 				}
 				require.Len(t, contract.Declarations(), count)
 				require.NoError(t, contract.ValidateRoutes(router.Routes()))
-				spec, err := os.ReadFile("../specs/" + name + "-openapi.yaml")
+				spec, err := os.ReadFile("../../../docs/" + name + "-openapi.yaml")
 				require.NoError(t, err)
 				require.NoError(t, contract.ValidateOpenAPI(strings.NewReader(string(spec))))
 				for _, route := range contract.Declarations() {

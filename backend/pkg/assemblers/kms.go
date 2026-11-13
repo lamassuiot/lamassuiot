@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	cebuilder "github.com/lamassuiot/lamassuiot/v4/backend/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
@@ -19,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/docs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 )
@@ -37,7 +37,7 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = specs.KMS
+		openApiContent = docs.KMS
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

@@ -34,7 +34,7 @@ func TestDeviceManagerOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 			require.NotEmpty(t, contract.Declarations())
 			require.NoError(t, contract.ValidateRoutes(router.Routes()))
 			assert.Equal(t, len(router.Routes()), len(contract.Declarations()))
-			file, err := os.Open("../specs/device-manager-openapi.yaml")
+			file, err := os.Open("../../../docs/device-manager-openapi.yaml")
 			require.NoError(t, err)
 			defer file.Close()
 			require.NoError(t, contract.ValidateOpenAPI(file))
@@ -144,7 +144,7 @@ func TestDeviceManagerEventsRequireDevicePermissionBeforeRESTOrSSE(t *testing.T)
 
 func TestDeviceManagerContractDetectsDriftAndUntrackedRoutes(t *testing.T) {
 	router, contract, _ := deviceManagerGuardRouter(false, false)
-	spec, err := os.ReadFile("../specs/device-manager-openapi.yaml")
+	spec, err := os.ReadFile("../../../docs/device-manager-openapi.yaml")
 	require.NoError(t, err)
 	for _, test := range []struct{ name, old, replacement, message string }{
 		{"valid but wrong action", "action: provision", "action: read", "authz contract mismatch"},
