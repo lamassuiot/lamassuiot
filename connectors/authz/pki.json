@@ -148,8 +148,7 @@
       { "column": "issuer_organization_unit",  "type": "string"    },
       { "column": "issuer_country",            "type": "string"    },
       { "column": "issuer_state",              "type": "string"    },
-      { "column": "issuer_locality",           "type": "string"    },
-      { "column": "version_schema",            "type": "string"    }
+      { "column": "issuer_locality",           "type": "string"    }
     ]
   },
   {

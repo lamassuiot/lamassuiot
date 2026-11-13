@@ -25,7 +25,7 @@ import (
 )
 
 func TestEnrollmentWebhookEveryOpenAPIOperation(t *testing.T) {
-	spec, err := os.ReadFile("../specs/enroll-reenroll-webhook-openapi.yaml")
+	spec, err := os.ReadFile("../../../docs/enroll-reenroll-webhook-openapi.yaml")
 	require.NoError(t, err)
 	var doc struct {
 		Paths map[string]map[string]yaml.Node `yaml:"paths"`

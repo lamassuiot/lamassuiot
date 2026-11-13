@@ -38,7 +38,7 @@ func TestCAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 		}
 	}
 	assert.True(t, registered, "recorded contract must belong to the actual CA router")
-	file, err := os.Open("../specs/ca-openapi.yaml")
+	file, err := os.Open("../../../docs/ca-openapi.yaml")
 	require.NoError(t, err)
 	defer file.Close()
 	require.NoError(t, contract.ValidateOpenAPI(file))
@@ -49,7 +49,7 @@ func TestCreateCertificateContractDetectsAnOtherwiseValidWrongAction(t *testing.
 	router := gin.New()
 	client := config.AuthzClient{Protocol: "http", BasePath: "/api/authz", Hostname: "localhost", Port: 8080}
 	contract := registerCARoutes(router.Group("/api/ca"), nil, newRemoteAuthzEngine(client, models.CASource, logrus.NewEntry(logrus.New())), logrus.NewEntry(logrus.New()))
-	spec, err := os.ReadFile("../specs/ca-openapi.yaml")
+	spec, err := os.ReadFile("../../../docs/ca-openapi.yaml")
 	require.NoError(t, err)
 	marker := "entity_type: certificate\n        action: create"
 	require.Contains(t, string(spec), marker)
