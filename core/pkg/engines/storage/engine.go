@@ -13,7 +13,7 @@ type CommonStorageEngine struct {
 	IssuanceProfile IssuanceProfileRepo
 	Device          DeviceManagerRepo
 	DMS             DMSRepo
-	VA              VARepo
+	VA              CRLSettingsRepo
 	Events          EventRepository
 	Subscriptions   SubscriptionsRepository
 	KMS             KMSKeysRepo
@@ -25,7 +25,7 @@ type StorageEngine interface {
 	GetCertStorage() (CertificatesRepo, error)
 	GetIssuanceProfileStorage() (IssuanceProfileRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)
-	GetVARoleStorage() (VARepo, error)
+	GetCRLSettingsStorage() (CRLSettingsRepo, error)
 	GetDMSStorage() (DMSRepo, error)
 	GetEventsStorage() (EventRepository, error)
 	GetSubscriptionsStorage() (SubscriptionsRepository, error)

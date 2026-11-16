@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -32,8 +33,10 @@ func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl servic
 
 func (r *vaHttpRoutes) handleError(ctx *gin.Context, err error) {
 	switch {
-	case errors.Is(err, errs.ErrVARoleNotFound), errors.Is(err, errs.ErrCANotFound), errors.Is(err, errs.ErrCertificateNotFound):
+	case errors.Is(err, errs.ErrCRLSettingsNotFound), errors.Is(err, errs.ErrCRLNotFound), errors.Is(err, errs.ErrCANotFound), errors.Is(err, errs.ErrCertificateNotFound):
 		ctx.JSON(http.StatusNotFound, gin.H{"err": err.Error()})
+	case errors.Is(err, errs.ErrCRLSettingsNotActive):
+		ctx.JSON(http.StatusConflict, gin.H{"err": err.Error()})
 	case errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 	default:
@@ -99,7 +102,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 
 func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	type uriParams struct {
-		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
+		ID string `uri:"id" binding:"required"`
 	}
 
 	var params uriParams
@@ -109,8 +112,8 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	}
 
 	crl, err := r.crl.GetCRL(ctx.Request.Context(), services.GetCRLInput{
-		CRLVersion:     big.NewInt(0),
-		CASubjectKeyID: params.CASubjectKeyID,
+		CRLVersion: big.NewInt(0),
+		ID:         params.ID,
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting crl list: %s", err)
@@ -121,32 +124,36 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "application/pkix-crl", crl.Raw)
 }
 
-func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
-	type uriParams struct {
-		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
+func (r *vaHttpRoutes) GetCRLSettingsList(ctx *gin.Context) {
+	queryParams, err := FilterQuery(ctx.Request, resources.CRLSettingsFilterableFields)
+	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 
-	role, err := r.crl.GetVARole(ctx.Request.Context(), services.GetVARoleInput{
-		CASubjectKeyID: params.CASubjectKeyID,
+	items := []models.CRLSettings{}
+	nextBookmark, err := r.crl.GetCRLSettingsList(ctx.Request.Context(), services.GetCRLSettingsListInput{
+		QueryParameters: queryParams,
+		ExhaustiveRun:   false,
+		ApplyFunc: func(item models.CRLSettings) {
+			items = append(items, item)
+		},
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while getting va role: %s", err)
+		r.logger.Errorf("something went wrong while listing crl settings: %s", err)
 		r.handleError(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, role)
+	ctx.JSON(http.StatusOK, resources.GetItemsResponse[models.CRLSettings]{
+		NextBookmark: nextBookmark,
+		List:         items,
+	})
 }
 
-func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
+func (r *vaHttpRoutes) GetCRLSettingsByID(ctx *gin.Context) {
 	type uriParams struct {
-		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
+		CAID string `uri:"ca-id" binding:"required"`
 	}
 
 	var params uriParams
@@ -155,21 +162,44 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody resources.VARoleUpdate
+	settings, err := r.crl.GetCRLSettings(ctx.Request.Context(), services.GetCRLSettingsInput{
+		CAID: params.CAID,
+	})
+	if err != nil {
+		r.logger.Errorf("something went wrong while getting crl settings: %s", err)
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, settings)
+}
+
+func (r *vaHttpRoutes) UpdateCRLSettings(ctx *gin.Context) {
+	type uriParams struct {
+		CAID string `uri:"ca-id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.CRLSettingsUpdate
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 
-	role, err := r.crl.UpdateVARole(ctx.Request.Context(), services.UpdateVARoleInput{
-		CASubjectKeyID: params.CASubjectKeyID,
-		CRLRole:        requestBody.VACRLRole,
+	settings, err := r.crl.UpdateCRLSettings(ctx.Request.Context(), services.UpdateCRLSettingsInput{
+		CAID:    params.CAID,
+		Options: requestBody.CRLSettingsOptions,
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while updating va role: %s", err)
+		r.logger.Errorf("something went wrong while updating crl settings: %s", err)
 		r.handleError(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, role)
+	ctx.JSON(http.StatusOK, settings)
 }

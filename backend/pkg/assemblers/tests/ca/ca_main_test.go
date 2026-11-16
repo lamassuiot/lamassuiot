@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
-	"strconv"
 	"testing"
 	"time"
 	"uuid"
@@ -30,7 +29,8 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
-const DefaultCAID = "111111-2222"
+var DefaultCAID string
+
 const DefaultCACN = "MyCA"
 
 func TestCreateCA(t *testing.T) {
@@ -41,7 +41,8 @@ func TestCreateCA(t *testing.T) {
 
 	caTest := serverTest.CA
 
-	caID := "12345-11111"
+	rootCAForSubTestID := uuid.NewV7().String()
+	rootCAForValidSubID := uuid.NewV7().String()
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
@@ -69,7 +70,6 @@ func TestCreateCA(t *testing.T) {
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -90,7 +90,6 @@ func TestCreateCA(t *testing.T) {
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -111,7 +110,6 @@ func TestCreateCA(t *testing.T) {
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -143,7 +141,6 @@ func TestCreateCA(t *testing.T) {
 				}
 
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Time, Time: tCA},
@@ -162,50 +159,12 @@ func TestCreateCA(t *testing.T) {
 				return nil
 			},
 		},
-		{
-			name: "Error/Duplicate-CA-ID",
-			before: func(svc services.CAService) error {
-				profile := createProfile(t)
-				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
-					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:      models.Subject{CommonName: "TestCA"},
-					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
-					ProfileID:    profile.ID,
-				})
-				if err != nil {
-					return err
-				}
-				return nil
-			},
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				profile := createProfile(t)
-				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
-					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:      models.Subject{CommonName: "TestCA"},
-					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
-					ProfileID:    profile.ID,
-				})
-			},
-			resultCheck: func(createdCA *models.CACertificate, err error) error {
-				if err == nil {
-					return fmt.Errorf("should've got error. Got none")
-				}
 
-				if !errors.Is(err, errs.ErrCAAlreadyExists) {
-					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrCAAlreadyExists, err)
-				}
-
-				return nil
-			},
-		},
 		{
 			name:   "Error/InvalidIssuanceProfileID",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -240,7 +199,6 @@ func TestCreateCA(t *testing.T) {
 				}
 
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:           models.Subject{CommonName: "TestCA-Inline-Profile"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -285,7 +243,6 @@ func TestCreateCA(t *testing.T) {
 				}
 
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                  caID,
 					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:             models.Subject{CommonName: "TestCA-Profile-Ref"},
 					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
@@ -321,7 +278,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Create CA without specifying CA issuance profile - should use default
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA-Default-Profile"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -359,7 +315,6 @@ func TestCreateCA(t *testing.T) {
 				}
 
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:           models.Subject{CommonName: "TestCA-Invalid"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -386,7 +341,6 @@ func TestCreateCA(t *testing.T) {
 				defaultProfile := createProfile(t)
 
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                  caID,
 					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:             models.Subject{CommonName: "TestCA-Invalid-Ref"},
 					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
@@ -428,7 +382,6 @@ func TestCreateCA(t *testing.T) {
 				}
 
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                  caID,
 					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:             models.Subject{CommonName: "TestCA-Invalid-Ref"},
 					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
@@ -480,7 +433,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Provide both - inline should take priority
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                  caID,
 					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:             models.Subject{CommonName: "TestCA-Priority"},
 					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
@@ -515,7 +467,6 @@ func TestCreateCA(t *testing.T) {
 				// This simulates older API calls that don't include CA-specific profile information
 				// Only the default ProfileID is provided, no CAIssuanceProfile or CAIssuanceProfileID
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA-NoProfile"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -588,7 +539,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Try to create CA with RSA key but profile disallows it
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:           models.Subject{CommonName: "TestCA-RSA-NotAllowed"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -639,7 +589,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Try to create CA with ECDSA key but profile disallows it
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
 					Subject:           models.Subject{CommonName: "TestCA-ECDSA-NotAllowed"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -690,7 +639,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Try to create CA with 2048-bit RSA key but profile only allows 4096
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:           models.Subject{CommonName: "TestCA-RSA-InvalidSize"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -741,7 +689,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Try to create CA with 256-bit ECDSA key but profile only allows 384 and 521
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
 					Subject:           models.Subject{CommonName: "TestCA-ECDSA-InvalidSize"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -792,7 +739,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Create CA with 2048-bit RSA key (allowed)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:           models.Subject{CommonName: "TestCA-RSA-Valid"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -859,7 +805,6 @@ func TestCreateCA(t *testing.T) {
 
 				// Create CA with 256-bit ECDSA key (allowed)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
 					Subject:           models.Subject{CommonName: "TestCA-ECDSA-Valid"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -895,13 +840,15 @@ func TestCreateCA(t *testing.T) {
 			before: func(svc services.CAService) error {
 				// Create root CA first
 				profile := createProfile(t)
-				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "root-ca-for-sub-test",
+				root, err := svc.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 4096},
 					Subject:      models.Subject{CommonName: "Root CA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 					ProfileID:    profile.ID,
 				})
+				if err == nil {
+					rootCAForSubTestID = root.ID
+				}
 				return err
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
@@ -937,8 +884,7 @@ func TestCreateCA(t *testing.T) {
 
 				// Try to create subordinate CA with 2048-bit RSA key (not allowed)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
-					ParentID:          "root-ca-for-sub-test",
+					ParentID:          rootCAForSubTestID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:           models.Subject{CommonName: "SubCA-RSA-InvalidSize"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -958,13 +904,15 @@ func TestCreateCA(t *testing.T) {
 			before: func(svc services.CAService) error {
 				// Create root CA first
 				profile := createProfile(t)
-				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "root-ca-for-valid-sub",
+				root, err := svc.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 4096},
 					Subject:      models.Subject{CommonName: "Root CA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 					ProfileID:    profile.ID,
 				})
+				if err == nil {
+					rootCAForValidSubID = root.ID
+				}
 				return err
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
@@ -1002,8 +950,7 @@ func TestCreateCA(t *testing.T) {
 
 				// Create subordinate CA with 4096-bit RSA key (allowed)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                caID,
-					ParentID:          "root-ca-for-valid-sub",
+					ParentID:          rootCAForValidSubID,
 					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 4096},
 					Subject:           models.Subject{CommonName: "SubCA-RSA-Valid"},
 					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
@@ -2390,7 +2337,7 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        "myCA",
+					CAID:        uuid.NewV7().String(),
 					CertRequest: (*models.X509CertificateRequest)(csr),
 					IssuanceProfile: &models.IssuanceProfile{
 						Validity:        validity,
@@ -3186,6 +3133,7 @@ func TestUpdateCAStatus(t *testing.T) {
 	}
 
 	caTest := serverTest.CA
+	myCAID := uuid.NewV7().String()
 
 	var testcases = []struct {
 		name        string
@@ -3206,14 +3154,16 @@ func TestUpdateCAStatus(t *testing.T) {
 					t.Fatalf("failed creating issuance profile: %s", err)
 				}
 
-				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "myCA",
+				created, err := svc.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
 					Subject:      models.Subject{CommonName: "myCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Second * 2)},
 					ProfileID:    profile.ID,
 					Metadata:     map[string]any{},
 				})
+				if err == nil {
+					myCAID = created.ID
+				}
 				if err != nil {
 					return fmt.Errorf("Got error while creating the CA %s", err)
 				}
@@ -3230,7 +3180,7 @@ func TestUpdateCAStatus(t *testing.T) {
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				caStatus := models.StatusExpired
 				res, err := caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
-					CAID:             "myCA",
+					CAID:             myCAID,
 					Status:           caStatus,
 					RevocationReason: models.RevocationReason(2),
 				})
@@ -3888,7 +3838,6 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:            "id-1234",
 					CACertificate: (*models.X509Certificate)(ca),
 				})
 
@@ -3922,7 +3871,6 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:            "id-1234",
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					Key:           key,
@@ -3967,7 +3915,6 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:            "id-1234",
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					Key:           key,
@@ -4003,7 +3950,6 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:            "id-1234",
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					Key:           key,
@@ -4362,7 +4308,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:            "id-1234",
 					ProfileID:     "non-existent-profile-id",
 					CACertificate: (*models.X509Certificate)(ca),
 					Key:           key,
@@ -4393,7 +4338,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 
 				// ProfileID is required for ImportedWithKey type but not provided
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:            "id-1234",
 					CACertificate: (*models.X509Certificate)(ca),
 					Key:           key,
 					ProfileID:     "non-existent-profile-id",
@@ -4447,6 +4391,7 @@ func TestDeleteCA(t *testing.T) {
 	}
 
 	caTest := serverTest.CA
+	childCAVerifyID := uuid.NewV7().String()
 
 	var testcases = []struct {
 		name        string
@@ -4553,7 +4498,6 @@ func TestDeleteCA(t *testing.T) {
 
 				// Create child CA
 				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "child-ca-test",
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "Test Child CA"},
 					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
@@ -4600,7 +4544,6 @@ func TestDeleteCA(t *testing.T) {
 
 				// Create child CA
 				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "child-ca-test-2",
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "Test Child CA 2"},
 					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
@@ -4647,7 +4590,6 @@ func TestDeleteCA(t *testing.T) {
 
 				// Create intermediate CA
 				intermediateCA, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "intermediate-ca-hierarchy",
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "Test Intermediate CA"},
 					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
@@ -4660,7 +4602,6 @@ func TestDeleteCA(t *testing.T) {
 
 				// Create leaf CA
 				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "leaf-ca-hierarchy",
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "Test Leaf CA"},
 					CAExpiration: models.Validity{Type: models.Time, Time: intermediateCA.Certificate.ValidTo},
@@ -4706,14 +4647,16 @@ func TestDeleteCA(t *testing.T) {
 				}
 
 				// Create child CA
-				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "child-ca-verify",
+				created, err := svc.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "Test Child CA Verify"},
 					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
 					ParentID:     rootCA.ID,
 					ProfileID:    rootCA.ProfileID,
 				})
+				if err == nil {
+					childCAVerifyID = created.ID
+				}
 				if err != nil {
 					return fmt.Errorf("failed creating child CA: %s", err)
 				}
@@ -4742,7 +4685,7 @@ func TestDeleteCA(t *testing.T) {
 
 				// Verify child CA is revoked
 				childCA, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
-					CAID: "child-ca-verify",
+					CAID: childCAVerifyID,
 				})
 				if err != nil {
 					return fmt.Errorf("child CA should still exist after parent deletion without cascade: %s", err)
@@ -5149,7 +5092,6 @@ func TestGetCAs(t *testing.T) {
 		{
 			name: "Err/GetCAsExRunFalse",
 			before: func(svc services.CAService) error {
-				var caName string
 				caDUr := models.TimeDuration(time.Hour * 24)
 				issuanceDur := models.TimeDuration(time.Hour * 12)
 
@@ -5165,10 +5107,8 @@ func TestGetCAs(t *testing.T) {
 					t.Fatalf("could not create profile: %s", err)
 				}
 
-				for i := range 5 {
-					caName = DefaultCAID + strconv.Itoa(i)
+				for range 5 {
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:           caName,
 						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 						Subject:      models.Subject{CommonName: DefaultCACN},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -5206,7 +5146,6 @@ func TestGetCAs(t *testing.T) {
 		{
 			name: "Err/GetCAsExRunTrue",
 			before: func(svc services.CAService) error {
-				var caName string
 				caDUr := models.TimeDuration(time.Hour * 24)
 				issuanceDur := models.TimeDuration(time.Hour * 12)
 
@@ -5221,10 +5160,8 @@ func TestGetCAs(t *testing.T) {
 				if err != nil {
 					t.Fatalf("could not create profile: %s", err)
 				}
-				for i := range 5 {
-					caName = DefaultCAID + strconv.Itoa(i)
+				for range 5 {
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:           caName,
 						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 						Subject:      models.Subject{CommonName: DefaultCACN},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
@@ -6037,7 +5974,6 @@ func TestHierarchy(t *testing.T) {
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurChild2},
 					ProfileID:    child2Profile.ID,
 					ParentID:     childCALvl1.ID,
-					ID:           "Lvl2",
 				})
 				if err != nil {
 					t.Fatalf("failed creating the second CA child: %s", err)
@@ -6119,7 +6055,6 @@ func TestHierarchy(t *testing.T) {
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurChild1},
 					ProfileID:    childProfile.ID,
 					ParentID:     rootCA.ID,
-					ID:           "Lvl1",
 				})
 
 				//cas := []*models.CACertificate{}
@@ -6532,12 +6467,14 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	}
 
 	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-		ID:           DefaultCAID,
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: DefaultCACN},
 		CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 		ProfileID:    profile.ID,
 	})
 
+	if err == nil {
+		DefaultCAID = ca.ID
+	}
 	return ca, err
 }

@@ -8,15 +8,19 @@ The sample data generator creates:
 
 ### Certificate Authorities
 
-1. **Imported Root CA** (`sample-imported-root-ca`)
-   - Uses the embedded ECDSA P-256 private key from `ecdsa_p256_key.pem`
-   - Self-signed certificate with 10-year validity
-   - Imported into the system via the ImportCA API
+The CA service assigns the ID of every CA, so the sample CAs are identified by their common name, not by an ID.
 
-2. **Generated Root CA** (`sample-generated-root-ca`)
+1. **Sample Imported Root CA**
+   - Uses the embedded ECDSA P-256 private key from `ecdsa_p256_key.pem`, imported into the KMS first
+   - Self-signed certificate with 10-year validity
+   - Created using the CreateCA API on that imported key
+
+2. **Sample Generated Root CA**
    - Freshly generated ECDSA P-256 key pair
    - Self-signed certificate with 10-year validity
    - Created using the CreateCA API
+
+Look them up by common name (`GET /v1/cas/cn/{common-name}` in the CA API), since their IDs differ on every run. The development monolithic starts with an empty database every time, so the sample data is always created from scratch.
 
 ### Certificates
 

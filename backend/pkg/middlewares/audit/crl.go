@@ -30,20 +30,20 @@ func (mw *CRLAuditEventPublisher) GetCRL(ctx context.Context, input services.Get
 	return mw.next.GetCRL(ctx, input)
 }
 
-func (mw *CRLAuditEventPublisher) GetVARole(ctx context.Context, input services.GetVARoleInput) (output *models.VARole, err error) {
-	return mw.next.GetVARole(ctx, input)
+func (mw *CRLAuditEventPublisher) GetCRLSettings(ctx context.Context, input services.GetCRLSettingsInput) (output *models.CRLSettings, err error) {
+	return mw.next.GetCRLSettings(ctx, input)
 }
 
-func (mw *CRLAuditEventPublisher) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
-	return mw.next.GetVARoles(ctx, input)
+func (mw *CRLAuditEventPublisher) GetCRLSettingsList(ctx context.Context, input services.GetCRLSettingsListInput) (string, error) {
+	return mw.next.GetCRLSettingsList(ctx, input)
 }
 
-func (mw *CRLAuditEventPublisher) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (output *models.VARole, err error) {
+func (mw *CRLAuditEventPublisher) UpdateCRLSettings(ctx context.Context, input services.UpdateCRLSettingsInput) (output *models.CRLSettings, err error) {
 	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateVARole, input, err, output)
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateCRLSettings, input, err, output)
 	}()
 
-	return mw.next.UpdateVARole(ctx, input)
+	return mw.next.UpdateCRLSettings(ctx, input)
 }
 
 func (mw *CRLAuditEventPublisher) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (output *x509.RevocationList, err error) {
@@ -54,10 +54,10 @@ func (mw *CRLAuditEventPublisher) CalculateCRL(ctx context.Context, input servic
 	return mw.next.CalculateCRL(ctx, input)
 }
 
-func (mw *CRLAuditEventPublisher) InitCRLRole(ctx context.Context, caSKI string) (output *models.VARole, err error) {
+func (mw *CRLAuditEventPublisher) InitCRLSettings(ctx context.Context, caID string) (output *models.CRLSettings, err error) {
 	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventInitCRLRole, caSKI, err, output)
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventInitCRLSettings, caID, err, output)
 	}()
 
-	return mw.next.InitCRLRole(ctx, caSKI)
+	return mw.next.InitCRLSettings(ctx, caID)
 }

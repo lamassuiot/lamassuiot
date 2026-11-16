@@ -59,6 +59,12 @@ var IssuanceProfileFilterableFields = map[string]FilterFieldType{
 	"name": StringFilterFieldType,
 }
 
+var CRLSettingsFilterableFields = map[string]FilterFieldType{
+	"ca_id":      StringFilterFieldType,
+	"status":     StringFilterFieldType,
+	"legacy_ski": StringFilterFieldType,
+}
+
 var DMSFilterableFields = map[string]FilterFieldType{
 	"id":            StringFilterFieldType,
 	"name":          StringFilterFieldType,

@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	reissueTestSKI       = "ca-ski"
+	reissueTestCAID      = "ca-id"
+	reissueTestSKI       = "shared-ski" // CAs sharing a key share it: no handler may route by it
 	reissueTestOldSerial = "old-serial"
 	reissueTestNewSerial = "new-serial"
 )
@@ -28,7 +29,7 @@ func reissueEvent(t *testing.T) *event.Event {
 
 	caWithSerial := func(sn string) models.CACertificate {
 		return models.CACertificate{
-			ID:                      "ca-id",
+			ID:                      reissueTestCAID,
 			CertificateSerialNumber: sn,
 			Certificate: models.Certificate{
 				SerialNumber: sn,
@@ -48,16 +49,23 @@ func reissueEvent(t *testing.T) *event.Event {
 	return &e
 }
 
-func vaRoleWithSigner(serial string) *models.VARole {
-	return &models.VARole{
-		CASubjectKeyID: reissueTestSKI,
-		CRLOptions: models.VACRLRole{
-			RefreshInterval:               models.TimeDuration(24 * time.Hour),
-			Validity:                      models.TimeDuration(48 * time.Hour),
-			SignerCertificateSerialNumber: serial,
-			RegenerateOnRevoke:            true,
+func settingsWithSigner(serial string) *models.CRLSettings {
+	return &models.CRLSettings{
+		CAID:   reissueTestCAID,
+		Status: models.CRLSettingsActive,
+		Options: models.CRLSettingsOptions{
+			RefreshInterval:    models.TimeDuration(24 * time.Hour),
+			Validity:           models.TimeDuration(48 * time.Hour),
+			SignerSerialNumber: serial,
+			RegenerateOnRevoke: true,
 		},
 	}
+}
+
+func archivedSettings() *models.CRLSettings {
+	s := settingsWithSigner("")
+	s.Status = models.CRLSettingsArchived
+	return s
 }
 
 func dispatchReissue(t *testing.T, svc services.CRLService) error {
@@ -74,14 +82,14 @@ func dispatchReissue(t *testing.T, svc services.CRLService) error {
 
 func TestReissueCAHandlerRotatesSignerFromPreviousCertificate(t *testing.T) {
 	svc := new(svcmock.MockVAService)
-	role := vaRoleWithSigner(reissueTestOldSerial)
+	settings := settingsWithSigner(reissueTestOldSerial)
 
-	expectedOptions := role.CRLOptions
-	expectedOptions.SignerCertificateSerialNumber = reissueTestNewSerial
+	expectedOptions := settings.Options
+	expectedOptions.SignerSerialNumber = reissueTestNewSerial
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(role, nil)
-	svc.On("UpdateVARole", mock.Anything, services.UpdateVARoleInput{CASubjectKeyID: reissueTestSKI, CRLRole: expectedOptions}).Return(vaRoleWithSigner(reissueTestNewSerial), nil)
-	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return(&x509.RevocationList{}, nil)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settings, nil)
+	svc.On("UpdateCRLSettings", mock.Anything, services.UpdateCRLSettingsInput{CAID: reissueTestCAID, Options: expectedOptions}).Return(settingsWithSigner(reissueTestNewSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: reissueTestCAID}).Return(&x509.RevocationList{}, nil)
 
 	err := dispatchReissue(t, svc)
 
@@ -92,12 +100,12 @@ func TestReissueCAHandlerRotatesSignerFromPreviousCertificate(t *testing.T) {
 func TestReissueCAHandlerKeepsSignerThatIsNotThePreviousCertificate(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner("other-serial"), nil)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settingsWithSigner("other-serial"), nil)
 
 	err := dispatchReissue(t, svc)
 
 	assert.NoError(t, err)
-	svc.AssertNotCalled(t, "UpdateVARole", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
@@ -106,23 +114,23 @@ func TestReissueCAHandlerKeepsSignerThatIsNotThePreviousCertificate(t *testing.T
 func TestReissueCAHandlerRegeneratesCRLWhenSignerAlreadyMoved(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestNewSerial), nil)
-	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return(&x509.RevocationList{}, nil)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settingsWithSigner(reissueTestNewSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: reissueTestCAID}).Return(&x509.RevocationList{}, nil)
 
 	err := dispatchReissue(t, svc)
 
 	assert.NoError(t, err)
 	svc.AssertExpectations(t)
-	svc.AssertNotCalled(t, "UpdateVARole", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
 }
 
 func TestReissueCAHandlerReturnsCRLGenerationError(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 	crlErr := errors.New("bucket down")
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
-	svc.On("UpdateVARole", mock.Anything, mock.Anything).Return(vaRoleWithSigner(reissueTestNewSerial), nil)
-	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return((*x509.RevocationList)(nil), crlErr)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settingsWithSigner(reissueTestOldSerial), nil)
+	svc.On("UpdateCRLSettings", mock.Anything, mock.Anything).Return(settingsWithSigner(reissueTestNewSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: reissueTestCAID}).Return((*x509.RevocationList)(nil), crlErr)
 
 	err := dispatchReissue(t, svc)
 
@@ -132,8 +140,8 @@ func TestReissueCAHandlerReturnsCRLGenerationError(t *testing.T) {
 func TestReissueCAHandlerKeepsSignerWhenNewCertificateIsRejected(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
-	svc.On("UpdateVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), errs.ErrValidateBadRequest)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settingsWithSigner(reissueTestOldSerial), nil)
+	svc.On("UpdateCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), errs.ErrValidateBadRequest)
 
 	err := dispatchReissue(t, svc)
 
@@ -142,15 +150,15 @@ func TestReissueCAHandlerKeepsSignerWhenNewCertificateIsRejected(t *testing.T) {
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
-func TestReissueCAHandlerIgnoresCAWithoutVARole(t *testing.T) {
+func TestReissueCAHandlerIgnoresCAWithoutCRLSettings(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return((*models.VARole)(nil), errs.ErrVARoleNotFound)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
 
 	err := dispatchReissue(t, svc)
 
 	assert.NoError(t, err)
-	svc.AssertNotCalled(t, "UpdateVARole", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
@@ -162,11 +170,12 @@ func revokedCertificateEvent(t *testing.T) *event.Event {
 
 	certWithStatus := func(status models.CertificateStatus) models.Certificate {
 		return models.Certificate{
-			SerialNumber:   "cert-serial",
-			SubjectKeyID:   "cert-ski",
-			AuthorityKeyID: reissueTestSKI,
-			Status:         status,
-			Certificate:    (*models.X509Certificate)(crt),
+			SerialNumber:     "cert-serial",
+			SubjectKeyID:     "cert-ski",
+			AuthorityKeyID:   reissueTestSKI,
+			IssuerCAMetadata: models.IssuerCAMetadata{ID: reissueTestCAID},
+			Status:           status,
+			Certificate:      (*models.X509Certificate)(crt),
 		}
 	}
 
@@ -196,8 +205,8 @@ func dispatchRevocation(t *testing.T, svc services.CRLService) error {
 func TestRevocationHandlerRegeneratesCRLOfIssuerCA(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
-	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CASubjectKeyID: reissueTestSKI}).Return(&x509.RevocationList{}, nil)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settingsWithSigner(reissueTestOldSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: reissueTestCAID}).Return(&x509.RevocationList{}, nil)
 
 	err := dispatchRevocation(t, svc)
 
@@ -207,10 +216,10 @@ func TestRevocationHandlerRegeneratesCRLOfIssuerCA(t *testing.T) {
 
 // An issuer CA without a VA role has no CRL to regenerate. Failing the event would make the event bus retry it
 // (2s + 6s + 10s) while holding back every later certificate event, and the retries cannot succeed.
-func TestRevocationHandlerIgnoresIssuerCAWithoutVARole(t *testing.T) {
+func TestRevocationHandlerIgnoresIssuerCAWithoutCRLSettings(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return((*models.VARole)(nil), errs.ErrVARoleNotFound)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
 
 	err := dispatchRevocation(t, svc)
 
@@ -218,11 +227,11 @@ func TestRevocationHandlerIgnoresIssuerCAWithoutVARole(t *testing.T) {
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
-func TestRevocationHandlerReturnsUnexpectedGetRoleError(t *testing.T) {
+func TestRevocationHandlerReturnsUnexpectedGetSettingsError(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 	getErr := errors.New("storage down")
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return((*models.VARole)(nil), getErr)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), getErr)
 
 	err := dispatchRevocation(t, svc)
 
@@ -234,11 +243,68 @@ func TestReissueCAHandlerReturnsUnexpectedUpdateError(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 	updateErr := errors.New("storage down")
 
-	svc.On("GetVARole", mock.Anything, services.GetVARoleInput{CASubjectKeyID: reissueTestSKI}).Return(vaRoleWithSigner(reissueTestOldSerial), nil)
-	svc.On("UpdateVARole", mock.Anything, mock.Anything).Return((*models.VARole)(nil), updateErr)
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settingsWithSigner(reissueTestOldSerial), nil)
+	svc.On("UpdateCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), updateErr)
 
 	err := dispatchReissue(t, svc)
 
 	assert.ErrorIs(t, err, updateErr)
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+// The revocation of a certificate goes to the CRL of the CA that issued it, not to whichever CA shares its AKI.
+func TestRevocationHandlerRoutesByIssuerCAIDNotByAKI(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return(settingsWithSigner(reissueTestOldSerial), nil)
+	svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: reissueTestCAID}).Return(&x509.RevocationList{}, nil)
+
+	assert.NoError(t, dispatchRevocation(t, svc))
+	svc.AssertNotCalled(t, "GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestSKI})
+	svc.AssertExpectations(t)
+}
+
+func TestRevocationHandlerIgnoresNonActiveSettings(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetCRLSettings", mock.Anything, mock.Anything).Return(archivedSettings(), nil)
+
+	assert.NoError(t, dispatchRevocation(t, svc))
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestRevocationHandlerSkipsRegenerationWhenDisabled(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	settings := settingsWithSigner(reissueTestOldSerial)
+	settings.Options.RegenerateOnRevoke = false
+
+	svc.On("GetCRLSettings", mock.Anything, mock.Anything).Return(settings, nil)
+
+	assert.NoError(t, dispatchRevocation(t, svc))
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestReissueCAHandlerIgnoresNonActiveSettings(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetCRLSettings", mock.Anything, mock.Anything).Return(archivedSettings(), nil)
+
+	assert.NoError(t, dispatchReissue(t, svc))
+	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestCreateCAHandlerInitsSettingsByCAID(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return(settingsWithSigner("sn"), nil)
+
+	e := event.New()
+	e.SetType(string(models.EventCreateCAKey))
+	assert.NoError(t, e.SetData(event.ApplicationJSON, models.CACertificate{
+		ID: reissueTestCAID, Certificate: models.Certificate{SubjectKeyID: reissueTestSKI},
+	}))
+
+	handler := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc).DispatchMap[string(models.EventCreateCAKey)]
+	assert.NoError(t, handler(context.Background(), &e))
+	svc.AssertExpectations(t)
 }

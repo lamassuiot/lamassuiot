@@ -1,6 +1,9 @@
 package authz
 
 import (
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
@@ -57,11 +60,47 @@ func TestPKISchemasLoadsEmbeddedSchema(t *testing.T) {
 	}
 }
 
-func TestVARoleSignerColumnContract(t *testing.T) {
+func TestCRLSettingsColumnContract(t *testing.T) {
 	registry, err := PKISchemas()
 	require.NoError(t, err)
-	role, err := registry.GetBySchemaEntity("va", "va_role")
+	settings, err := registry.GetBySchemaEntity("va", "crl_settings")
 	require.NoError(t, err)
-	require.NotNil(t, role.GetFilterableField("crl_signer_certificate_serial_number"))
-	require.Nil(t, role.GetFilterableField("crl_subject_key_id_signer"))
+	require.Equal(t, []string{"ca_id"}, settings.PrimaryKeys)
+	for _, column := range []string{"ca_id", "status", "legacy_ski", "signer_serial_number"} {
+		require.NotNil(t, settings.GetFilterableField(column), column)
+	}
+	require.Nil(t, settings.GetFilterableField("crl_signer_certificate_serial_number"))
+
+	// Filters and relation joins are emitted as raw SQL on these columns, so a name the table does not have makes
+	// every request under a policy that uses it fail.
+	columns := crlSettingsMigrationColumns(t)
+	for _, f := range settings.Filterable {
+		require.Contains(t, columns, f.Column, "filterable column")
+	}
+	require.NotEmpty(t, settings.Relations)
+	for _, rel := range settings.Relations {
+		require.Contains(t, columns, rel.ForeignKey, "foreign key of relation %s", rel.Name)
+	}
+
+	_, err = registry.GetBySchemaEntity("va", "va_role")
+	require.Error(t, err, "the va_role entity is gone")
+}
+
+// crlSettingsMigrationColumns returns the columns of the crl_settings table as the VA migration creates it.
+func crlSettingsMigrationColumns(t *testing.T) []string {
+	t.Helper()
+	sql, err := os.ReadFile("../../engines/storage/postgres/migrations/va/20261111120000_crl_settings.sql")
+	require.NoError(t, err)
+	table := regexp.MustCompile(`(?s)CREATE TABLE crl_settings \((.*?)\n \);`).FindSubmatch(sql)
+	require.NotNil(t, table, "CREATE TABLE crl_settings not found in the migration")
+	var columns []string
+	for _, line := range strings.Split(string(table[1]), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || fields[0] == "CONSTRAINT" {
+			continue
+		}
+		columns = append(columns, fields[0])
+	}
+	require.Contains(t, columns, "ca_id")
+	return columns
 }

@@ -98,7 +98,6 @@ type IssueCACSROutput struct {
 }
 
 type ImportCAInput struct {
-	ID            string
 	ProfileID     string
 	CACertificate *models.X509Certificate   `validate:"required"`
 	CAChain       []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
@@ -108,7 +107,6 @@ type ImportCAInput struct {
 }
 
 type CreateCAInput struct {
-	ID           string
 	ParentID     string
 	KeyMetadata  models.KeyMetadata `validate:"required"`
 	Subject      models.Subject     `validate:"required"`

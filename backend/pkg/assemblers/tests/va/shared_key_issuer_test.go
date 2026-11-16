@@ -13,73 +13,76 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// CAs sharing a key share the VA Role of their SKI. The CRL is issued by the CA of the Role's signer, not by
-// whichever of them a lookup by SKI returns first.
-func TestCRLOfCAsSharingAKeyIsIssuedByTheCAOfTheRoleSigner(t *testing.T) {
+// CAs sharing a key have one CRL settings each. The CRL of a CA is issued by that CA, and it stays so after the
+// CA is reissued.
+func TestCRLOfCAsSharingAKeyIsIssuedByEachCA(t *testing.T) {
 	require.NoError(t, serverTest.BeforeEach())
 	ctx := context.Background()
 	caSvc := serverTest.CA.Service
 	owner, err := initCAForVA(caSvc)
 	require.NoError(t, err)
-	role := waitForInitialCRL(t, owner.Certificate.SubjectKeyID)
-	require.Equal(t, owner.Certificate.SerialNumber, role.CRLOptions.SignerCertificateSerialNumber)
+	settings := waitForInitialCRL(t, owner.ID)
+	require.Equal(t, owner.Certificate.SerialNumber, settings.Options.SignerSerialNumber)
 
-	// Its ID sorts before the owner's, so an unordered lookup by SKI finds it first.
-	_, err = caSvc.CreateCA(ctx, services.CreateCAInput{
-		ID:           "000-shared-key",
+	// The backend assigns a separate ID even though both CAs share a key.
+	shared, err := caSvc.CreateCA(ctx, services.CreateCAInput{
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048, KeyID: "pkcs11:token-id=" + owner.Certificate.EngineID + ";id=" + owner.Certificate.KeyID + ";type=private"},
 		Subject:      models.Subject{CommonName: "Shared key CA"},
 		CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(24 * time.Hour)},
 		ProfileID:    owner.ProfileID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, owner.Certificate.SubjectKeyID, shared.Certificate.SubjectKeyID, "the CAs share the SKI")
+	sharedSettings := waitForInitialCRL(t, shared.ID)
+	require.Equal(t, shared.Certificate.SerialNumber, sharedSettings.Options.SignerSerialNumber)
 
-	requireCRLIssuedBy(t, role.CASubjectKeyID, owner)
+	requireCRLIssuedBy(t, owner)
+	requireCRLIssuedBy(t, shared)
 
-	// After a reissue the Role moves to the owner's new certificate, and the CRL is still issued by the owner.
+	// After a reissue the settings move to the owner's new certificate, and the CRL is still issued by the owner.
 	reissued, err := caSvc.ReissueCA(ctx, services.ReissueCAInput{CAID: owner.ID})
 	require.NoError(t, err)
-	waitForVARole(t, role.CASubjectKeyID, func(r *models.VARole) bool {
-		return r.CRLOptions.SignerCertificateSerialNumber == reissued.Certificate.SerialNumber
+	waitForCRLSettings(t, owner.ID, func(r *models.CRLSettings) bool {
+		return r.Options.SignerSerialNumber == reissued.Certificate.SerialNumber
 	})
-	requireCRLIssuedBy(t, role.CASubjectKeyID, owner)
+	requireCRLIssuedBy(t, owner)
 }
 
-// The CA that shares the key of another one raises ca.create too: its VA Role already exists, so initializing
-// it again keeps the Role instead of failing and having the event retried.
-func TestInitCRLRoleKeepsTheRoleOfACAWithTheSameKey(t *testing.T) {
+// The CA that shares the key of another one raises ca.create too: each CA gets its own settings, and a retried event
+// keeps the settings instead of failing or resetting the CRL.
+func TestInitCRLSettingsKeepsExistingSettings(t *testing.T) {
 	require.NoError(t, serverTest.BeforeEach())
 	ctx := context.Background()
 	owner, err := initCAForVA(serverTest.CA.Service)
 	require.NoError(t, err)
-	role := waitForInitialCRL(t, owner.Certificate.SubjectKeyID)
+	settings := waitForInitialCRL(t, owner.ID)
 
-	again, err := serverTest.VA.CRLService.InitCRLRole(ctx, owner.Certificate.SubjectKeyID)
+	again, err := serverTest.VA.CRLService.InitCRLSettings(ctx, owner.ID)
 	require.NoError(t, err)
-	require.Equal(t, role.CRLOptions.SignerCertificateSerialNumber, again.CRLOptions.SignerCertificateSerialNumber)
-	require.Equal(t, role.LatestCRL.Version.String(), again.LatestCRL.Version.String(), "the existing CRL must not be reset")
+	require.Equal(t, settings.Options.SignerSerialNumber, again.Options.SignerSerialNumber)
+	require.Equal(t, settings.LatestCRL.Version.String(), again.LatestCRL.Version.String(), "the existing CRL must not be reset")
 }
 
-func waitForInitialCRL(t *testing.T, ski string) *models.VARole {
+func waitForInitialCRL(t *testing.T, caID string) *models.CRLSettings {
 	t.Helper()
-	var role *models.VARole
+	var settings *models.CRLSettings
 	require.NoError(t, tests.SleepRetry(5, 3*time.Second, func() error {
 		var err error
-		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{CASubjectKeyID: ski})
+		settings, err = serverTest.VA.CRLService.GetCRLSettings(context.Background(), services.GetCRLSettingsInput{CAID: caID})
 		if err != nil {
 			return err
 		}
-		if role.LatestCRL.Version.Int == nil || role.LatestCRL.Version.Int.Sign() == 0 {
-			return errs.ErrVARoleNotFound
+		if settings.LatestCRL.Version.Int == nil || settings.LatestCRL.Version.Int.Sign() == 0 {
+			return errs.ErrCRLSettingsNotFound
 		}
 		return nil
 	}))
-	return role
+	return settings
 }
 
-func requireCRLIssuedBy(t *testing.T, ski string, ca *models.CACertificate) {
+func requireCRLIssuedBy(t *testing.T, ca *models.CACertificate) {
 	t.Helper()
-	crl, err := serverTest.VA.CRLService.CalculateCRL(context.Background(), services.CalculateCRLInput{CASubjectKeyID: ski})
+	crl, err := serverTest.VA.CRLService.CalculateCRL(context.Background(), services.CalculateCRLInput{CAID: ca.ID})
 	require.NoError(t, err)
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	require.Equal(t, caCert.RawSubject, crl.RawIssuer)
