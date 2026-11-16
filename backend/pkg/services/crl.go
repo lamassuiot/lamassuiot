@@ -139,6 +139,9 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 		if gcerrors.Code(err) == gcerrors.NotFound && settings.LegacySKI != nil {
 			crlPem, err = svc.bucket.ReadAll(ctx, crlObjectKey(*settings.LegacySKI, versionStr))
 		}
+		if err == nil {
+			lFunc.Warnf("serving CRL version %s of CA %s: latest version %s is not published", versionStr, settings.CAID, settings.LatestCRL.Version.String())
+		}
 	}
 
 	if gcerrors.Code(err) == gcerrors.NotFound {
