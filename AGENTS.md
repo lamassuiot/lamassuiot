@@ -96,7 +96,7 @@ What must agree:
 - Fields: every API field exists in the OpenAPI schema and the model, and nothing removed from the model stays in the spec. This includes nested and embedded structs.
 - `pki.json` uses **database column names**, not API names (for example `last_seen` in the DB and `seen_at` in the API). Take names from the model's gorm column or the migration, and flatten embedded structs with their `embeddedPrefix`.
 - `filterable` lists the columns of the table, or of its `view_tables` entry when the entity has one (`certificates_view` exposes `c.*`). Drop columns that a migration drops and add columns it creates.
-- `relations` mirror the foreign keys of the migrations, including self-references and cross-schema ones. `primary_key` matches the table's primary key.
+- `relations` mirror the foreign keys of the migrations, including cross-schema ones. Self-references (such as `device_groups.parent_id`) are left out: the policy builder offers every relation, and the authz engine rejects a relation back to the same entity. `primary_key` matches the table's primary key.
 - Column types in `filterable` match the database type.
 
 Verify before reporting done:

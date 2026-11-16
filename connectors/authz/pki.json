@@ -208,13 +208,7 @@
       "create",
       "ui"
     ],
-    "relations": [
-      {
-        "name": "parent_id",
-        "target_entity": "device_group",
-        "foreign_key": "parent_id"
-      }
-    ],
+    "relations": [],
     "schema_name": "devicemanager",
     "filterable": [
       { "column": "name",        "type": "string"    },
