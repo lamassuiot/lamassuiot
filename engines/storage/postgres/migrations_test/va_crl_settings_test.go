@@ -3,6 +3,7 @@ package migrationstest
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -15,14 +16,15 @@ import (
 const crlSettingsMigrationVersion = 20261111120000
 
 type crlSettingsRow struct {
-	CAID               string  `gorm:"column:ca_id"`
-	LegacySKI          *string `gorm:"column:legacy_ski"`
-	SignerSerialNumber *string `gorm:"column:signer_serial_number"`
-	Validity           string  `gorm:"column:validity"`
-	RefreshInterval    string  `gorm:"column:refresh_interval"`
-	RegenerateOnRevoke bool    `gorm:"column:regenerate_on_revoke"`
-	Status             string  `gorm:"column:status"`
-	LatestCRLVersion   string  `gorm:"column:latest_crl_version"`
+	CAID               string    `gorm:"column:ca_id"`
+	LegacySKI          *string   `gorm:"column:legacy_ski"`
+	SignerSerialNumber *string   `gorm:"column:signer_serial_number"`
+	Validity           string    `gorm:"column:validity"`
+	RefreshInterval    string    `gorm:"column:refresh_interval"`
+	RegenerateOnRevoke bool      `gorm:"column:regenerate_on_revoke"`
+	Status             string    `gorm:"column:status"`
+	LatestCRLVersion   string    `gorm:"column:latest_crl_version"`
+	LatestCRLValidTo   time.Time `gorm:"column:latest_crl_valid_until"`
 }
 
 // prepareVAMigration leaves the va schema right before the crl_settings migration, with a simulated ca schema.
@@ -46,7 +48,7 @@ func prepareVAMigration(t *testing.T, caCertificates, caAuthorities string, role
 	}
 	for _, ski := range roles {
 		require.NoError(t, con.Exec(`INSERT INTO va_role (ca_ski, crl_subject_key_id_signer, crl_validity, crl_refresh_interval, crl_regenerate_on_revoke, latest_crl_version, latest_crl_valid_from, latest_crl_valid_until)
-			VALUES (?, ?, '168h0m0s', '166h0m0s', true, 7, now(), now())`, ski, ski).Error)
+			VALUES (?, ?, '168h0m0s', '166h0m0s', true, 7, now(), now() + interval '7 days')`, ski, ski).Error)
 	}
 	_, err = m.ApplyVersion(ctx, 20261104121000, true)
 	require.NoError(t, err)
@@ -85,6 +87,15 @@ func TestCRLSettingsMigration(t *testing.T) {
 		require.True(t, a.RegenerateOnRevoke)
 		require.Equal(t, "7", a.LatestCRLVersion, "CRL numbering continues")
 		require.Equal(t, "ACTIVE", get("id-b").Status)
+	})
+
+	t.Run("active settings are due for a new CRL, so it is published under the CA ID with an IDP that lists it", func(t *testing.T) {
+		for _, caID := range []string{"id-a", "id-b"} {
+			require.False(t, get(caID).LatestCRLValidTo.After(time.Now()), "CRL of %s must be regenerated on the first monitor run", caID)
+		}
+		for _, ski := range []string{"ski-orph", "ski-so"} {
+			require.True(t, get("legacy-"+ski).LatestCRLValidTo.After(time.Now()), "archived settings are never regenerated, keep their validity")
+		}
 	})
 
 	t.Run("roles without CA are archived under a synthetic id", func(t *testing.T) {

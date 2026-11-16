@@ -62,11 +62,14 @@ BEGIN
      role_record.ca_ski, ca_ids[1], role_record.crl_signer_certificate_serial_number;
    END IF;
 
+   -- The last CRL stays under the SKI and its critical IDP lists only /crl/<ski>, so a verifier that matches the IDP
+   -- rejects it when fetched through the CDP of certificates issued from now on (/crl/<ca-id>). Marking it as expired
+   -- makes the VA monitor publish a new one under the CA ID, whose IDP lists both URLs, on its first run.
    INSERT INTO crl_settings (ca_id, legacy_ski, signer_serial_number, validity, refresh_interval, regenerate_on_revoke,
      status, latest_crl_version, latest_crl_valid_from, latest_crl_valid_until)
    VALUES (ca_ids[1], role_record.ca_ski, role_record.crl_signer_certificate_serial_number, role_record.crl_validity,
      role_record.crl_refresh_interval, role_record.crl_regenerate_on_revoke, 'ACTIVE', role_record.latest_crl_version,
-     role_record.latest_crl_valid_from, role_record.latest_crl_valid_until);
+     role_record.latest_crl_valid_from, LEAST(role_record.latest_crl_valid_until, now()));
   END IF;
  END LOOP;
 
