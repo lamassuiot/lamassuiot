@@ -10,7 +10,7 @@ info:
 
 externalDocs:
   description: Lamassu DMS Manager API
-  url: ./index.html#dmsmanager
+  url: https://github.com/lamassuiot/lamassuiot/blob/v4/docs/dms-manager-openapi.yaml
 
 servers:
   - url: https://webhook.example.com
