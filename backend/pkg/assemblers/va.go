@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
 	fssBuilder "github.com/lamassuiot/lamassuiot/v4/backend/pkg/fs-storage/builder"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/jobs"
@@ -19,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/docs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
@@ -40,7 +40,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = specs.VA
+		openApiContent = docs.VA
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

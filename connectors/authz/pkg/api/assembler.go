@@ -18,12 +18,12 @@ import (
 	authzmw_otel "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/middlewares/otel"
 	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
-	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
 	authzgorm "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gorm"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/docs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -83,7 +83,7 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = specs.Authz
+		openApiContent = docs.Authz
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
