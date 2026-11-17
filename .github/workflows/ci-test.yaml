@@ -283,9 +283,9 @@ jobs:
       checks: read
       statuses: read
     env:
-      # GitHub attaches pull_request workflow checks to github.sha (the merge
-      # ref), while push and workflow_dispatch checks use the commit directly.
-      CODECOV_SHA: ${{ github.sha }}
+      # Codecov associates pull_request uploads with the PR head commit. Push
+      # and workflow_dispatch runs use the workflow commit directly.
+      CODECOV_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       NOTIFY_RESULT: ${{ needs.codecov-notify.result }}
       POLL_SECONDS: 20
       MAX_ATTEMPTS: 30
@@ -293,6 +293,11 @@ jobs:
     steps:
       # manual_trigger keeps Codecov statuses pending until codecov-notify completes.
       # Keep polling so a permanently stalled Codecov result fails this required check.
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
       - name: Wait for Codecov result
         env:
           GH_TOKEN: ${{ github.token }}

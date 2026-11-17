@@ -23,12 +23,23 @@ fetch_all_check_runs() {
   local all_runs='[]'
 
   while :; do
-    page_payload=$(fetch_json "${checks_url}&page=${page}")
-    page_runs=$(jq '.check_runs' <<<"$page_payload")
-    all_runs=$(jq -n --argjson all "$all_runs" --argjson page "$page_runs" '$all + $page')
+    if ! page_payload=$(fetch_json "${checks_url}&page=${page}"); then
+      return 1
+    fi
+    if ! jq -e '(.check_runs | type) == "array"' <<<"$page_payload" >/dev/null; then
+      return 1
+    fi
+    if ! page_runs=$(jq '.check_runs' <<<"$page_payload"); then
+      return 1
+    fi
+    if ! all_runs=$(jq -n --argjson all "$all_runs" --argjson page "$page_runs" '$all + $page'); then
+      return 1
+    fi
 
     if (( $(jq 'length' <<<"$page_runs") < 100 )); then
-      jq -n --argjson check_runs "$all_runs" '{check_runs: $check_runs}'
+      if ! jq -n --argjson check_runs "$all_runs" '{check_runs: $check_runs}'; then
+        return 1
+      fi
       return 0
     fi
     page=$((page + 1))
@@ -49,7 +60,7 @@ codecov_state() {
 
   # Only checks created by Codecov count; the watchdog is a GitHub Actions check.
   codecov_checks=$(jq '[.check_runs[] | select(.app.slug == "codecov")]' <<<"$checks")
-  codecov_statuses=$(jq '[.statuses[] | select((.context | ascii_downcase | contains("codecov")))]' <<<"$statuses")
+  codecov_statuses=$(jq '[.[] | select((.context | ascii_downcase | contains("codecov")))]' <<<"$statuses")
   check_count=$(jq 'length' <<<"$codecov_checks")
   status_count=$(jq 'length' <<<"$codecov_statuses")
   failed_checks=$(jq '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "action_required")] | length' <<<"$codecov_checks")
