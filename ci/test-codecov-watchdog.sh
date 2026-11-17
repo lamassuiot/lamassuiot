@@ -29,13 +29,51 @@ assert_state pending "$pending_checks" "$empty_statuses"
 assert_state success "$completed_checks" "$empty_statuses"
 assert_state success '{"check_runs":[]}' "$completed_statuses"
 
-checks_url='https://example.test/check-runs?per_page=100'
+export checks_url='https://example.test/check-runs?per_page=100'
+requested_url_file="$(mktemp)"
+trap 'rm -f "$requested_url_file"' EXIT
 fetch_json() {
+  printf '%s\n' "$1" >"$requested_url_file"
   echo '{"message":"temporary API failure"}'
 }
 
 if fetch_all_check_runs >/dev/null 2>&1; then
   echo "Expected malformed check-runs response to fail" >&2
+  exit 1
+fi
+if [[ "$(cat "$requested_url_file")" != "${checks_url}&page=1" ]]; then
+  echo "Unexpected check-runs URL: $(cat "$requested_url_file")" >&2
+  exit 1
+fi
+
+fetch_json() {
+  return 1
+}
+
+if fetch_all_check_runs >/dev/null 2>&1; then
+  echo "Expected fetch failure to propagate" >&2
+  exit 1
+fi
+
+fetch_json() {
+  printf '%s\n' "$1" >"$requested_url_file"
+  if [[ "$1" == *"page=1" ]]; then
+    jq -n '{check_runs: [range(0; 100) | {name: ("check-" + tostring)}]}'
+  else
+    echo '{"check_runs":[{"name":"last-check"}]}'
+  fi
+}
+
+if ! all_runs=$(fetch_all_check_runs); then
+  echo "Expected multi-page check-runs response to succeed" >&2
+  exit 1
+fi
+if [[ "$(jq '.check_runs | length' <<<"$all_runs")" != "101" ]]; then
+  echo "Expected 101 aggregated check-runs" >&2
+  exit 1
+fi
+if [[ "$(cat "$requested_url_file")" != "${checks_url}&page=2" ]]; then
+  echo "Expected pagination to request page 2" >&2
   exit 1
 fi
 
