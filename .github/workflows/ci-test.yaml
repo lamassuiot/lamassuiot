@@ -283,10 +283,13 @@ jobs:
       checks: read
       statuses: read
     env:
-      CODECOV_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      # GitHub attaches pull_request workflow checks to github.sha (the merge
+      # ref), while push and workflow_dispatch checks use the commit directly.
+      CODECOV_SHA: ${{ github.sha }}
       NOTIFY_RESULT: ${{ needs.codecov-notify.result }}
       POLL_SECONDS: 20
       MAX_ATTEMPTS: 30
+      MAX_API_FAILURES: 5
     steps:
       # manual_trigger keeps Codecov statuses pending until codecov-notify completes.
       # Keep polling so a permanently stalled Codecov result fails this required check.
@@ -294,47 +297,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-
-          if [[ "$NOTIFY_RESULT" != "success" ]]; then
-            echo "Codecov notifications did not complete successfully: $NOTIFY_RESULT"
-            exit 1
-          fi
-
-          api_headers=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28")
-          checks_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${CODECOV_SHA}/check-runs?per_page=100"
-          statuses_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${CODECOV_SHA}/status"
-
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            checks=$(curl --fail-with-body --silent --show-error "${api_headers[@]}" "$checks_url")
-            statuses=$(curl --fail-with-body --silent --show-error "${api_headers[@]}" "$statuses_url")
-
-            codecov_checks=$(jq '[.check_runs[] | select((.name | ascii_downcase | contains("codecov")))]' <<<"$checks")
-            codecov_statuses=$(jq '[.statuses[] | select((.context | ascii_downcase | contains("codecov")))]' <<<"$statuses")
-            check_count=$(jq 'length' <<<"$codecov_checks")
-            status_count=$(jq 'length' <<<"$codecov_statuses")
-            failed_checks=$(jq '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "action_required")] | length' <<<"$codecov_checks")
-            failed_statuses=$(jq '[.[] | select(.state == "failure" or .state == "error")] | length' <<<"$codecov_statuses")
-            pending_checks=$(jq '[.[] | select(.status != "completed" or .conclusion == null)] | length' <<<"$codecov_checks")
-            pending_statuses=$(jq '[.[] | select(.state == "pending")] | length' <<<"$codecov_statuses")
-
-            echo "Attempt $attempt/$MAX_ATTEMPTS: checks=$check_count statuses=$status_count pending_checks=$pending_checks pending_statuses=$pending_statuses"
-
-            if (( failed_checks > 0 || failed_statuses > 0 )); then
-              echo "Codecov reported a failure for $CODECOV_SHA"
-              exit 1
-            fi
-
-            if (( (check_count > 0 || status_count > 0) && pending_checks == 0 && pending_statuses == 0 )); then
-              echo "Codecov completed for $CODECOV_SHA"
-              exit 0
-            fi
-
-            sleep "$POLL_SECONDS"
-          done
-
-          echo "Codecov did not complete within $((POLL_SECONDS * MAX_ATTEMPTS)) seconds"
-          exit 1
+          bash ci/codecov-watchdog.sh
 
   lint:
     name: Go lint
@@ -369,3 +332,8 @@ jobs:
 
       - name: Run go vet
         run: go vet ./connectors/authz/... ./engines/crypto/... ./engines/fs-storage/... ./backend/pkg/jobs
+
+      - name: Check Codecov watchdog scripts
+        run: |
+          shellcheck ci/codecov-watchdog.sh ci/test-codecov-watchdog.sh
+          bash ci/test-codecov-watchdog.sh
