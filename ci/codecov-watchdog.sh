@@ -60,7 +60,17 @@ codecov_state() {
 
   # Only checks created by Codecov count; the watchdog is a GitHub Actions check.
   codecov_checks=$(jq '[.check_runs[] | select(.app.slug == "codecov")]' <<<"$checks")
-  codecov_statuses=$(jq '[.[] | select((.context | ascii_downcase | contains("codecov")))]' <<<"$statuses")
+  codecov_statuses=$(jq '
+    [.[] | select((.context | ascii_downcase | contains("codecov")))]
+    | sort_by(.created_at // "")
+    | reverse
+    | reduce .[] as $status
+        ([];
+         if any(.[]; .context == $status.context)
+         then .
+         else . + [$status]
+         end)
+  ' <<<"$statuses")
   check_count=$(jq 'length' <<<"$codecov_checks")
   status_count=$(jq 'length' <<<"$codecov_statuses")
   failed_checks=$(jq '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "action_required")] | length' <<<"$codecov_checks")
