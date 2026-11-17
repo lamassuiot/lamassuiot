@@ -32,12 +32,17 @@ fetch_all_check_runs() {
     if ! page_runs=$(jq '.check_runs' <<<"$page_payload"); then
       return 1
     fi
-    if ! all_runs=$(jq -n --argjson all "$all_runs" --argjson page "$page_runs" '$all + $page'); then
+    if ! all_runs=$(jq -n \
+      --slurpfile all <(printf '%s\n' "$all_runs") \
+      --slurpfile page <(printf '%s\n' "$page_runs") \
+      '$all[0] + $page[0]'); then
       return 1
     fi
 
     if (( $(jq 'length' <<<"$page_runs") < 100 )); then
-      if ! jq -n --argjson check_runs "$all_runs" '{check_runs: $check_runs}'; then
+      if ! jq -n \
+        --slurpfile check_runs <(printf '%s\n' "$all_runs") \
+        '{check_runs: $check_runs[0]}'; then
         return 1
       fi
       return 0

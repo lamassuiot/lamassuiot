@@ -28,11 +28,17 @@ completed_checks='{"check_runs":[{"name":"codecov/project","app":{"slug":"codeco
 empty_statuses='[]'
 completed_statuses='[{"context":"codecov/project","state":"success"}]'
 stale_statuses='[{"context":"codecov/project","state":"failure","created_at":"2026-11-17T10:00:00Z"},{"context":"codecov/project","state":"success","created_at":"2026-11-17T10:01:00Z"}]'
+failed_check='{"check_runs":[{"name":"codecov/project","app":{"slug":"codecov"},"status":"completed","conclusion":"failure"}]}'
+failed_status='[{"context":"codecov/project","state":"error","created_at":"2026-11-17T10:02:00Z"}]'
+pending_status='[{"context":"codecov/project","state":"pending","created_at":"2026-11-17T10:03:00Z"}]'
 
 assert_state pending "$pending_checks" "$empty_statuses"
 assert_state success "$completed_checks" "$empty_statuses"
 assert_state success '{"check_runs":[]}' "$completed_statuses"
 assert_state success '{"check_runs":[]}' "$stale_statuses"
+assert_state failure "$failed_check" "$empty_statuses"
+assert_state failure '{"check_runs":[]}' "$failed_status"
+assert_state pending "$completed_checks" "$pending_status"
 
 # The variable is consumed by fetch_all_check_runs from the sourced script.
 # shellcheck disable=SC2034
@@ -71,7 +77,7 @@ fi
 fetch_json() {
   printf '%s\n' "$1" >"$requested_url_file"
   if [[ "$1" == *"page=1" ]]; then
-    jq -n '{check_runs: [range(0; 100) | {name: ("check-" + tostring)}]}'
+    jq -n '{check_runs: [range(0; 100) | {name: ("check-" + tostring), details: ("x" * 30000)}]}'
   else
     echo '{"check_runs":[{"name":"last-check"}]}'
   fi
