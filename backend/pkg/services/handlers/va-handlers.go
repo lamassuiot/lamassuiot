@@ -22,6 +22,8 @@ func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.
 			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
 			string(models.EventReissueCAKey):               func(ctx context.Context, m *event.Event) error { return reissueCAHandler(ctx, m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, svc, l) },
+			string(models.EventUpdateCAStatusKey):          func(ctx context.Context, m *event.Event) error { return updateCAStatusHandler(ctx, m, svc, l) },
+			string(models.EventDeleteCAKey):                func(ctx context.Context, m *event.Event) error { return deleteCAHandler(ctx, m, svc, l) },
 		},
 	}
 }
@@ -102,12 +104,17 @@ func createCAHandler(ctx context.Context, event *event.Event, crlSvc services.CR
 		return err
 	}
 
-	_, err = crlSvc.InitCRLSettings(ctx, ca.ID)
+	settings, err := crlSvc.InitCRLSettings(ctx, ca.ID)
 
 	if err != nil {
 		err = fmt.Errorf("could not initialize CRL settings: %s", err)
 		lMessaging.Error(err)
 		return err
+	}
+
+	if settings == nil {
+		lMessaging.Infof("CA %s has no key to sign CRLs: no CRL settings created", ca.ID)
+		return nil
 	}
 
 	lMessaging.Infof("CRL settings initialized for CA %s", ca.ID)
@@ -183,5 +190,93 @@ func updateCertificateStatus(ctx context.Context, event *event.Event, crlSvc ser
 		}
 	}
 
+	return nil
+}
+
+// updateCAStatusHandler moves the CRL settings of the CA to the status its CA calls for (a revoked CA gets its final
+// CRL), then regenerates the CRL of the CA that issued it: UpdateCAStatus publishes no certificate.status.update for the
+// certificate of the CA itself, so its revocation would otherwise wait for the next refresh of that CRL.
+func updateCAStatusHandler(ctx context.Context, event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
+	ca, err := helpers.GetEventBody[models.UpdateModel[models.CACertificate]](event)
+	if err != nil {
+		err = fmt.Errorf("could not decode cloud event: %s", err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	caID := ca.Updated.ID
+	// The CA is read again rather than taken from the event, which may be stale or redelivered.
+	settings, err := crlSvc.ReconcileCRLSettings(ctx, services.ReconcileCRLSettingsInput{CAID: caID})
+	switch {
+	case errors.Is(err, errs.ErrCRLSettingsNotFound):
+		lMessaging.Infof("CA %s has no CRL settings: nothing to update for its status %s", caID, ca.Updated.Certificate.Status)
+	case err != nil:
+		err = fmt.Errorf("could not update the CRL settings of CA %s to its status %s: %w", caID, ca.Updated.Certificate.Status, err)
+		lMessaging.Error(err)
+		return err
+	default:
+		lMessaging.Infof("CRL settings of CA %s are %s after its status changed to %s", caID, settings.Status, ca.Updated.Certificate.Status)
+	}
+
+	return regenerateIssuerCRL(ctx, ca, crlSvc, lMessaging)
+}
+
+// regenerateIssuerCRL regenerates the CRL of the issuer of a CA that was revoked (for any reason) or reactivated from
+// hold, as updateCertificateStatus does for the certificates it issued.
+func regenerateIssuerCRL(ctx context.Context, ca *models.UpdateModel[models.CACertificate], crlSvc services.CRLService, lMessaging *logrus.Entry) error {
+	updated, previous := ca.Updated.Certificate, ca.Previous.Certificate
+	issuerID := updated.IssuerCAMetadata.ID
+	reactivated := previous.Status == models.StatusRevoked && previous.RevocationReason == ocsp.CertificateHold && updated.Status == models.StatusActive
+	if issuerID == "" || issuerID == ca.Updated.ID || (updated.Status != models.StatusRevoked && !reactivated) {
+		return nil
+	}
+
+	issuer, err := crlSvc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: issuerID})
+	if errors.Is(err, errs.ErrCRLSettingsNotFound) {
+		lMessaging.Infof("issuer CA %s of CA %s has no CRL settings: no CRL to regenerate", issuerID, ca.Updated.ID)
+		return nil
+	}
+	if err != nil {
+		err = fmt.Errorf("could not get CRL settings of issuer CA %s of CA %s: %w", issuerID, ca.Updated.ID, err)
+		lMessaging.Error(err)
+		return err
+	}
+	if issuer.Status != models.CRLSettingsActive || !issuer.Options.RegenerateOnRevoke {
+		lMessaging.Infof("CRL of issuer CA %s is not regenerated for CA %s: settings %s, regenerate on revoke %t", issuerID, ca.Updated.ID, issuer.Status, issuer.Options.RegenerateOnRevoke)
+		return nil
+	}
+
+	if _, err := crlSvc.CalculateCRL(ctx, services.CalculateCRLInput{CAID: issuerID}); err != nil {
+		err = fmt.Errorf("could not regenerate the CRL of issuer CA %s for CA %s: %w", issuerID, ca.Updated.ID, err)
+		lMessaging.Error(err)
+		return err
+	}
+	lMessaging.Infof("CRL of issuer CA %s regenerated for the status %s of CA %s", issuerID, updated.Status, ca.Updated.ID)
+	return nil
+}
+
+// deleteCAHandler archives the CRL settings of a deleted CA: its last CRL is still served, and its signer certificate
+// is no longer retained. It reconciles them rather than archiving them outright: the CA is checked to be gone, not
+// taken from the event.
+func deleteCAHandler(ctx context.Context, event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
+	input, err := helpers.GetEventBody[services.DeleteCAInput](event)
+	if err != nil {
+		err = fmt.Errorf("could not decode cloud event: %s", err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	_, err = crlSvc.ReconcileCRLSettings(ctx, services.ReconcileCRLSettingsInput{CAID: input.CAID})
+	if errors.Is(err, errs.ErrCRLSettingsNotFound) {
+		lMessaging.Infof("deleted CA %s has no CRL settings to archive", input.CAID)
+		return nil
+	}
+	if err != nil {
+		err = fmt.Errorf("could not archive the CRL settings of deleted CA %s: %w", input.CAID, err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	lMessaging.Infof("CRL settings of deleted CA %s reconciled", input.CAID)
 	return nil
 }

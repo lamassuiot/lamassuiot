@@ -46,6 +46,7 @@ func setupVARouter(ocspService services.OCSPService, crlService services.CRLServ
 	router.GET("/va/crl-settings", vaRoutes.GetCRLSettingsList)
 	router.GET("/va/crl-settings/:ca-id", vaRoutes.GetCRLSettingsByID)
 	router.PUT("/va/crl-settings/:ca-id", vaRoutes.UpdateCRLSettings)
+	router.DELETE("/va/crl-settings/:ca-id", vaRoutes.DeleteCRLSettings)
 
 	return router
 }
@@ -461,4 +462,35 @@ func TestGetCRLSettingsList_ReturnsPage(t *testing.T) {
 	var page resources.GetItemsResponse[models.CRLSettings]
 	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
 	assert.Len(t, page.List, 2)
+}
+
+// Only archived settings are purged: any other status is a conflict.
+func TestDeleteCRLSettings(t *testing.T) {
+	for _, tc := range []struct {
+		err    error
+		status int
+	}{
+		{err: nil, status: http.StatusNoContent},
+		{err: errs.ErrCRLSettingsNotFound, status: http.StatusNotFound},
+		{err: errs.ErrCRLSettingsNotArchived, status: http.StatusConflict},
+		{err: errs.ErrValidateBadRequest, status: http.StatusBadRequest},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			mockCRLService := new(svcmock.MockVAService)
+			mockCRLService.On("DeleteCRLSettings", mock.Anything, services.DeleteCRLSettingsInput{CAID: "ca-1"}).Return(tc.err)
+			router := setupVARouter(new(MockOCSPService), mockCRLService)
+
+			req, _ := http.NewRequest(http.MethodDelete, "/va/crl-settings/ca-1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.status, w.Code)
+			if tc.err != nil {
+				var response map[string]any
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+				assert.Equal(t, tc.err.Error(), response["err"])
+			}
+			mockCRLService.AssertExpectations(t)
+		})
+	}
 }

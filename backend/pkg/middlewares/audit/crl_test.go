@@ -107,6 +107,30 @@ func TestCRLAuditEventPublisher(t *testing.T) {
 			},
 		},
 		{
+			name: "FinalizeCRLSettings with errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithErrors(t, "FinalizeCRLSettings", services.FinalizeCRLSettingsInput{}, models.EventFinalizeCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
+			name: "FinalizeCRLSettings without errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithoutErrors(t, "FinalizeCRLSettings", services.FinalizeCRLSettingsInput{}, models.EventFinalizeCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
+			name: "ArchiveCRLSettings with errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithErrors(t, "ArchiveCRLSettings", services.ArchiveCRLSettingsInput{}, models.EventArchiveCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
+			name: "ArchiveCRLSettings without errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithoutErrors(t, "ArchiveCRLSettings", services.ArchiveCRLSettingsInput{}, models.EventArchiveCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
 			name: "InitCRLSettings with errors - Audit event produced",
 			test: func(t *testing.T) {
 				crlAuditWithErrors(t, "InitCRLSettings", "", models.EventInitCRLSettings, &models.CRLSettings{})
@@ -122,5 +146,21 @@ func TestCRLAuditEventPublisher(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, tc.test)
+	}
+}
+
+func TestCRLAuditEventPublisherDeleteCRLSettings(t *testing.T) {
+	for _, serviceErr := range []error{nil, errors.New("some error")} {
+		next := new(svcmock.MockVAService)
+		next.On("DeleteCRLSettings", mock.Anything, mock.Anything).Return(serviceErr)
+		pub := new(CloudEventPublisherMock)
+		pub.On("PublishCloudEvent", mock.Anything, mock.Anything)
+
+		err := NewCRLAuditEventPublisher(AuditPublisher{ICloudEventPublisher: pub})(next).
+			DeleteCRLSettings(context.Background(), services.DeleteCRLSettingsInput{CAID: "ca-1"})
+
+		assert.Equal(t, serviceErr, err)
+		next.AssertExpectations(t)
+		pub.AssertExpectations(t)
 	}
 }

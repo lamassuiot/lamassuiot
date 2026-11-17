@@ -26,8 +26,11 @@ type CertificatesRepo interface {
 	Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Delete(ctx context.Context, serialNumber string) error
 	// ReleaseKey makes the certificates stop referencing their KMS key, so the KMS can delete it once no
-	// other certificate does. They keep their engine.
+	// other certificate, nor ACTIVE CRL settings, does. They keep their engine.
 	ReleaseKey(ctx context.Context, serialNumbers []string) error
+	// CRLSettingsHoldingKey returns, sorted, the CA IDs of the ACTIVE CRL settings that have one of the certificates
+	// as signer: they retain its KMS key until they are FINAL, so deleting the key before would fail.
+	CRLSettingsHoldingKey(ctx context.Context, serialNumbers []string) ([]string, error)
 }
 
 type CACertificatesRepo interface {

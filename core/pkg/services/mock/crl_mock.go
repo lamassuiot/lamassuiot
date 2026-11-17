@@ -50,3 +50,26 @@ func (m *MockVAService) InitCRLSettings(ctx context.Context, caID string) (*mode
 	settings, _ := args.Get(0).(*models.CRLSettings)
 	return settings, args.Error(1)
 }
+
+func (m *MockVAService) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (*models.CRLSettings, error) {
+	args := m.Called(ctx, input)
+	settings, _ := args.Get(0).(*models.CRLSettings)
+	return settings, args.Error(1)
+}
+
+func (m *MockVAService) ArchiveCRLSettings(ctx context.Context, input services.ArchiveCRLSettingsInput) (*models.CRLSettings, error) {
+	args := m.Called(ctx, input)
+	settings, _ := args.Get(0).(*models.CRLSettings)
+	return settings, args.Error(1)
+}
+
+func (m *MockVAService) DeleteCRLSettings(ctx context.Context, input services.DeleteCRLSettingsInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
+}
+
+func (m *MockVAService) ReconcileCRLSettings(ctx context.Context, input services.ReconcileCRLSettingsInput) (*models.CRLSettings, error) {
+	args := m.Called(ctx, input)
+	settings, _ := args.Get(0).(*models.CRLSettings)
+	return settings, args.Error(1)
+}

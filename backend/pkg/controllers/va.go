@@ -35,7 +35,7 @@ func (r *vaHttpRoutes) handleError(ctx *gin.Context, err error) {
 	switch {
 	case errors.Is(err, errs.ErrCRLSettingsNotFound), errors.Is(err, errs.ErrCRLNotFound), errors.Is(err, errs.ErrCANotFound), errors.Is(err, errs.ErrCertificateNotFound):
 		ctx.JSON(http.StatusNotFound, gin.H{"err": err.Error()})
-	case errors.Is(err, errs.ErrCRLSettingsNotActive):
+	case errors.Is(err, errs.ErrCRLSettingsNotActive), errors.Is(err, errs.ErrCRLSettingsNotArchived):
 		ctx.JSON(http.StatusConflict, gin.H{"err": err.Error()})
 	case errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
@@ -202,4 +202,25 @@ func (r *vaHttpRoutes) UpdateCRLSettings(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, settings)
+}
+
+// DeleteCRLSettings purges ARCHIVED settings. Their published CRLs stay in the bucket.
+func (r *vaHttpRoutes) DeleteCRLSettings(ctx *gin.Context) {
+	type uriParams struct {
+		CAID string `uri:"ca-id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+
+	if err := r.crl.DeleteCRLSettings(ctx.Request.Context(), services.DeleteCRLSettingsInput{CAID: params.CAID}); err != nil {
+		r.logger.Errorf("something went wrong while deleting crl settings: %s", err)
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
 }

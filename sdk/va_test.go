@@ -74,3 +74,26 @@ func TestVASDKGetCRLUsesTheID(t *testing.T) {
 
 	require.Equal(t, "/crl/ca%20id%2F1", path, "the id is escaped as one path segment")
 }
+
+func TestCRLSettingsSDKDelete(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/crl-settings/ca-1", r.URL.Path)
+		require.Equal(t, http.MethodDelete, r.Method)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	require.NoError(t, NewHttpVAClient(server.Client(), server.URL).DeleteCRLSettings(context.Background(), services.DeleteCRLSettingsInput{CAID: "ca-1"}))
+
+	for status, want := range map[int]error{
+		http.StatusNotFound: errs.ErrCRLSettingsNotFound,
+		http.StatusConflict: errs.ErrCRLSettingsNotArchived,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]string{"err": want.Error()})
+		}))
+		err := NewHttpVAClient(server.Client(), server.URL).DeleteCRLSettings(context.Background(), services.DeleteCRLSettingsInput{CAID: "ca-1"})
+		require.ErrorIs(t, err, want, "status %d", status)
+		server.Close()
+	}
+}

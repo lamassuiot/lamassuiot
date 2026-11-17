@@ -59,9 +59,10 @@ func TestCRLSettingsUseTheirReferencedSignerCertificate(t *testing.T) {
 	require.NoError(t, crl.CheckSignatureFrom((*x509.Certificate)(reissued.Certificate.Certificate)))
 	require.NoError(t, crl.CheckSignatureFrom((*x509.Certificate)(issuer.Certificate.Certificate)))
 
-	// FK existence alone cannot check cryptographic compatibility; generation must check it too.
+	// The database only checks that the signer and its key exist, not that they fit the CA: generation checks it.
 	db := vaSchemaDB(t)
-	require.NoError(t, db.Exec(`UPDATE crl_settings SET signer_serial_number = ? WHERE ca_id = ?`, signer.Certificate.SerialNumber, role.CAID).Error)
+	require.NoError(t, db.Exec(`UPDATE crl_settings s SET signer_serial_number = c.serial_number, signer_engine_id = c.engine_id,
+		signer_key_id = c.key_id FROM ca.certificates c WHERE c.serial_number = ? AND s.ca_id = ?`, signer.Certificate.SerialNumber, role.CAID).Error)
 	_, err = serverTest.VA.CRLService.CalculateCRL(ctx, services.CalculateCRLInput{CAID: role.CAID})
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 }

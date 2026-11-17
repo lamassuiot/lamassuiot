@@ -310,7 +310,8 @@
     "primary_key": "ca_id",
     "atomic_actions": [
       "read",
-      "update"
+      "update",
+      "delete"
     ],
     "global_actions": [
       "create",
@@ -331,6 +332,8 @@
       { "column": "refresh_interval",           "type": "string"    },
       { "column": "validity",                   "type": "string"    },
       { "column": "signer_serial_number",       "type": "string"    },
+      { "column": "signer_engine_id",           "type": "string"    },
+      { "column": "signer_key_id",              "type": "string"    },
       { "column": "regenerate_on_revoke",       "type": "bool"      },
       { "column": "latest_crl_version",         "type": "float"     },
       { "column": "latest_crl_valid_from",      "type": "timestamp" },

@@ -346,6 +346,10 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 		CascadeDelete: deleteCascade,
 	})
 
+	if errors.Is(err, errs.ErrCAFinalCRLPending) || errors.Is(err, errs.ErrCAKeyHeldByCRLSettings) {
+		ctx.JSON(409, gin.H{"err": err.Error()})
+		return
+	}
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:

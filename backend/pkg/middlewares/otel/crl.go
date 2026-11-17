@@ -70,3 +70,31 @@ func (mw *CRLOTelTracer) InitCRLSettings(ctx context.Context, caID string) (outp
 
 	return mw.next.InitCRLSettings(ctx, caID)
 }
+
+func (mw *CRLOTelTracer) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (*models.CRLSettings, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.FinalizeCRLSettings(ctx, input)
+}
+
+func (mw *CRLOTelTracer) ArchiveCRLSettings(ctx context.Context, input services.ArchiveCRLSettingsInput) (*models.CRLSettings, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.ArchiveCRLSettings(ctx, input)
+}
+
+func (mw *CRLOTelTracer) DeleteCRLSettings(ctx context.Context, input services.DeleteCRLSettingsInput) error {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.DeleteCRLSettings(ctx, input)
+}
+
+func (mw *CRLOTelTracer) ReconcileCRLSettings(ctx context.Context, input services.ReconcileCRLSettingsInput) (*models.CRLSettings, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.ReconcileCRLSettings(ctx, input)
+}

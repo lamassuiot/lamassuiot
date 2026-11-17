@@ -70,3 +70,11 @@ func (cli *httpVAClient) UpdateCRLSettings(ctx context.Context, input services.U
 	}
 	return response, nil
 }
+
+func (cli *httpVAClient) DeleteCRLSettings(ctx context.Context, input services.DeleteCRLSettingsInput) error {
+	return cli.delete(ctx, "/v1/crl-settings/"+url.PathEscape(input.CAID), map[int][]error{
+		404: {errs.ErrCRLSettingsNotFound},
+		400: {errs.ErrValidateBadRequest},
+		409: {errs.ErrCRLSettingsNotArchived},
+	})
+}
