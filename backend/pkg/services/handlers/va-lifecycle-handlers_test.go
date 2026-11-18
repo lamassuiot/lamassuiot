@@ -100,6 +100,7 @@ func TestUpdateCAStatusHandlerReturnsReconcileErrors(t *testing.T) {
 // is regenerated here.
 func TestUpdateCAStatusHandlerRegeneratesTheIssuerCRL(t *testing.T) {
 	calculationFailure := errors.New("CRL calculation failed")
+	issuerLookupFailure := errors.New("issuer CRL settings lookup failed")
 	for _, tc := range []struct {
 		name               string
 		previous, updated  models.CACertificate
@@ -122,6 +123,8 @@ func TestUpdateCAStatusHandlerRegeneratesTheIssuerCRL(t *testing.T) {
 			issuer: issuerSettings(models.CRLSettingsActive, false), wantIssuerSettings: true},
 		{name: "issuer without settings", previous: subordinateCA(models.StatusActive, 0), updated: subordinateCA(models.StatusRevoked, ocsp.KeyCompromise),
 			issuerErr: errs.ErrCRLSettingsNotFound, wantIssuerSettings: true},
+		{name: "issuer settings lookup fails", previous: subordinateCA(models.StatusActive, 0), updated: subordinateCA(models.StatusRevoked, ocsp.KeyCompromise),
+			issuerErr: issuerLookupFailure, wantIssuerSettings: true},
 		{name: "issuer CRL calculation fails", previous: subordinateCA(models.StatusActive, 0), updated: subordinateCA(models.StatusRevoked, ocsp.KeyCompromise),
 			issuer: issuerSettings(models.CRLSettingsActive, true), calculateErr: calculationFailure, wantIssuerSettings: true, wantIssuerCRL: true},
 	} {
@@ -136,7 +139,9 @@ func TestUpdateCAStatusHandlerRegeneratesTheIssuerCRL(t *testing.T) {
 			}
 
 			err := dispatch(t, svc, models.EventUpdateCAStatusKey, caStatusUpdate(tc.previous, tc.updated))
-			if tc.calculateErr != nil {
+			if errors.Is(tc.issuerErr, issuerLookupFailure) {
+				assert.ErrorIs(t, err, issuerLookupFailure)
+			} else if tc.calculateErr != nil {
 				assert.ErrorIs(t, err, tc.calculateErr)
 			} else {
 				assert.NoError(t, err)
