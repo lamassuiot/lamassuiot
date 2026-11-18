@@ -1552,6 +1552,8 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 //     Cascade delete not allowed by configuration.
 //   - ErrCAFinalCRLPending
 //     The CRL settings of the CA still retain its key: its final CRL is not issued yet.
+//   - ErrCAKeyHeldByCRLSettings
+//     Another CA's CRL settings still retain this CA's key.
 func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
