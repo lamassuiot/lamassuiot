@@ -95,47 +95,6 @@ func TestCertificateWriteResponsesHavePrivateKey(t *testing.T) {
 	})
 }
 
-// CA signatures are persisted like leaf certificates and can later be registered as CAs.
-func TestSignCAResponseIsPersisted(t *testing.T) {
-	require.NoError(t, serverTest.BeforeEach())
-	ctx := context.Background()
-	svc := serverTest.CA.HttpCASDK
-	profile := newKeyRefsProfile(t)
-	issuer := createKeyRefsCA(t, "F10 transient CA issuer", profile.ID, "")
-	for _, managed := range []bool{true, false} {
-		name := "external key"
-		if managed {
-			name = "KMS private key"
-		}
-		t.Run(name, func(t *testing.T) {
-			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-			require.NoError(t, err)
-			if managed {
-				importKeyInto(t, key, defaultEngine)
-			}
-			csr, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: name}, key)
-			require.NoError(t, err)
-			// Use a separate value so the stored leaf profile keeps its original semantics.
-			profileCopy := *profile
-			profileCopy.SignAsCA = true
-			cert, err := svc.SignCertificate(ctx, services.SignCertificateInput{
-				CAID: issuer.ID, CertRequest: (*models.X509CertificateRequest)(csr), IssuanceProfile: &profileCopy,
-			})
-			require.NoError(t, err)
-			require.True(t, cert.IsCA)
-			assert.Equal(t, managed, cert.HasPrivateKey)
-			stored, err := svc.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: cert.SerialNumber})
-			require.NoError(t, err)
-			assert.Equal(t, cert, stored)
-			registered, err := svc.ImportCA(ctx, services.ImportCAInput{CACertificate: cert.Certificate, ProfileID: profile.ID})
-			require.NoError(t, err)
-			assert.Equal(t, cert.SerialNumber, registered.CertificateSerialNumber)
-			assert.Equal(t, stored, &registered.Certificate)
-			assert.Equal(t, issuer.Level+1, registered.Level)
-		})
-	}
-}
-
 func TestCAWritesPreserveCertificateKeyEngineAndIssuer(t *testing.T) {
 	require.NoError(t, serverTest.BeforeEach())
 	ctx := context.Background()

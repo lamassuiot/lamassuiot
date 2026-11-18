@@ -846,7 +846,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			CAID:            input.ParentID,
 			CertRequest:     (*models.X509CertificateRequest)(csr),
 			IssuanceProfile: caIssuanceProfile,
-		}, key)
+		}, key, true)
 		if err != nil {
 			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -1482,7 +1482,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		CAID:            issuerCAID,
 		CertRequest:     (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: profile,
-	}, subjectKey)
+	}, subjectKey, true)
 	if err != nil {
 		lFunc.Errorf("could not sign reissued CA certificate: %s", err)
 		return nil, err
@@ -1605,11 +1605,12 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 }
 
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
-	return svc.signCertificate(ctx, input, nil)
+	return svc.signCertificate(ctx, input, nil, false)
 }
 
 // signCertificate retains a subject key already resolved by CA creation/reissuance.
-func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services.SignCertificateInput, subjectKey *models.Key) (*models.Certificate, error) {
+// allowCA permits a SignAsCA profile: only CA creation and reissue set it.
+func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services.SignCertificateInput, subjectKey *models.Key, allowCA bool) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := caValidator.Struct(input)
@@ -1657,6 +1658,11 @@ func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services
 			lFunc.Errorf("could not get default ca issuance profile %s: %s", ca.ProfileID, err)
 			return nil, err
 		}
+	}
+
+	if profile.SignAsCA && !allowCA {
+		lFunc.Errorf("rejected sign_as_ca=true profile for CA %s: CA certificates are only issued by CA creation or reissue", input.CAID)
+		return nil, errs.ErrSignAsCANotAllowed
 	}
 
 	lFunc.Debugf("sign certificate request with %s CA", input.CAID)
