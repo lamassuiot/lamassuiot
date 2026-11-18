@@ -57,6 +57,14 @@ func issuerSettings(status models.CRLSettingsStatus, regenerate bool) *models.CR
 	return s
 }
 
+func TestCreateCAHandlerWithoutSettingsIsAccepted(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	svc.On("InitCRLSettings", mock.Anything, subCAID).Return(nil, nil)
+
+	assert.NoError(t, dispatch(t, svc, models.EventCreateCAKey, subordinateCA(models.StatusActive, 0)))
+	svc.AssertExpectations(t)
+}
+
 func TestUpdateCAStatusHandlerReconcilesTheCA(t *testing.T) {
 	root := subordinateCA(models.StatusRevoked, ocsp.KeyCompromise)
 	root.Certificate.IssuerCAMetadata.ID = subCAID // self-signed: no issuer CRL to regenerate
@@ -91,11 +99,13 @@ func TestUpdateCAStatusHandlerReturnsReconcileErrors(t *testing.T) {
 // UpdateCAStatus publishes no certificate.status.update for the certificate of the CA itself, so the CRL of its issuer
 // is regenerated here.
 func TestUpdateCAStatusHandlerRegeneratesTheIssuerCRL(t *testing.T) {
+	calculationFailure := errors.New("CRL calculation failed")
 	for _, tc := range []struct {
 		name               string
 		previous, updated  models.CACertificate
 		issuer             *models.CRLSettings
 		issuerErr          error
+		calculateErr       error
 		wantIssuerCRL      bool
 		wantIssuerSettings bool
 	}{
@@ -112,6 +122,8 @@ func TestUpdateCAStatusHandlerRegeneratesTheIssuerCRL(t *testing.T) {
 			issuer: issuerSettings(models.CRLSettingsActive, false), wantIssuerSettings: true},
 		{name: "issuer without settings", previous: subordinateCA(models.StatusActive, 0), updated: subordinateCA(models.StatusRevoked, ocsp.KeyCompromise),
 			issuerErr: errs.ErrCRLSettingsNotFound, wantIssuerSettings: true},
+		{name: "issuer CRL calculation fails", previous: subordinateCA(models.StatusActive, 0), updated: subordinateCA(models.StatusRevoked, ocsp.KeyCompromise),
+			issuer: issuerSettings(models.CRLSettingsActive, true), calculateErr: calculationFailure, wantIssuerSettings: true, wantIssuerCRL: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := new(svcmock.MockVAService)
@@ -120,10 +132,15 @@ func TestUpdateCAStatusHandlerRegeneratesTheIssuerCRL(t *testing.T) {
 				svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: parentCAID}).Return(tc.issuer, tc.issuerErr)
 			}
 			if tc.wantIssuerCRL {
-				svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: parentCAID}).Return(&x509.RevocationList{}, nil)
+				svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: parentCAID}).Return(&x509.RevocationList{}, tc.calculateErr)
 			}
 
-			assert.NoError(t, dispatch(t, svc, models.EventUpdateCAStatusKey, caStatusUpdate(tc.previous, tc.updated)))
+			err := dispatch(t, svc, models.EventUpdateCAStatusKey, caStatusUpdate(tc.previous, tc.updated))
+			if tc.calculateErr != nil {
+				assert.ErrorIs(t, err, tc.calculateErr)
+			} else {
+				assert.NoError(t, err)
+			}
 			svc.AssertExpectations(t)
 			if !tc.wantIssuerCRL {
 				svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
@@ -149,4 +166,13 @@ func TestDeleteCAHandlerWithoutSettingsIsAccepted(t *testing.T) {
 	svc.On("ReconcileCRLSettings", mock.Anything, mock.Anything).Return(nil, errs.ErrCRLSettingsNotFound)
 
 	assert.NoError(t, dispatch(t, svc, models.EventDeleteCAKey, services.DeleteCAInput{CAID: subCAID}))
+}
+
+func TestDeleteCAHandlerReturnsReconcileErrors(t *testing.T) {
+	failure := errors.New("reconcile failed")
+	svc := new(svcmock.MockVAService)
+	svc.On("ReconcileCRLSettings", mock.Anything, services.ReconcileCRLSettingsInput{CAID: subCAID}).Return(nil, failure)
+
+	assert.ErrorIs(t, dispatch(t, svc, models.EventDeleteCAKey, services.DeleteCAInput{CAID: subCAID}), failure)
+	svc.AssertExpectations(t)
 }
