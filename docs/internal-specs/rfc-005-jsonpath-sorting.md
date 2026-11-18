@@ -637,7 +637,7 @@ All SQL injection attempts are rejected:
 4. Edge case testing
 
 ### Phase 3: Documentation (Week 3)
-1. Update existing `docs/filtering.md` with sorting examples
+1. Update existing `docs/internal-specs/rfc-002-filtering.md` with sorting examples
 2. Add SDK examples for each language
 3. Update API OpenAPI specifications
 4. Create migration guide for API consumers
@@ -798,7 +798,7 @@ Use a JSON object for complex sorting:
 
 - [PostgreSQL JSON Functions](https://www.postgresql.org/docs/current/functions-json.html)
 - [PostgreSQL JSONPath](https://www.postgresql.org/docs/current/datatype-json.html#DATATYPE-JSONPATH)
-- [Lamassu Filtering Documentation](./filtering.md)
+- [Lamassu Filtering Documentation](./rfc-002-filtering.md)
 - [JSONPath Specification (RFC 9535)](https://datatracker.ietf.org/doc/html/rfc9535)
 
 ---
@@ -884,11 +884,11 @@ LIMIT 10;
 - [x] Fix GORM clause API usage (use `tx.Clauses` instead of `tx.Order` for complex expressions)
 
 ### Documentation
-- [x] Update `docs/RFC005-jsonpath-sorting.md` with implementation details
+- [x] Update `docs/internal-specs/rfc-005-jsonpath-sorting.md` with implementation details
 - [x] Document type-aware sorting (numbers, dates, text)
 - [x] Document GORM Clauses API requirement
 - [x] Add integration test examples
-- [x] Update `docs/filtering.md` with sorting section
+- [x] Update `docs/internal-specs/rfc-002-filtering.md` with sorting section
   - [x] Basic sorting examples
   - [x] JSONPath sorting syntax
   - [x] Type-aware sorting table
@@ -982,8 +982,8 @@ This section provides a detailed, step-by-step implementation plan designed for 
 ### Step 6: Documentation and Cleanup
 **Goal:** Update documentation to reflect the new capabilities.
 *   **Action:**
-    *   Edit `docs/filtering.md` to add the new sorting examples.
-    *   Update `docs/*-openapi.yaml` files if the `sort_by` parameter description needs to be explicit about the new syntax (though it's still a string).
+    *   Edit `docs/internal-specs/rfc-002-filtering.md` to add the new sorting examples.
+    *   Update `docs/specs/*-openapi.yaml` files if the `sort_by` parameter description needs to be explicit about the new syntax (though it's still a string).
 *   **Verification:** Manual review of the rendered markdown.
 
 ---
@@ -1013,7 +1013,7 @@ This RFC proposed a natural extension to Lamassu's existing JSONPath filtering c
 - [backend/pkg/controllers/utils_test.go](backend/pkg/controllers/utils_test.go) - Unit test
 - [engines/storage/postgres/utils.go](engines/storage/postgres/utils.go) - PostgreSQL query generation
 - [engines/storage/postgres/test/device_sort_jsonpath_test.go](engines/storage/postgres/test/device_sort_jsonpath_test.go) - Integration tests (4 test cases)
-- [docs/filtering.md](docs/filtering.md) - User documentation with examples
+- [docs/internal-specs/rfc-002-filtering.md](rfc-002-filtering.md) - User documentation with examples
 
 **Test Coverage:**
 - ✅ String sorting: `metadata.environment` (dev → prod → stage)

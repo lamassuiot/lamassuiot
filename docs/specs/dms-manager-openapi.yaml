@@ -5,7 +5,7 @@ info:
   description: |
     Device Management Service (DMS) API for managing registration authorities and EST enrollment flows.
 
-    [View Enrollment and Re-enrollment Webhook API](https://github.com/lamassuiot/lamassuiot/blob/v4/docs/enroll-reenroll-webhook-openapi.yaml)
+    [View Enrollment and Re-enrollment Webhook API](https://github.com/lamassuiot/lamassuiot/blob/v4/docs/specs/enroll-reenroll-webhook-openapi.yaml)
   contact:
     name: Lamassu IoT
     url: https://github.com/lamassuiot/lamassuiot
@@ -15,7 +15,7 @@ info:
 
 externalDocs:
   description: Enrollment and Re-enrollment Webhook Authentication API
-  url: https://github.com/lamassuiot/lamassuiot/blob/v4/docs/enroll-reenroll-webhook-openapi.yaml
+  url: https://github.com/lamassuiot/lamassuiot/blob/v4/docs/specs/enroll-reenroll-webhook-openapi.yaml
 
 servers:
   - url: /api/dmsmanager

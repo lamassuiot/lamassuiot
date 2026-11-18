@@ -23,7 +23,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v4/docs"
+	"github.com/lamassuiot/lamassuiot/v4/docs/specs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"

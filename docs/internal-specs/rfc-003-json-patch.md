@@ -159,14 +159,14 @@ Certain metadata keys are used by Lamassu IoT's internal subsystems and should b
 ---
 
 ## Related Documentation
-- [Filtering and JSONPath](./filtering.md) — For querying these same fields using advanced expressions.
+- [Filtering and JSONPath](./rfc-002-filtering.md) — For querying these same fields using advanced expressions.
 
 ---
 
 ## Where to look in the codebase 🔎
 
-- **Models**: [core/pkg/models/patches.go](../core/pkg/models/patches.go)
-- **Logic**: [core/pkg/helpers/jsonpatches.go](../core/pkg/helpers/jsonpatches.go)
-- **Tests**: [core/pkg/helpers/jsonpatches_test.go](../core/pkg/helpers/jsonpatches_test.go)
+- **Models**: [core/pkg/models/patches.go](../../core/pkg/models/patches.go)
+- **Logic**: [core/pkg/helpers/jsonpatches.go](../../core/pkg/helpers/jsonpatches.go)
+- **Tests**: [core/pkg/helpers/jsonpatches_test.go](../../core/pkg/helpers/jsonpatches_test.go)
 
 

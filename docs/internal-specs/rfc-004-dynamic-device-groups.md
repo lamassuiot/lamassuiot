@@ -370,11 +370,11 @@ Use dockertest for Postgres container setup. Follow patterns in existing assembl
 
 #### Step 5.1: OpenAPI Specification
 **Deliverables:**
-- Update `docs/device-manager-openapi.yaml` with new endpoints
+- Update `docs/specs/device-manager-openapi.yaml` with new endpoints
 
 **Agent Prompt:**
 ```
-Add to docs/device-manager-openapi.yaml:
+Add to docs/specs/device-manager-openapi.yaml:
 - /device-groups endpoints (POST, GET, GET /:id, PUT /:id, DELETE /:id)
 - /device-groups/:group_id/devices endpoint
 - /device-groups/:group_id/stats endpoint
