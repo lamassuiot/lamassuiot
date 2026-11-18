@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type KMSEventPublisher struct {
@@ -34,6 +34,10 @@ func (mw KMSEventPublisher) GetKeys(ctx context.Context, input services.GetKeysI
 
 func (mw KMSEventPublisher) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	return mw.Next.GetKey(ctx, input)
+}
+
+func (mw KMSEventPublisher) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	return mw.Next.GetKeysByPublicKey(ctx, input)
 }
 
 func (mw KMSEventPublisher) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {

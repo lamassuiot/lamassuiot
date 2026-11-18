@@ -16,6 +16,7 @@ var CertificateFilterableFields = map[string]FilterFieldType{
 	"extensions.key_usage":          StringArrayFilterFieldType,
 	"extensions.extended_key_usage": StringArrayFilterFieldType,
 	"is_ca":                         EnumFilterFieldType,
+	"has_private_key":               EnumFilterFieldType,
 }
 
 var CAFilterableFields = map[string]FilterFieldType{
@@ -36,6 +37,7 @@ var CAFilterableFields = map[string]FilterFieldType{
 	"extensions.key_usage":          StringArrayFilterFieldType,
 	"extensions.extended_key_usage": StringArrayFilterFieldType,
 	"is_ca":                         EnumFilterFieldType,
+	"has_private_key":               EnumFilterFieldType,
 }
 
 var KMSFilterableFields = map[string]FilterFieldType{
@@ -73,4 +75,18 @@ var DeviceFilterableFields = map[string]FilterFieldType{
 	"tags":               StringArrayFilterFieldType,
 	"metadata":           JsonFilterFieldType,
 	"identity_slot":      JsonFilterFieldType,
+}
+
+var DeviceEventFilterableFields = map[string]FilterFieldType{
+	"event_ts":          DateFilterFieldType,
+	"event_type":        EnumFilterFieldType,
+	"description":       StringFilterFieldType,
+	"source":            StringFilterFieldType,
+	"structured_fields": JsonFilterFieldType,
+}
+
+var AlertFilterableFields = map[string]FilterFieldType{
+	"event_type": StringFilterFieldType,
+	"seen_at":    DateFilterFieldType,
+	"counter":    NumberFilterFieldType,
 }

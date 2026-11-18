@@ -5,10 +5,10 @@ import (
 	"flag"
 	"os"
 
-	bconfig "github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/migration/catokms"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	bconfig "github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/migration/catokms"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	log "github.com/sirupsen/logrus"
 )
 

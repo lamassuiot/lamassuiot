@@ -3,12 +3,13 @@ package models
 type CryptoEngineType string
 
 const (
-	PKCS11            CryptoEngineType = "PKCS11"
-	AzureKeyVault     CryptoEngineType = "AZURE_KEY_VAULT"
-	Golang            CryptoEngineType = "GOLANG"
-	VaultKV2          CryptoEngineType = "HASHICORP_VAULT_KV_V2"
-	AWSKMS            CryptoEngineType = "AWS_KMS"
-	AWSSecretsManager CryptoEngineType = "AWS_SECRETS_MANAGER"
+	PKCS11               CryptoEngineType = "PKCS11"
+	Golang               CryptoEngineType = "GOLANG"
+	VaultKV2             CryptoEngineType = "HASHICORP_VAULT_KV_V2"
+	AWSKMS               CryptoEngineType = "AWS_KMS"
+	AWSSecretsManager    CryptoEngineType = "AWS_SECRETS_MANAGER"
+	AzureKeyVault        CryptoEngineType = "AZURE_KEY_VAULT"
+	AzureKeyVaultSecrets CryptoEngineType = "AZURE_KEY_VAULT_SECRETS"
 )
 
 type CryptoEngineSL int

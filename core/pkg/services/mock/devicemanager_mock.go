@@ -3,8 +3,8 @@ package mock
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -25,6 +25,16 @@ func (dm *MockDeviceManagerService) CreateDevice(ctx context.Context, input serv
 func (dm *MockDeviceManagerService) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
 	args := dm.Called(ctx, input)
 	return args.Get(0).(*models.Device), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	args := dm.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
+func (dm *MockDeviceManagerService) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	args := dm.Called(ctx, input)
+	return args.Get(0).(*models.DeviceEvent), args.Error(1)
 }
 
 func (dm *MockDeviceManagerService) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {

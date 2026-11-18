@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 
-	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	lamassu "github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.DMSManagerSource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.DMSManagerSource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
 	lDeviceManagerClient := helpers.SetupLogger(conf.DevManagerClient.LogLevel, "DMS Manager", "LMS SDK - DeviceManager Client")
@@ -63,7 +63,7 @@ func main() {
 	}
 
 	deviceSDK := sdk.NewHttpDeviceManagerClient(
-		sdk.HttpClientWithSourceHeaderInjector(deviceMngrHttpCli, models.DMSManagerSource),
+		sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(deviceMngrHttpCli, models.DMSManagerSource), "X-Principal-ID", "admin-mode"),
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 

@@ -1,14 +1,16 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+import cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 
 type AlertsConfig struct {
 	OtelConfig            cconfig.OTELConfig             `mapstructure:"otel"`
+	OpenAPI               cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs                  cconfig.Logging                `mapstructure:"logs"`
 	Server                cconfig.HttpServer             `mapstructure:"server"`
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
 	SubscriberDLQEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
 	Storage               cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	AuthzClient           AuthzClient                    `mapstructure:"authz_client"`
 	SMTPConfig            SMTPServer                     `mapstructure:"smtp_server"`
 }
 

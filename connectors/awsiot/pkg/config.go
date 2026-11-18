@@ -1,8 +1,8 @@
 package pkg
 
 import (
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 )
 
 type ConnectorServiceConfig struct {

@@ -3,26 +3,30 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"uuid"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
+	auditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/handlers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 )
 
 func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.DeviceManagerService, int, error) {
-	service, err := AssembleDeviceManagerService(conf, caService)
+	service, sseHub, err := AssembleDeviceManagerService(conf, caService)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble Device Manager Service. Exiting: %s", err)
 	}
@@ -31,8 +35,14 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewDeviceManagerHTTPLayer(httpGrp, *service)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	routes.NewDeviceManagerHTTPLayerWithSSE(httpGrp, *service, sseHub, conf.AuthzClient, lHttp)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.DeviceManager
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Device Manager http server: %s", err)
 	}
@@ -40,7 +50,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 	return service, port, nil
 }
 
-func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, error) {
+func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, *controllers.DeviceEventSSEHub, error) {
 	serviceID := "device-manager"
 	sdk.InitOtelSDK(context.Background(), "Device Manager Service", conf.OtelConfig)
 
@@ -49,7 +59,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	devStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
 	if err != nil {
-		return nil, fmt.Errorf("could not create device storage: %s", err)
+		return nil, nil, fmt.Errorf("could not create device storage: %s", err)
 	}
 
 	svc := lservices.NewDeviceManagerService(lservices.DeviceManagerBuilder{
@@ -66,8 +76,10 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	if conf.PublisherEventBus.Enabled {
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
 		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+			return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
+
+		lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Audit Bus")
 
 		svc = eventpub.NewDeviceEventPublisher(&eventpub.CloudEventPublisher{
 			Publisher: pub,
@@ -75,8 +87,20 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			Logger:    lMessaging,
 		})(svc)
 
+		svc = auditpub.NewDeviceAuditEventPublisher(*auditpub.NewAuditPublisher(&eventpub.CloudEventPublisher{
+			Publisher: pub,
+			ServiceID: serviceID,
+			Logger:    lAudit,
+		}))(svc)
+
 		//this utilizes the middlewares from within the DeviceManager service (if svc.service.func is used instead of regular svc.func)
 		deviceSvc.SetService(svc)
+	}
+
+	var sseHub *controllers.DeviceEventSSEHub
+
+	if conf.SSEEnabled && !conf.SubscriberEventBus.Enabled {
+		return nil, nil, fmt.Errorf("SSEEnabled requires SubscriberEventBus to be enabled")
 	}
 
 	if conf.SubscriberEventBus.Enabled {
@@ -85,7 +109,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		} else {
 			dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
 			if err != nil {
-				return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+				return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 			}
 
 			lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
@@ -94,23 +118,63 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
 			if err != nil {
 				lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-				return nil, err
+				return nil, nil, err
 			}
 
+			// Existing handler: react to certificate events to update device identity slots
 			eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManager-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
 			if err != nil {
-				return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+				return nil, nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 			}
 
 			if err := subHandler.RunAsync(); err != nil {
 				lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
-				return nil, err
+				return nil, nil, err
+			}
+
+			// SSE hub: only create when SSE is enabled
+			if conf.SSEEnabled {
+				lSSE := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "SSE Hub")
+				sseHub = controllers.NewDeviceEventSSEHub(lSSE)
+
+				// SSE needs fan-out across instances: every instance with connected
+				// SSE clients must receive every device.* event. With the underlying
+				// AMQP pubsub, serviceID becomes the queue suffix and instances
+				// sharing it form a competing-consumer group — only one instance
+				// would get each event, leaving SSE clients on the others silent.
+				// Append a per-process UUID so each instance binds its own queue
+				// to the exchange and they all receive the broadcast.
+				//
+				// Caveat: queues are declared durable by the eventbus layer, so
+				// queues from crashed/replaced instances linger until cleaned up
+				// out-of-band (operator tooling or RabbitMQ TTL policies).
+				sseServiceID := fmt.Sprintf("%s-sse-%s", serviceID, uuid.NewV7().String())
+				sseSubscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, sseServiceID, lSSE)
+				if err != nil {
+					lSSE.Errorf("could not generate SSE Event Bus Subscriber: %s", err)
+					return nil, nil, err
+				}
+
+				sseEventHandlers := handlers.NewDeviceEventSSEHandler(lSSE, sseHub)
+				sseSubHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManager-SSE", []string{"device.#"}, dlqPublisher, sseSubscriber, lSSE, *sseEventHandlers)
+				if err != nil {
+					return nil, nil, fmt.Errorf("could not create SSE Event Bus Subscription Handler: %s", err)
+				}
+
+				if err := sseSubHandler.RunAsync(); err != nil {
+					lSSE.Errorf("could not run SSE Event Bus Subscription Handler: %s", err)
+					return nil, nil, err
+				}
+
+				lSSE.Infof("SSE hub started, listening for device.# events")
+			} else {
+				lMessaging.Infof("SSE is disabled by configuration")
 			}
 		}
 	}
 
-	return &svc, nil
+	return &svc, sseHub, nil
 }
 
 func createDevicesStorageInstance(logger *logrus.Entry, conf cconfig.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {

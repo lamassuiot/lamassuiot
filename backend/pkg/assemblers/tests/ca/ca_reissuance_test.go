@@ -4,21 +4,17 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestReissueCAService(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
 	var testcases = []struct {
@@ -144,6 +140,44 @@ func TestReissueCAService(t *testing.T) {
 					return fmt.Errorf("expected ErrCAExpired error but got none")
 				}
 				return fmt.Errorf("expected ErrCAExpired but got: %s", err)
+			},
+		},
+		{
+			name: "OK/ReissueCA_KeepsUserMetadata",
+			before: func(caSDK services.CAService) (string, error) {
+				ca, err := createTestCA(caSDK, "RootCA-Reissue-Metadata", false)
+				if err != nil {
+					return "", err
+				}
+				_, err = caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
+					CAID: ca.ID,
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder("owner"), "team-a").
+						Build(),
+				})
+				if err != nil {
+					return "", err
+				}
+				return ca.ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
+				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+					CAID: caID,
+				})
+			},
+			resultCheck: func(caSDK services.CAService, originalCA *models.CACertificate, reissuedCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error: %s", err)
+				}
+				if reissuedCA.Metadata["owner"] != "team-a" {
+					return fmt.Errorf("user metadata lost on reissue: expected owner=team-a, got %v", reissuedCA.Metadata["owner"])
+				}
+				if reissuedCA.Metadata[models.CAMetadataReissuedFromKey] != originalCA.Certificate.SerialNumber {
+					return fmt.Errorf("missing or incorrect reissued-from metadata: expected %s, got %v",
+						originalCA.Certificate.SerialNumber,
+						reissuedCA.Metadata[models.CAMetadataReissuedFromKey])
+				}
+				return nil
 			},
 		},
 		{
@@ -353,16 +387,12 @@ func TestReissueCAService(t *testing.T) {
 
 				// The URLs should be recomputed (might contain new serial number for CRL endpoint)
 				// We just verify they exist and are not empty
-				for _, url := range reissuedCert.CRLDistributionPoints {
-					if url == "" {
-						return fmt.Errorf("empty CRL distribution point URL")
-					}
+				if slices.Contains(reissuedCert.CRLDistributionPoints, "") {
+					return fmt.Errorf("empty CRL distribution point URL")
 				}
 
-				for _, url := range reissuedCert.OCSPServer {
-					if url == "" {
-						return fmt.Errorf("empty OCSP server URL")
-					}
+				if slices.Contains(reissuedCert.OCSPServer, "") {
+					return fmt.Errorf("empty OCSP server URL")
 				}
 
 				// Verify the number of URLs matches
@@ -562,7 +592,7 @@ func TestReissueCAService(t *testing.T) {
 	for _, tc := range testcases {
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -612,9 +642,8 @@ func TestReissueCAService(t *testing.T) {
 }
 
 func TestReissueCASDK(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -663,10 +692,9 @@ func TestReissueCASDK(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}

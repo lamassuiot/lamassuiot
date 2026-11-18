@@ -8,8 +8,8 @@ import (
 	"runtime"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/bridges/otellogrus"
 	"go.opentelemetry.io/otel/log/global"
@@ -93,14 +93,14 @@ func configureLoggerWitSourceAndCallerID(ctx context.Context, logger *logrus.Ent
 	logger = logger.WithField("auth-type", authMode)
 	logger = logger.WithField("auth-id", authID)
 
+	if authCtx := ctx.Value(core.LamassuContextKeyAuthContext); authCtx != nil {
+		logger = logger.WithField("auth-context", authCtx)
+	}
+
 	return logger
 }
 
 func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
-	if logger.Logger.Level < logrus.DebugLevel {
-		return logger
-	}
-
 	spanCtx := trace.SpanFromContext(ctx).SpanContext()
 	if spanCtx.HasTraceID() {
 		return logger.WithField("trace-id", spanCtx.TraceID().String())
@@ -115,4 +115,11 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 
 func InitContext() context.Context {
 	return context.Background()
+}
+
+func InitJobContext(jobName string) context.Context {
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthType, "job")
+	ctx = context.WithValue(ctx, core.LamassuContextKeyAuthID, jobName)
+	return ctx
 }

@@ -6,15 +6,20 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
 )
 
-func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
+// BuildTLSTransport returns a clone of http.DefaultTransport (keeping proxy
+// settings and timeouts) whose TLS config trusts the system CAs plus
+// cfg.CACertificateFile.
+func BuildTLSTransport(cfg config.TLSConfig) (*http.Transport, error) {
 	caPool := helpers.LoadSytemCACertPool()
-	tlsConfig := &tls.Config{}
+	tlsConfig := &tls.Config{
+		RootCAs: caPool,
+	}
 
 	if cfg.InsecureSkipVerify {
 		tlsConfig.InsecureSkipVerify = true
@@ -29,9 +34,19 @@ func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*htt
 		caPool.AddCert(cert)
 	}
 
-	cli.Transport = &http.Transport{
-		TLSClientConfig: tlsConfig,
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsConfig
+
+	return transport, nil
+}
+
+func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
+	transport, err := BuildTLSTransport(cfg)
+	if err != nil {
+		return nil, err
 	}
+
+	cli.Transport = transport
 
 	return cli, nil
 }
@@ -57,15 +72,23 @@ type loggingRoundTripper struct {
 
 func (lrt loggingRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
 	start := time.Now()
+	// Dumping buffers request and response bodies, so only do it when the
+	// output is actually logged.
+	trace := lrt.logger.Logger.IsLevelEnabled(logrus.TraceLevel)
+	var dReq string
+	if trace {
+		dReq = gindump.DumpRequest(req, true, true)
+	}
 	// Send the request, get the response (or the error)
-	dReq := gindump.DumpRequest(req, true, true)
 	res, err = lrt.transport.RoundTrip(req)
 	if err != nil {
 		lrt.logger.Errorf("%s: %s", req.URL.String(), err)
 	} else {
 		log := lrt.logger.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
 		log.Debug(req.URL.String())
-		log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
+		if trace {
+			log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
+		}
 	}
 
 	return

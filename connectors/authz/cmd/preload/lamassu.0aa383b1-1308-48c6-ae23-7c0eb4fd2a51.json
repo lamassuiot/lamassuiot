@@ -1,0 +1,20 @@
+{
+  "id": "lamassu.0aa383b1-1308-48c6-ae23-7c0eb4fd2a51",
+  "name": "KMS - Reader",
+  "description": "Read-only access to KMS keys",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "kms",
+      "entity_type": "kms_key",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

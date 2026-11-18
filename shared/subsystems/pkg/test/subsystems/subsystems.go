@@ -1,8 +1,10 @@
 package subsystems
 
+import "sync"
+
 type SubsystemBackend struct {
-	Config     interface{}
-	Extra      *map[string]interface{}
+	Config     any
+	Extra      *map[string]any
 	BeforeEach func() error
 	AfterSuite func()
 }
@@ -18,7 +20,7 @@ type StorageSubsystem interface {
 
 type ParametrizedSubsystem interface {
 	Subsystem
-	Prepare(config map[string]interface{}) error
+	Prepare(config map[string]any) error
 }
 
 type SubsystemProvider string
@@ -30,14 +32,25 @@ const (
 	Vault    SubsystemProvider = "vault"
 	Pkcs11   SubsystemProvider = "pkcs11"
 	Aws      SubsystemProvider = "aws"
+	Azure    SubsystemProvider = "azure"
 )
 
-var subsystemsMap map[SubsystemProvider]Subsystem = make(map[SubsystemProvider]Subsystem)
+var (
+	subsystemsMapMu sync.RWMutex
+	subsystemsMap   = make(map[SubsystemProvider]Subsystem)
+)
 
 func RegisterSubsystemBuilder(name SubsystemProvider, subsystem Subsystem) {
+	subsystemsMapMu.Lock()
+	defer subsystemsMapMu.Unlock()
+
 	subsystemsMap[name] = subsystem
 }
 
 func GetSubsystemBuilder[E Subsystem](name SubsystemProvider) E {
-	return subsystemsMap[name].(E)
+	subsystemsMapMu.RLock()
+	subsystem := subsystemsMap[name]
+	subsystemsMapMu.RUnlock()
+
+	return subsystem.(E)
 }

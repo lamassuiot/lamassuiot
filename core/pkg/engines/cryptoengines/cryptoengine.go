@@ -6,35 +6,45 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
+	"sync"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
 type CryptoEngine interface {
 	GetEngineConfig() models.CryptoEngineInfo
 
-	ListPrivateKeyIDs() ([]string, error)
-	GetPrivateKeyByID(keyID string) (crypto.Signer, error)
+	ListPrivateKeyIDs(ctx context.Context) ([]string, error)
+	GetPrivateKeyByID(ctx context.Context, keyID string) (crypto.Signer, error)
 
 	CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error)
 	CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error)
 
-	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
-	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
+	ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error)
+	ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error)
 
-	DeleteKey(keyID string) error
+	DeleteKey(ctx context.Context, keyID string) error
 
-	RenameKey(oldID, newID string) error
+	RenameKey(ctx context.Context, oldID, newID string) error
 }
 
-var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error))
+var (
+	cryptoEngineBuildersMu sync.RWMutex
+	cryptoEngineBuilders   = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error))
+)
 
 func RegisterCryptoEngine(name config.CryptoEngineProvider, builder func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error)) {
+	cryptoEngineBuildersMu.Lock()
+	defer cryptoEngineBuildersMu.Unlock()
+
 	cryptoEngineBuilders[name] = builder
 }
 
 func GetEngineBuilder(name config.CryptoEngineProvider) func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error) {
+	cryptoEngineBuildersMu.RLock()
+	defer cryptoEngineBuildersMu.RUnlock()
+
 	return cryptoEngineBuilders[name]
 }

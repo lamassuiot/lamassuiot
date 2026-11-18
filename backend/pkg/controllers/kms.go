@@ -2,13 +2,14 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type kmsHttpRoutes struct {
@@ -18,6 +19,19 @@ type kmsHttpRoutes struct {
 func NewKMSHttpRoutes(svc services.KMSService) *kmsHttpRoutes {
 	return &kmsHttpRoutes{
 		svc: svc,
+	}
+}
+
+func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, errs.ErrKeyNotFound):
+		ctx.JSON(404, gin.H{"err": err.Error()})
+	case errors.Is(err, errs.ErrKeyEngineRequired), errors.Is(err, errs.ErrKeyAliasCollidesWithKeyID), errors.Is(err, errs.ErrValidateBadRequest):
+		ctx.JSON(400, gin.H{"err": err.Error()})
+	case errors.Is(err, errs.ErrKeyInUse):
+		ctx.JSON(409, gin.H{"err": err.Error()})
+	default:
+		ctx.JSON(500, gin.H{"err": err.Error()})
 	}
 }
 
@@ -87,19 +101,43 @@ func (r *kmsHttpRoutes) GetKeyByID(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 
 		return
 	}
 
 	ctx.JSON(200, key)
+}
+
+func (r *kmsHttpRoutes) GetKeysByPublicKey(ctx *gin.Context) {
+	var requestBody resources.GetKeysByPublicKeyBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	decodedKey, err := base64.StdEncoding.DecodeString(requestBody.PublicKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	pubKey, err := helpers.ParsePublicKey(decodedKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": errs.ErrValidateBadRequest.Error()})
+		return
+	}
+
+	keys, err := r.svc.GetKeysByPublicKey(ctx.Request.Context(), services.GetKeysByPublicKeyInput{
+		PublicKey: pubKey,
+		EngineID:  requestBody.EngineID,
+	})
+	if err != nil {
+		r.handleError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, keys)
 }
 
 func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
@@ -119,12 +157,7 @@ func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -163,12 +196,7 @@ func (r *kmsHttpRoutes) ImportKey(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -198,14 +226,7 @@ func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -235,14 +256,7 @@ func (r *kmsHttpRoutes) UpdateKeyMetadata(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -271,14 +285,7 @@ func (r *kmsHttpRoutes) UpdateKeyName(ctx *gin.Context) {
 		Name: requestBody.Name,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -308,14 +315,7 @@ func (r *kmsHttpRoutes) UpdateKeyTags(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -338,14 +338,7 @@ func (r *kmsHttpRoutes) DeleteKeyByID(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 
 		return
 	}
@@ -377,14 +370,7 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		MessageType: requestBody.MessageType,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 	ctx.JSON(200, signature)
@@ -415,14 +401,7 @@ func (r *kmsHttpRoutes) VerifySignature(ctx *gin.Context) {
 		MessageType: requestBody.MessageType,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 	ctx.JSON(200, valid)
@@ -439,12 +418,7 @@ func (r *kmsHttpRoutes) GetStats(ctx *gin.Context) {
 		QueryParameters: queryParams,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 

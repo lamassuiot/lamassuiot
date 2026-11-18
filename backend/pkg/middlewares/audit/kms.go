@@ -3,10 +3,10 @@ package auditpub
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type KMSAuditEventPublisher struct {
@@ -35,6 +35,10 @@ func (mw KMSAuditEventPublisher) GetKeys(ctx context.Context, input services.Get
 
 func (mw KMSAuditEventPublisher) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	return mw.next.GetKey(ctx, input)
+}
+
+func (mw KMSAuditEventPublisher) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	return mw.next.GetKeysByPublicKey(ctx, input)
 }
 
 func (mw KMSAuditEventPublisher) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {

@@ -10,14 +10,14 @@ import (
 func TestFilterJSONSchema(t *testing.T) {
 	tests := []struct {
 		name           string
-		eventData      interface{}
+		eventData      any
 		schema         string
 		expectedResult bool
 		wantErr        bool
 	}{
 		{
 			name: "ValidSchemaAndMatchingData",
-			eventData: map[string]interface{}{
+			eventData: map[string]any{
 				"name": "John",
 				"age":  30,
 			},
@@ -46,7 +46,7 @@ func TestFilterJSONSchema(t *testing.T) {
 		},
 		{
 			name: "ValidSchemaAndNonMatchingData",
-			eventData: map[string]interface{}{
+			eventData: map[string]any{
 				"name": "John",
 			},
 			schema: `{
@@ -74,7 +74,7 @@ func TestFilterJSONSchema(t *testing.T) {
 		},
 		{
 			name: "InvalidSchema",
-			eventData: map[string]interface{}{
+			eventData: map[string]any{
 				"name": "John",
 				"age":  30,
 			},
@@ -84,7 +84,7 @@ func TestFilterJSONSchema(t *testing.T) {
 		},
 		{
 			name: "EmptySchema",
-			eventData: map[string]interface{}{
+			eventData: map[string]any{
 				"name": "John",
 				"age":  30,
 			},
@@ -94,7 +94,7 @@ func TestFilterJSONSchema(t *testing.T) {
 		},
 		{
 			name: "ValidSchemaWithAdditionalProperties",
-			eventData: map[string]interface{}{
+			eventData: map[string]any{
 				"name":    "John",
 				"age":     30,
 				"address": "123 Street",

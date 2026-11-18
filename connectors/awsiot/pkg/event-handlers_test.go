@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	smock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	smock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 )
@@ -51,11 +51,11 @@ func TestHandleUpdateCertificateNotAttached(t *testing.T) {
 		t.Error(err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	json.Unmarshal(eventContent, &parsed)
-	data := parsed["data"].(map[string]interface{})
-	updated := data["updated"].(map[string]interface{})
-	metadata := updated["metadata"].(map[string]interface{})
+	data := parsed["data"].(map[string]any)
+	updated := data["updated"].(map[string]any)
+	metadata := updated["metadata"].(map[string]any)
 	delete(metadata, "lamassu.io/iot/aws-12345")
 
 	eventContent, err = json.Marshal(parsed)
@@ -112,7 +112,7 @@ func TestHandleUpdateMetadataUpdateShadow(t *testing.T) {
 	// Prepare logger
 	entry := logrus.WithField("svc", "aws-iot")
 
-	prevState := []map[string]interface{}{
+	prevState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -125,7 +125,7 @@ func TestHandleUpdateMetadataUpdateShadow(t *testing.T) {
 		},
 	}
 
-	newState := []map[string]interface{}{
+	newState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -157,7 +157,7 @@ func TestHandleUpdateMetadataUpdateShadow(t *testing.T) {
 	awsConnectorMock.AssertCalled(t, "UpdateDeviceShadow", mock.Anything, mock.Anything)
 }
 
-func prepareMessage(t *testing.T, file string, prevState []map[string]interface{}, newState []map[string]interface{}) *message.Message {
+func prepareMessage(t *testing.T, file string, prevState []map[string]any, newState []map[string]any) *message.Message {
 	eventContent, err := os.ReadFile(file)
 	if err != nil {
 		t.Error(err)
@@ -180,7 +180,7 @@ func prepareMessage(t *testing.T, file string, prevState []map[string]interface{
 	certUpdate.Previous.Metadata["lamassu.io/ca/expiration-deltas"] = prevState
 	certUpdate.Updated.Metadata["lamassu.io/ca/expiration-deltas"] = newState
 
-	var eventMap map[string]interface{}
+	var eventMap map[string]any
 	json.Unmarshal(eventContent, &eventMap)
 	eventMap["data"] = certUpdate
 
@@ -198,7 +198,7 @@ func TestHandleUpdateMetadataNotUpdateShadow(t *testing.T) {
 	// Prepare logger
 	entry := logrus.WithField("svc", "aws-iot")
 
-	prevState := []map[string]interface{}{
+	prevState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -211,7 +211,7 @@ func TestHandleUpdateMetadataNotUpdateShadow(t *testing.T) {
 		},
 	}
 
-	newState := []map[string]interface{}{
+	newState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -253,7 +253,7 @@ func TestHandleUpdateMetadataMultipleUpdates(t *testing.T) {
 	// Prepare logger
 	entry := logrus.WithField("svc", "aws-iot")
 
-	prevState := []map[string]interface{}{
+	prevState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -266,7 +266,7 @@ func TestHandleUpdateMetadataMultipleUpdates(t *testing.T) {
 		},
 	}
 
-	newState := []map[string]interface{}{
+	newState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -298,7 +298,7 @@ func TestHandleUpdateMetadataMultipleUpdates(t *testing.T) {
 	awsConnectorMock.AssertNumberOfCalls(t, "UpdateDeviceShadow", 1)
 
 	// Prepare second event
-	prevState = []map[string]interface{}{
+	prevState = []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -311,7 +311,7 @@ func TestHandleUpdateMetadataMultipleUpdates(t *testing.T) {
 		},
 	}
 
-	newState = []map[string]interface{}{
+	newState = []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -343,7 +343,7 @@ func TestHandleUpdateMetadataDMSNoConfiguredNoUpdateShadow(t *testing.T) {
 	// Prepare logger
 	entry := logrus.WithField("svc", "aws-iot")
 
-	prevState := []map[string]interface{}{
+	prevState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",
@@ -356,7 +356,7 @@ func TestHandleUpdateMetadataDMSNoConfiguredNoUpdateShadow(t *testing.T) {
 		},
 	}
 
-	newState := []map[string]interface{}{
+	newState := []map[string]any{
 		{
 			"delta":     "1w",
 			"name":      "Critical",

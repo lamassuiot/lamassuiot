@@ -2,11 +2,34 @@ package eventfilters
 
 import (
 	"testing"
+	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestJavascriptFilterInterruptsInfiniteLoops(t *testing.T) {
+	for _, script := range []string{
+		"function(event) { while (true) {} }",
+		"(function() { while (true) {} })()",
+		"function(event) { try { while (true) {} } catch (e) { return true; } }",
+		"function(event) { while (true) { try { while (true) {} } catch (e) {} } }",
+		"function(event) { try { while (true) {} } finally { while (true) {} } }",
+	} {
+		t.Run(script, func(t *testing.T) {
+			started := time.Now()
+			matched, err := javascriptFilter(cloudevents.NewEvent(), script)
+			require.ErrorIs(t, err, errJavascriptFilterTimeout)
+			require.False(t, matched)
+			require.Less(t, time.Since(started), 2*time.Second)
+			// A timed-out VM must not affect subsequent filters.
+			matched, err = javascriptFilter(cloudevents.NewEvent(), "function(event) { return true; }")
+			require.NoError(t, err)
+			require.True(t, matched)
+		})
+	}
+}
 
 func TestJavascriptFilter(t *testing.T) {
 	tests := []struct {
@@ -20,7 +43,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "valid script returns true",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:   "function(event) { return event.data.key === 'value'; }",
@@ -31,7 +54,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "valid script returns false",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "other"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "other"})
 				return e
 			}(),
 			script:   "function(event) { return event.data.key === 'value'; }",
@@ -42,7 +65,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "invalid script",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:  "function(event) { return event.data.key === 'value' ",
@@ -52,7 +75,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script returns non-boolean value",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:   "function(event) { return event.data.key }",
@@ -63,7 +86,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script execution error",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:  "function(event) { throw new Error('error'); }",
@@ -73,7 +96,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script execution multiple functions error",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script: `
@@ -86,7 +109,7 @@ func TestJavascriptFilter(t *testing.T) {
 			name: "script execution not a function",
 			event: func() cloudevents.Event {
 				e := cloudevents.NewEvent()
-				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
+				e.SetData(cloudevents.ApplicationJSON, map[string]any{"key": "value"})
 				return e
 			}(),
 			script:   "{'a': 1}",

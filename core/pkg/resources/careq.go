@@ -3,7 +3,7 @@ package resources
 import (
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 type CreateCABody struct {
@@ -93,7 +93,7 @@ type UpdateCAProfileBody struct {
 }
 
 type UpdateCertificateMetadataBody struct {
-	Patches []models.PatchOperation `validate:"required"`
+	Patches []models.PatchOperation `json:"patches" validate:"required"`
 }
 
 type GetCertificatesByExpirationDateQueryParams struct {
@@ -110,7 +110,7 @@ type GetCertificateStatus struct {
 }
 
 type ImportCertificateBody struct {
-	Metadata    map[string]interface{}  `json:"metadata"`
+	Metadata    map[string]any          `json:"metadata"`
 	Certificate *models.X509Certificate `json:"certificate"`
 }
 
@@ -159,6 +159,12 @@ type ImportKeyBody struct {
 	Name       string         `json:"name"`
 	Tags       []string       `json:"tags"`
 	Metadata   map[string]any `json:"metadata"`
+}
+
+// GetKeysByPublicKeyBody carries a base64-encoded PEM PUBLIC KEY.
+type GetKeysByPublicKeyBody struct {
+	PublicKey string `json:"public_key"`
+	EngineID  string `json:"engine_id"`
 }
 
 type CreateUpdateIssuanceProfileBody struct {

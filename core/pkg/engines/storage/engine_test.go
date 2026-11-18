@@ -3,7 +3,7 @@ package storage
 import (
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -34,7 +34,7 @@ func (m *MockStorageEngine) GetDMSStorage() (DMSRepo, error) {
 	return nil, nil
 }
 
-func (m *MockStorageEngine) GetEnventsStorage() (EventRepository, error) {
+func (m *MockStorageEngine) GetEventsStorage() (EventRepository, error) {
 	return nil, nil
 }
 

@@ -238,6 +238,8 @@ GET /api/devmanager/v1/devices?sort_by=metadata[jsonpath]$.created_at&sort_mode=
 GET /api/devmanager/v1/devices?sort_by=metadata%5Bjsonpath%5D$.environment&sort_mode=asc
 ```
 
+**Supported paths:** only simple paths can be used for sorting: `$` followed by `.key` segments, where keys contain only letters, digits, `_` and `-`, and array indexes `[n]` or `[last]` (e.g. `$.location.region`, `$.tags[0]`, `$.items[last].name`). Wildcards, filters, slices, quoted keys and keys with any other character (such as `lamassu.io/...` keys) are not supported: the API ignores such a `sort_by` and returns results in the default order (in-process calls to the backend services get an `invalid json path` error instead).
+
 ### Type-Aware Sorting
 
 The system automatically detects and handles different data types in JSON fields:
@@ -340,6 +342,11 @@ GET /api/devmanager/v1/devices?bookmark=<encoded_bookmark>
 
 The system ensures consistent ordering across all pages of results.
 
+**Exhaustive runs (Go):** whether `ExhaustiveRun: true` keeps the sort depends on where it runs:
+
+- HTTP SDK clients (`sdk` package) request every page from the API, so the requested sort is kept.
+- In-process calls to the backend services or the storage layer walk every matching row in batches of `PageSize` rows (50 by default), ordered by primary key, and ignore any sort, including service defaults such as newest-first device events. This fixed order keeps the walk complete even when the callback updates rows while iterating (for example, moving certificates out of a filtered status). Sort the collected results yourself if you need a specific order.
+
 ---
 
 ## Practical tips & caveats ⚠️
@@ -347,6 +354,8 @@ The system ensures consistent ordering across all pages of results.
 - Always URL-encode filter values when they contain spaces, quotes, or special characters.
 - JSONPath filtering depends on PostgreSQL's `jsonpath` implementation — consult Postgres docs for expression semantics.
 - Not all fields are filterable; check the resource-specific filter maps (e.g. `core/pkg/resources/*.go`) for allowed fields.
+- Pagination: when `page_size` is omitted the default is 50 items per page (previously 25); the maximum is 1000 and larger values are capped. Bookmarks issued with a larger limit are clamped to 1000.
+- Substring matching (`contains`, `ilike`-style operators) treats `%`, `_` and `\` in the filter value as literal characters, not SQL wildcards.
 - For client libraries, prefer SDK helpers to encode filters properly; the SDK maps filter operations to short operator strings (e.g. `EnumEqual` -> `eq`, `JsonPathExpression` -> `jsonpath`).
 
 ---

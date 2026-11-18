@@ -1,9 +1,9 @@
 package migrations
 
 import (
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/ca"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/devicemanager"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/dmsmanager"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/ca"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/devicemanager"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/dmsmanager"
 )
 
 // the order of the migrations is NOT IMPORTANT. It is only necessary to register them all
@@ -15,11 +15,16 @@ func RegisterGoMigrations(dbname string) {
 		ca.Register20250908074250AddProfileId()
 		ca.Register20250915090500UpdateSkiAki()
 		ca.Register20260331120000AddCertificateExtensions()
+		ca.Register20261027100000CertificateKeyID()
+		ca.Register20261027120000BackfillCertificateIssuer()
+		ca.Register20261030120000CertificateKeyForeignKey()
 	case "devicemanager":
 		devicemanager.Register20250925120000RemoveSerialHyphens()
 	case "dmsmanager":
 		dmsmanager.Register20241230124809ServerkeygenRevokereenroll()
 		dmsmanager.Register20250612100530ESTVerifyCSRSignature()
 		dmsmanager.Register20260604110000ReenrollAuthSettings()
+		dmsmanager.Register20261021120000WebhookHTTPClientConfig()
+		dmsmanager.Register20261022120000ReenrollValidationCAs()
 	}
 }

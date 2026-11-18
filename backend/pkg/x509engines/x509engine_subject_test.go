@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -687,7 +687,7 @@ func TestValidateCryptoEnforcement(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		publicKey   interface{}
+		publicKey   any
 		enforcement models.IssuanceProfileCryptoEnforcement
 		expectError bool
 	}{
@@ -807,7 +807,7 @@ func TestApplyIssuanceProfileToTemplate_Validity(t *testing.T) {
 	testCases := []struct {
 		name             string
 		validityType     models.ValidityType
-		validityValue    interface{}
+		validityValue    any
 		expectedNotAfter time.Time
 	}{
 		{

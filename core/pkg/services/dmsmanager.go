@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 type DMSManagerService interface {
@@ -32,7 +32,10 @@ type CreateDMSInput struct {
 }
 
 type UpdateDMSInput struct {
-	DMS models.DMS `validate:"required"`
+	ID       string `validate:"required"`
+	Name     string `validate:"required"`
+	Metadata map[string]any
+	Settings *models.DMSSettings `validate:"required"`
 }
 
 type GetDMSByIDInput struct {

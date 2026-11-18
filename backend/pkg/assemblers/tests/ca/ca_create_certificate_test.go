@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 // ---------------------------------------------------------------------------
@@ -65,9 +64,9 @@ func revokeCA(t *testing.T, caSDK services.CAService, caID string) {
 // ---------------------------------------------------------------------------
 
 func TestCreateCertificateSDK(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -169,7 +168,7 @@ func TestCreateCertificateSDK(t *testing.T) {
 				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 					CAID: caID,
 					KeySpec: services.CertificateKeySpec{
-						KeyIdentifier: key.KeyID,
+						KeyIdentifier: key.PKCS11URI,
 					},
 					Subject: models.Subject{CommonName: "reuse-key-cert"},
 				})
@@ -657,9 +656,9 @@ func TestCreateCertificateSDK(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			if err := serverTest.BeforeEach(); err != nil {
+			err := serverTest.BeforeEach()
+			if err != nil {
 				t.Fatalf("BeforeEach failed: %s", err)
 			}
 
@@ -682,9 +681,9 @@ func TestCreateCertificateSDK(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCreateCertificateService(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -955,9 +954,9 @@ func TestCreateCertificateService(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			if err := serverTest.BeforeEach(); err != nil {
+			err := serverTest.BeforeEach()
+			if err != nil {
 				t.Fatalf("BeforeEach failed: %s", err)
 			}
 
@@ -992,9 +991,9 @@ func TestCreateCertificateService(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -1003,7 +1002,8 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 	// Success path: middleware chain returns certificate; it is persisted.
 	// ------------------------------------------------------------------ //
 	t.Run("OK/MiddlewareChain-CertificatePersisted", func(t *testing.T) {
-		if err := serverTest.BeforeEach(); err != nil {
+		err := serverTest.BeforeEach()
+		if err != nil {
 			t.Fatalf("BeforeEach failed: %s", err)
 		}
 
@@ -1050,14 +1050,15 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 	// Error path: middleware chain propagates ErrCAStatus without swallowing.
 	// ------------------------------------------------------------------ //
 	t.Run("ERR/MiddlewareChain-ErrorPropagated", func(t *testing.T) {
-		if err := serverTest.BeforeEach(); err != nil {
+		err := serverTest.BeforeEach()
+		if err != nil {
 			t.Fatalf("BeforeEach failed: %s", err)
 		}
 
 		ca := createActiveCA(t, caTest.Service)
 		revokeCA(t, caTest.Service, ca.ID)
 
-		_, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+		_, err = caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 			CAID: ca.ID,
 			KeySpec: services.CertificateKeySpec{
 				Type: models.KeyType(x509.RSA),
@@ -1078,14 +1079,15 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 	// (proves KMS key creation and signing round-trip is repeatable).
 	// ------------------------------------------------------------------ //
 	t.Run("OK/SequentialCalls-UniqueSerialNumbers", func(t *testing.T) {
-		if err := serverTest.BeforeEach(); err != nil {
+		err := serverTest.BeforeEach()
+		if err != nil {
 			t.Fatalf("BeforeEach failed: %s", err)
 		}
 
 		ca := createActiveCA(t, caTest.Service)
 		serials := map[string]struct{}{}
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 				CAID: ca.ID,
 				KeySpec: services.CertificateKeySpec{
@@ -1108,7 +1110,8 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 	// Reuse key: the same KMS key can back multiple certificates.
 	// ------------------------------------------------------------------ //
 	t.Run("OK/ReuseKey-MultipleCerts", func(t *testing.T) {
-		if err := serverTest.BeforeEach(); err != nil {
+		err := serverTest.BeforeEach()
+		if err != nil {
 			t.Fatalf("BeforeEach failed: %s", err)
 		}
 
@@ -1125,11 +1128,11 @@ func TestCreateCertificateEventAndAuditBehavior(t *testing.T) {
 		}
 
 		var prevSerial string
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			cert, err := caTest.HttpCASDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
 				CAID: ca.ID,
 				KeySpec: services.CertificateKeySpec{
-					KeyIdentifier: sharedKey.KeyID,
+					KeyIdentifier: sharedKey.PKCS11URI,
 				},
 				Subject: models.Subject{CommonName: fmt.Sprintf("shared-key-cert-%d", i)},
 			})

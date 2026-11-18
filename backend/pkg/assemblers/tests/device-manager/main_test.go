@@ -9,43 +9,22 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
 )
-
-func StartDeviceManagerServiceTestServer(t *testing.T, withDMSManager, withEventBus bool) (*tests.DeviceManagerTestServer, *tests.TestServer, error) {
-	services := []tests.Service{tests.CA, tests.DEVICE_MANAGER}
-	dbs := []string{"kms", "ca", "devicemanager"}
-	if withDMSManager {
-		dbs = append(dbs, "dmsmanager")
-		services = append(services, tests.DMS_MANAGER)
-	}
-
-	builder := tests.TestServiceBuilder{}.WithDatabase(dbs...).WithService(services...)
-	if withEventBus {
-		builder = builder.WithEventBus()
-	}
-
-	testServer, err := builder.Build(t)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not create Device Manager test server: %s", err)
-	}
-
-	return testServer.DeviceManager, testServer, nil
-}
 
 func TestGetAllDevices(t *testing.T) {
 	// t.Parallel()
 	devsIds := [3]string{"test1", "test2", "test3"}
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -53,7 +32,7 @@ func TestGetAllDevices(t *testing.T) {
 		ID:        devsIds[0],
 		Alias:     "test",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -67,7 +46,7 @@ func TestGetAllDevices(t *testing.T) {
 		ID:        devsIds[1],
 		Alias:     "test2",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -81,7 +60,7 @@ func TestGetAllDevices(t *testing.T) {
 		ID:        devsIds[2],
 		Alias:     "test3",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -195,7 +174,6 @@ func TestGetAllDevices(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -207,7 +185,7 @@ func TestGetDeviceStats(t *testing.T) {
 	devsIds := [3]string{"test1", "test2", "test3"}
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -216,7 +194,7 @@ func TestGetDeviceStats(t *testing.T) {
 		ID:        devsIds[0],
 		Alias:     "test",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -230,7 +208,7 @@ func TestGetDeviceStats(t *testing.T) {
 		ID:        devsIds[1],
 		Alias:     "test2",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -244,7 +222,7 @@ func TestGetDeviceStats(t *testing.T) {
 		ID:        devsIds[2],
 		Alias:     "test3",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -282,7 +260,6 @@ func TestGetDeviceStats(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -293,7 +270,7 @@ func TestGetDeviceStats(t *testing.T) {
 func TestGetDeviceStatsFiltered(t *testing.T) {
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -303,7 +280,7 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 		ID:        "dev-dms1-1",
 		Alias:     "Device DMS1-1",
 		Tags:      []string{"production", "server"},
-		Metadata:  map[string]interface{}{"location": "datacenter-1", "rack": "A1"},
+		Metadata:  map[string]any{"location": "datacenter-1", "rack": "A1"},
 		DMSID:     "dms-production",
 		Icon:      "server",
 		IconColor: "#FF0000",
@@ -317,7 +294,7 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 		ID:        "dev-dms1-2",
 		Alias:     "Device DMS1-2",
 		Tags:      []string{"production", "iot"},
-		Metadata:  map[string]interface{}{"location": "datacenter-1", "rack": "B2"},
+		Metadata:  map[string]any{"location": "datacenter-1", "rack": "B2"},
 		DMSID:     "dms-production",
 		Icon:      "sensor",
 		IconColor: "#00FF00",
@@ -331,7 +308,7 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 		ID:        "dev-dms2-1",
 		Alias:     "Device DMS2-1",
 		Tags:      []string{"staging", "server"},
-		Metadata:  map[string]interface{}{"location": "datacenter-2", "rack": "C1"},
+		Metadata:  map[string]any{"location": "datacenter-2", "rack": "C1"},
 		DMSID:     "dms-staging",
 		Icon:      "server",
 		IconColor: "#0000FF",
@@ -345,7 +322,7 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 		ID:        "dev-dms2-2",
 		Alias:     "Device DMS2-2",
 		Tags:      []string{"staging", "iot"},
-		Metadata:  map[string]interface{}{"location": "datacenter-2", "rack": "D2"},
+		Metadata:  map[string]any{"location": "datacenter-2", "rack": "D2"},
 		DMSID:     "dms-staging",
 		Icon:      "sensor",
 		IconColor: "#FFFF00",
@@ -662,7 +639,6 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -673,7 +649,7 @@ func TestGetDeviceStatsFiltered(t *testing.T) {
 func TestGetDeviceByID(t *testing.T) {
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -682,7 +658,7 @@ func TestGetDeviceByID(t *testing.T) {
 		ID:        "test",
 		Alias:     "test",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -743,7 +719,6 @@ func TestGetDeviceByID(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -751,11 +726,67 @@ func TestGetDeviceByID(t *testing.T) {
 	}
 }
 
+func TestGetDeviceEvents(t *testing.T) {
+	ctx := context.Background()
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+
+	deviceID := "events-device"
+	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+		ID:        deviceID,
+		Alias:     "events-device",
+		Tags:      []string{"events"},
+		Metadata:  map[string]any{"env": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	})
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	_, err = dmgr.Service.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
+		ID:        deviceID,
+		NewStatus: models.DeviceActive,
+	})
+	if err != nil {
+		t.Fatalf("could not update device status: %s", err)
+	}
+
+	events := []models.DeviceEvent{}
+	_, err = dmgr.HttpDeviceManagerSDK.GetDeviceEvents(ctx, services.GetDeviceEventsInput{
+		DeviceID: deviceID,
+		ListInput: resources.ListInput[models.DeviceEvent]{
+			ExhaustiveRun: true,
+			ApplyFunc: func(event models.DeviceEvent) {
+				events = append(events, event)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not get device events: %s", err)
+	}
+
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+
+	eventTypes := []models.DeviceEventType{events[0].EventType, events[1].EventType}
+	if !slices.Contains(eventTypes, models.DeviceEventTypeCreated) {
+		t.Fatalf("expected events to contain CREATED, got %v", eventTypes)
+	}
+	if !slices.Contains(eventTypes, models.DeviceEventTypeStatusUpdated) {
+		t.Fatalf("expected events to contain STATUS-UPDATED, got %v", eventTypes)
+	}
+}
+
 func TestUpdateDeviceMetadata(t *testing.T) {
 	// t.Parallel()
 
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -763,13 +794,13 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 	deviceUpdMeta := map[string]any{
 		"test":    "test",
 		"lamassu": "lamassu",
-		"arr":     []interface{}{"test", "test2"},
+		"arr":     []any{"test", "test2"},
 	}
 	deviceSample1 := services.CreateDeviceInput{
 		ID:        "test",
 		Alias:     "test",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -810,7 +841,6 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -823,7 +853,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 	devDMS2 := [3]string{"test11", "test12", "test13"}
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t, true, false)
+	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -832,7 +862,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -859,7 +889,6 @@ func TestGetDevicesByDMS(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -912,7 +941,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					ID:        devDMS1[0],
 					Alias:     "test",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     dms.ID,
 					Icon:      "test",
 					IconColor: "#000000",
@@ -926,7 +955,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					ID:        devDMS1[1],
 					Alias:     "test2",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     dms.ID,
 					Icon:      "test",
 					IconColor: "#000000",
@@ -998,7 +1027,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					ID:        devDMS2[0],
 					Alias:     "test",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     dms.ID,
 					Icon:      "test",
 					IconColor: "#000000",
@@ -1012,7 +1041,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					ID:        devDMS2[1],
 					Alias:     "test2",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     dms.ID,
 					Icon:      "test",
 					IconColor: "#000000",
@@ -1026,7 +1055,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					ID:        devDMS2[2],
 					Alias:     "test3",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     dms.ID,
 					Icon:      "test",
 					IconColor: "#000000",
@@ -1070,7 +1099,6 @@ func TestGetDevicesByDMS(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -1148,7 +1176,7 @@ func TestDecommissionDevice(t *testing.T) {
 
 	// t.Parallel()
 	ctx := context.Background()
-	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t, true, false)
+	dmgr, testServer, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1157,7 +1185,7 @@ func TestDecommissionDevice(t *testing.T) {
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
-			ID:       uuid.NewString(),
+			ID:       uuid.NewV7().String(),
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
@@ -1181,7 +1209,6 @@ func TestDecommissionDevice(t *testing.T) {
 					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
-					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
 					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
@@ -1235,7 +1262,7 @@ func TestDecommissionDevice(t *testing.T) {
 					ID:        devDMS1[0],
 					Alias:     "test",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     dms.ID,
 					Icon:      "test",
 					IconColor: "#000000",
@@ -1249,7 +1276,7 @@ func TestDecommissionDevice(t *testing.T) {
 					ID:        devDMS1[1],
 					Alias:     "test2",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     dms.ID,
 					Icon:      "test",
 					IconColor: "#000000",
@@ -1294,7 +1321,6 @@ func TestDecommissionDevice(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
@@ -1304,7 +1330,7 @@ func TestDecommissionDevice(t *testing.T) {
 
 func TestDuplicateDeviceCreation(t *testing.T) {
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1313,7 +1339,7 @@ func TestDuplicateDeviceCreation(t *testing.T) {
 		ID:        "test",
 		Alias:     "test",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -1331,7 +1357,7 @@ func TestDuplicateDeviceCreation(t *testing.T) {
 
 func TestPagination(t *testing.T) {
 	ctx := context.Background()
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1340,7 +1366,7 @@ func TestPagination(t *testing.T) {
 		ID:        "test",
 		Alias:     "test",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -1350,7 +1376,7 @@ func TestPagination(t *testing.T) {
 		ID:        "test2",
 		Alias:     "test2",
 		Tags:      []string{"test2"},
-		Metadata:  map[string]interface{}{"test2": "test2"},
+		Metadata:  map[string]any{"test2": "test2"},
 		DMSID:     "test2",
 		Icon:      "test2",
 		IconColor: "#000001",
@@ -1360,7 +1386,7 @@ func TestPagination(t *testing.T) {
 		ID:        "test3",
 		Alias:     "test3",
 		Tags:      []string{"test3"},
-		Metadata:  map[string]interface{}{"test3": "test3"},
+		Metadata:  map[string]any{"test3": "test3"},
 		DMSID:     "test3",
 		Icon:      "test3",
 		IconColor: "#000002",
@@ -1370,7 +1396,7 @@ func TestPagination(t *testing.T) {
 		ID:        "test4",
 		Alias:     "test4",
 		Tags:      []string{"test4"},
-		Metadata:  map[string]interface{}{"test4": "test4"},
+		Metadata:  map[string]any{"test4": "test4"},
 		DMSID:     "test4",
 		Icon:      "test4",
 		IconColor: "#000003",
@@ -1380,7 +1406,7 @@ func TestPagination(t *testing.T) {
 		ID:        "test5",
 		Alias:     "test5",
 		Tags:      []string{"test5"},
-		Metadata:  map[string]interface{}{"test5": "test5"},
+		Metadata:  map[string]any{"test5": "test5"},
 		DMSID:     "test5",
 		Icon:      "test5",
 		IconColor: "#000004",
@@ -1512,7 +1538,7 @@ func TestPagination(t *testing.T) {
 func TestBasicDeviceManager(t *testing.T) {
 	ctx := context.Background()
 
-	dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -1521,7 +1547,7 @@ func TestBasicDeviceManager(t *testing.T) {
 		ID:        "test",
 		Alias:     "test",
 		Tags:      []string{"test"},
-		Metadata:  map[string]interface{}{"test": "test"},
+		Metadata:  map[string]any{"test": "test"},
 		DMSID:     "test",
 		Icon:      "test",
 		IconColor: "#000000",
@@ -1531,7 +1557,7 @@ func TestBasicDeviceManager(t *testing.T) {
 		ID:        "test2",
 		Alias:     "test2",
 		Tags:      []string{"test2"},
-		Metadata:  map[string]interface{}{"test2": "test2"},
+		Metadata:  map[string]any{"test2": "test2"},
 		DMSID:     "test2",
 		Icon:      "test2",
 		IconColor: "#000001",
@@ -1567,7 +1593,7 @@ func checkUpdateDeviceMetadata(t *testing.T, dmgr *tests.DeviceManagerTestServer
 	request := services.UpdateDeviceMetadataInput{
 		ID: deviceSample.ID,
 		Patches: helpers.NewPatchBuilder().
-			Add(helpers.JSONPointerBuilder(), map[string]interface{}{"test": "test2"}).
+			Add(helpers.JSONPointerBuilder(), map[string]any{"test": "test2"}).
 			Build(),
 	}
 
@@ -1649,8 +1675,8 @@ func checkDevice(t *testing.T, device *models.Device, deviceSample services.Crea
 		t.Fatalf("device creation timestamp is zero")
 	}
 
-	if device.Events == nil {
-		t.Fatalf("device events is nil")
+	if device.Events != nil {
+		t.Fatalf("device events should not be included in device payload")
 	}
 
 	if device.IdentitySlot != nil {
@@ -1726,7 +1752,7 @@ func TestDeleteDevice(t *testing.T) {
 					ID:        deviceID,
 					Alias:     "test",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     "test",
 					Icon:      "test",
 					IconColor: "#000000",
@@ -1771,7 +1797,7 @@ func TestDeleteDevice(t *testing.T) {
 					ID:        deviceID,
 					Alias:     "test",
 					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
+					Metadata:  map[string]any{"test": "test"},
 					DMSID:     "test",
 					Icon:      "test",
 					IconColor: "#000000",
@@ -1815,7 +1841,7 @@ func TestDeleteDevice(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			dmgr, _, err := StartDeviceManagerServiceTestServer(t, false, false)
+			dmgr, _, err := StartDeviceManagerServiceTestServer(t)
 			if err != nil {
 				t.Fatalf("could not create Device Manager test server: %s", err)
 			}

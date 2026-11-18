@@ -45,8 +45,8 @@ const (
 )
 
 type IoTAWSCAMetadataRegistration struct {
-	RegistrationRequestTime time.Time                          `json:"registration_request_time,omitempty"`
-	RegistrationTime        time.Time                          `json:"registration_time,omitempty"`
+	RegistrationRequestTime time.Time                          `json:"registration_request_time"`
+	RegistrationTime        time.Time                          `json:"registration_time"`
 	Status                  IoTAWSCAMetadataRegistrationStatus `json:"status"`
 	Error                   string                             `json:"error"`
 	PrimaryAccount          bool                               `json:"primary_account"`
@@ -81,11 +81,11 @@ type IotAWSDMSMetadata struct {
 		AWSCACertificateId  string `json:"aws_ca_id,omitempty"`
 		ProvisioningRoleArn string `json:"provisioning_role_arn"`
 		EnableTemplate      bool   `json:"enable_template"`
-	} `json:"jitp_config,omitempty"`
+	} `json:"jitp_config"`
 	ShadowConfig struct {
 		Enable     bool   `json:"enable"`
 		ShadowName string `json:"shadow_name,omitempty"`
-	} `json:"shadow_config,omitempty"`
+	} `json:"shadow_config"`
 }
 
 type AWSIoTPolicy struct {

@@ -3,8 +3,8 @@ package mock
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -34,6 +34,12 @@ func (m *MockKMSService) GetKeys(ctx context.Context, input services.GetKeysInpu
 func (m *MockKMSService) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+// GetKeysByPublicKey returns the keys of a key pair from its public key
+func (m *MockKMSService) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).([]*models.Key), args.Error(1)
 }
 
 // CreateKey creates a new cryptographic key

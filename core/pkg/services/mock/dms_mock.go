@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/x509"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -18,7 +18,7 @@ func (m *MockDMSManagerService) CACerts(ctx context.Context, aps string) ([]*x50
 	return args.Get(0).([]*x509.Certificate), args.Error(1)
 }
 
-func (m *MockDMSManagerService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (m *MockDMSManagerService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
 	args := m.Called(ctx, csr, aps)
 	return args.Get(0).(*x509.Certificate), args.Get(1), args.Error(2)
 }

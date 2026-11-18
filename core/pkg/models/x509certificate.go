@@ -113,7 +113,7 @@ func (X509Certificate) GormDataType() string {
 	return "text"
 }
 
-func (c *X509Certificate) Scan(value interface{}) error {
+func (c *X509Certificate) Scan(value any) error {
 	crtString, ok := value.(string)
 	if !ok {
 		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
@@ -139,7 +139,7 @@ func (X509CertificateRequest) GormDataType() string {
 	return "text"
 }
 
-func (c *X509CertificateRequest) Scan(value interface{}) error {
+func (c *X509CertificateRequest) Scan(value any) error {
 	crtString, ok := value.(string)
 	if !ok {
 		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))

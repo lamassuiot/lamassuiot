@@ -9,13 +9,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	svcmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	svcmock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -141,10 +142,10 @@ func TestGetRoleByID_Success(t *testing.T) {
 	vaRole := &models.VARole{
 		CASubjectKeyID: "test-ca-ski",
 		CRLOptions: models.VACRLRole{
-			Validity:           models.TimeDuration(86400000000000), // 24 hours in nanoseconds
-			RefreshInterval:    models.TimeDuration(82800000000000), // 23 hours in nanoseconds
-			RegenerateOnRevoke: true,
-			SubjectKeyIDSigner: "test-ca-ski",
+			Validity:                      models.TimeDuration(24 * time.Hour),
+			RefreshInterval:               models.TimeDuration(23 * time.Hour),
+			RegenerateOnRevoke:            true,
+			SignerCertificateSerialNumber: "test-ca-ski",
 		},
 		LatestCRL: models.LatestCRLMeta{
 			Version: bigIntVersion,
@@ -164,7 +165,7 @@ func TestGetRoleByID_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify response can be parsed
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "test-ca-ski", response["ca_ski"])
@@ -239,10 +240,10 @@ func TestUpdateRole_Success(t *testing.T) {
 	updatedRole := &models.VARole{
 		CASubjectKeyID: "test-ca-ski",
 		CRLOptions: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000), // 48 hours in nanoseconds
-			RefreshInterval:    models.TimeDuration(169200000000000), // 47 hours in nanoseconds
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
+			Validity:                      models.TimeDuration(48 * time.Hour),
+			RefreshInterval:               models.TimeDuration(47 * time.Hour),
+			RegenerateOnRevoke:            false,
+			SignerCertificateSerialNumber: "test-ca-ski",
 		},
 		LatestCRL: models.LatestCRLMeta{
 			Version: bigIntVersion,
@@ -256,12 +257,10 @@ func TestUpdateRole_Success(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:                      models.TimeDuration(172800000000000),
+		RefreshInterval:               models.TimeDuration(169200000000000),
+		RegenerateOnRevoke:            false,
+		SignerCertificateSerialNumber: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 
@@ -273,13 +272,13 @@ func TestUpdateRole_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify response can be parsed
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "test-ca-ski", response["ca_ski"])
 
 	// Verify CRL options
-	crlOptions := response["crl_options"].(map[string]interface{})
+	crlOptions := response["crl_options"].(map[string]any)
 	assert.False(t, crlOptions["regenerate_on_revoke"].(bool))
 
 	mockCRLService.AssertExpectations(t)
@@ -296,12 +295,10 @@ func TestUpdateRole_VARoleNotFound(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:                      models.TimeDuration(172800000000000),
+		RefreshInterval:               models.TimeDuration(169200000000000),
+		RegenerateOnRevoke:            false,
+		SignerCertificateSerialNumber: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 
@@ -312,7 +309,7 @@ func TestUpdateRole_VARoleNotFound(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "VA role not found", response["err"])
@@ -328,12 +325,10 @@ func TestUpdateRole_ValidationError(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:                      models.TimeDuration(172800000000000),
+		RefreshInterval:               models.TimeDuration(169200000000000),
+		RegenerateOnRevoke:            false,
+		SignerCertificateSerialNumber: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 
@@ -344,7 +339,7 @@ func TestUpdateRole_ValidationError(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "struct validation error", response["err"])
@@ -360,12 +355,10 @@ func TestUpdateRole_InternalServerError(t *testing.T) {
 	router := setupVARouter(mockOCSPService, mockCRLService)
 
 	updateBody := resources.VARoleUpdate{
-		VACRLRole: models.VACRLRole{
-			Validity:           models.TimeDuration(172800000000000),
-			RefreshInterval:    models.TimeDuration(169200000000000),
-			RegenerateOnRevoke: false,
-			SubjectKeyIDSigner: "test-ca-ski",
-		},
+		Validity:                      models.TimeDuration(172800000000000),
+		RefreshInterval:               models.TimeDuration(169200000000000),
+		RegenerateOnRevoke:            false,
+		SignerCertificateSerialNumber: "test-ca-ski",
 	}
 	bodyBytes, _ := json.Marshal(updateBody)
 

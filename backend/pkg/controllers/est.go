@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
 	"go.mozilla.org/pkcs7"
 )
@@ -210,7 +210,7 @@ func (r *estHttpRoutes) ServerKeyGen(ctx *gin.Context) {
 
 type multipartPart struct {
 	ContentType string
-	Data        interface{}
+	Data        any
 }
 
 const (
@@ -331,7 +331,7 @@ func encodeMultiPart(boundary string, parts []multipartPart) (*bytes.Buffer, str
 	return buf, fmt.Sprintf("%s; %s=%s", "multipart/mixed", "boundary", boundary), nil
 }
 
-func WriteResponse(w http.ResponseWriter, contentType string, encode bool, obj interface{}) {
+func WriteResponse(w http.ResponseWriter, contentType string, encode bool, obj any) {
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}

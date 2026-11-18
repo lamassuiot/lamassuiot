@@ -8,12 +8,12 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"go.opentelemetry.io/otel/trace"
 )
 
-func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
+func BuildCloudEvent(ctx context.Context, payload any) event.Event {
 	event := cloudevents.NewEvent()
 
 	event.SetSpecVersion("1.0")
@@ -58,7 +58,7 @@ func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
 		event.SetExtension("authid", eventAuthID)
 	}
 
-	if eventAuthCtx, ok := ctx.Value(core.LamassuContextKeyAuthContext).(map[string]interface{}); ok && eventAuthCtx != nil {
+	if eventAuthCtx, ok := ctx.Value(core.LamassuContextKeyAuthContext).(map[string]any); ok && eventAuthCtx != nil {
 		// extensions dont allow nested objects. Must serialize to string
 		eventAuthCtxBytes, err := json.Marshal(eventAuthCtx)
 		if err != nil {

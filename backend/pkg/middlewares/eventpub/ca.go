@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type CAEventPublisher struct {
@@ -226,6 +226,10 @@ func (mw CAEventPublisher) SignatureVerify(ctx context.Context, input services.S
 
 func (mw CAEventPublisher) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	return mw.Next.GetCertificateBySerialNumber(ctx, input)
+}
+
+func (mw CAEventPublisher) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	return mw.Next.GetCertificateKey(ctx, input)
 }
 
 func (mw CAEventPublisher) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {

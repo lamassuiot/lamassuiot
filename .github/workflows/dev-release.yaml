@@ -7,10 +7,25 @@ on:
         description: "Docker image tag (leave blank to use 'dev'). Cannot be 'latest' or start with a number."
         required: false
         default: ""
-
+      go:
+        description: "Go version to use as builder."
+        required: true
+        type: choice
+        options:
+          - golang:1.27.3-bookworm
+          - ghcr.io/lamassuiot/golang-pqc:latest
+          - ghcr.io/lamassuiot/golang-pqc:go1.27
+          - other
+        default: golang:1.27.3-bookworm
+      other:
+        description: "Only used when go = 'other'. Must be Debian/Ubuntu-based and provide apt-get (required by the ci/kms.dockerfile arm64 build)."
+        type: string
+        default: ""
+ 
 jobs:
   validate_tag:
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Validate tag input
         run: |
@@ -31,8 +46,35 @@ jobs:
 
           printf 'TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
 
+  # Resolve dependencies once and share them with every image build, instead of
+  # each matrix job (and each target architecture) fetching them on its own.
+  vendor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Vendor dependencies
+        run: go mod vendor
+
+      - name: Upload vendor directory
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vendor
+          path: vendor
+          retention-days: 1
+
   build_docker_image:
-    needs: validate_tag
+    needs: [validate_tag, vendor]
     permissions:
       contents: read
       packages: write
@@ -47,18 +89,17 @@ jobs:
             va,
             alerts,
             aws-connector,
+            authz,
             lamassu-db-migration,
             ca-to-kms-migration,
-            monolithic,
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
-    environment: release
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.sha }}
 
       - name: Resolve tag
         run: |
@@ -67,21 +108,71 @@ jobs:
           echo "TAG=$TAG" >> $GITHUB_ENV
           echo "SHA1VER=${TAG}-$(git rev-parse HEAD)" >> $GITHUB_ENV
 
+      - name: Resolve builder
+        run: |
+          GO_INPUT="${{ github.event.inputs.go }}"
+          if [[ "$GO_INPUT" == "other" ]]; then
+            BUILDER="${{ github.event.inputs.other }}"
+          else
+            BUILDER="$GO_INPUT"
+          fi
+          echo "BUILDER=$BUILDER" >> $GITHUB_ENV
+
+      - name: Download vendor directory
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vendor
+          path: vendor
+
       - name: Login to Github Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate custom builder
+        # Only kms.dockerfile requires apt-get (CGO cross-toolchain install for
+        # arm64); other services build with CGO_ENABLED=0 and don't need it.
+        if: github.event.inputs.go == 'other' && matrix.service == 'kms'
+        env:
+          BUILDER: ${{ github.event.inputs.other }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$BUILDER" ]]; then
+            echo "::error::A custom builder image is required when go=other"
+            exit 1
+          fi
+          docker pull "$BUILDER"
+          if ! docker run --rm --entrypoint /bin/sh "$BUILDER" -c \
+            'test -f /etc/debian_version && command -v apt-get >/dev/null'; then
+            echo "::error::Custom builders must be Debian/Ubuntu-based and provide apt-get"
+            exit 1
+          fi
+
+      # Enable ARM64 emulation for Dockerfiles that need to execute target-architecture
+      # binaries during the build. Go services may cross-compile natively via BUILDPLATFORM.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
       - name: Build ${{ matrix.service }} DEV docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ci/${{ matrix.service }}.dockerfile
+          build-contexts: |
+            vendor=./vendor
+          platforms: linux/amd64,linux/arm64
           build-args: |
-            BASE_IMAGE=alpine:3.14
+            BUILDER=${{ env.BUILDER }}
             SHA1VER=${{ env.SHA1VER }}
             VERSION=${{ env.TAG }}
           tags: |
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ env.TAG }}
           push: true
+          sbom: true

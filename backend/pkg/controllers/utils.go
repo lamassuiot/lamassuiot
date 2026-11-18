@@ -7,15 +7,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) (*resources.QueryParameters, error) {
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
-		PageSize:     25,
+		PageSize:     resources.DefaultPageSize,
 	}
 
 	if len(r.URL.RawQuery) > 0 {
@@ -27,9 +27,9 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				sortQueryParam := value
 				sortField := strings.Trim(sortQueryParam, " ")
 
-				if idx := strings.Index(sortField, "[jsonpath]"); idx != -1 {
-					fieldName := sortField[:idx]
-					jsonPathExpr := sortField[idx+len("[jsonpath]"):]
+				if before, after, ok := strings.Cut(sortField, "[jsonpath]"); ok {
+					fieldName := before
+					jsonPathExpr := after
 
 					if fieldType, exists := filterFieldMap[fieldName]; exists && fieldType == resources.JsonFilterFieldType {
 						// Validate JSONPath expression to prevent SQL injection
@@ -65,7 +65,7 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				value := v[len(v)-1] //only get last
 				pageS, err := strconv.Atoi(value)
 				if err == nil {
-					queryParams.PageSize = pageS
+					queryParams.PageSize = min(pageS, resources.MaxPageSize)
 				}
 
 			case "bookmark":
@@ -170,33 +170,13 @@ func isValidJsonPath(jsonPath string) bool {
 	return true
 }
 
-// isSimpleJsonPath checks if a JSONPath expression is a simple dot-separated path
-// suitable for sorting (e.g., $.field, $.field.nested)
-// Complex expressions with filters, comparisons, etc. are not supported for sorting
+// isSimpleJsonPath checks if a JSONPath expression is a simple path suitable for
+// sorting (e.g., $.field, $.field.nested, $.tags[0], $.tags[last])
+// Complex expressions with filters, comparisons, etc. are not supported for sorting.
+// It uses the same parser as the storage engines, so an accepted path never fails there.
 func isSimpleJsonPath(jsonPath string) bool {
-	// Must start with $. or $[
-	if !strings.HasPrefix(jsonPath, "$.") && !strings.HasPrefix(jsonPath, "$[") {
-		return false
-	}
-
-	// Remove the $ prefix
-	jsonPath = strings.TrimPrefix(jsonPath, "$")
-
-	// Check for characters that indicate complex expressions
-	// Simple paths should only contain: letters, numbers, underscore, dot, hyphen, and basic array access
-	complexChars := "?@!=<>&|()\" "
-	for _, complexChar := range complexChars {
-		if strings.ContainsRune(jsonPath, complexChar) {
-			return false
-		}
-	}
-
-	// Allow only simple array access like [0], [1], [last], but not [*] or filters
-	if strings.Contains(jsonPath, "[*]") {
-		return false
-	}
-
-	return true
+	_, err := resources.ParseSortJsonPath(jsonPath)
+	return err == nil
 }
 
 // parseFilterOperand parses a filter operand string and returns the corresponding FilterOperation
@@ -342,7 +322,7 @@ func FilterQueryWithPrefix(r *http.Request, filterFieldMap map[string]resources.
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
 		Filters:      []resources.FilterOption{},
-		PageSize:     25,
+		PageSize:     resources.DefaultPageSize,
 	}
 
 	for _, value := range filterValues {
@@ -419,21 +399,18 @@ func (e *InvalidOperandError) Error() string {
 // ConvertDeviceGroupToResponse converts a device group model (with FilterOperation integers) to an API response format (with operand names).
 // The group model is expected to have all criteria (inherited + own) in the Criteria field.
 // This function separates them into inherited_criteria and criteria fields for the API response.
-func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount int) map[string]interface{} {
+func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount int) map[string]any {
 	if group == nil {
 		return nil
 	}
 
 	// Separate inherited criteria from own criteria
 	totalCriteria := len(group.Criteria)
-	inheritedCount := totalCriteria - ownCriteriaCount
-	if inheritedCount < 0 {
-		inheritedCount = 0
-	}
+	inheritedCount := max(totalCriteria-ownCriteriaCount, 0)
 
 	// Convert inherited criteria
 	inheritedCriteria := make([]resources.DeviceGroupFilterOptionRequest, 0, inheritedCount)
-	for i := 0; i < inheritedCount; i++ {
+	for i := range inheritedCount {
 		criterion := group.Criteria[i]
 		fieldType, exists := resources.DeviceFilterableFields[criterion.Field]
 		if !exists {
@@ -464,7 +441,7 @@ func ConvertDeviceGroupToResponse(group *models.DeviceGroup, ownCriteriaCount in
 	}
 
 	// Build response map with separated criteria
-	response := map[string]interface{}{
+	response := map[string]any{
 		"id":                 group.ID,
 		"name":               group.Name,
 		"description":        group.Description,

@@ -2,9 +2,10 @@ package services
 
 import (
 	"context"
+	"crypto"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 type KMSService interface {
@@ -12,6 +13,7 @@ type KMSService interface {
 
 	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
 	GetKey(ctx context.Context, input GetKeyInput) (*models.Key, error)
+	GetKeysByPublicKey(ctx context.Context, input GetKeysByPublicKeyInput) ([]*models.Key, error)
 	GetKeyStats(ctx context.Context, input GetKeyStatsInput) (*models.KeyStats, error)
 
 	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
@@ -28,13 +30,25 @@ type KMSService interface {
 	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
 }
 
-// Identifier can be either KeyID, Alias, or PKCS11URI
+// Identifier can be a PKCS11URI, an Alias, or a KeyID. A key is identified by
+// (KeyID, EngineID) because the same KeyID can be held by several engines at once (e.g. the
+// private key in an offline HSM and the public key in an online engine): the URI carries the
+// engine in token-id and an alias is unique across engines, while a bare KeyID resolves only
+// while a single engine holds it and is rejected once several do.
 type GetKeyInput struct {
 	Identifier string `validate:"required"`
 }
 
 type GetKeysInput struct {
 	resources.ListInput[models.Key]
+}
+
+// GetKeysByPublicKeyInput finds the keys of a key pair from its public key, which is what links a
+// certificate to its key: a certificate's SKI is whatever its issuer wrote. Without EngineID it
+// returns every engine's copy of the key.
+type GetKeysByPublicKeyInput struct {
+	PublicKey crypto.PublicKey `validate:"required"`
+	EngineID  string
 }
 
 type CreateKeyInput struct {

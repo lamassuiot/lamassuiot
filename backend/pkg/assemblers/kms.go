@@ -2,25 +2,24 @@ package assemblers
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
-	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
-	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
+	cebuilder "github.com/lamassuiot/lamassuiot/v4/backend/pkg/cryptoengines/builder"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
+	auditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	otel "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/otel"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -34,8 +33,14 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewKMSHTTPLayer(httpGrp, *kmsService)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	routes.NewKMSHTTPLayer(httpGrp, *kmsService, conf.AuthzClient, lHttp)
+
+	var openApiContent []byte
+	if conf.OpenAPI.Enabled {
+		openApiContent = specs.KMS
+	}
+
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run KMS Service http server: %s", err)
 	}
@@ -71,13 +76,11 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 		}
 
 		logEntry.Infof("loaded %s engine with id %s", engine.Service.GetEngineConfig().Type, engineID)
+	}
 
-		if conf.CryptoEngineConfig.MigrateKeysFormat {
-			err = migrateKeysToV2Format(lSvc, engine, engineID)
-			if err != nil {
-				return nil, fmt.Errorf("could not migrate %s engine keys to v2 format: %s", engineID, err)
-			}
-		}
+	if conf.CryptoEngineConfig.MigrateKeysFormat {
+		renamed := lservices.NormalizeKeyNames(context.Background(), lSvc, kmsStorage, engines)
+		lSvc.Infof("renamed %d keys to their digest", renamed)
 	}
 
 	svc, err := lservices.NewKMSService(lservices.KMSServiceBuilder{
@@ -157,93 +160,19 @@ func createCryptoEngines(logger *log.Entry, conf config.KMSConfig) (map[string]*
 	return engines, nil
 }
 
-func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID string) error {
-	// Check if engine keys should be renamed
-	keyIDs, err := engine.Service.ListPrivateKeyIDs()
+// NormalizeKMSKeyNames renames, in their engine and in the KMS, the keys whose key_id is not the digest
+// of their public key, as starting the KMS with crypto_engines.migrate_keys_format does.
+func NormalizeKMSKeyNames(ctx context.Context, conf config.KMSConfig) (int, error) {
+	logger := helpers.SetupLogger(conf.Logs.Level, "KMS", "Key Names")
+
+	kmsStorage, err := createKMSStorageInstance(helpers.SetupLogger(conf.Storage.LogLevel, "KMS", "Storage"), conf.Storage)
 	if err != nil {
-		return nil
+		return 0, fmt.Errorf("could not create KMS storage instance: %s", err)
 	}
-	keyMigLog := logger.WithField("engine", engineID)
-	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
-	keyMigLog.Infof("checking engine keys format")
-
-	// Iter over all keys and rename if not in sha256 hex format
-	for _, keyID := range keyIDs {
-		key, err := engine.Service.GetPrivateKeyByID(keyID)
-		if err != nil {
-			return fmt.Errorf("could not get key %s: %w", keyID, err)
-		}
-
-		newKeyID, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
-		if err != nil {
-			return fmt.Errorf("could not encode public key digest: %w", err)
-		}
-
-		// only rename if different
-		if newKeyID != keyID {
-			keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
-			err = engine.Service.RenameKey(keyID, newKeyID)
-			if err != nil {
-				return fmt.Errorf("could not rename key %s: %w", keyID, err)
-			}
-		}
-	}
-	return nil
-}
-
-func migrateKeysToV3Format(logger *log.Entry, caCertsRepo storage.CACertificatesRepo, engine *lservices.Engine, engineID string) error {
-	mapKeyIDToSha256Hex := map[string]string{}
-	keyIDs, err := engine.Service.ListPrivateKeyIDs()
+	engines, err := createCryptoEngines(helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "KMS", "CryptoEngine"), conf)
 	if err != nil {
-		return nil
+		return 0, fmt.Errorf("could not create crypto engines: %s", err)
 	}
 
-	keyMigLog := logger.WithField("engine", engineID)
-	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
-	keyMigLog.Infof("checking engine keys format")
-
-	for _, keyID := range keyIDs {
-		key, err := engine.Service.GetPrivateKeyByID(keyID)
-		if err != nil {
-			return fmt.Errorf("could not get key %s: %w", keyID, err)
-		}
-
-		shaInHex, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
-		if err != nil {
-			return fmt.Errorf("could not encode public key digest: %w", err)
-		}
-
-		mapKeyIDToSha256Hex[shaInHex] = keyID
-	}
-
-	// Iterate over all CA certs of type IMPORTED and check if their SKI matches the keyID in the engine
-	// If not, rename the key in the engine to match the SKI
-	_, err = caCertsRepo.SelectByType(context.Background(), models.CertificateTypeImportedWithKey, storage.StorageListRequest[models.CACertificate]{
-		ExhaustiveRun: true,
-		ApplyFunc: func(ca models.CACertificate) {
-			certSN := ca.Certificate.SerialNumber
-			x509 := ca.Certificate.Certificate
-			certPubKeySha256Hex, err := softCrypto.EncodePKIXPublicKeyDigest(x509.PublicKey)
-			if err != nil {
-				keyMigLog.Errorf("could not encode public key digest for cert %s: %s", certSN, err)
-				return
-			}
-
-			certSkiInHex := hex.EncodeToString(x509.SubjectKeyId)
-
-			if oldKeyID, ok := mapKeyIDToSha256Hex[certPubKeySha256Hex]; ok && certSkiInHex != oldKeyID {
-				keyMigLog.Infof("migrating cert %s from keyID %s to %s", certSN, oldKeyID, certSkiInHex)
-				err = engine.Service.RenameKey(oldKeyID, certSkiInHex)
-				if err != nil {
-					keyMigLog.Errorf("could not rename key %s to %s: %s", oldKeyID, certSkiInHex, err)
-					return
-				}
-			}
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("could not select all certificates: %w", err)
-	}
-
-	return nil
+	return lservices.NormalizeKeyNames(ctx, logger, kmsStorage, engines), nil
 }

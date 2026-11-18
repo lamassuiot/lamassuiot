@@ -1,0 +1,65 @@
+[
+  {
+    "id": "wfx-operator",
+    "name": "wfx Operator",
+    "description": "Northbound full access: manage all workflows and jobs. Intended for CI/CD pipelines, fleet management systems, and human operators.",
+    "rules": [
+      {
+        "namespace": "wfx",
+        "schema_name": "public",
+        "entity_type": "workflow",
+        "actions": ["read", "delete", "create", "list"],
+        "direct_grants": ["*"]
+      },
+      {
+        "namespace": "wfx",
+        "schema_name": "public",
+        "entity_type": "job",
+        "actions": ["read", "delete", "status-update", "definition-update", "tags-manage", "create", "list", "events-subscribe"],
+        "direct_grants": ["*"]
+      }
+    ]
+  },
+  {
+    "id": "wfx-device-client",
+    "name": "wfx Device Client",
+    "description": "Southbound client access: discover and execute assigned jobs. Can read jobs, update status and definition, manage tags, subscribe to events. Cannot create or delete jobs/workflows.",
+    "rules": [
+      {
+        "namespace": "wfx",
+        "schema_name": "public",
+        "entity_type": "workflow",
+        "actions": ["read", "list"],
+        "direct_grants": ["*"]
+      },
+      {
+        "namespace": "wfx",
+        "schema_name": "public",
+        "entity_type": "job",
+        "actions": ["read", "status-update", "definition-update", "tags-manage", "list", "events-subscribe"],
+        "direct_grants": ["*"]
+      }
+    ]
+  },
+  {
+    "id": "wfx-observer",
+    "name": "wfx Observer",
+    "description": "Read-only access across all resources. Intended for monitoring dashboards, audit tools, and read-only integrations.",
+    "rules": [
+      {
+        "namespace": "wfx",
+        "schema_name": "public",
+        "entity_type": "workflow",
+        "actions": ["read", "list"],
+        "direct_grants": ["*"]
+      },
+      {
+        "namespace": "wfx",
+        "schema_name": "public",
+        "entity_type": "job",
+        "actions": ["read", "list", "events-subscribe"],
+        "direct_grants": ["*"]
+      }
+    ]
+  }
+]

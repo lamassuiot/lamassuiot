@@ -16,14 +16,14 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
 )
 
@@ -175,7 +175,7 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 }
 
 // Helper to get engine and signer
-func (svc *KMSServiceBackend) getEngineAndSigner(engineID, keyID string) (*cryptoengines.CryptoEngine, crypto.Signer, error) {
+func (svc *KMSServiceBackend) getEngineAndSigner(ctx context.Context, engineID, keyID string) (*cryptoengines.CryptoEngine, crypto.Signer, error) {
 	engine, ok := svc.cryptoEngines[engineID]
 	if !ok {
 		return nil, nil, errors.New("engine not found")
@@ -183,7 +183,7 @@ func (svc *KMSServiceBackend) getEngineAndSigner(engineID, keyID string) (*crypt
 
 	engineInstance := *engine
 
-	signer, err := engineInstance.GetPrivateKeyByID(keyID)
+	signer, err := engineInstance.GetPrivateKeyByID(ctx, keyID)
 	if err != nil || signer == nil {
 		return nil, nil, errors.New("could not get signing key")
 	}
@@ -199,7 +199,7 @@ type kmsOperationSetup struct {
 	Engine *cryptoengines.CryptoEngine
 }
 
-func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
+func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input any) (*kmsOperationSetup, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Validate input struct
@@ -223,7 +223,7 @@ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifie
 	}
 
 	// Get engine and signer
-	engine, signer, err := svc.getEngineAndSigner(key.EngineID, key.KeyID)
+	engine, signer, err := svc.getEngineAndSigner(ctx, key.EngineID, key.KeyID)
 	if err != nil {
 		return nil, err
 	}
@@ -278,53 +278,103 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return nil, errs.ErrValidateBadRequest
 	}
 
+	// A key is identified by (key_id, engine_id). A PKCS#11 URI carries the engine in
+	// token-id and an alias is unique across engines, so both address a single key. A bare
+	// keyID is only a search: it resolves while one engine holds it and is rejected once
+	// several do, rather than silently picking a copy.
 	if strings.HasPrefix(input.Identifier, "pkcs11:") {
 		lFunc.Debugf("checking if Key '%s' exists via PKCS11URI", input.Identifier)
-		_, keyID, _, err := parsePKCS11ID(input.Identifier)
+		engineID, keyID, _, err := parsePKCS11ID(input.Identifier)
 		if err != nil {
 			lFunc.Errorf("failed to parse PKCS11 ID: %s", err)
-			return nil, err
+			return nil, errs.ErrValidateBadRequest
 		}
 
-		lFunc.Debugf("checking if Key '%s' exists via KeyID", keyID)
-		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID)
+		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, engineID)
 		if err != nil {
-			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", keyID, err)
+			lFunc.Errorf("something went wrong while checking if key '%s' exists in engine '%s': %s", keyID, engineID, err)
 			return nil, err
 		}
 
 		if !exists {
-			lFunc.Infof("key %s can not be found in storage engine via keyID", keyID)
+			lFunc.Infof("key %s can not be found in engine %s", keyID, engineID)
 			return nil, errs.ErrKeyNotFound
 		}
 
 		return key, nil
-	} else {
+	}
 
-		lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
-		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, input.Identifier)
+	// A keyID takes precedence over an alias, so an alias can never shadow the key whose
+	// keyID it happens to match.
+	lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
+	copies, err := svc.kmsStorage.SelectByKeyID(ctx, input.Identifier)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+		return nil, err
+	}
+
+	if len(copies) == 1 {
+		return copies[0], nil
+	}
+
+	if len(copies) > 1 {
+		engineIDs := make([]string, len(copies))
+		for i, k := range copies {
+			engineIDs[i] = k.EngineID
+		}
+		lFunc.Infof("keyID %s is held by engines %v; an engine must be specified", input.Identifier, engineIDs)
+		return nil, errs.ErrKeyEngineRequired
+	}
+
+	lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
+	exists, key, err := svc.kmsStorage.SelectExistsByAlias(ctx, input.Identifier)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if alias '%s' exists in storage engine: %s", input.Identifier, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Infof("key %s can not be found in storage engine via keyID or alias", input.Identifier)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	return key, nil
+}
+
+func (svc *KMSServiceBackend) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := kmsValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("GetKeysByPublicKeyInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Every crypto engine names its keys this way, so the keyID follows from the public key alone.
+	keyID, err := chelpers.PublicKeyDigest(input.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not compute the key ID of the public key: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	if input.EngineID == "" {
+		keys, err := svc.kmsStorage.SelectByKeyID(ctx, keyID)
 		if err != nil {
-			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+			lFunc.Errorf("something went wrong while looking up key '%s' in storage engine: %s", keyID, err)
 			return nil, err
 		}
-
-		if !exists {
-			lFunc.Infof("key %s can not be found in storage engine via keyID", input.Identifier)
-			lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
-			exists, key, err = svc.kmsStorage.SelectExistsByAlias(ctx, input.Identifier)
-			if err != nil {
-				lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
-				return nil, err
-			}
-
-			if !exists {
-				lFunc.Infof("key %s can not be found in storage engine via alias", input.Identifier)
-				return nil, errs.ErrKeyNotFound
-			}
-		}
-
-		return key, nil
+		return keys, nil
 	}
+
+	exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, input.EngineID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while looking up key '%s' in engine '%s': %s", keyID, input.EngineID, err)
+		return nil, err
+	}
+	if !exists {
+		return []*models.Key{}, nil
+	}
+	return []*models.Key{key}, nil
 }
 
 func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
@@ -550,7 +600,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 			return nil, err
 		}
 
-		keyID, signer, err = engineInstance.ImportRSAPrivateKey(k)
+		keyID, signer, err = engineInstance.ImportRSAPrivateKey(ctx, k)
 	case *ecdsa.PrivateKey:
 		size = k.Params().BitSize
 		algorithm = "ECDSA"
@@ -561,7 +611,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 			return nil, err
 		}
 
-		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(k)
+		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(ctx, k)
 	default:
 		lFunc.Errorf("unsupported private key type")
 		return nil, errors.New("unsupported private key type")
@@ -695,6 +745,19 @@ func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input servic
 				lFunc.Errorf("duplicate alias '%s' found for key '%s'", alias, input.ID)
 				return nil, fmt.Errorf("duplicate alias found")
 			}
+
+			// A keyID wins over an alias when resolving an identifier, so an alias that
+			// matches one would never resolve to this key.
+			shadowed, err := svc.kmsStorage.SelectByKeyID(ctx, alias)
+			if err != nil {
+				lFunc.Errorf("failed to check if alias '%s' collides with a keyID: %v", alias, err)
+				return nil, err
+			}
+
+			if len(shadowed) > 0 {
+				lFunc.Errorf("alias '%s' collides with an existing keyID", alias)
+				return nil, errs.ErrKeyAliasCollidesWithKeyID
+			}
 		}
 	}
 
@@ -792,23 +855,24 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 	}
 	engineInstance := *engine
 
-	_, err = engineInstance.GetPrivateKeyByID(key.KeyID)
+	_, err = engineInstance.GetPrivateKeyByID(ctx, key.KeyID)
 	if err != nil {
 		lFunc.Errorf("could not get key from engine: %s", err)
 		return fmt.Errorf("key not found")
 	}
 
-	err = engineInstance.DeleteKey(key.KeyID)
+	// The engine copy is only deleted once the row is: a key a certificate references keeps both.
+	lFunc.Debugf("deleting key %s (engine %s)", key.KeyID, key.EngineID)
+	err = svc.kmsStorage.DeleteWith(ctx, key.KeyID, key.EngineID, func() error {
+		return engineInstance.DeleteKey(ctx, key.KeyID)
+	})
+	if errors.Is(err, errs.ErrKeyInUse) {
+		lFunc.Infof("key %s (engine %s) is in use, not deleting it", key.KeyID, key.EngineID)
+		return errs.ErrKeyInUse
+	}
 	if err != nil {
 		lFunc.Errorf("delete key error: %s", err)
-		return err
-	}
-
-	lFunc.Debugf("deleting key %s from storage engine", key.KeyID)
-	err = svc.kmsStorage.Delete(ctx, key.KeyID)
-	if err != nil {
-		lFunc.Errorf("delete by ID error: %s", err)
-		return fmt.Errorf("failed to delete key from storage: %w", err)
+		return fmt.Errorf("failed to delete key: %w", err)
 	}
 
 	lFunc.Infof("key %s deleted successfully", key.KeyID)

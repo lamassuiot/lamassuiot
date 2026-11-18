@@ -1,0 +1,56 @@
+{
+  "id": "lamassu.7ec5d897-3a3f-43d1-b67a-dd220719572b",
+  "name": "Authz - Full Access",
+  "description": "",
+  "rules": [
+    {
+      "namespace": "authz",
+      "schema_name": "public",
+      "entity_type": "principal",
+      "actions": [
+        "create",
+        "list",
+        "read",
+        "update",
+        "delete"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schema_name": "public",
+      "entity_type": "policy",
+      "actions": [
+        "create",
+        "list",
+        "read",
+        "update",
+        "delete"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "authz",
+      "schema_name": "public",
+      "entity_type": "principal_policy",
+      "actions": [
+        "create",
+        "list",
+        "read",
+        "delete",
+        "grant",
+        "revoke"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	mhelper "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
 
@@ -46,7 +46,7 @@ func upUpdateSkiAki(ctx context.Context, tx *sql.Tx) error {
 		}
 
 		// 3. Get SKI (or generate from public key)
-		ski, err := helpers.GetSubjectKeyID(logger, cert)
+		ski, err := helpers.GetSubjectKeyID(ctx, logger, cert)
 		if err != nil {
 			logger.Errorf("could not get Subject Key Identifier for certificate: %s: %s", r["serial_number"], err)
 			continue

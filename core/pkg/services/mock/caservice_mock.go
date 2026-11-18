@@ -3,8 +3,8 @@ package mock
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -115,6 +115,10 @@ func (m *MockCAService) ImportCertificate(ctx context.Context, input services.Im
 func (m *MockCAService) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.Certificate), args.Error(1)
+}
+func (m *MockCAService) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CertificateKey), args.Error(1)
 }
 func (m *MockCAService) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	args := m.Called(ctx, input)

@@ -84,7 +84,6 @@ type AuthOptionsClientCertificate struct {
 
 type ReEnrollmentSettings struct {
 	ReEnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"est_rfc7030_settings"`
-	AdditionalValidationCAs       []string                    `json:"additional_validation_cas"`
 	RevokeOnReEnrollment          bool                        `json:"revoke_on_reenrollment"`
 	ReEnrollmentDelta             TimeDuration                `json:"reenrollment_delta"`
 	EnableExpiredRenewal          bool                        `json:"enable_expired_renewal"`

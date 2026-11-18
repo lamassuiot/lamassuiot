@@ -3,10 +3,11 @@ package outputchannels
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,13 +15,22 @@ type NotificationSenderService interface {
 	SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error
 }
 
-var outputServicesBuilders = make(map[models.ChannelType]func(c models.Channel, smtpServer config.SMTPServer) (NotificationSenderService, error))
+var (
+	outputServicesBuildersMu sync.RWMutex
+	outputServicesBuilders   = make(map[models.ChannelType]func(c models.Channel, smtpServer config.SMTPServer) (NotificationSenderService, error))
+)
 
 func RegisterOutputServiceBuilder(name models.ChannelType, builder func(c models.Channel, smtpServer config.SMTPServer) (NotificationSenderService, error)) {
+	outputServicesBuildersMu.Lock()
+	defer outputServicesBuildersMu.Unlock()
+
 	outputServicesBuilders[name] = builder
 }
 
 func GetOutputServiceBuilder(name models.ChannelType) func(c models.Channel, smtpServer config.SMTPServer) (NotificationSenderService, error) {
+	outputServicesBuildersMu.RLock()
+	defer outputServicesBuildersMu.RUnlock()
+
 	return outputServicesBuilders[name]
 }
 

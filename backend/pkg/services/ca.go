@@ -9,21 +9,21 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
-	"github.com/jakehl/goid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/x509engines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
@@ -267,13 +267,12 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.
 	return stats, nil
 }
 
-func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (_ *models.CACertificate, err error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	var err error
 
 	// Validate IssuanceProfileID exists if provided (required for ImportedWithKey type)
 	if input.ProfileID != "" {
-		_, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		_, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
 			ProfileID: input.ProfileID,
 		})
 		if err != nil {
@@ -281,12 +280,50 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
+	// Reject duplicate IDs before importing or binding any private key.
+	caID := input.ID
+	if caID == "" {
+		caID = uuid.NewV7().String()
+	}
+
+	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
+	if err != nil {
+		lFunc.Errorf("could not check if CA %s exists: %s", caID, err)
+		return nil, err
+	}
+	if exists {
+		lFunc.Errorf("cannot import duplicate CA. CA with ID '%s' already exists", caID)
+		return nil, errs.ErrCAAlreadyExists
+	}
+
 	caCert := input.CACertificate
 	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
 
+	// Two CAs on one certificate row would share its status and key: revoking or deleting one would
+	// revoke the other and delete its key.
+	exists, owner, err := svc.caStorage.SelectExistsBySerialNumber(ctx, caCertSN)
+	if err != nil {
+		lFunc.Errorf("could not check if certificate %s belongs to a CA: %s", caCertSN, err)
+		return nil, err
+	}
 	caCertX509 := (*x509.Certificate)(input.CACertificate)
+	if exists {
+		if owner.Certificate.Certificate == nil || !(*x509.Certificate)(owner.Certificate.Certificate).Equal(caCertX509) {
+			lFunc.Errorf("certificate %s is a different certificate with the serial number of CA '%s'", caCertSN, owner.ID)
+			return nil, errs.ErrValidateBadRequest
+		}
+		lFunc.Errorf("cannot import duplicate CA. Certificate %s already belongs to CA '%s'", caCertSN, owner.ID)
+		return nil, errs.ErrCAAlreadyExists
+	}
 
-	skid, err := helpers.GetSubjectKeyID(lFunc, caCertX509)
+	// Checked before ImportKey: the certificate of a CA must assert basicConstraints cA=TRUE, and a
+	// rejected certificate must not leave its key in the KMS.
+	if !caCertX509.BasicConstraintsValid || !caCertX509.IsCA {
+		lFunc.Errorf("certificate %s - %s cannot be imported as a CA: basicConstraints cA flag is not set", caCertSN, caCert.Subject.CommonName)
+		return nil, errs.ErrCANotCA
+	}
+
+	skid, err := helpers.GetSubjectKeyID(ctx, lFunc, caCertX509)
 	if err != nil {
 		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", caCertX509.Subject.CommonName, err)
 		return nil, err
@@ -299,49 +336,44 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		importType = models.CertificateTypeImportedWithKey
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, importType)
 
+		// Checked before ImportKey: a key that does not match the certificate must not reach the KMS.
+		signer, ok := input.Key.(crypto.Signer)
+		if !ok {
+			lFunc.Errorf("unsupported private key type %T for CA %s", input.Key, caCertSN)
+			return nil, errs.ErrCAValidCertAndPrivKey
+		}
+		if pub, ok := signer.Public().(interface{ Equal(crypto.PublicKey) bool }); !ok || !pub.Equal(caCertX509.PublicKey) {
+			lFunc.Errorf("the private key does not match the public key of CA %s", caCertSN)
+			return nil, errs.ErrCAValidCertAndPrivKey
+		}
+
 		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
 			PrivateKey: input.Key,
+			EngineID:   input.EngineID,
 		})
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
-		if key.KeyID != skid {
-			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-				ID: key.KeyID,
-				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-					ResourceType: "certificate",
-					ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
-				}).Build(),
-			})
+		// The key is not deleted automatically: it may already be referenced by other
+		// certificates, so it is left for the operator to remove.
+		importedKeyID := key.PKCS11URI
+		defer func() {
 			if err != nil {
-				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
-				return nil, fmt.Errorf("could not rename imported key: %w", err)
+				lFunc.Warnf("CA import failed after importing key %s. Delete the key manually if no CA uses it", importedKeyID)
 			}
-		}
-
-		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
-			return nil, fmt.Errorf("could not import key: %w", err)
-		}
+		}()
 	} else {
-		//search in KMS if key exists for the CA being imported
-		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
-			Identifier: skid,
-		})
-		if err != nil {
-			lFunc.Infof("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
+		// The SKI is whatever the issuer wrote, so the key is looked up by its public key.
+		key = discoverCertificateKey(ctx, lFunc, svc.kmsService, caCertX509.PublicKey, input.EngineID)
+		if key == nil {
+			lFunc.Infof("the KMS does not hold the key of CA %s. Importing it without key", caCertSN)
 			importType = models.CertificateTypeImportedWithoutKey
 		} else {
-			lFunc.Infof("found key with SKID %s for CA %s in KMS", skid, caCertSN)
+			lFunc.Infof("found key %s for CA %s in KMS", key.PKCS11URI, caCertSN)
 			importType = models.CertificateTypeManaged
 		}
-	}
-
-	caID := input.ID
-	if caID == "" {
-		caID = goid.NewV4UUID().String()
 	}
 
 	issuerMeta := models.IssuerCAMetadata{
@@ -351,6 +383,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	level := 0
 
+	// Preserve the imported certificate's AKI; the parent's AKI identifies
+	// the parent's issuer, not the issuer of this certificate.
 	akid := hex.EncodeToString(caCertX509.AuthorityKeyId)
 
 	isSelfSigned := false
@@ -368,11 +402,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			for _, parentCA := range parentCAs {
 				p := x509.Certificate(*parentCA.Certificate.Certificate)
 				c := x509.Certificate(*ca)
-				err = c.CheckSignatureFrom(&p)
+				signatureErr := c.CheckSignatureFrom(&p)
 
-				if err != nil {
+				if signatureErr != nil {
 					if akid != "" {
-						lFunc.Warnf("possible parent CA detected, but failed cryptographic validation: %s", err)
+						lFunc.Warnf("possible parent CA detected, but failed cryptographic validation: %s", signatureErr)
 					}
 					continue // Skip if verification fails
 				}
@@ -387,7 +421,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 		// 1st Attempt: Check if the CA is signed by a parent CA using Authority Key Identifier (AKID)
 		lFunc.Debugf("checking if CA %s is signed by a parent CA using AKID", input.CACertificate.Subject.CommonName)
-		svc.caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
+		_, err = svc.caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
 			storage.StorageListRequest[models.CACertificate]{
 				ExhaustiveRun: true,
 				ApplyFunc: func(c models.CACertificate) {
@@ -395,10 +429,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				},
 			})
 
+		if err != nil {
+			lFunc.Errorf("something went wrong while looking up parent CA by AKID %s: %s", akid, err)
+			return nil, err
+		}
+
 		parentCA := findParentCAInArray(input.CACertificate, candidateParentCAs)
 		if parentCA != nil {
 			lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
-			akid = parentCA.Certificate.AuthorityKeyID
 			// When verification is successful, update the level and metadata
 			level = parentCA.Level + 1
 			issuerMeta = models.IssuerCAMetadata{
@@ -411,7 +449,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 			// 2nd Attempt: Find all CAs based on the Issuer Subject of the certificate being imported
 			candidateParentCAs = []models.CACertificate{}
-			svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+			_, err = svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
 				ExhaustiveRun: true,
 				ApplyFunc: func(c models.CACertificate) {
 					if chelpers.PkixNameEqual(c.Certificate.Certificate.Subject, input.CACertificate.Issuer) {
@@ -420,10 +458,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				},
 			})
 
+			if err != nil {
+				lFunc.Errorf("something went wrong while looking up parent CA by issuer subject: %s", err)
+				return nil, err
+			}
+
 			parentCA = findParentCAInArray(input.CACertificate, candidateParentCAs)
 			if parentCA != nil {
 				lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
-				akid = parentCA.Certificate.AuthorityKeyID
 				// When verification is successful, update the level and metadata
 				level = parentCA.Level + 1
 				issuerMeta = models.IssuerCAMetadata{
@@ -452,25 +494,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
-	engineID := ""
+	engineID, keyID := "", ""
 	if key != nil {
-		engineID = key.EngineID
-		key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: key.KeyID,
-			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
-			}).Build(),
-		})
-		if err != nil {
-			lFunc.Errorf("could not bind CA %s to key %s: %s", caCert.Subject.CommonName, key.KeyID, err)
-			return nil, err
-		}
+		engineID, keyID = key.EngineID, key.KeyID
 	}
 
 	ca := &models.CACertificate{
 		ID:         caID,
-		Metadata:   map[string]interface{}{},
+		Metadata:   map[string]any{},
 		ProfileID:  input.ProfileID,
 		CreationTS: time.Now(),
 		Level:      level,
@@ -487,16 +518,60 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
-			Metadata:            map[string]interface{}{},
+			Metadata:            map[string]any{},
 			Type:                importType,
 			IssuerCAMetadata:    issuerMeta,
 			EngineID:            engineID,
+			KeyID:               keyID,
 			IsCA:                true,
 		},
 	}
 
+	exists, storedCertificate, err := svc.certStorage.SelectExistsBySerialNumber(ctx, ca.Certificate.SerialNumber)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		storedCertificate, err = svc.certStorage.Insert(ctx, &ca.Certificate)
+		// A concurrent import stored the certificate after the checks above. Reusing that row could give
+		// two CAs the same certificate, so this import is the duplicate.
+		if errors.Is(err, errs.ErrCertificateAlreadyExists) {
+			lFunc.Errorf("cannot import duplicate CA. Certificate %s was stored by a concurrent import", caCertSN)
+			return nil, errs.ErrCAAlreadyExists
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	if storedCertificate.Certificate == nil || !(*x509.Certificate)(storedCertificate.Certificate).Equal(caCertX509) {
+		return nil, errs.ErrValidateBadRequest
+	}
+	// A reused row still holds the previous import's data, for example once DeleteCA released it: this import
+	// decides its type and names its own CA as the issuer of a self-signed certificate.
+	if exists {
+		storedCertificate.Type, storedCertificate.IssuerCAMetadata = importType, issuerMeta
+		// The key holds the certificate's public key, so this import links it; a row that already has one keeps it.
+		if key != nil {
+			if storedCertificate.KeyID == "" {
+				storedCertificate.EngineID, storedCertificate.KeyID = key.EngineID, key.KeyID
+			} else if storedCertificate.EngineID != key.EngineID {
+				lFunc.Warnf("certificate %s already uses its key in crypto engine %s; the copy in %s is not used", caCertSN, storedCertificate.EngineID, key.EngineID)
+			}
+		}
+		storedCertificate, err = svc.certStorage.Update(ctx, storedCertificate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	ca.Certificate = *storedCertificate
+	ca.CertificateSerialNumber = storedCertificate.SerialNumber
+
 	lFunc.Debugf("insert CA %s in storage engine", caID)
 	cert, err := svc.caStorage.Insert(ctx, ca)
+	if err != nil {
+		lFunc.Errorf("something went wrong while inserting CA '%s' in storage engine: %s", caID, err)
+		return nil, err
+	}
 
 	// Flag to check if it's the first iteration
 	firstIteration := true
@@ -508,9 +583,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 		// In the future if we plan to support Cross Signed certs, it is important not fetching just by AKI,
 		// since two cross signed certs (using the same SKI) are signed by different AKIs. Hence, we select by AKI AND Issuer DSN
-		svc.caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
+		var updateErr error
+		_, err = svc.caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
 			ExhaustiveRun: true,
 			ApplyFunc: func(child models.CACertificate) {
+				if updateErr != nil {
+					return
+				}
 				childCertX509 := (*x509.Certificate)(child.Certificate.Certificate)
 				isSelfSignedChild := false
 				if err := childCertX509.CheckSignatureFrom(childCertX509); err != nil {
@@ -523,11 +602,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 					if firstIteration { //Check also with crypto validation to ensure child is actually signed by parent?
 						p := x509.Certificate(*parent.Certificate.Certificate)
 						c := x509.Certificate(*child.Certificate.Certificate)
-						err = c.CheckSignatureFrom(&p)
+						signatureErr := c.CheckSignatureFrom(&p)
 
-						if err != nil {
+						if signatureErr != nil {
 							if child.Certificate.AuthorityKeyID != "" {
-								lFunc.Warnf("possible child CA detected, but failed cryptographic validation: %s", err)
+								lFunc.Warnf("possible child CA detected, but failed cryptographic validation: %s", signatureErr)
 							}
 							return // if verification fails, "tentative" parent CA did not sign the certificate being imported. skip update
 						}
@@ -539,18 +618,35 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 					child.Certificate.IssuerCAMetadata.Level = parent.Level
 					child.Certificate.IssuerCAMetadata.SN = parent.Certificate.SerialNumber
 
-					// Update the level in DB
-					svc.caStorage.Update(ctx, &child)
+					// The certificate's issuer metadata and the CA's level have separate stores.
+					_, updateErr = svc.certStorage.Update(ctx, &child.Certificate)
+					if updateErr != nil {
+						return
+					}
+					_, updateErr = svc.caStorage.Update(ctx, &child)
+					if updateErr != nil {
+						return
+					}
 
 					// Enqueue child for further processing
 					queue = append(queue, child)
 				}
 			},
 		})
+		// The CA is already stored, so failing here would leave it saved while a
+		// retry gets ErrCAAlreadyExists. Reparenting is best effort, as before.
+		if err != nil {
+			lFunc.Errorf("CA '%s' was imported, but looking up child CAs of '%s' failed: %s", caID, parent.ID, err)
+			break
+		}
+		if updateErr != nil {
+			lFunc.Errorf("CA '%s' was imported, but updating child CAs of '%s' failed: %s", caID, parent.ID, updateErr)
+			break
+		}
 		firstIteration = false
 	}
 
-	return cert, err
+	return cert, nil
 }
 
 // resolveCAIssuanceProfile resolves the CA issuance profile with the following priority:
@@ -611,9 +707,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		input.Metadata = map[string]any{}
 	}
 
-	var err error
 	caValidator.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
-	err = caValidator.Struct(input)
+	err := caValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("CreateCAInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -636,7 +731,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	// Check if CA already exists
 	caID := input.ID
 	if caID == "" {
-		caID = goid.NewV4UUID().String()
+		caID = uuid.NewV7().String()
 	}
 
 	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
@@ -653,6 +748,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	lFunc.Debugf("creating CA with common name: %s", input.Subject.CommonName)
 
 	var ca *x509.Certificate
+	var certificate *models.Certificate
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
@@ -682,11 +778,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	signer := NewKMSCryptoSigner(ctx, *key, svc.kmsService)
 	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
 
-	var akid, skid string
-	skid = key.KeyID
+	var akid string
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
-		// Generate Key Pair to be used by the new CA
 		akid = key.KeyID
 
 		// Root CA. Root CAs can be generate directly
@@ -751,17 +845,18 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 		csr, _ := x509.ParseCertificateRequest(csrDerBytes)
 
-		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
+		signedCA, err := svc.signCertificate(ctx, services.SignCertificateInput{
 			CAID:            input.ParentID,
 			CertRequest:     (*models.X509CertificateRequest)(csr),
 			IssuanceProfile: caIssuanceProfile,
-		})
+		}, key)
 		if err != nil {
 			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
 		}
 
 		ca = (*x509.Certificate)(signedCA.Certificate)
+		certificate = signedCA
 
 		// Update the CA level and issuer metadata
 		caLevel = parentCA.Level + 1
@@ -772,31 +867,10 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		}
 	}
 
-	if err != nil {
-		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
-		return nil, err
-	}
-
-	key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key.KeyID,
-		Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-			ResourceType: "certificate",
-			ResourceID:   helpers.SerialNumberToHexString(ca.SerialNumber),
-		}).Build(),
-	})
-	if err != nil {
-		lFunc.Errorf("could not bind CA %s to key %s: %s", input.Subject.CommonName, key.KeyID, err)
-		return nil, err
-	}
-
-	caCert := models.CACertificate{
-		ID:         caID,
-		Metadata:   input.Metadata,
-		ProfileID:  input.ProfileID,
-		CreationTS: time.Now(),
-		Level:      caLevel,
-		Certificate: models.Certificate{
-			SubjectKeyID:   skid,
+	if certificate == nil {
+		// Root creation signs directly with the new CA's key.
+		certificate, err = svc.certStorage.Insert(ctx, &models.Certificate{
+			SubjectKeyID:   key.KeyID,
 			AuthorityKeyID: akid,
 			Certificate:    (*models.X509Certificate)(ca),
 			Extensions:     certificateExtensionsFromX509(ca),
@@ -808,15 +882,26 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 				Strength: models.KeyStrengthHigh,
 			},
 			Subject:             input.Subject,
+			Issuer:              chelpers.PkixNameToSubject(ca.Issuer),
 			ValidFrom:           ca.NotBefore,
 			ValidTo:             ca.NotAfter,
 			RevocationTimestamp: time.Time{},
 			IssuerCAMetadata:    issuerCAMeta,
-			Metadata:            map[string]interface{}{},
+			Metadata:            map[string]any{},
 			Type:                models.CertificateTypeManaged,
 			EngineID:            key.EngineID,
+			KeyID:               key.KeyID,
 			IsCA:                true,
-		},
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	caCert := models.CACertificate{
+		ID: caID, Metadata: input.Metadata, ProfileID: input.ProfileID,
+		CreationTS: time.Now(), Level: caLevel,
+		CertificateSerialNumber: certificate.SerialNumber,
+		Certificate:             *certificate,
 	}
 
 	lFunc.Debugf("insert CA %s in storage engine", caID)
@@ -964,7 +1049,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 	}
 
 	lFunc.Debugf("updating the status of CA %s to %s", input.CAID, input.Status)
-	ca, err = svc.caStorage.Update(ctx, ca)
+	_, err = svc.certStorage.Update(ctx, &ca.Certificate)
 	if err != nil {
 		lFunc.Errorf("could not update CA %s status: %s", input.CAID, err)
 		return nil, err
@@ -1010,7 +1095,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 			ExhaustiveRun: true,
 			ApplyFunc:     revokeCertFunc,
 			QueryParams:   &resources.QueryParameters{},
-			ExtraOpts:     map[string]interface{}{},
+			ExtraOpts:     map[string]any{},
 		})
 		if err != nil {
 			return nil, err
@@ -1171,7 +1256,7 @@ func (svc *CAServiceBackend) deleteCertificatesIssuedByCA(ctx context.Context, c
 		ExhaustiveRun: true,
 		ApplyFunc:     deleteCertFunc,
 		QueryParams:   &resources.QueryParameters{},
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 	})
 
 	return err
@@ -1198,7 +1283,7 @@ func (svc *CAServiceBackend) revokeCertificatesIssuedByCA(ctx context.Context, c
 		ExhaustiveRun: true,
 		ApplyFunc:     revokeCertFunc,
 		QueryParams:   &resources.QueryParameters{},
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 	})
 	if err != nil {
 		lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.Certificate.SerialNumber, ca.Certificate.IssuerCAMetadata.ID)
@@ -1238,6 +1323,44 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 	return svc.revokeCertificatesIssuedByCA(ctx, ca, lFunc)
 }
 
+// caCertificateHistory returns a CA's current certificate and the ones it reissued, following each
+// certificate's reissued-from link back. The links are metadata users can edit, so a link is only
+// followed to a certificate that links back with reissued-as, uses the same key and is not the current
+// certificate of a CA: a forged link cannot reach the certificates of another CA sharing the key. The
+// walk stops at the first link it does not follow, so a broken link only leaves older certificates out.
+func (svc *CAServiceBackend) caCertificateHistory(ctx context.Context, current *models.Certificate, lFunc *logrus.Entry) []*models.Certificate {
+	history := []*models.Certificate{current}
+	seen := map[string]bool{current.SerialNumber: true}
+	for cert := current; ; {
+		previous, ok := cert.Metadata[models.CAMetadataReissuedFromKey].(string)
+		if !ok || previous == "" || seen[previous] {
+			return history
+		}
+		exists, prev, err := svc.certStorage.SelectExistsBySerialNumber(ctx, previous)
+		if err != nil {
+			lFunc.Warnf("could not get certificate %s, reissued as %s: %s", previous, cert.SerialNumber, err)
+			return history
+		}
+		if !exists || prev.KeyID != current.KeyID || prev.EngineID != current.EngineID {
+			return history
+		}
+		if reissuedAs, _ := prev.Metadata[models.CAMetadataReissuedAsKey].(string); reissuedAs != cert.SerialNumber {
+			return history
+		}
+		isCurrent, _, err := svc.caStorage.SelectExistsBySerialNumber(ctx, previous)
+		if err != nil {
+			lFunc.Warnf("could not check whether certificate %s is the current certificate of a CA: %s", previous, err)
+			return history
+		}
+		if isCurrent {
+			return history
+		}
+		history = append(history, prev)
+		seen[previous] = true
+		cert = prev
+	}
+}
+
 // deleteCAPrivateKey deletes the private key associated with a CA from its crypto engine
 func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) {
 	if ca.Certificate.EngineID == "" {
@@ -1245,19 +1368,32 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 		return
 	}
 
-	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
-	keyID, err := helpers.GetSubjectKeyID(lFunc, caCert)
+	// Only the copy held by this CA's engine, not every engine's copy of the same key.
+	key, err := findCertificateKey(ctx, svc.kmsService, ca.Certificate.Certificate.PublicKey, ca.Certificate.EngineID, ca.Certificate.KeyID)
 	if err != nil {
-		lFunc.Warnf("could not compute key ID for CA %s: %s", ca.ID, err)
+		lFunc.Warnf("could not find the private key of CA %s in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
 		return
 	}
 
-	err = svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{
-		Identifier: keyID,
-	})
-	if err != nil {
+	// The certificates stay, for the issuer's CRL and OCSP, but no longer use the key.
+	history := svc.caCertificateHistory(ctx, &ca.Certificate, lFunc)
+	serials := make([]string, len(history))
+	for i, cert := range history {
+		serials[i] = cert.SerialNumber
+	}
+	if err = svc.certStorage.ReleaseKey(ctx, serials); err != nil {
+		lFunc.Warnf("could not release the certificates of CA %s from its key, keeping it in crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
+		return
+	}
+
+	// The KMS refuses to delete a key a certificate still references, such as a cross-signed CA's.
+	err = svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{Identifier: kmsKeyIdentifier(key)})
+	switch {
+	case errors.Is(err, errs.ErrKeyInUse):
+		lFunc.Infof("the key of CA %s is still in use, keeping it in crypto engine %s", ca.ID, ca.Certificate.EngineID)
+	case err != nil:
 		lFunc.Warnf("could not delete private key for CA %s from crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
-	} else {
+	default:
 		lFunc.Debugf("successfully deleted private key for CA %s from crypto engine %s", ca.ID, ca.Certificate.EngineID)
 	}
 }
@@ -1300,8 +1436,12 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	lFunc.Debugf("reissuing CA certificate for %s", input.CAID)
 
-	//Create a Certificate Signer for the existing CA
-	signer := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
+	// Resolve the subject key once and retain that exact binding in the new certificate.
+	subjectKey, err := findCertificateKey(ctx, svc.kmsService, ca.Certificate.Certificate.PublicKey, ca.Certificate.EngineID, ca.Certificate.KeyID)
+	if err != nil {
+		return nil, err
+	}
+	signer := NewKMSCryptoSigner(ctx, *subjectKey, svc.kmsService)
 
 	// Calculate validity duration from current certificate
 	currentCert := (*x509.Certificate)(ca.Certificate.Certificate)
@@ -1326,79 +1466,38 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		lFunc.Debugf("Duration is not provided. Preserved current CA validity duration")
 	}
 
-	var newCert *x509.Certificate
-	var newAKID, newSKID string
-
-	// Check if this is a root CA or subordinate CA
-	if ca.Certificate.SubjectKeyID == ca.Certificate.AuthorityKeyID {
-		// Root CA - reissue as self-signed using CSR approach for consistency
-		lFunc.Debugf("reissuing root CA %s", input.CAID)
-
-		// Create a CSR for the root CA with the existing key using the certificate as template
-		csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
-		if err != nil {
-			lFunc.Errorf("could not create CSR for reissued root CA: %s", err)
-			return nil, err
-		}
-
-		// Sign the CSR with itself (self-signed)
-		signedCert, err := svc.SignCertificate(ctx, services.SignCertificateInput{
-			CAID:            input.CAID,
-			CertRequest:     (*models.X509CertificateRequest)(csr),
-			IssuanceProfile: profile,
-		})
-		if err != nil {
-			lFunc.Errorf("could not sign reissued root CA certificate: %s", err)
-			return nil, err
-		}
-
-		newCert = (*x509.Certificate)(signedCert.Certificate)
-		newSKID = signedCert.SubjectKeyID
-		newAKID = signedCert.AuthorityKeyID
-	} else {
-		// Subordinate CA - need to sign with parent CA
-		lFunc.Debugf("reissuing subordinate CA %s", input.CAID)
-
-		// Get parent CA
-		exists, parentCA, err := svc.caStorage.SelectExistsByID(ctx, ca.Certificate.IssuerCAMetadata.ID)
-		if err != nil {
-			lFunc.Errorf("could not get parent CA %s: %s", ca.Certificate.IssuerCAMetadata.ID, err)
-			return nil, err
-		}
-		if !exists {
-			lFunc.Errorf("parent CA %s not found", ca.Certificate.IssuerCAMetadata.ID)
-			return nil, errs.ErrCANotFound
-		}
-
-		// Create a CSR for the subordinate CA with the existing key
-		csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
-		if err != nil {
-			lFunc.Errorf("could not create CSR for reissued subordinate CA: %s", err)
-			return nil, err
-		}
-
-		// Sign the CSR with the parent CA, using the resolved issuance profile
-		signedCert, err := svc.SignCertificate(ctx, services.SignCertificateInput{
-			CAID:            parentCA.ID,
-			CertRequest:     (*models.X509CertificateRequest)(csr),
-			IssuanceProfile: profile,
-		})
-		if err != nil {
-			lFunc.Errorf("could not sign reissued subordinate CA certificate: %s", err)
-			return nil, err
-		}
-
-		newCert = (*x509.Certificate)(signedCert.Certificate)
-		newSKID = signedCert.SubjectKeyID
-		newAKID = signedCert.AuthorityKeyID
+	// A root CA signs its own reissue; a subordinate CA is signed by its parent.
+	// signCertificate returns ErrCANotFound if the issuing CA does not exist.
+	issuerCAID := input.CAID
+	if ca.Certificate.SubjectKeyID != ca.Certificate.AuthorityKeyID {
+		issuerCAID = ca.Certificate.IssuerCAMetadata.ID
 	}
+	lFunc.Debugf("reissuing CA %s signed by CA %s", input.CAID, issuerCAID)
+
+	// Create a CSR with the existing key using the current certificate as template
+	csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
+	if err != nil {
+		lFunc.Errorf("could not create CSR for reissued CA: %s", err)
+		return nil, err
+	}
+
+	signedCert, err := svc.signCertificate(ctx, services.SignCertificateInput{
+		CAID:            issuerCAID,
+		CertRequest:     (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: profile,
+	}, subjectKey)
+	if err != nil {
+		lFunc.Errorf("could not sign reissued CA certificate: %s", err)
+		return nil, err
+	}
+	newCert := (*x509.Certificate)(signedCert.Certificate)
 
 	// Get old serial number for linking metadata
 	oldSerialNumber := ca.Certificate.SerialNumber
 
 	// Update old certificate metadata to link to new certificate
 	if ca.Certificate.Metadata == nil {
-		ca.Certificate.Metadata = map[string]interface{}{}
+		ca.Certificate.Metadata = map[string]any{}
 	}
 	ca.Certificate.Metadata[models.CAMetadataReissuedAsKey] = helpers.SerialNumberToHexString(newCert.SerialNumber)
 	ca.Certificate.Metadata[models.CAMetadataReissuedAtKey] = time.Now().Format(time.RFC3339)
@@ -1411,15 +1510,15 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 	}
 
 	// Create new certificate metadata with link to old certificate
-	newMetadata := map[string]interface{}{}
+	newMetadata := map[string]any{}
 	newMetadata[models.CAMetadataReissuedFromKey] = oldSerialNumber
 	newMetadata[models.CAMetadataReissueReasonKey] = "certificate-reissuance"
 
 	// Create the new certificate record
 	newCertificateRecord := models.Certificate{
 		SerialNumber:     helpers.SerialNumberToHexString(newCert.SerialNumber),
-		SubjectKeyID:     newSKID,
-		AuthorityKeyID:   newAKID,
+		SubjectKeyID:     signedCert.SubjectKeyID,
+		AuthorityKeyID:   signedCert.AuthorityKeyID,
 		Metadata:         newMetadata,
 		Status:           models.StatusActive,
 		Certificate:      (*models.X509Certificate)(newCert),
@@ -1431,21 +1530,27 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		ValidTo:          newCert.NotAfter,
 		IssuerCAMetadata: ca.Certificate.IssuerCAMetadata,
 		Type:             ca.Certificate.Type,
-		EngineID:         ca.Certificate.EngineID,
-		IsCA:             true,
+		EngineID:         subjectKey.EngineID,
+		// A reissued certificate keeps the CA's key.
+		KeyID: subjectKey.KeyID,
+		IsCA:  true,
 	}
 
-	// Insert the new certificate
-	_, err = svc.certStorage.Insert(ctx, &newCertificateRecord)
+	// Signing already inserted the new certificate; add its reissuance metadata.
+	_, err = svc.certStorage.Update(ctx, &newCertificateRecord)
 	if err != nil {
-		lFunc.Errorf("could not insert new certificate: %s", err)
+		lFunc.Errorf("could not update new certificate: %s", err)
 		return nil, err
 	}
 
 	// Update the CA to point to the new certificate
 	ca.CertificateSerialNumber = newCertificateRecord.SerialNumber
 	ca.Certificate = newCertificateRecord // Update the Certificate field to point to new certificate
-	ca.Metadata = newMetadata
+	// Keep the CA's own metadata; only add or refresh the reissuance keys.
+	if ca.Metadata == nil {
+		ca.Metadata = map[string]any{}
+	}
+	maps.Copy(ca.Metadata, newMetadata)
 
 	updatedCA, err := svc.caStorage.Update(ctx, ca)
 	if err != nil {
@@ -1503,6 +1608,11 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 }
 
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
+	return svc.signCertificate(ctx, input, nil)
+}
+
+// signCertificate retains a subject key already resolved by CA creation/reissuance.
+func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services.SignCertificateInput, subjectKey *models.Key) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := caValidator.Struct(input)
@@ -1559,45 +1669,38 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
-	ski, err := helpers.GetSubjectKeyID(lFunc, x509Cert)
+	ski, err := helpers.GetSubjectKeyID(ctx, lFunc, x509Cert)
 	if err != nil {
 		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", x509Cert.Subject.CommonName, err)
 		return nil, err
 	}
 
-	aki, err := helpers.GetSubjectKeyID(lFunc, caCert)
+	aki, err := helpers.GetSubjectKeyID(ctx, lFunc, caCert)
 	if err != nil {
 		lFunc.Errorf("could not get Authority Key Identifier for CA: %s: %s", caCert.Subject.CommonName, err)
 		return nil, err
 	}
 
-	// Detect whether the subject key is managed in the KMS and, if so, bind it to this certificate.
+	// Detect whether the subject key is managed in the KMS and, if so, make this certificate reference it.
 	certType := models.CertificateTypeImportedWithoutKey
-	engineID := ""
-	subjectKey, getKeyErr := svc.kmsService.GetKey(ctx, services.GetKeyInput{Identifier: ski})
-	if getKeyErr == nil && subjectKey.HasPrivateKey {
+	engineID, keyID := "", ""
+	if subjectKey == nil {
+		subjectKey = discoverCertificateKey(ctx, lFunc, svc.kmsService, x509Cert.PublicKey, "")
+	}
+	if subjectKey != nil {
 		certType = models.CertificateTypeManaged
-		engineID = subjectKey.EngineID
-		_, bindErr := svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-			ID: subjectKey.KeyID,
-			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-				ResourceType: "certificate",
-				ResourceID:   helpers.SerialNumberToHexString(x509Cert.SerialNumber),
-			}).Build(),
-		})
-		if bindErr != nil {
-			lFunc.Warnf("could not bind key %s to certificate %s: %s", subjectKey.KeyID, helpers.SerialNumberToHexString(x509Cert.SerialNumber), bindErr)
-		}
+		engineID, keyID = subjectKey.EngineID, subjectKey.KeyID
 	}
 
 	cert := models.Certificate{
-		Metadata:    map[string]interface{}{},
+		Metadata:    map[string]any{},
 		Type:        certType,
 		Certificate: (*models.X509Certificate)(x509Cert),
 		Extensions:  certificateExtensionsFromX509(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
-			SN: helpers.SerialNumberToHexString(caCert.SerialNumber),
-			ID: ca.ID,
+			SN:    helpers.SerialNumberToHexString(caCert.SerialNumber),
+			ID:    ca.ID,
+			Level: ca.Level,
 		},
 		Status:              models.StatusActive,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
@@ -1611,15 +1714,11 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		SubjectKeyID:        ski,
 		AuthorityKeyID:      aki,
 		EngineID:            engineID,
+		KeyID:               keyID,
 	}
 
-	// CAs get inserted into the CA storage engine by the CreateCA method. Don't insert them here.
-	if !x509Cert.IsCA {
-		lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
-		return svc.certStorage.Insert(ctx, &cert)
-	}
-
-	return &cert, nil
+	lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
+	return svc.certStorage.Insert(ctx, &cert)
 }
 
 func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
@@ -1631,7 +1730,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		status = models.StatusExpired
 	}
 
-	skid, err := helpers.GetSubjectKeyID(lFunc, x509Cert)
+	skid, err := helpers.GetSubjectKeyID(ctx, lFunc, x509Cert)
 	if err != nil {
 		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", x509Cert.Subject.CommonName, err)
 		return nil, err
@@ -1645,6 +1744,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		Status:              status,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
 		Subject:             chelpers.PkixNameToSubject(input.Certificate.Subject),
+		Issuer:              chelpers.PkixNameToSubject(input.Certificate.Issuer),
 		SerialNumber:        helpers.SerialNumberToHexString(input.Certificate.SerialNumber),
 		ValidFrom:           input.Certificate.NotBefore,
 		ValidTo:             input.Certificate.NotAfter,
@@ -1818,6 +1918,41 @@ func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, i
 	}
 
 	return cert, nil
+}
+
+func (svc *CAServiceBackend) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := caValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("GetCertificateKeyInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	cert, err := svc.service.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: input.SerialNumber})
+	if err != nil {
+		return nil, err
+	}
+
+	if cert.EngineID == "" {
+		lFunc.Infof("the KMS does not hold the key of certificate %s", input.SerialNumber)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	key, err := findCertificateKey(ctx, svc.kmsService, cert.Certificate.PublicKey, cert.EngineID, cert.KeyID)
+	if err != nil {
+		lFunc.Infof("could not find the key of certificate %s in crypto engine %s: %s", input.SerialNumber, cert.EngineID, err)
+		return nil, err
+	}
+
+	return &models.CertificateKey{
+		KeyID:     key.KeyID,
+		EngineID:  key.EngineID,
+		PKCS11URI: kmsKeyIdentifier(key),
+		Algorithm: key.Algorithm,
+		Size:      key.Size,
+		PublicKey: key.PublicKey,
+	}, nil
 }
 
 func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
@@ -2043,7 +2178,7 @@ func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input serv
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
 		QueryParams:   input.QueryParameters,
-		ExtraOpts:     map[string]interface{}{},
+		ExtraOpts:     map[string]any{},
 	})
 }
 
@@ -2065,7 +2200,7 @@ func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input s
 
 func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	id := uuid.NewString()
+	id := uuid.NewV7().String()
 	input.Profile.ID = id
 	lFunc.Infof("creating issuance profile '%s' with ID '%s'", input.Profile.Name, id)
 

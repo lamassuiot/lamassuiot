@@ -1,9 +1,10 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+import cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 
 type DMSconfig struct {
 	OtelConfig        cconfig.OTELConfig             `mapstructure:"otel"`
+	OpenAPI           cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs              cconfig.Logging                `mapstructure:"logs"`
 	Server            cconfig.HttpServer             `mapstructure:"server"`
 	PublisherEventBus cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
@@ -17,5 +18,6 @@ type DMSconfig struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"device_manager_client"`
 
-	DownstreamCertificateFile string `mapstructure:"downstream_cert_file"`
+	AuthzClient               AuthzClient                    `mapstructure:"authz_client"`
+	DownstreamCertificateFile string                         `mapstructure:"downstream_cert_file"`
 }

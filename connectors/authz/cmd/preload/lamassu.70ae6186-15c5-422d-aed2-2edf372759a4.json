@@ -1,0 +1,20 @@
+{
+  "id": "lamassu.70ae6186-15c5-422d-aed2-2edf372759a4",
+  "name": "Job Manager - Mgmt NBI Job Observer",
+  "description": "Read-only management NBI Job Manager HTTP access for jobs.",
+  "http_rules": [
+    {
+      "http_schema_name": "Job Manager",
+      "actions": [
+        "nbi-health-read",
+        "nbi-version-read",
+        "nbi-job-list",
+        "nbi-job-events",
+        "nbi-job-status-read",
+        "nbi-job-definition-read",
+        "nbi-job-tags-read",
+        "nbi-job-read"
+      ]
+    }
+  ]
+}

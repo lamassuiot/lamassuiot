@@ -8,19 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestEditCAProfiles(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
 	caTest := serverTest.CA
 
 	caDur := models.TimeDuration(time.Hour * 24)
@@ -280,12 +274,11 @@ func TestEditCAProfiles(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+				t.Fatalf("BeforeEach failed: %s", err)
 			}
 
 			caID, newProfileID, err := tc.before(caTest.Service)
@@ -313,9 +306,9 @@ func TestEditCAProfiles(t *testing.T) {
 }
 
 func TestEditIssuanceProfilesIntegration(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -641,12 +634,11 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+				t.Fatalf("BeforeEach failed: %s", err)
 			}
 
 			originalProfile, err := tc.before(caTest.Service)
@@ -665,9 +657,9 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 }
 
 func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
-	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	err := serverTest.BeforeEach()
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("BeforeEach failed: %s", err)
 	}
 
 	caTest := serverTest.CA
@@ -771,12 +763,11 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = serverTest.BeforeEach()
+			err := serverTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+				t.Fatalf("BeforeEach failed: %s", err)
 			}
 
 			caID, originalProfileID, newProfileID, err := tc.before(caTest.Service)

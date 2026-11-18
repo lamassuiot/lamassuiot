@@ -38,7 +38,7 @@ func ParseCertificateRequest(cert string) (*x509.CertificateRequest, error) {
 	return x509.ParseCertificateRequest(certDERBlock.Bytes)
 }
 
-func ReadPrivateKeyFromFile(filePath string) (interface{}, error) {
+func ReadPrivateKeyFromFile(filePath string) (any, error) {
 	keyFileBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func ReadPrivateKeyFromFile(filePath string) (interface{}, error) {
 	return ParsePrivateKey(keyFileBytes)
 }
 
-func ParsePrivateKey(privKeyBytes []byte) (interface{}, error) {
+func ParsePrivateKey(privKeyBytes []byte) (any, error) {
 	keyDERBlock, _ := pem.Decode(privKeyBytes)
 
 	if key, err := x509.ParsePKCS1PrivateKey(keyDERBlock.Bytes); err == nil {
@@ -87,6 +87,24 @@ func PrivateKeyToPEM(key any) (string, error) {
 	)
 
 	return string(pemdata), nil
+}
+
+func PublicKeyToPEM(key crypto.PublicKey) (string, error) {
+	b, err := x509.MarshalPKIXPublicKey(key)
+	if err != nil {
+		return "", err
+	}
+
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: b})), nil
+}
+
+func ParsePublicKey(pubKeyBytes []byte) (crypto.PublicKey, error) {
+	block, _ := pem.Decode(pubKeyBytes)
+	if block == nil || block.Type != "PUBLIC KEY" {
+		return nil, errors.New("expected a PEM PUBLIC KEY block")
+	}
+
+	return x509.ParsePKIXPublicKey(block.Bytes)
 }
 
 func GenerateSelfSignedCertificate(key crypto.Signer, cn string) (*x509.Certificate, error) {

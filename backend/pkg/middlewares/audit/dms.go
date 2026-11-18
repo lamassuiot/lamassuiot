@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/x509"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type DmsAuditEventPublisher struct {
@@ -60,7 +60,7 @@ func (mw DmsAuditEventPublisher) CACerts(ctx context.Context, aps string) ([]*x5
 
 func (mw DmsAuditEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
 	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventEnrollKey, map[string]interface{}{
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventEnrollKey, map[string]any{
 			"csr": csr,
 			"aps": aps,
 		}, err, (*models.X509Certificate)(out))
@@ -72,7 +72,7 @@ func (mw DmsAuditEventPublisher) Enroll(ctx context.Context, csr *x509.Certifica
 func (mw DmsAuditEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
 	//TODO: check if this is correct
 	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventReEnrollKey, map[string]interface{}{
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventReEnrollKey, map[string]any{
 			"csr": csr,
 			"aps": aps,
 		}, err, (*models.X509Certificate)(out))
@@ -81,7 +81,7 @@ func (mw DmsAuditEventPublisher) Reenroll(ctx context.Context, csr *x509.Certifi
 	return mw.next.Reenroll(ctx, csr, aps)
 }
 
-func (mw DmsAuditEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (mw DmsAuditEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
 	return mw.next.ServerKeyGen(ctx, csr, aps)
 }
 

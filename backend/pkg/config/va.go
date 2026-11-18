@@ -1,9 +1,10 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+import cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 
 type VAconfig struct {
 	OtelConfig            cconfig.OTELConfig             `mapstructure:"otel"`
+	OpenAPI               cconfig.OpenAPIConfig          `mapstructure:"openapi"`
 	Logs                  cconfig.Logging                `mapstructure:"logs"`
 	Server                cconfig.HttpServer             `mapstructure:"server"`
 	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
@@ -14,13 +15,6 @@ type VAconfig struct {
 	CRLMonitoringJob      cconfig.MonitoringJob          `mapstructure:"crl_monitoring_job"`
 	CAClient              CAClient                       `mapstructure:"ca_client"`
 	KMSClient             KMSClient                      `mapstructure:"kms_client"`
+	AuthzClient           AuthzClient                    `mapstructure:"authz_client"`
 	VADomains             []string                       `mapstructure:"va_domains"`
-}
-
-type CAClient struct {
-	cconfig.HTTPClient `mapstructure:",squash"`
-}
-
-type KMSClient struct {
-	cconfig.HTTPClient `mapstructure:",squash"`
 }

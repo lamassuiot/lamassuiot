@@ -1,7 +1,9 @@
 package storage
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"sync"
+
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,19 +27,28 @@ type StorageEngine interface {
 	GetDeviceStorage() (DeviceManagerRepo, error)
 	GetVARoleStorage() (VARepo, error)
 	GetDMSStorage() (DMSRepo, error)
-	GetEnventsStorage() (EventRepository, error)
+	GetEventsStorage() (EventRepository, error)
 	GetSubscriptionsStorage() (SubscriptionsRepository, error)
 	GetKMSStorage() (KMSKeysRepo, error)
 }
 
 // map of available storage engines with config.StorageProvider as key and function to build the storage engine as value
-var storageEngineBuilders = make(map[config.StorageProvider]func(*logrus.Entry, config.PluggableStorageEngine) (StorageEngine, error))
+var (
+	storageEngineBuildersMu sync.RWMutex
+	storageEngineBuilders   = make(map[config.StorageProvider]func(*logrus.Entry, config.PluggableStorageEngine) (StorageEngine, error))
+)
 
 // RegisterStorageEngine registers a new storage engine
 func RegisterStorageEngine(name config.StorageProvider, builder func(*logrus.Entry, config.PluggableStorageEngine) (StorageEngine, error)) {
+	storageEngineBuildersMu.Lock()
+	defer storageEngineBuildersMu.Unlock()
+
 	storageEngineBuilders[name] = builder
 }
 
 func GetEngineBuilder(name config.StorageProvider) func(*logrus.Entry, config.PluggableStorageEngine) (StorageEngine, error) {
+	storageEngineBuildersMu.RLock()
+	defer storageEngineBuildersMu.RUnlock()
+
 	return storageEngineBuilders[name]
 }

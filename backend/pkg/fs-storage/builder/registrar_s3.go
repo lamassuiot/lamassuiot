@@ -3,7 +3,7 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3"
+	"github.com/lamassuiot/lamassuiot/v4/engines/fs-storage/s3"
 )
 
 func init() {

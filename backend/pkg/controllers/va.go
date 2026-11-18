@@ -2,15 +2,16 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -30,10 +31,10 @@ func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl servic
 }
 
 func (r *vaHttpRoutes) handleError(ctx *gin.Context, err error) {
-	switch err {
-	case errs.ErrVARoleNotFound, errs.ErrCANotFound:
+	switch {
+	case errors.Is(err, errs.ErrVARoleNotFound), errors.Is(err, errs.ErrCANotFound), errors.Is(err, errs.ErrCertificateNotFound):
 		ctx.JSON(http.StatusNotFound, gin.H{"err": err.Error()})
-	case errs.ErrValidateBadRequest:
+	case errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(http.StatusInternalServerError, gin.H{"err": err.Error()})

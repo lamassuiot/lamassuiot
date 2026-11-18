@@ -11,10 +11,10 @@ type VARole struct {
 }
 
 type VACRLRole struct {
-	RefreshInterval    TimeDuration `json:"refresh_interval" gorm:"serializer:text"`
-	Validity           TimeDuration `json:"validity" gorm:"serializer:text"`
-	SubjectKeyIDSigner string       `json:"subject_key_id_signer"`
-	RegenerateOnRevoke bool         `json:"regenerate_on_revoke"`
+	RefreshInterval               TimeDuration `json:"refresh_interval" gorm:"serializer:text"`
+	Validity                      TimeDuration `json:"validity" gorm:"serializer:text"`
+	SignerCertificateSerialNumber string       `json:"signer_certificate_serial_number" validate:"required"`
+	RegenerateOnRevoke            bool         `json:"regenerate_on_revoke"`
 }
 type LatestCRLMeta struct {
 	Version    BigInt    `json:"version" gorm:"type:NUMERIC;serializer:text"`

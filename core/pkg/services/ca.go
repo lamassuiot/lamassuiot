@@ -5,8 +5,8 @@ import (
 	"crypto/x509"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 type CAService interface {
@@ -32,6 +32,7 @@ type CAService interface {
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
 
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
+	GetCertificateKey(ctx context.Context, input GetCertificateKeyInput) (*models.CertificateKey, error)
 	GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error)
 	GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error)
 	GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error)
@@ -213,7 +214,8 @@ type CertificateKeySpec struct {
 	EngineID string         `json:"engine_id"` // optional: target a specific crypto engine
 
 	// --- reuse mode ---
-	// KeyIdentifier references an existing KMS key by its KeyID, Alias, or PKCS11URI.
+	// KeyIdentifier references an existing KMS key by its PKCS11URI, Alias, or KeyID. A bare
+	// KeyID resolves only while a single engine holds the key.
 	KeyIdentifier string `json:"key_identifier"`
 }
 
@@ -257,6 +259,10 @@ type SignatureVerifyInput struct {
 }
 
 type GetCertificatesBySerialNumberInput struct {
+	SerialNumber string `validate:"required"`
+}
+
+type GetCertificateKeyInput struct {
 	SerialNumber string `validate:"required"`
 }
 

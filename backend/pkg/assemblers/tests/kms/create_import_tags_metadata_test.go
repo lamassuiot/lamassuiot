@@ -7,14 +7,15 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"slices"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -51,13 +52,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 
 				expectedTags := []string{"production", "critical", "backup-enabled"}
 				for _, tag := range expectedTags {
-					found := false
-					for _, keyTag := range createdKey.Tags {
-						if keyTag == tag {
-							found = true
-							break
-						}
-					}
+					found := slices.Contains(createdKey.Tags, tag)
 					if !found {
 						return fmt.Errorf("expected tag '%s' not found in key tags", tag)
 					}
@@ -229,7 +224,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -248,7 +243,7 @@ func TestCreateKeyWithTagsAndMetadata(t *testing.T) {
 }
 
 func TestImportKeyWithTagsAndMetadata(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -289,13 +284,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 
 				expectedTags := []string{"imported", "rsa-key", "archive"}
 				for _, tag := range expectedTags {
-					found := false
-					for _, keyTag := range importedKey.Tags {
-						if keyTag == tag {
-							found = true
-							break
-						}
-					}
+					found := slices.Contains(importedKey.Tags, tag)
 					if !found {
 						return fmt.Errorf("expected tag '%s' not found in key tags", tag)
 					}
@@ -441,7 +430,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -460,7 +449,7 @@ func TestImportKeyWithTagsAndMetadata(t *testing.T) {
 }
 
 func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -489,7 +478,7 @@ func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
 
 				// Retrieve the key
 				retrievedKey, err := kmsSDK.GetKey(context.Background(), services.GetKeyInput{
-					Identifier: createdKey.KeyID,
+					Identifier: createdKey.PKCS11URI,
 				})
 				if err != nil {
 					return fmt.Errorf("failed to retrieve key: %s", err)
@@ -522,7 +511,7 @@ func TestCreateAndRetrieveKeyWithTagsAndMetadata(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = kmsTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}

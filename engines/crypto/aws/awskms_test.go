@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -21,7 +21,7 @@ import (
 func TestNewAWSKMSEngine(t *testing.T) {
 	logger := logrus.New().WithField("test", "NewAWSKMSEngine")
 	awsConf := aws.Config{}
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"key": "value",
 	}
 
@@ -61,7 +61,7 @@ func TestNewAWSKMSEngine(t *testing.T) {
 
 func testDeleteKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	awsengine := engine.(*AWSKMSCryptoEngine)
-	err := awsengine.DeleteKey("test-key")
+	err := awsengine.DeleteKey(context.Background(), "test-key")
 	assert.EqualError(t, err, "cannot delete key [test-key]. Go to your aws account and do it manually")
 }
 
@@ -149,7 +149,7 @@ func TestAWSKMSPaginationSupport(t *testing.T) {
 		}
 
 		// List all keys - this should use pagination internally
-		listedKeys, err := engine.ListPrivateKeyIDs()
+		listedKeys, err := engine.ListPrivateKeyIDs(context.Background())
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, len(listedKeys), numKeys, "Should list at least the created keys")
 
@@ -174,7 +174,7 @@ func TestAWSKMSPaginationSupport(t *testing.T) {
 
 		// Verify we can retrieve each key by ID (tests pagination in GetPrivateKeyByID)
 		for keyID, expectedSigner := range createdKeys {
-			retrievedSigner, err := engine.GetPrivateKeyByID(keyID)
+			retrievedSigner, err := engine.GetPrivateKeyByID(context.Background(), keyID)
 			assert.NoError(t, err)
 			assert.NotNil(t, retrievedSigner)
 			assert.Equal(t, expectedSigner.Public(), retrievedSigner.Public(),
@@ -197,14 +197,14 @@ func TestAWSKMSPaginationSupport(t *testing.T) {
 		newKeyID1 := "renamed-key-1"
 		newKeyID2 := "renamed-key-2"
 
-		err = engine.RenameKey(keyID1, newKeyID1)
+		err = engine.RenameKey(ctx, keyID1, newKeyID1)
 		assert.NoError(t, err)
 
-		err = engine.RenameKey(keyID2, newKeyID2)
+		err = engine.RenameKey(ctx, keyID2, newKeyID2)
 		assert.NoError(t, err)
 
 		// List keys - should include renamed keys
-		listedKeys, err := engine.ListPrivateKeyIDs()
+		listedKeys, err := engine.ListPrivateKeyIDs(ctx)
 		assert.NoError(t, err)
 
 		assert.Contains(t, listedKeys, newKeyID1, "Should contain renamed key 1")
@@ -213,10 +213,10 @@ func TestAWSKMSPaginationSupport(t *testing.T) {
 		assert.NotContains(t, listedKeys, keyID2, "Should not contain old key ID 2")
 
 		// Retrieve renamed keys
-		_, err = engine.GetPrivateKeyByID(newKeyID1)
+		_, err = engine.GetPrivateKeyByID(ctx, newKeyID1)
 		assert.NoError(t, err)
 
-		_, err = engine.GetPrivateKeyByID(newKeyID2)
+		_, err = engine.GetPrivateKeyByID(ctx, newKeyID2)
 		assert.NoError(t, err)
 	})
 }

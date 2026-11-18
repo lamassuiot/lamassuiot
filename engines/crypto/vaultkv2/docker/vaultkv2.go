@@ -2,42 +2,43 @@ package docker
 
 import (
 	"fmt"
+	"net/netip"
 	"strconv"
 
 	vaultApi "github.com/hashicorp/vault/api"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	"github.com/ory/dockertest/v4"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	vconfig "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/config"
-	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2/config"
+	dockerrunner "github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/dockerrunner"
 )
 
 func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() error, *vconfig.HashicorpVaultSDK, string, error) {
 	rootToken := "root-token-dev"
-	containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-		Repository: "vault",  // image
-		Tag:        "1.13.3", // version
-		CapAdd:     []string{"IPC_LOCK"},
-		Env: []string{
+	runOpts := []dockertest.RunOption{
+		dockertest.WithTag("1.13.3"),
+		dockertest.WithHostConfig(func(config *container.HostConfig) {
+			config.CapAdd = []string{"IPC_LOCK"}
+		}),
+		dockertest.WithEnv([]string{
 			"VAULT_DEV_ROOT_TOKEN_ID=" + rootToken,
 			"VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
-		},
-		Labels: map[string]string{
+		}),
+		dockertest.WithLabels(map[string]string{
 			"group": "lamassuiot-monolithic",
-		},
-	}, func(hc *docker.HostConfig) {
-		if exposeAsStandardPort {
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"8200/tcp": {
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "8200", // random port
-					},
-				},
-			}
-		}
-	})
+		}),
+	}
+	if exposeAsStandardPort {
+		runOpts = append(runOpts, dockertest.WithPortBindings(network.PortMap{
+			network.MustParsePort("8200/tcp"): []network.PortBinding{
+				{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "8200"},
+			},
+		}))
+	}
+
+	containerCleanup, container, _, err := dockerrunner.RunDocker("vault", runOpts...)
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
@@ -91,7 +92,7 @@ func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() er
 		return nil, nil, nil, "", err
 	}
 
-	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]interface{}{
+	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]any{
 		"policies": []string{"pki-kv"},
 	})
 	if err != nil {
@@ -122,15 +123,11 @@ func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() er
 			RoleID:    roleID,
 			SecretID:  config.Password(secretID),
 			MountPath: mountPath,
-			HTTPConnection: config.HTTPConnection{
-				Protocol: config.HTTP,
-				BasePath: "",
-				BasicConnection: config.BasicConnection{
-					Hostname:  "127.0.0.1",
-					Port:      p,
-					TLSConfig: config.TLSConfig{},
-				},
-			},
+			Protocol:  config.HTTP,
+			BasePath:  "",
+			Hostname:  "127.0.0.1",
+			Port:      p,
+			TLSConfig: config.TLSConfig{},
 		},
 		rootToken,
 		nil

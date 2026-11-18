@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 )
 
 func TestGenerateCertificateRequestFromCertificate_SAN(t *testing.T) {

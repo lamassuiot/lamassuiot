@@ -2,11 +2,12 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -15,7 +16,7 @@ const kmsTableName = "kms_keys"
 
 type PostgresKMSStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.Key]
+	querier *DBQuerier[models.Key]
 }
 
 func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRepo, error) {
@@ -23,6 +24,8 @@ func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRe
 	if err != nil {
 		return nil, err
 	}
+	// The same key can live in several engines, so key_id alone is not unique
+	querier.uniqueColumns = []string{"key_id", "engine_id"}
 
 	return &PostgresKMSStore{
 		db:      db,
@@ -31,7 +34,7 @@ func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRe
 }
 
 func (db *PostgresKMSStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
+	return db.querier.Count(ctx, []GormExtraOps{})
 }
 
 func (db *PostgresKMSStore) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
@@ -39,12 +42,12 @@ func (db *PostgresKMSStore) CountWithFilters(ctx context.Context, queryParams *r
 		return db.Count(ctx)
 	}
 
-	return db.querier.CountFiltered(ctx, queryParams.Filters, []gormExtraOps{})
+	return db.querier.CountFiltered(ctx, queryParams.Filters, []GormExtraOps{})
 }
 
 func (db *PostgresKMSStore) CountByEngineWithFilters(ctx context.Context, engineID string, queryParams *resources.QueryParameters) (int, error) {
-	opts := []gormExtraOps{
-		{query: "engine_id = ?", additionalWhere: []any{engineID}},
+	opts := []GormExtraOps{
+		{Query: "engine_id = ?", AdditionalWhere: []any{engineID}},
 	}
 
 	if queryParams == nil {
@@ -55,12 +58,35 @@ func (db *PostgresKMSStore) CountByEngineWithFilters(ctx context.Context, engine
 }
 
 func (db *PostgresKMSStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Key]) (string, error) {
-	opts := []gormExtraOps{}
+	opts := []GormExtraOps{}
 	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, id string) (bool, *models.Key, error) {
-	return db.querier.SelectExists(ctx, id, nil)
+// The identity of a key is (key_id, engine_id): the same key_id can be held by several
+// engines at once. DBQuerier addresses rows by a single column, so the composite-key
+// operations below build their own WHERE clauses instead of going through it.
+func (db *PostgresKMSStore) SelectExistsByKeyID(ctx context.Context, keyID, engineID string) (bool, *models.Key, error) {
+	var elem models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("key_id = ? AND engine_id = ?", keyID, engineID).Limit(1).Find(&elem)
+	if tx.Error != nil {
+		return false, nil, tx.Error
+	}
+
+	if tx.RowsAffected == 0 {
+		return false, nil, nil
+	}
+
+	return true, &elem, nil
+}
+
+func (db *PostgresKMSStore) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
+	var keys []*models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("key_id = ?", keyID).Order("engine_id").Find(&keys)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return keys, nil
 }
 
 func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string) (bool, *models.Key, error) {
@@ -70,7 +96,9 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
 	var elem models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).Limit(1).Find(&elem)
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).
+		Where("aliases @> ?::jsonb", jsonStringArray(alias)).
+		Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}
@@ -87,9 +115,81 @@ func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	return db.querier.Update(ctx, kmsKey, kmsKey.KeyID)
+	tx := db.querier.Session(&gorm.Session{FullSaveAssociations: true}).Table(kmsTableName).WithContext(ctx).
+		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Save(kmsKey)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	if tx.RowsAffected != 1 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	return kmsKey, nil
 }
 
-func (db *PostgresKMSStore) Delete(ctx context.Context, id string) error {
-	return db.querier.Delete(ctx, id)
+func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) error {
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).
+		Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
+	if errors.Is(tx.Error, gorm.ErrForeignKeyViolated) {
+		return errs.ErrKeyInUse
+	}
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if tx.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+
+	return nil
+}
+
+func (db *PostgresKMSStore) DeleteWith(ctx context.Context, keyID, engineID string, fn func() error) error {
+	return db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
+		if errors.Is(res.Error, gorm.ErrForeignKeyViolated) {
+			return errs.ErrKeyInUse
+		}
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return errs.ErrKeyNotFound
+		}
+		return fn()
+	})
+}
+
+// RenameKey runs under a lock shared by every rename, so KMS instances starting at once do not rename the
+// same key twice. The certificates that reference the key follow it through their foreign key, which
+// cascades updates.
+func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (bool, error) {
+	renamed := false
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext('lamassu.kms.rename-key'))`).Error; err != nil {
+			return err
+		}
+
+		var found int64
+		if err := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", oldKeyID, engineID).Count(&found).Error; err != nil {
+			return err
+		}
+		if found == 0 {
+			return nil
+		}
+
+		if err := renameInEngine(); err != nil {
+			return err
+		}
+
+		res := tx.Exec(`UPDATE kms_keys SET key_id = ?, aliases = COALESCE(aliases, '[]'::jsonb) || ?::jsonb
+			WHERE key_id = ? AND engine_id = ?`, newKeyID, jsonStringArray(oldKeyID), oldKeyID, engineID)
+		if res.Error != nil {
+			return res.Error
+		}
+		renamed = res.RowsAffected == 1
+		return nil
+	})
+	return renamed && err == nil, err
 }

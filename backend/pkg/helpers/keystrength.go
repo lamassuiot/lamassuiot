@@ -5,7 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
 func KeyStrengthMetadataFromCertificate(cert *x509.Certificate) models.KeyStrengthMetadata {

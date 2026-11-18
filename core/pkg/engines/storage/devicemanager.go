@@ -3,14 +3,14 @@ package storage
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 )
 
 type DeviceManagerRepo interface {
 	Count(ctx context.Context, queryParams *resources.QueryParameters) (int, error)
-	SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
-	SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
+	SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error)
+	SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error)
 	SelectExists(ctx context.Context, ID string) (bool, *models.Device, error)
 	Update(ctx context.Context, device *models.Device) (*models.Device, error)
 	Insert(ctx context.Context, device *models.Device) (*models.Device, error)
@@ -18,6 +18,15 @@ type DeviceManagerRepo interface {
 
 	// DeviceGroups returns the device groups repository
 	DeviceGroups() DeviceGroupsRepo
+
+	// DeviceEvents returns the device events repository
+	DeviceEvents() DeviceEventsRepo
+}
+
+type DeviceEventsRepo interface {
+	Insert(ctx context.Context, event *models.DeviceEventRecord) (*models.DeviceEventRecord, error)
+	SelectByDeviceID(ctx context.Context, req StorageListRequest[models.DeviceEventRecord], deviceID string) (string, error)
+	DeleteByDeviceID(ctx context.Context, deviceID string) error
 }
 
 type DeviceGroupsRepo interface {

@@ -25,7 +25,7 @@ type ESTServerAuthOptionPSK struct {
 
 type ESTClientAuthOptionsMutualTLS struct {
 	Certificate *X509Certificate
-	PrivateKey  interface{}
+	PrivateKey  any
 }
 
 type EnrollReenrollEvent struct {

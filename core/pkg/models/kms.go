@@ -3,10 +3,22 @@ package models
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
 )
+
+// CertificateKey identifies the KMS key of a certificate and carries only its public material:
+// reading a certificate does not grant access to the key's aliases, tags or metadata.
+type CertificateKey struct {
+	KeyID     string `json:"key_id"`
+	EngineID  string `json:"engine_id"`
+	PKCS11URI string `json:"pkcs11_uri"`
+	Algorithm string `json:"algorithm"`
+	Size      int    `json:"size"`
+	PublicKey string `json:"public_key"`
+}
 
 // KMS
 type Key struct {
@@ -63,4 +75,28 @@ type KeyStats struct {
 	TotalKeys                    int            `json:"total_keys"`
 	KeysDistributionPerEngine    map[string]int `json:"keys_distribution_per_engine"`
 	KeysDistributionPerAlgorithm map[string]int `json:"keys_distribution_per_algorithm"`
+}
+
+func ParsePKCS11URI(uri string) (map[string]string, error) {
+	result := make(map[string]string)
+
+	// Strip the scheme ("pkcs11:") if present
+	uri = strings.TrimPrefix(uri, "pkcs11:")
+
+	// Split key=value pairs by ";"
+	parts := strings.SplitSeq(uri, ";")
+	for part := range parts {
+		if part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid part: %s", part)
+		}
+		key := kv[0]
+		val := kv[1]
+		result[key] = val
+	}
+
+	return result, nil
 }

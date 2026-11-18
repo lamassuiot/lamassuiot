@@ -15,11 +15,11 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
 )
 
@@ -118,7 +118,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
 
-	skid, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(csr.PublicKey)
+	skid, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(ctx, csr.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return nil, err
@@ -219,12 +219,12 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 
 /*
 func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, caCertificate.PublicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
+	return engine.cryptoEngine.GetPrivateKeyByID(ctx, keyID)
 }
 */
 

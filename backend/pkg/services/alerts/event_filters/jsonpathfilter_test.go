@@ -10,14 +10,14 @@ import (
 func TestJsonPathExists(t *testing.T) {
 	tests := []struct {
 		name     string
-		data     interface{}
+		data     any
 		path     string
 		expected bool
 		wantErr  bool
 	}{
 		{
 			name: "ValidPathExists",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"name": "John",
 				"age":  30,
 			},
@@ -27,7 +27,7 @@ func TestJsonPathExists(t *testing.T) {
 		},
 		{
 			name: "ValidPathDoesNotExist",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"name": "John",
 				"age":  30,
 			},
@@ -37,7 +37,7 @@ func TestJsonPathExists(t *testing.T) {
 		},
 		{
 			name: "InvalidPath",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"name": "John",
 				"age":  30,
 			},
@@ -47,8 +47,8 @@ func TestJsonPathExists(t *testing.T) {
 		},
 		{
 			name: "NestedPathExists",
-			data: map[string]interface{}{
-				"person": map[string]interface{}{
+			data: map[string]any{
+				"person": map[string]any{
 					"name": "John",
 					"age":  30,
 				},
@@ -59,8 +59,8 @@ func TestJsonPathExists(t *testing.T) {
 		},
 		{
 			name: "NestedPathDoesNotExist",
-			data: map[string]interface{}{
-				"person": map[string]interface{}{
+			data: map[string]any{
+				"person": map[string]any{
 					"name": "John",
 					"age":  30,
 				},
@@ -71,8 +71,8 @@ func TestJsonPathExists(t *testing.T) {
 		},
 		{
 			name: "NestedPathWithExpressionExists",
-			data: map[string]interface{}{
-				"person": map[string]interface{}{
+			data: map[string]any{
+				"person": map[string]any{
 					"name": "John",
 					"age":  30,
 				},
@@ -83,8 +83,8 @@ func TestJsonPathExists(t *testing.T) {
 		},
 		{
 			name: "NestedPathWithExpressionNotExists",
-			data: map[string]interface{}{
-				"person": map[string]interface{}{
+			data: map[string]any{
+				"person": map[string]any{
 					"name": "John",
 					"age":  30,
 				},

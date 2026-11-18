@@ -3,9 +3,9 @@ package eventpub
 import (
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	svcmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	svcmock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -236,7 +236,6 @@ func TestCAEventPublisher(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, tc.test)
 	}
 }

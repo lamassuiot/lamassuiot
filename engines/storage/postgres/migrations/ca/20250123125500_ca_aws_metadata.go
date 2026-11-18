@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	mhelper "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/helpers"
+	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
 
@@ -31,7 +31,7 @@ func upCaAwsMetadata(ctx context.Context, tx *sql.Tx) error {
 		metadataStr := r["metadata"].(string)
 
 		// Unmarshal the JSON into a map
-		var metadata map[string]interface{}
+		var metadata map[string]any
 		if err := json.Unmarshal([]byte(metadataStr), &metadata); err != nil {
 			return fmt.Errorf("failed to unmarshal JSON: %v", err)
 		}
@@ -41,7 +41,7 @@ func upCaAwsMetadata(ctx context.Context, tx *sql.Tx) error {
 		// Check if the there is any metadata for aws starting with "lamassu.io/iot/aws."
 		for key, value := range metadata {
 			if strings.HasPrefix(key, "lamassu.io/iot/aws.") {
-				awsMeta := value.(map[string]interface{})
+				awsMeta := value.(map[string]any)
 
 				// Now, if there is a key named "register", it means the metadata is in the old format. New format contains "registration" key instead.
 				if registered, ok := awsMeta["register"]; ok {
@@ -49,7 +49,7 @@ func upCaAwsMetadata(ctx context.Context, tx *sql.Tx) error {
 					shouldUpdate = true
 
 					if registered.(bool) {
-						awsMeta["registration"] = map[string]interface{}{
+						awsMeta["registration"] = map[string]any{
 							"status":                    "SUCCEEDED",
 							"registration_request_time": time.Unix(0, 0).In(time.UTC),
 							"registration_time":         time.Unix(0, 0).In(time.UTC),
@@ -57,7 +57,7 @@ func upCaAwsMetadata(ctx context.Context, tx *sql.Tx) error {
 							"error":                     "",
 						}
 					} else {
-						awsMeta["registration"] = map[string]interface{}{
+						awsMeta["registration"] = map[string]any{
 							"status": "FAILED",
 						}
 					}

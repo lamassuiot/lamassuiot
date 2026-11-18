@@ -3,10 +3,10 @@ package auditpub
 import (
 	"context"
 
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
@@ -152,6 +152,13 @@ func (mw CAOTelTracer) GetCertificateBySerialNumber(ctx context.Context, input s
 	defer span.End()
 
 	return mw.next.GetCertificateBySerialNumber(ctx, input)
+}
+
+func (mw CAOTelTracer) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.GetCertificateKey(ctx, input)
 }
 
 func (mw CAOTelTracer) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {

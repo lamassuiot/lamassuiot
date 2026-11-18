@@ -1,9 +1,13 @@
 package resources
 
-import "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+import "github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 
 type GetCAsResponse struct {
 	IterableList[models.CACertificate]
+}
+
+type GetAlertsResponse struct {
+	IterableList[models.AlertLatestEvent]
 }
 
 type GetItemsResponse[T any] struct {

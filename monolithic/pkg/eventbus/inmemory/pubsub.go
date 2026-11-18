@@ -10,8 +10,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const fanoutTopic = "__all__" // internal fan-out topic for wildcard subscribers
-var wildcardSubscribers int32 // tracks wildcard subscribers to avoid needless fan-out when none
+const fanoutTopic = "__all__"        // internal fan-out topic for wildcard subscribers
+var wildcardSubscribers atomic.Int32 // tracks wildcard subscribers to avoid needless fan-out when none
 
 // goChannelPublisher wraps GoChannel publisher to match AMQP/AWS publisher patterns
 type goChannelPublisher struct {
@@ -32,7 +32,7 @@ func (p *goChannelPublisher) Publish(topic string, messages ...*message.Message)
 	}
 
 	// Also publish copies to a fan-out topic so wildcard subscribers (ca.#, #, etc.) receive them
-	if atomic.LoadInt32(&wildcardSubscribers) > 0 {
+	if wildcardSubscribers.Load() > 0 {
 		fanoutMsgs := make([]*message.Message, 0, len(messages))
 		for _, msg := range messages {
 			cpy := msg.Copy()
@@ -64,7 +64,7 @@ func (s *goChannelSubscriber) Subscribe(ctx context.Context, topic string) (<-ch
 	// Wildcard patterns ("#") subscribe to the fan-out topic and filter locally
 	if strings.Contains(topic, "#") {
 		s.logger.Debugf("subscribing with wildcard: %s (fanout)", topic)
-		atomic.AddInt32(&wildcardSubscribers, 1)
+		wildcardSubscribers.Add(1)
 
 		incoming, err := s.pubsub.Subscribe(ctx, fanoutTopic)
 		if err != nil {
@@ -112,8 +112,8 @@ func topicMatchesPattern(pattern, actual string) bool {
 		return true
 	}
 
-	if strings.HasSuffix(pattern, "#") {
-		prefix := strings.TrimSuffix(pattern, "#")
+	if before, ok := strings.CutSuffix(pattern, "#"); ok {
+		prefix := before
 		return strings.HasPrefix(actual, prefix)
 	}
 

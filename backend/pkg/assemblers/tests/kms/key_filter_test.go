@@ -7,15 +7,15 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	ctx := context.Background()
-	kmsTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
@@ -58,13 +58,13 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 	}
 
 	// Update metadata for each key
-	ud1 := make(map[string]interface{})
+	ud1 := make(map[string]any)
 	ud1["environment"] = "production"
 	ud1["purpose"] = "signing"
 	ud1["critical"] = true
 	ud1["rotation_days"] = 90
 	_, err = kmsTest.Service.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key1.KeyID,
+		ID: key1.PKCS11URI,
 		Patches: helpers.NewPatchBuilder().
 			Add(helpers.JSONPointerBuilder(), ud1).
 			Build(),
@@ -73,13 +73,13 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for key1: %s", err)
 	}
 
-	ud2 := make(map[string]interface{})
+	ud2 := make(map[string]any)
 	ud2["environment"] = "development"
 	ud2["purpose"] = "encryption"
 	ud2["critical"] = false
 	ud2["rotation_days"] = 30
 	_, err = kmsTest.Service.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key2.KeyID,
+		ID: key2.PKCS11URI,
 		Patches: helpers.NewPatchBuilder().
 			Add(helpers.JSONPointerBuilder(), ud2).
 			Build(),
@@ -88,13 +88,13 @@ func TestGetKeysFilterByMetadataJsonPath(t *testing.T) {
 		t.Fatalf("failed to update metadata for key2: %s", err)
 	}
 
-	ud3 := make(map[string]interface{})
+	ud3 := make(map[string]any)
 	ud3["environment"] = "staging"
 	ud3["purpose"] = "signing"
 	ud3["critical"] = true
 	ud3["rotation_days"] = 60
 	_, err = kmsTest.Service.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-		ID: key3.KeyID,
+		ID: key3.PKCS11URI,
 		Patches: helpers.NewPatchBuilder().
 			Add(helpers.JSONPointerBuilder(), ud3).
 			Build(),

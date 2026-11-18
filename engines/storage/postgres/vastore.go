@@ -3,15 +3,16 @@ package postgres
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type PostgresVAStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.VARole]
+	querier *DBQuerier[models.VARole]
 }
 
 func NewVARepository(logger *logrus.Entry, db *gorm.DB) (storage.VARepo, error) {
@@ -31,13 +32,21 @@ func (db *PostgresVAStore) Get(ctx context.Context, caSki string) (bool, *models
 }
 
 func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRequest[models.VARole]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresVAStore) Update(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Update(ctx, role, role.CASubjectKeyID)
+	updated, err := db.querier.Update(ctx, role, role.CASubjectKeyID)
+	if isForeignKeyViolation(err, "va_role_signer_certificate_fk") {
+		return nil, errs.ErrCertificateNotFound
+	}
+	return updated, err
 }
 
 func (db *PostgresVAStore) Insert(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Insert(ctx, role, role.CASubjectKeyID)
+	inserted, err := db.querier.Insert(ctx, role, role.CASubjectKeyID)
+	if isForeignKeyViolation(err, "va_role_signer_certificate_fk") {
+		return nil, errs.ErrCertificateNotFound
+	}
+	return inserted, err
 }

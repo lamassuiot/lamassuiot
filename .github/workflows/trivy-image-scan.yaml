@@ -1,0 +1,48 @@
+name: Scan Container Image
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      image-ref:
+        description: Container image reference to scan
+        required: true
+        type: string
+      category:
+        description: GitHub code scanning category for this image stream
+        required: true
+        type: string
+
+jobs:
+  scan:
+    name: Scan image vulnerabilities
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ inputs.image-ref }}
+          format: sarif
+          output: trivy-results.sarif
+          vuln-type: os
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+
+      - name: Upload Trivy results to code scanning
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy-results.sarif
+          category: ${{ inputs.category }}

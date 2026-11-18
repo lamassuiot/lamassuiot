@@ -6,12 +6,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"strings"
-	"text/template"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -31,17 +31,39 @@ func NewSMTPOutputService(config models.EmailConfig, smtpServer config.SMTPServe
 }
 
 func (s *SMTPOutputService) SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error {
+	msg, err := s.buildMessage(event)
+	if err != nil {
+		return err
+	}
+	n := gomail.NewDialer(s.smtpServer.Host, s.smtpServer.Port, s.smtpServer.Username, s.smtpServer.Password)
+	if s.smtpServer.Insecure {
+		n.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+
+	if !s.smtpServer.SSL {
+		n.SSL = false
+	}
+
+	// Send the email
+	if err := n.DialAndSend(msg); err != nil {
+		return err
+	}
+	return nil
+}
+
+// buildMessage renders event fields as HTML text, never as markup.
+func (s *SMTPOutputService) buildMessage(event cloudevents.Event) (*gomail.Message, error) {
 	humanEventNameFormat := cases.Title(language.Und).String(strings.Join(strings.Split(event.Type(), "."), " "))
 
 	t := template.New("eventmail")
 	t, err := t.Parse(emailTemplate)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	eventBytes, err := event.MarshalJSON()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var eventMap map[string]any
@@ -62,7 +84,7 @@ func (s *SMTPOutputService) SendNotification(logger *logrus.Entry, ctx context.C
 
 	eventBodyBuf := new(bytes.Buffer)
 	if err = t.Execute(eventBodyBuf, templateData); err != nil {
-		return err
+		return nil, err
 	}
 
 	msg := gomail.NewMessage()
@@ -70,20 +92,7 @@ func (s *SMTPOutputService) SendNotification(logger *logrus.Entry, ctx context.C
 	msg.SetHeader("To", s.config.Email)
 	msg.SetHeader("Subject", fmt.Sprintf("Lamassu Event: %s", humanEventNameFormat))
 	msg.SetBody("text/html", eventBodyBuf.String())
-	n := gomail.NewDialer(s.smtpServer.Host, s.smtpServer.Port, s.smtpServer.Username, s.smtpServer.Password)
-	if s.smtpServer.Insecure {
-		n.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-
-	if !s.smtpServer.SSL {
-		n.SSL = false
-	}
-
-	// Send the email
-	if err := n.DialAndSend(msg); err != nil {
-		return err
-	}
-	return nil
+	return msg, nil
 }
 
 const emailTemplate = `<!DOCTYPE html>

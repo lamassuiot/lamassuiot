@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type deviceEventPublisher struct {
@@ -42,6 +42,21 @@ func (mw *deviceEventPublisher) CreateDevice(ctx context.Context, input services
 
 func (mw *deviceEventPublisher) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
 	return mw.next.GetDeviceByID(ctx, input)
+}
+
+func (mw *deviceEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
+}
+
+func (mw *deviceEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateDeviceEventKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s/event", input.DeviceID))
+
+	output, err := mw.next.CreateDeviceEvent(ctx, input)
+	if err == nil {
+		mw.eventMWPub.PublishCloudEvent(ctx, output)
+	}
+	return output, err
 }
 
 func (mw *deviceEventPublisher) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {

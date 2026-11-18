@@ -2,14 +2,14 @@ package amqp
 
 import (
 	"github.com/ThreeDotsLabs/watermill/message"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/v4/engines/eventbus/amqp/config"
 	"github.com/sirupsen/logrus"
 )
 
 func Register() {
-	eventbus.RegisterEventBusEngine("amqp", func(eventBusProvider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+	eventbus.RegisterEventBusEngine("amqp", func(eventBusProvider string, config any, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 		return NewAmqpEngine(config, serviceId, logger)
 	})
 }
@@ -22,7 +22,7 @@ type AmqpEngine struct {
 	publisher  message.Publisher
 }
 
-func NewAmqpEngine(conf interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+func NewAmqpEngine(conf any, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 	localConf, err := cconfig.DecodeStruct[config.AMQPConnection](conf)
 	if err != nil {
 		logger.Errorf("could not decode AMQP Connection config: %s", err)

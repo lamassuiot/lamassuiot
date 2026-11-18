@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,7 +18,7 @@ func TestGetDMSStatsFiltered(t *testing.T) {
 	ctx := context.Background()
 
 	// Start server once for all subtests
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}

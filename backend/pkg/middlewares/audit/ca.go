@@ -3,10 +3,10 @@ package auditpub
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type CAAuditEventPublisher struct {
@@ -138,6 +138,10 @@ func (mw CAAuditEventPublisher) SignatureVerify(ctx context.Context, input servi
 
 func (mw CAAuditEventPublisher) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	return mw.next.GetCertificateBySerialNumber(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {
+	return mw.next.GetCertificateKey(ctx, input)
 }
 
 func (mw CAAuditEventPublisher) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {

@@ -29,24 +29,30 @@ const (
 )
 
 type Certificate struct {
-	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
-	SubjectKeyID        string                 `json:"subject_key_id"`
-	AuthorityKeyID      string                 `json:"authority_key_id"`
-	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	Status              CertificateStatus      `json:"status"`
-	Certificate         *X509Certificate       `json:"certificate"`
-	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
-	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-	Issuer              Subject                `json:"issuer" gorm:"embedded;embeddedPrefix:issuer_"`
-	ValidFrom           time.Time              `json:"valid_from"`
-	Extensions          CertificateExtensions  `json:"extensions" gorm:"embedded;embeddedPrefix:extensions_"`
-	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
-	ValidTo             time.Time              `json:"valid_to"`
-	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
-	RevocationReason    RevocationReason       `json:"revocation_reason" gorm:"serializer:text"`
-	Type                CertificateType        `json:"type"`
-	EngineID            string                 `json:"engine_id"`
-	IsCA                bool                   `json:"is_ca"`
+	SerialNumber        string                `json:"serial_number" gorm:"primaryKey"`
+	SubjectKeyID        string                `json:"subject_key_id"`
+	AuthorityKeyID      string                `json:"authority_key_id"`
+	Metadata            map[string]any        `json:"metadata" gorm:"serializer:json"`
+	Status              CertificateStatus     `json:"status"`
+	Certificate         *X509Certificate      `json:"certificate"`
+	KeyMetadata         KeyStrengthMetadata   `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
+	Subject             Subject               `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	Issuer              Subject               `json:"issuer" gorm:"embedded;embeddedPrefix:issuer_"`
+	ValidFrom           time.Time             `json:"valid_from"`
+	Extensions          CertificateExtensions `json:"extensions" gorm:"embedded;embeddedPrefix:extensions_"`
+	IssuerCAMetadata    IssuerCAMetadata      `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
+	ValidTo             time.Time             `json:"valid_to"`
+	RevocationTimestamp time.Time             `json:"revocation_timestamp"`
+	RevocationReason    RevocationReason      `json:"revocation_reason" gorm:"serializer:text"`
+	Type                CertificateType       `json:"type"`
+	EngineID            string                `json:"engine_id"`
+	// KeyID is the ID of the certificate's key in the KMS, empty when the KMS does not hold it (stored as
+	// NULL, which the foreign key does not check). With EngineID it identifies the key, and the database
+	// keeps the KMS from deleting it while the certificate references it.
+	KeyID string `json:"key_id" gorm:"serializer:nullstring"`
+	// HasPrivateKey is derived at read time from the KMS through certificates_view; it is not a stored column.
+	HasPrivateKey bool `json:"has_private_key" gorm:"->"`
+	IsCA          bool `json:"is_ca"`
 }
 
 type CertificateExtensions struct {
@@ -72,13 +78,13 @@ type IssuerCAMetadata struct {
 }
 
 type CACertificate struct {
-	ID                      string                 `json:"id"`
-	Certificate             Certificate            `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
-	CertificateSerialNumber string                 `json:"serial_number" gorm:"column:serial_number"`
-	Metadata                map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	CreationTS              time.Time              `json:"creation_ts"`
-	Level                   int                    `json:"level"`
-	ProfileID               string                 `json:"profile_id"`
+	ID                      string         `json:"id"`
+	Certificate             Certificate    `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
+	CertificateSerialNumber string         `json:"serial_number" gorm:"column:serial_number"`
+	Metadata                map[string]any `json:"metadata" gorm:"serializer:json"`
+	CreationTS              time.Time      `json:"creation_ts"`
+	Level                   int            `json:"level"`
+	ProfileID               string         `json:"profile_id"`
 }
 
 type CAStats struct {
@@ -124,13 +130,4 @@ type CAAttachedToDevice struct {
 		RAID string `json:"ra_id"`
 	} `json:"authorized_by"`
 	DeviceID string `json:"device_id"`
-}
-
-const (
-	KMSBindResourceKey = "lamassu.io/kms/binded-resources"
-)
-
-type KMSBindResource struct {
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
 }

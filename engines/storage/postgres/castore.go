@@ -2,20 +2,23 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 const caDBName = "ca_certificates"
-const caJoinCaCertificatesAndCertificates = "JOIN certificates ON ca_certificates.serial_number = certificates.serial_number"
+const caJoinCaCertificatesAndCertificates = "JOIN " + certificateReadTable + " ON ca_certificates.serial_number = certificates.serial_number"
 
 type PostgresCAStore struct {
-	db      *gorm.DB
-	querier *postgresDBQuerier[models.CACertificate]
+	db           *gorm.DB
+	querier      *DBQuerier[models.CACertificate]
+	writeQuerier *DBQuerier[models.CACertificate]
 }
 
 func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
@@ -24,14 +27,27 @@ func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertific
 		return nil, err
 	}
 
+	// Association reads use the same derived fields as direct certificate reads.
+	// This hook is only applied by the querier's SELECT paths; association writes keep their table.
+	querier.preload = func(tx *gorm.DB) *gorm.DB {
+		return tx.Preload("Certificate", func(association *gorm.DB) *gorm.DB {
+			return association.Table(certificateReadTable)
+		})
+	}
+
+	// CA writes only own the reference, never the associated certificate.
+	writer := *querier
+	writer.DB = db.Omit("Certificate").Session(&gorm.Session{})
+
 	return &PostgresCAStore{
-		db:      db,
-		querier: querier,
+		db:           db,
+		querier:      querier,
+		writeQuerier: &writer,
 	}, nil
 }
 
 func (db *PostgresCAStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{})
+	return db.querier.Count(ctx, []GormExtraOps{})
 }
 
 func (db *PostgresCAStore) CountWithFilters(ctx context.Context, queryParams *resources.QueryParameters) (int, error) {
@@ -39,21 +55,21 @@ func (db *PostgresCAStore) CountWithFilters(ctx context.Context, queryParams *re
 		return db.Count(ctx)
 	}
 
-	opts := []gormExtraOps{
-		{joins: []string{caJoinCaCertificatesAndCertificates}},
+	opts := []GormExtraOps{
+		{Joins: []string{caJoinCaCertificatesAndCertificates}},
 	}
 	return db.querier.CountFiltered(ctx, queryParams.Filters, opts)
 }
 
 func (db *PostgresCAStore) CountByEngine(ctx context.Context, engineID string) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{
-		{query: "certificates.engine_id = ? ", additionalWhere: []any{engineID}, joins: []string{caJoinCaCertificatesAndCertificates}},
+	return db.querier.Count(ctx, []GormExtraOps{
+		{Query: "certificates.engine_id = ? ", AdditionalWhere: []any{engineID}, Joins: []string{caJoinCaCertificatesAndCertificates}},
 	})
 }
 
 func (db *PostgresCAStore) CountByEngineWithFilters(ctx context.Context, engineID string, queryParams *resources.QueryParameters) (int, error) {
-	opts := []gormExtraOps{
-		{query: "certificates.engine_id = ? ", additionalWhere: []any{engineID}, joins: []string{caJoinCaCertificatesAndCertificates}},
+	opts := []GormExtraOps{
+		{Query: "certificates.engine_id = ? ", AdditionalWhere: []any{engineID}, Joins: []string{caJoinCaCertificatesAndCertificates}},
 	}
 
 	if queryParams == nil {
@@ -64,27 +80,27 @@ func (db *PostgresCAStore) CountByEngineWithFilters(ctx context.Context, engineI
 }
 
 func (db *PostgresCAStore) CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {
-	return db.querier.Count(ctx, []gormExtraOps{
-		{query: "certificates.status = ? ", additionalWhere: []any{status}, joins: []string{caJoinCaCertificatesAndCertificates}},
+	return db.querier.Count(ctx, []GormExtraOps{
+		{Query: "certificates.status = ? ", AdditionalWhere: []any{status}, Joins: []string{caJoinCaCertificatesAndCertificates}},
 	})
 }
 
 func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	opts := []gormExtraOps{
-		{query: "certificates.type = ? ", additionalWhere: []any{CAType}, joins: []string{caJoinCaCertificatesAndCertificates}},
+	opts := []GormExtraOps{
+		{Query: "certificates.type = ? ", AdditionalWhere: []any{CAType}, Joins: []string{caJoinCaCertificatesAndCertificates}},
 	}
 	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCAStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	opts := []gormExtraOps{
-		{joins: []string{caJoinCaCertificatesAndCertificates}},
+	opts := []GormExtraOps{
+		{Joins: []string{caJoinCaCertificatesAndCertificates}},
 	}
 	// if req.QueryParams != nil {
 	// 	for _, filter := range req.QueryParams.Filters {
 	// 		if filter.Field == "subject.common_name" {
-	// 			opts = []gormExtraOps{
-	// 				{joins: []string{caJoinCaCertificatesAndCertificates}},
+	// 			opts = []GormExtraOps{
+	// 				{Joins: []string{caJoinCaCertificatesAndCertificates}},
 	// 			}
 	// 			break
 	// 		}
@@ -95,8 +111,8 @@ func (db *PostgresCAStore) SelectAll(ctx context.Context, req storage.StorageLis
 }
 
 func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
-		{query: "certificates.subject_common_name = ? ", additionalWhere: []any{commonName}, joins: []string{caJoinCaCertificatesAndCertificates}},
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{
+		{Query: "certificates.subject_common_name = ? ", AdditionalWhere: []any{commonName}, Joins: []string{caJoinCaCertificatesAndCertificates}},
 	}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
@@ -106,51 +122,51 @@ func (db *PostgresCAStore) SelectExistsBySerialNumber(ctx context.Context, seria
 }
 
 func (db *PostgresCAStore) SelectByParentCA(ctx context.Context, parentCAID string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
-		{query: "certificates.issuer_meta_id = ? AND id != ?", additionalWhere: []any{parentCAID, parentCAID}, joins: []string{caJoinCaCertificatesAndCertificates}},
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{
+		{Query: "certificates.issuer_meta_id = ? AND id != ?", AdditionalWhere: []any{parentCAID, parentCAID}, Joins: []string{caJoinCaCertificatesAndCertificates}},
 	}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCAStore) SelectBySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{
 		{
-			query: "certificates.subject_common_name = ? AND " +
+			Query: "certificates.subject_common_name = ? AND " +
 				"certificates.subject_organization = ? AND " +
 				"certificates.subject_organization_unit = ? AND " +
 				"certificates.subject_country = ? AND " +
 				"certificates.subject_state = ? AND " +
 				"certificates.subject_locality = ? AND " +
 				"subject_key_id = ?",
-			additionalWhere: []any{sub.CommonName,
+			AdditionalWhere: []any{sub.CommonName,
 				sub.Organization,
 				sub.OrganizationUnit,
 				sub.Country,
 				sub.State,
 				sub.Locality,
 				skid},
-			joins: []string{caJoinCaCertificatesAndCertificates},
+			Joins: []string{caJoinCaCertificatesAndCertificates},
 		},
 	}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCAStore) SelectByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+	return db.querier.SelectAll(ctx, req.QueryParams, []GormExtraOps{
 		{
-			query: "certificates.issuer_common_name = ? AND " +
+			Query: "certificates.issuer_common_name = ? AND " +
 				"certificates.issuer_organization = ? AND " +
 				"certificates.issuer_organization_unit = ? AND " +
 				"certificates.issuer_country = ? AND " +
 				"certificates.issuer_state = ? AND " +
 				"certificates.issuer_locality = ? AND " +
 				"authority_key_id = ?",
-			additionalWhere: []any{iss.CommonName,
+			AdditionalWhere: []any{iss.CommonName,
 				iss.Organization,
 				iss.OrganizationUnit,
 				iss.Country,
 				iss.State,
 				iss.Locality,
 				akid},
-			joins: []string{caJoinCaCertificatesAndCertificates},
+			Joins: []string{caJoinCaCertificatesAndCertificates},
 		},
 	}, req.ExhaustiveRun, req.ApplyFunc)
 }
@@ -160,11 +176,35 @@ func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (boo
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(ctx, caCertificate, caCertificate.ID)
+	ca, err := db.writeQuerier.Insert(ctx, caCertificate, caCertificate.ID)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return nil, errs.ErrCAAlreadyExists
+	}
+	if err != nil {
+		return nil, err
+	}
+	return db.reload(ctx, ca)
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(ctx, caCertificate, caCertificate.ID)
+	updated, err := db.writeQuerier.Update(ctx, caCertificate, caCertificate.ID)
+	if err != nil {
+		return nil, err
+	}
+	return db.reload(ctx, updated)
+}
+
+// reload also refreshes the certificate association through certificates_view.
+func (db *PostgresCAStore) reload(ctx context.Context, ca *models.CACertificate) (*models.CACertificate, error) {
+	found, stored, err := db.SelectExistsByID(ctx, ca.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, gorm.ErrRecordNotFound
+	}
+	*ca = *stored
+	return ca, nil
 }
 
 func (db *PostgresCAStore) Delete(ctx context.Context, id string) error {

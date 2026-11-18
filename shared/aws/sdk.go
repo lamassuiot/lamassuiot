@@ -12,7 +12,7 @@ import (
 )
 
 func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
-	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...any) (aws.Endpoint, error) {
 		if conf.EndpointURL != "" {
 			return aws.Endpoint{
 				PartitionID:   "aws",

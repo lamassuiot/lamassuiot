@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )
@@ -23,11 +23,10 @@ import (
 const DefaultCAID = "111"
 
 func TestBaseCRL(t *testing.T) {
-	serverTest, err := StartVAServiceTestServer(t)
+	vaTestServer, err := StartVAServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create VA test server")
+		t.Fatalf("could not start VA service test server: %s", err)
 	}
-
 	var testcases = []struct {
 		name        string
 		before      func(services.CAService) ([]*models.Certificate, error)
@@ -38,7 +37,7 @@ func TestBaseCRL(t *testing.T) {
 			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
-				for i := 0; i < crtsToIssue; i++ {
+				for range crtsToIssue {
 					crt, err := generateCertificate(caSDK)
 					if err != nil {
 						return nil, err
@@ -71,7 +70,7 @@ func TestBaseCRL(t *testing.T) {
 			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
-				for i := 0; i < crtsToIssue; i++ {
+				for range crtsToIssue {
 					crt, err := generateCertificate(caSDK)
 					if err != nil {
 						return nil, err
@@ -103,27 +102,29 @@ func TestBaseCRL(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			serverTest.BeforeEach()
-			_, err := initCAForVA(serverTest)
+			err := serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("could not run BeforeEach: %s", err)
+			}
+			_, err = initCAForVA(vaTestServer.HttpCASDK)
 			if err != nil {
 				t.Fatalf("could not init CA for VA: %s", err)
 			}
-			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+			issuerCA, err := vaTestServer.HttpCASDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 			if err != nil {
 				t.Fatalf("could not get issuer CA: %s", err)
 			}
 
-			crts, err := tc.before(serverTest.CA.Service)
+			crts, err := tc.before(vaTestServer.HttpCASDK)
 			if err != nil {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
 			var crl *x509.RevocationList
 			err = tests.SleepRetry(5, 5*time.Second, func() error {
-				crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+				crl, err = vaTestServer.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 					CASubjectKeyID: issuerCA.Certificate.AuthorityKeyID,
 					Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
 					VerifyResponse: true,
@@ -141,15 +142,11 @@ func TestBaseCRL(t *testing.T) {
 }
 
 func TestCRLCertificateRevocation(t *testing.T) {
-	serverTest, err := StartVAServiceTestServer(t)
+	vaTestServer, err := StartVAServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create VA test server")
+		t.Fatalf("could not start VA service test server: %s", err)
 	}
-
-	caSDK := serverTest.CA.HttpCASDK
-
-	serverTest.BeforeEach()
-	ca, err := initCAForVA(serverTest)
+	ca, err := initCAForVA(vaTestServer.HttpCASDK)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
@@ -157,8 +154,8 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	crtsToIssue := 10
 	issuedCertsSNs := []string{}
 	var oneCrt *models.Certificate
-	for i := 0; i < crtsToIssue; i++ {
-		crt, err := generateCertificate(caSDK)
+	for range crtsToIssue {
+		crt, err := generateCertificate(vaTestServer.HttpCASDK)
 		oneCrt = crt
 		if err != nil {
 			t.Fatalf("could not generate certificate: %s", err)
@@ -172,7 +169,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
 		// First get v1 CRL and check that it has 0 entries
-		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+		crl, err = vaTestServer.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
@@ -202,7 +199,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 
 	// Revoke a certificate
 	rndSN := issuedCertsSNs[rand.Intn(len(issuedCertsSNs))]
-	_, err = caSDK.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+	_, err = vaTestServer.HttpCASDK.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
 		SerialNumber:     rndSN,
 		NewStatus:        models.StatusRevoked,
 		RevocationReason: ocsp.CessationOfOperation,
@@ -213,7 +210,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	// Sleep to ensure that the CRL is regenerated. Since the CRL is generated on revoke via event bus, it may take some time.
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v2 CRL and check that it has 1 entry
-		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+		crl, err = vaTestServer.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
@@ -241,17 +238,9 @@ func TestCRLCertificateRevocation(t *testing.T) {
 }
 
 func TestPostOCSP(t *testing.T) {
-	t.Parallel()
-
-	serverTest, err := StartVAServiceTestServer(t)
+	vaTestServer, err := StartVAServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create VA test server")
-	}
-
-	serverTest.BeforeEach()
-	_, err = initCAForVA(serverTest)
-	if err != nil {
-		t.Fatalf("could not init CA for VA: %s", err)
+		t.Fatalf("could not start VA service test server: %s", err)
 	}
 
 	var testcases = []struct {
@@ -321,26 +310,32 @@ func TestPostOCSP(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-
-			crt, err := generateCertificate(serverTest.CA.Service)
+			err := serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("could not run BeforeEach: %s", err)
+			}
+			_, err = initCAForVA(vaTestServer.HttpCASDK)
+			if err != nil {
+				t.Fatalf("could not init CA for VA: %s", err)
+			}
+			crt, err := generateCertificate(vaTestServer.HttpCASDK)
 			if err != nil {
 				t.Fatalf("failed generating crt in test case: %s", err)
 			}
 
-			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+			issuerCA, err := vaTestServer.HttpCASDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 			if err != nil {
 				t.Fatalf("could not get issuer CA: %s", err)
 			}
 
-			err = tc.before(serverTest.CA.Service, crt)
+			err = tc.before(vaTestServer.HttpCASDK, crt)
 			if err != nil {
 				t.Fatalf("could not run before OCSP Request-Response: %s", err)
 			}
 
-			response, err := serverTest.VA.HttpVASDK.GetOCSPResponsePost(context.Background(), services.GetOCSPResponseInput{
+			response, err := vaTestServer.HttpVASDK.GetOCSPResponsePost(context.Background(), services.GetOCSPResponseInput{
 				Certificate:    (*x509.Certificate)(crt.Certificate),
 				Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
 				VerifyResponse: true,
@@ -353,27 +348,26 @@ func TestPostOCSP(t *testing.T) {
 	}
 }
 func TestGetOCSP(t *testing.T) {
-	serverTest, err := StartVAServiceTestServer(t)
+	vaServerTest, err := StartVAServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create VA test server")
+		t.Fatalf("could not start VA service test server: %s", err)
 	}
-	serverTest.BeforeEach()
-	_, err = initCAForVA(serverTest)
+	_, err = initCAForVA(vaServerTest.HttpCASDK)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
 
-	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+	issuerCA, err := vaServerTest.HttpCASDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 	if err != nil {
 		t.Fatalf("could not get issuer CA: %s", err)
 	}
 
-	crt, err := generateCertificate(serverTest.CA.Service)
+	crt, err := generateCertificate(vaServerTest.HttpCASDK)
 	if err != nil {
 		t.Fatalf("failed generating crt in test case: %s", err)
 	}
 
-	response, err := serverTest.VA.HttpVASDK.GetOCSPResponseGet(context.Background(), services.GetOCSPResponseInput{
+	response, err := vaServerTest.HttpVASDK.GetOCSPResponseGet(context.Background(), services.GetOCSPResponseInput{
 		Certificate:    (*x509.Certificate)(crt.Certificate),
 		Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
 		VerifyResponse: true,
@@ -401,29 +395,31 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 		ocsp.AACompromise:         "AACompromise",
 	}
 
-	serverTest, err := StartVAServiceTestServer(t)
+	vaServerTest, err := StartVAServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create VA test server")
-	}
-	serverTest.BeforeEach()
-	_, err = initCAForVA(serverTest)
-	if err != nil {
-		t.Fatalf("could not init CA for VA: %s", err)
-	}
-
-	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
-	if err != nil {
-		t.Fatalf("could not get issuer CA: %s", err)
+		t.Fatalf("could not start VA service test server: %s", err)
 	}
 
 	for reason, reasonName := range testcases {
 		t.Run(fmt.Sprintf("Revocation-%s", reasonName), func(t *testing.T) {
-			crt, err := generateCertificate(serverTest.CA.Service)
+			err := serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("could not run BeforeEach: %s", err)
+			}
+			_, err = initCAForVA(vaServerTest.HttpCASDK)
+			if err != nil {
+				t.Fatalf("could not init CA for VA: %s", err)
+			}
+			issuerCA, err := vaServerTest.HttpCASDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+			if err != nil {
+				t.Fatalf("could not get issuer CA: %s", err)
+			}
+			crt, err := generateCertificate(vaServerTest.HttpCASDK)
 			if err != nil {
 				t.Fatalf("failed generating crt in test case: %s", err)
 			}
 
-			_, err = serverTest.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+			_, err = vaServerTest.HttpCASDK.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
 				SerialNumber:     crt.SerialNumber,
 				NewStatus:        models.StatusRevoked,
 				RevocationReason: models.RevocationReason(reason),
@@ -432,7 +428,7 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 				t.Fatalf("failed revoking certificate: %s", err)
 			}
 
-			response, err := serverTest.VA.HttpVASDK.GetOCSPResponsePost(context.Background(), services.GetOCSPResponseInput{
+			response, err := vaServerTest.HttpVASDK.GetOCSPResponsePost(context.Background(), services.GetOCSPResponseInput{
 				Certificate:    (*x509.Certificate)(crt.Certificate),
 				Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
 				VerifyResponse: true,
@@ -453,20 +449,18 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 }
 
 func TestVARole(t *testing.T) {
-	serverTest, err := StartVAServiceTestServer(t)
+	vaServerTest, err := StartVAServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create VA test server")
+		t.Fatalf("could not start VA service test server: %s", err)
 	}
-
-	serverTest.BeforeEach()
-	ca, err := initCAForVA(serverTest)
+	ca, err := initCAForVA(vaServerTest.HttpCASDK)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
 
 	var role *models.VARole
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
-		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
+		role, err = vaServerTest.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
 			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		})
 
@@ -484,14 +478,14 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be true, got %t", role.CRLOptions.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SubjectKeyIDSigner != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CRLOptions.SubjectKeyIDSigner)
+	if role.CRLOptions.SignerCertificateSerialNumber != ca.Certificate.SerialNumber {
+		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.CRLOptions.SignerCertificateSerialNumber)
 	}
 
 	//Now Update the role
 
 	role.CRLOptions.RegenerateOnRevoke = false
-	role.CRLOptions.SubjectKeyIDSigner = "123"
+	role.CRLOptions.SignerCertificateSerialNumber = ca.Certificate.SerialNumber
 	role.CRLOptions.Validity = models.TimeDuration(time.Hour * 2)
 
 	role, err = serverTest.VA.CRLService.UpdateVARole(context.Background(), services.UpdateVARoleInput{
@@ -515,8 +509,8 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be false, got %t", role.CRLOptions.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SubjectKeyIDSigner != "123" {
-		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be 123, got %s", role.CRLOptions.SubjectKeyIDSigner)
+	if role.CRLOptions.SignerCertificateSerialNumber != ca.Certificate.SerialNumber {
+		t.Fatalf("role CRLOptions.SignerCertificateSerialNumber should be %s, got %s", ca.Certificate.SerialNumber, role.CRLOptions.SignerCertificateSerialNumber)
 	}
 
 	//Now get all roles
@@ -632,20 +626,12 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 	return crt, nil
 }
 
-func StartVAServiceTestServer(t *testing.T) (*tests.TestServer, error) {
-	testServer, err := tests.TestServiceBuilder{}.WithDatabase("ca", "va", "kms").WithService(tests.CA, tests.VA).WithMonitor().WithEventBus().Build(t)
-	if err != nil {
-		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
-	}
-	return testServer, nil
-}
-
-func initCAForVA(testServer *tests.TestServer) (*models.CACertificate, error) {
+func initCAForVA(caSvc services.CAService) (*models.CACertificate, error) {
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
-	profile, err := testServer.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+	profile, err := caSvc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
 		Profile: models.IssuanceProfile{
 			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 		},
@@ -654,7 +640,7 @@ func initCAForVA(testServer *tests.TestServer) (*models.CACertificate, error) {
 		return nil, err
 	}
 
-	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+	ca, err := caSvc.CreateCA(context.Background(), services.CreateCAInput{
 		ID:           DefaultCAID,
 		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:      models.Subject{CommonName: "TestCA"},
@@ -669,21 +655,20 @@ func initCAForVA(testServer *tests.TestServer) (*models.CACertificate, error) {
 }
 
 func TestCRLCertificateReactivationFromHold(t *testing.T) {
-	t.Parallel()
-
-	serverTest, err := StartVAServiceTestServer(t)
+	vaServerTest, err := StartVAServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create VA test server")
+		t.Fatalf("could not start VA service test server: %s", err)
 	}
-
-	serverTest.BeforeEach()
-	ca, err := initCAForVA(serverTest)
+	if err := vaServerTest.BeforeEach(); err != nil {
+		t.Fatalf("could not run BeforeEach: %s", err)
+	}
+	ca, err := initCAForVA(vaServerTest.HttpCASDK)
 	if err != nil {
 		t.Fatalf("could not initialize CA: %s", err)
 	}
 
 	// Issue a test certificate
-	oneCrt, err := generateCertificate(serverTest.CA.Service)
+	oneCrt, err := generateCertificate(vaServerTest.HttpCASDK)
 	if err != nil {
 		t.Fatalf("could not generate certificate: %s", err)
 	}
@@ -692,7 +677,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	var crl *x509.RevocationList
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// First get v1 CRL and check that it has 0 entries
-		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+		crl, err = vaServerTest.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
@@ -721,7 +706,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	assert.Equal(t, big.NewInt(1), crl.Number, "CRL should have version 1 initially")
 
 	// Revoke the certificate with CertificateHold reason
-	_, err = serverTest.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+	_, err = vaServerTest.HttpCASDK.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
 		SerialNumber:     oneCrt.SerialNumber,
 		NewStatus:        models.StatusRevoked,
 		RevocationReason: ocsp.CertificateHold,
@@ -732,7 +717,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	// Sleep to ensure that the CRL is regenerated after revocation
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v2 CRL and check that it has 1 entry
-		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+		crl, err = vaServerTest.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,
@@ -770,7 +755,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	assert.Equal(t, big.NewInt(2), crl.Number, "CRL should have version 2 after revocation")
 
 	// Now reactivate the certificate (remove from CertificateHold)
-	_, err = serverTest.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+	_, err = vaServerTest.HttpCASDK.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
 		SerialNumber: oneCrt.SerialNumber,
 		NewStatus:    models.StatusActive,
 		// No revocation reason needed when reactivating
@@ -781,7 +766,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	// Sleep to ensure that the CRL is regenerated after reactivation
 	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v3 CRL and check that it has 0 entries (certificate should be removed)
-		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+		crl, err = vaServerTest.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
 			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
 			VerifyResponse: true,

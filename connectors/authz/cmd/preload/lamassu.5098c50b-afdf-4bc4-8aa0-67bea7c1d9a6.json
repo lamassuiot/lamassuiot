@@ -1,0 +1,33 @@
+{
+  "id": "lamassu.5098c50b-afdf-4bc4-8aa0-67bea7c1d9a6",
+  "name": "Alerts - Reader",
+  "description": "Read-only access to alerts events and subscriptions",
+  "rules": [
+    {
+      "namespace": "pki",
+      "schema_name": "alerts",
+      "entity_type": "event",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    },
+    {
+      "namespace": "pki",
+      "schema_name": "alerts",
+      "entity_type": "subscription",
+      "actions": [
+        "read",
+        "ui"
+      ],
+      "relations": [],
+      "direct_grants": [
+        "*"
+      ]
+    }
+  ]
+}

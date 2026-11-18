@@ -26,11 +26,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	hhelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	hhelpers "github.com/lamassuiot/lamassuiot/v4/shared/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -483,10 +483,9 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		Version: 0,
 	}
 
-	var rnf *iotdataplaneTypes.ResourceNotFoundException
 	getShadowOutput, err := svc.iotdataplaneSDK.GetThingShadow(context.Background(), getShadowReq)
 	if err != nil {
-		if !errors.As(err, &rnf) {
+		if _, ok := errors.AsType[*iotdataplaneTypes.ResourceNotFoundException](err); !ok {
 			return fmt.Errorf("could not get device %s shadow: %s", input.DeviceID, err)
 		}
 	} else {
@@ -606,17 +605,18 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		return err
 	}
 
-	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
-		EvenType:          models.DeviceEventTypeShadowUpdated,
-		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
-	}
-
-	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-		ID:   input.DeviceID,
-		Slot: *device.IdentitySlot,
+	_, err = svc.DeviceSDK.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		DeviceID:    input.DeviceID,
+		Timestamp:   time.Now(),
+		Type:        models.DeviceEventTypeShadowUpdated,
+		Description: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
+		Source:      AWSIoTSource(svc.ConnectorID),
+		StructuredFields: map[string]any{
+			"actions": actions,
+		},
 	})
 	if err != nil {
-		lFunc.Errorf("could not update device metadata: %s", err)
+		lFunc.Errorf("could not create device event: %s", err)
 		return err
 	}
 
@@ -887,8 +887,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdatePolicies(ctx context.C
 			PolicyName: &policy.PolicyName,
 		})
 		if err != nil {
-			var rne *types.ResourceNotFoundException
-			if !errors.As(err, &rne) {
+			if _, ok := errors.AsType[*types.ResourceNotFoundException](err); !ok {
 				lFunc.Errorf("got error while getting %s policy: %s", policy.PolicyName, err)
 				return err
 			}
@@ -1028,7 +1027,10 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 	dms.Metadata[AWSIoTMetadataKey(svc.ConnectorID)] = updatedJitpConf
 
 	_, err = svc.DmsSDK.UpdateDMS(ctx, services.UpdateDMSInput{
-		DMS: *dms,
+		ID:       dms.ID,
+		Name:     dms.Name,
+		Metadata: dms.Metadata,
+		Settings: &dms.Settings,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while updating DMS metadata: %s", err)
@@ -1102,7 +1104,6 @@ func (svc *AWSCloudConnectorServiceBackend) connectThingOverMqttWss(ctx context.
 	}
 
 	requestUrl := fmt.Sprintf("wss://%s%s?%s", host, canonicalUri, canonicalQuerystring)
-	fmt.Println(requestUrl)
 
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(requestUrl)

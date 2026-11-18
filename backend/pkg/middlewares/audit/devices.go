@@ -3,10 +3,10 @@ package auditpub
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
+	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 type DeviceAuditEventPublisher struct {
@@ -39,6 +39,18 @@ func (mw *DeviceAuditEventPublisher) CreateDevice(ctx context.Context, input ser
 
 func (mw *DeviceAuditEventPublisher) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
 	return mw.next.GetDeviceByID(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
+}
+
+func (mw *DeviceAuditEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (output *models.DeviceEvent, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateDeviceEventKey, input, err, output)
+	}()
+
+	return mw.next.CreateDeviceEvent(ctx, input)
 }
 
 func (mw *DeviceAuditEventPublisher) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {

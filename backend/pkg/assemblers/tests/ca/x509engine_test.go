@@ -14,32 +14,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
-	beservice "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	beservice "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/x509engines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
 func setupX509TestSuite(t *testing.T) (services.KMSService, *x509engines.X509Engine, error) {
-	builder := tests.TestServiceBuilder{}.WithDatabase("kms", "ca")
-	testServer, err := builder.Build(t)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not create Device Manager test server: %s", err)
-	}
-
-	err = testServer.BeforeEach()
-	if err != nil {
-		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
+	if err := serverTest.BeforeEach(); err != nil {
+		return nil, nil, fmt.Errorf("could not run BeforeEach: %s", err)
 	}
 
 	// Create a new instance of GoCryptoEngine
 	log := chelpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
 
-	x509Engine := x509engines.NewX509Engine(log, []string{"ocsp.lamassu.io", "va.lamassu.io"}, testServer.KMS.HttpKMSSDK)
-	return testServer.KMS.HttpKMSSDK, &x509Engine, nil
+	x509Engine := x509engines.NewX509Engine(log, []string{"ocsp.lamassu.io", "va.lamassu.io"}, serverTest.KMS.HttpKMSSDK)
+	return serverTest.KMS.HttpKMSSDK, &x509Engine, nil
 }
 
 func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyType, tcExpirationTime time.Time) error {
@@ -182,7 +174,6 @@ func TestCreateRootCA(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -322,7 +313,6 @@ func TestRootCAExtendedKeyUsage(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -534,7 +524,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			// Create subordinate CA key using KMS
@@ -978,7 +967,6 @@ func TestSignCertificateRequest(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			csr, errCsr := chelpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.key())

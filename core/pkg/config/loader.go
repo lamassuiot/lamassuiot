@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func DecodeStruct[E any](source interface{}) (E, error) {
+func DecodeStruct[E any](source any) (E, error) {
 	var target E
 	err := mapstructure.Decode(source, &target)
 	if err != nil {
@@ -20,8 +20,8 @@ func DecodeStruct[E any](source interface{}) (E, error) {
 	return target, nil
 }
 
-func EncodeStruct[E any](source E) (map[string]interface{}, error) {
-	var target map[string]interface{}
+func EncodeStruct[E any](source E) (map[string]any, error) {
+	var target map[string]any
 	err := mapstructure.Decode(source, &target)
 	if err != nil {
 		return nil, fmt.Errorf("could not decode struct: %w", err)
@@ -31,7 +31,7 @@ func EncodeStruct[E any](source E) (map[string]interface{}, error) {
 
 func readConfig[E any](configFilePath string, defaults *E) (*E, error) {
 	vp := viper.New()
-	defaultsMap := map[string]interface{}{}
+	defaultsMap := map[string]any{}
 
 	if defaults != nil {
 		mapstructure.Decode(defaults, &defaultsMap)

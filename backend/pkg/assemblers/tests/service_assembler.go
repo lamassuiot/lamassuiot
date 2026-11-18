@@ -3,9 +3,9 @@ package tests
 import (
 	"context"
 	"crypto/elliptic"
-	"crypto/tls"
 	"fmt"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -13,17 +13,17 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
-	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
+	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/subsystems"
 )
 
 type TestServiceBuilder struct {
@@ -111,6 +111,39 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 	t.Cleanup(testServer.AfterSuite)
 
 	return testServer, nil
+}
+
+func (b TestServiceBuilder) BuildSuite() (*TestServer, error) {
+	var err error
+	eventBusConf := &TestEventBusConfig{
+		Config: cconfig.EventBusEngine{
+			Enabled: false,
+		},
+	}
+	if b.withEventBus {
+		eventBusConf, err = PrepareRabbitMQForTest()
+		if err != nil {
+			return nil, fmt.Errorf("could not prepare RabbitMQ test server: %s", err)
+		}
+	}
+
+	storageConfig, err := PreparePostgresForTest(b.withDatabase)
+	if err != nil {
+		return nil, fmt.Errorf("could not prepare Postgres test server: %s", err)
+	}
+
+	cryptoEngines := []CryptoEngine{GOLANG}
+	if b.withVault {
+		cryptoEngines = append(cryptoEngines, VAULT)
+	}
+
+	cryptoConfig := PrepareCryptoEnginesForTest(cryptoEngines)
+
+	if b.withService == nil {
+		b.withService = []Service{CA}
+	}
+
+	return AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withSmtp, b.withService, b.withMonitor, b.allowCascadeDelete)
 }
 
 type CryptoEngine int
@@ -206,7 +239,9 @@ type TestServer struct {
 	DMSManager    *DMSManagerTestServer
 	Alerts        *AlertsTestServer
 
-	EventBus *TestEventBusConfig
+	EventBus      *TestEventBusConfig
+	Storage       *TestStorageEngineConfig
+	CryptoEngines *TestCryptoEngineConfig
 
 	BeforeEach func() error
 	AfterSuite func()
@@ -256,13 +291,13 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 		CryptoEngines:     []cconfig.CryptoEngineConfig{},
 	}
 
-	fsid := fmt.Sprintf("/tmp/%s", uuid.NewString())
+	fsid := fmt.Sprintf("/tmp/%s", uuid.NewV7().String())
 
 	fsconfig := cconfig.CryptoEngineConfig{
 		ID:       "filesystem-1",
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 		Type:     cconfig.FilesystemProvider,
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"storage_directory": fsid,
 		},
 	}
@@ -338,7 +373,7 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 
 	return &KMSTestServer{
 		Service:    *svc,
-		HttpKMSSDK: sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpKMSSDK: sdk.NewHttpKMSClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -378,7 +413,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 
 	return &CATestServer{
 		Service:   *svc,
-		HttpCASDK: sdk.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpCASDK: sdk.NewHttpCAClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -415,7 +450,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 
 	return &DeviceManagerTestServer{
 		Service:              *svc,
-		HttpDeviceManagerSDK: sdk.NewHttpDeviceManagerClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpDeviceManagerSDK: sdk.NewHttpDeviceManagerClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -476,16 +511,10 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		return nil, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
 
-	httpCli := http.Client{}
-	httpCli.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
 	return &DMSManagerTestServer{
 		Port:                 port,
 		Service:              *svc,
-		HttpDeviceManagerSDK: sdk.NewHttpDMSManagerClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		HttpDeviceManagerSDK: sdk.NewHttpDMSManagerClient(NewTestHTTPClientInsecure(), fmt.Sprintf("https://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -517,7 +546,7 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 		FilesystemStorage: cconfig.FSStorageConfig{
 			ID:   "fs",
 			Type: cconfig.LocalFilesystem,
-			Config: map[string]interface{}{
+			Config: map[string]any{
 				"storage_directory": "/tmp/lamassuiot",
 			},
 		},
@@ -534,7 +563,7 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 		CRLService:    *crlSvc,
 		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
 		HttpCASDK:     caTestServer.HttpCASDK,
-		HttpVASDK:     sdk.NewHttpVAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
+		HttpVASDK:     sdk.NewHttpVAClient(NewTestHTTPClient(), fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -570,17 +599,10 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 		return nil, err
 	}
 
-	httpCli := http.Client{}
-	httpCli.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
-
 	return &AlertsTestServer{
 		Port:                 port,
 		Service:              *svc,
-		HttpAlertsManagerSDK: sdk.NewHttpAlertsClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		HttpAlertsManagerSDK: sdk.NewHttpAlertsClient(NewTestHTTPClientInsecure(), fmt.Sprintf("https://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -591,7 +613,7 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 }
 
 func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool, allowCascadeDelete bool) (*TestServer, error) {
-	servicesMap := make(map[Service]interface{})
+	servicesMap := make(map[Service]any)
 
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
@@ -706,9 +728,11 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 	}
 
 	return &TestServer{
-		EventBus: eventBus,
-		KMS:      kmsTestServer,
-		CA:       caTestServer,
+		EventBus:      eventBus,
+		Storage:       storageEngine,
+		CryptoEngines: cryptoEngines,
+		KMS:           kmsTestServer,
+		CA:            caTestServer,
 		DeviceManager: func() *DeviceManagerTestServer {
 			if servicesMap[DEVICE_MANAGER] != nil {
 				return servicesMap[DEVICE_MANAGER].(*DeviceManagerTestServer)
@@ -740,7 +764,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 
 func SleepRetry(retry int, sleep time.Duration, f func() error) error {
 	var err error
-	for i := 0; i < retry; i++ {
+	for range retry {
 		err = f()
 		if err == nil {
 			return nil
@@ -762,14 +786,12 @@ func getDlqEventBusConfig(conf cconfig.EventBusEngine) cconfig.EventBusEngine {
 	return dlqEventBus
 }
 
-func deepCopy(src map[string]interface{}) map[string]interface{} {
+func deepCopy(src map[string]any) map[string]any {
 	if src == nil {
 		return nil
 	}
-	dst := make(map[string]interface{}, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
+	dst := make(map[string]any, len(src))
+	maps.Copy(dst, src)
 	return dst
 }
 

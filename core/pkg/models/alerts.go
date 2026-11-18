@@ -47,16 +47,18 @@ type EmailConfig struct {
 }
 
 type MSTeamsChannelConfig struct {
-	WebhookURL string `json:"webhook_url"`
+	WebhookURL string                 `json:"webhook_url"`
+	HTTPClient *WebhookCallHttpClient `json:"http_client,omitempty"`
 }
 
 type WebhookChannelConfig struct {
-	WebhookURL    string `json:"webhook_url"`
-	WebhookMethod string `json:"webhook_method"`
+	WebhookURL    string                 `json:"webhook_url"`
+	WebhookMethod string                 `json:"webhook_method"`
+	HTTPClient    *WebhookCallHttpClient `json:"http_client,omitempty"`
 }
 
 type AlertLatestEvent struct {
-	EventType EventType         `json:"event_types" gorm:"primaryKey"`
+	EventType EventType         `json:"event_type" gorm:"primaryKey"`
 	Event     cloudevents.Event `json:"event" gorm:"serializer:json"`
 	LastSeen  time.Time         `json:"seen_at"`
 	TotalSeen int               `json:"counter"`

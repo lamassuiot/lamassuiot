@@ -5,20 +5,17 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	_ "embed"
 	"encoding/pem"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,33 +24,22 @@ var embeddedPrivateKey []byte
 
 // PopulateSampleData populates the system with sample DMS, devices and issuance profiles for testing
 // It uses HTTP clients to interact with the services
-func PopulateSampleData(
-	ctx context.Context,
-	logger *logrus.Entry,
-	caServiceURL string,
-	deviceServiceURL string,
-) error {
+func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL string, caServiceURL string, dmsServiceURL string, deviceServiceURL string) error {
 	logger.Info("Populating system with sample data...")
 
-	// Setup HTTP client with insecure TLS (for development)
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
-	}
+	httpCli := sdk.HttpClientWithCustomHeaders(&http.Client{Timeout: 10 * time.Second}, "X-Principal-ID", "admin-mode")
 
 	// Create CA SDK client
-	caService := sdk.NewHttpCAClient(httpClient, caServiceURL)
+	caService := sdk.NewHttpCAClient(httpCli, caServiceURL)
 
 	// Create KMS SDK client - extract base URL from CA service URL
-	kmsServiceURL := strings.ReplaceAll(caServiceURL, "/api/ca", "/api/kms")
-	kmsService := sdk.NewHttpKMSClient(httpClient, kmsServiceURL)
+	kmsService := sdk.NewHttpKMSClient(httpCli, kmsServiceURL)
 
 	// Create DMS Manager SDK client - extract base URL from device service URL
-	dmsServiceURL := extractBaseURL(deviceServiceURL)
-	dmsService := sdk.NewHttpDMSManagerClient(httpClient, dmsServiceURL)
+	dmsService := sdk.NewHttpDMSManagerClient(httpCli, dmsServiceURL)
+
+	// Get device manager service URL
+	deviceManagerService := sdk.NewHttpDeviceManagerClient(httpCli, deviceServiceURL)
 
 	// Step 1: Create Issuance Profiles for the CAs
 	logger.Info("Creating CA issuance profiles...")
@@ -89,7 +75,7 @@ func PopulateSampleData(
 		Subject: models.Subject{
 			CommonName:       "Sample Generated Root CA",
 			Organization:     "LamassuIoT Sample",
-			OrganizationUnit: "Development",
+			OrganizationUnit: "IoT",
 			Country:          "ES",
 			State:            "Gipuzkoa",
 			Locality:         "Arrasate",
@@ -183,7 +169,7 @@ func PopulateSampleData(
 	dmsInput := services.CreateDMSInput{
 		ID:   sampleDMSID,
 		Name: "Sample DMS",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"description": "Sample DMS for testing",
 			"sample":      true,
 		},
@@ -202,7 +188,7 @@ func PopulateSampleData(
 				DeviceProvisionProfile: models.DeviceProvisionProfile{
 					Icon:      "Laptop",
 					IconColor: "#0066CC",
-					Metadata: map[string]interface{}{
+					Metadata: map[string]any{
 						"sample": true,
 					},
 					Tags: []string{"sample", "test"},
@@ -210,8 +196,7 @@ func PopulateSampleData(
 				RegistrationMode: models.JITP,
 			},
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				RevokeOnReEnrollment:    false,
-				AdditionalValidationCAs: []string{},
+				RevokeOnReEnrollment: false,
 				ReEnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 					AuthMode: "CLIENT_CERTIFICATE",
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
@@ -242,14 +227,14 @@ func PopulateSampleData(
 		tags      []string
 		icon      string
 		iconColor string
-		metadata  map[string]interface{}
+		metadata  map[string]any
 	}{
 		{
 			id:        "device-001",
 			tags:      []string{"production", "warehouse", "sensor"},
 			icon:      "Thermometer",
 			iconColor: "#FF6B6B",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse A",
 				"type":         "temperature-sensor",
 				"manufacturer": "SensorCorp",
@@ -262,7 +247,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "sensor"},
 			icon:      "AirVent",
 			iconColor: "#4ECDC4",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse A",
 				"type":         "humidity-sensor",
 				"manufacturer": "SensorCorp",
@@ -275,7 +260,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "gateway"},
 			icon:      "Router",
 			iconColor: "#95E1D3",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab B",
 				"type":         "iot-gateway",
 				"manufacturer": "TechGateway",
@@ -288,7 +273,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "controller"},
 			icon:      "Cpu",
 			iconColor: "#F38181",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site C",
 				"type":         "plc-controller",
 				"manufacturer": "IndustrialSys",
@@ -301,7 +286,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "sensor"},
 			icon:      "Gauge",
 			iconColor: "#AA96DA",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site C",
 				"type":         "pressure-sensor",
 				"manufacturer": "SensorCorp",
@@ -314,7 +299,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "test", "actuator"},
 			icon:      "Zap",
 			iconColor: "#FCBAD3",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Test Lab B",
 				"type":         "electric-actuator",
 				"manufacturer": "ActuatorTech",
@@ -327,7 +312,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "camera"},
 			icon:      "Camera",
 			iconColor: "#A8D8EA",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse A",
 				"type":         "security-camera",
 				"manufacturer": "VisionTech",
@@ -340,7 +325,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "sensor"},
 			icon:      "Activity",
 			iconColor: "#FFD3B6",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab B",
 				"type":         "accelerometer",
 				"manufacturer": "MotionSense",
@@ -353,7 +338,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "gateway"},
 			icon:      "Radio",
 			iconColor: "#FFAAA5",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site D",
 				"type":         "edge-gateway",
 				"manufacturer": "EdgeTech",
@@ -366,7 +351,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "test", "sensor"},
 			icon:      "Fan",
 			iconColor: "#FF8B94",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Test Lab A",
 				"type":         "airflow-sensor",
 				"manufacturer": "EnvironmentSys",
@@ -379,7 +364,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "sensor"},
 			icon:      "Thermometer",
 			iconColor: "#3498DB",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse B",
 				"type":         "water-level-sensor",
 				"manufacturer": "FluidSense",
@@ -392,7 +377,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "sensor"},
 			icon:      "AirVent",
 			iconColor: "#1ABC9C",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site A",
 				"type":         "wind-sensor",
 				"manufacturer": "WeatherTech",
@@ -405,7 +390,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "controller"},
 			icon:      "Cpu",
 			iconColor: "#9B59B6",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab A",
 				"type":         "micro-controller",
 				"manufacturer": "EmbeddedSys",
@@ -418,7 +403,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "actuator"},
 			icon:      "Zap",
 			iconColor: "#E74C3C",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse B",
 				"type":         "alarm-system",
 				"manufacturer": "SecurityPro",
@@ -431,7 +416,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "warehouse", "sensor"},
 			icon:      "Gauge",
 			iconColor: "#F39C12",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse C",
 				"type":         "light-sensor",
 				"manufacturer": "LuminaTech",
@@ -444,7 +429,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "gateway"},
 			icon:      "Router",
 			iconColor: "#16A085",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site B",
 				"type":         "wireless-gateway",
 				"manufacturer": "ConnectTech",
@@ -457,7 +442,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "sensor"},
 			icon:      "Activity",
 			iconColor: "#34495E",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab C",
 				"type":         "rain-detector",
 				"manufacturer": "WeatherSense",
@@ -470,7 +455,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "controller"},
 			icon:      "Cpu",
 			iconColor: "#7F8C8D",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse A",
 				"type":         "hvac-controller",
 				"manufacturer": "ClimateTech",
@@ -483,7 +468,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "test", "gateway"},
 			icon:      "Radio",
 			iconColor: "#2ECC71",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Test Lab C",
 				"type":         "mesh-gateway",
 				"manufacturer": "MeshNet",
@@ -496,7 +481,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "sensor"},
 			icon:      "Thermometer",
 			iconColor: "#F1C40F",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site E",
 				"type":         "solar-irradiance-sensor",
 				"manufacturer": "SolarTech",
@@ -509,7 +494,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "camera"},
 			icon:      "Camera",
 			iconColor: "#E67E22",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse C",
 				"type":         "video-recorder",
 				"manufacturer": "VisionTech",
@@ -522,7 +507,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "actuator"},
 			icon:      "Zap",
 			iconColor: "#C0392B",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab D",
 				"type":         "power-switch",
 				"manufacturer": "ElectroSys",
@@ -535,7 +520,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "sensor"},
 			icon:      "Gauge",
 			iconColor: "#ECF0F1",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site F",
 				"type":         "snow-depth-sensor",
 				"manufacturer": "WeatherSense",
@@ -548,7 +533,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "warehouse", "controller"},
 			icon:      "Cpu",
 			iconColor: "#D35400",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse D",
 				"type":         "logistics-controller",
 				"manufacturer": "LogisticsPro",
@@ -561,7 +546,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "gateway"},
 			icon:      "Router",
 			iconColor: "#2980B9",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site G",
 				"type":         "ble-gateway",
 				"manufacturer": "WirelessHub",
@@ -574,7 +559,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "sensor"},
 			icon:      "Activity",
 			iconColor: "#16A085",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab E",
 				"type":         "vibration-sensor",
 				"manufacturer": "VibeTech",
@@ -587,7 +572,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "sensor"},
 			icon:      "Gauge",
 			iconColor: "#8E44AD",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse A",
 				"type":         "sound-sensor",
 				"manufacturer": "AudioSense",
@@ -600,7 +585,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "test", "controller"},
 			icon:      "Cpu",
 			iconColor: "#27AE60",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Test Lab D",
 				"type":         "display-controller",
 				"manufacturer": "DisplayTech",
@@ -613,7 +598,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "sensor"},
 			icon:      "Gauge",
 			iconColor: "#2ECC71",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site H",
 				"type":         "battery-monitor",
 				"manufacturer": "PowerSense",
@@ -626,7 +611,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "gateway"},
 			icon:      "Radio",
 			iconColor: "#E84393",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse B",
 				"type":         "zigbee-gateway",
 				"manufacturer": "ZigTech",
@@ -639,7 +624,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "sensor"},
 			icon:      "Activity",
 			iconColor: "#00B894",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab F",
 				"type":         "gps-tracker",
 				"manufacturer": "NaviTech",
@@ -652,7 +637,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "warehouse", "actuator"},
 			icon:      "Zap",
 			iconColor: "#636E72",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse E",
 				"type":         "smart-lock",
 				"manufacturer": "SecureTech",
@@ -665,7 +650,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "controller"},
 			icon:      "Cpu",
 			iconColor: "#B2BEC3",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site I",
 				"type":         "edge-server",
 				"manufacturer": "EdgeCompute",
@@ -678,7 +663,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "sensor"},
 			icon:      "Activity",
 			iconColor: "#0984E3",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse F",
 				"type":         "motion-detector",
 				"manufacturer": "SecuritySense",
@@ -691,7 +676,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "gateway"},
 			icon:      "Router",
 			iconColor: "#74B9FF",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab G",
 				"type":         "cellular-gateway",
 				"manufacturer": "MobileNet",
@@ -704,7 +689,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "test", "sensor"},
 			icon:      "Thermometer",
 			iconColor: "#FD79A8",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Test Lab E",
 				"type":         "location-beacon",
 				"manufacturer": "BeaconTech",
@@ -717,7 +702,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "actuator"},
 			icon:      "Zap",
 			iconColor: "#6C5CE7",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site J",
 				"type":         "valve-controller",
 				"manufacturer": "FlowTech",
@@ -730,7 +715,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "controller"},
 			icon:      "Cpu",
 			iconColor: "#A29BFE",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse G",
 				"type":         "inventory-tracker",
 				"manufacturer": "StockSys",
@@ -743,7 +728,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "sensor"},
 			icon:      "Gauge",
 			iconColor: "#FF7675",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab H",
 				"type":         "proximity-sensor",
 				"manufacturer": "RangeTech",
@@ -756,7 +741,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "warehouse", "camera"},
 			icon:      "Camera",
 			iconColor: "#FDCB6E",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse H",
 				"type":         "surveillance-camera",
 				"manufacturer": "WatchTech",
@@ -769,7 +754,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "sensor"},
 			icon:      "Activity",
 			iconColor: "#00CEC9",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site K",
 				"type":         "compass-sensor",
 				"manufacturer": "OrientTech",
@@ -782,7 +767,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "gateway"},
 			icon:      "Radio",
 			iconColor: "#FD79A8",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse I",
 				"type":         "lora-gateway",
 				"manufacturer": "LoRaNet",
@@ -795,7 +780,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "controller"},
 			icon:      "Cpu",
 			iconColor: "#55EFC4",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab I",
 				"type":         "motor-controller",
 				"manufacturer": "MotionDrive",
@@ -808,7 +793,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "test", "actuator"},
 			icon:      "Zap",
 			iconColor: "#FF6348",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Test Lab F",
 				"type":         "notification-device",
 				"manufacturer": "AlertSys",
@@ -821,7 +806,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "sensor"},
 			icon:      "Gauge",
 			iconColor: "#2D3436",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site L",
 				"type":         "distance-sensor",
 				"manufacturer": "RangeFinder",
@@ -834,7 +819,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "sensor"},
 			icon:      "Activity",
 			iconColor: "#DFE6E9",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse J",
 				"type":         "rotation-sensor",
 				"manufacturer": "SpinTech",
@@ -847,7 +832,7 @@ func PopulateSampleData(
 			tags:      []string{"development", "lab", "gateway"},
 			icon:      "Router",
 			iconColor: "#A29BFE",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Lab J",
 				"type":         "mqtt-gateway",
 				"manufacturer": "MQTTHub",
@@ -860,7 +845,7 @@ func PopulateSampleData(
 			tags:      []string{"staging", "warehouse", "controller"},
 			icon:      "Cpu",
 			iconColor: "#00B894",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse K",
 				"type":         "analytics-device",
 				"manufacturer": "DataTech",
@@ -873,7 +858,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "field", "actuator"},
 			icon:      "Zap",
 			iconColor: "#FDCB6E",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Field Site M",
 				"type":         "relay-switch",
 				"manufacturer": "SwitchTech",
@@ -886,7 +871,7 @@ func PopulateSampleData(
 			tags:      []string{"production", "warehouse", "sensor"},
 			icon:      "Fan",
 			iconColor: "#6C5CE7",
-			metadata: map[string]interface{}{
+			metadata: map[string]any{
 				"location":     "Warehouse L",
 				"type":         "time-sync-device",
 				"manufacturer": "ChronoTech",
@@ -895,9 +880,6 @@ func PopulateSampleData(
 			},
 		},
 	}
-
-	// Get device manager service URL
-	deviceManagerService := sdk.NewHttpDeviceManagerClient(httpClient, deviceServiceURL)
 
 	logger.Info("Creating sample devices...")
 	var usedDMSID string
@@ -1051,27 +1033,6 @@ func generateAndSignCertificate(ctx context.Context, caService services.CAServic
 	return signedCert, nil
 }
 
-// extractBaseURL extracts the base URL without the path
-// converts "http://127.0.0.1:8080/api/devmanager" to "http://127.0.0.1:8080/api/dmsmanager"
-func extractBaseURL(serviceURL string) string {
-	// Simple extraction: replace /devmanager with /dmsmanager
-	// This assumes the gateway URL structure
-	return strings.ReplaceAll(serviceURL, "/api/devmanager", "/api/dmsmanager")
-}
-
-// parseURL parses a service URL into HTTPConnection config
-func parseURL(serviceURL string) cconfig.HTTPConnection {
-	// Simple parser - assumes format like "http://127.0.0.1:8080" or "https://127.0.0.1:8443"
-	return cconfig.HTTPConnection{
-		BasicConnection: cconfig.BasicConnection{
-			Hostname: "127.0.0.1",
-			Port:     0,
-		},
-		Protocol: cconfig.HTTP,
-		BasePath: "",
-	}
-}
-
 // importKeyAndCreateCA imports a private key into KMS and creates a CA using that key
 func importKeyAndCreateCA(ctx context.Context, logger *logrus.Entry, kmsService services.KMSService, caService services.CAService, profileID string) (string, error) {
 	// Parse the embedded private key
@@ -1109,7 +1070,7 @@ func importKeyAndCreateCA(ctx context.Context, logger *logrus.Entry, kmsService 
 		Subject: models.Subject{
 			CommonName:       "Sample Imported Root CA",
 			Organization:     "LamassuIoT Sample",
-			OrganizationUnit: "Development",
+			OrganizationUnit: "IoT",
 			State:            "Gipuzkoa",
 			Locality:         "Arrasate",
 		},
@@ -1195,7 +1156,7 @@ func enrollSampleDevices(ctx context.Context, logger *logrus.Entry, caService se
 	tags      []string
 	icon      string
 	iconColor string
-	metadata  map[string]interface{}
+	metadata  map[string]any
 }) error {
 	for _, device := range devices {
 		logger.Infof("Enrolling device: %s", device.id)

@@ -8,8 +8,8 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	mhelper "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	mhelper "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
 

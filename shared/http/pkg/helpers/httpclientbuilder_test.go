@@ -1,10 +1,16 @@
 package helpers
 
 import (
+	"bytes"
+	"encoding/pem"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -41,6 +47,42 @@ func TestBuildHTTPClientWithTLSOptions(t *testing.T) {
 	}
 }
 
+// A server whose certificate is signed by a private CA must be trusted once
+// that CA is supplied through CACertificateFile.
+func TestBuildHTTPClientWithTLSOptionsTrustsCACertificateFile(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+
+	caFile := filepath.Join(t.TempDir(), "ca.crt")
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(caFile, caPEM, 0o600); err != nil {
+		t.Fatalf("could not write CA file: %v", err)
+	}
+
+	client, err := BuildHTTPClientWithTLSOptions(&http.Client{}, cconfig.TLSConfig{})
+	if err != nil {
+		t.Fatalf("BuildHTTPClientWithTLSOptions failed with error: %v", err)
+	}
+	if _, err := client.Get(srv.URL); err == nil {
+		t.Fatal("request to a server signed by an untrusted CA succeeded")
+	}
+
+	client, err = BuildHTTPClientWithTLSOptions(&http.Client{}, cconfig.TLSConfig{CACertificateFile: caFile})
+	if err != nil {
+		t.Fatalf("BuildHTTPClientWithTLSOptions failed with error: %v", err)
+	}
+	res, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("request failed despite CACertificateFile: %v", err)
+	}
+	res.Body.Close()
+
+	// The transport must keep the defaults (proxy from environment, timeouts).
+	if client.Transport.(*http.Transport).Proxy == nil {
+		t.Error("BuildHTTPClientWithTLSOptions dropped the default proxy settings")
+	}
+}
+
 func TestBuildHTTPClientWithTracerLogger(t *testing.T) {
 	// Create a mock HTTP client
 	mockClient := &http.Client{}
@@ -71,5 +113,39 @@ func TestBuildHTTPClientWithTracerLogger(t *testing.T) {
 	// Verify that the returned client has the loggingRoundTripper as the Transport
 	if _, ok := client.Transport.(loggingRoundTripper); !ok {
 		t.Error("BuildHTTPClientWithTracerLogger did not set the loggingRoundTripper as the Transport")
+	}
+}
+
+// The trace dump buffers only a bounded prefix of the response body, so the
+// caller must still receive the complete body.
+func TestLoggingRoundTripperPreservesLargeBodies(t *testing.T) {
+	payload := bytes.Repeat([]byte("a"), 3<<20)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer srv.Close()
+
+	for _, level := range []logrus.Level{logrus.InfoLevel, logrus.TraceLevel} {
+		logger := logrus.New()
+		logger.SetOutput(io.Discard)
+		logger.SetLevel(level)
+
+		client, err := BuildHTTPClientWithTracerLogger(&http.Client{}, logrus.NewEntry(logger))
+		if err != nil {
+			t.Fatalf("BuildHTTPClientWithTracerLogger failed with error: %v", err)
+		}
+
+		res, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("request failed at level %s: %v", level, err)
+		}
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			t.Fatalf("reading body failed at level %s: %v", level, err)
+		}
+		if !bytes.Equal(body, payload) {
+			t.Errorf("body altered at level %s: got %d bytes, want %d", level, len(body), len(payload))
+		}
 	}
 }

@@ -1,9 +1,9 @@
 package aws
 
 import (
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 	log "github.com/sirupsen/logrus"
 )
 

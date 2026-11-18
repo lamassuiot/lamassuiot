@@ -7,10 +7,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,7 +27,7 @@ func NewCryptoMonitor(service services.CAService, logger *logrus.Entry) *CryptoM
 }
 
 func (svc *CryptoMonitor) Run() {
-	ctx := helpers.InitContext()
+	ctx := helpers.InitJobContext("ca-crypto-monitor")
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	now := time.Now()
@@ -95,6 +95,13 @@ func (svc *CryptoMonitor) updateCAIfNeeded(ca models.CACertificate, now time.Tim
 			CAID:   ca.ID,
 			Status: models.StatusExpired,
 		})
+		return
+	}
+
+	if ca.Certificate.Certificate == nil {
+		if svc.logger != nil {
+			svc.logger.Warnf("skipping CA %s: certificate data is unavailable", ca.ID)
+		}
 		return
 	}
 

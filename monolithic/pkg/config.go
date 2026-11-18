@@ -1,8 +1,9 @@
 package pkg
 
 import (
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
 )
 
 type LamassuMonolithicAssembleMode string
@@ -31,7 +32,12 @@ type MonolithicConfig struct {
 	AWSIoTManager         MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
 	VAStorageDir          string                         `mapstructure:"va_storage_directory"`
 	UIPort                int                            `mapstructure:"ui_port"`
+	WfxNorthPort          int                            `mapstructure:"wfx_north_port"`
+	WfxSouthPort          int                            `mapstructure:"wfx_south_port"`
+	AuthzProxyPrefixes    []string                       `mapstructure:"authz_proxy_prefixes"`
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
+	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
+	AuthzConfig           *authzconfig.AuthzConfig       `mapstructure:"authz"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {
