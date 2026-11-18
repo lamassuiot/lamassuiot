@@ -2243,6 +2243,8 @@ func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input se
 //     The CA is not in an active state
 //   - ErrInvalidKeySpec
 //     Neither or both of (Type+Bits) and KeyIdentifier were specified
+//   - ErrSignAsCANotAllowed
+//     The selected issuance profile has sign_as_ca enabled
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
