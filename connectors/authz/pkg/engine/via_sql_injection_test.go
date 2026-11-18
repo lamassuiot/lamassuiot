@@ -17,11 +17,11 @@ import (
 // resolveRelationForeignKey in graph.go resolves `via` against the schemas' own declared
 // relations instead of trusting the policy's string, so it can never reach the SQL unresolved.
 //
-// Scenario: a principal may read exactly ONE certificate (their own, "my-own-cert-serial").
-// The policy also grants them read on "the CA that issued it" via the real schema relation
-// certificate.issuer_meta_id -> ca_certificate. That should scope a CA listing to exactly
-// one row. Before the fix, a crafted `via` turned the JOIN into a tautology and returned
-// every CA instead; now the policy is rejected before any SQL is built.
+// Scenario: a principal may read exactly ONE issuance profile ("profile-1") and, through it, the
+// CAs that use it, via the real schema relation ca_certificate.profile_id -> issuance_profile.
+// That should scope a CA listing to the CAs using that profile. Before the fix, a crafted `via`
+// turned the JOIN into a tautology and returned every CA instead; now the policy is rejected
+// before any SQL is built.
 //
 // Run: cd connectors/authz && go test ./pkg/engine/ -run TestViaRelationRejectsUnresolvedForeignKey -v
 func TestViaRelationRejectsUnresolvedForeignKey(t *testing.T) {
@@ -35,9 +35,9 @@ func TestViaRelationRejectsUnresolvedForeignKey(t *testing.T) {
 	buildFilterSQL := func(via string) (string, error) {
 		policies := engine.NewPolicyRegistry()
 		p := &models.Policy{ID: "p", Name: "p", Rules: []*models.Rule{{
-			Namespace: "pki", SchemaName: "ca", EntityType: "certificate",
+			Namespace: "pki", SchemaName: "ca", EntityType: "issuance_profile",
 			Actions:      []string{"read"},
-			DirectGrants: []string{"my-own-cert-serial"}, // the ONLY certificate this principal may read
+			DirectGrants: []string{"profile-1"}, // the ONLY issuance profile this principal may read
 			Relations: []models.RelationRule{{
 				ToSchemaName: "ca", ToEntityType: "ca_certificate",
 				Via: via, Actions: []string{"read"},
@@ -60,19 +60,20 @@ func TestViaRelationRejectsUnresolvedForeignKey(t *testing.T) {
 	// --- Execute the real engine's SQL against a real (SQLite) database. ---
 	// Stripping the "ca." Postgres schema prefix is the only non-authentic step: it's a
 	// schema-qualification detail of running against Postgres, not part of the bug. Table
-	// and column names are copied verbatim from pki.json (ca_certificates, certificates_view,
-	// issuer_meta_id, serial_number, id).
+	// and column names are copied verbatim from pki.json (ca_certificates, issuance_profiles,
+	// profile_id, id); the FK lives on ca_certificates, as it does in the real schema.
 	run := func(sql string) []string {
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, stmt := range []string{
-			`CREATE TABLE ca_certificates (id TEXT PRIMARY KEY, issuer_meta_id TEXT)`,
-			`CREATE TABLE certificates_view (serial_number TEXT PRIMARY KEY)`,
-			`INSERT INTO ca_certificates VALUES ('my-ca', 'my-own-cert-serial')`,            // issued MY certificate
-			`INSERT INTO ca_certificates VALUES ('other-tenants-ca', 'someone-elses-cert')`, // must stay invisible
-			`INSERT INTO certificates_view VALUES ('my-own-cert-serial')`,
+			`CREATE TABLE ca_certificates (id TEXT PRIMARY KEY, profile_id TEXT)`,
+			`CREATE TABLE issuance_profiles (id TEXT PRIMARY KEY)`,
+			`INSERT INTO issuance_profiles VALUES ('profile-1')`,
+			`INSERT INTO issuance_profiles VALUES ('profile-2')`,
+			`INSERT INTO ca_certificates VALUES ('my-ca', 'profile-1')`,            // uses MY profile
+			`INSERT INTO ca_certificates VALUES ('other-tenants-ca', 'profile-2')`, // must stay invisible
 		} {
 			if err := db.Exec(stmt).Error; err != nil {
 				t.Fatalf("seed error: %v (%s)", err, stmt)
@@ -88,8 +89,8 @@ func TestViaRelationRejectsUnresolvedForeignKey(t *testing.T) {
 		return ids
 	}
 
-	t.Run("legitimate via: still scoped to the one CA that issued my certificate", func(t *testing.T) {
-		sql, err := buildFilterSQL("issuer_meta_id")
+	t.Run("legitimate via: still scoped to the CAs using my profile", func(t *testing.T) {
+		sql, err := buildFilterSQL("profile_id")
 		if err != nil {
 			t.Fatalf("a legitimate, schema-declared via must not be rejected: %v", err)
 		}
@@ -102,7 +103,7 @@ func TestViaRelationRejectsUnresolvedForeignKey(t *testing.T) {
 	})
 
 	t.Run("injected via: rejected before any SQL is built", func(t *testing.T) {
-		via := "issuer_meta_id = j0_0.serial_number OR 1=1 OR ca_certificates.id"
+		via := "profile_id = j0_0.id OR 1=1 OR ca_certificates.id"
 		sql, err := buildFilterSQL(via)
 		fmt.Printf("\nvia=%q\n", via)
 		if err == nil {
@@ -112,9 +113,8 @@ func TestViaRelationRejectsUnresolvedForeignKey(t *testing.T) {
 	})
 
 	t.Run("via naming a real column of an unrelated entity: still rejected", func(t *testing.T) {
-		// "level" is a real, filterable column of ca_certificate itself, so it is not a nonsense
-		// string — but it is not a declared relation between certificate and ca_certificate, so
-		// it must still be rejected rather than silently accepted because it "looks real".
+		// "level" is a real column of ca_certificates, so it is not a nonsense string, but it is not
+		// a declared relation to issuance_profile: it must still be rejected, not accepted for "looking real".
 		sql, err := buildFilterSQL("level")
 		if err == nil {
 			t.Fatalf("expected rejection, but got SQL: %s", sql)
