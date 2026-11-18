@@ -63,6 +63,13 @@ GRANT SELECT ON ca.certificates_view TO service_user;
 
 The view reads `kms.kms_keys` with its owner's privileges, so the service user needs no privileges on the `kms` schema for this.
 
+The CA service also reads `va.crl_settings` when it deletes a CA, to check that no ACTIVE CRL settings still retain the key. If the CA service connects as a different user from the one that ran the migrations, grant that user the privileges below after migrating `va`. Without them, deleting any CA that has a crypto engine fails with `permission denied for schema va` (or `for table crl_settings`), before the CA service can tell whether a final CRL is pending. Installations without the `va` schema migrated need nothing.
+
+```sql
+GRANT USAGE ON SCHEMA va TO service_user;
+GRANT SELECT ON va.crl_settings TO service_user;
+```
+
 To migrate every schema in order:
 
 ```bash
