@@ -116,9 +116,16 @@ func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace s
 		if targetSchema == nil {
 			return fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, targetEntityType)
 		}
+
+		// Resolve via against the schema instead of using the policy's string as a JOIN column.
+		foreignKey, err := resolveRelationForeignKey(fromEntity, fromNamespace, rel.Via, targetSchema, schemas)
+		if err != nil {
+			return err
+		}
+
 		edge := &GraphEdge{
 			From: fromEntity, To: targetEntityType, Via: rel.Via,
-			Actions: rel.Actions, ForeignKey: rel.Via,
+			Actions: rel.Actions, ForeignKey: foreignKey,
 			TableName: targetSchema.TableName, QualifiedTableName: targetSchema.QualifiedTableName(),
 			PrimaryKey: targetSchema.PrimaryKeys[0],
 		}
@@ -145,6 +152,26 @@ func findSchemaForRelation(namespace, entityType string, schemas *SchemaRegistry
 		}
 	}
 	return nil
+}
+
+// resolveRelationForeignKey returns the schema's own foreign key for via (a relation name or its
+// FK column), checking both directions, or an error if no such relation is declared.
+func resolveRelationForeignKey(fromEntity, fromNamespace, via string, targetSchema *SchemaDefinition, schemas *SchemaRegistry) (string, error) {
+	fromSchema := findSchemaForRelation(fromNamespace, fromEntity, schemas)
+	if fromSchema == nil {
+		return "", fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, fromEntity)
+	}
+	for _, relConfig := range fromSchema.Relations {
+		if (relConfig.ForeignKey == via || relConfig.Name == via) && relConfig.TargetEntity == targetSchema.EntityType {
+			return relConfig.ForeignKey, nil
+		}
+	}
+	for _, relConfig := range targetSchema.Relations {
+		if (relConfig.ForeignKey == via || relConfig.Name == via) && relConfig.TargetEntity == fromSchema.EntityType {
+			return relConfig.ForeignKey, nil
+		}
+	}
+	return "", fmt.Errorf("relation 'via' %q is not a declared relation between %s and %s", via, fromEntity, targetSchema.QualifiedEntityType())
 }
 
 func mergeEdgeActions(edge *GraphEdge, newActions []string) {
