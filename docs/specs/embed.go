@@ -1,6 +1,6 @@
-// Package docs embeds the OpenAPI specifications served by each service.
+// Package specs embeds the OpenAPI specifications served by each service.
 // The YAML files in this directory are the single source of truth for the HTTP APIs.
-package docs
+package specs
 
 import _ "embed"
 

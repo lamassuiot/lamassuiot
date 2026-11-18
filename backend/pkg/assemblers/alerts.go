@@ -16,7 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v4/docs"
+	"github.com/lamassuiot/lamassuiot/v4/docs/specs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 )
@@ -35,7 +35,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.Alerts
+		openApiContent = specs.Alerts
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

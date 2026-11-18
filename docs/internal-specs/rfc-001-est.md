@@ -1,4 +1,4 @@
-# EST (Enrollment over Secure Transport) — usage in Lamassu IoT 🔧💡
+# RFC-001: EST (Enrollment over Secure Transport) — usage in Lamassu IoT 🔧💡
 
 A concise reference for using EST (RFC 7030) with Lamassu IoT, using OpenSSL and `curl`.
 
