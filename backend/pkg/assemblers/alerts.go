@@ -35,7 +35,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.Alerts
+		openApiContent = specs.Alerts
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

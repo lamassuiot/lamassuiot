@@ -37,7 +37,7 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.KMS
+		openApiContent = specs.KMS
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

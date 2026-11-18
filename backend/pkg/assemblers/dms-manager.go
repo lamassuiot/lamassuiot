@@ -34,7 +34,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.DMSManager
+		openApiContent = specs.DMSManager
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

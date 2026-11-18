@@ -83,7 +83,7 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.Authz
+		openApiContent = specs.Authz
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

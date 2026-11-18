@@ -1121,7 +1121,7 @@ Phases 2, 3, and 4 can be executed in parallel after Phase 1 completes. Phase 5 
 ## 14. References
 
 - [RFC-004: Dynamic Device Groups](rfc-004-dynamic-device-groups.md) - Uses filtered stats for group statistics
-- [RFC-005: JSONPath Sorting](rfc-005-jsonpath-sorting.md) - JSONPath expression support in queries
+- [RFC-005: JSONPath Expressions in Sort Options](rfc-005-jsonpath-sorting.md) - JSONPath expression support in queries
 - [Device Manager OpenAPI](../specs/device-manager-openapi.yaml) - Reference implementation of filtered stats
 - [KMS OpenAPI](../specs/kms-openapi.yaml) - KMS service API specification
 - [Filtering Documentation](rfc-002-filtering.md) - Filter syntax reference

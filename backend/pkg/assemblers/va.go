@@ -40,7 +40,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.VA
+		openApiContent = specs.VA
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

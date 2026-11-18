@@ -37,7 +37,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.CA
+		openApiContent = specs.CA
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)

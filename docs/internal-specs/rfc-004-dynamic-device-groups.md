@@ -1,4 +1,4 @@
-# RFC: Dynamic Device Groups
+# RFC-004: Dynamic Device Groups
 
 | Status | Proposed |
 |:---|:---|

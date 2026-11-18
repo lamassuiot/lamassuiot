@@ -1,4 +1,4 @@
-# RFC: JSONPath Expressions in Sort Options
+# RFC-005: JSONPath Expressions in Sort Options
 
 **Status:** Implemented  
 **Created:** 2026-01-19  
