@@ -60,8 +60,10 @@ func (db *PostgresCRLSettingsStore) Insert(ctx context.Context, settings *models
 // its key).
 func signerError(err error) error {
 	switch {
-	case isForeignKeyViolation(err, crlSettingsSignerFK), isForeignKeyViolation(err, crlSettingsSignerKeyFK):
+	case isForeignKeyViolation(err, crlSettingsSignerFK):
 		return errs.ErrCertificateNotFound
+	case isForeignKeyViolation(err, crlSettingsSignerKeyFK):
+		return errs.ErrKeyNotFound
 	case isCheckViolation(err, crlSettingsSignerByStatus):
 		return errs.ErrValidateBadRequest
 	}

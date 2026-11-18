@@ -33,7 +33,7 @@ func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl servic
 
 func (r *vaHttpRoutes) handleError(ctx *gin.Context, err error) {
 	switch {
-	case errors.Is(err, errs.ErrCRLSettingsNotFound), errors.Is(err, errs.ErrCRLNotFound), errors.Is(err, errs.ErrCANotFound), errors.Is(err, errs.ErrCertificateNotFound):
+	case errors.Is(err, errs.ErrCRLSettingsNotFound), errors.Is(err, errs.ErrCRLNotFound), errors.Is(err, errs.ErrCANotFound), errors.Is(err, errs.ErrCertificateNotFound), errors.Is(err, errs.ErrKeyNotFound):
 		ctx.JSON(http.StatusNotFound, gin.H{"err": err.Error()})
 	case errors.Is(err, errs.ErrCRLSettingsNotActive), errors.Is(err, errs.ErrCRLSettingsNotArchived):
 		ctx.JSON(http.StatusConflict, gin.H{"err": err.Error()})

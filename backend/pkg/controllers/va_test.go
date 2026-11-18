@@ -318,6 +318,18 @@ func TestUpdateCRLSettings_SettingsNotFound(t *testing.T) {
 	mockCRLService.AssertExpectations(t)
 }
 
+func TestUpdateCRLSettings_MissingSignerKey(t *testing.T) {
+	crlService := new(svcmock.MockVAService)
+	crlService.On("UpdateCRLSettings", mock.Anything, mock.Anything).Return((*models.CRLSettings)(nil), errs.ErrKeyNotFound)
+	router := setupVARouter(new(MockOCSPService), crlService)
+	req := httptest.NewRequest(http.MethodPut, "/va/crl-settings/ca-1", bytes.NewBufferString(`{"signer_serial_number":"sn"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.JSONEq(t, `{"err":"`+errs.ErrKeyNotFound.Error()+`"}`, w.Body.String())
+}
+
 func TestUpdateCRLSettings_ValidationError(t *testing.T) {
 	mockCRLService := new(svcmock.MockVAService)
 	mockOCSPService := new(MockOCSPService)

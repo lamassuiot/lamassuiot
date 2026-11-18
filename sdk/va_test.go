@@ -3,8 +3,10 @@ package sdk
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -59,6 +61,19 @@ func TestCRLSettingsSDKMapsStatusCodesToErrors(t *testing.T) {
 		require.ErrorIs(t, err, want, "status %d", status)
 		server.Close()
 	}
+}
+
+type vaTestTransport func(*http.Request) (*http.Response, error)
+
+func (f vaTestTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestUpdateCRLSettingsSDKMapsMissingSignerKey(t *testing.T) {
+	transport := vaTestTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(`{"err":"key not found"}`)), Header: make(http.Header)}, nil
+	})
+	client := NewHttpVAClient(&http.Client{Transport: transport}, "http://va.test")
+	_, err := client.UpdateCRLSettings(context.Background(), services.UpdateCRLSettingsInput{CAID: "ca-1"})
+	require.ErrorIs(t, err, errs.ErrKeyNotFound)
 }
 
 func TestVASDKGetCRLUsesTheID(t *testing.T) {
