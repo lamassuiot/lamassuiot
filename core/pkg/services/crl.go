@@ -16,6 +16,7 @@ type CRLService interface {
 	GetCRLSettings(ctx context.Context, input GetCRLSettingsInput) (*models.CRLSettings, error)
 	GetCRLSettingsList(ctx context.Context, input GetCRLSettingsListInput) (string, error)
 	UpdateCRLSettings(ctx context.Context, input UpdateCRLSettingsInput) (*models.CRLSettings, error)
+	// InitCRLSettings returns nil settings without error if none exist and the CA certificate has no KMS engine or key ID.
 	InitCRLSettings(ctx context.Context, caID string) (*models.CRLSettings, error)
 	// FinalizeCRLSettings moves ACTIVE settings to FINAL, publishing their final CRL first if asked to. Settings that
 	// are not ACTIVE are returned unchanged.

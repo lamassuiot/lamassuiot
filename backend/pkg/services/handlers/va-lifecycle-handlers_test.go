@@ -87,6 +87,20 @@ func TestUpdateCAStatusHandlerWithoutSettingsIsAccepted(t *testing.T) {
 	assert.NoError(t, dispatch(t, svc, models.EventUpdateCAStatusKey, caStatusUpdate(subordinateCA(models.StatusActive, 0), ca)))
 }
 
+func TestRevokedCAWithoutSettingsRegeneratesIssuerCRL(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	mock.InOrder(
+		svc.On("ReconcileCRLSettings", mock.Anything, services.ReconcileCRLSettingsInput{CAID: subCAID}).Return(nil, errs.ErrCRLSettingsNotFound).Once(),
+		svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: parentCAID}).Return(issuerSettings(models.CRLSettingsActive, true), nil).Once(),
+		svc.On("CalculateCRL", mock.Anything, services.CalculateCRLInput{CAID: parentCAID}).Return(&x509.RevocationList{}, nil).Once(),
+	)
+
+	err := dispatch(t, svc, models.EventUpdateCAStatusKey, caStatusUpdate(
+		subordinateCA(models.StatusActive, 0), subordinateCA(models.StatusRevoked, ocsp.KeyCompromise)))
+	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+}
+
 func TestUpdateCAStatusHandlerReturnsReconcileErrors(t *testing.T) {
 	failure := errors.New("bucket down")
 	svc := new(svcmock.MockVAService)
