@@ -162,6 +162,15 @@ func TestFinalizeCRLSettingsWithoutCRL(t *testing.T) {
 	require.Zero(t, f.crlFiles("ca-a"), "a CRL signed by an expired CA is not trusted")
 }
 
+func TestFinalizeCRLSettingsRequiresNextUpdateForTheFinalCRL(t *testing.T) {
+	f := newCRLFixture(t)
+	f.lifecycleCA("ca-a", models.StatusRevoked, ocsp.KeyCompromise)
+
+	_, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true})
+	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
+	require.Zero(t, f.crlFiles("ca-a"), "nothing is published when the input is rejected")
+}
+
 func TestReconcileCRLSettings(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

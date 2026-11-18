@@ -33,7 +33,7 @@ type FinalizeCRLSettingsInput struct {
 	CAID string `validate:"required"`
 	// FinalCRL publishes a last CRL, valid until FinalCRLNextUpdate, before the settings stop signing CRLs.
 	FinalCRL           bool
-	FinalCRLNextUpdate time.Time
+	FinalCRLNextUpdate time.Time `validate:"required_with=FinalCRL"`
 }
 
 type ArchiveCRLSettingsInput struct {
