@@ -49,3 +49,20 @@ func TestDeleteCAKeyHeldByCRLSettingsReturnsConflict(t *testing.T) {
 	require.ErrorIs(t, err, errs.ErrCAKeyHeldByCRLSettings)
 	require.Contains(t, err.Error(), "CA ca-2")
 }
+
+func TestDeleteCACascadeChildConflictReachesSDK(t *testing.T) {
+	for _, conflict := range []error{errs.ErrCAFinalCRLPending, errs.ErrCAKeyHeldByCRLSettings} {
+		t.Run(conflict.Error(), func(t *testing.T) {
+			routes := &caHttpRoutes{svc: &caDeleteTestService{err: fmt.Errorf("%w: could not delete child CA ca-2", conflict)}}
+			router := gin.New()
+			router.DELETE("/v1/cas/:id", routes.DeleteCA)
+			transport := &importCATransport{handler: router}
+			client := sdk.NewHttpCAClient(&http.Client{Transport: transport}, "http://ca.test")
+
+			err := client.DeleteCA(context.Background(), services.DeleteCAInput{CAID: "ca-1", CascadeDelete: true})
+			require.Equal(t, http.StatusConflict, transport.status)
+			require.ErrorIs(t, err, conflict)
+			require.Contains(t, err.Error(), "ca-2")
+		})
+	}
+}

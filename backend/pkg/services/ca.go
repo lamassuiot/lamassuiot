@@ -1247,7 +1247,7 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 		lFunc.Infof("Deleting child CA %s (%s) issued by CA %s", child.ID, child.Certificate.Subject.CommonName, ca.ID)
 		if err := svc.service.DeleteCA(ctx, services.DeleteCAInput{CAID: child.ID, CascadeDelete: true}); err != nil {
 			lFunc.Errorf("could not delete child CA %s issued by CA %s: %s", child.ID, ca.ID, err)
-			return fmt.Errorf("could not delete child CA %s: %w", child.ID, err)
+			return fmt.Errorf("%w: could not delete child CA %s", err, child.ID)
 		}
 		return nil
 	})

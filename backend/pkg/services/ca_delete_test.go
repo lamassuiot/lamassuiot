@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -50,12 +51,12 @@ func (repo *deleteCARepo) Delete(_ context.Context, id string) error {
 // checks and releases.
 type deleteCertRepo struct {
 	*importCertificateRepo
-	held       map[string]string
-	checked    [][]string
-	released   [][]string
-	byCA       int
-	lookups    map[string]int
-	issued     map[string][]string
+	held     map[string]string
+	checked  [][]string
+	released [][]string
+	byCA     int
+	lookups  map[string]int
+	issued   map[string][]string
 }
 
 func (repo *deleteCertRepo) SelectExistsBySerialNumber(ctx context.Context, serial string) (bool, *models.Certificate, error) {
@@ -304,6 +305,25 @@ func TestCascadeDeleteKeepsTheParentWhenAChildFails(t *testing.T) {
 	require.NotContains(t, f.cas.deleted, "ca-1")
 	require.Contains(t, f.cas.cas, "ca-1")
 	require.Empty(t, f.kms.deletedKeys)
+}
+
+func TestCascadeDeleteChildConflictRetainsErrorPrefixAndChild(t *testing.T) {
+	for _, conflict := range []error{errs.ErrCAFinalCRLPending, errs.ErrCAKeyHeldByCRLSettings} {
+		t.Run(conflict.Error(), func(t *testing.T) {
+			f := newDeleteCAFixture(t, models.RevocationReason(ocsp.KeyCompromise))
+			f.svc.allowCascadeDelete = true
+			f.addChildCA(t, "ca-1", "ca-2", models.StatusRevoked)
+			f.addChildCA(t, "ca-2", "ca-3", models.StatusRevoked)
+			f.cas.failDelete = map[string]error{"ca-3": conflict}
+
+			err := f.svc.DeleteCA(context.Background(), coreservices.DeleteCAInput{CAID: "ca-1", CascadeDelete: true})
+			require.ErrorIs(t, err, conflict)
+			require.True(t, strings.HasPrefix(err.Error(), conflict.Error()+": "), "SDK must recognize the error: %s", err)
+			require.Contains(t, err.Error(), "ca-2")
+			require.Contains(t, err.Error(), "ca-3")
+			require.NotContains(t, f.cas.deleted, "ca-1")
+		})
+	}
 }
 
 // A cascade delete of a CA whose descendants are all ready deletes them, children before their parent.
