@@ -218,6 +218,8 @@ func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.Sig
 		ProfileID:   input.IssuanceProfileID,
 	}, map[int][]error{
 		400: {
+			errs.ErrValidateBadRequest,
+			errs.ErrCAStatus,
 			errs.ErrSignAsCANotAllowed,
 		},
 		404: {

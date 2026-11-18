@@ -1619,6 +1619,13 @@ func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services
 		return nil, errs.ErrCANotFound
 	}
 
+	// Reject an inline SignAsCA profile before any CA/engine work; profiles resolved
+	// by ID or from the CA default are checked once resolved below.
+	if input.IssuanceProfile != nil && input.IssuanceProfile.SignAsCA && !allowCA {
+		lFunc.Errorf("rejected sign_as_ca=true profile for CA %s: CA certificates are only issued by CA creation or reissue", input.CAID)
+		return nil, errs.ErrSignAsCANotAllowed
+	}
+
 	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
 		return nil, err
