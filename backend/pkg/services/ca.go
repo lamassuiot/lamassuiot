@@ -846,7 +846,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			CAID:            input.ParentID,
 			CertRequest:     (*models.X509CertificateRequest)(csr),
 			IssuanceProfile: caIssuanceProfile,
-		}, key)
+		}, key, true)
 		if err != nil {
 			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -1482,7 +1482,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		CAID:            issuerCAID,
 		CertRequest:     (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: profile,
-	}, subjectKey)
+	}, subjectKey, true)
 	if err != nil {
 		lFunc.Errorf("could not sign reissued CA certificate: %s", err)
 		return nil, err
@@ -1605,17 +1605,25 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 }
 
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
-	return svc.signCertificate(ctx, input, nil)
+	return svc.signCertificate(ctx, input, nil, false)
 }
 
 // signCertificate retains a subject key already resolved by CA creation/reissuance.
-func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services.SignCertificateInput, subjectKey *models.Key) (*models.Certificate, error) {
+// allowCA permits a SignAsCA profile: only CA creation and reissue set it.
+func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services.SignCertificateInput, subjectKey *models.Key, allowCA bool) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := caValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("SignCertificateInput struct validation error: %s", err)
 		return nil, errs.ErrCANotFound
+	}
+
+	// Reject an inline SignAsCA profile before any CA/engine work; profiles resolved
+	// by ID or from the CA default are checked once resolved below.
+	if input.IssuanceProfile != nil && input.IssuanceProfile.SignAsCA && !allowCA {
+		lFunc.Errorf("rejected sign_as_ca=true profile for CA %s: CA certificates are only issued by CA creation or reissue", input.CAID)
+		return nil, errs.ErrSignAsCANotAllowed
 	}
 
 	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
@@ -1657,6 +1665,11 @@ func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services
 			lFunc.Errorf("could not get default ca issuance profile %s: %s", ca.ProfileID, err)
 			return nil, err
 		}
+	}
+
+	if profile.SignAsCA && !allowCA {
+		lFunc.Errorf("rejected sign_as_ca=true profile for CA %s: CA certificates are only issued by CA creation or reissue", input.CAID)
+		return nil, errs.ErrSignAsCANotAllowed
 	}
 
 	lFunc.Debugf("sign certificate request with %s CA", input.CAID)
@@ -2230,6 +2243,8 @@ func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input se
 //     The CA is not in an active state
 //   - ErrInvalidKeySpec
 //     Neither or both of (Type+Bits) and KeyIdentifier were specified
+//   - ErrSignAsCANotAllowed
+//     The selected issuance profile has sign_as_ca enabled
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {

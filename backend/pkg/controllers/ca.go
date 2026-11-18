@@ -710,7 +710,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAStatus:
+		case errs.ErrCAStatus, errs.ErrSignAsCANotAllowed:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
@@ -744,7 +744,7 @@ func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 	})
 	if err != nil {
 		switch err {
-		case errs.ErrInvalidKeySpec, errs.ErrValidateBadRequest, errs.ErrCAStatus, errs.ErrKeyEngineRequired:
+		case errs.ErrInvalidKeySpec, errs.ErrValidateBadRequest, errs.ErrCAStatus, errs.ErrKeyEngineRequired, errs.ErrSignAsCANotAllowed:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCANotFound, errs.ErrKeyNotFound, errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})

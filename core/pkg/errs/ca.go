@@ -31,6 +31,9 @@ var (
 
 	ErrIssuanceProfileNotFound error = errors.New("issuance profile not found")
 
+	// ErrSignAsCANotAllowed: only CA creation and reissue may issue a CA certificate (sign_as_ca=true).
+	ErrSignAsCANotAllowed error = errors.New("sign_as_ca=true is not allowed when signing a certificate: CA certificates are only issued by CA creation or reissue")
+
 	//KMS
 	ErrKeyNotFound error = errors.New("key not found")
 	// A key is identified by (key_id, engine_id), so a keyID held by more than one engine

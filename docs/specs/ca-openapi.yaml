@@ -498,6 +498,10 @@ paths:
     post:
       tags: [Certificates]
       summary: Sign a CSR with a CA
+      description: |
+        Issues an end-entity certificate. Profiles with `sign_as_ca=true` are rejected with
+        `400`, whether the profile is inline, referenced by ID or the CA's default profile:
+        CA certificates are only issued by CA creation and CA reissue.
       operationId: signCertificate
       x-authz:
         namespace: pki
@@ -636,6 +640,8 @@ paths:
       description: |
         Issues a new certificate by generating a key pair inside the specified engine.
         The CA to sign the certificate is specified in the request body.
+        Profiles with `sign_as_ca=true` are rejected with `400`, whether the profile is inline,
+        referenced by ID or the CA's default profile.
       operationId: createCertificate
       x-authz:
         namespace: pki
@@ -1542,6 +1548,10 @@ components:
           $ref: '#/components/schemas/Validity'
         sign_as_ca:
           type: boolean
+          description: |
+            Marks the profile as issuing CA certificates. A profile with this flag can only be
+            used by CA creation and CA reissue; `signCertificate` and `createCertificate`
+            reject it with `400`.
         honor_key_usage:
           type: boolean
         key_usage:
