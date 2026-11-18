@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
@@ -117,8 +118,13 @@ func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace s
 			return fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, targetEntityType)
 		}
 
-		// Resolve via against the schema instead of using the policy's string as a JOIN column.
+		// Resolve via against the schema instead of using the policy's string as a JOIN column;
+		// a relation the schema doesn't declare grants nothing and is skipped, not fatal.
 		foreignKey, err := resolveRelationForeignKey(fromEntity, fromNamespace, rel.Via, targetSchema, schemas)
+		if errors.Is(err, errUndeclaredVia) {
+			fmt.Printf("Warning: skipping relation that grants nothing: %v\n", err)
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -154,24 +160,21 @@ func findSchemaForRelation(namespace, entityType string, schemas *SchemaRegistry
 	return nil
 }
 
-// resolveRelationForeignKey returns the schema's own foreign key for via (a relation name or its
-// FK column), checking both directions, or an error if no such relation is declared.
+var errUndeclaredVia = errors.New("relation via is not declared by the schema")
+
+// resolveRelationForeignKey returns the schema's own foreign key for via (a relation name or its FK
+// column) declared by the target schema, the only direction the JOIN in filter.go can express.
 func resolveRelationForeignKey(fromEntity, fromNamespace, via string, targetSchema *SchemaDefinition, schemas *SchemaRegistry) (string, error) {
 	fromSchema := findSchemaForRelation(fromNamespace, fromEntity, schemas)
 	if fromSchema == nil {
 		return "", fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, fromEntity)
-	}
-	for _, relConfig := range fromSchema.Relations {
-		if (relConfig.ForeignKey == via || relConfig.Name == via) && relConfig.TargetEntity == targetSchema.EntityType {
-			return relConfig.ForeignKey, nil
-		}
 	}
 	for _, relConfig := range targetSchema.Relations {
 		if (relConfig.ForeignKey == via || relConfig.Name == via) && relConfig.TargetEntity == fromSchema.EntityType {
 			return relConfig.ForeignKey, nil
 		}
 	}
-	return "", fmt.Errorf("relation 'via' %q is not a declared relation between %s and %s", via, fromEntity, targetSchema.QualifiedEntityType())
+	return "", fmt.Errorf("%w: %q between %s and %s", errUndeclaredVia, via, fromEntity, targetSchema.QualifiedEntityType())
 }
 
 func mergeEdgeActions(edge *GraphEdge, newActions []string) {
