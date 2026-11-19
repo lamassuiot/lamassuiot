@@ -20,9 +20,8 @@ type GraphNode struct {
 type GraphEdge struct {
 	From               string   // source entity type
 	To                 string   // target entity type
-	Via                string   // the policy's raw via string; never safe for SQL, use ForeignKey for column references
 	Actions            []string // allowed actions through this edge
-	ForeignKey         string   // FK column name in target table
+	ForeignKey         string   // join column in the target table: the schema relation's foreign_key, enforced or only logical
 	TableName          string   // target table name
 	QualifiedTableName string   // schema-qualified table name (schema.table)
 	PrimaryKey         string   // target primary key
@@ -114,16 +113,17 @@ func (g *AuthorizationGraph) addUserOwnershipEdges(schemas *SchemaRegistry) {
 				continue
 			}
 			edge := &GraphEdge{
-				From: schema.QualifiedEntityType(), To: "user", Via: relConfig.ForeignKey,
+				From: schema.QualifiedEntityType(), To: "user",
 				ForeignKey: relConfig.ForeignKey, TableName: schema.TableName,
 				QualifiedTableName: schema.QualifiedTableName(), PrimaryKey: schema.PrimaryKeys[0],
 			}
 			qualifiedType := schema.QualifiedEntityType()
+			key := edgeKey(edge.To, edge.ForeignKey)
 			if g.nodes[qualifiedType] != nil {
-				g.nodes[qualifiedType].Relations[relConfig.ForeignKey] = edge
+				g.nodes[qualifiedType].Relations[key] = edge
 			}
 			if g.nodes[schema.EntityType] != nil {
-				g.nodes[schema.EntityType].Relations[relConfig.ForeignKey] = edge
+				g.nodes[schema.EntityType].Relations[key] = edge
 			}
 		}
 	}
@@ -157,16 +157,18 @@ func (g *AuthorizationGraph) addRelationEdges(policyID string, fromEntity string
 		}
 
 		edge := &GraphEdge{
-			From: fromEntity, To: targetEntityType, Via: rel.Via,
+			From: fromEntity, To: targetEntityType,
 			Actions: rel.Actions, ForeignKey: foreignKey,
 			TableName: targetSchema.TableName, QualifiedTableName: targetSchema.QualifiedTableName(),
 			PrimaryKey: targetSchema.PrimaryKeys[0],
 		}
 		if g.nodes[fromEntity] != nil {
-			if existingEdge, exists := g.nodes[fromEntity].Relations[rel.Via]; exists {
+			// Keyed by the resolved join column, so every via spelling of one relation shares this edge.
+			key := edgeKey(edge.To, edge.ForeignKey)
+			if existingEdge, exists := g.nodes[fromEntity].Relations[key]; exists {
 				mergeEdgeActions(existingEdge, rel.Actions)
 			} else {
-				g.nodes[fromEntity].Relations[rel.Via] = edge
+				g.nodes[fromEntity].Relations[key] = edge
 			}
 		}
 		if len(rel.Relations) > 0 {
@@ -176,6 +178,13 @@ func (g *AuthorizationGraph) addRelationEdges(policyID string, fromEntity string
 		}
 	}
 	return nil
+}
+
+// edgeKey identifies an edge within its source node by target and join column, which together fix
+// the JOIN filter.go emits. The column alone is not unique: several targets can declare the same
+// column towards one entity, and an ownership column to user can share its name with a relation's.
+func edgeKey(to, foreignKey string) string {
+	return to + "|" + foreignKey
 }
 
 func findSchemaForRelation(namespace, entityType string, schemas *SchemaRegistry) *SchemaDefinition {

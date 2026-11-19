@@ -37,7 +37,7 @@ func TestFilterGenerator_ControlActionOnDevice(t *testing.T) {
 	for i, path := range paths {
 		t.Logf("Path %d:", i)
 		for j, edge := range path {
-			t.Logf("  Edge %d: %s -[%s (actions: %v)]-> %s", j, edge.From, edge.Via, edge.Actions, edge.To)
+			t.Logf("  Edge %d: %s -[%s (actions: %v)]-> %s", j, edge.From, edge.ForeignKey, edge.Actions, edge.To)
 		}
 	}
 
