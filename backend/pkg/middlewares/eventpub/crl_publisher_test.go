@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"math/big"
 	"testing"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -122,4 +124,50 @@ func TestCRLEventPublisherInitWithoutSettingsPublishesNothing(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	pub.AssertNotCalled(t, "PublishCloudEvent", mock.Anything, mock.Anything)
+}
+
+func finalizeEventMatcher(eventType models.EventType) any {
+	return mock.MatchedBy(func(ctx context.Context) bool {
+		return ctx.Value(core.LamassuContextKeyEventSubject) == "crl/ca-1" && ctx.Value(core.LamassuContextKeyEventType) == eventType
+	})
+}
+
+// The final CRL is a CRL publication like any other: it announces va.role.crl.create with the CRL, besides the
+// va.crl-settings.finalize event of the settings.
+func TestCRLEventPublisherFinalCRLPublishesCreateCRL(t *testing.T) {
+	version := big.NewInt(7)
+	finalCRL := &x509.RevocationList{Number: version}
+	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal, LatestCRL: models.LatestCRLMeta{Version: models.BigInt{Int: version}}}
+
+	next := new(svcmock.MockVAService)
+	next.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: "ca-1"}).Return(&models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsActive}, nil)
+	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
+	next.On("GetCRL", mock.Anything, services.GetCRLInput{ID: "ca-1", CRLVersion: version}).Return(finalCRL, nil)
+	pub := new(CloudEventPublisherMock)
+	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventCreateCRL), finalCRL).Return().Once()
+	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventFinalizeCRLSettings), finalSettings).Return().Once()
+
+	_, err := NewCRLEventPublisher(pub)(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	pub.AssertExpectations(t)
+}
+
+// Finalizing settings that were already FINAL issues no CRL, so a retried event announces none.
+func TestCRLEventPublisherFinalizingFinalSettingsPublishesNoCreateCRL(t *testing.T) {
+	version := big.NewInt(7)
+	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal, LatestCRL: models.LatestCRLMeta{Version: models.BigInt{Int: version}}}
+
+	next := new(svcmock.MockVAService)
+	next.On("GetCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
+	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
+	pub := new(CloudEventPublisherMock)
+	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventFinalizeCRLSettings), finalSettings).Return().Once()
+
+	_, _ = NewCRLEventPublisher(pub)(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
+
+	pub.AssertExpectations(t)
+	pub.AssertNumberOfCalls(t, "PublishCloudEvent", 1)
 }

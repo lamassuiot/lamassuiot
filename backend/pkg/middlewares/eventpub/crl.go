@@ -75,15 +75,34 @@ func (mw *clrEventPublisher) InitCRLSettings(ctx context.Context, caID string) (
 }
 
 func (mw *clrEventPublisher) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (output *models.CRLSettings, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventFinalizeCRLSettings)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CAID))
+	// The final CRL is only issued by this call if the settings were still ACTIVE: finalizing FINAL settings again, as a
+	// retried event does, issues none.
+	issuesFinalCRL := false
+	if input.FinalCRL {
+		if before, getErr := mw.next.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID}); getErr == nil {
+			issuesFinalCRL = before.Status == models.CRLSettingsActive
+		}
+	}
+
+	finalizeCtx := context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventFinalizeCRLSettings)
+	finalizeCtx = context.WithValue(finalizeCtx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CAID))
 
 	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
+		if err != nil {
+			return
 		}
+		// The final CRL is a CRL publication like any other, announced as such before the settings change.
+		if issuesFinalCRL && output != nil && output.Status == models.CRLSettingsFinal && output.LatestCRL.Version.Int != nil {
+			crl, getErr := mw.next.GetCRL(ctx, services.GetCRLInput{ID: input.CAID, CRLVersion: output.LatestCRL.Version.Int})
+			if getErr == nil {
+				createCtx := context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCRL)
+				createCtx = context.WithValue(createCtx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CAID))
+				mw.eventMWPub.PublishCloudEvent(createCtx, crl)
+			}
+		}
+		mw.eventMWPub.PublishCloudEvent(finalizeCtx, output)
 	}()
-	return mw.next.FinalizeCRLSettings(ctx, input)
+	return mw.next.FinalizeCRLSettings(finalizeCtx, input)
 }
 
 func (mw *clrEventPublisher) ArchiveCRLSettings(ctx context.Context, input services.ArchiveCRLSettingsInput) (output *models.CRLSettings, err error) {
