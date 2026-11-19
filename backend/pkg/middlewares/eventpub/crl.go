@@ -5,6 +5,8 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
+
 	beService "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -14,13 +16,15 @@ import (
 type clrEventPublisher struct {
 	next       services.CRLService
 	eventMWPub ICloudEventPublisher
+	logger     *logrus.Entry
 }
 
-func NewCRLEventPublisher(eventMWPub ICloudEventPublisher) beService.CRLMiddleware {
+func NewCRLEventPublisher(eventMWPub ICloudEventPublisher, logger *logrus.Entry) beService.CRLMiddleware {
 	return func(next services.CRLService) services.CRLService {
 		return &clrEventPublisher{
 			next:       next,
 			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.VASource),
+			logger:     logger,
 		}
 	}
 }
@@ -76,8 +80,9 @@ func (mw *clrEventPublisher) InitCRLSettings(ctx context.Context, caID string) (
 
 func (mw *clrEventPublisher) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (output *models.CRLSettings, err error) {
 	// The final CRL is only issued by this call if the settings were still ACTIVE: finalizing FINAL settings again, as a
-	// retried event does, issues none.
-	issuesFinalCRL := false
+	// retried event does, issues none. If the status cannot be read, the call is assumed to issue it: a duplicate CRL
+	// event is harmless under at-least-once delivery, a lost one is never published again.
+	issuesFinalCRL := input.FinalCRL
 	if input.FinalCRL {
 		if before, getErr := mw.next.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID}); getErr == nil {
 			issuesFinalCRL = before.Status == models.CRLSettingsActive
@@ -94,7 +99,9 @@ func (mw *clrEventPublisher) FinalizeCRLSettings(ctx context.Context, input serv
 		// The final CRL is a CRL publication like any other, announced as such before the settings change.
 		if issuesFinalCRL && output != nil && output.Status == models.CRLSettingsFinal && output.LatestCRL.Version.Int != nil {
 			crl, getErr := mw.next.GetCRL(ctx, services.GetCRLInput{ID: input.CAID, CRLVersion: output.LatestCRL.Version.Int})
-			if getErr == nil {
+			if getErr != nil {
+				mw.logger.Errorf("could not read the final CRL %s of CA %s to announce it: %s", output.LatestCRL.Version.Int, input.CAID, getErr)
+			} else {
 				createCtx := context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCRL)
 				createCtx = context.WithValue(createCtx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CAID))
 				mw.eventMWPub.PublishCloudEvent(createCtx, crl)
