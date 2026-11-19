@@ -78,7 +78,12 @@ func TestCRLSettingsColumnContract(t *testing.T) {
 	for _, f := range settings.Filterable {
 		require.Contains(t, columns, f.Column, "filterable column")
 	}
-	require.NotEmpty(t, settings.Relations)
+	// One relation per foreign key of the migration: crl_settings_signer_cert_fk and crl_settings_signer_key_fk.
+	targets := map[string]string{}
+	for _, rel := range settings.Relations {
+		targets[rel.ForeignKey] = rel.TargetEntity
+	}
+	require.Equal(t, map[string]string{"signer_serial_number": "certificate", "signer_key_id": "kms_key"}, targets)
 	for _, rel := range settings.Relations {
 		require.Contains(t, columns, rel.ForeignKey, "foreign key of relation %s", rel.Name)
 	}

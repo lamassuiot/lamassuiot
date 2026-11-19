@@ -322,6 +322,11 @@
         "name": "signer_serial_number",
         "target_entity": "certificate",
         "foreign_key": "signer_serial_number"
+      },
+      {
+        "name": "signer_key_id",
+        "target_entity": "kms_key",
+        "foreign_key": "signer_key_id"
       }
     ],
     "schema_name": "va",
