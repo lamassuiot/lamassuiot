@@ -141,6 +141,35 @@ func TestCredentialSchemaEnvPart(t *testing.T) {
 	assert.Equal(t, "PKI_V2", credentialSchemaEnvPart("pki.v2"))
 }
 
+func TestReadConfigRejectsCredentialSchemaEnvironmentNameCollisions(t *testing.T) {
+	_, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+credentials:
+  pki.v2:
+    provider: postgres
+  pki_v2:
+    provider: postgres
+`), nil)
+
+	require.ErrorContains(t, err, `schemas "pki.v2" and "pki_v2" produce the same environment variable name`)
+}
+
+func TestReadConfigIgnoresCredentialEnvironmentVariablesForAbsentSchemas(t *testing.T) {
+	t.Setenv("LAMASSU_AUTHZ_CREDENTIALS_FOO_USERNAME", "env-foo-user")
+
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+credentials:
+  pki:
+    provider: postgres
+    username: yaml-pki-user
+`), nil)
+	require.NoError(t, err)
+
+	require.Len(t, config.Credentials, 1)
+	assert.Equal(t, "yaml-pki-user", config.Credentials["pki"].Config["username"])
+	_, exists := config.Credentials["foo"]
+	assert.False(t, exists)
+}
+
 func writeCredentialConfig(t *testing.T, config string) string {
 	t.Helper()
 	configPath := t.TempDir() + "/config.yml"
@@ -281,6 +310,33 @@ subscriber_dlq_event_bus:
 }
 
 func TestReadConfigUnsetCredentialEnvironmentVariablesPreserveYAML(t *testing.T) {
+	credentialEnvVars := []string{
+		"LAMASSU_POSTGRES_USERNAME",
+		"LAMASSU_POSTGRES_PASSWORD",
+		"LAMASSU_AMQP_USERNAME",
+		"LAMASSU_AMQP_PASSWORD",
+		"LAMASSU_SMTP_USERNAME",
+		"LAMASSU_SMTP_PASSWORD",
+	}
+	originalEnv := make(map[string]string, len(credentialEnvVars))
+	originallySet := make(map[string]bool, len(credentialEnvVars))
+	for _, envName := range credentialEnvVars {
+		if value, ok := os.LookupEnv(envName); ok {
+			originalEnv[envName] = value
+			originallySet[envName] = true
+		}
+		require.NoError(t, os.Unsetenv(envName))
+	}
+	t.Cleanup(func() {
+		for _, envName := range credentialEnvVars {
+			if originallySet[envName] {
+				assert.NoError(t, os.Setenv(envName, originalEnv[envName]))
+			} else {
+				assert.NoError(t, os.Unsetenv(envName))
+			}
+		}
+	})
+
 	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
 storage:
   provider: postgres
@@ -311,12 +367,12 @@ smtp_server:
 	assert.Equal(t, "yaml-smtp-password", config.SMTPServer.Password)
 }
 
-func TestReadConfigEmptyCredentialEnvironmentVariablesPreserveYAML(t *testing.T) {
+func TestReadConfigEmptyCredentialEnvironmentVariablesFailWhenYAMLValueExists(t *testing.T) {
 	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "")
 	t.Setenv("LAMASSU_AMQP_PASSWORD", "")
 	t.Setenv("LAMASSU_SMTP_PASSWORD", "")
 
-	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+	_, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
 storage:
   provider: postgres
   hostname: yaml-host
@@ -336,9 +392,5 @@ smtp_server:
   username: yaml-smtp-user
   password: yaml-smtp-password
 `), nil)
-	require.NoError(t, err)
-
-	assert.Equal(t, "yaml-pg-password", config.Storage.Config["password"])
-	assert.Equal(t, "yaml-amqp-password", config.PublisherEventBus.Config["basic_auth"].(map[string]any)["password"])
-	assert.Equal(t, "yaml-smtp-password", config.SMTPServer.Password)
+	require.ErrorContains(t, err, "LAMASSU_POSTGRES_PASSWORD is set but empty")
 }

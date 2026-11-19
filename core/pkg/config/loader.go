@@ -70,6 +70,9 @@ func bindCredentialEnv(vp *viper.Viper) error {
 		if err := vp.BindEnv(binding.configKey, binding.envName); err != nil {
 			return fmt.Errorf("could not bind environment variable %s to %s: %w", binding.envName, binding.configKey, err)
 		}
+		if value, exists := os.LookupEnv(binding.envName); exists && value == "" && vp.IsSet(binding.configKey) {
+			return fmt.Errorf("credential environment variable %s is set but empty while configuration key %s has a value", binding.envName, binding.configKey)
+		}
 	}
 
 	credentials := vp.GetStringMap("credentials")
