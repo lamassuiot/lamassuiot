@@ -284,10 +284,13 @@ func TestCascadeDeleteChecksEveryDescendantBeforeAnyChange(t *testing.T) {
 func TestCascadeDeleteRejectsAnActiveDescendant(t *testing.T) {
 	f := newDeleteCAFixture(t, models.RevocationReason(ocsp.KeyCompromise))
 	f.svc.allowCascadeDelete = true
-	f.addChildCA(t, "ca-1", "ca-2", models.StatusActive)
+	f.addChildCA(t, "ca-1", "ca-2", models.StatusRevoked)
+	f.addChildCA(t, "ca-2", "ca-3", models.StatusActive)
 
 	err := f.svc.DeleteCA(context.Background(), coreservices.DeleteCAInput{CAID: "ca-1", CascadeDelete: true})
 	require.ErrorIs(t, err, errs.ErrCAStatus)
+	require.Contains(t, err.Error(), "ca-3")
+	require.Contains(t, err.Error(), string(models.StatusActive))
 	require.Empty(t, f.cas.deleted)
 	require.Zero(t, f.certs.byCA)
 }

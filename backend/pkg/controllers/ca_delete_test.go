@@ -18,6 +18,19 @@ type caDeleteTestService struct {
 	err error
 }
 
+func TestDeleteCAStatusWithDetailsReturnsBadRequest(t *testing.T) {
+	routes := &caHttpRoutes{svc: &caDeleteTestService{err: fmt.Errorf("%w: CA ca-3 cannot be deleted while in status ACTIVE", errs.ErrCAStatus)}}
+	router := gin.New()
+	router.DELETE("/v1/cas/:id", routes.DeleteCA)
+	transport := &importCATransport{handler: router}
+	client := sdk.NewHttpCAClient(&http.Client{Transport: transport}, "http://ca.test")
+
+	err := client.DeleteCA(context.Background(), services.DeleteCAInput{CAID: "ca-1", CascadeDelete: true})
+	require.Equal(t, http.StatusBadRequest, transport.status)
+	require.ErrorIs(t, err, errs.ErrCAStatus)
+	require.Contains(t, err.Error(), "ca-3")
+}
+
 func (svc *caDeleteTestService) DeleteCA(context.Context, services.DeleteCAInput) error {
 	return svc.err
 }

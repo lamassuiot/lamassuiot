@@ -1161,7 +1161,7 @@ func forEachSelected[E any](ctx context.Context, selectFn func(context.Context, 
 // CA.
 func (svc *CAServiceBackend) checkCACanBeDeleted(ctx context.Context, ca *models.CACertificate, descendants bool, lFunc *logrus.Entry) ([]string, error) {
 	if err := svc.caValidatorCADeletionEligibility(ca, lFunc); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: CA %s cannot be deleted while in status %s", err, ca.ID, ca.Certificate.Status)
 	}
 	keySerials := svc.caKeySerials(ctx, ca, lFunc)
 	if err := svc.checkCAKeyCanBeReleased(ctx, ca, keySerials); err != nil {
