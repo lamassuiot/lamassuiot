@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 	var err error
 	serverTest, err = tests.TestServiceBuilder{}.
 		WithDatabase("ca", "devicemanager", "dmsmanager", "kms").
-		WithService(tests.CA, tests.DEVICE_MANAGER, tests.DMS_MANAGER).
+		WithService(tests.CA, tests.DEVICE_MANAGER, tests.AUTHZ, tests.DMS_MANAGER).
 		WithEventBus().
 		BuildSuite()
 	if err != nil {

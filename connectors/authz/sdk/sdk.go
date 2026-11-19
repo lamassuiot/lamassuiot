@@ -76,19 +76,26 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		},
 	}
 
-	client := &Client{
-		httpClient: httpClient,
-		baseURL:    config.BaseURL,
-		headers:    config.CustomHeaders,
-	}
+	return newClient(httpClient, config.BaseURL, config.CustomHeaders), nil
+}
 
-	// Initialize service clients
+// NewClientWithHTTPClient builds a client on an http.Client already configured by the caller, such as sdk.BuildHTTPClient.
+func NewClientWithHTTPClient(httpClient *http.Client, baseURL string) *Client {
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	httpClient.Transport = &contextSourceRoundTripper{transport: transport}
+	return newClient(httpClient, baseURL, nil)
+}
+
+func newClient(httpClient *http.Client, baseURL string, headers map[string]string) *Client {
+	client := &Client{httpClient: httpClient, baseURL: baseURL, headers: headers}
 	client.Authz = newAuthzClient(client)
 	client.Principals = newPrincipalClient(client)
 	client.Policies = newPolicyClient(client)
 	client.Schemas = newSchemaClient(client)
-
-	return client, nil
+	return client
 }
 
 // WithHeader adds a custom header to all requests

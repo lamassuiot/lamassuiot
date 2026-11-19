@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
 	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -43,6 +45,9 @@ type DMSManagerServiceBackend struct {
 	caClient         services.CAService
 	logger           *logrus.Entry
 	crlCache         *crlCache
+
+	authz           *authzsdk.Client
+	authzPrincipals config.DMSAuthzPrincipals
 }
 
 type DMSManagerBuilder struct {
@@ -57,6 +62,9 @@ type DMSManagerBuilder struct {
 	// CRLCacheMaxTTL bounds how long a downloaded CRL is reused; a CRL is never kept past its nextUpdate. 0 uses the
 	// default of 1 hour.
 	CRLCacheMaxTTL time.Duration
+
+	Authz           *authzsdk.Client // nil disables authz_principal_settings
+	AuthzPrincipals config.DMSAuthzPrincipals
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
@@ -67,6 +75,9 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		downstreamCert:   builder.DownstreamCertificate,
 		logger:           builder.Logger,
 		crlCache:         newCRLCache(builder.CRLCacheMaxBytes, builder.CRLCacheMaxTTL),
+
+		authz:           builder.Authz,
+		authzPrincipals: builder.AuthzPrincipals,
 	}
 
 	svc.service = svc
@@ -123,9 +134,20 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		Settings:     input.Settings,
 	}
 
+	createdPrincipal := false
+	if authzPrincipalEnabled(dms.Settings) {
+		if createdPrincipal, err = svc.syncAuthzPrincipal(ctx, dms); err != nil {
+			lFunc.Errorf("could not provision the authz principal of DMS '%s': %s", input.ID, err)
+			return nil, err
+		}
+	}
+
 	dms, err = svc.dmsStorage.Insert(ctx, dms)
 	if err != nil {
-		lFunc.Errorf("could not insert DMS '%s': %s", dms.ID, err)
+		lFunc.Errorf("could not insert DMS '%s': %s", input.ID, err)
+		if createdPrincipal {
+			svc.rollbackAuthzPrincipal(ctx, lFunc, input.ID, "the failed insert")
+		}
 		return nil, err
 	}
 	lFunc.Debugf("DMS '%s' persisted into storage engine", dms.ID)
@@ -155,11 +177,32 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	if input.Metadata != nil {
 		dms.Metadata = input.Metadata
 	}
+	hadPrincipal := authzPrincipalEnabled(dms.Settings)
+	storedPrincipal := dms.Settings.AuthzPrincipalSettings
 	dms.Name = input.Name
 	dms.Settings = *input.Settings
+	// nil means "not provided": keep the stored switch, so a client unaware of it cannot turn it off.
+	if dms.Settings.AuthzPrincipalSettings == nil {
+		dms.Settings.AuthzPrincipalSettings = storedPrincipal
+	}
+
+	createdPrincipal := false
+	if authzPrincipalEnabled(dms.Settings) {
+		createdPrincipal, err = svc.syncAuthzPrincipal(ctx, dms)
+	} else if hadPrincipal {
+		err = svc.deleteAuthzPrincipal(ctx, lFunc, dms.ID)
+	}
+	if err != nil {
+		lFunc.Errorf("could not update the authz principal of DMS '%s': %s", input.ID, err)
+		return nil, err
+	}
 
 	lFunc.Debugf("updating DMS %s", input.ID)
-	return svc.dmsStorage.Update(ctx, dms)
+	updated, err := svc.dmsStorage.Update(ctx, dms)
+	if err != nil && createdPrincipal {
+		svc.rollbackAuthzPrincipal(ctx, lFunc, input.ID, "the failed update")
+	}
+	return updated, err
 }
 
 func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
@@ -206,13 +249,20 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 
 	id := input.ID
 	lFunc.Debugf("checking if DMS '%s' exists", id)
-	exists, _, err := svc.dmsStorage.SelectExists(ctx, id)
+	exists, dms, err := svc.dmsStorage.SelectExists(ctx, id)
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", id, err)
 		return err
 	} else if !exists {
 		lFunc.Errorf("DMS '%s' does not exist in storage engine", id)
 		return errs.ErrDMSNotFound
+	}
+
+	if authzPrincipalEnabled(dms.Settings) {
+		if err := svc.deleteAuthzPrincipal(ctx, lFunc, id); err != nil {
+			lFunc.Errorf("could not delete the authz principal of DMS '%s': %s", id, err)
+			return err
+		}
 	}
 
 	err = svc.dmsStorage.Delete(ctx, id)
