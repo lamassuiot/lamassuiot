@@ -1,12 +1,10 @@
 package eventpub
 
 import (
-	"bytes"
 	"context"
 	"crypto/x509"
 	"errors"
 	"math/big"
-	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +12,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	svcmock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -45,10 +42,10 @@ func TestCRLEventPublisherSubjectsUseCAID(t *testing.T) {
 		{
 			name: "finalize", eventType: models.EventFinalizeCRLSettings,
 			setup: func(svc *svcmock.MockVAService) {
-				svc.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(&models.CRLSettings{}, nil)
+				svc.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(&models.CRLSettings{}, nil, nil)
 			},
 			call: func(svc services.CRLService) {
-				_, _ = svc.FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1"})
+				_, _, _ = svc.FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1"})
 			},
 		},
 		{
@@ -87,7 +84,7 @@ func TestCRLEventPublisherSubjectsUseCAID(t *testing.T) {
 				return ctx.Value(core.LamassuContextKeyEventSubject) == "crl/ca-1" && ctx.Value(core.LamassuContextKeyEventType) == tc.eventType
 			}), mock.Anything).Return()
 
-			tc.call(NewCRLEventPublisher(pub, testLogger())(next))
+			tc.call(NewCRLEventPublisher(pub)(next))
 
 			pub.AssertExpectations(t)
 		})
@@ -98,14 +95,14 @@ func TestCRLEventPublisherSubjectsUseCAID(t *testing.T) {
 // lifecycle operations, which publish their own events.
 func TestCRLEventPublisherLifecycleWithoutEvents(t *testing.T) {
 	next := new(svcmock.MockVAService)
-	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(nil, errors.New("boom"))
+	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(nil, nil, errors.New("boom"))
 	next.On("ArchiveCRLSettings", mock.Anything, mock.Anything).Return(nil, errors.New("boom"))
 	next.On("DeleteCRLSettings", mock.Anything, mock.Anything).Return(errors.New("boom"))
 	next.On("ReconcileCRLSettings", mock.Anything, mock.Anything).Return(&models.CRLSettings{}, nil)
 	pub := new(CloudEventPublisherMock)
-	svc := NewCRLEventPublisher(pub, testLogger())(next)
+	svc := NewCRLEventPublisher(pub)(next)
 
-	_, _ = svc.FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1"})
+	_, _, _ = svc.FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1"})
 	_, _ = svc.ArchiveCRLSettings(context.Background(), services.ArchiveCRLSettingsInput{CAID: "ca-1"})
 	_ = svc.DeleteCRLSettings(context.Background(), services.DeleteCRLSettingsInput{CAID: "ca-1"})
 	_, _ = svc.ReconcileCRLSettings(context.Background(), services.ReconcileCRLSettingsInput{CAID: "ca-1"})
@@ -119,7 +116,7 @@ func TestCRLEventPublisherInitWithoutSettingsPublishesNothing(t *testing.T) {
 	next := new(svcmock.MockVAService)
 	next.On("InitCRLSettings", mock.Anything, "ca-1").Return(nil, nil)
 	pub := new(CloudEventPublisherMock)
-	svc := NewCRLEventPublisher(pub, testLogger())(next)
+	svc := NewCRLEventPublisher(pub)(next)
 
 	_, err := svc.InitCRLSettings(context.Background(), "ca-1")
 
@@ -135,92 +132,61 @@ func finalizeEventMatcher(eventType models.EventType) any {
 	})
 }
 
-// The final CRL is a CRL publication like any other: it announces va.role.crl.create with the CRL, besides the
-// va.crl-settings.finalize event of the settings.
+// The final CRL is a CRL publication like any other: it announces va.role.crl.create with the CRL the call issued,
+// besides the va.crl-settings.finalize event of the settings. It needs no reads of its own, which could fail after the
+// settings are FINAL and lose the event for good.
 func TestCRLEventPublisherFinalCRLPublishesCreateCRL(t *testing.T) {
-	version := big.NewInt(7)
-	finalCRL := &x509.RevocationList{Number: version}
-	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal, LatestCRL: models.LatestCRLMeta{Version: models.BigInt{Int: version}}}
+	finalCRL := &x509.RevocationList{Number: big.NewInt(7)}
+	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal}
 
 	next := new(svcmock.MockVAService)
-	next.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: "ca-1"}).Return(&models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsActive}, nil)
-	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
-	next.On("GetCRL", mock.Anything, services.GetCRLInput{ID: "ca-1", CRLVersion: version}).Return(finalCRL, nil)
+	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, finalCRL, nil)
 	pub := new(CloudEventPublisherMock)
 	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventCreateCRL), finalCRL).Return().Once()
 	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventFinalizeCRLSettings), finalSettings).Return().Once()
 
-	_, err := NewCRLEventPublisher(pub, testLogger())(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
+	_, _, err := NewCRLEventPublisher(pub)(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	pub.AssertExpectations(t)
+	next.AssertNotCalled(t, "GetCRL", mock.Anything, mock.Anything)
+	next.AssertNotCalled(t, "GetCRLSettings", mock.Anything, mock.Anything)
 }
 
-// Finalizing settings that were already FINAL issues no CRL, so a retried event announces none.
-func TestCRLEventPublisherFinalizingFinalSettingsPublishesNoCreateCRL(t *testing.T) {
-	version := big.NewInt(7)
-	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal, LatestCRL: models.LatestCRLMeta{Version: models.BigInt{Int: version}}}
+// A call that issued no CRL (settings already FINAL, finalized without one, or finalized by someone else) announces
+// none: only the finalize event goes out.
+func TestCRLEventPublisherFinalizeWithoutCRLPublishesNoCreateCRL(t *testing.T) {
+	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal}
 
 	next := new(svcmock.MockVAService)
-	next.On("GetCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
-	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
+	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil, nil)
 	pub := new(CloudEventPublisherMock)
 	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventFinalizeCRLSettings), finalSettings).Return().Once()
 
-	_, _ = NewCRLEventPublisher(pub, testLogger())(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
+	_, _, _ = NewCRLEventPublisher(pub)(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
 
 	pub.AssertExpectations(t)
 	pub.AssertNumberOfCalls(t, "PublishCloudEvent", 1)
 }
 
-// An unknown status before the call counts as "will issue": a duplicate CRL event is harmless, a lost one is not.
-func TestCRLEventPublisherFinalCRLPublishesCreateCRLWhenTheStatusReadFails(t *testing.T) {
-	version := big.NewInt(7)
-	finalCRL := &x509.RevocationList{Number: version}
-	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal, LatestCRL: models.LatestCRLMeta{Version: models.BigInt{Int: version}}}
+// A final CRL that was issued is announced even if the call fails afterwards (reading the settings back): the CRL is
+// published and the settings are FINAL, and a retry would issue and announce nothing. Only the finalize event, which
+// reports the settings, needs the call to succeed.
+func TestCRLEventPublisherPublishesTheIssuedFinalCRLEvenIfTheCallFails(t *testing.T) {
+	finalCRL := &x509.RevocationList{Number: big.NewInt(7)}
 
 	next := new(svcmock.MockVAService)
-	next.On("GetCRLSettings", mock.Anything, mock.Anything).Return(nil, errors.New("storage unavailable"))
-	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
-	next.On("GetCRL", mock.Anything, mock.Anything).Return(finalCRL, nil)
+	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(nil, finalCRL, errors.New("storage unavailable"))
 	pub := new(CloudEventPublisherMock)
 	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventCreateCRL), finalCRL).Return().Once()
-	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventFinalizeCRLSettings), finalSettings).Return().Once()
 
-	_, _ = NewCRLEventPublisher(pub, testLogger())(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
+	_, _, err := NewCRLEventPublisher(pub)(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
 
-	pub.AssertExpectations(t)
-}
-
-func testLogger() *logrus.Entry {
-	l := logrus.New()
-	l.SetOutput(&bytes.Buffer{})
-	return logrus.NewEntry(l)
-}
-
-// A final CRL whose re-read fails cannot be announced: the failure is logged, not swallowed, and the finalize event
-// still goes out.
-func TestCRLEventPublisherLogsWhenTheFinalCRLCannotBeRead(t *testing.T) {
-	version := big.NewInt(7)
-	finalSettings := &models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsFinal, LatestCRL: models.LatestCRLMeta{Version: models.BigInt{Int: version}}}
-
-	next := new(svcmock.MockVAService)
-	next.On("GetCRLSettings", mock.Anything, mock.Anything).Return(&models.CRLSettings{CAID: "ca-1", Status: models.CRLSettingsActive}, nil)
-	next.On("FinalizeCRLSettings", mock.Anything, mock.Anything).Return(finalSettings, nil)
-	next.On("GetCRL", mock.Anything, mock.Anything).Return((*x509.RevocationList)(nil), errors.New("bucket unavailable"))
-	pub := new(CloudEventPublisherMock)
-	pub.On("PublishCloudEvent", finalizeEventMatcher(models.EventFinalizeCRLSettings), finalSettings).Return().Once()
-	var logs bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logs)
-
-	_, _ = NewCRLEventPublisher(pub, logrus.NewEntry(l))(next).FinalizeCRLSettings(context.Background(), services.FinalizeCRLSettingsInput{CAID: "ca-1", FinalCRL: true, FinalCRLNextUpdate: time.Now().Add(time.Hour)})
-
+	if err == nil {
+		t.Fatal("expected the error to be returned")
+	}
 	pub.AssertExpectations(t)
 	pub.AssertNumberOfCalls(t, "PublishCloudEvent", 1)
-	if !strings.Contains(logs.String(), "ca-1") || !strings.Contains(logs.String(), "bucket unavailable") {
-		t.Fatalf("the failure to read the final CRL was not logged: %q", logs.String())
-	}
 }

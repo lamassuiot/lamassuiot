@@ -71,7 +71,7 @@ func (mw *CRLOTelTracer) InitCRLSettings(ctx context.Context, caID string) (outp
 	return mw.next.InitCRLSettings(ctx, caID)
 }
 
-func (mw *CRLOTelTracer) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (*models.CRLSettings, error) {
+func (mw *CRLOTelTracer) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (*models.CRLSettings, *x509.RevocationList, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 

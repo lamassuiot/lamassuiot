@@ -62,7 +62,7 @@ func (mw *CRLAuditEventPublisher) InitCRLSettings(ctx context.Context, caID stri
 	return mw.next.InitCRLSettings(ctx, caID)
 }
 
-func (mw *CRLAuditEventPublisher) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (output *models.CRLSettings, err error) {
+func (mw *CRLAuditEventPublisher) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (output *models.CRLSettings, finalCRL *x509.RevocationList, err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventFinalizeCRLSettings, input, err, output)
 	}()

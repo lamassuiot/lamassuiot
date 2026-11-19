@@ -19,8 +19,9 @@ type CRLService interface {
 	// InitCRLSettings returns nil settings without error if none exist and the CA certificate has no KMS engine or key ID.
 	InitCRLSettings(ctx context.Context, caID string) (*models.CRLSettings, error)
 	// FinalizeCRLSettings moves ACTIVE settings to FINAL, publishing their final CRL first if asked to. Settings that
-	// are not ACTIVE are returned unchanged.
-	FinalizeCRLSettings(ctx context.Context, input FinalizeCRLSettingsInput) (*models.CRLSettings, error)
+	// are not ACTIVE are returned unchanged. The CRL returned is the final CRL this call issued, so that it can be
+	// announced without reading it again: it is nil if the call issued none.
+	FinalizeCRLSettings(ctx context.Context, input FinalizeCRLSettingsInput) (*models.CRLSettings, *x509.RevocationList, error)
 	// ArchiveCRLSettings moves the settings of a deleted CA to ARCHIVED.
 	ArchiveCRLSettings(ctx context.Context, input ArchiveCRLSettingsInput) (*models.CRLSettings, error)
 	// DeleteCRLSettings purges ARCHIVED settings. Their published CRLs stay in the bucket.

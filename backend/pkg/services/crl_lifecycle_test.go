@@ -64,9 +64,12 @@ func TestFinalizeCRLSettingsIssuesTheFinalCRL(t *testing.T) {
 	ca := f.lifecycleCA("ca-a", models.StatusRevoked, ocsp.KeyCompromise)
 	f.revoke("ca-a", 1001)
 
-	got, err := f.svc.FinalizeCRLSettings(ctx, coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
+	got, finalCRL, err := f.svc.FinalizeCRLSettings(ctx, coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
 	require.NoError(t, err)
 	require.Equal(t, models.CRLSettingsFinal, got.Status)
+	require.NotNil(t, finalCRL, "the final CRL issued by the call is returned, so that it can be announced")
+	require.Equal(t, "1", finalCRL.Number.String())
+	require.Equal(t, []int64{1001}, serials(finalCRL))
 	require.Nil(t, got.SignerEngineID)
 	require.Nil(t, got.SignerKeyID)
 	require.Equal(t, ca.Certificate.SerialNumber, got.Options.SignerSerialNumber)
@@ -76,9 +79,10 @@ func TestFinalizeCRLSettingsIssuesTheFinalCRL(t *testing.T) {
 	require.Equal(t, []int64{1001}, serials(crl))
 
 	t.Run("a retry publishes nothing", func(t *testing.T) {
-		again, err := f.svc.FinalizeCRLSettings(ctx, coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
+		again, againCRL, err := f.svc.FinalizeCRLSettings(ctx, coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
 		require.NoError(t, err)
 		require.Equal(t, models.CRLSettingsFinal, again.Status)
+		require.Nil(t, againCRL, "no CRL was issued, so there is none to announce")
 		require.Equal(t, 1, f.crlFiles("ca-a"))
 	})
 }
@@ -110,10 +114,11 @@ func TestFinalizeCRLSettingsReissuesTheFinalCRLAfterAConcurrentOne(t *testing.T)
 	repo := &interveningCRLRepo{memCRLSettingsRepo: f.repo}
 	f.svc.vaRepo = repo
 
-	got, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
+	got, finalCRL, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
 	require.NoError(t, err)
 	require.True(t, repo.intervened)
 	require.Equal(t, models.CRLSettingsFinal, got.Status)
+	require.Equal(t, "3", finalCRL.Number.String(), "the CRL returned is the one that stayed as the final one")
 	require.Equal(t, "3", got.LatestCRL.Version.String(), "final (1), intervening (2), final again (3)")
 	require.True(t, f.readCRL("ca-a", "3").NextUpdate.Equal(ca.Certificate.ValidTo))
 }
@@ -145,10 +150,11 @@ func TestFinalizeCRLSettingsAfterAConcurrentFinalizer(t *testing.T) {
 	repo := &concurrentFinalizerRepo{memCRLSettingsRepo: f.repo}
 	f.svc.vaRepo = repo
 
-	got, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
+	got, finalCRL, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true, FinalCRLNextUpdate: ca.Certificate.ValidTo})
 	require.NoError(t, err)
 	require.True(t, repo.finalized)
 	require.Equal(t, models.CRLSettingsFinal, got.Status)
+	require.Nil(t, finalCRL, "the other finalizer issued the final CRL: announcing it is up to that one")
 	require.Equal(t, "1", got.LatestCRL.Version.String(), "the final CRL of the other finalizer")
 }
 
@@ -156,9 +162,10 @@ func TestFinalizeCRLSettingsWithoutCRL(t *testing.T) {
 	f := newCRLFixture(t)
 	f.lifecycleCA("ca-a", models.StatusExpired, 0)
 
-	got, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a"})
+	got, finalCRL, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a"})
 	require.NoError(t, err)
 	require.Equal(t, models.CRLSettingsFinal, got.Status)
+	require.Nil(t, finalCRL)
 	require.Zero(t, f.crlFiles("ca-a"), "a CRL signed by an expired CA is not trusted")
 }
 
@@ -166,7 +173,7 @@ func TestFinalizeCRLSettingsRequiresNextUpdateForTheFinalCRL(t *testing.T) {
 	f := newCRLFixture(t)
 	f.lifecycleCA("ca-a", models.StatusRevoked, ocsp.KeyCompromise)
 
-	_, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true})
+	_, _, err := f.svc.FinalizeCRLSettings(context.Background(), coreservices.FinalizeCRLSettingsInput{CAID: "ca-a", FinalCRL: true})
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 	require.Zero(t, f.crlFiles("ca-a"), "nothing is published when the input is rejected")
 }

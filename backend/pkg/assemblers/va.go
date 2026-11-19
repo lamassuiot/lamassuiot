@@ -136,7 +136,7 @@ func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (ser
 		Publisher: pub,
 		ServiceID: serviceID,
 		Logger:    lMessaging,
-	}, lMessaging)(crl)
+	})(crl)
 
 	return crl, nil
 }

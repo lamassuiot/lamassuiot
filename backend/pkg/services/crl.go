@@ -451,26 +451,27 @@ func deref(s *string) string {
 // published between the final CRL and the transition to FINAL.
 const finalCRLAttempts = 3
 
-func (svc CRLServiceBackend) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (*models.CRLSettings, error) {
+func (svc CRLServiceBackend) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (*models.CRLSettings, *x509.RevocationList, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 	if err := crlValidate.Struct(input); err != nil {
-		return nil, errs.ErrValidateBadRequest
+		return nil, nil, errs.ErrValidateBadRequest
 	}
 
 	for attempt := 1; ; attempt++ {
 		settings, err := svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if settings.Status != models.CRLSettingsActive {
 			// Transitions only move forward: a retried event finds them done.
-			return settings, nil
+			return settings, nil, nil
 		}
 
 		// The final CRL is published while the settings are still ACTIVE, so its key is still retained, and they only
 		// move to FINAL while it is still their latest CRL: a regular CRL published meanwhile would otherwise replace it,
 		// and expire long before the CA.
 		var finalVersion *big.Int
+		var finalCRL *x509.RevocationList
 		if input.FinalCRL {
 			crl, err := svc.calculateCRL(ctx, settings, func(time.Time) time.Time { return input.FinalCRLNextUpdate })
 			if err == nil {
@@ -488,14 +489,20 @@ func (svc CRLServiceBackend) FinalizeCRLSettings(ctx context.Context, input serv
 			}
 			if err != nil {
 				lFunc.Errorf("could not issue the final CRL of CA %s: %s", input.CAID, err)
-				return nil, err
+				return nil, nil, err
 			}
+			finalCRL = crl
 			lFunc.Infof("final CRL %s of CA %s issued, valid until %s", finalVersion, input.CAID, input.FinalCRLNextUpdate)
 		} else if err := svc.vaRepo.MarkFinal(ctx, input.CAID, nil); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		return svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
+		finalSettings, err := svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
+		if err != nil {
+			// The final CRL is issued and the settings are FINAL: it is returned so that it is still announced.
+			return nil, finalCRL, err
+		}
+		return finalSettings, finalCRL, nil
 	}
 }
 
@@ -520,7 +527,7 @@ func (svc CRLServiceBackend) ArchiveCRLSettings(ctx context.Context, input servi
 		if signer.ValidTo.After(time.Now()) {
 			finalize.FinalCRL, finalize.FinalCRLNextUpdate = true, signer.ValidTo
 		}
-		if _, err := svc.service.FinalizeCRLSettings(ctx, finalize); err != nil {
+		if _, _, err := svc.service.FinalizeCRLSettings(ctx, finalize); err != nil {
 			return nil, err
 		}
 	}
@@ -564,10 +571,12 @@ func (svc CRLServiceBackend) ReconcileCRLSettings(ctx context.Context, input ser
 	cert := ca.Certificate
 	switch {
 	case cert.Status == models.StatusExpired, !notAfter.After(time.Now()):
-		return svc.service.FinalizeCRLSettings(ctx, services.FinalizeCRLSettingsInput{CAID: input.CAID})
+		finalized, _, err := svc.service.FinalizeCRLSettings(ctx, services.FinalizeCRLSettingsInput{CAID: input.CAID})
+		return finalized, err
 	case cert.Status == models.StatusRevoked && cert.RevocationReason != models.RevocationReason(ocsp.CertificateHold) &&
 		(input.RevokedBefore.IsZero() || cert.RevocationTimestamp.Before(input.RevokedBefore)):
-		return svc.service.FinalizeCRLSettings(ctx, services.FinalizeCRLSettingsInput{CAID: input.CAID, FinalCRL: true, FinalCRLNextUpdate: notAfter})
+		finalized, _, err := svc.service.FinalizeCRLSettings(ctx, services.FinalizeCRLSettingsInput{CAID: input.CAID, FinalCRL: true, FinalCRLNextUpdate: notAfter})
+		return finalized, err
 	}
 	// Active, or on hold: a hold is reversible, so the CA keeps signing CRLs.
 	return settings, nil
