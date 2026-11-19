@@ -127,6 +127,12 @@ func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primary
 	return &querier, nil
 }
 
+// isCheckViolation tells whether err is a violation of the given check constraint.
+func isCheckViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == constraint
+}
+
 // isForeignKeyViolation tells whether err is a foreign-key violation of the given constraint.
 func isForeignKeyViolation(err error, constraint string) bool {
 	var pgErr *pgconn.PgError

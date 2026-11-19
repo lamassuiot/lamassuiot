@@ -3,8 +3,10 @@ package sdk
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -61,6 +63,19 @@ func TestCRLSettingsSDKMapsStatusCodesToErrors(t *testing.T) {
 	}
 }
 
+type vaTestTransport func(*http.Request) (*http.Response, error)
+
+func (f vaTestTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestUpdateCRLSettingsSDKMapsMissingSignerKey(t *testing.T) {
+	transport := vaTestTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(`{"err":"key not found"}`)), Header: make(http.Header)}, nil
+	})
+	client := NewHttpVAClient(&http.Client{Transport: transport}, "http://va.test")
+	_, err := client.UpdateCRLSettings(context.Background(), services.UpdateCRLSettingsInput{CAID: "ca-1"})
+	require.ErrorIs(t, err, errs.ErrKeyNotFound)
+}
+
 func TestVASDKGetCRLUsesTheID(t *testing.T) {
 	var path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,4 +88,27 @@ func TestVASDKGetCRLUsesTheID(t *testing.T) {
 	_, _ = client.GetCRL(context.Background(), services.GetCRLResponseInput{ID: "ca id/1"})
 
 	require.Equal(t, "/crl/ca%20id%2F1", path, "the id is escaped as one path segment")
+}
+
+func TestCRLSettingsSDKDelete(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/crl-settings/ca-1", r.URL.Path)
+		require.Equal(t, http.MethodDelete, r.Method)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	require.NoError(t, NewHttpVAClient(server.Client(), server.URL).DeleteCRLSettings(context.Background(), services.DeleteCRLSettingsInput{CAID: "ca-1"}))
+
+	for status, want := range map[int]error{
+		http.StatusNotFound: errs.ErrCRLSettingsNotFound,
+		http.StatusConflict: errs.ErrCRLSettingsNotArchived,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]string{"err": want.Error()})
+		}))
+		err := NewHttpVAClient(server.Client(), server.URL).DeleteCRLSettings(context.Background(), services.DeleteCRLSettingsInput{CAID: "ca-1"})
+		require.ErrorIs(t, err, want, "status %d", status)
+		server.Close()
+	}
 }

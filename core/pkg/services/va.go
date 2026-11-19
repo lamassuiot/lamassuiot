@@ -15,6 +15,7 @@ type VAService interface {
 	GetCRLSettingsList(ctx context.Context, input GetCRLSettingsListInput) (string, error)
 	GetCRLSettingsByID(ctx context.Context, input GetCRLSettingsInput) (*models.CRLSettings, error)
 	UpdateCRLSettings(ctx context.Context, input UpdateCRLSettingsInput) (*models.CRLSettings, error)
+	DeleteCRLSettings(ctx context.Context, input DeleteCRLSettingsInput) error
 }
 
 type GetOCSPResponseInput struct {

@@ -61,7 +61,7 @@ func (cli *httpVAClient) GetCRLSettingsByID(ctx context.Context, input services.
 
 func (cli *httpVAClient) UpdateCRLSettings(ctx context.Context, input services.UpdateCRLSettingsInput) (*models.CRLSettings, error) {
 	response, err := cli.put[*models.CRLSettings](ctx, "/v1/crl-settings/"+url.PathEscape(input.CAID), input.Options, map[int][]error{
-		404: {errs.ErrCRLSettingsNotFound, errs.ErrCertificateNotFound},
+		404: {errs.ErrCRLSettingsNotFound, errs.ErrCertificateNotFound, errs.ErrKeyNotFound},
 		400: {errs.ErrValidateBadRequest},
 		409: {errs.ErrCRLSettingsNotActive},
 	})
@@ -69,4 +69,12 @@ func (cli *httpVAClient) UpdateCRLSettings(ctx context.Context, input services.U
 		return nil, err
 	}
 	return response, nil
+}
+
+func (cli *httpVAClient) DeleteCRLSettings(ctx context.Context, input services.DeleteCRLSettingsInput) error {
+	return cli.delete(ctx, "/v1/crl-settings/"+url.PathEscape(input.CAID), map[int][]error{
+		404: {errs.ErrCRLSettingsNotFound},
+		400: {errs.ErrValidateBadRequest},
+		409: {errs.ErrCRLSettingsNotArchived},
+	})
 }

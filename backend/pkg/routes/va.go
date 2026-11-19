@@ -35,5 +35,6 @@ func registerVARoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp servi
 	v1.GET("/crl-settings", vaAuthzMw.List(), vaRoutes.GetCRLSettingsList)
 	v1.GET("/crl-settings/:ca-id", vaAuthzMw.Resource("read", caIDKey), vaRoutes.GetCRLSettingsByID)
 	v1.PUT("/crl-settings/:ca-id", vaAuthzMw.Resource("update", caIDKey), vaRoutes.UpdateCRLSettings)
+	v1.DELETE("/crl-settings/:ca-id", vaAuthzMw.Resource("delete", caIDKey), vaRoutes.DeleteCRLSettings)
 	return contract
 }

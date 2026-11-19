@@ -114,7 +114,8 @@ func TestArchivedCRLSettingsServeTheirCRLButCannotBeChanged(t *testing.T) {
 	ca, err := initCAForVA(serverTest.CA.Service)
 	require.NoError(t, err)
 	settings := waitForInitialCRL(t, ca.ID)
-	require.NoError(t, vaSchemaDB(t).Exec(`UPDATE crl_settings SET status = 'ARCHIVED' WHERE ca_id = ?`, ca.ID).Error)
+	require.NoError(t, vaSchemaDB(t).Exec(`UPDATE crl_settings SET status = 'ARCHIVED', signer_serial_number = NULL,
+		signer_engine_id = NULL, signer_key_id = NULL WHERE ca_id = ?`, ca.ID).Error)
 
 	_, err = serverTest.VA.HttpVASDK.UpdateCRLSettings(ctx, services.UpdateCRLSettingsInput{CAID: ca.ID, Options: settings.Options})
 	require.ErrorIs(t, err, errs.ErrCRLSettingsNotActive)
