@@ -603,6 +603,17 @@ components:
           type: string
         issuance_profile:
           $ref: '#/components/schemas/IssuanceProfile'
+        authz_principal_settings:
+          $ref: '#/components/schemas/AuthzPrincipalSettings'
+
+    AuthzPrincipalSettings:
+      type: object
+      description: |
+        While enabled, the DMS Manager keeps the authz principal `dms:{id}`, which authenticates any certificate of the enrollment CA. Omitted on update, the current value is kept.
+        A 400 if the DMS Manager has this feature disabled, or the enrollment CA is missing or not active.
+      properties:
+        enabled:
+          type: boolean
 
     ServerKeyGenSettings:
       type: object
