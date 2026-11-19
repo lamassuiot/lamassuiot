@@ -3,11 +3,11 @@ package audit
 import (
 	"context"
 
+	baudit "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
+	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
 	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
-	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
-	baudit "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
 )
 
 type principalAuditPublisher struct {

@@ -132,7 +132,6 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := cli.post[*models.CACertificate](ctx, "/v1/cas", resources.CreateCABody{
-		ID:                  input.ID,
 		Subject:             input.Subject,
 		KeyMetadata:         input.KeyMetadata,
 		ProfileID:           input.ProfileID,
@@ -184,7 +183,6 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	}
 
 	response, err := cli.post[*models.CACertificate](ctx, "/v1/cas/import", resources.ImportCABody{
-		ID:            input.ID,
 		ProfileID:     input.ProfileID,
 		CACertificate: input.CACertificate,
 		CAChain:       input.CAChain,
@@ -197,6 +195,7 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 			errs.ErrCAIssuanceExpiration,
 			errs.ErrCAIncompatibleValidity,
 			errs.ErrCAValidCertAndPrivKey,
+			errs.ErrCANotCA,
 		},
 		404: {
 			errs.ErrIssuanceProfileNotFound,
@@ -474,6 +473,7 @@ func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input se
 
 func (cli *httpCAClient) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
 	err := cli.delete(ctx, "/v1/certificates/"+input.SerialNumber, map[int][]error{
+		409: {errs.ErrCertificateInUse},
 		404: {
 			errs.ErrCertificateNotFound,
 		},

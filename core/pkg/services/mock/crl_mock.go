@@ -23,26 +23,30 @@ func (m *MockVAService) GetCRL(ctx context.Context, input services.GetCRLInput) 
 	return args.Get(0).(*x509.RevocationList), args.Error(1)
 }
 
-func (m *MockVAService) GetVARole(ctx context.Context, input services.GetVARoleInput) (*models.VARole, error) {
+func (m *MockVAService) GetCRLSettings(ctx context.Context, input services.GetCRLSettingsInput) (*models.CRLSettings, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*models.VARole), args.Error(1)
+	settings, _ := args.Get(0).(*models.CRLSettings)
+	return settings, args.Error(1)
 }
 
-func (m *MockVAService) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
+func (m *MockVAService) GetCRLSettingsList(ctx context.Context, input services.GetCRLSettingsListInput) (string, error) {
 	args := m.Called(ctx, input)
-	roles := args.Get(0).(*[]*models.VARole)
-	for _, role := range *roles {
-		input.ApplyFunc(*role)
+	if list, ok := args.Get(0).(*[]*models.CRLSettings); ok {
+		for _, settings := range *list {
+			input.ApplyFunc(*settings)
+		}
 	}
 	return "", args.Error(1)
 }
 
-func (m *MockVAService) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
+func (m *MockVAService) UpdateCRLSettings(ctx context.Context, input services.UpdateCRLSettingsInput) (*models.CRLSettings, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*models.VARole), args.Error(1)
+	settings, _ := args.Get(0).(*models.CRLSettings)
+	return settings, args.Error(1)
 }
 
-func (m *MockVAService) InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error) {
-	args := m.Called(ctx, caSki)
-	return args.Get(0).(*models.VARole), args.Error(1)
+func (m *MockVAService) InitCRLSettings(ctx context.Context, caID string) (*models.CRLSettings, error) {
+	args := m.Called(ctx, caID)
+	settings, _ := args.Get(0).(*models.CRLSettings)
+	return settings, args.Error(1)
 }

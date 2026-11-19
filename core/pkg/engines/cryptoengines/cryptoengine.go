@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
+	"sync"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -29,12 +30,21 @@ type CryptoEngine interface {
 	RenameKey(ctx context.Context, oldID, newID string) error
 }
 
-var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error))
+var (
+	cryptoEngineBuildersMu sync.RWMutex
+	cryptoEngineBuilders   = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error))
+)
 
 func RegisterCryptoEngine(name config.CryptoEngineProvider, builder func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error)) {
+	cryptoEngineBuildersMu.Lock()
+	defer cryptoEngineBuildersMu.Unlock()
+
 	cryptoEngineBuilders[name] = builder
 }
 
 func GetEngineBuilder(name config.CryptoEngineProvider) func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error) {
+	cryptoEngineBuildersMu.RLock()
+	defer cryptoEngineBuildersMu.RUnlock()
+
 	return cryptoEngineBuilders[name]
 }

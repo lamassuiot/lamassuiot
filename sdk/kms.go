@@ -164,7 +164,10 @@ func (cli *httpKMSClient) UpdateKeyTags(ctx context.Context, input services.Upda
 }
 
 func (cli *httpKMSClient) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
-	err := cli.delete(ctx, "/v1/keys/"+input.Identifier, map[int][]error{})
+	err := cli.delete(ctx, "/v1/keys/"+input.Identifier, map[int][]error{
+		404: {errs.ErrKeyNotFound},
+		409: {errs.ErrKeyInUse},
+	})
 	if err != nil {
 		return err
 	}

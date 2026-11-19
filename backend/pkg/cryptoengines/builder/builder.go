@@ -19,6 +19,5 @@ func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngineConfig) (cryp
 }
 
 func init() {
-	log.Info("Registering default crypto engine")
 	filesystem.Register()
 }

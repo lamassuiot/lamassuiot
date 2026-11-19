@@ -103,37 +103,39 @@ func TestTenantRLSScopesCountsAndPagination(t *testing.T) {
 }
 
 func TestVATenantRLSUsesCompositeTenantKey(t *testing.T) {
-	cfg, suite := BeforeSuite([]string{postgresstorage.VA_SCHEMA}, false)
+	cfg, suite := BeforeSuite([]string{postgresstorage.KMS_SCHEMA, postgresstorage.CA_SCHEMA, postgresstorage.VA_SCHEMA}, false)
 	defer suite.AfterSuite()
 
-	require.NoError(t, postgresstorage.MigrateDatabase(helpers.SetupLogger(config.Info, "PostgreSQL", "VA RLS test"), cfg, postgresstorage.VA_SCHEMA))
+	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "VA RLS test")
+	require.NoError(t, postgresstorage.MigrateDatabase(logger, cfg, postgresstorage.CA_SCHEMA))
+	require.NoError(t, postgresstorage.MigrateDatabase(logger, cfg, postgresstorage.VA_SCHEMA))
 
 	adminDB := suite.DB[postgresstorage.VA_SCHEMA]
 	require.NoError(t, adminDB.Exec("ALTER ROLE lamassu_app PASSWORD 'va-rls-test'").Error)
 	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.VA_SCHEMA, "va-rls-test")
 
-	require.NoError(t, adminDB.Exec("INSERT INTO va_role (tenant_id, ca_ski) VALUES (?, ?), (?, ?)",
-		"tenant-a", "shared-ca-ski", "tenant-b", "shared-ca-ski").Error)
+	require.NoError(t, adminDB.Exec("INSERT INTO crl_settings (tenant_id, ca_id, status) VALUES (?, ?, ?), (?, ?, ?)",
+		"tenant-a", "shared-ca-id", "ACTIVE", "tenant-b", "shared-ca-id", "ACTIVE").Error)
 
-	countRoles := func(ctx context.Context) int64 {
+	countSettings := func(ctx context.Context) int64 {
 		var count int64
 		txErr := postgresstorage.WithTenantTransaction(ctx, appDB, func(tx *gorm.DB) error {
-			return tx.Raw("SELECT count(*) FROM va_role").Scan(&count).Error
+			return tx.Raw("SELECT count(*) FROM crl_settings").Scan(&count).Error
 		})
 		require.NoError(t, txErr)
 		return count
 	}
 
-	require.Equal(t, int64(1), countRoles(tenantTestContext("tenant-a", models.TenantActive)))
-	require.Equal(t, int64(1), countRoles(tenantTestContext("tenant-b", models.TenantActive)))
+	require.Equal(t, int64(1), countSettings(tenantTestContext("tenant-a", models.TenantActive)))
+	require.Equal(t, int64(1), countSettings(tenantTestContext("tenant-b", models.TenantActive)))
 
 	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
-		return tx.Exec("INSERT INTO va_role (tenant_id, ca_ski) VALUES (?, ?)", "tenant-b", "cross-tenant-ca").Error
+		return tx.Exec("INSERT INTO crl_settings (tenant_id, ca_id, status) VALUES (?, ?, ?)", "tenant-b", "cross-tenant-ca", "ACTIVE").Error
 	})
 	require.Error(t, err)
 
 	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
-		result := tx.Exec("UPDATE va_role SET ca_ski = ? WHERE tenant_id = ? AND ca_ski = ?", "changed-ca-ski", "tenant-b", "shared-ca-ski")
+		result := tx.Exec("UPDATE crl_settings SET ca_id = ? WHERE tenant_id = ? AND ca_id = ?", "changed-ca-id", "tenant-b", "shared-ca-id")
 		require.NoError(t, result.Error)
 		require.Zero(t, result.RowsAffected)
 		return nil
@@ -141,7 +143,7 @@ func TestVATenantRLSUsesCompositeTenantKey(t *testing.T) {
 	require.NoError(t, err)
 
 	err = postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
-		result := tx.Exec("DELETE FROM va_role WHERE tenant_id = ? AND ca_ski = ?", "tenant-b", "shared-ca-ski")
+		result := tx.Exec("DELETE FROM crl_settings WHERE tenant_id = ? AND ca_id = ?", "tenant-b", "shared-ca-id")
 		require.NoError(t, result.Error)
 		require.Zero(t, result.RowsAffected)
 		return nil

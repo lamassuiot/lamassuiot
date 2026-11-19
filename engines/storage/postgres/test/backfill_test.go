@@ -36,7 +36,7 @@ func TestTenantBackfillReconciliation(t *testing.T) {
 		postgres.DEVICE_SCHEMA: {"devices", "device_groups", "device_events"},
 		postgres.DMS_SCHEMA:    {"dms"},
 		postgres.ALERTS_SCHEMA: {"subscriptions", "events"},
-		postgres.VA_SCHEMA:     {"va_role"},
+		postgres.VA_SCHEMA:     {"crl_settings"},
 		postgres.KMS_SCHEMA:    {"kms_keys"},
 	}
 	schemaNames := []string{postgres.CONTROLPLANE_SCHEMA}

@@ -33,7 +33,7 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 	config := config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.Postgres, Config: configMap}
 	logger := helpers.SetupLogger(config.LogLevel, "storage", "postgres")
 
-	for _, schemaName := range p.schemas {
+	for _, schemaName := range postgres.OrderForMigration(p.schemas) {
 		m := postgres.NewMigrator(logger, postgresEngine.DB[schemaName])
 		if m != nil {
 			m.MigrateToLatest()
@@ -66,7 +66,7 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 					return fmt.Errorf("could not run reinitialize DMSManager tables: %s", err)
 				}
 			case "va":
-				_, err := postgres.NewVARepository(logger, postgresEngine.DB[schemaName])
+				_, err := postgres.NewCRLSettingsRepository(logger, postgresEngine.DB[schemaName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize VA tables: %s", err)
 				}

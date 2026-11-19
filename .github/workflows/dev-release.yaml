@@ -92,6 +92,7 @@ jobs:
             authz,
             lamassu-db-migration,
             ca-to-kms-migration,
+            upgrade-check,
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
@@ -125,16 +126,17 @@ jobs:
           path: vendor
 
       - name: Login to Github Registry
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate custom builder
-        # Only kms.dockerfile requires apt-get (CGO cross-toolchain install for
-        # arm64); other services build with CGO_ENABLED=0 and don't need it.
-        if: github.event.inputs.go == 'other' && matrix.service == 'kms'
+        # Only kms.dockerfile and upgrade-check.dockerfile require apt-get (CGO
+        # cross-toolchain install for arm64); other services build with
+        # CGO_ENABLED=0 and don't need it.
+        if: github.event.inputs.go == 'other' && (matrix.service == 'kms' || matrix.service == 'upgrade-check')
         env:
           BUILDER: ${{ github.event.inputs.other }}
         run: |

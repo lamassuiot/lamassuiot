@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -123,9 +124,43 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*DBQuerier[E], error) {
 	schema.RegisterSerializer("text", TextSerializer{})
+	schema.RegisterSerializer("nullstring", NullStringSerializer{})
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
 	querier.logger = log
 	return &querier, nil
+}
+
+// isForeignKeyViolation tells whether err is a foreign-key violation of the given constraint.
+func isForeignKeyViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == constraint
+}
+
+// NullStringSerializer stores the empty string as NULL. It is for the columns of a foreign key, which
+// does not check a NULL: the empty string would have to reference a row that does not exist.
+type NullStringSerializer struct{}
+
+func (NullStringSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue any) error {
+	var value string
+	switch v := dbValue.(type) {
+	case nil:
+	case string:
+		value = v
+	case []byte:
+		value = string(v)
+	default:
+		return fmt.Errorf("unsupported dbValue type: %T", dbValue)
+	}
+
+	field.ReflectValueOf(ctx, dst).SetString(value)
+	return nil
+}
+
+func (NullStringSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue any) (any, error) {
+	if value, _ := fieldValue.(string); value != "" {
+		return value, nil
+	}
+	return nil, nil
 }
 
 // TextSerializer string serializer
@@ -245,6 +280,15 @@ type DBQuerier[E any] struct {
 	uniqueColumns   []string
 	hasTenantColumn bool
 	logger          *logrus.Entry
+	// preload overrides default association reads for repositories with derived read models.
+	preload func(*gorm.DB) *gorm.DB
+}
+
+func (db *DBQuerier[E]) preloadAssociations(tx *gorm.DB) *gorm.DB {
+	if db.preload != nil {
+		return db.preload(tx)
+	}
+	return tx.Preload(clause.Associations)
 }
 
 func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) DBQuerier[E] {
@@ -253,7 +297,7 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
 		uniqueColumns:    []string{primaryKeyColumn},
-		hasTenantColumn:  isTenantScopedEntity[E]() && db.Migrator().HasColumn(tableName, tenantIDColumnName),
+		hasTenantColumn:  isTenantScopedEntity[E]() && db.Migrator().HasColumn(physicalTableName(tableName), tenantIDColumnName),
 	}
 }
 
@@ -316,7 +360,19 @@ func (db *DBQuerier[E]) tenantScope(ctx context.Context) (string, bool, error) {
 }
 
 func (db *DBQuerier[E]) tenantIDColumn() string {
-	return db.tableName + "." + tenantIDColumnName
+	return tableAlias(db.tableName) + "." + tenantIDColumnName
+}
+
+func physicalTableName(tableName string) string {
+	name, _, _ := strings.Cut(tableName, " AS ")
+	return name
+}
+
+func tableAlias(tableName string) string {
+	if _, alias, found := strings.Cut(tableName, " AS "); found {
+		return alias
+	}
+	return tableName
 }
 
 func (db *DBQuerier[E]) withTenantScopedTx(ctx context.Context, tenantID string, scoped bool, fn func(tx *gorm.DB) error) error {
@@ -626,7 +682,7 @@ func (db *DBQuerier[E]) selectAllBody(ctx context.Context, tx *gorm.DB, queryPar
 		return "", db.selectAllInBatches(ctx, tx, offset, limit, applyFunc)
 	} else {
 		tx = tx.Clauses(db.withUniqueOrder(orderBy)).Offset(offset).Limit(limit + 1)
-		rs := tx.WithContext(ctx).Preload(clause.Associations).Find(&elems)
+		rs := db.preloadAssociations(tx.WithContext(ctx)).Find(&elems)
 
 		if rs.Error != nil {
 			return "", rs.Error
@@ -673,7 +729,7 @@ func (db *DBQuerier[E]) selectAllInBatches(ctx context.Context, tx *gorm.DB, off
 	var last []any
 	for {
 		var batch []E
-		q := base.WithContext(ctx).Preload(clause.Associations).Clauses(order).Limit(batchSize)
+		q := db.preloadAssociations(base.WithContext(ctx)).Clauses(order).Limit(batchSize)
 		if last == nil {
 			q = q.Offset(offset)
 		} else {
@@ -712,10 +768,13 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 		searchCol = *queryCol
 	}
 
-	cond, err := columnEquals(searchCol, queryID)
+	column, err := safeColumn(searchCol)
 	if err != nil {
 		return false, nil, err
 	}
+
+	column.Table = clause.CurrentTable
+	cond := clause.Eq{Column: column, Value: queryID}
 
 	tenantID, scoped, err := db.tenantScope(ctx)
 	if err != nil {
@@ -725,7 +784,7 @@ func (db *DBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryC
 	var elem E
 	var rowsAffected int64
 	err = db.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
-		q := tx.Table(db.tableName).Preload(clause.Associations).Limit(1)
+		q := db.preloadAssociations(tx.Table(db.tableName)).Limit(1)
 		if scoped {
 			q = q.Where(db.tenantIDColumn()+" = ?", tenantID)
 		}

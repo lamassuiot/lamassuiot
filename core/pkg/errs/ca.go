@@ -16,10 +16,13 @@ var (
 	ErrCAIssuanceExpiration   error = errors.New("issuance expiration greater than CA expiration")
 	ErrCAType                 error = errors.New("CA type inconsistent")
 	ErrCAValidCertAndPrivKey  error = errors.New("CA and the provided key don't match")
+	ErrCANotCA                error = errors.New("certificate is not a CA: basicConstraints cA flag is not set")
 
 	ErrValidateBadRequest error = errors.New("struct validation error")
 
 	ErrCertificateNotFound                   error = errors.New("certificate not found")
+	ErrCertificateAlreadyExists              error = errors.New("certificate already exists")
+	ErrCertificateInUse                      error = errors.New("certificate is in use")
 	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
 	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
 	ErrCertificateIssuerCAExists             error = errors.New("cannot delete certificate: issuer CA still exists")
@@ -36,6 +39,8 @@ var (
 	// A keyID wins over an alias when resolving an identifier, so such an alias would never
 	// resolve to the key it was set on.
 	ErrKeyAliasCollidesWithKeyID error = errors.New("alias collides with an existing keyID")
+	// Resources such as certificates are bound to the key, so deleting it would leave them unable to sign.
+	ErrKeyInUse error = errors.New("key is in use")
 
 	// CreateCertificate
 	ErrInvalidKeySpec error = errors.New("invalid key spec: exactly one of (Type+Bits) or KeyIdentifier must be provided")

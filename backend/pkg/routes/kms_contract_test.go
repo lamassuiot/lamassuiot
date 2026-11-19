@@ -29,7 +29,7 @@ func TestKMSOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 	require.NotEmpty(t, contract.Declarations())
 	require.NoError(t, contract.ValidateRoutes(router.Routes()))
 	assert.Equal(t, len(router.Routes()), len(contract.Declarations()))
-	spec, err := os.Open("../specs/kms-openapi.yaml")
+	spec, err := os.Open("../../../docs/kms-openapi.yaml")
 	require.NoError(t, err)
 	defer spec.Close()
 	require.NoError(t, contract.ValidateOpenAPI(spec))
@@ -164,7 +164,7 @@ func TestKMSResourceResolutionFailuresStopBeforeAuthorization(t *testing.T) {
 
 func TestKMSContractDetectsDriftAndUntrackedRoutes(t *testing.T) {
 	router, contract, _ := kmsGuardRouter(false, nil)
-	spec, err := os.ReadFile("../specs/kms-openapi.yaml")
+	spec, err := os.ReadFile("../../../docs/kms-openapi.yaml")
 	require.NoError(t, err)
 	require.Contains(t, string(spec), "action: sign")
 	// Delete is valid in the domain, but differs from the signing endpoint's guard.

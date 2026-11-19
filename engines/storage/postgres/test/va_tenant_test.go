@@ -5,96 +5,104 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
-	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
-func TestVAStoreTenantIsolation(t *testing.T) {
-	cfg, suite := BeforeSuite([]string{postgres.VA_SCHEMA}, false)
-	defer suite.AfterSuite()
-
-	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "Test")
-	require.NoError(t, postgres.MigrateDatabase(logger, cfg, postgres.VA_SCHEMA))
-
-	store, err := postgres.NewVARepository(logger, suite.DB[postgres.VA_SCHEMA])
-	require.NoError(t, err)
+func TestCRLSettingsTenantIsolation(t *testing.T) {
+	f, cleanup := newCRLSettingsFixture(t)
+	defer cleanup()
 
 	ctxA := tenantTestContext("tenant-a", models.TenantActive)
 	ctxB := tenantTestContext("tenant-b", models.TenantActive)
 
-	newRole := func(caSki string, tenantID string, version int64) *models.VARole {
-		now := time.Now().UTC().Truncate(time.Second)
-		return &models.VARole{
-			CASubjectKeyID: caSki,
-			TenantID:       tenantID,
-			CRLOptions: models.VACRLRole{
-				RefreshInterval:    models.TimeDuration(24 * time.Hour),
-				Validity:           models.TimeDuration(48 * time.Hour),
-				SubjectKeyIDSigner: caSki,
-				RegenerateOnRevoke: true,
-			},
-			LatestCRL: models.LatestCRLMeta{
-				Version:    models.BigInt{Int: big.NewInt(version)},
-				ValidFrom:  now,
-				ValidUntil: now.Add(48 * time.Hour),
-			},
-		}
+	signerA := newTestCertificate(t, 201, "", "")
+	_, err := f.certs.Insert(ctxA, signerA)
+	require.NoError(t, err)
+	signerB := newTestCertificate(t, 202, "", "")
+	_, err = f.certs.Insert(ctxB, signerB)
+	require.NoError(t, err)
+
+	settingsFor := func(caID string, legacySKI *string, signer *models.Certificate) *models.CRLSettings {
+		settings := f.settings(caID, legacySKI)
+		settings.Options.SignerSerialNumber = signer.SerialNumber
+		return settings
 	}
 
 	t.Run("insert takes the tenant from the context", func(t *testing.T) {
-		role, err := store.Insert(ctxA, newRole("ca-ski-1", "tenant-b", 1))
+		settings := settingsFor("ca-1", nil, signerA)
+		settings.TenantID = "tenant-b"
+		inserted, err := f.repo.Insert(ctxA, settings)
 		require.NoError(t, err)
-		assert.Equal(t, "tenant-a", role.TenantID)
+		assert.Equal(t, "tenant-a", inserted.TenantID)
+	})
+
+	t.Run("the signer must belong to the same tenant", func(t *testing.T) {
+		_, err := f.repo.Insert(ctxA, settingsFor("ca-cross", nil, signerB))
+		assert.ErrorIs(t, err, errs.ErrCertificateNotFound)
 	})
 
 	t.Run("another tenant cannot read it", func(t *testing.T) {
-		exists, _, err := store.Get(ctxA, "ca-ski-1")
+		exists, _, err := f.repo.Get(ctxA, "ca-1")
 		require.NoError(t, err)
 		assert.True(t, exists)
 
-		exists, _, err = store.Get(ctxB, "ca-ski-1")
+		exists, _, err = f.repo.Get(ctxB, "ca-1")
 		require.NoError(t, err)
 		assert.False(t, exists)
 	})
 
-	t.Run("another tenant cannot update it", func(t *testing.T) {
-		_, err := store.Update(ctxB, newRole("ca-ski-1", "tenant-b", 9))
-		assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	t.Run("another tenant cannot update its options", func(t *testing.T) {
+		options := settingsFor("ca-1", nil, signerB).Options
+		options.Validity = models.TimeDuration(5 * time.Hour)
+		_, err := f.repo.UpdateOptions(ctxB, "ca-1", options)
+		assert.ErrorIs(t, err, errs.ErrCRLSettingsNotFound)
 
-		_, role, err := store.Get(ctxA, "ca-ski-1")
+		_, got, err := f.repo.Get(ctxA, "ca-1")
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), role.LatestCRL.Version.Int64())
-		assert.Equal(t, "tenant-a", role.TenantID)
+		assert.Equal(t, models.TimeDuration(time.Hour), got.Options.Validity)
 	})
 
-	t.Run("each tenant keeps its own role for the same ca", func(t *testing.T) {
-		_, err := store.Insert(ctxB, newRole("ca-ski-1", "", 5))
+	t.Run("another tenant cannot update its latest CRL", func(t *testing.T) {
+		now := time.Now()
+		latest := models.LatestCRLMeta{Version: models.BigInt{Int: big.NewInt(1)}, ValidFrom: now, ValidUntil: now.Add(time.Hour)}
+		err := f.repo.UpdateLatestCRL(ctxB, "ca-1", big.NewInt(0), latest)
+		assert.ErrorIs(t, err, errs.ErrCRLSettingsConflict)
+
+		_, got, err := f.repo.Get(ctxA, "ca-1")
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), got.LatestCRL.Version.Int64())
+	})
+
+	t.Run("another tenant cannot find it by its legacy SKI", func(t *testing.T) {
+		ski := "aa11"
+		_, err := f.repo.Insert(ctxA, settingsFor("ca-2", &ski, signerA))
 		require.NoError(t, err)
 
-		_, roleA, err := store.Get(ctxA, "ca-ski-1")
+		exists, _, err := f.repo.GetByLegacySKI(ctxA, ski)
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), roleA.LatestCRL.Version.Int64())
+		assert.True(t, exists)
 
-		_, roleB, err := store.Get(ctxB, "ca-ski-1")
+		exists, _, err = f.repo.GetByLegacySKI(ctxB, ski)
 		require.NoError(t, err)
-		assert.Equal(t, int64(5), roleB.LatestCRL.Version.Int64())
+		assert.False(t, exists)
 	})
 
 	t.Run("lists are scoped to the tenant", func(t *testing.T) {
-		tenants := []string{}
-		_, err := store.GetAll(ctxB, storage.StorageListRequest[models.VARole]{
+		_, err := f.repo.Insert(ctxB, settingsFor("ca-3", nil, signerB))
+		require.NoError(t, err)
+
+		caIDs := []string{}
+		_, err = f.repo.GetAll(ctxB, storage.StorageListRequest[models.CRLSettings]{
 			ExhaustiveRun: true,
-			ApplyFunc: func(role models.VARole) {
-				tenants = append(tenants, role.TenantID)
+			ApplyFunc: func(settings models.CRLSettings) {
+				caIDs = append(caIDs, settings.CAID)
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, []string{"tenant-b"}, tenants)
+		assert.Equal(t, []string{"ca-3"}, caIDs)
 	})
 }

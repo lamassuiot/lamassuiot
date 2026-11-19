@@ -240,6 +240,50 @@ func TestSchemaValidation(t *testing.T) {
 			},
 			shouldError: true,
 		},
+		{
+			name: "valid view tables",
+			schema: SchemaDefinition{
+				EntityType:    "certificate",
+				TableName:     "certificates",
+				ViewTables:    []string{"certificates_view", "certificates_report_view"},
+				PrimaryKeys:   []string{"serial_number"},
+				AtomicActions: []string{"read"},
+			},
+			shouldError: false,
+		},
+		{
+			name: "empty view table",
+			schema: SchemaDefinition{
+				EntityType:    "certificate",
+				TableName:     "certificates",
+				ViewTables:    []string{""},
+				PrimaryKeys:   []string{"serial_number"},
+				AtomicActions: []string{"read"},
+			},
+			shouldError: true,
+		},
+		{
+			name: "duplicate view table",
+			schema: SchemaDefinition{
+				EntityType:    "certificate",
+				TableName:     "certificates",
+				ViewTables:    []string{"certificates_view", "certificates_view"},
+				PrimaryKeys:   []string{"serial_number"},
+				AtomicActions: []string{"read"},
+			},
+			shouldError: true,
+		},
+		{
+			name: "view table equal to the table",
+			schema: SchemaDefinition{
+				EntityType:    "certificate",
+				TableName:     "certificates",
+				ViewTables:    []string{"certificates"},
+				PrimaryKeys:   []string{"serial_number"},
+				AtomicActions: []string{"read"},
+			},
+			shouldError: true,
+		},
 	}
 
 	for _, tt := range tests {

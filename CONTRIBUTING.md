@@ -75,6 +75,7 @@ Before contributing to LamassuIot, make sure you have the following tools instal
    - `noamqp` — when present, AMQP/RabbitMQ eventbus registration is excluded.
    - `novault` — when present, Vault crypto engine registration is excluded.
    - `nopkcs11` — when present, PKCS#11 crypto engine registration is excluded.
+   - `noazure` — when present, Azure Key Vault and Azure Secrets crypto engine registration is excluded.
    - `nojs` — when present, the JavaScript-based alert/event filter registrar is excluded.
    - `windows` / `!windows` — platform-specific files use the `windows` tag to include Windows-only implementations (for example PKCS#11 has a Windows stub). Most PKCS#11 code is excluded on Windows builds.
 
@@ -123,19 +124,20 @@ To set up the project locally, follow these steps:
 
 See how a minor change to your commit message style can make you a better programmer.
 
-Format: `<type>: <service>: <subject>`
+Format: `<type>(<scope>): <description>`
 
 ## Example
 
 ```
-feat: AWS Connector: add hat wobble
-^--^  ^-----------^  ^------------^
-|     |              |
-|     |              +-> Summary in present tense.
-|     |      
-|     +-> Service being updated: CA, Device Manager, DMS Manager, AWS Connector, Alerts
+feat(aws-connector): add support for ...
+^--^ ^-----------^  ^-----------------^
+|    |              |
+|    |              +-> Description in present tense.
+|    |
+|    +-> Optional scope, usually the service or subsystem being updated.
 |
-+-------> Type: chore, feat, fix, bump, remove, security or test
++------> Type: feat, fix, bump, revert, remove, security, test, chore,
+         refactor, docs, build or ci
 ```
 
 More Examples:
@@ -144,15 +146,25 @@ More Examples:
 - `feat`: (new feature for the user, not a new feature for build script)
 - `fix`: (bug fix for the user, not a fix to a build script)
 - `bump`: (bump libraries or go version number)
+- `revert`: (reverting a previous change)
 - `remove`: (deleted feature)
 - `security`: (security fix)
 - `test`: (adding missing tests, refactoring tests; no production code change)
+- `refactor`: (code change that neither fixes a bug nor adds a feature)
+- `docs`: (documentation-only change)
+- `build`: (change affecting the build system or dependencies)
+- `ci`: (change to CI configuration or automation)
 
 References:
 
 - https://www.conventionalcommits.org/
 - https://seesparkbox.com/foundry/semantic_commit_messages
 - http://karma-runner.github.io/1.0/dev/git-commit-msg.html
+
+Common scopes include `ca`, `kms`, `va`, `device-manager`, `dms-manager`,
+`alerts`, `aws-connector`, `authz`, `cryptoengines` and `ci`. Build tags such
+as `noazure` and `nopkcs11` are not commit scopes; use them in the description
+when relevant.
 
 ## Signed Commits
 

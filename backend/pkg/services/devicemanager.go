@@ -165,7 +165,7 @@ func toDeviceEventRecord(deviceID string, eventTS time.Time, event models.Device
 		ID:               uuid.NewV7().String(),
 		DeviceID:         deviceID,
 		EventTS:          eventTS,
-		EventType:        string(event.EvenType),
+		EventType:        string(event.EventType),
 		Description:      event.EventDescriptions,
 		Source:           source,
 		StructuredFields: structuredFields,
@@ -181,7 +181,7 @@ func deviceEventFromRecord(record models.DeviceEventRecord) models.DeviceEvent {
 	return models.DeviceEvent{
 		ID:                record.ID,
 		EventTS:           record.EventTS,
-		EvenType:          models.DeviceEventType(record.EventType),
+		EventType:         models.DeviceEventType(record.EventType),
 		EventDescriptions: record.Description,
 		Source:            record.Source,
 		StructuredFields:  record.StructuredFields,
@@ -227,7 +227,7 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input s
 		return nil, err
 	}
 
-	if err = svc.persistDeviceEvent(ctx, dev.ID, now, models.DeviceEvent{EvenType: models.DeviceEventTypeCreated}); err != nil {
+	if err = svc.persistDeviceEvent(ctx, dev.ID, now, models.DeviceEvent{EventType: models.DeviceEventTypeCreated}); err != nil {
 		lFunc.Errorf("could not persist creation event for device %s: %s", input.ID, err)
 		if rollbackErr := svc.devicesStorage.Delete(ctx, dev.ID); rollbackErr != nil {
 			lFunc.Errorf("could not rollback device %s after event persistence failure: %s", input.ID, rollbackErr)
@@ -347,7 +347,7 @@ func (svc DeviceManagerServiceBackend) CreateDeviceEvent(ctx context.Context, in
 	}
 
 	event := models.DeviceEvent{
-		EvenType:          input.Type,
+		EventType:         input.Type,
 		EventDescriptions: input.Description,
 		Source:            input.Source,
 		StructuredFields:  input.StructuredFields,
@@ -396,7 +396,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	if input.NewStatus == models.DeviceDecommissioned {
 		statusEventTS = time.Now()
 		statusEvent = &models.DeviceEvent{
-			EvenType: models.DeviceEventTypeStatusDecommissioned,
+			EventType: models.DeviceEventTypeStatusDecommissioned,
 		}
 
 		idSlot := device.IdentitySlot
@@ -427,7 +427,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	} else {
 		statusEventTS = time.Now()
 		statusEvent = &models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeStatusUpdated,
+			EventType:         models.DeviceEventTypeStatusUpdated,
 			EventDescriptions: fmt.Sprintf("Status updated from '%s' to '%s'", device.Status, input.NewStatus),
 		}
 	}
@@ -572,14 +572,14 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	now := time.Now()
 	if isFirstProvisioning {
 		if eventErr := svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeProvisioned,
+			EventType:         models.DeviceEventTypeProvisioned,
 			EventDescriptions: fmt.Sprintf("Identity slot provisioned with status '%s'", newSlot.Status),
 		}); eventErr != nil {
 			lFunc.Errorf("could not persist provisioning event for device %s (slot change still applied): %s", input.ID, eventErr)
 		}
 	} else if slotStatusChanged {
 		if eventErr := svc.persistDeviceEvent(ctx, device.ID, now, models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeReProvisioned,
+			EventType:         models.DeviceEventTypeReProvisioned,
 			EventDescriptions: fmt.Sprintf("Identity Slot Status updated from '%s' to '%s'", oldSlotStatus, newSlot.Status),
 		}); eventErr != nil {
 			lFunc.Errorf("could not persist re-provisioning event for device %s (slot change still applied): %s", input.ID, eventErr)

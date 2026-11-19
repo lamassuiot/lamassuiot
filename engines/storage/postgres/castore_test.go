@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"io"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,7 +40,7 @@ func (keylessImportKMS) GetKeysByPublicKey(context.Context, services.GetKeysByPu
 	return nil, nil
 }
 
-func postgresImportInput(t *testing.T, id string, serial int64) services.ImportCAInput {
+func postgresImportInput(t *testing.T, serial int64) services.ImportCAInput {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -53,11 +54,11 @@ func postgresImportInput(t *testing.T, id string, serial int64) services.ImportC
 	require.NoError(t, err)
 	cert, err := x509.ParseCertificate(der)
 	require.NoError(t, err)
-	return services.ImportCAInput{ID: id, CACertificate: (*models.X509Certificate)(cert)}
+	return services.ImportCAInput{CACertificate: (*models.X509Certificate)(cert)}
 }
 
 func TestCAStoreUniqueIDPostgres(t *testing.T) {
-	_, suite := postgrestest.BeforeSuite([]string{"ca"}, false)
+	_, suite := postgrestest.BeforeSuite([]string{"kms", "ca"}, false)
 	t.Cleanup(suite.AfterSuite)
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
@@ -66,10 +67,14 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 	pool, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, pool.Close()) })
+	// the CA schema references the KMS one, which is migrated first
+	NewMigrator(log, suite.DB["kms"]).MigrateToLatest()
 	NewMigrator(log, db).MigrateToLatest()
 	repo, err := NewCAPostgresRepository(log, db)
 	require.NoError(t, err)
-	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{CAStorage: repo, KMSService: keylessImportKMS{}, Logger: log})
+	certRepo, err := NewCertificateRepository(log, db)
+	require.NoError(t, err)
+	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{CAStorage: repo, CertificateStorage: certRepo, KMSService: keylessImportKMS{}, Logger: log})
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -80,13 +85,16 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		require.Equal(t, want, count, table)
 	}
 
-	_, err = svc.ImportCA(ctx, postgresImportInput(t, "shared", 1))
+	firstInput := postgresImportInput(t, 1)
+	first, err := svc.ImportCA(ctx, firstInput)
 	require.NoError(t, err)
-	_, err = svc.ImportCA(ctx, postgresImportInput(t, "other", 2))
+	second, err := svc.ImportCA(ctx, postgresImportInput(t, 2))
 	require.NoError(t, err)
 
-	t.Run("import with an existing ID", func(t *testing.T) {
-		ca, err := svc.ImportCA(ctx, postgresImportInput(t, "shared", 3))
+	require.NotEqual(t, first.ID, second.ID)
+
+	t.Run("import with an existing certificate", func(t *testing.T) {
+		ca, err := svc.ImportCA(ctx, firstInput)
 		require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
 		require.Nil(t, ca)
 		countRows("ca_certificates", 2)
@@ -94,9 +102,7 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 	})
 
 	t.Run("duplicates and foreign-key errors", func(t *testing.T) {
-		var serial string
-		require.NoError(t, db.Raw("SELECT serial_number FROM ca_certificates WHERE id = 'other'").Scan(&serial).Error)
-		_, err := repo.Insert(ctx, &models.CACertificate{ID: "shared", CertificateSerialNumber: serial})
+		_, err := repo.Insert(ctx, &models.CACertificate{ID: first.ID, CertificateSerialNumber: second.CertificateSerialNumber})
 		require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
 		// A foreign-key violation must not become a duplicate-ID error.
 		_, err = repo.Insert(ctx, &models.CACertificate{ID: "missing-cert", CertificateSerialNumber: "missing"})
@@ -104,8 +110,8 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		require.NotErrorIs(t, err, errs.ErrCAAlreadyExists)
 	})
 
-	t.Run("concurrent inserts roll back the losing certificate", func(t *testing.T) {
-		exists, original, err := repo.SelectExistsByID(ctx, "shared")
+	t.Run("concurrent CA inserts reference existing certificates", func(t *testing.T) {
+		exists, original, err := repo.SelectExistsByID(ctx, first.ID)
 		require.NoError(t, err)
 		require.True(t, exists)
 		start := make(chan struct{})
@@ -113,8 +119,10 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		for _, serial := range []string{"aa", "bb"} {
 			ca := *original
 			ca.ID = "direct-insert"
-			ca.CertificateSerialNumber = ""
 			ca.Certificate.SerialNumber = serial
+			_, err := certRepo.Insert(ctx, &ca.Certificate)
+			require.NoError(t, err)
+			ca.CertificateSerialNumber = serial
 			go func() {
 				<-start
 				_, err := repo.Insert(ctx, &ca)
@@ -135,16 +143,17 @@ func TestCAStoreUniqueIDPostgres(t *testing.T) {
 		require.Equal(t, 1, succeeded)
 		require.Equal(t, 1, duplicated)
 		countRows("ca_certificates", 3)
-		countRows("certificates", 3)
+		countRows("certificates", 4)
 	})
 }
 
 func TestCARepositoryTenantScopeWithJoinedQueries(t *testing.T) {
 	logger := helpers.SetupLogger(config.Info, "test", "ca-repo-tenant-scope")
-	_, suite := postgrestest.BeforeSuite([]string{"ca"}, false)
+	_, suite := postgrestest.BeforeSuite([]string{"kms", "ca"}, false)
 	defer suite.AfterSuite()
 
 	db := suite.DB["ca"]
+	NewMigrator(logger, suite.DB["kms"]).MigrateToLatest()
 	NewMigrator(logger, db).MigrateToLatest()
 
 	repo, err := NewCAPostgresRepository(logger, db)
@@ -238,41 +247,43 @@ func TestCARepositoryTenantScopeWithJoinedQueries(t *testing.T) {
 }
 
 func TestCAStoreTenantIsolationPostgres(t *testing.T) {
-	_, suite := postgrestest.BeforeSuite([]string{"ca"}, false)
+	_, suite := postgrestest.BeforeSuite([]string{"kms", "ca"}, false)
 	defer suite.AfterSuite()
 
 	logger := helpers.SetupLogger(config.Info, "test", "ca-store-tenant-isolation")
 	db := suite.DB["ca"]
+	NewMigrator(logger, suite.DB["kms"]).MigrateToLatest()
 	NewMigrator(logger, db).MigrateToLatest()
 
 	caRepo, err := NewCAPostgresRepository(logger, db)
 	require.NoError(t, err)
 	certRepo, err := NewCertificateRepository(logger, db)
 	require.NoError(t, err)
-	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{CAStorage: caRepo, KMSService: keylessImportKMS{}, Logger: logger})
+	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{CAStorage: caRepo, CertificateStorage: certRepo, KMSService: keylessImportKMS{}, Logger: logger})
 	require.NoError(t, err)
 
 	tenantA := deviceGroupsTenantContext("00000000-0000-0000-0000-00000000000a")
 	tenantB := deviceGroupsTenantContext("00000000-0000-0000-0000-00000000000b")
 
-	imported, err := svc.ImportCA(tenantA, postgresImportInput(t, "ca-tenant-a", 1))
+	imported, err := svc.ImportCA(tenantA, postgresImportInput(t, 1))
 	require.NoError(t, err)
+	caID := imported.ID
 	serial := imported.Certificate.SerialNumber
 
 	t.Run("the CA and its certificate take the tenant from the context", func(t *testing.T) {
 		var caTenant, certificateTenant string
-		require.NoError(t, db.Raw("SELECT tenant_id FROM ca_certificates WHERE id = ?", "ca-tenant-a").Scan(&caTenant).Error)
+		require.NoError(t, db.Raw("SELECT tenant_id FROM ca_certificates WHERE id = ?", caID).Scan(&caTenant).Error)
 		require.NoError(t, db.Raw("SELECT tenant_id FROM certificates WHERE serial_number = ?", serial).Scan(&certificateTenant).Error)
 		require.Equal(t, "00000000-0000-0000-0000-00000000000a", caTenant)
 		require.Equal(t, "00000000-0000-0000-0000-00000000000a", certificateTenant)
 	})
 
 	t.Run("another tenant cannot read the CA", func(t *testing.T) {
-		exists, _, err := caRepo.SelectExistsByID(tenantA, "ca-tenant-a")
+		exists, _, err := caRepo.SelectExistsByID(tenantA, caID)
 		require.NoError(t, err)
 		require.True(t, exists)
 
-		exists, _, err = caRepo.SelectExistsByID(tenantB, "ca-tenant-a")
+		exists, _, err = caRepo.SelectExistsByID(tenantB, caID)
 		require.NoError(t, err)
 		require.False(t, exists)
 	})
@@ -298,10 +309,73 @@ func TestCAStoreTenantIsolationPostgres(t *testing.T) {
 	})
 
 	t.Run("another tenant cannot delete the CA", func(t *testing.T) {
-		require.Error(t, caRepo.Delete(tenantB, "ca-tenant-a"))
+		require.Error(t, caRepo.Delete(tenantB, caID))
 
-		exists, _, err := caRepo.SelectExistsByID(tenantA, "ca-tenant-a")
+		exists, _, err := caRepo.SelectExistsByID(tenantA, caID)
 		require.NoError(t, err)
 		require.True(t, exists)
 	})
+}
+
+// Force both imports to observe the certificate as absent before either inserts it.
+type simultaneousImportCertificates struct {
+	storage.CertificatesRepo
+	mu      sync.Mutex
+	lookups int
+	ready   chan struct{}
+}
+
+func (repo *simultaneousImportCertificates) SelectExistsBySerialNumber(ctx context.Context, serial string) (bool, *models.Certificate, error) {
+	found, cert, err := repo.CertificatesRepo.SelectExistsBySerialNumber(ctx, serial)
+	repo.mu.Lock()
+	repo.lookups++
+	n := repo.lookups
+	if n == 2 {
+		close(repo.ready)
+	}
+	repo.mu.Unlock()
+	if n <= 2 {
+		select {
+		case <-repo.ready:
+		case <-ctx.Done():
+			return false, nil, ctx.Err()
+		}
+	}
+	return found, cert, err
+}
+
+func TestConcurrentCAImportsKeepDuplicateIDError(t *testing.T) {
+	_, suite := postgrestest.BeforeSuite([]string{"kms", "ca"}, false)
+	t.Cleanup(suite.AfterSuite)
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	log := logrus.NewEntry(logger)
+	NewMigrator(log, suite.DB["kms"]).MigrateToLatest()
+	NewMigrator(log, suite.DB["ca"]).MigrateToLatest()
+	cas, err := NewCAPostgresRepository(log, suite.DB["ca"])
+	require.NoError(t, err)
+	certs, err := NewCertificateRepository(log, suite.DB["ca"])
+	require.NoError(t, err)
+	svc, err := backendservices.NewCAService(backendservices.CAServiceBuilder{Logger: log, CAStorage: cas,
+		CertificateStorage: &simultaneousImportCertificates{CertificatesRepo: certs, ready: make(chan struct{})}, KMSService: keylessImportKMS{}})
+	require.NoError(t, err)
+	input := postgresImportInput(t, 9001)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results := make(chan error, 2)
+	for range 2 {
+		go func() { _, err := svc.ImportCA(ctx, input); results <- err }()
+	}
+	var successes, duplicates int
+	for range 2 {
+		err := <-results
+		if err == nil {
+			successes++
+		} else {
+			require.ErrorIs(t, err, errs.ErrCAAlreadyExists)
+			duplicates++
+		}
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, 1, duplicates)
 }

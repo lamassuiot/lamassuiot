@@ -29,6 +29,7 @@ COPY core core
 COPY shared shared
 COPY sdk sdk
 COPY backend backend
+COPY docs docs
 COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors

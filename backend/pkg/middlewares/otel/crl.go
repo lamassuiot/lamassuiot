@@ -36,25 +36,25 @@ func (mw *CRLOTelTracer) GetCRL(ctx context.Context, input services.GetCRLInput)
 	return mw.next.GetCRL(ctx, input)
 }
 
-func (mw *CRLOTelTracer) GetVARole(ctx context.Context, input services.GetVARoleInput) (output *models.VARole, err error) {
+func (mw *CRLOTelTracer) GetCRLSettings(ctx context.Context, input services.GetCRLSettingsInput) (output *models.CRLSettings, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 
-	return mw.next.GetVARole(ctx, input)
+	return mw.next.GetCRLSettings(ctx, input)
 }
 
-func (mw *CRLOTelTracer) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
+func (mw *CRLOTelTracer) GetCRLSettingsList(ctx context.Context, input services.GetCRLSettingsListInput) (string, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 
-	return mw.next.GetVARoles(ctx, input)
+	return mw.next.GetCRLSettingsList(ctx, input)
 }
 
-func (mw *CRLOTelTracer) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (output *models.VARole, err error) {
+func (mw *CRLOTelTracer) UpdateCRLSettings(ctx context.Context, input services.UpdateCRLSettingsInput) (output *models.CRLSettings, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 
-	return mw.next.UpdateVARole(ctx, input)
+	return mw.next.UpdateCRLSettings(ctx, input)
 }
 
 func (mw *CRLOTelTracer) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (output *x509.RevocationList, err error) {
@@ -64,9 +64,9 @@ func (mw *CRLOTelTracer) CalculateCRL(ctx context.Context, input services.Calcul
 	return mw.next.CalculateCRL(ctx, input)
 }
 
-func (mw *CRLOTelTracer) InitCRLRole(ctx context.Context, caSKI string) (output *models.VARole, err error) {
+func (mw *CRLOTelTracer) InitCRLSettings(ctx context.Context, caID string) (output *models.CRLSettings, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
 
-	return mw.next.InitCRLRole(ctx, caSKI)
+	return mw.next.InitCRLSettings(ctx, caID)
 }

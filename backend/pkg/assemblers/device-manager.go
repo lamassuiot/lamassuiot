@@ -13,7 +13,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/services/handlers"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	ceventbus "github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
@@ -21,6 +20,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/docs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 )
@@ -39,7 +39,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = specs.DeviceManager
+		openApiContent = docs.DeviceManager
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
@@ -123,7 +123,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 			// Existing handler: react to certificate events to update device identity slots
 			eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManager-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
 			if err != nil {
 				return nil, nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 			}

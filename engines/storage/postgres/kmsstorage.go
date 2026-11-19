@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -151,6 +153,9 @@ func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) 
 		rowsAffected = result.RowsAffected
 		return result.Error
 	})
+	if errors.Is(err, gorm.ErrForeignKeyViolated) {
+		return errs.ErrKeyInUse
+	}
 	if err != nil {
 		return err
 	}
@@ -175,4 +180,67 @@ func (db *PostgresKMSStore) tenantTable(ctx context.Context, fn func(q *gorm.DB,
 		}
 		return fn(q, tenantID, scoped)
 	})
+}
+
+func (db *PostgresKMSStore) DeleteWith(ctx context.Context, keyID, engineID string, fn func() error) error {
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return err
+	}
+
+	run := func(tx *gorm.DB) error {
+		q := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", keyID, engineID)
+		if scoped {
+			q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
+		}
+		res := q.Delete(nil)
+		if errors.Is(res.Error, gorm.ErrForeignKeyViolated) {
+			return errs.ErrKeyInUse
+		}
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return errs.ErrKeyNotFound
+		}
+		return fn()
+	}
+
+	if scoped {
+		return withTenantIDTransaction(ctx, db.db, tenantID, run)
+	}
+	return db.db.WithContext(ctx).Transaction(run)
+}
+
+// RenameKey runs under a lock shared by every rename, so KMS instances starting at once do not rename the
+// same key twice. The certificates that reference the key follow it through their foreign key, which
+// cascades updates.
+func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (bool, error) {
+	renamed := false
+	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext('lamassu.kms.rename-key'))`).Error; err != nil {
+			return err
+		}
+
+		var found int64
+		if err := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", oldKeyID, engineID).Count(&found).Error; err != nil {
+			return err
+		}
+		if found == 0 {
+			return nil
+		}
+
+		if err := renameInEngine(); err != nil {
+			return err
+		}
+
+		res := tx.Exec(`UPDATE kms_keys SET key_id = ?, aliases = COALESCE(aliases, '[]'::jsonb) || ?::jsonb
+			WHERE key_id = ? AND engine_id = ?`, newKeyID, jsonStringArray(oldKeyID), oldKeyID, engineID)
+		if res.Error != nil {
+			return res.Error
+		}
+		renamed = res.RowsAffected == 1
+		return nil
+	})
+	return renamed && err == nil, err
 }

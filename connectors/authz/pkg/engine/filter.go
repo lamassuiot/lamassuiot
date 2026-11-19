@@ -126,7 +126,7 @@ func buildColumnFilterConditionsWithPrefix(schema *SchemaDefinition, cf []models
 func (r *FilterResult) buildFullSQL(schema *SchemaDefinition, conditionOperator string) {
 	var sqlBuilder strings.Builder
 	sqlBuilder.WriteString("SELECT * FROM ")
-	sqlBuilder.WriteString(schema.QualifiedTableName())
+	sqlBuilder.WriteString(schema.FromClause())
 
 	// Add JOINs
 	if len(r.Joins) > 0 {

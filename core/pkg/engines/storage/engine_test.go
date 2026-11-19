@@ -34,7 +34,7 @@ func (m *MockStorageEngine) GetDMSStorage() (DMSRepo, error) {
 	return nil, nil
 }
 
-func (m *MockStorageEngine) GetEnventsStorage() (EventRepository, error) {
+func (m *MockStorageEngine) GetEventsStorage() (EventRepository, error) {
 	return nil, nil
 }
 
@@ -42,7 +42,7 @@ func (m *MockStorageEngine) GetSubscriptionsStorage() (SubscriptionsRepository, 
 	return nil, nil
 }
 
-func (m *MockStorageEngine) GetVARoleStorage() (VARepo, error) {
+func (m *MockStorageEngine) GetCRLSettingsStorage() (CRLSettingsRepo, error) {
 	return nil, nil
 }
 
