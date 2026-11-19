@@ -198,6 +198,36 @@ storage:
 	assert.Equal(t, "", config.Storage.Config["password"])
 }
 
+func TestReadConfigAllowsEmptyCredentialEnvironmentVariableWithEmptySchemaYAMLValue(t *testing.T) {
+	t.Setenv("LAMASSU_AUTHZ_CREDENTIALS_PKI_PASSWORD", "")
+
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+credentials:
+  pki:
+    provider: postgres
+    password: ""
+`), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "", config.Credentials["pki"].Config["password"])
+}
+
+func TestReadConfigRejectsEmptyCredentialEnvironmentVariableWithDefaultValue(t *testing.T) {
+	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "")
+	type configWithStoragePassword struct {
+		Storage struct {
+			Password string `mapstructure:"password"`
+		} `mapstructure:"storage"`
+	}
+	defaults := configWithStoragePassword{}
+	defaults.Storage.Password = "default-pg-password"
+
+	_, err := readConfig[configWithStoragePassword](writeCredentialConfig(t, `
+storage:
+  provider: postgres
+`), &defaults)
+	require.ErrorContains(t, err, "LAMASSU_POSTGRES_PASSWORD is set but empty")
+}
+
 func writeCredentialConfig(t *testing.T, config string) string {
 	t.Helper()
 	configPath := t.TempDir() + "/config.yml"
