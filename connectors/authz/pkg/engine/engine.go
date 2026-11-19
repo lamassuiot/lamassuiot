@@ -46,11 +46,9 @@ func (e *Engine) Logger() *logrus.Entry {
 // dbs: map of config schema name (e.g., "pki", "iot") -> database connection
 // schemaPaths: map of config schema name -> schema file path
 func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...EngineOption) (*Engine, error) {
-	schemas := NewSchemaRegistry()
-	for configSchemaName, schemaPath := range schemaPaths {
-		if err := schemas.Load(schemaPath, configSchemaName); err != nil {
-			return nil, fmt.Errorf("failed to load schema %s from %s: %w", configSchemaName, schemaPath, err)
-		}
+	schemas, err := LoadSchemaRegistry(schemaPaths)
+	if err != nil {
+		return nil, err
 	}
 
 	e := &Engine{
@@ -67,6 +65,18 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	e.logger.WithFields(logrus.Fields{"schema_count": len(schemas.GetAll())}).Debug("engine schemas loaded")
 
 	return e, nil
+}
+
+// LoadSchemaRegistry loads the schema files keyed by config namespace, as NewEngine does. Use it
+// where policies must be validated against the schemas without building an engine.
+func LoadSchemaRegistry(schemaPaths map[string]string) (*SchemaRegistry, error) {
+	schemas := NewSchemaRegistry()
+	for configSchemaName, schemaPath := range schemaPaths {
+		if err := schemas.Load(schemaPath, configSchemaName); err != nil {
+			return nil, fmt.Errorf("failed to load schema %s from %s: %w", configSchemaName, schemaPath, err)
+		}
+	}
+	return schemas, nil
 }
 
 const engineTracer = "github.com/lamassuiot/lamassuiot/v4/connectors/authz/engine"
