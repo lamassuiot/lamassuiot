@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -27,6 +28,70 @@ func EncodeStruct[E any](source E) (map[string]any, error) {
 		return nil, fmt.Errorf("could not decode struct: %w", err)
 	}
 	return target, nil
+}
+
+type credentialEnvBinding struct {
+	configKey string
+	envName   string
+}
+
+// credentialEnvBindings is the allowlist of fixed credential paths that may
+// be overridden by the process environment. Keep this explicit: enabling
+// AutomaticEnv would also expose non-secret configuration to implicit
+// overrides.
+var credentialEnvBindings = []credentialEnvBinding{
+	{configKey: "storage.username", envName: "LAMASSU_POSTGRES_USERNAME"},
+	{configKey: "storage.password", envName: "LAMASSU_POSTGRES_PASSWORD"},
+	{configKey: "authz_db.username", envName: "LAMASSU_AUTHZ_DB_USERNAME"},
+	{configKey: "authz_db.password", envName: "LAMASSU_AUTHZ_DB_PASSWORD"},
+	{configKey: "publisher_event_bus.basic_auth.username", envName: "LAMASSU_AMQP_USERNAME"},
+	{configKey: "publisher_event_bus.basic_auth.password", envName: "LAMASSU_AMQP_PASSWORD"},
+	{configKey: "subscriber_event_bus.basic_auth.username", envName: "LAMASSU_AMQP_USERNAME"},
+	{configKey: "subscriber_event_bus.basic_auth.password", envName: "LAMASSU_AMQP_PASSWORD"},
+	{configKey: "subscriber_dlq_event_bus.basic_auth.username", envName: "LAMASSU_AMQP_USERNAME"},
+	{configKey: "subscriber_dlq_event_bus.basic_auth.password", envName: "LAMASSU_AMQP_PASSWORD"},
+	{configKey: "smtp_server.username", envName: "LAMASSU_SMTP_USERNAME"},
+	{configKey: "smtp_server.password", envName: "LAMASSU_SMTP_PASSWORD"},
+}
+
+var dynamicCredentialFields = []string{"username", "password"}
+
+func credentialSchemaEnvPart(schema string) string {
+	return strings.ToUpper(strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '_'
+	}, schema))
+}
+
+func bindCredentialEnv(vp *viper.Viper) error {
+	for _, binding := range credentialEnvBindings {
+		if err := vp.BindEnv(binding.configKey, binding.envName); err != nil {
+			return fmt.Errorf("could not bind environment variable %s to %s: %w", binding.envName, binding.configKey, err)
+		}
+	}
+
+	credentials := vp.GetStringMap("credentials")
+	envNames := make(map[string]string, len(credentials))
+	for schema := range credentials {
+		envPart := credentialSchemaEnvPart(schema)
+		envPrefix := "LAMASSU_AUTHZ_CREDENTIALS_" + envPart
+		if previousSchema, exists := envNames[envPart]; exists && previousSchema != schema {
+			return fmt.Errorf("authz credential schemas %q and %q produce the same environment variable name", previousSchema, schema)
+		}
+		envNames[envPart] = schema
+
+		for _, field := range dynamicCredentialFields {
+			key := "credentials." + schema + "." + field
+			env := envPrefix + "_" + strings.ToUpper(field)
+			if err := vp.BindEnv(key, env); err != nil {
+				return fmt.Errorf("could not bind environment variable %s to %s: %w", env, key, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func readConfig[E any](configFilePath string, defaults *E) (*E, error) {
@@ -57,6 +122,10 @@ func readConfig[E any](configFilePath string, defaults *E) (*E, error) {
 		// Config file was found but another error was produced
 		return nil, fmt.Errorf("error while processing config file: %w", err)
 		// }
+	}
+
+	if err := bindCredentialEnv(vp); err != nil {
+		return nil, fmt.Errorf("could not configure credential environment overrides: %w", err)
 	}
 
 	var config E

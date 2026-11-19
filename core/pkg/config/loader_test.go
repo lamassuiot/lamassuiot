@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type TestServiceConfig struct {
@@ -110,4 +111,234 @@ func TestLoadConfigFromUnsetEnv(t *testing.T) {
 	config, err := LoadConfig[TestServiceConfig](nil)
 	assert.Error(t, err)
 	assert.Nil(t, config)
+}
+
+type CredentialOverrideConfig struct {
+	Storage           PluggableStorageEngine `mapstructure:"storage"`
+	PublisherEventBus EventBusEngine         `mapstructure:"publisher_event_bus"`
+	SMTPServer        struct {
+		Username string `mapstructure:"username"`
+		Password string `mapstructure:"password"`
+		Host     string `mapstructure:"host"`
+	} `mapstructure:"smtp_server"`
+	AuthzDB     PluggableStorageEngine            `mapstructure:"authz_db"`
+	Credentials map[string]PluggableStorageEngine `mapstructure:"credentials"`
+}
+
+type testPostgresConfig struct {
+	Password Password `mapstructure:"password"`
+}
+
+type testAMQPConfig struct {
+	BasicAuth struct {
+		Password Password `mapstructure:"password"`
+	} `mapstructure:"basic_auth"`
+}
+
+func TestCredentialSchemaEnvPart(t *testing.T) {
+	assert.Equal(t, "PKI", credentialSchemaEnvPart("pki"))
+	assert.Equal(t, "PKI_V2", credentialSchemaEnvPart("pki-v2"))
+	assert.Equal(t, "PKI_V2", credentialSchemaEnvPart("pki.v2"))
+}
+
+func writeCredentialConfig(t *testing.T, config string) string {
+	t.Helper()
+	configPath := t.TempDir() + "/config.yml"
+	require.NoError(t, os.WriteFile(configPath, []byte(config), 0600))
+	return configPath
+}
+
+func TestReadConfigCredentialEnvironmentOverrides(t *testing.T) {
+	t.Setenv("LAMASSU_POSTGRES_USERNAME", "env-pg-user")
+	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "env-pg-password")
+	t.Setenv("LAMASSU_AMQP_USERNAME", "env-amqp-user")
+	t.Setenv("LAMASSU_AMQP_PASSWORD", "env-amqp-password")
+	t.Setenv("LAMASSU_SMTP_USERNAME", "env-smtp-user")
+	t.Setenv("LAMASSU_SMTP_PASSWORD", "env-smtp-password")
+	t.Setenv("LAMASSU_AUTHZ_DB_USERNAME", "env-authz-user")
+	t.Setenv("LAMASSU_AUTHZ_DB_PASSWORD", "env-authz-password")
+	t.Setenv("LAMASSU_AUTHZ_CREDENTIALS_PKI_USERNAME", "env-pki-user")
+	t.Setenv("LAMASSU_AUTHZ_CREDENTIALS_PKI_PASSWORD", "env-pki-password")
+	t.Setenv("LAMASSU_POSTGRES_HOSTNAME", "must-not-be-used")
+
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+storage:
+  provider: postgres
+  hostname: yaml-host
+  port: 5432
+  username: yaml-pg-user
+  password: yaml-pg-password
+publisher_event_bus:
+  provider: amqp
+  hostname: yaml-host
+  port: 5672
+  basic_auth:
+    enabled: true
+    username: yaml-amqp-user
+    password: yaml-amqp-password
+smtp_server:
+  host: yaml-smtp-host
+  username: yaml-smtp-user
+  password: yaml-smtp-password
+authz_db:
+  provider: postgres
+  username: yaml-authz-user
+  password: yaml-authz-password
+credentials:
+  pki:
+    provider: postgres
+    username: yaml-pki-user
+    password: yaml-pki-password
+`), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "env-pg-user", config.Storage.Config["username"])
+	assert.Equal(t, "env-pg-password", config.Storage.Config["password"])
+	assert.Equal(t, "env-amqp-user", config.PublisherEventBus.Config["basic_auth"].(map[string]any)["username"])
+	assert.Equal(t, "env-amqp-password", config.PublisherEventBus.Config["basic_auth"].(map[string]any)["password"])
+	assert.Equal(t, "env-smtp-user", config.SMTPServer.Username)
+	assert.Equal(t, "env-smtp-password", config.SMTPServer.Password)
+	assert.Equal(t, "env-authz-user", config.AuthzDB.Config["username"])
+	assert.Equal(t, "env-authz-password", config.AuthzDB.Config["password"])
+	assert.Equal(t, "env-pki-user", config.Credentials["pki"].Config["username"])
+	assert.Equal(t, "env-pki-password", config.Credentials["pki"].Config["password"])
+
+	assert.Equal(t, "yaml-host", config.Storage.Config["hostname"])
+	assert.Equal(t, 5432, config.Storage.Config["port"])
+	assert.Equal(t, "yaml-host", config.PublisherEventBus.Config["hostname"])
+	assert.Equal(t, "yaml-smtp-host", config.SMTPServer.Host)
+
+	pg, err := DecodeStruct[testPostgresConfig](config.Storage.Config)
+	require.NoError(t, err)
+	assert.Equal(t, Password("env-pg-password"), pg.Password)
+
+	amqp, err := DecodeStruct[testAMQPConfig](config.PublisherEventBus.Config)
+	require.NoError(t, err)
+	assert.Equal(t, Password("env-amqp-password"), amqp.BasicAuth.Password)
+}
+
+func TestReadConfigCredentialEnvironmentVariablesCanSupplyMissingValues(t *testing.T) {
+	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "env-pg-password")
+	t.Setenv("LAMASSU_AMQP_PASSWORD", "env-amqp-password")
+	t.Setenv("LAMASSU_SMTP_PASSWORD", "env-smtp-password")
+	t.Setenv("LAMASSU_AUTHZ_DB_PASSWORD", "env-authz-password")
+	t.Setenv("LAMASSU_AUTHZ_CREDENTIALS_PKI_PASSWORD", "env-pki-password")
+
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+storage:
+  provider: postgres
+  hostname: yaml-host
+  port: 5432
+publisher_event_bus:
+  provider: amqp
+  hostname: yaml-host
+  port: 5672
+  basic_auth:
+    enabled: true
+smtp_server:
+  host: yaml-smtp-host
+authz_db:
+  provider: postgres
+credentials:
+  pki:
+    provider: postgres
+`), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "env-pg-password", config.Storage.Config["password"])
+	assert.Equal(t, "env-amqp-password", config.PublisherEventBus.Config["basic_auth"].(map[string]any)["password"])
+	assert.Equal(t, "env-smtp-password", config.SMTPServer.Password)
+	assert.Equal(t, "env-authz-password", config.AuthzDB.Config["password"])
+	assert.Equal(t, "env-pki-password", config.Credentials["pki"].Config["password"])
+}
+
+func TestReadConfigCredentialEnvironmentOverridesSubscriberBuses(t *testing.T) {
+	t.Setenv("LAMASSU_AMQP_USERNAME", "env-amqp-user")
+	t.Setenv("LAMASSU_AMQP_PASSWORD", "env-amqp-password")
+
+	config, err := readConfig[struct {
+		SubscriberEventBus    EventBusEngine `mapstructure:"subscriber_event_bus"`
+		SubscriberDLQEventBus EventBusEngine `mapstructure:"subscriber_dlq_event_bus"`
+	}](writeCredentialConfig(t, `
+subscriber_event_bus:
+  provider: amqp
+  basic_auth:
+    username: yaml-user
+    password: yaml-password
+subscriber_dlq_event_bus:
+  provider: amqp
+  basic_auth:
+    username: yaml-user
+    password: yaml-password
+`), nil)
+	require.NoError(t, err)
+
+	for _, eventBus := range []EventBusEngine{config.SubscriberEventBus, config.SubscriberDLQEventBus} {
+		auth := eventBus.Config["basic_auth"].(map[string]any)
+		assert.Equal(t, "env-amqp-user", auth["username"])
+		assert.Equal(t, "env-amqp-password", auth["password"])
+	}
+}
+
+func TestReadConfigUnsetCredentialEnvironmentVariablesPreserveYAML(t *testing.T) {
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+storage:
+  provider: postgres
+  hostname: yaml-host
+  port: 5432
+  username: yaml-pg-user
+  password: yaml-pg-password
+publisher_event_bus:
+  provider: amqp
+  hostname: yaml-host
+  port: 5672
+  basic_auth:
+    enabled: true
+    username: yaml-amqp-user
+    password: yaml-amqp-password
+smtp_server:
+  host: yaml-smtp-host
+  username: yaml-smtp-user
+  password: yaml-smtp-password
+`), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "yaml-pg-user", config.Storage.Config["username"])
+	assert.Equal(t, "yaml-pg-password", config.Storage.Config["password"])
+	assert.Equal(t, "yaml-amqp-user", config.PublisherEventBus.Config["basic_auth"].(map[string]any)["username"])
+	assert.Equal(t, "yaml-amqp-password", config.PublisherEventBus.Config["basic_auth"].(map[string]any)["password"])
+	assert.Equal(t, "yaml-smtp-user", config.SMTPServer.Username)
+	assert.Equal(t, "yaml-smtp-password", config.SMTPServer.Password)
+}
+
+func TestReadConfigEmptyCredentialEnvironmentVariablesPreserveYAML(t *testing.T) {
+	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "")
+	t.Setenv("LAMASSU_AMQP_PASSWORD", "")
+	t.Setenv("LAMASSU_SMTP_PASSWORD", "")
+
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+storage:
+  provider: postgres
+  hostname: yaml-host
+  port: 5432
+  username: yaml-pg-user
+  password: yaml-pg-password
+publisher_event_bus:
+  provider: amqp
+  hostname: yaml-host
+  port: 5672
+  basic_auth:
+    enabled: true
+    username: yaml-amqp-user
+    password: yaml-amqp-password
+smtp_server:
+  host: yaml-smtp-host
+  username: yaml-smtp-user
+  password: yaml-smtp-password
+`), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "yaml-pg-password", config.Storage.Config["password"])
+	assert.Equal(t, "yaml-amqp-password", config.PublisherEventBus.Config["basic_auth"].(map[string]any)["password"])
+	assert.Equal(t, "yaml-smtp-password", config.SMTPServer.Password)
 }
