@@ -9,6 +9,7 @@ import (
 	"encoding/asn1"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/url"
@@ -25,6 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
+	"golang.org/x/crypto/ocsp"
 
 	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	"go.opentelemetry.io/otel"
@@ -187,6 +189,13 @@ func (svc CRLServiceBackend) InitCRLSettings(ctx context.Context, caID string) (
 		return existing, nil
 	}
 
+	// ACTIVE settings retain the key of their signer (crl_settings_signer_key_fk), and a CA without a key in the KMS
+	// cannot sign CRLs anyway. It gets no settings, and this is not an error: the event would be redelivered forever.
+	if ca.Certificate.EngineID == "" || ca.Certificate.KeyID == "" {
+		lFunc.Warnf("CA %s has no key in the KMS: it cannot sign CRLs, so no CRL settings are created", caID)
+		return nil, nil
+	}
+
 	settings, err := svc.vaRepo.Insert(ctx, &models.CRLSettings{
 		CAID:   caID,
 		Status: models.CRLSettingsActive,
@@ -196,6 +205,8 @@ func (svc CRLServiceBackend) InitCRLSettings(ctx context.Context, caID string) (
 			RegenerateOnRevoke: true,
 			SignerSerialNumber: ca.Certificate.SerialNumber,
 		},
+		SignerEngineID: &ca.Certificate.EngineID,
+		SignerKeyID:    &ca.Certificate.KeyID,
 		LatestCRL: models.LatestCRLMeta{
 			Version:   models.BigInt{Int: big.NewInt(0)},
 			ValidFrom: time.Now(),
@@ -244,15 +255,31 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, errs.ErrCRLSettingsNotActive
 	}
 
-	crlCA, signerCert, err := svc.crlIssuer(ctx, input.CAID, settings.Options.SignerSerialNumber)
+	validity := time.Duration(settings.Options.Validity)
+	return svc.calculateCRL(ctx, settings, func(now time.Time) time.Time { return now.Add(validity) })
+}
+
+// calculateCRL generates and publishes the next CRL of ACTIVE settings, valid until nextUpdate(now). It does not need
+// the CA to exist: the revocations are listed by the CA ID, which outlives the CA.
+func (svc CRLServiceBackend) calculateCRL(ctx context.Context, settings *models.CRLSettings, nextUpdate func(now time.Time) time.Time) (*x509.RevocationList, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	caID := settings.CAID
+
+	// The signer is checked against the identity of the CA while the CA exists: the database only knows that it is a
+	// certificate. Once the CA is gone, the signer validated when it was set is used as it is.
+	_, signerCert, err := svc.crlIssuer(ctx, caID, settings.Options.SignerSerialNumber)
+	if errors.Is(err, errs.ErrCANotFound) {
+		signerCert, err = svc.caSDK.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: settings.Options.SignerSerialNumber})
+	}
 	if err != nil {
+		lFunc.Errorf("could not get a valid CRL signer %s for CA %s: %s", settings.Options.SignerSerialNumber, caID, err)
 		return nil, err
 	}
 
 	certList := []x509.RevocationListEntry{}
-	lFunc.Debugf("reading CA %s certificates", crlCA.ID)
+	lFunc.Debugf("reading CA %s certificates", caID)
 	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
-		CAID:   crlCA.ID,
+		CAID:   caID,
 		Status: models.StatusRevoked,
 		ListInput: resources.ListInput[models.Certificate]{
 			ExhaustiveRun: true,
@@ -270,7 +297,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", crlCA.ID, err)
+		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", caID, err)
 		return nil, err
 	}
 
@@ -279,7 +306,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	extensions := []pkix.Extension{}
 
-	idp, err := svc.getDistributionPointExtension(crlCA.ID, settings.LegacySKI)
+	idp, err := svc.getDistributionPointExtension(caID, settings.LegacySKI)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
@@ -287,7 +314,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	extensions = append(extensions, *idp)
 
-	lFunc.Debugf("creating revocation list. CA %s", crlCA.ID)
+	lFunc.Debugf("creating revocation list. CA %s", caID)
 	now := time.Now()
 
 	previousVersion := big.NewInt(0)
@@ -302,7 +329,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		RevokedCertificateEntries: certList,
 		Number:                    crlVersion,
 		ThisUpdate:                now,
-		NextUpdate:                now.Add(time.Duration(settings.Options.Validity)),
+		NextUpdate:                nextUpdate(now),
 		ExtraExtensions:           extensions,
 	}, caCert, crlSigner)
 	if err != nil {
@@ -320,7 +347,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	// claimed first, so the file at its final path is only ever written by the generation that won it: the CRL is
 	// staged in a private file, and moved to its path once the claim succeeds.
 	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
-	finalKey := crlObjectKey(crlCA.ID, crl.Number.String())
+	finalKey := crlObjectKey(caID, crl.Number.String())
 	nonce := make([]byte, 8)
 	if _, err = rand.Read(nonce); err != nil {
 		return nil, err
@@ -333,7 +360,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	}
 	defer func() { _ = svc.bucket.Delete(context.WithoutCancel(ctx), stagedKey) }()
 
-	err = svc.vaRepo.UpdateLatestCRL(ctx, crlCA.ID, previousVersion, models.LatestCRLMeta{
+	err = svc.vaRepo.UpdateLatestCRL(ctx, caID, previousVersion, models.LatestCRLMeta{
 		Version:    models.BigInt{Int: crl.Number},
 		ValidFrom:  crl.ThisUpdate,
 		ValidUntil: crl.NextUpdate,
@@ -346,7 +373,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	err = svc.bucket.Copy(ctx, finalKey, stagedKey, nil)
 	if err != nil {
 		lFunc.Errorf("something went wrong while publishing CRL: %s", err)
-		if rollbackErr := svc.vaRepo.UpdateLatestCRL(context.WithoutCancel(ctx), crlCA.ID, crl.Number, settings.LatestCRL); rollbackErr != nil {
+		if rollbackErr := svc.vaRepo.UpdateLatestCRL(context.WithoutCancel(ctx), caID, crl.Number, settings.LatestCRL); rollbackErr != nil {
 			lFunc.Errorf("could not restore previous CRL settings: %s", rollbackErr)
 		}
 		return nil, err
@@ -397,13 +424,168 @@ func (svc CRLServiceBackend) UpdateCRLSettings(ctx context.Context, input servic
 	}
 
 	// A signer that is kept is not checked again: an unrelated edit must not fail because of it (#841).
+	signerKey := models.CRLSignerKey{EngineID: deref(settings.SignerEngineID), KeyID: deref(settings.SignerKeyID)}
 	if input.Options.SignerSerialNumber != settings.Options.SignerSerialNumber {
-		if _, _, err := svc.crlIssuer(ctx, input.CAID, input.Options.SignerSerialNumber); err != nil {
+		_, signer, err := svc.crlIssuer(ctx, input.CAID, input.Options.SignerSerialNumber)
+		if err != nil {
+			return nil, err
+		}
+		// ACTIVE settings retain the key of their signer, so a signer has to have one in the KMS.
+		if signer.KeyID == "" {
+			return nil, errs.ErrValidateBadRequest
+		}
+		signerKey = models.CRLSignerKey{EngineID: signer.EngineID, KeyID: signer.KeyID}
+	}
+
+	return svc.vaRepo.UpdateOptions(ctx, input.CAID, input.Options, signerKey)
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// finalCRLAttempts bounds how many times FinalizeCRLSettings issues the final CRL again when another CRL gets
+// published between the final CRL and the transition to FINAL.
+const finalCRLAttempts = 3
+
+func (svc CRLServiceBackend) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (*models.CRLSettings, *x509.RevocationList, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if err := crlValidate.Struct(input); err != nil {
+		return nil, nil, errs.ErrValidateBadRequest
+	}
+
+	for attempt := 1; ; attempt++ {
+		settings, err := svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
+		if err != nil {
+			return nil, nil, err
+		}
+		if settings.Status != models.CRLSettingsActive {
+			// Transitions only move forward: a retried event finds them done.
+			return settings, nil, nil
+		}
+
+		// The final CRL is published while the settings are still ACTIVE, so its key is still retained, and they only
+		// move to FINAL while it is still their latest CRL: a regular CRL published meanwhile would otherwise replace it,
+		// and expire long before the CA.
+		var finalVersion *big.Int
+		var finalCRL *x509.RevocationList
+		if input.FinalCRL {
+			crl, err := svc.calculateCRL(ctx, settings, func(time.Time) time.Time { return input.FinalCRLNextUpdate })
+			if err == nil {
+				finalVersion = crl.Number
+				err = svc.vaRepo.MarkFinal(ctx, input.CAID, finalVersion)
+			}
+			if errors.Is(err, errs.ErrCRLSettingsConflict) && attempt < finalCRLAttempts {
+				lFunc.Warnf("another CRL of CA %s was published along its final CRL: issuing the final CRL again", input.CAID)
+				continue
+			}
+			if errors.Is(err, errs.ErrCRLSettingsNotActive) {
+				// Another finalizer got there first: reading them again finds them done.
+				lFunc.Infof("CRL settings of CA %s were finalized meanwhile", input.CAID)
+				continue
+			}
+			if err != nil {
+				lFunc.Errorf("could not issue the final CRL of CA %s: %s", input.CAID, err)
+				return nil, nil, err
+			}
+			finalCRL = crl
+			lFunc.Infof("final CRL %s of CA %s issued, valid until %s", finalVersion, input.CAID, input.FinalCRLNextUpdate)
+		} else if err := svc.vaRepo.MarkFinal(ctx, input.CAID, nil); err != nil {
+			return nil, nil, err
+		}
+
+		finalSettings, err := svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
+		if err != nil {
+			// The final CRL is issued and the settings are FINAL: it is returned so that it is still announced.
+			return nil, finalCRL, err
+		}
+		return finalSettings, finalCRL, nil
+	}
+}
+
+// ArchiveCRLSettings archives the settings of a deleted CA. Settings still ACTIVE at that point (their signer was not
+// one of the certificates the CA released, or an event was lost) still retain the key of their signer, so they first
+// get a final CRL, valid until the signer expires: archiving must never leave the last CRL a short-lived one.
+func (svc CRLServiceBackend) ArchiveCRLSettings(ctx context.Context, input services.ArchiveCRLSettingsInput) (*models.CRLSettings, error) {
+	if err := crlValidate.Struct(input); err != nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	settings, err := svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
+	if err != nil {
+		return nil, err
+	}
+	if settings.Status == models.CRLSettingsActive {
+		signer, err := svc.caSDK.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: settings.Options.SignerSerialNumber})
+		if err != nil {
+			return nil, err
+		}
+		finalize := services.FinalizeCRLSettingsInput{CAID: input.CAID}
+		if signer.ValidTo.After(time.Now()) {
+			finalize.FinalCRL, finalize.FinalCRLNextUpdate = true, signer.ValidTo
+		}
+		if _, _, err := svc.service.FinalizeCRLSettings(ctx, finalize); err != nil {
 			return nil, err
 		}
 	}
 
-	return svc.vaRepo.UpdateOptions(ctx, input.CAID, input.Options)
+	if err := svc.vaRepo.MarkArchived(ctx, input.CAID); err != nil {
+		return nil, err
+	}
+	return svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
+}
+
+func (svc CRLServiceBackend) DeleteCRLSettings(ctx context.Context, input services.DeleteCRLSettingsInput) error {
+	if err := crlValidate.Struct(input); err != nil {
+		return errs.ErrValidateBadRequest
+	}
+	return svc.vaRepo.Delete(ctx, input.CAID)
+}
+
+// ReconcileCRLSettings brings the settings in line with their CA, reading it again rather than trusting an event that
+// may be stale or redelivered: a deleted CA archives them, and an ACTIVE settings of a revoked (not on hold) CA gets its
+// final CRL and turns FINAL. An expired CA turns FINAL without one, since a CRL signed by an expired CA is not trusted.
+// Changes go through svc.service so that they publish their events.
+func (svc CRLServiceBackend) ReconcileCRLSettings(ctx context.Context, input services.ReconcileCRLSettingsInput) (*models.CRLSettings, error) {
+	if err := crlValidate.Struct(input); err != nil {
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	settings, err := svc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: input.CAID})
+	if err != nil || settings.Status == models.CRLSettingsArchived {
+		return settings, err
+	}
+
+	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput{CAID: input.CAID})
+	if errors.Is(err, errs.ErrCANotFound) {
+		return svc.service.ArchiveCRLSettings(ctx, services.ArchiveCRLSettingsInput{CAID: input.CAID})
+	}
+	if err != nil || settings.Status != models.CRLSettingsActive {
+		return settings, err
+	}
+
+	notAfter := caLatestNotAfter(ca)
+	cert := ca.Certificate
+	switch {
+	case cert.Status == models.StatusExpired, !notAfter.After(time.Now()):
+		finalized, _, err := svc.service.FinalizeCRLSettings(ctx, services.FinalizeCRLSettingsInput{CAID: input.CAID})
+		return finalized, err
+	case cert.Status == models.StatusRevoked && cert.RevocationReason != models.RevocationReason(ocsp.CertificateHold) &&
+		(input.RevokedBefore.IsZero() || cert.RevocationTimestamp.Before(input.RevokedBefore)):
+		finalized, _, err := svc.service.FinalizeCRLSettings(ctx, services.FinalizeCRLSettingsInput{CAID: input.CAID, FinalCRL: true, FinalCRLNextUpdate: notAfter})
+		return finalized, err
+	}
+	// Active, or on hold: a hold is reversible, so the CA keeps signing CRLs.
+	return settings, nil
+}
+
+// caLatestNotAfter is the latest notAfter among the certificates of a CA: no certificate of the CA is valid after it,
+// so no CRL of the CA needs to be either. Today a CA has a single current certificate.
+func caLatestNotAfter(ca *models.CACertificate) time.Time {
+	return ca.Certificate.ValidTo
 }
 
 // getDistributionPointExtension builds the IDP of the CRL of a CA: the URLs of every certificate it covers. For

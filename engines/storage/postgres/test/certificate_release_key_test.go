@@ -64,3 +64,18 @@ func TestCAStoreInsertWithMissingCertificateIsRejected(t *testing.T) {
 	})
 	require.ErrorIs(t, err, gorm.ErrForeignKeyViolated)
 }
+
+// Without the VA schema no CRL settings retain a key.
+func TestCRLSettingsHoldingKeyWithoutVASchema(t *testing.T) {
+	_, kmsStore, certStore := newKMSAndCertStores(t)
+	ctx := context.Background()
+
+	insertTestKey(t, kmsStore, "e1", "k1")
+	cert := newTestCertificate(t, 1, "e1", "k1")
+	_, err := certStore.Insert(ctx, cert)
+	require.NoError(t, err)
+
+	holders, err := certStore.CRLSettingsHoldingKey(ctx, []string{cert.SerialNumber})
+	require.NoError(t, err)
+	require.Empty(t, holders)
+}

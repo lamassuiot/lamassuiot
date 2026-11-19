@@ -117,7 +117,9 @@ func (cli *httpCAClient) GetCAs(ctx context.Context, input services.GetCAsInput)
 }
 
 func (cli *httpCAClient) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
-	response, err := cli.get[models.CACertificate](ctx, "/v1/cas/"+input.CAID, nil, map[int][]error{})
+	response, err := cli.get[models.CACertificate](ctx, "/v1/cas/"+input.CAID, nil, map[int][]error{
+		404: {errs.ErrCANotFound},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +363,10 @@ func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAIn
 		},
 		403: {
 			errs.ErrCascadeDeleteNotAllowed,
+		},
+		409: {
+			errs.ErrCAFinalCRLPending,
+			errs.ErrCAKeyHeldByCRLSettings,
 		},
 	})
 	if err != nil {

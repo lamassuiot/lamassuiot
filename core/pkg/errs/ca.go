@@ -26,6 +26,10 @@ var (
 	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
 	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
 	ErrCertificateIssuerCAExists             error = errors.New("cannot delete certificate: issuer CA still exists")
+	// ErrCAFinalCRLPending: the CA cannot be deleted until the VA issues its final CRL and stops retaining its key.
+	ErrCAFinalCRLPending error = errors.New("final CRL of the CA not issued yet")
+	// ErrCAKeyHeldByCRLSettings: the key of the CA signs the CRLs of another CA, whose ACTIVE CRL settings retain it.
+	ErrCAKeyHeldByCRLSettings error = errors.New("the key of the CA signs the CRLs of another CA")
 
 	ErrCascadeDeleteNotAllowed error = errors.New("cascade delete operations are not allowed by configuration")
 

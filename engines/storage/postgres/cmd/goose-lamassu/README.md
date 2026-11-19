@@ -29,9 +29,9 @@ Migrate **`kms` → `ca` → `va`**, one at a time. Never run them in parallel.
 
 1. `kms`
 2. `ca`: certificates reference KMS keys. If `kms` is not migrated yet, it fails with `kms schema not found: migrate the kms schema before the ca schema`. Register legacy keys in KMS before running it with [`ca-to-kms-migration`](../../../../../backend/cmd/ca-to-kms-migration/README.md), which runs on the `ca` schema of earlier versions.
-3. `va`: CRL settings reference their signer certificates and are keyed by CA ID, so it needs `ca` migrated. Before running it, every SKI must belong to a single CA, every VA role must have a signer certificate with a key, and no CA ID may contain `/` or equal the SKI of another role; the migration fails and lists the affected rows otherwise. If `va` is not migrated, CRL settings and CRL requests fail with `relation "crl_settings" does not exist`.
+3. `va`: CRL settings reference their signer certificates and KMS keys and are keyed by CA ID, so it needs both `kms` and `ca` migrated. Before running it, every SKI must belong to a single CA, every VA role must have a signer certificate with a key, and no CA ID may contain `/` or equal the SKI of another role; the migration fails and lists the affected rows otherwise. If `va` is not migrated, CRL settings and CRL requests fail with `relation "crl_settings" does not exist`.
 
-Both foreign keys validate existing rows.
+The foreign keys validate existing rows.
 
 `devicemanager`, `dmsmanager` and `alerts` are independent and can be migrated at any point.
 
@@ -43,6 +43,7 @@ The `ca` and `va` migrations create foreign keys and read tables that belong to 
 |---|---|---|---|
 | `ca` | `kms` | `USAGE` on the schema; `SELECT` and `REFERENCES` on `kms.kms_keys`; `INSERT` on `kms.kms_keys` | The certificate-to-key foreign key, the `certificates_view` view, and the registration of the public keys of deleted CAs |
 | `va` | `ca` | `USAGE` on the schema; `SELECT` and `REFERENCES` on `ca.certificates`; `SELECT` on `ca.ca_certificates` | The VA role-to-signer-certificate foreign key and the lookup of each role's signer certificate |
+| `va` | `kms` | `USAGE` on the schema; `SELECT` and `REFERENCES` on `kms.kms_keys` | The CRL signer key lookup and foreign key |
 
 Without them the migration aborts, for example with `permission denied for table certificates` on the `va` foreign key. Earlier schemas are already migrated, so grant the missing privileges and run the failed schema again. For example, for the `va` migration:
 
@@ -50,6 +51,8 @@ Without them the migration aborts, for example with `permission denied for table
 GRANT USAGE ON SCHEMA ca TO migration_user;
 GRANT SELECT, REFERENCES ON ca.certificates TO migration_user;
 GRANT SELECT ON ca.ca_certificates TO migration_user;
+GRANT USAGE ON SCHEMA kms TO migration_user;
+GRANT SELECT, REFERENCES ON kms.kms_keys TO migration_user;
 ```
 
 The `ca` migration also creates the view `ca.certificates_view`, through which the CA service reads certificates and CAs. The view belongs to the user that ran the migration, so if the CA service connects as a different user, grant that user `SELECT` on the view after migrating `ca`. Without it, every certificate and CA read fails with `permission denied for table certificates_view`.
@@ -59,6 +62,13 @@ GRANT SELECT ON ca.certificates_view TO service_user;
 ```
 
 The view reads `kms.kms_keys` with its owner's privileges, so the service user needs no privileges on the `kms` schema for this.
+
+The CA service also reads `va.crl_settings` when it deletes a CA, to check that no ACTIVE CRL settings still retain the key. If the CA service connects as a different user from the one that ran the migrations, grant that user the privileges below after migrating `va`. Without them, deleting any CA that has a crypto engine fails with `permission denied for schema va` (or `for table crl_settings`), before the CA service can tell whether a final CRL is pending. Installations without the `va` schema migrated need nothing.
+
+```sql
+GRANT USAGE ON SCHEMA va TO service_user;
+GRANT SELECT ON va.crl_settings TO service_user;
+```
 
 To migrate every schema in order:
 
