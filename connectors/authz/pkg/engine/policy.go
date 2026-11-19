@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -343,4 +344,74 @@ func concretizeRuleForSchema(rule *models.Rule, schema *SchemaDefinition) *model
 	concrete.SchemaName = schema.SchemaName
 	concrete.EntityType = schema.EntityType
 	return &concrete
+}
+
+// ErrPolicySchemaMismatch wraps every reason ValidatePolicyAgainstSchemas rejects a policy, so
+// callers can report all of them as invalid input.
+var ErrPolicySchemaMismatch = errors.New("policy does not match the loaded schemas")
+
+// ValidatePolicyAgainstSchemas rejects, when the policy is saved, the relations that the graph
+// would skip at evaluation time (an undeclared via grants nothing) or fail on (an unloaded relation
+// target fails the whole authorization). Rules are concretized like buildPolicyEdges does:
+//   - every relation target must be a loaded schema in the rule's namespace;
+//   - a via must resolve from at least one schema the rule matches, since a wildcard rule
+//     legitimately resolves it for some matches and not for others;
+//   - a non-wildcard rule with relations must match a loaded schema.
+//
+// A wildcard rule that matches no schema is skipped at evaluation time with a warning, so it is not
+// rejected here.
+func ValidatePolicyAgainstSchemas(policy *models.Policy, schemas *SchemaRegistry) error {
+	for i, rule := range policy.Rules {
+		if len(rule.Relations) == 0 {
+			continue
+		}
+		var fromEntities []string
+		for _, schema := range schemas.GetAll() {
+			if ruleMatchesSchema(rule, schema) {
+				fromEntities = append(fromEntities, schema.QualifiedEntityType())
+			}
+		}
+		if len(fromEntities) == 0 {
+			if rule.SchemaName == "*" || rule.EntityType == "*" {
+				continue
+			}
+			return fmt.Errorf("%w: invalid rule at index %d: %s is not a loaded schema in namespace %s",
+				ErrPolicySchemaMismatch, i, rule.QualifiedEntityType(), rule.Namespace)
+		}
+		if err := validateRelationsAgainstSchemas(fromEntities, rule.Namespace, rule.Relations, schemas); err != nil {
+			return fmt.Errorf("%w: invalid rule at index %d: %w", ErrPolicySchemaMismatch, i, err)
+		}
+	}
+	return nil
+}
+
+func validateRelationsAgainstSchemas(fromEntities []string, namespace string, relations []models.RelationRule, schemas *SchemaRegistry) error {
+	for i := range relations {
+		rel := &relations[i]
+		target := rel.QualifiedTo()
+		targetSchema := findSchemaForRelation(namespace, target, schemas)
+		if targetSchema == nil {
+			return fmt.Errorf("relation target %s is not a loaded schema in namespace %s", target, namespace)
+		}
+		if err := resolveFromAny(fromEntities, namespace, rel.Via, targetSchema, schemas); err != nil {
+			return err
+		}
+		if err := validateRelationsAgainstSchemas([]string{target}, namespace, rel.Relations, schemas); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func resolveFromAny(fromEntities []string, namespace, via string, targetSchema *SchemaDefinition, schemas *SchemaRegistry) error {
+	var err error
+	for _, from := range fromEntities {
+		if _, err = resolveRelationForeignKey(from, namespace, via, targetSchema, schemas); err == nil {
+			return nil
+		}
+	}
+	if len(fromEntities) > 1 && errors.Is(err, ErrUndeclaredVia) {
+		return fmt.Errorf("%w: %q towards %s from any schema the rule matches", ErrUndeclaredVia, via, targetSchema.QualifiedEntityType())
+	}
+	return err
 }

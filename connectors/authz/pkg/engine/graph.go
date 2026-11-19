@@ -3,6 +3,9 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"io"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
@@ -17,7 +20,7 @@ type GraphNode struct {
 type GraphEdge struct {
 	From               string   // source entity type
 	To                 string   // target entity type
-	Via                string   // relation name (FK in schema)
+	Via                string   // the policy's raw via string; never safe for SQL, use ForeignKey for column references
 	Actions            []string // allowed actions through this edge
 	ForeignKey         string   // FK column name in target table
 	TableName          string   // target table name
@@ -27,14 +30,34 @@ type GraphEdge struct {
 
 // AuthorizationGraph represents the complete entity relationship graph
 type AuthorizationGraph struct {
-	nodes map[string]*GraphNode
+	nodes  map[string]*GraphNode
+	logger *logrus.Entry
+}
+
+// GraphOption configures an AuthorizationGraph.
+type GraphOption func(*AuthorizationGraph)
+
+// WithGraphLogger sets the logger the graph reports skipped rules and relations to.
+func WithGraphLogger(l *logrus.Entry) GraphOption {
+	return func(g *AuthorizationGraph) {
+		if l != nil {
+			g.logger = l
+		}
+	}
 }
 
 // NewAuthorizationGraph creates a new authorization graph
-func NewAuthorizationGraph() *AuthorizationGraph {
-	return &AuthorizationGraph{
-		nodes: make(map[string]*GraphNode),
+func NewAuthorizationGraph(opts ...GraphOption) *AuthorizationGraph {
+	nop := logrus.New()
+	nop.SetOutput(io.Discard)
+	g := &AuthorizationGraph{
+		nodes:  make(map[string]*GraphNode),
+		logger: logrus.NewEntry(nop),
 	}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 // BuildFromPoliciesAndSchemas constructs the graph from policy and schema definitions
@@ -69,13 +92,15 @@ func (g *AuthorizationGraph) buildPolicyEdges(policies *PolicyRegistry, schemas 
 				}
 				matchedSchemas++
 				concreteRule := concretizeRuleForSchema(rule, schema)
-				if err := g.addRuleEdges(concreteRule.QualifiedEntityType(), concreteRule.Namespace, concreteRule, schemas); err != nil {
+				if err := g.addRuleEdges(policy.ID, concreteRule.QualifiedEntityType(), concreteRule.Namespace, concreteRule, schemas); err != nil {
 					return err
 				}
 			}
 			if matchedSchemas == 0 && (rule.SchemaName == "*" || rule.EntityType == "*") {
-				fmt.Printf("Warning: wildcard rule matched no schemas: namespace=%s schemaName=%s entityType=%s (skipping rule)\n",
-					rule.Namespace, rule.SchemaName, rule.EntityType)
+				g.logger.WithFields(logrus.Fields{
+					"policy_id": policy.ID, "namespace": rule.Namespace,
+					"schema_name": rule.SchemaName, "entity_type": rule.EntityType,
+				}).Warn("wildcard rule matched no schemas (skipping rule)")
 			}
 		}
 	}
@@ -105,12 +130,12 @@ func (g *AuthorizationGraph) addUserOwnershipEdges(schemas *SchemaRegistry) {
 }
 
 // addRuleEdges adds edges from a policy's relations
-func (g *AuthorizationGraph) addRuleEdges(entityType string, namespace string, rule *models.Rule, schemas *SchemaRegistry) error {
-	return g.addRelationEdges(entityType, namespace, rule.Relations, schemas)
+func (g *AuthorizationGraph) addRuleEdges(policyID string, entityType string, namespace string, rule *models.Rule, schemas *SchemaRegistry) error {
+	return g.addRelationEdges(policyID, entityType, namespace, rule.Relations, schemas)
 }
 
 // addRelationEdges recursively adds edges from relation policies
-func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace string, relations []models.RelationRule, schemas *SchemaRegistry) error {
+func (g *AuthorizationGraph) addRelationEdges(policyID string, fromEntity string, fromNamespace string, relations []models.RelationRule, schemas *SchemaRegistry) error {
 	for _, rel := range relations {
 		targetEntityType := rel.QualifiedTo()
 		targetSchema := findSchemaForRelation(fromNamespace, targetEntityType, schemas)
@@ -121,8 +146,10 @@ func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace s
 		// Resolve via against the schema instead of using the policy's string as a JOIN column;
 		// a relation the schema doesn't declare grants nothing and is skipped, not fatal.
 		foreignKey, err := resolveRelationForeignKey(fromEntity, fromNamespace, rel.Via, targetSchema, schemas)
-		if errors.Is(err, errUndeclaredVia) {
-			fmt.Printf("Warning: skipping relation that grants nothing: %v\n", err)
+		if errors.Is(err, ErrUndeclaredVia) {
+			g.logger.WithFields(logrus.Fields{
+				"policy_id": policyID, "from": fromEntity, "to": targetEntityType, "via": rel.Via,
+			}).Warnf("skipping relation that grants nothing: %v", err)
 			continue
 		}
 		if err != nil {
@@ -143,7 +170,7 @@ func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace s
 			}
 		}
 		if len(rel.Relations) > 0 {
-			if err := g.addRelationEdges(targetEntityType, fromNamespace, rel.Relations, schemas); err != nil {
+			if err := g.addRelationEdges(policyID, targetEntityType, fromNamespace, rel.Relations, schemas); err != nil {
 				return err
 			}
 		}
@@ -160,7 +187,8 @@ func findSchemaForRelation(namespace, entityType string, schemas *SchemaRegistry
 	return nil
 }
 
-var errUndeclaredVia = errors.New("relation via is not declared by the schema")
+// ErrUndeclaredVia is returned when a relation's via names no relation declared by the schemas.
+var ErrUndeclaredVia = errors.New("relation via is not declared by the schema")
 
 // resolveRelationForeignKey returns the schema's own foreign key for via (a relation name or its FK
 // column) declared by the target schema, the only direction the JOIN in filter.go can express.
@@ -174,7 +202,7 @@ func resolveRelationForeignKey(fromEntity, fromNamespace, via string, targetSche
 			return relConfig.ForeignKey, nil
 		}
 	}
-	return "", fmt.Errorf("%w: %q between %s and %s", errUndeclaredVia, via, fromEntity, targetSchema.QualifiedEntityType())
+	return "", fmt.Errorf("%w: %q between %s and %s", ErrUndeclaredVia, via, fromEntity, targetSchema.QualifiedEntityType())
 }
 
 func mergeEdgeActions(edge *GraphEdge, newActions []string) {

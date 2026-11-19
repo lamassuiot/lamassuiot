@@ -146,7 +146,7 @@ func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, 
 		span.End()
 	}()
 	log := helpers.ConfigureLogger(ctx, e.logger)
-	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
+	filterGenerator, err := NewFilterGenerator(e.schemas, policies, WithGraphLogger(e.logger))
 	if err != nil {
 		return false, fmt.Errorf("failed to build authorization graph: %w", err)
 	}
@@ -219,7 +219,7 @@ func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, na
 		return "", fmt.Errorf("entity type '%s' does not belong to namespace '%s'", entityType, namespace)
 	}
 
-	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
+	filterGenerator, err := NewFilterGenerator(e.schemas, policies, WithGraphLogger(e.logger))
 	if err != nil {
 		return "", fmt.Errorf("failed to build authorization graph: %w", err)
 	}

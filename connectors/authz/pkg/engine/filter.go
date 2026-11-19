@@ -16,8 +16,8 @@ type FilterGenerator struct {
 }
 
 // NewFilterGenerator creates a new filter generator.
-func NewFilterGenerator(schemas *SchemaRegistry, policies *PolicyRegistry) (*FilterGenerator, error) {
-	graph := NewAuthorizationGraph()
+func NewFilterGenerator(schemas *SchemaRegistry, policies *PolicyRegistry, opts ...GraphOption) (*FilterGenerator, error) {
+	graph := NewAuthorizationGraph(opts...)
 	if err := graph.BuildFromPoliciesAndSchemas(policies, schemas); err != nil {
 		return nil, fmt.Errorf("failed to build authorization graph: %w", err)
 	}
