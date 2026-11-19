@@ -107,6 +107,20 @@ func TestLoadConfigFromEnvMissingFile(t *testing.T) {
 	assert.Nil(t, config)
 }
 
+func TestLoadConfigFromEnvRejectsEmptyCredentialEnvironmentVariable(t *testing.T) {
+	t.Setenv("LAMASSU_CONFIG_FILE", writeCredentialConfig(t, `
+storage:
+  provider: postgres
+  password: yaml-pg-password
+`))
+	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "")
+
+	config, err := LoadConfig[CredentialOverrideConfig](nil)
+
+	require.ErrorContains(t, err, "LAMASSU_POSTGRES_PASSWORD is set but empty")
+	assert.Nil(t, config)
+}
+
 func TestLoadConfigFromUnsetEnv(t *testing.T) {
 	config, err := LoadConfig[TestServiceConfig](nil)
 	assert.Error(t, err)
@@ -142,6 +156,8 @@ func TestCredentialSchemaEnvPart(t *testing.T) {
 }
 
 func TestReadConfigRejectsCredentialSchemaEnvironmentNameCollisions(t *testing.T) {
+	t.Setenv("LAMASSU_AUTHZ_CREDENTIALS_PKI_V2_USERNAME", "env-user")
+
 	_, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
 credentials:
   pki.v2:
@@ -153,7 +169,34 @@ credentials:
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pki.v2")
 	assert.Contains(t, err.Error(), "pki_v2")
-	assert.Contains(t, err.Error(), "produce the same environment variable name")
+	assert.Contains(t, err.Error(), "LAMASSU_AUTHZ_CREDENTIALS_PKI_V2")
+}
+
+func TestReadConfigAllowsCredentialSchemaEnvironmentNameCollisionsWithoutOverrides(t *testing.T) {
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+credentials:
+  pki.v2:
+    provider: postgres
+    username: yaml-v2-user
+  pki_v2:
+    provider: postgres
+    username: yaml-underscore-user
+`), nil)
+
+	require.NoError(t, err)
+	assert.NotNil(t, config)
+}
+
+func TestReadConfigPreservesCredentialSchemaNamesContainingDots(t *testing.T) {
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+credentials:
+  pki.v2:
+    provider: postgres
+`), nil)
+
+	require.NoError(t, err)
+	require.Contains(t, config.Credentials, "pki.v2")
+	assert.Equal(t, StorageProvider("postgres"), config.Credentials["pki.v2"].Provider)
 }
 
 func TestReadConfigIgnoresCredentialEnvironmentVariablesForAbsentSchemas(t *testing.T) {
