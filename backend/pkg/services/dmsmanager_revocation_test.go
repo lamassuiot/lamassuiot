@@ -521,6 +521,20 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			expectedErr: "could not verify certificate revocation status",
 		},
 		{
+			// RFC 5280 6.3.3: the IDP must name one of the certificate's CRL distribution points, not necessarily the
+			// one the CRL was downloaded from (mirrors).
+			name: "OK/CRLIssuingDistributionPointNamesAnotherDistributionPointOfTheCertificate",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				down := httptest.NewServer(http.NotFoundHandler())
+				down.Close()
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(down.URL)})
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 70, nil, []string{down.URL, srv.URL})
+			},
+		},
+		{
 			name: "Err/CRLMalformedIssuingDistributionPoint",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
@@ -599,6 +613,208 @@ func TestCheckRevocationFreshness(t *testing.T) {
 			}
 			if !tc.fresh && err == nil {
 				t.Fatalf("expected not fresh. Got no error")
+			}
+		})
+	}
+}
+
+// issueSubCA issues an intermediate CA certificate signed by ca, with the given serial and revocation endpoints.
+func (ca *revocationTestCA) issueSubCA(t *testing.T, cn string, serial int64, ocspURLs, crlURLs []string) *revocationTestCA {
+	t.Helper()
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(serial),
+		Subject:               pkix.Name{CommonName: cn},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		SubjectKeyId:          []byte(cn),
+		OCSPServer:            ocspURLs,
+		CRLDistributionPoints: crlURLs,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, &key.PublicKey, ca.key)
+	if err != nil {
+		t.Fatalf("could not create intermediate CA certificate: %s", err)
+	}
+	cert, _ := x509.ParseCertificate(der)
+	return &revocationTestCA{cert: cert, key: key}
+}
+
+// TestEnrollmentChainRevocation checks that enrollment verifies the revocation status of every certificate of the
+// verified chain against the certificate that signed it, and rejects a validation CA revoked in Lamassu. The DMS
+// trusts root; the device presents leaf plus, in most cases, an intermediate issued by root.
+func TestEnrollmentChainRevocation(t *testing.T) {
+	root := newRevocationTestCA(t, "root-ca")
+
+	good := func(sn *big.Int) ocsp.Response {
+		return ocsp.Response{Status: ocsp.Good, SerialNumber: sn, ThisUpdate: time.Now().Add(-time.Minute), NextUpdate: time.Now().Add(time.Hour)}
+	}
+	crlURL := func(t *testing.T, signer *revocationTestCA, revoked ...*big.Int) string {
+		srv := crlServer(t, signer, time.Now().Add(time.Hour), revoked...)
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+	// goodIntermediate is an intermediate whose root CRL does not list it.
+	goodIntermediate := func(t *testing.T) *revocationTestCA {
+		return root.issueSubCA(t, "intermediate-ca", 200, nil, []string{crlURL(t, root)})
+	}
+
+	tests := []struct {
+		name              string
+		chain             func(t *testing.T) []*x509.Certificate
+		rootStatus        models.CertificateStatus
+		allowUnverifiable bool
+		expectedErrs      []string
+	}{
+		{
+			name: "OK/OCSPGoodFromIntermediate",
+			chain: func(t *testing.T) []*x509.Certificate {
+				intermediate := goodIntermediate(t)
+				srv := newTestOCSPResponder(t, intermediate, good)
+				t.Cleanup(srv.Close)
+				return []*x509.Certificate{intermediate.issueLeaf(t, 101, []string{srv.URL}, nil), intermediate.cert}
+			},
+		},
+		{
+			name: "OK/CRLFromIntermediateNotListed",
+			chain: func(t *testing.T) []*x509.Certificate {
+				intermediate := goodIntermediate(t)
+				return []*x509.Certificate{intermediate.issueLeaf(t, 102, nil, []string{crlURL(t, intermediate)}), intermediate.cert}
+			},
+		},
+		{
+			name: "Err/CRLFromIntermediateListsCertificate",
+			chain: func(t *testing.T) []*x509.Certificate {
+				intermediate := goodIntermediate(t)
+				return []*x509.Certificate{intermediate.issueLeaf(t, 103, nil, []string{crlURL(t, intermediate, big.NewInt(103))}), intermediate.cert}
+			},
+			expectedErrs: []string{"certificate is revoked"},
+		},
+		{
+			name: "Err/IntermediateRevoked",
+			chain: func(t *testing.T) []*x509.Certificate {
+				intermediate := root.issueSubCA(t, "intermediate-ca", 201, nil, []string{crlURL(t, root, big.NewInt(201))})
+				return []*x509.Certificate{intermediate.issueLeaf(t, 104, nil, []string{crlURL(t, intermediate)}), intermediate.cert}
+			},
+			expectedErrs: []string{"certificate is revoked", "intermediate-ca", "SN=c9"},
+		},
+		{
+			name: "Err/IntermediateNoSource",
+			chain: func(t *testing.T) []*x509.Certificate {
+				intermediate := root.issueSubCA(t, "intermediate-ca", 202, nil, nil)
+				return []*x509.Certificate{intermediate.issueLeaf(t, 105, nil, []string{crlURL(t, intermediate)}), intermediate.cert}
+			},
+			expectedErrs: []string{"cannot be verified", "intermediate-ca", "SN=ca"},
+		},
+		{
+			name: "OK/IntermediateNoSourceAllowed",
+			chain: func(t *testing.T) []*x509.Certificate {
+				intermediate := root.issueSubCA(t, "intermediate-ca", 203, nil, nil)
+				return []*x509.Certificate{intermediate.issueLeaf(t, 106, nil, []string{crlURL(t, intermediate)}), intermediate.cert}
+			},
+			allowUnverifiable: true,
+		},
+		{
+			name: "OK/ExtraUnrelatedCertificateIgnored",
+			chain: func(t *testing.T) []*x509.Certificate {
+				intermediate := goodIntermediate(t)
+				unrelated := newRevocationTestCA(t, "unrelated-ca")
+				return []*x509.Certificate{intermediate.issueLeaf(t, 107, nil, []string{crlURL(t, intermediate)}), unrelated.cert, intermediate.cert}
+			},
+		},
+		{
+			name: "OK/LeafDirectlyUnderValidationCA",
+			chain: func(t *testing.T) []*x509.Certificate {
+				return []*x509.Certificate{root.issueLeaf(t, 108, nil, []string{crlURL(t, root)})}
+			},
+		},
+		{
+			name: "Err/ValidationCARevokedInLamassu",
+			chain: func(t *testing.T) []*x509.Certificate {
+				return []*x509.Certificate{root.issueLeaf(t, 109, nil, []string{crlURL(t, root)})}
+			},
+			rootStatus:   models.StatusRevoked,
+			expectedErrs: []string{"validation CA", "revoked"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			chain := tc.chain(t)
+			rootStatus := tc.rootStatus
+			if rootStatus == "" {
+				rootStatus = models.StatusActive
+			}
+
+			caMock := new(svcmock.MockCAService)
+			caMock.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return((*models.Certificate)(nil), errs.ErrCertificateNotFound)
+			caMock.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{
+				ID:          "root-ca",
+				Certificate: models.Certificate{Status: rootStatus, Certificate: (*models.X509Certificate)(root.cert)},
+			}, nil)
+			svc := DMSManagerServiceBackend{caClient: caMock, logger: logrus.NewEntry(logrus.New())}
+
+			opts := models.EnrollmentOptionsESTRFC7030{
+				AuthOptionsMTLS: models.AuthOptionsClientCertificate{
+					ValidationCAs:               []string{"root-ca"},
+					AllowUnverifiableRevocation: tc.allowUnverifiable,
+				},
+			}
+			_, err := svc.validateClientCertificateEnrollment(context.Background(), logrus.NewEntry(logrus.New()), opts, chain)
+			if len(tc.expectedErrs) == 0 {
+				if err != nil {
+					t.Fatalf("expected no error. Got %s", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q. Got none", tc.expectedErrs)
+			}
+			for _, expected := range tc.expectedErrs {
+				if !strings.Contains(err.Error(), expected) {
+					t.Fatalf("expected error containing '%s'. Got %s", expected, err)
+				}
+			}
+		})
+	}
+}
+
+// TestReenrollmentValidationCARevoked checks that re-enrollment rejects a certificate whose validation CA is revoked
+// in Lamassu, even when the certificate itself is not revoked.
+func TestReenrollmentValidationCARevoked(t *testing.T) {
+	enrollCA := newRevocationTestCA(t, "enroll-ca")
+
+	tests := []struct {
+		name        string
+		status      models.CertificateStatus
+		expectedErr string
+	}{
+		{name: "OK/EnrollCAActive", status: models.StatusActive},
+		{name: "Err/EnrollCARevoked", status: models.StatusRevoked, expectedErr: "validation CA enroll-ca is revoked"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := crlServer(t, enrollCA, time.Now().Add(time.Hour))
+			t.Cleanup(srv.Close)
+			leaf := enrollCA.issueLeaf(t, 301, nil, []string{srv.URL})
+
+			svc := notInLamassu()
+			ca := &models.CACertificate{
+				ID:          "enroll-ca",
+				Certificate: models.Certificate{Status: tc.status, Certificate: (*models.X509Certificate)(enrollCA.cert)},
+			}
+			_, err := svc.validateClientCertificateReenrollment(context.Background(), logrus.NewEntry(logrus.New()), ca.ID, ca, models.ReEnrollmentSettings{}, []*x509.Certificate{leaf}, leaf.Subject.CommonName)
+			if tc.expectedErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error. Got %s", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.expectedErr) {
+				t.Fatalf("expected error containing '%s'. Got %v", tc.expectedErr, err)
 			}
 		})
 	}
