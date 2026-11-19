@@ -724,10 +724,13 @@ components:
           type: boolean
           default: false
           description: >-
-            Accept client certificates whose revocation status cannot be checked because they are not managed
-            by Lamassu and include no OCSP or CRL distribution point. When false (default), such certificates
-            are rejected. Certificates whose OCSP/CRL endpoints are unreachable, return invalid or stale
-            responses, or report an unknown status are always rejected.
+            Accept certificates of the presented chain whose revocation status cannot be checked because they
+            are not managed by Lamassu and include no OCSP or CRL distribution point. On enrollment, the
+            revocation status of the client certificate and of every intermediate CA certificate between it and
+            the validation CA is checked; on re-enrollment, that of the client certificate. When false (default),
+            such certificates are rejected. Certificates whose OCSP/CRL endpoints are unreachable, return invalid
+            or stale responses, or report an unknown status are always rejected, and so is a validation CA that
+            is revoked in Lamassu.
 
     DeviceProvisionProfile:
       type: object
