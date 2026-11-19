@@ -123,8 +123,6 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 		return nil, nil, nil, nil, err
 	}
 
-	policyManager := service.NewPolicyManager(policyStore)
-
 	schemaDbs := make(map[string]*gorm.DB)
 	for schemaName, credentials := range conf.Credentials {
 		lDB.Infof("Creating database connection for schema: %s", schemaName)
@@ -144,6 +142,8 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+
+	policyManager := service.NewPolicyManager(policyStore, service.WithPolicySchemas(eng.GetSchemas()))
 
 	if err := seedStorage(context.Background(), conf, principalManager, policyManager); err != nil {
 		return nil, nil, nil, nil, err

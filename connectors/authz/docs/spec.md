@@ -47,7 +47,7 @@ Example (rule-level + relation-level wildcard):
         "schemaName": "public",
         "entityType": "building"
       },
-      "via": "parent",
+      "via": "organization_id",
       "actions": ["*"],
       "relations": []
     }
@@ -1194,7 +1194,7 @@ Policies determine how permissions cascade through entity relationships. The nes
           "schemaName": "public",
           "entityType": "building"
         },
-        "via": "parent",
+        "via": "organization_id",
         "actions": ["read", "write", "delete"],
         "relations": [
           {
@@ -1202,7 +1202,7 @@ Policies determine how permissions cascade through entity relationships. The nes
               "schemaName": "public",
               "entityType": "gateway"
             },
-            "via": "parent",
+            "via": "building_id",
             "actions": ["read", "write", "configure"],
             "relations": [
               {
@@ -1210,7 +1210,7 @@ Policies determine how permissions cascade through entity relationships. The nes
                   "schemaName": "public",
                   "entityType": "device"
                 },
-                "via": "parent",
+                "via": "gateway_id",
                 "actions": ["read", "write", "control"]
               }
             ]
@@ -1230,7 +1230,7 @@ Policies determine how permissions cascade through entity relationships. The nes
           "schemaName": "public",
           "entityType": "gateway"
         },
-        "via": "parent",
+        "via": "building_id",
         "actions": ["read", "write", "configure"],
         "relations": [
           {
@@ -1238,7 +1238,7 @@ Policies determine how permissions cascade through entity relationships. The nes
               "schemaName": "public",
               "entityType": "device"
             },
-            "via": "parent",
+            "via": "gateway_id",
             "actions": ["read", "write", "control"]
           }
         ]
@@ -1256,7 +1256,7 @@ Policies determine how permissions cascade through entity relationships. The nes
           "schemaName": "public",
           "entityType": "device"
         },
-        "via": "parent",
+        "via": "gateway_id",
         "actions": ["read", "write", "control"]
       }
     ]
@@ -1280,7 +1280,7 @@ Each policy defines:
 - **`actions`**: What actions can be performed directly on this entity (supports both atomic and global actions)
 - **`relations`**: Nested array defining how permissions cascade to related entities
   - **`to`**: The target entity as object `{ schemaName, entityType }`
-  - **`via`**: The relation name matching a foreign key defined in the schema (e.g., "organization", "building", "gateway")
+  - **`via`**: The `foreign_key` column (or the relation `name`) that the **target** entity's schema declares towards the rule's entity (e.g., `organization_id` for organization → building, `building_id` for building → gateway, `gateway_id` for gateway → device). A `via` the target schema does not declare is never placed in SQL. `POST`/`PUT /policies` reject it with `400`, as well as a `to` that is not a loaded schema (for a rule with a wildcard `schemaName` or `entityType`, the `via` only has to resolve from one of the schemas the rule matches). A non-wildcard rule that has `relations` must itself match a loaded schema too; otherwise the save is rejected with `400` (e.g. `ca.issuance_profile is not a loaded schema in namespace pki`), so load the entity again or remove the rule's `relations` before saving the policy. A wildcard rule that matches no loaded schema is not checked. For a policy already stored, the relation is skipped, grants nothing and is logged as a warning with the policy ID and the `via`
   - **`actions`**: Which actions are granted on the target entity
   - **`relations`**: Recursive - can nest further to cascade through multiple levels
 
@@ -1295,9 +1295,9 @@ Given: User Alice has `owner_id` set in `organizations` table for organization `
 
 The engine recursively evaluates:
 1. Alice owns `organization:acme-corp` (via `owner_id` column) → can perform `["read", "write", "delete"]`
-2. Follow nested relation `to: { schemaName: "public", entityType: "building" }` `via: "parent"` → Alice gets `["read", "write", "delete"]` on all buildings where `buildings.organization_id = 'acme-corp'`
-3. Continue to nested `to: { schemaName: "public", entityType: "gateway" }` `via: "parent"` → Alice gets `["read", "write", "configure"]` on all gateways where `iot_gateways.building_id` matches those buildings
-4. Continue to nested `to: { schemaName: "public", entityType: "device" }` `via: "parent"` → Alice gets `["read", "write", "control"]` on all devices where `iot_devices.gateway_id` matches those gateways
+2. Follow nested relation `to: { schemaName: "public", entityType: "building" }` `via: "organization_id"` → Alice gets `["read", "write", "delete"]` on all buildings where `buildings.organization_id = 'acme-corp'`
+3. Continue to nested `to: { schemaName: "public", entityType: "gateway" }` `via: "building_id"` → Alice gets `["read", "write", "configure"]` on all gateways where `iot_gateways.building_id` matches those buildings
+4. Continue to nested `to: { schemaName: "public", entityType: "device" }` `via: "gateway_id"` → Alice gets `["read", "write", "control"]` on all devices where `iot_devices.gateway_id` matches those gateways
 
 **Result:** Ownership at the organization level (via `owner_id` foreign key) cascades all the way down through the entire hierarchy automatically.
 

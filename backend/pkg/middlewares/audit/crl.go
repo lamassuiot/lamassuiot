@@ -61,3 +61,33 @@ func (mw *CRLAuditEventPublisher) InitCRLSettings(ctx context.Context, caID stri
 
 	return mw.next.InitCRLSettings(ctx, caID)
 }
+
+func (mw *CRLAuditEventPublisher) FinalizeCRLSettings(ctx context.Context, input services.FinalizeCRLSettingsInput) (output *models.CRLSettings, finalCRL *x509.RevocationList, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventFinalizeCRLSettings, input, err, output)
+	}()
+
+	return mw.next.FinalizeCRLSettings(ctx, input)
+}
+
+func (mw *CRLAuditEventPublisher) ArchiveCRLSettings(ctx context.Context, input services.ArchiveCRLSettingsInput) (output *models.CRLSettings, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventArchiveCRLSettings, input, err, output)
+	}()
+
+	return mw.next.ArchiveCRLSettings(ctx, input)
+}
+
+func (mw *CRLAuditEventPublisher) DeleteCRLSettings(ctx context.Context, input services.DeleteCRLSettingsInput) (err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteCRLSettings, input, err, nil)
+	}()
+
+	return mw.next.DeleteCRLSettings(ctx, input)
+}
+
+// ReconcileCRLSettings records nothing of its own: the changes it makes go through FinalizeCRLSettings and
+// ArchiveCRLSettings, which are audited.
+func (mw *CRLAuditEventPublisher) ReconcileCRLSettings(ctx context.Context, input services.ReconcileCRLSettingsInput) (*models.CRLSettings, error) {
+	return mw.next.ReconcileCRLSettings(ctx, input)
+}

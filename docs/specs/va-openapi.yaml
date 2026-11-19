@@ -276,13 +276,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: CRL settings or signer certificate not found
+          description: CRL settings, signer certificate, or signer key not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
           description: The CRL settings are not ACTIVE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - CRL Settings
+      summary: Purge archived CRL settings
+      description: |
+        Deletes the CRL settings of a CA that no longer exists. Only `ARCHIVED` settings can be deleted. The CRLs
+        already published stay in the CRL bucket, but `/crl/{id}` stops serving them.
+      operationId: deleteCrlSettings
+      x-authz:
+        namespace: pki
+        schema_name: va
+        entity_type: crl_settings
+        action: delete
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      responses:
+        '204':
+          description: CRL settings deleted
+        '400':
+          description: Bad request - invalid CA ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: CRL settings not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The CRL settings are not ARCHIVED
           content:
             application/json:
               schema:
@@ -361,10 +404,12 @@ components:
           $ref: '#/components/schemas/CRLSettingsOptions'
         status:
           type: string
-          enum: [ACTIVE, ARCHIVED]
+          enum: [ACTIVE, FINAL, ARCHIVED]
           description: |
-            `ACTIVE` settings generate CRLs. `ARCHIVED` ones belong to a CA that no longer exists: their last CRL is
-            still served, but it is never regenerated. Read-only.
+            `ACTIVE` settings generate CRLs, and retain the key of their signer. `FINAL` ones belong to a revoked or
+            expired CA: the final CRL of a revoked CA is valid until the CA expires, an expired CA gets none, and no
+            CRL is generated anymore. `ARCHIVED` ones belong to a CA that no longer exists: their last CRL is still
+            served, but it is never regenerated. Read-only.
         latest_crl:
           $ref: '#/components/schemas/LatestCRLMeta'
 

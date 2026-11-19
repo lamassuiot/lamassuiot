@@ -43,7 +43,7 @@ func TestVAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 3, public)
-	assert.Equal(t, 3, protected)
+	assert.Equal(t, 4, protected)
 	spec, err := os.Open("../../../docs/specs/va-openapi.yaml")
 	require.NoError(t, err)
 	defer spec.Close()
