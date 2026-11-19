@@ -482,6 +482,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Policy'
+        '400':
+          description: >-
+            Invalid policy: malformed body, an ID with the reserved `lamassu.` prefix, or a
+            relation the loaded schemas do not declare (undeclared `via`, or a `to` that is not a
+            loaded schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: A policy with this ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Policy could not be stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /policies/search:
     get:
@@ -559,6 +580,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Policy'
+        '400':
+          description: >-
+            Invalid policy: malformed body, or a relation the loaded schemas do not declare
+            (undeclared `via`, or a `to` that is not a loaded schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: The policy is system-managed (`lamassu.` prefix) and cannot be updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Policy could not be stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       x-authz:
         namespace: authz
@@ -930,6 +977,19 @@ components:
           items:
             type: object
             additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+          additionalProperties:
+            type: string
 
     GrantPolicyRequest:
       type: object
