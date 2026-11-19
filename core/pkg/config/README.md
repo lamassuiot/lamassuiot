@@ -45,10 +45,16 @@ Schema names are converted to uppercase and non-alphanumeric characters are
 replaced with `_`. The loader rejects configurations where two schema names
 would produce the same environment-variable prefix.
 
-Unset and empty environment variables are treated as unset by Viper, so the
-YAML value remains in use. A non-empty environment variable overrides the YAML
-value. The loader deliberately does not enable `AutomaticEnv`; only the
-explicit credential paths above are eligible for environment overrides.
+For the fixed credential paths above, an unset environment variable is ignored
+and a non-empty environment variable overrides the YAML value. If one of these
+variables is set but empty while the corresponding YAML or default value is
+non-empty, the loader rejects the configuration instead of silently falling
+back to that value. This applies to schema-specific Authz bindings as well. If
+the corresponding YAML or default value is empty or absent, an empty variable
+is ignored.
+The loader deliberately does not enable `AutomaticEnv`; only the explicit
+credential paths above and schema-specific Authz bindings are eligible for
+environment overrides.
 
 Kubernetes deployments can inject these variables using `secretKeyRef`.
 The corresponding credentials should not also be rendered into a ConfigMap.

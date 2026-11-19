@@ -56,6 +56,13 @@ var credentialEnvBindings = []credentialEnvBinding{
 
 var dynamicCredentialFields = []string{"username", "password"}
 
+func rejectEmptyCredentialEnv(vp *viper.Viper, configKey, envName string) error {
+	if value, exists := os.LookupEnv(envName); exists && value == "" && vp.GetString(configKey) != "" {
+		return fmt.Errorf("credential environment variable %s is set but empty while configuration key %s has a value", envName, configKey)
+	}
+	return nil
+}
+
 func credentialSchemaEnvPart(schema string) string {
 	return strings.ToUpper(strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
@@ -70,8 +77,8 @@ func bindCredentialEnv(vp *viper.Viper) error {
 		if err := vp.BindEnv(binding.configKey, binding.envName); err != nil {
 			return fmt.Errorf("could not bind environment variable %s to %s: %w", binding.envName, binding.configKey, err)
 		}
-		if value, exists := os.LookupEnv(binding.envName); exists && value == "" && vp.IsSet(binding.configKey) {
-			return fmt.Errorf("credential environment variable %s is set but empty while configuration key %s has a value", binding.envName, binding.configKey)
+		if err := rejectEmptyCredentialEnv(vp, binding.configKey, binding.envName); err != nil {
+			return err
 		}
 	}
 
@@ -90,6 +97,9 @@ func bindCredentialEnv(vp *viper.Viper) error {
 			env := envPrefix + "_" + strings.ToUpper(field)
 			if err := vp.BindEnv(key, env); err != nil {
 				return fmt.Errorf("could not bind environment variable %s to %s: %w", env, key, err)
+			}
+			if err := rejectEmptyCredentialEnv(vp, key, env); err != nil {
+				return err
 			}
 		}
 	}

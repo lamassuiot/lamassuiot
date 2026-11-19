@@ -150,7 +150,10 @@ credentials:
     provider: postgres
 `), nil)
 
-	require.ErrorContains(t, err, `schemas "pki.v2" and "pki_v2" produce the same environment variable name`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pki.v2")
+	assert.Contains(t, err.Error(), "pki_v2")
+	assert.Contains(t, err.Error(), "produce the same environment variable name")
 }
 
 func TestReadConfigIgnoresCredentialEnvironmentVariablesForAbsentSchemas(t *testing.T) {
@@ -168,6 +171,31 @@ credentials:
 	assert.Equal(t, "yaml-pki-user", config.Credentials["pki"].Config["username"])
 	_, exists := config.Credentials["foo"]
 	assert.False(t, exists)
+}
+
+func TestReadConfigRejectsEmptyCredentialEnvironmentVariablesForSchema(t *testing.T) {
+	t.Setenv("LAMASSU_AUTHZ_CREDENTIALS_PKI_PASSWORD", "")
+
+	_, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+credentials:
+  pki:
+    provider: postgres
+    password: yaml-pki-password
+`), nil)
+
+	require.ErrorContains(t, err, "LAMASSU_AUTHZ_CREDENTIALS_PKI_PASSWORD is set but empty")
+}
+
+func TestReadConfigAllowsEmptyCredentialEnvironmentVariableWithEmptyYAMLValue(t *testing.T) {
+	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "")
+
+	config, err := readConfig[CredentialOverrideConfig](writeCredentialConfig(t, `
+storage:
+  provider: postgres
+  password: ""
+`), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "", config.Storage.Config["password"])
 }
 
 func writeCredentialConfig(t *testing.T, config string) string {
@@ -368,6 +396,33 @@ smtp_server:
 }
 
 func TestReadConfigEmptyCredentialEnvironmentVariablesFailWhenYAMLValueExists(t *testing.T) {
+	credentialEnvVars := []string{
+		"LAMASSU_POSTGRES_USERNAME",
+		"LAMASSU_POSTGRES_PASSWORD",
+		"LAMASSU_AMQP_USERNAME",
+		"LAMASSU_AMQP_PASSWORD",
+		"LAMASSU_SMTP_USERNAME",
+		"LAMASSU_SMTP_PASSWORD",
+	}
+	originalEnv := make(map[string]string, len(credentialEnvVars))
+	originallySet := make(map[string]bool, len(credentialEnvVars))
+	for _, envName := range credentialEnvVars {
+		if value, ok := os.LookupEnv(envName); ok {
+			originalEnv[envName] = value
+			originallySet[envName] = true
+		}
+		require.NoError(t, os.Unsetenv(envName))
+	}
+	t.Cleanup(func() {
+		for _, envName := range credentialEnvVars {
+			if originallySet[envName] {
+				assert.NoError(t, os.Setenv(envName, originalEnv[envName]))
+			} else {
+				assert.NoError(t, os.Unsetenv(envName))
+			}
+		}
+	})
+
 	t.Setenv("LAMASSU_POSTGRES_PASSWORD", "")
 	t.Setenv("LAMASSU_AMQP_PASSWORD", "")
 	t.Setenv("LAMASSU_SMTP_PASSWORD", "")
