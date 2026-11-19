@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -45,7 +46,6 @@ func TestEditCAProfiles(t *testing.T) {
 	// Helper function to create a CA
 	createCA := func(t *testing.T, caID string, profileID string) *models.CACertificate {
 		ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			ID:           caID,
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 			Subject:      models.Subject{CommonName: "TestCA"},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: caDur},
@@ -70,7 +70,7 @@ func TestEditCAProfiles(t *testing.T) {
 				initialProfile := createProfile(t, "InitialProfile", "Initial profile description", models.Validity{Type: models.Duration, Duration: issuanceDur})
 
 				// Create CA with initial profile
-				ca := createCA(t, "test-ca-1", initialProfile.ID)
+				ca := createCA(t, uuid.NewV7().String(), initialProfile.ID)
 
 				// Create new profile to switch to
 				newProfile := createProfile(t, "NewProfile", "New profile description", models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 6)})
@@ -140,7 +140,7 @@ func TestEditCAProfiles(t *testing.T) {
 				profile := createProfile(t, "SameProfile", "Same profile description", models.Validity{Type: models.Duration, Duration: issuanceDur})
 
 				// Create CA with profile
-				ca := createCA(t, "test-ca-2", profile.ID)
+				ca := createCA(t, uuid.NewV7().String(), profile.ID)
 
 				// Return same profile ID for update
 				return ca.ID, profile.ID, nil
@@ -174,7 +174,7 @@ func TestEditCAProfiles(t *testing.T) {
 				initialProfile := createProfile(t, "DurationProfile", "Duration-based profile", models.Validity{Type: models.Duration, Duration: issuanceDur})
 
 				// Create CA with initial profile
-				ca := createCA(t, "test-ca-3", initialProfile.ID)
+				ca := createCA(t, uuid.NewV7().String(), initialProfile.ID)
 
 				// Create new profile with time validity
 				futureTime := time.Now().Add(time.Hour * 48)
@@ -209,7 +209,7 @@ func TestEditCAProfiles(t *testing.T) {
 				profile3 := createProfile(t, "Profile3", "Third profile", models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 4)})
 
 				// Create CA with first profile
-				ca := createCA(t, "test-ca-4", profile1.ID)
+				ca := createCA(t, uuid.NewV7().String(), profile1.ID)
 
 				// Update to second profile
 				_, err := serverTest.CA.Service.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
@@ -248,7 +248,7 @@ func TestEditCAProfiles(t *testing.T) {
 				initialProfile := createProfile(t, "InitialProfile", "Initial profile description", models.Validity{Type: models.Duration, Duration: issuanceDur})
 
 				// Create CA with initial profile
-				ca := createCA(t, "test-ca-invalid-profile", initialProfile.ID)
+				ca := createCA(t, uuid.NewV7().String(), initialProfile.ID)
 
 				// Return a non-existent profile ID
 				return ca.ID, "non-existent-profile-id", nil
@@ -686,7 +686,6 @@ func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
 
 				// Create CA
 				ca, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:           "test-ca-with-certs",
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},

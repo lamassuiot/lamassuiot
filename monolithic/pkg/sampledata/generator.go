@@ -69,9 +69,7 @@ func PopulateSampleData(ctx context.Context, logger *logrus.Entry, kmsServiceURL
 	// Step 3: Create a Generated Root CA
 	logger.Info("Creating Generated Root CA...")
 
-	generatedCAID := "sample-generated-root-ca"
 	generatedCA, err := caService.CreateCA(ctx, services.CreateCAInput{
-		ID: generatedCAID,
 		Subject: models.Subject{
 			CommonName:       "Sample Generated Root CA",
 			Organization:     "LamassuIoT Sample",
@@ -1064,9 +1062,7 @@ func importKeyAndCreateCA(ctx context.Context, logger *logrus.Entry, kmsService 
 
 	// Step 2: Create the CA using the imported key
 	logger.Info("Creating CA with imported key...")
-	caID := "sample-imported-root-ca"
 	createdCA, err := caService.CreateCA(ctx, services.CreateCAInput{
-		ID: caID,
 		Subject: models.Subject{
 			CommonName:       "Sample Imported Root CA",
 			Organization:     "LamassuIoT Sample",

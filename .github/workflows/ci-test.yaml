@@ -289,6 +289,7 @@ jobs:
     name: Codecov notifications
     needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -306,6 +307,38 @@ jobs:
           fail_ci_if_error: true
           verbose: true
 
+  codecov-watchdog:
+    name: Codecov result watchdog
+    needs: [codecov-notify]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: read
+      statuses: read
+    env:
+      # Codecov associates pull_request uploads with the PR head commit. Push
+      # and workflow_dispatch runs use the workflow commit directly.
+      CODECOV_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOTIFY_RESULT: ${{ needs.codecov-notify.result }}
+      POLL_SECONDS: 20
+      MAX_ATTEMPTS: 30
+      MAX_API_FAILURES: 5
+    steps:
+      # manual_trigger keeps Codecov statuses pending until codecov-notify completes.
+      # Keep polling so a permanently stalled Codecov result fails this required check.
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Wait for Codecov result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash ci/codecov-watchdog.sh
+        
   sonarqube:
     name: SonarQube
     # Fork pull requests do not receive repository secrets, so SONAR_TOKEN is unavailable.
@@ -395,3 +428,8 @@ jobs:
 
       - name: Run go vet
         run: go vet ./connectors/authz/... ./engines/crypto/... ./engines/fs-storage/... ./backend/pkg/jobs
+
+      - name: Check Codecov watchdog scripts
+        run: |
+          shellcheck ci/codecov-watchdog.sh ci/test-codecov-watchdog.sh
+          bash ci/test-codecov-watchdog.sh

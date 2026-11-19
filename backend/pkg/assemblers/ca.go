@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/specs"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/jobs"
 	auditpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/audit"
@@ -19,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/docs/specs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	log "github.com/sirupsen/logrus"
 )

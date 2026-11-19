@@ -197,6 +197,7 @@ jobs:
             authz,
             lamassu-db-migration,
             ca-to-kms-migration,
+            upgrade-check,
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
@@ -264,6 +265,7 @@ jobs:
             authz,
             lamassu-db-migration,
             ca-to-kms-migration,
+            upgrade-check,
           ]
     uses: ./.github/workflows/trivy-image-scan.yaml
     with:

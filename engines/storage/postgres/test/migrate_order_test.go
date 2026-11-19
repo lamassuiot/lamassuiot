@@ -75,6 +75,6 @@ func TestMigratingVAMigratesCAAndKMSFirst(t *testing.T) {
 	logger := helpers.SetupLogger(config.Info, "PostgreSQL", "VA dependencies")
 	require.NoError(t, postgres.MigrateDatabase(logger, cfg, postgres.VA_SCHEMA))
 	var valid bool
-	require.NoError(t, suite.DB[postgres.VA_SCHEMA].Raw(`SELECT convalidated FROM pg_constraint WHERE conrelid = 'va.va_role'::regclass AND conname = 'va_role_signer_certificate_fk'`).Scan(&valid).Error)
+	require.NoError(t, suite.DB[postgres.VA_SCHEMA].Raw(`SELECT convalidated FROM pg_constraint WHERE conrelid = 'va.crl_settings'::regclass AND conname = 'crl_settings_signer_cert_fk'`).Scan(&valid).Error)
 	require.True(t, valid)
 }
