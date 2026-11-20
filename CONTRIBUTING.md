@@ -184,6 +184,17 @@ Signed-off-by: Your Name <your.email@example.com>
 
 This line certifies that you wrote the code or otherwise have the right to submit it under the open source license indicated in the repository.
 
+# Pull requests and CI
+
+Pull requests run CI checks, including module tests and Codecov coverage
+reporting. Coverage uploads are evaluated together after the test jobs finish.
+If Codecov reports a failure, the check fails immediately. If its result stays
+pending or never appears, the watchdog fails the check after about 10 minutes.
+
+The watchdog reports the Codecov result; it does not restart Codecov. If the
+check fails or times out, inspect the workflow run and Codecov check to
+understand what needs attention.
+
 ## Dependency Review
 
 Every pull request runs a required dependency review. Changes that

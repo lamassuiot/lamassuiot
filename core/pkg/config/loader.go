@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -29,8 +31,109 @@ func EncodeStruct[E any](source E) (map[string]any, error) {
 	return target, nil
 }
 
+type credentialEnvBinding struct {
+	configKey string
+	envName   string
+}
+
+// credentialEnvBindings is the allowlist of fixed credential paths that may
+// be overridden by the process environment. Keep this explicit: enabling
+// AutomaticEnv would also expose non-secret configuration to implicit
+// overrides.
+var credentialEnvBindings = []credentialEnvBinding{
+	{configKey: "storage::username", envName: "LAMASSU_POSTGRES_USERNAME"},
+	{configKey: "storage::password", envName: "LAMASSU_POSTGRES_PASSWORD"},
+	{configKey: "authz_db::username", envName: "LAMASSU_AUTHZ_DB_USERNAME"},
+	{configKey: "authz_db::password", envName: "LAMASSU_AUTHZ_DB_PASSWORD"},
+	{configKey: "publisher_event_bus::basic_auth::username", envName: "LAMASSU_AMQP_USERNAME"},
+	{configKey: "publisher_event_bus::basic_auth::password", envName: "LAMASSU_AMQP_PASSWORD"},
+	{configKey: "subscriber_event_bus::basic_auth::username", envName: "LAMASSU_AMQP_USERNAME"},
+	{configKey: "subscriber_event_bus::basic_auth::password", envName: "LAMASSU_AMQP_PASSWORD"},
+	{configKey: "subscriber_dlq_event_bus::basic_auth::username", envName: "LAMASSU_AMQP_USERNAME"},
+	{configKey: "subscriber_dlq_event_bus::basic_auth::password", envName: "LAMASSU_AMQP_PASSWORD"},
+	{configKey: "smtp_server::username", envName: "LAMASSU_SMTP_USERNAME"},
+	{configKey: "smtp_server::password", envName: "LAMASSU_SMTP_PASSWORD"},
+}
+
+var dynamicCredentialFields = []string{"username", "password"}
+
+type credentialEnvError struct {
+	err error
+}
+
+func (e *credentialEnvError) Error() string {
+	return e.err.Error()
+}
+
+func (e *credentialEnvError) Unwrap() error {
+	return e.err
+}
+
+func rejectEmptyCredentialEnv(vp *viper.Viper, configKey, envName string) error {
+	if value, exists := os.LookupEnv(envName); exists && value == "" && vp.GetString(configKey) != "" {
+		return fmt.Errorf("credential environment variable %s is set but empty while configuration key %s has a value", envName, configKey)
+	}
+	return nil
+}
+
+func credentialSchemaEnvPart(schema string) string {
+	return strings.ToUpper(strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '_'
+	}, schema))
+}
+
+func bindCredentialEnv(vp *viper.Viper) error {
+	for _, binding := range credentialEnvBindings {
+		if err := vp.BindEnv(binding.configKey, binding.envName); err != nil {
+			return fmt.Errorf("could not bind environment variable %s to %s: %w", binding.envName, binding.configKey, err)
+		}
+		if err := rejectEmptyCredentialEnv(vp, binding.configKey, binding.envName); err != nil {
+			return err
+		}
+	}
+
+	credentials := vp.GetStringMap("credentials")
+	envNames := make(map[string]string, len(credentials))
+	for schema := range credentials {
+		envPart := credentialSchemaEnvPart(schema)
+		envPrefix := "LAMASSU_AUTHZ_CREDENTIALS_" + envPart
+		if previousSchema, exists := envNames[envPart]; exists && previousSchema != schema {
+			if credentialSchemaEnvIsSet(envPrefix) {
+				return fmt.Errorf("authz credential schemas %q and %q produce the same environment variable name %s", previousSchema, schema, envPrefix)
+			}
+			log.Warnf("authz credential schemas %q and %q produce the same environment variable name %s; YAML values will be used until that environment variable is set", previousSchema, schema, envPrefix)
+		}
+		envNames[envPart] = schema
+
+		for _, field := range dynamicCredentialFields {
+			key := "credentials::" + schema + "::" + field
+			env := envPrefix + "_" + strings.ToUpper(field)
+			if err := vp.BindEnv(key, env); err != nil {
+				return fmt.Errorf("could not bind environment variable %s to %s: %w", env, key, err)
+			}
+			if err := rejectEmptyCredentialEnv(vp, key, env); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func credentialSchemaEnvIsSet(envPrefix string) bool {
+	for _, field := range dynamicCredentialFields {
+		if _, exists := os.LookupEnv(envPrefix + "_" + strings.ToUpper(field)); exists {
+			return true
+		}
+	}
+	return false
+}
+
 func readConfig[E any](configFilePath string, defaults *E) (*E, error) {
-	vp := viper.New()
+	vp := viper.NewWithOptions(viper.KeyDelimiter("::"))
 	defaultsMap := map[string]any{}
 
 	if defaults != nil {
@@ -59,6 +162,10 @@ func readConfig[E any](configFilePath string, defaults *E) (*E, error) {
 		// }
 	}
 
+	if err := bindCredentialEnv(vp); err != nil {
+		return nil, fmt.Errorf("could not configure credential environment overrides: %w", &credentialEnvError{err: err})
+	}
+
 	var config E
 	err := vp.Unmarshal(&config)
 	if err != nil {
@@ -82,6 +189,10 @@ func LoadConfig[E any](defaults *E) (*E, error) {
 		conf, err = readConfig[E](configFileEnv, defaults)
 
 		if err != nil {
+			var credentialErr *credentialEnvError
+			if errors.As(err, &credentialErr) {
+				return nil, err
+			}
 			log.Warnf("failed to load config file specified in ENV '%s' variable. will try to load from standard paths: %s", configFileEnvVar, err)
 			loadStandardPaths = true
 		}

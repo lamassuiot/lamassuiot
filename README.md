@@ -95,14 +95,6 @@ We welcome community contributions! To get started:
 2. Open an issue describing your proposal or bug report.
 3. Submit a pull request with a focused change set and accompanying tests.
 
-### CI coverage reporting
-
-The CI workflow uploads coverage for each module to Codecov and then runs a
-separate notification step so all module uploads are evaluated together. The
-workflow also includes a Codecov watchdog: if the Codecov checks remain
-pending, fail, or never appear within the configured timeout, the workflow
-fails instead of leaving the pull request blocked indefinitely.
-
 ## Security
 
 To report a security vulnerability, do **not** open a public issue — follow

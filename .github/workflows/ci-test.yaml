@@ -337,7 +337,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          bash ci/codecov-watchdog.sh
+          bash .github/codecov-watchdog.sh
         
   sonarqube:
     name: SonarQube
@@ -431,5 +431,5 @@ jobs:
 
       - name: Check Codecov watchdog scripts
         run: |
-          shellcheck ci/codecov-watchdog.sh ci/test-codecov-watchdog.sh
-          bash ci/test-codecov-watchdog.sh
+          shellcheck .github/codecov-watchdog.sh .github/test-codecov-watchdog.sh
+          bash .github/test-codecov-watchdog.sh
