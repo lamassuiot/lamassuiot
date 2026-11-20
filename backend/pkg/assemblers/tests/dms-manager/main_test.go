@@ -612,6 +612,11 @@ func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
 			require.NoError(t, s.Authz.Client.Policies.Delete(ctx, "policy-b"))
 			return ca.ID
 		}},
+		{name: "x509 principal not managed for this RA", principalType: "x509", wantErr: errs.ErrValidateBadRequest, prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
+			_, err := s.Authz.Client.Principals.Create(ctx, &dto.CreatePrincipalRequest{ID: "dms:ra-1", Name: "operator's", Type: "x509", AuthConfig: &authzmodels.AuthConfig{"match_mode": "serial_and_ca"}})
+			require.NoError(t, err)
+			return ca.ID
+		}},
 		{name: "principal of another type", principalType: "oidc", prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
 			_, err := s.Authz.Client.Principals.Create(ctx, &dto.CreatePrincipalRequest{ID: "dms:ra-1", Name: "someone else", Type: "oidc", AuthConfig: &authzmodels.AuthConfig{}})
 			require.NoError(t, err)
@@ -674,23 +679,6 @@ func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
 		dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "ra-1"})
 		require.NoError(t, err)
 		assert.Equal(t, caID, dms.Settings.EnrollmentSettings.EnrollmentCA)
-	})
-
-	t.Run("a failed update does not keep the new CA on a principal stored without auth_config", func(t *testing.T) {
-		dmsMgr, servers, _ := createRA(t)
-		other := createAuthzTestCA(t, servers, "other-ca")
-		require.NoError(t, servers.Authz.DB.Exec("UPDATE principals SET auth_config = 'null'::jsonb WHERE id = 'dms:ra-1'").Error)
-		require.NoError(t, servers.Authz.Client.Principals.RevokePolicy(ctx, "dms:ra-1", "policy-b"))
-		servers.Authz.FailWhen(isGrant)
-		next := authzTestSettings(other.ID, true)
-
-		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &next})
-
-		require.Error(t, err)
-		servers.Authz.FailWhen(func(*http.Request) bool { return false })
-		if config := authzPrincipal(t, servers, "dms:ra-1").AuthConfig; config != nil {
-			assert.NotContains(t, *config, "ca_trust", "the principal trusts no CA instead of the one that was never saved")
-		}
 	})
 
 	t.Run("update while authz is down keeps the stored RA", func(t *testing.T) {

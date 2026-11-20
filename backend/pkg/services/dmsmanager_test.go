@@ -10,6 +10,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -84,10 +85,14 @@ type authzStub struct {
 	policies   map[string]bool
 	failGrant  bool
 	failDelete bool
+	failGet    bool
 	onGrant    func() // runs once, in the middle of the first grant, which then fails
 }
 
 func (a *authzStub) Get(_ context.Context, id string) (*dto.PrincipalResponse, error) {
+	if a.failGet {
+		return nil, &authzsdk.APIError{StatusCode: 503}
+	}
 	if p, ok := a.principals[id]; ok {
 		read := *p // the real client decodes a new object on every read
 		return &read, nil
@@ -259,6 +264,7 @@ func TestDMSAuthzPrincipalFollowsTheDMS(t *testing.T) {
 	require.NoError(t, env.create("ra-1", "ca-1", true))
 	require.NoError(t, env.create("ra-2", "ca-1", false))
 	assert.Equal(t, "x509", env.authz.principals["dms:ra-1"].Type)
+	assert.Equal(t, "ra-1", managedDMS(env.authz.principals["dms:ra-1"].AuthConfig))
 	assert.ElementsMatch(t, []string{"policy-a", "policy-b"}, env.grantedPolicies("ra-1"))
 	assert.NotContains(t, env.authz.principals, "dms:ra-2", "an RA with the switch off gets no principal")
 
@@ -322,6 +328,15 @@ func TestDMSAuthzPrincipalCreateFailureLeavesNothingBehind(t *testing.T) {
 		})
 	}
 
+	t.Run("an x509 principal not managed for this RA is kept", func(t *testing.T) {
+		env := newDMSAuthzEnv(t, true)
+		config := &authzmodels.AuthConfig{"match_mode": "serial_and_ca"}
+		env.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "x509", AuthConfig: config}
+
+		assert.ErrorIs(t, env.create("ra-1", "ca-1", true), errs.ErrValidateBadRequest)
+		assert.Equal(t, config, env.authz.principals["dms:ra-1"].AuthConfig)
+	})
+
 	t.Run("principal of another type is kept", func(t *testing.T) {
 		env := newDMSAuthzEnv(t, true)
 		env.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "oidc"}
@@ -341,10 +356,6 @@ func TestDMSAuthzPrincipalFailedUpdateRestoresThePrincipal(t *testing.T) {
 			e.authz.grants["dms:ra-1"] = e.authz.grants["dms:ra-1"][:1]
 			e.authz.failGrant = true
 		}},
-		{name: "the principal was stored without auth_config", prepare: func(e *dmsAuthzEnv) {
-			e.authz.principals["dms:ra-1"].AuthConfig = nil
-			e.repo.failUpdate = true
-		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -355,33 +366,66 @@ func TestDMSAuthzPrincipalFailedUpdateRestoresThePrincipal(t *testing.T) {
 
 			require.Error(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
 
-			restored := env.authz.principals["dms:ra-1"].AuthConfig
-			if before == nil {
-				assert.NotContains(t, *restored, "ca_trust", "a principal without a stored config trusts no CA")
-				return
-			}
-			assert.Equal(t, before, restored, "the principal does not trust the CA that was never saved")
+			assert.Equal(t, before, env.authz.principals["dms:ra-1"].AuthConfig, "the principal does not trust the CA that was never saved")
 			assert.Equal(t, "ca-1", env.repo.dms["ra-1"].Settings.EnrollmentSettings.EnrollmentCA)
 		})
 	}
 }
 
 func TestDMSAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
-	// The second request saves another CA, or the same one the first request was setting.
-	for _, newerCA := range []string{"ca-3", "ca-2"} {
-		t.Run("newer update to "+newerCA, func(t *testing.T) {
+	cases := []struct {
+		name     string
+		newerCA  string
+		failRead bool // the first request can not read the principal back
+	}{
+		{name: "another CA", newerCA: "ca-3"},
+		{name: "the same CA", newerCA: "ca-2"},
+		{name: "another CA and a failed read", newerCA: "ca-3", failRead: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
 			env := newDMSAuthzEnv(t, true)
 			require.NoError(t, env.create("ra-1", "ca-1", true))
 			env.authz.grants["dms:ra-1"] = env.authz.grants["dms:ra-1"][:1]
 			// While the first update grants the missing policy, the second one saves. Then the first one fails.
-			env.authz.onGrant = func() { require.NoError(t, env.update("ra-1", dmsSettings(newerCA, ptr(true)))) }
+			env.authz.onGrant = func() {
+				require.NoError(t, env.update("ra-1", dmsSettings(tc.newerCA, ptr(true))))
+				env.authz.failGet = tc.failRead
+			}
 
 			require.Error(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
 
+			env.authz.failGet = false
 			saved := env.repo.dms["ra-1"].Settings.EnrollmentSettings.EnrollmentCA
-			assert.Equal(t, newerCA, saved, "the newer update was saved")
+			assert.Equal(t, tc.newerCA, saved, "the newer update was saved")
 			cfg := dmsPrincipalAuthConfig((*x509.Certificate)(env.cas[saved].Certificate.Certificate), nil)
-			assert.Equal(t, pinnedCA(&cfg), env.trusts("ra-1"), "the principal trusts the CA that was saved")
+			assert.Equal(t, cfg["ca_trust"].(map[string]any)["value"], env.trusts("ra-1"), "the principal trusts the CA that was saved")
+		})
+	}
+}
+
+func TestDMSAuthzPrincipalIsRecreatedWhenSavingFailsAfterDeletingIt(t *testing.T) {
+	cases := map[string]func(e *dmsAuthzEnv) error{
+		"deleting the RA": func(e *dmsAuthzEnv) error {
+			e.repo.failDelete = true
+			return e.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-1"})
+		},
+		"turning the switch off": func(e *dmsAuthzEnv) error {
+			e.repo.failUpdate = true
+			return e.update("ra-1", dmsSettings("ca-1", ptr(false)))
+		},
+	}
+	for name, fail := range cases {
+		t.Run(name, func(t *testing.T) {
+			env := newDMSAuthzEnv(t, true)
+			require.NoError(t, env.create("ra-1", "ca-1", true))
+			before := env.trusts("ra-1")
+
+			require.Error(t, fail(env))
+
+			require.Contains(t, env.authz.principals, "dms:ra-1", "the stored RA still has the switch on, so its principal is back")
+			assert.Equal(t, before, env.trusts("ra-1"))
+			assert.ElementsMatch(t, []string{"policy-a", "policy-b"}, env.grantedPolicies("ra-1"))
 		})
 	}
 }

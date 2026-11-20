@@ -33,7 +33,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/shared/subsystems/pkg/test/subsystems"
-	"gorm.io/gorm"
 )
 
 type TestServiceBuilder struct {
@@ -554,7 +553,6 @@ var AuthzTestPolicyIDs = []string{"policy-a", "policy-b"}
 
 type AuthzTestServer struct {
 	Client     *authzsdk.Client // as the DMS Manager sees authz, through FailWhen
-	DB         *gorm.DB         // direct access to the authz tables, for states the API cannot create
 	failWhen   atomic.Pointer[func(*http.Request) bool]
 	BeforeEach func() error
 	AfterSuite func()
@@ -584,7 +582,7 @@ func BuildAuthzTestServer(storageEngine *TestStorageEngineConfig) (*AuthzTestSer
 		return nil, fmt.Errorf("could not connect to the Authz database: %s", err)
 	}
 
-	srv := &AuthzTestServer{DB: db}
+	srv := &AuthzTestServer{}
 	proxy := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", port)})
 	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if match := srv.failWhen.Load(); match != nil && (*match)(r) {
