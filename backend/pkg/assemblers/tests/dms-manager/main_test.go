@@ -483,13 +483,24 @@ func authzPrincipal(t *testing.T, servers *tests.TestServer, id string) *dto.Pri
 
 func authzGrants(t *testing.T, servers *tests.TestServer, id string) map[string]string {
 	t.Helper()
-	granted, err := servers.Authz.Client.Principals.GetPolicies(context.Background(), id)
-	require.NoError(t, err)
-	grants := map[string]string{}
-	for _, g := range granted.List {
-		grants[g.PolicyID] = g.GrantedBy
+	grants, query := map[string]string{}, map[string]string{}
+	for {
+		page, err := servers.Authz.Client.Principals.GetPolicies(context.Background(), id, query)
+		require.NoError(t, err)
+		for _, g := range page.List {
+			grants[g.PolicyID] = g.GrantedBy
+		}
+		if page.NextBookmark == "" {
+			return grants
+		}
+		query["bookmark"] = page.NextBookmark
 	}
-	return grants
+}
+
+// authzTrustedCA is the fingerprint of the CA the principal of an RA trusts.
+func authzTrustedCA(t *testing.T, servers *tests.TestServer, id string) any {
+	t.Helper()
+	return (*authzPrincipal(t, servers, id).AuthConfig)["ca_trust"].(map[string]any)["value"]
 }
 
 func TestAuthzPrincipalFollowsTheDMS(t *testing.T) {
@@ -497,9 +508,6 @@ func TestAuthzPrincipalFollowsTheDMS(t *testing.T) {
 	require.NoError(t, err)
 	ctx, authz := context.Background(), servers.Authz.Client
 	ca1, ca2 := createAuthzTestCA(t, servers, "ra-ca-1"), createAuthzTestCA(t, servers, "ra-ca-2")
-	trustedCA := func() any {
-		return (*authzPrincipal(t, servers, "dms:ra-1").AuthConfig)["ca_trust"].(map[string]any)["value"]
-	}
 	update := func(s models.DMSSettings) {
 		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &s})
 		require.NoError(t, err)
@@ -514,9 +522,9 @@ func TestAuthzPrincipalFollowsTheDMS(t *testing.T) {
 	assert.Equal(t, map[string]string{"policy-a": models.DMSManagerSource, "policy-b": models.DMSManagerSource}, authzGrants(t, servers, "dms:ra-1"))
 	assert.Nil(t, authzPrincipal(t, servers, "dms:ra-2"), "an RA with the switch off gets no principal")
 
-	before := trustedCA()
+	before := authzTrustedCA(t, servers, "dms:ra-1")
 	update(authzTestSettings(ca2.ID, true))
-	assert.NotEqual(t, before, trustedCA(), "the principal follows a change of Enrollment CA")
+	assert.NotEqual(t, before, authzTrustedCA(t, servers, "dms:ra-1"), "the principal follows a change of Enrollment CA")
 
 	rules := []*authzmodels.Rule{{Namespace: "iot", SchemaName: "public", EntityType: "organization", Actions: []string{"read"}}}
 	_, err = authz.Policies.Create(ctx, &dto.CreatePolicyRequest{ID: "by-hand", Name: "by-hand", Rules: rules})
@@ -634,6 +642,24 @@ func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
 		return dmsMgr, servers, caID
 	}
 
+	t.Run("a failed update keeps trusting the stored CA", func(t *testing.T) {
+		dmsMgr, servers, caID := createRA(t)
+		other := createAuthzTestCA(t, servers, "other-ca")
+		before := authzTrustedCA(t, servers, "dms:ra-1")
+		require.NoError(t, servers.Authz.Client.Principals.RevokePolicy(ctx, "dms:ra-1", "policy-b"))
+		servers.Authz.FailWhen(isGrant)
+		next := authzTestSettings(other.ID, true)
+
+		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &next})
+
+		require.Error(t, err)
+		servers.Authz.FailWhen(func(*http.Request) bool { return false })
+		assert.Equal(t, before, authzTrustedCA(t, servers, "dms:ra-1"), "the principal does not trust the CA that was never saved")
+		dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "ra-1"})
+		require.NoError(t, err)
+		assert.Equal(t, caID, dms.Settings.EnrollmentSettings.EnrollmentCA)
+	})
+
 	t.Run("update while authz is down keeps the stored RA", func(t *testing.T) {
 		dmsMgr, servers, caID := createRA(t)
 		servers.Authz.FailWhen(func(*http.Request) bool { return true })
@@ -663,6 +689,34 @@ func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
 
 		require.NoError(t, dmsMgr.Service.DeleteDMS(ctx, services.DeleteDMSInput{ID: "ra-1"}))
 	})
+}
+
+func TestAuthzPrincipalSyncReadsEveryGrantPage(t *testing.T) {
+	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
+	require.NoError(t, err)
+	ctx, authz := context.Background(), servers.Authz.Client
+	settings := authzTestSettings(createAuthzTestCA(t, servers, "ra-ca").ID, true)
+	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: settings})
+	require.NoError(t, err)
+
+	// More grants than a page holds, with the wanted policies last.
+	grant := func(policyID string) {
+		require.NoError(t, authz.Principals.GrantPolicy(ctx, "dms:ra-1", &dto.GrantPolicyRequest{PolicyID: policyID, GrantedBy: models.DMSManagerSource}))
+	}
+	for _, policyID := range tests.AuthzTestPolicyIDs {
+		require.NoError(t, authz.Principals.RevokePolicy(ctx, "dms:ra-1", policyID))
+	}
+	for i := range 55 {
+		grant(fmt.Sprintf("obsolete-%02d", i))
+	}
+	for _, policyID := range tests.AuthzTestPolicyIDs {
+		grant(policyID)
+	}
+
+	_, err = dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &settings})
+
+	require.NoError(t, err, "a wanted policy on a later page is not granted again")
+	assert.Equal(t, map[string]string{"policy-a": models.DMSManagerSource, "policy-b": models.DMSManagerSource}, authzGrants(t, servers, "dms:ra-1"), "obsolete grants on every page are revoked")
 }
 
 func TestESTEnroll(t *testing.T) {
