@@ -37,6 +37,10 @@ func (svc DMSManagerServiceBackend) syncAuthzPrincipal(ctx context.Context, dms 
 	if svc.authz == nil {
 		return nil, fmt.Errorf("%w: authz principal creation is disabled in the DMS Manager", errs.ErrValidateBadRequest)
 	}
+	// authz addresses the principal by id in a URL path, where a "/" can never be read back or deleted.
+	if strings.Contains(dms.ID, "/") {
+		return nil, fmt.Errorf("%w: an RA with an authz principal can not have a '/' in its id", errs.ErrValidateBadRequest)
+	}
 	caID := dms.Settings.EnrollmentSettings.EnrollmentCA
 	if caID == "" {
 		return nil, fmt.Errorf("%w: an authz principal needs an enrollment CA", errs.ErrValidateBadRequest)
@@ -74,7 +78,12 @@ func (svc DMSManagerServiceBackend) syncAuthzPrincipal(ctx context.Context, dms 
 	case err == nil:
 		_, err = svc.authz.Principals.Update(ctx, id, &dto.UpdatePrincipalRequest{Name: &name, Description: &description, AuthConfig: &authConfig})
 		undo = func(cause string) {
-			restore := &dto.UpdatePrincipalRequest{Name: &existing.Name, Description: &existing.Description, AuthConfig: existing.AuthConfig}
+			// A principal stored without auth_config comes back as null, which an update would not overwrite.
+			previousConfig := existing.AuthConfig
+			if previousConfig == nil {
+				previousConfig = &authzmodels.AuthConfig{}
+			}
+			restore := &dto.UpdatePrincipalRequest{Name: &existing.Name, Description: &existing.Description, AuthConfig: previousConfig}
 			if _, restoreErr := svc.authz.Principals.Update(context.WithoutCancel(ctx), id, restore); restoreErr != nil {
 				lFunc.Errorf("could not restore authz principal of DMS '%s' after %s: %s", dms.ID, cause, restoreErr)
 			}
