@@ -106,14 +106,21 @@ func (r *memCRLSettingsRepo) GetAll(_ context.Context, req storage.StorageListRe
 	return "", nil
 }
 
-func (r *memCRLSettingsRepo) UpdateOptions(_ context.Context, id string, o models.CRLSettingsOptions) (*models.CRLSettings, error) {
+func (r *memCRLSettingsRepo) UpdateOptions(_ context.Context, id string, o models.CRLSettingsOptions, signer models.CRLSignerKey) (*models.CRLSettings, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	s, ok := r.rows[id]
 	if !ok {
 		return nil, errs.ErrCRLSettingsNotFound
 	}
+	if s.Status != models.CRLSettingsActive {
+		return nil, errs.ErrCRLSettingsNotActive
+	}
+	if signer.KeyID == "" || signer.EngineID == "" {
+		return nil, errs.ErrValidateBadRequest
+	}
 	s.Options = o
+	s.SignerEngineID, s.SignerKeyID = &signer.EngineID, &signer.KeyID
 	r.rows[id] = s
 	return &s, nil
 }
@@ -121,12 +128,62 @@ func (r *memCRLSettingsRepo) UpdateOptions(_ context.Context, id string, o model
 func (r *memCRLSettingsRepo) UpdateLatestCRL(_ context.Context, id string, expected *big.Int, latest models.LatestCRLMeta) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	s := r.rows[id]
+	s, ok := r.rows[id]
+	if !ok {
+		return errs.ErrCRLSettingsNotFound
+	}
+	if s.Status != models.CRLSettingsActive {
+		return errs.ErrCRLSettingsNotActive
+	}
 	if r.conflict || s.LatestCRL.Version.Cmp(expected) != 0 {
 		return errs.ErrCRLSettingsConflict
 	}
 	s.LatestCRL = latest
 	r.rows[id] = s
+	return nil
+}
+
+func (r *memCRLSettingsRepo) MarkFinal(_ context.Context, id string, latestVersion *big.Int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.rows[id]
+	if !ok {
+		return errs.ErrCRLSettingsNotFound
+	}
+	if s.Status != models.CRLSettingsActive {
+		return nil
+	}
+	if latestVersion != nil && s.LatestCRL.Version.Cmp(latestVersion) != 0 {
+		return errs.ErrCRLSettingsConflict
+	}
+	s.Status, s.SignerEngineID, s.SignerKeyID = models.CRLSettingsFinal, nil, nil
+	r.rows[id] = s
+	return nil
+}
+
+func (r *memCRLSettingsRepo) MarkArchived(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.rows[id]
+	if !ok {
+		return errs.ErrCRLSettingsNotFound
+	}
+	s.Status, s.Options.SignerSerialNumber, s.SignerEngineID, s.SignerKeyID = models.CRLSettingsArchived, "", nil, nil
+	r.rows[id] = s
+	return nil
+}
+
+func (r *memCRLSettingsRepo) Delete(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.rows[id]
+	if !ok {
+		return errs.ErrCRLSettingsNotFound
+	}
+	if s.Status != models.CRLSettingsArchived {
+		return errs.ErrCRLSettingsNotArchived
+	}
+	delete(r.rows, id)
 	return nil
 }
 
@@ -247,8 +304,9 @@ func (f *crlFixture) revoke(caID string, serial int64) {
 	})
 }
 
+// settings are the CRL settings of a CA with the signer columns its status keeps (§4).
 func (f *crlFixture) settings(ca models.CACertificate, legacySKI *string, status models.CRLSettingsStatus) models.CRLSettings {
-	return models.CRLSettings{
+	s := models.CRLSettings{
 		CAID: ca.ID, LegacySKI: legacySKI, Status: status,
 		Options: models.CRLSettingsOptions{
 			SignerSerialNumber: ca.Certificate.SerialNumber, Validity: models.TimeDuration(time.Hour),
@@ -256,6 +314,14 @@ func (f *crlFixture) settings(ca models.CACertificate, legacySKI *string, status
 		},
 		LatestCRL: models.LatestCRLMeta{Version: models.BigInt{Int: big.NewInt(0)}, ValidFrom: time.Now()},
 	}
+	switch status {
+	case models.CRLSettingsActive:
+		engineID, keyID := ca.Certificate.EngineID, ca.Certificate.KeyID
+		s.SignerEngineID, s.SignerKeyID = &engineID, &keyID
+	case models.CRLSettingsArchived:
+		s.Options.SignerSerialNumber = ""
+	}
+	return s
 }
 
 func serials(crl *x509.RevocationList) []int64 {
@@ -337,6 +403,21 @@ func TestInitCRLSettings(t *testing.T) {
 		f := newCRLFixture(t)
 		_, err := f.svc.InitCRLSettings(ctx, "nope")
 		require.ErrorIs(t, err, errs.ErrCANotFound)
+	})
+
+	// ACTIVE settings retain the key of their signer, so a CA without a key in the KMS gets none. It must not fail:
+	// the event would be redelivered forever.
+	t.Run("a CA without a key gets no settings and no error", func(t *testing.T) {
+		f := newCRLFixture(t)
+		ca := f.addCA("ca-a", "Root")
+		ca.Certificate.EngineID, ca.Certificate.KeyID = "", ""
+		f.cas["ca-a"] = ca
+
+		settings, err := f.svc.InitCRLSettings(ctx, "ca-a")
+		require.NoError(t, err)
+		require.Nil(t, settings)
+		require.Empty(t, f.repo.rows)
+		require.Equal(t, 0, f.crlFiles("ca-a"), "no CRL is generated")
 	})
 }
 

@@ -1,4 +1,4 @@
-# RFC: Convert Device IdentitySlot to JSONB and Enable Filtering
+# RFC-006: Convert Device IdentitySlot to JSONB and Enable Filtering
 
 ## Status
 Proposed

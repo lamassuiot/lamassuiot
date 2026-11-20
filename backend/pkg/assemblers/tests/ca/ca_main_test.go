@@ -1981,7 +1981,7 @@ func TestSignCertificate(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/IssuanceProfile-IsCATrue",
+			name: "Err/IssuanceProfile-SignAsCANotAllowed",
 			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				//first create profile
 				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
@@ -2022,20 +2022,8 @@ func TestSignCertificate(t *testing.T) {
 				})
 			},
 			resultCheck: func(issuedCerts *models.Certificate, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've got no error but got error: %s", err)
-				}
-
-				if issuedCerts == nil {
-					return fmt.Errorf("should've got issued certificate but got nil")
-				}
-
-				if issuedCerts.Subject.CommonName != "test" {
-					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
-				}
-
-				if issuedCerts.IsCA != true {
-					return fmt.Errorf("issued certificate should be a CA but IsCA is false")
+				if !errors.Is(err, errs.ErrSignAsCANotAllowed) {
+					return fmt.Errorf("should've got error %s but got %v", errs.ErrSignAsCANotAllowed, err)
 				}
 
 				return nil
@@ -2054,7 +2042,7 @@ func TestSignCertificate(t *testing.T) {
 						HonorSubject:           true,
 						HonorExtensions:        true,
 						Validity:               validity,
-						SignAsCA:               true,
+						SignAsCA:               false,
 						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
 							Enabled:        true,
 							AllowECDSAKeys: false,
@@ -2132,7 +2120,7 @@ func TestSignCertificate(t *testing.T) {
 						HonorSubject:           true,
 						HonorExtensions:        true,
 						Validity:               validity,
-						SignAsCA:               true,
+						SignAsCA:               false,
 						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
 							Enabled:        true,
 							AllowECDSAKeys: true,
@@ -2210,7 +2198,7 @@ func TestSignCertificate(t *testing.T) {
 						HonorSubject:           true,
 						HonorExtensions:        true,
 						Validity:               validity,
-						SignAsCA:               true,
+						SignAsCA:               false,
 						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
 							Enabled:              true,
 							AllowECDSAKeys:       true,
@@ -2279,7 +2267,7 @@ func TestSignCertificate(t *testing.T) {
 						HonorSubject:           true,
 						HonorExtensions:        true,
 						Validity:               validity,
-						SignAsCA:               true,
+						SignAsCA:               false,
 						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
 							Enabled:            true,
 							AllowECDSAKeys:     true,

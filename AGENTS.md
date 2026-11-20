@@ -21,6 +21,8 @@ When the skill listed for a step is available in your tool, invoke it instead of
 | Receive feedback | Verify review feedback technically before applying it. | `superpowers:receiving-code-review` |
 | Close | Leave the branch ready; the user decides on commit, merge or PR. | `superpowers:finishing-a-development-branch` |
 
+For changes covered by a specification or RFC in `docs/internal-specs/`, read the relevant document before implementation and respect its design decisions. If the change alters those decisions or makes the document inaccurate, update the specification in the same change.
+
 ### Security-sensitive work
 
 Applies to any security request, and to changes touching KMS, key bindings, crypto engines, EST, authentication or authorization. Run it after the design step and again on the finished diff, in addition to the workflow above:
@@ -89,7 +91,7 @@ Example assembler flow:
 The same data model is described in three places. Whenever you change one, check the other two in the same change:
 
 1. **Go model**: structs in `core/pkg/models/` (`json` and `gorm` tags) plus the Postgres migrations in `engines/storage/postgres/migrations/`.
-2. **OpenAPI**: `docs/*-openapi.yaml`. This is the single copy of each spec: embedded by `docs/embed.go`, no symlinks or duplicates elsewhere. A new spec must also be added to `TestEveryOpenAPISpecHasAnAssignedSuite` in `backend/pkg/routes/spec_inventory_test.go`.
+2. **OpenAPI**: `docs/specs/*-openapi.yaml`. This is the single copy of each spec: embedded by `docs/specs/embed.go`, no symlinks or duplicates elsewhere. A new spec must also be added to `TestEveryOpenAPISpecHasAnAssignedSuite` in `backend/pkg/routes/spec_inventory_test.go`.
 3. **Authz schema**: `connectors/authz/pki.json`, one entry per entity.
 
 What must agree:

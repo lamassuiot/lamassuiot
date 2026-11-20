@@ -67,7 +67,7 @@ func TestAuthorizationGraph_FindPathsToUser(t *testing.T) {
 	for i, path := range paths {
 		t.Logf("Path %d (%d hops):", i, len(path))
 		for j, edge := range path {
-			t.Logf("  Hop %d: %s -[%s]-> %s", j, edge.From, edge.Via, edge.To)
+			t.Logf("  Hop %d: %s -[%s]-> %s", j, edge.From, edge.ForeignKey, edge.To)
 		}
 	}
 }
@@ -99,7 +99,7 @@ func TestAuthorizationGraph_FindPathsBetween(t *testing.T) {
 	for _, path := range paths {
 		t.Logf("Path with %d edges:", len(path))
 		for i, edge := range path {
-			t.Logf("  Edge %d: %s -[%s]-> %s", i, edge.From, edge.Via, edge.To)
+			t.Logf("  Edge %d: %s -[%s]-> %s", i, edge.From, edge.ForeignKey, edge.To)
 		}
 	}
 
@@ -150,7 +150,7 @@ func TestAuthorizationGraph_BuildingToDevice(t *testing.T) {
 			path[1].From == "public.gateway" && path[1].To == "public.device" {
 			foundTwoHopPath = true
 			t.Logf("Found 2-hop path: building -[%s]-> gateway -[%s]-> device",
-				path[0].Via, path[1].Via)
+				path[0].ForeignKey, path[1].ForeignKey)
 		}
 	}
 
@@ -183,7 +183,7 @@ func TestAuthorizationGraph_NoPath(t *testing.T) {
 		for _, path := range paths {
 			t.Logf("Unexpected path:")
 			for i, edge := range path {
-				t.Logf("  Edge %d: %s -[%s]-> %s", i, edge.From, edge.Via, edge.To)
+				t.Logf("  Edge %d: %s -[%s]-> %s", i, edge.From, edge.ForeignKey, edge.To)
 			}
 		}
 	}

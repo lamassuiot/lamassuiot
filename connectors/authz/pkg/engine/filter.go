@@ -16,8 +16,8 @@ type FilterGenerator struct {
 }
 
 // NewFilterGenerator creates a new filter generator.
-func NewFilterGenerator(schemas *SchemaRegistry, policies *PolicyRegistry) (*FilterGenerator, error) {
-	graph := NewAuthorizationGraph()
+func NewFilterGenerator(schemas *SchemaRegistry, policies *PolicyRegistry, opts ...GraphOption) (*FilterGenerator, error) {
+	graph := NewAuthorizationGraph(opts...)
 	if err := graph.BuildFromPoliciesAndSchemas(policies, schemas); err != nil {
 		return nil, fmt.Errorf("failed to build authorization graph: %w", err)
 	}
@@ -361,27 +361,43 @@ func (fg *FilterGenerator) pathAllowedByRule(rule *models.Rule, path []*GraphEdg
 	if len(path) == 0 {
 		return false
 	}
+	return fg.relationsAllowPath(rule.Namespace, rule.Relations, path, action)
+}
 
-	currentRelations := rule.Relations
-	for i, edge := range path {
-		found := false
-		for _, rel := range currentRelations {
-			if rel.QualifiedTo() == edge.To && rel.Via == edge.Via {
-				if i == len(path)-1 {
-					if !relHasAction(&rel, action) {
-						return false
-					}
-				}
-				currentRelations = rel.Relations
-				found = true
-				break
-			}
+// relationsAllowPath tries every relation that matches the path's first edge, since a rule can
+// reach one relation through several via spellings with different actions or nested relations.
+func (fg *FilterGenerator) relationsAllowPath(namespace string, relations []models.RelationRule, path []*GraphEdge, action string) bool {
+	edge := path[0]
+	for i := range relations {
+		rel := &relations[i]
+		if !fg.relationMatchesEdge(namespace, rel, edge) {
+			continue
 		}
-		if !found {
-			return false
+		if len(path) == 1 {
+			if relHasAction(rel, action) {
+				return true
+			}
+			continue
+		}
+		if fg.relationsAllowPath(namespace, rel.Relations, path[1:], action) {
+			return true
 		}
 	}
-	return true
+	return false
+}
+
+// relationMatchesEdge reports whether rel is the relation edge was built from: same target and a
+// via that resolves to the edge's join column, whichever way the via is spelled.
+func (fg *FilterGenerator) relationMatchesEdge(namespace string, rel *models.RelationRule, edge *GraphEdge) bool {
+	if rel.QualifiedTo() != edge.To {
+		return false
+	}
+	targetSchema := findSchemaForRelation(namespace, edge.To, fg.schemas)
+	if targetSchema == nil {
+		return false
+	}
+	foreignKey, err := resolveRelationForeignKey(edge.From, namespace, rel.Via, targetSchema, fg.schemas)
+	return err == nil && foreignKey == edge.ForeignKey
 }
 
 // relHasAction checks if a models.RelationRule supports an action

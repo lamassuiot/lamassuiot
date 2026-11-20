@@ -1,4 +1,4 @@
-# Filtering and JSONPath support ✅
+# RFC-002: Filtering and JSONPath support ✅
 
 ## Overview
 

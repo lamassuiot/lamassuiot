@@ -1,4 +1,4 @@
-# RFC-008: Filtered Statistics Endpoints
+# RFC-007: Filtered Statistics Endpoints
 
 | Status | Implemented |
 |:---|:---|
@@ -394,13 +394,13 @@ For each new interface method, implement in the PostgreSQL storage layer:
 
 #### 7.5.1 Device Manager
 
-**File**: `docs/device-manager-openapi.yaml`
+**File**: `docs/specs/device-manager-openapi.yaml`
 
 No changes required—already includes filter parameter on `/stats` endpoint.
 
 #### 7.5.2 CA Service
 
-**File**: `docs/ca-openapi.yaml`
+**File**: `docs/specs/ca-openapi.yaml`
 
 | Change | Description |
 |--------|-------------|
@@ -409,7 +409,7 @@ No changes required—already includes filter parameter on `/stats` endpoint.
 
 #### 7.5.3 DMS Manager
 
-**File**: `docs/dms-manager-openapi.yaml`
+**File**: `docs/specs/dms-manager-openapi.yaml`
 
 | Change | Description |
 |--------|-------------|
@@ -417,7 +417,7 @@ No changes required—already includes filter parameter on `/stats` endpoint.
 
 #### 7.5.4 KMS
 
-**File**: `docs/kms-openapi.yaml`
+**File**: `docs/specs/kms-openapi.yaml`
 
 | Change | Description |
 |--------|-------------|
@@ -637,7 +637,7 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 
 #### Step 2.4: Update DMS OpenAPI Specification
 
-**Files to modify**: `docs/dms-manager-openapi.yaml`
+**Files to modify**: `docs/specs/dms-manager-openapi.yaml`
 
 **Changes**:
 - Add `filter` query parameter to `/v1/stats` endpoint.
@@ -770,7 +770,7 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 
 #### Step 3.8: Update KMS OpenAPI Specification
 
-**Files to modify**: `docs/kms-openapi.yaml`
+**Files to modify**: `docs/specs/kms-openapi.yaml`
 
 **Changes**:
 - Add new endpoint `/stats` with GET method.
@@ -911,7 +911,7 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 
 #### Step 4.8: Update CA OpenAPI Specification
 
-**Files to modify**: `docs/ca-openapi.yaml`
+**Files to modify**: `docs/specs/ca-openapi.yaml`
 
 **Changes**:
 - Add `ca_filter` and `cert_filter` query parameters to `/stats` endpoint.
@@ -973,7 +973,7 @@ This plan is designed for incremental implementation by a coding agent. Each ste
 
 #### Step 5.2: Update Filtering Documentation
 
-**Files to modify**: `docs/filtering.md`
+**Files to modify**: `docs/internal-specs/rfc-002-filtering.md`
 
 **Changes**:
 - Add section explaining filtered statistics endpoints.
@@ -1120,11 +1120,11 @@ Phases 2, 3, and 4 can be executed in parallel after Phase 1 completes. Phase 5 
 
 ## 14. References
 
-- [RFC-004: Dynamic Device Groups](RFC-004-DynamicDeviceGroups.md) - Uses filtered stats for group statistics
-- [RFC-005: JSONPath Sorting](RFC005-jsonpath-sorting.md) - JSONPath expression support in queries
-- [Device Manager OpenAPI](device-manager-openapi.yaml) - Reference implementation of filtered stats
-- [KMS OpenAPI](kms-openapi.yaml) - KMS service API specification
-- [Filtering Documentation](filtering.md) - Filter syntax reference
+- [RFC-004: Dynamic Device Groups](rfc-004-dynamic-device-groups.md) - Uses filtered stats for group statistics
+- [RFC-005: JSONPath Expressions in Sort Options](rfc-005-jsonpath-sorting.md) - JSONPath expression support in queries
+- [Device Manager OpenAPI](../specs/device-manager-openapi.yaml) - Reference implementation of filtered stats
+- [KMS OpenAPI](../specs/kms-openapi.yaml) - KMS service API specification
+- [Filtering Documentation](rfc-002-filtering.md) - Filter syntax reference
 
 ---
 
@@ -1134,7 +1134,7 @@ Phases 2, 3, and 4 can be executed in parallel after Phase 1 completes. Phase 5 
 
 ### Implementation Status
 
-All phases of RFC-008 have been successfully implemented:
+All phases of RFC-007 have been successfully implemented:
 
 - ✅ **Phase 1**: Storage layer foundation with `CountWithFilters` methods
 - ✅ **Phase 2**: DMS Manager filtered stats endpoint
@@ -1156,7 +1156,7 @@ A comprehensive test suite (`backend/pkg/assemblers/tests/cross_service_stats_te
 
 #### 2. Enhanced Documentation
 
-Updated [filtering.md](filtering.md) with a new "Filtered Statistics Endpoints" section covering:
+Updated [rfc-002-filtering.md](rfc-002-filtering.md) with a new "Filtered Statistics Endpoints" section covering:
 - Overview and key characteristics
 - Service-specific examples for CA, KMS, DMS Manager, and Device Manager
 - Status filter restriction explanation

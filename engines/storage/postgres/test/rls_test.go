@@ -115,7 +115,7 @@ func TestVATenantRLSUsesCompositeTenantKey(t *testing.T) {
 	appDB := openTenantAppDB(t, cfg.Hostname, cfg.Port, postgresstorage.VA_SCHEMA, "va-rls-test")
 
 	require.NoError(t, adminDB.Exec("INSERT INTO crl_settings (tenant_id, ca_id, status) VALUES (?, ?, ?), (?, ?, ?)",
-		"tenant-a", "shared-ca-id", "ACTIVE", "tenant-b", "shared-ca-id", "ACTIVE").Error)
+		"tenant-a", "shared-ca-id", "ARCHIVED", "tenant-b", "shared-ca-id", "ARCHIVED").Error)
 
 	countSettings := func(ctx context.Context) int64 {
 		var count int64
@@ -130,7 +130,7 @@ func TestVATenantRLSUsesCompositeTenantKey(t *testing.T) {
 	require.Equal(t, int64(1), countSettings(tenantTestContext("tenant-b", models.TenantActive)))
 
 	err := postgresstorage.WithTenantTransaction(tenantTestContext("tenant-a", models.TenantActive), appDB, func(tx *gorm.DB) error {
-		return tx.Exec("INSERT INTO crl_settings (tenant_id, ca_id, status) VALUES (?, ?, ?)", "tenant-b", "cross-tenant-ca", "ACTIVE").Error
+		return tx.Exec("INSERT INTO crl_settings (tenant_id, ca_id, status) VALUES (?, ?, ?)", "tenant-b", "cross-tenant-ca", "ARCHIVED").Error
 	})
 	require.Error(t, err)
 

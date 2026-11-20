@@ -66,7 +66,8 @@ func TestCRLSettingsColumnContract(t *testing.T) {
 	settings, err := registry.GetBySchemaEntity("va", "crl_settings")
 	require.NoError(t, err)
 	require.Equal(t, []string{"ca_id"}, settings.PrimaryKeys)
-	for _, column := range []string{"ca_id", "status", "legacy_ski", "signer_serial_number"} {
+	require.Contains(t, settings.AtomicActions, "delete", "archived settings are purged with the delete action")
+	for _, column := range []string{"ca_id", "status", "legacy_ski", "signer_serial_number", "signer_engine_id", "signer_key_id"} {
 		require.NotNil(t, settings.GetFilterableField(column), column)
 	}
 	require.Nil(t, settings.GetFilterableField("crl_signer_certificate_serial_number"))
@@ -77,7 +78,12 @@ func TestCRLSettingsColumnContract(t *testing.T) {
 	for _, f := range settings.Filterable {
 		require.Contains(t, columns, f.Column, "filterable column")
 	}
-	require.NotEmpty(t, settings.Relations)
+	// One relation per foreign key of the migration: crl_settings_signer_cert_fk and crl_settings_signer_key_fk.
+	targets := map[string]string{}
+	for _, rel := range settings.Relations {
+		targets[rel.ForeignKey] = rel.TargetEntity
+	}
+	require.Equal(t, map[string]string{"signer_serial_number": "certificate", "signer_key_id": "kms_key"}, targets)
 	for _, rel := range settings.Relations {
 		require.Contains(t, columns, rel.ForeignKey, "foreign key of relation %s", rel.Name)
 	}

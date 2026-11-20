@@ -133,18 +133,70 @@ func (db *PostgresCertificateStorage) reload(ctx context.Context, certificate *m
 
 func (db *PostgresCertificateStorage) Delete(ctx context.Context, serialNumber string) error {
 	err := db.querier.Delete(ctx, serialNumber)
-	if isForeignKeyViolation(err, "crl_settings_signer_cert_fk") {
+	if isForeignKeyViolation(err, crlSettingsSignerFK) {
 		return errs.ErrCertificateInUse
 	}
 	return err
 }
 
+// ReleaseKey nulls key_id.
 func (db *PostgresCertificateStorage) ReleaseKey(ctx context.Context, serialNumbers []string) error {
 	if len(serialNumbers) == 0 {
 		return nil
 	}
 
-	return db.db.WithContext(ctx).Table("certificates").Where("serial_number IN ?", serialNumbers).Update("key_id", nil).Error
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return err
+	}
+
+	return db.querier.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		q := tx.Table("certificates").Where("serial_number IN ?", serialNumbers)
+		if scoped {
+			q = q.Where(db.querier.tenantIDColumn()+" = ?", tenantID)
+		}
+		return q.Update("key_id", nil).Error
+	})
+}
+
+// crlSettingsTable is the VA table whose ACTIVE rows retain the key of their signer certificate.
+const crlSettingsTable = VA_SCHEMA + ".crl_settings"
+
+// CRLSettingsHoldingKey names the CAs whose ACTIVE CRL settings have one of the certificates as signer: they retain
+// its KMS key (crl_settings_signer_key_fk), which the KMS cannot delete until they are FINAL. It only reads, so it
+// takes no row locks. Without the VA schema there are no settings, and nothing retains a key.
+func (db *PostgresCertificateStorage) CRLSettingsHoldingKey(ctx context.Context, serialNumbers []string) ([]string, error) {
+	holders := []string{}
+	if len(serialNumbers) == 0 {
+		return holders, nil
+	}
+
+	tenantID, scoped, err := db.querier.tenantScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = db.querier.withTenantScopedTx(ctx, tenantID, scoped, func(tx *gorm.DB) error {
+		var vaMigrated bool
+		if err := tx.Raw("SELECT to_regclass(?) IS NOT NULL", crlSettingsTable).Scan(&vaMigrated).Error; err != nil {
+			return err
+		}
+		if !vaMigrated {
+			return nil
+		}
+
+		query := "SELECT ca_id FROM " + crlSettingsTable + " WHERE status = ? AND signer_serial_number IN ?"
+		args := []any{models.CRLSettingsActive, serialNumbers}
+		if scoped {
+			query += " AND " + tenantIDColumnName + " = ?"
+			args = append(args, tenantID)
+		}
+		return tx.Raw(query+" ORDER BY ca_id", args...).Scan(&holders).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return holders, nil
 }
 
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, req storage.StorageListRequest[models.Certificate]) (string, error) {

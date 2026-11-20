@@ -394,6 +394,10 @@ func nonOKResponseToError(resStatusCode int, resBody []byte, knownErrors map[int
 		if errInSC.Error() == decodedErr.Err {
 			return errInSC
 		}
+		// A known error with details, as fmt.Errorf("%w: details", errInSC) prints it.
+		if details, ok := strings.CutPrefix(decodedErr.Err, errInSC.Error()+": "); ok {
+			return fmt.Errorf("%w: %s", errInSC, details)
+		}
 	}
 
 	return fmt.Errorf("unexpected status code %d. No expected error matching found: %s", resStatusCode, string(resBody))

@@ -8,11 +8,21 @@ import (
 type CRLSettingsStatus string
 
 const (
-	// CRLSettingsActive settings are used to generate CRLs.
+	// CRLSettingsActive settings are used to generate CRLs. The database retains the key of their signer.
 	CRLSettingsActive CRLSettingsStatus = "ACTIVE"
-	// CRLSettingsArchived settings belong to a CA that no longer exists: their last CRL is still served, but never regenerated.
+	// CRLSettingsFinal settings belong to a revoked or expired CA: their final CRL, if any, is published and nothing
+	// signs a new one, so the key of their signer is no longer retained. Their signer certificate still is.
+	CRLSettingsFinal CRLSettingsStatus = "FINAL"
+	// CRLSettingsArchived settings belong to a CA that no longer exists: their last CRL is still served, but never
+	// regenerated, and they retain nothing.
 	CRLSettingsArchived CRLSettingsStatus = "ARCHIVED"
 )
+
+// CRLSignerKey identifies the KMS key of a CRL signer certificate.
+type CRLSignerKey struct {
+	EngineID string
+	KeyID    string
+}
 
 // CRLSettings holds how the CRL of a CA is generated and the state of its latest CRL. They are keyed by the ID of the
 // CA, never by its Subject Key Identifier: CAs sharing a key share the SKI, not the CRL.
@@ -24,7 +34,11 @@ type CRLSettings struct {
 	LegacySKI *string            `json:"legacy_ski,omitempty" gorm:"column:legacy_ski"`
 	Options   CRLSettingsOptions `json:"crl_options" gorm:"embedded"`
 	Status    CRLSettingsStatus  `json:"status" gorm:"column:status"`
-	LatestCRL LatestCRLMeta      `json:"latest_crl" gorm:"embedded;embeddedPrefix:latest_crl_"`
+	// SignerEngineID and SignerKeyID copy the KMS key of the signer certificate while the settings are ACTIVE, only so
+	// that the database retains it in the KMS (crl_settings_signer_key_fk). They are never set by the API.
+	SignerEngineID *string       `json:"-" gorm:"column:signer_engine_id"`
+	SignerKeyID    *string       `json:"-" gorm:"column:signer_key_id"`
+	LatestCRL      LatestCRLMeta `json:"latest_crl" gorm:"embedded;embeddedPrefix:latest_crl_"`
 }
 
 // CRLSettingsOptions are the editable settings.

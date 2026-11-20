@@ -78,6 +78,26 @@ func TestCreateCertificateSDK(t *testing.T) {
 		run         func(caSDK services.CAService, caID string) (*models.Certificate, error)
 		resultCheck func(cert *models.Certificate, err error) error
 	}{
+		{
+			name: "Error/SignAsCANotAllowed",
+			before: func(caSDK services.CAService) (string, error) {
+				return createActiveCA(t, caSDK).ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.Certificate, error) {
+				return caSDK.CreateCertificate(context.Background(), services.CreateCertificateInput{
+					CAID:            caID,
+					KeySpec:         services.CertificateKeySpec{Type: models.KeyType(x509.ECDSA), Bits: 256},
+					Subject:         models.Subject{CommonName: "sign-as-ca-rejected"},
+					IssuanceProfile: &models.IssuanceProfile{SignAsCA: true},
+				})
+			},
+			resultCheck: func(cert *models.Certificate, err error) error {
+				if cert != nil || !errors.Is(err, errs.ErrSignAsCANotAllowed) {
+					return fmt.Errorf("expected no certificate and ErrSignAsCANotAllowed, got certificate %v and error %v", cert, err)
+				}
+				return nil
+			},
+		},
 		// ------------------------------------------------------------------ //
 		// Success: generate-mode (new RSA key)
 		// ------------------------------------------------------------------ //

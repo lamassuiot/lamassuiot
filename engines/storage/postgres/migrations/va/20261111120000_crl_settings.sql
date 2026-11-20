@@ -9,6 +9,9 @@ BEGIN
  IF to_regclass('ca.certificates') IS NULL OR to_regclass('ca.ca_certificates') IS NULL THEN
   RAISE EXCEPTION 'ca schema not found: migrate the ca schema before the va schema';
  END IF;
+ IF to_regclass('kms.kms_keys') IS NULL THEN
+  RAISE EXCEPTION 'kms schema not found: migrate the kms schema before the va schema';
+ END IF;
 
  -- Existing CA ids end up in URLs (/crl/<ca-id>) and no escaping survives the path decoding of gin for a '/'.
  SELECT string_agg(id, ', ' ORDER BY id) INTO problem FROM ca.ca_certificates WHERE position('/' IN id) > 0;
@@ -21,6 +24,9 @@ BEGIN
   ca_id TEXT NOT NULL,
   legacy_ski TEXT,
   signer_serial_number TEXT,
+  -- KMS key of the signer certificate, which crl_settings_signer_key_fk retains while the settings are ACTIVE.
+  signer_engine_id TEXT,
+  signer_key_id TEXT,
   validity TEXT,
   refresh_interval TEXT,
   regenerate_on_revoke BOOLEAN,
@@ -30,7 +36,12 @@ BEGIN
   latest_crl_valid_until TIMESTAMPTZ,
   CONSTRAINT crl_settings_pkey PRIMARY KEY (tenant_id, ca_id),
   CONSTRAINT crl_settings_legacy_ski_uq UNIQUE (tenant_id, legacy_ski),
-  CONSTRAINT crl_settings_status_chk CHECK (status IN ('ACTIVE', 'ARCHIVED'))
+  -- Which signer columns each status has. ACTIVE needs all three: with MATCH SIMPLE a NULL key column would silently
+  -- turn off crl_settings_signer_key_fk. FINAL keeps the certificate but not its key; ARCHIVED keeps neither.
+  CONSTRAINT crl_settings_signer_by_status CHECK (
+      (status = 'ACTIVE' AND signer_serial_number IS NOT NULL AND signer_engine_id IS NOT NULL AND signer_key_id IS NOT NULL)
+   OR (status = 'FINAL' AND signer_serial_number IS NOT NULL AND signer_engine_id IS NULL AND signer_key_id IS NULL)
+   OR (status = 'ARCHIVED' AND signer_serial_number IS NULL AND signer_engine_id IS NULL AND signer_key_id IS NULL))
  );
 
  FOR role_record IN SELECT * FROM va_role ORDER BY ca_ski LOOP
@@ -57,8 +68,10 @@ BEGIN
      role_record.crl_regenerate_on_revoke, 'ARCHIVED', role_record.latest_crl_version, role_record.latest_crl_valid_from,
      role_record.latest_crl_valid_until);
   ELSE
-   IF NOT EXISTS (SELECT 1 FROM ca.certificates c
-     WHERE c.serial_number = role_record.crl_signer_certificate_serial_number AND COALESCE(c.key_id, '') <> '') THEN
+   -- ACTIVE settings need the engine and the key of their signer, and the key must be in the KMS
+   -- (crl_settings_signer_by_status, crl_settings_signer_key_fk).
+   IF NOT EXISTS (SELECT 1 FROM ca.certificates c JOIN kms.kms_keys k ON k.tenant_id = c.tenant_id AND k.engine_id = c.engine_id AND k.key_id = c.key_id
+     WHERE c.tenant_id = role_record.tenant_id AND c.serial_number = role_record.crl_signer_certificate_serial_number) THEN
     RAISE EXCEPTION 'VA role %, CA %: signer certificate % has no key, so it cannot sign CRLs. Point the role to a signer with a key, or fix the key reference of the certificate, before upgrading',
      role_record.ca_ski, ca_ids[1], role_record.crl_signer_certificate_serial_number;
    END IF;
@@ -66,11 +79,12 @@ BEGIN
    -- The last CRL stays under the SKI and its critical IDP lists only /crl/<ski>, so a verifier that matches the IDP
    -- rejects it when fetched through the CDP of certificates issued from now on (/crl/<ca-id>). Marking it as expired
    -- makes the VA monitor publish a new one under the CA ID, whose IDP lists both URLs, on its first run.
-   INSERT INTO crl_settings (tenant_id, ca_id, legacy_ski, signer_serial_number, validity, refresh_interval, regenerate_on_revoke,
-     status, latest_crl_version, latest_crl_valid_from, latest_crl_valid_until)
-   VALUES (role_record.tenant_id, ca_ids[1], role_record.ca_ski, role_record.crl_signer_certificate_serial_number, role_record.crl_validity,
+   INSERT INTO crl_settings (tenant_id, ca_id, legacy_ski, signer_serial_number, signer_engine_id, signer_key_id, validity,
+     refresh_interval, regenerate_on_revoke, status, latest_crl_version, latest_crl_valid_from, latest_crl_valid_until)
+   SELECT c.tenant_id, ca_ids[1], role_record.ca_ski, c.serial_number, c.engine_id, c.key_id, role_record.crl_validity,
      role_record.crl_refresh_interval, role_record.crl_regenerate_on_revoke, 'ACTIVE', role_record.latest_crl_version,
-     role_record.latest_crl_valid_from, LEAST(role_record.latest_crl_valid_until, now()));
+     role_record.latest_crl_valid_from, LEAST(role_record.latest_crl_valid_until, now())
+   FROM ca.certificates c WHERE c.tenant_id = role_record.tenant_id AND c.serial_number = role_record.crl_signer_certificate_serial_number;
   END IF;
  END LOOP;
 
@@ -86,6 +100,14 @@ BEGIN
   ON DELETE NO ACTION ON UPDATE CASCADE;
  CREATE INDEX crl_settings_signer_cert_idx ON crl_settings (signer_serial_number);
  CREATE INDEX crl_settings_tenant_id_idx ON crl_settings (tenant_id);
+
+ -- Retains the KMS key of the signer while the settings are ACTIVE: the KMS cannot delete it until the final CRL is
+ -- issued, which clears these columns. Renaming the key cascades, as it does into ca.certificates. The key is
+ -- referenced in the KMS rather than through the certificate, so the ca schema is left unchanged.
+ ALTER TABLE crl_settings ADD CONSTRAINT crl_settings_signer_key_fk
+  FOREIGN KEY (tenant_id, signer_key_id, signer_engine_id) REFERENCES kms.kms_keys (tenant_id, key_id, engine_id)
+  ON DELETE RESTRICT ON UPDATE CASCADE;
+ CREATE INDEX crl_settings_signer_key_idx ON crl_settings (signer_engine_id, signer_key_id);
 
  DROP TABLE va_role;
 END $$;

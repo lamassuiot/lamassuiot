@@ -36,6 +36,10 @@ coverage:
         target: auto
         flags:
         - crypto-filesystem
+      crypto-software:
+        target: auto
+        flags:
+        - crypto-software
       crypto-vaultkv2:
         target: auto
         flags:
@@ -44,6 +48,14 @@ coverage:
         target: auto
         flags:
         - crypto-azure
+      fs-storage-localfs:
+        target: auto
+        flags:
+        - fs-storage-localfs
+      fs-storage-s3:
+        target: auto
+        flags:
+        - fs-storage-s3
       crypto-pkcs11:
         target: auto
         flags:
@@ -114,6 +126,10 @@ flags:
     paths:
         - engines/crypto/filesystem/
     carryforward: true
+  crypto-software:
+    paths:
+        - engines/crypto/software/
+    carryforward: true
   crypto-vaultkv2:
     paths:
         - engines/crypto/vaultkv2/
@@ -121,6 +137,14 @@ flags:
   crypto-azure:
     paths:
         - engines/crypto/azure/
+    carryforward: true
+  fs-storage-localfs:
+    paths:
+        - engines/fs-storage/localfs/
+    carryforward: true
+  fs-storage-s3:
+    paths:
+        - engines/fs-storage/s3/
     carryforward: true
   crypto-pkcs11:
     paths:

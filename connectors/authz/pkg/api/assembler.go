@@ -23,7 +23,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v4/docs"
+	"github.com/lamassuiot/lamassuiot/v4/docs/specs"
 	sdk "github.com/lamassuiot/lamassuiot/v4/sdk"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -83,7 +83,7 @@ func AssembleAuthzServiceWithHTTPServer(conf authzconfig.AuthzConfig, serviceInf
 
 	var openApiContent []byte
 	if conf.OpenAPI.Enabled {
-		openApiContent = docs.Authz
+		openApiContent = specs.Authz
 	}
 
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo, openApiContent)
@@ -123,8 +123,6 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 		return nil, nil, nil, nil, err
 	}
 
-	policyManager := service.NewPolicyManager(policyStore)
-
 	schemaDbs := make(map[string]*gorm.DB)
 	for schemaName, credentials := range conf.Credentials {
 		lDB.Infof("Creating database connection for schema: %s", schemaName)
@@ -144,6 +142,8 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+
+	policyManager := service.NewPolicyManager(policyStore, service.WithPolicySchemas(eng.GetSchemas()))
 
 	if err := seedStorage(context.Background(), conf, principalManager, policyManager); err != nil {
 		return nil, nil, nil, nil, err
