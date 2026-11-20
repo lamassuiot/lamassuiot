@@ -3,6 +3,7 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
@@ -78,6 +79,8 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 	} else if authz == nil || len(conf.AuthzPrincipals.PolicyIDs) == 0 {
 		return nil, fmt.Errorf("authz_principals needs an authz client and authz_principals.policy_ids")
 	}
+	// A repeated id would be granted twice, which authz rejects.
+	conf.AuthzPrincipals.PolicyIDs = slices.Compact(slices.Sorted(slices.Values(conf.AuthzPrincipals.PolicyIDs)))
 
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
