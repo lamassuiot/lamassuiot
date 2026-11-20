@@ -404,7 +404,8 @@ func TestDMSAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
 	}
 }
 
-func TestDMSAuthzPrincipalIsRecreatedWhenSavingFailsAfterDeletingIt(t *testing.T) {
+// A failed delete, or a second one racing a successful delete, must never bring the CA trust back.
+func TestDMSAuthzPrincipalIsNotRecreatedWhenSavingFailsAfterDeletingIt(t *testing.T) {
 	cases := map[string]func(e *dmsAuthzEnv) error{
 		"deleting the RA": func(e *dmsAuthzEnv) error {
 			e.repo.failDelete = true
@@ -419,13 +420,10 @@ func TestDMSAuthzPrincipalIsRecreatedWhenSavingFailsAfterDeletingIt(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			env := newDMSAuthzEnv(t, true)
 			require.NoError(t, env.create("ra-1", "ca-1", true))
-			before := env.trusts("ra-1")
 
 			require.Error(t, fail(env))
 
-			require.Contains(t, env.authz.principals, "dms:ra-1", "the stored RA still has the switch on, so its principal is back")
-			assert.Equal(t, before, env.trusts("ra-1"))
-			assert.ElementsMatch(t, []string{"policy-a", "policy-b"}, env.grantedPolicies("ra-1"))
+			assert.NotContains(t, env.authz.principals, "dms:ra-1")
 		})
 	}
 }
