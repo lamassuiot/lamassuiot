@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
@@ -173,6 +174,7 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		dms.Metadata = input.Metadata
 	}
 	hadPrincipal := authzPrincipalEnabled(dms.Settings)
+	previous := *dms
 	storedPrincipal := dms.Settings.AuthzPrincipalSettings
 	dms.Name = input.Name
 	dms.Settings = *input.Settings
@@ -196,6 +198,8 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	updated, err := svc.dmsStorage.Update(ctx, dms)
 	if err != nil && undoPrincipal != nil {
 		undoPrincipal("the failed update")
+	} else if err != nil && hadPrincipal {
+		svc.recreateAuthzPrincipal(ctx, lFunc, &previous, "the failed update")
 	}
 	return updated, err
 }
@@ -263,6 +267,9 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 	err = svc.dmsStorage.Delete(ctx, id)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting the DMS %s %s", id, err)
+		if authzPrincipalEnabled(dms.Settings) {
+			svc.recreateAuthzPrincipal(ctx, lFunc, dms, "the failed delete")
+		}
 		return err
 	}
 
@@ -315,38 +322,45 @@ func (svc DMSManagerServiceBackend) syncAuthzPrincipal(ctx context.Context, dms 
 	id := dmsPrincipalID(dms.ID)
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	authConfig := dmsPrincipalAuthConfig(caCert, svc.authzPrincipals.SubjectAttributeMappings)
+	// The revision tells this request's write apart from any other, so recovery only ever undoes its own.
+	revision := uuid.NewV7().String()
+	authConfig[dmsManagerMarker] = map[string]any{"dms_id": dms.ID, "revision": revision}
 	name := fmt.Sprintf("RA %s", dms.Name)
 	description := fmt.Sprintf("Managed by the DMS Manager for RA %s: trusts every certificate signed by %q. Edit the RA, not this principal.", dms.ID, caCert.Subject.CommonName)
 
+	// Restoring after a failure is only safe while the principal still holds this request's write.
+	ownsPrincipal := func(uctx context.Context, cause string) bool {
+		current, getErr := svc.authz.Principals.Get(uctx, id)
+		if getErr != nil || managedRevision(current.AuthConfig) != revision {
+			lFunc.Warnf("authz principal of DMS '%s' left as is after %s: it can not be confirmed as this request's", dms.ID, cause)
+			return false
+		}
+		return true
+	}
+
 	existing, err := svc.authz.Principals.Get(ctx, id)
 	switch {
-	case err == nil && existing.Type != "x509":
-		return nil, fmt.Errorf("authz principal %s already exists with type %q", id, existing.Type)
+	case err == nil && (existing.Type != "x509" || managedDMS(existing.AuthConfig) != dms.ID):
+		return nil, fmt.Errorf("%w: authz principal %s already exists and is not managed by the DMS Manager for this RA", errs.ErrValidateBadRequest, id)
 	case err == nil:
 		_, err = svc.authz.Principals.Update(ctx, id, &dto.UpdatePrincipalRequest{Name: &name, Description: &description, AuthConfig: &authConfig})
 		undo = func(cause string) {
 			uctx := context.WithoutCancel(ctx)
-			// Another request owns the principal now if it changed it, or if it already saved this same CA. Restoring would overwrite it.
-			current, getErr := svc.authz.Principals.Get(uctx, id)
-			saved, stored, readErr := svc.dmsStorage.SelectExists(uctx, dms.ID)
-			changed := getErr == nil && pinnedCA(current.AuthConfig) != pinnedCA(&authConfig)
-			if changed || (readErr == nil && saved && stored.Settings.EnrollmentSettings.EnrollmentCA == caID) {
-				lFunc.Warnf("authz principal of DMS '%s' was not restored after %s: another request changed it", dms.ID, cause)
+			if !ownsPrincipal(uctx, cause) {
 				return
 			}
-			// A principal stored without auth_config comes back as null, which an update would not overwrite.
-			previousConfig := existing.AuthConfig
-			if previousConfig == nil {
-				previousConfig = &authzmodels.AuthConfig{}
-			}
-			restore := &dto.UpdatePrincipalRequest{Name: &existing.Name, Description: &existing.Description, AuthConfig: previousConfig}
+			restore := &dto.UpdatePrincipalRequest{Name: &existing.Name, Description: &existing.Description, AuthConfig: existing.AuthConfig}
 			if _, restoreErr := svc.authz.Principals.Update(uctx, id, restore); restoreErr != nil {
 				lFunc.Errorf("could not restore authz principal of DMS '%s' after %s: %s", dms.ID, cause, restoreErr)
 			}
 		}
 	case isAuthzNotFound(err):
 		_, err = svc.authz.Principals.Create(ctx, &dto.CreatePrincipalRequest{ID: id, Name: name, Description: &description, Type: "x509", AuthConfig: &authConfig})
-		undo = func(cause string) { svc.rollbackAuthzPrincipal(ctx, lFunc, dms.ID, cause) }
+		undo = func(cause string) {
+			if ownsPrincipal(context.WithoutCancel(ctx), cause) {
+				svc.rollbackAuthzPrincipal(ctx, lFunc, dms.ID, cause)
+			}
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("could not save authz principal %s: %w", id, err)
@@ -451,14 +465,33 @@ func dmsPrincipalAuthConfig(ca *x509.Certificate, mappings map[string]string) au
 	return cfg
 }
 
-// pinnedCA is the fingerprint of the CA a principal config trusts, empty when it trusts none.
-func pinnedCA(config *authzmodels.AuthConfig) string {
+// dmsManagerMarker is the auth_config key that marks a principal as kept by the DMS Manager.
+const dmsManagerMarker = "dms_manager"
+
+// managedDMS is the RA a principal config is kept for, empty when the DMS Manager does not manage it.
+func managedDMS(config *authzmodels.AuthConfig) string {
+	return managedField(config, "dms_id")
+}
+
+// managedRevision identifies the request that last wrote a principal config.
+func managedRevision(config *authzmodels.AuthConfig) string {
+	return managedField(config, "revision")
+}
+
+func managedField(config *authzmodels.AuthConfig, field string) string {
 	if config == nil {
 		return ""
 	}
-	trust, _ := (*config)["ca_trust"].(map[string]any)
-	fingerprint, _ := trust["value"].(string)
-	return fingerprint
+	marker, _ := (*config)[dmsManagerMarker].(map[string]any)
+	value, _ := marker[field].(string)
+	return value
+}
+
+// recreateAuthzPrincipal puts back the principal of a stored RA after it was deleted and saving the RA then failed.
+func (svc DMSManagerServiceBackend) recreateAuthzPrincipal(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, cause string) {
+	if _, err := svc.syncAuthzPrincipal(context.WithoutCancel(ctx), dms); err != nil {
+		lFunc.Errorf("could not recreate authz principal of DMS '%s' after %s: %s", dms.ID, cause, err)
+	}
 }
 
 func isAuthzNotFound(err error) bool {
