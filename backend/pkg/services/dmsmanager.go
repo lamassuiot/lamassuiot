@@ -326,8 +326,11 @@ func (svc DMSManagerServiceBackend) syncAuthzPrincipal(ctx context.Context, dms 
 		_, err = svc.authz.Principals.Update(ctx, id, &dto.UpdatePrincipalRequest{Name: &name, Description: &description, AuthConfig: &authConfig})
 		undo = func(cause string) {
 			uctx := context.WithoutCancel(ctx)
-			// Another request that saved in the meantime owns the principal now, and restoring would overwrite its CA.
-			if current, getErr := svc.authz.Principals.Get(uctx, id); getErr == nil && pinnedCA(current.AuthConfig) != pinnedCA(&authConfig) {
+			// Another request owns the principal now if it changed it, or if it already saved this same CA. Restoring would overwrite it.
+			current, getErr := svc.authz.Principals.Get(uctx, id)
+			saved, stored, readErr := svc.dmsStorage.SelectExists(uctx, dms.ID)
+			changed := getErr == nil && pinnedCA(current.AuthConfig) != pinnedCA(&authConfig)
+			if changed || (readErr == nil && saved && stored.Settings.EnrollmentSettings.EnrollmentCA == caID) {
 				lFunc.Warnf("authz principal of DMS '%s' was not restored after %s: another request changed it", dms.ID, cause)
 				return
 			}
