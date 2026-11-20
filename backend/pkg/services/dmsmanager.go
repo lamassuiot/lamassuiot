@@ -184,7 +184,6 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		dms.Metadata = input.Metadata
 	}
 	hadPrincipal := authzPrincipalEnabled(dms.Settings)
-	previous := *dms
 	storedPrincipal := dms.Settings.AuthzPrincipalSettings
 	dms.Name = input.Name
 	dms.Settings = *input.Settings
@@ -206,10 +205,9 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 
 	lFunc.Debugf("updating DMS %s", input.ID)
 	updated, err := svc.dmsStorage.Update(ctx, dms)
+	// A principal deleted by turning the switch off is not put back: a failed save never brings trust back.
 	if err != nil && undoPrincipal != nil {
 		undoPrincipal("the failed update")
-	} else if err != nil && hadPrincipal {
-		svc.recreateAuthzPrincipal(ctx, lFunc, &previous, "the failed update")
 	}
 	return updated, err
 }
@@ -277,9 +275,6 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 	err = svc.dmsStorage.Delete(ctx, id)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting the DMS %s %s", id, err)
-		if authzPrincipalEnabled(dms.Settings) {
-			svc.recreateAuthzPrincipal(ctx, lFunc, dms, "the failed delete")
-		}
 		return err
 	}
 
@@ -495,13 +490,6 @@ func managedField(config *authzmodels.AuthConfig, field string) string {
 	marker, _ := (*config)[dmsManagerMarker].(map[string]any)
 	value, _ := marker[field].(string)
 	return value
-}
-
-// recreateAuthzPrincipal puts back the principal of a stored RA after it was deleted and saving the RA then failed.
-func (svc DMSManagerServiceBackend) recreateAuthzPrincipal(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, cause string) {
-	if _, err := svc.syncAuthzPrincipal(context.WithoutCancel(ctx), dms); err != nil {
-		lFunc.Errorf("could not recreate authz principal of DMS '%s' after %s: %s", dms.ID, cause, err)
-	}
 }
 
 func isAuthzNotFound(err error) bool {
