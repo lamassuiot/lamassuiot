@@ -124,9 +124,9 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		Settings:     input.Settings,
 	}
 
-	createdPrincipal := false
+	var undoPrincipal func(cause string)
 	if authzPrincipalEnabled(dms.Settings) {
-		if createdPrincipal, err = svc.syncAuthzPrincipal(ctx, dms); err != nil {
+		if undoPrincipal, err = svc.syncAuthzPrincipal(ctx, dms); err != nil {
 			lFunc.Errorf("could not provision the authz principal of DMS '%s': %s", input.ID, err)
 			return nil, err
 		}
@@ -135,8 +135,8 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 	dms, err = svc.dmsStorage.Insert(ctx, dms)
 	if err != nil {
 		lFunc.Errorf("could not insert DMS '%s': %s", input.ID, err)
-		if createdPrincipal {
-			svc.rollbackAuthzPrincipal(ctx, lFunc, input.ID, "the failed insert")
+		if undoPrincipal != nil {
+			undoPrincipal("the failed insert")
 		}
 		return nil, err
 	}
@@ -176,9 +176,9 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		dms.Settings.AuthzPrincipalSettings = storedPrincipal
 	}
 
-	createdPrincipal := false
+	var undoPrincipal func(cause string)
 	if authzPrincipalEnabled(dms.Settings) {
-		createdPrincipal, err = svc.syncAuthzPrincipal(ctx, dms)
+		undoPrincipal, err = svc.syncAuthzPrincipal(ctx, dms)
 	} else if hadPrincipal {
 		err = svc.deleteAuthzPrincipal(ctx, lFunc, dms.ID)
 	}
@@ -189,8 +189,8 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 
 	lFunc.Debugf("updating DMS %s", input.ID)
 	updated, err := svc.dmsStorage.Update(ctx, dms)
-	if err != nil && createdPrincipal {
-		svc.rollbackAuthzPrincipal(ctx, lFunc, input.ID, "the failed update")
+	if err != nil && undoPrincipal != nil {
+		undoPrincipal("the failed update")
 	}
 	return updated, err
 }
