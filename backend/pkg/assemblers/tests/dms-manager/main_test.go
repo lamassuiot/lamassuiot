@@ -2,6 +2,7 @@ package dmsmanager
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -9,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +26,10 @@ import (
 	"github.com/globalsign/est"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -31,6 +37,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -436,6 +443,333 @@ func TestGetMissingDMSShouldFail(t *testing.T) {
 	}
 
 	assert.ErrorIs(t, err, errs.ErrDMSNotFound)
+}
+
+func createAuthzTestCA(t *testing.T, servers *tests.TestServer, name string) *models.CACertificate {
+	t.Helper()
+	ctx := context.Background()
+	profile, err := servers.CA.Service.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)}},
+	})
+	require.NoError(t, err)
+	ca, err := servers.CA.Service.CreateCA(ctx, services.CreateCAInput{
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+		Subject:      models.Subject{CommonName: name},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(24 * time.Hour)},
+		ProfileID:    profile.ID,
+		Metadata:     map[string]any{},
+	})
+	require.NoError(t, err)
+	return ca
+}
+
+func authzTestSettings(caID string, principal bool) models.DMSSettings {
+	var s models.DMSSettings
+	s.EnrollmentSettings.EnrollmentCA = caID
+	s.AuthzPrincipalSettings = &models.AuthzPrincipalSettings{Enabled: principal}
+	return s
+}
+
+// authzPrincipal returns the principal stored in authz, or nil if there is none.
+func authzPrincipal(t *testing.T, servers *tests.TestServer, id string) *dto.PrincipalResponse {
+	t.Helper()
+	p, err := servers.Authz.Client.Principals.Get(context.Background(), id)
+	var apiErr *authzsdk.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	require.NoError(t, err)
+	return p
+}
+
+func authzGrants(t *testing.T, servers *tests.TestServer, id string) map[string]string {
+	t.Helper()
+	grants, query := map[string]string{}, map[string]string{}
+	for {
+		page, err := servers.Authz.Client.Principals.GetPolicies(context.Background(), id, query)
+		require.NoError(t, err)
+		for _, g := range page.List {
+			grants[g.PolicyID] = g.GrantedBy
+		}
+		if page.NextBookmark == "" {
+			return grants
+		}
+		query["bookmark"] = page.NextBookmark
+	}
+}
+
+// authzPrincipalIDs lists the ids of every principal stored in authz, including ones the API cannot address by id.
+func authzPrincipalIDs(t *testing.T, servers *tests.TestServer) []string {
+	t.Helper()
+	list, err := servers.Authz.Client.Principals.List(context.Background(), map[string]string{"page_size": "100"})
+	require.NoError(t, err)
+	ids := []string{}
+	for _, p := range list.List {
+		ids = append(ids, p.ID)
+	}
+	return ids
+}
+
+// authzTrustedCA is the fingerprint of the CA the principal of an RA trusts.
+func authzTrustedCA(t *testing.T, servers *tests.TestServer, id string) any {
+	t.Helper()
+	return (*authzPrincipal(t, servers, id).AuthConfig)["ca_trust"].(map[string]any)["value"]
+}
+
+func TestAuthzPrincipalFollowsTheDMS(t *testing.T) {
+	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
+	require.NoError(t, err)
+	ctx, authz := context.Background(), servers.Authz.Client
+	ca1, ca2 := createAuthzTestCA(t, servers, "ra-ca-1"), createAuthzTestCA(t, servers, "ra-ca-2")
+	update := func(s models.DMSSettings) {
+		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &s})
+		require.NoError(t, err)
+	}
+
+	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: authzTestSettings(ca1.ID, true)})
+	require.NoError(t, err)
+	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-2", Name: "No principal", Settings: authzTestSettings(ca1.ID, false)})
+	require.NoError(t, err)
+	require.NotNil(t, authzPrincipal(t, servers, "dms:ra-1"))
+	assert.Equal(t, "x509", authzPrincipal(t, servers, "dms:ra-1").Type)
+	assert.Equal(t, map[string]string{"policy-a": models.DMSManagerSource, "policy-b": models.DMSManagerSource}, authzGrants(t, servers, "dms:ra-1"))
+	assert.Nil(t, authzPrincipal(t, servers, "dms:ra-2"), "an RA with the switch off gets no principal")
+
+	before := authzTrustedCA(t, servers, "dms:ra-1")
+	update(authzTestSettings(ca2.ID, true))
+	assert.NotEqual(t, before, authzTrustedCA(t, servers, "dms:ra-1"), "the principal follows a change of Enrollment CA")
+
+	rules := []*authzmodels.Rule{{Namespace: "iot", SchemaName: "public", EntityType: "organization", Actions: []string{"read"}}}
+	_, err = authz.Policies.Create(ctx, &dto.CreatePolicyRequest{ID: "by-hand", Name: "by-hand", Rules: rules})
+	require.NoError(t, err)
+	require.NoError(t, authz.Principals.GrantPolicy(ctx, "dms:ra-1", &dto.GrantPolicyRequest{PolicyID: "by-hand", GrantedBy: "admin"}))
+	unaware := authzTestSettings(ca2.ID, true)
+	unaware.AuthzPrincipalSettings = nil
+	update(unaware)
+	assert.NotNil(t, authzPrincipal(t, servers, "dms:ra-1"), "a client that does not send the switch keeps it")
+	assert.Equal(t, "admin", authzGrants(t, servers, "dms:ra-1")["by-hand"], "grants made by others are kept")
+
+	update(authzTestSettings(ca2.ID, false))
+	assert.Nil(t, authzPrincipal(t, servers, "dms:ra-1"), "turning the switch off deletes the principal")
+	update(authzTestSettings(ca2.ID, true))
+	assert.NotNil(t, authzPrincipal(t, servers, "dms:ra-1"))
+
+	require.NoError(t, dmsMgr.Service.DeleteDMS(ctx, services.DeleteDMSInput{ID: "ra-1"}))
+	assert.Nil(t, authzPrincipal(t, servers, "dms:ra-1"), "deleting the RA deletes the principal")
+}
+
+func TestAuthzPrincipalTrustsOnlyItsEnrollmentCA(t *testing.T) {
+	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
+	require.NoError(t, err)
+	ctx := context.Background()
+	ca, otherCA := createAuthzTestCA(t, servers, "ra-ca"), createAuthzTestCA(t, servers, "other-ca")
+	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: authzTestSettings(ca.ID, true)})
+	require.NoError(t, err)
+
+	stored := authzPrincipal(t, servers, "dms:ra-1")
+	principal := authzmodels.Principal{ID: stored.ID, Type: stored.Type, AuthConfig: *stored.AuthConfig, Active: stored.Active}
+	issue := func(ca *models.CACertificate) *x509.Certificate {
+		key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+		csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "device-1"}, key)
+		crt, err := servers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{CAID: ca.ID, CertRequest: (*models.X509CertificateRequest)(csr), IssuanceProfileID: ca.ProfileID})
+		require.NoError(t, err)
+		return (*x509.Certificate)(crt.Certificate)
+	}
+
+	device := issue(ca)
+	matched, err := store.X509Matcher{}.Match([]authzmodels.Principal{principal}, device)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dms:ra-1"}, matched, "a certificate of the Enrollment CA authenticates")
+	matched, err = store.X509Matcher{}.Match([]authzmodels.Principal{principal}, issue(otherCA))
+	require.NoError(t, err)
+	assert.Empty(t, matched, "a certificate of another CA does not")
+	attrs, err := store.X509Matcher{}.ResolveSubjectAttributes(principal, device)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"device_id": "device-1"}, attrs)
+}
+
+func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
+	ctx := context.Background()
+	isGrant := func(r *http.Request) bool {
+		return r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/policies")
+	}
+	cases := []struct {
+		name          string
+		prepare       func(t *testing.T, servers *tests.TestServer, ca *models.CACertificate) string // returns the Enrollment CA id
+		wantErr       error
+		principalType string // a principal that existed before and must be kept
+		id            string // the RA id, "ra-1" when empty
+	}{
+		{name: "authz is down", prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
+			s.Authz.FailWhen(func(*http.Request) bool { return true })
+			return ca.ID
+		}},
+		{name: "a grant fails after the principal is created", prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
+			s.Authz.FailWhen(isGrant)
+			return ca.ID
+		}},
+		{name: "unknown policy", prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
+			require.NoError(t, s.Authz.Client.Policies.Delete(ctx, "policy-b"))
+			return ca.ID
+		}},
+		{name: "x509 principal not managed for this RA", principalType: "x509", wantErr: errs.ErrValidateBadRequest, prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
+			_, err := s.Authz.Client.Principals.Create(ctx, &dto.CreatePrincipalRequest{ID: "dms:ra-1", Name: "operator's", Type: "x509", AuthConfig: &authzmodels.AuthConfig{"match_mode": "serial_and_ca"}})
+			require.NoError(t, err)
+			return ca.ID
+		}},
+		{name: "principal of another type", principalType: "oidc", prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
+			_, err := s.Authz.Client.Principals.Create(ctx, &dto.CreatePrincipalRequest{ID: "dms:ra-1", Name: "someone else", Type: "oidc", AuthConfig: &authzmodels.AuthConfig{}})
+			require.NoError(t, err)
+			return ca.ID
+		}},
+		{name: "id with a slash", id: "ra/x", wantErr: errs.ErrValidateBadRequest, prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string { return ca.ID }},
+		{name: "no Enrollment CA", wantErr: errs.ErrValidateBadRequest, prepare: func(*testing.T, *tests.TestServer, *models.CACertificate) string { return "" }},
+		{name: "revoked Enrollment CA", wantErr: errs.ErrValidateBadRequest, prepare: func(t *testing.T, s *tests.TestServer, ca *models.CACertificate) string {
+			_, err := s.CA.Service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{CAID: ca.ID, Status: models.StatusRevoked, RevocationReason: models.RevocationReason(1)})
+			require.NoError(t, err)
+			return ca.ID
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
+			require.NoError(t, err)
+			caID := tc.prepare(t, servers, createAuthzTestCA(t, servers, "ra-ca"))
+			id := cmp.Or(tc.id, "ra-1")
+
+			_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: id, Name: "Field devices", Settings: authzTestSettings(caID, true)})
+
+			require.Error(t, err)
+			if tc.wantErr != nil {
+				assert.ErrorIs(t, err, tc.wantErr)
+			}
+			servers.Authz.FailWhen(func(*http.Request) bool { return false })
+			_, err = dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: id})
+			assert.ErrorIs(t, err, errs.ErrDMSNotFound, "the DMS is not stored")
+			if tc.principalType == "" {
+				assert.NotContains(t, authzPrincipalIDs(t, servers), "dms:"+id, "no principal is left behind")
+			} else {
+				assert.Equal(t, tc.principalType, authzPrincipal(t, servers, "dms:ra-1").Type, "the existing principal is kept")
+			}
+		})
+	}
+
+	createRA := func(t *testing.T) (*tests.DMSManagerTestServer, *tests.TestServer, string) {
+		dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
+		require.NoError(t, err)
+		caID := createAuthzTestCA(t, servers, "ra-ca").ID
+		_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: authzTestSettings(caID, true)})
+		require.NoError(t, err)
+		return dmsMgr, servers, caID
+	}
+
+	t.Run("a failed update keeps trusting the stored CA", func(t *testing.T) {
+		dmsMgr, servers, caID := createRA(t)
+		other := createAuthzTestCA(t, servers, "other-ca")
+		before := authzTrustedCA(t, servers, "dms:ra-1")
+		require.NoError(t, servers.Authz.Client.Principals.RevokePolicy(ctx, "dms:ra-1", "policy-b"))
+		servers.Authz.FailWhen(isGrant)
+		next := authzTestSettings(other.ID, true)
+
+		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &next})
+
+		require.Error(t, err)
+		servers.Authz.FailWhen(func(*http.Request) bool { return false })
+		assert.Equal(t, before, authzTrustedCA(t, servers, "dms:ra-1"), "the principal does not trust the CA that was never saved")
+		dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "ra-1"})
+		require.NoError(t, err)
+		assert.Equal(t, caID, dms.Settings.EnrollmentSettings.EnrollmentCA)
+	})
+
+	t.Run("update while authz is down keeps the stored RA", func(t *testing.T) {
+		dmsMgr, servers, caID := createRA(t)
+		servers.Authz.FailWhen(func(*http.Request) bool { return true })
+		off := authzTestSettings(caID, false)
+		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &off})
+
+		require.Error(t, err)
+		dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "ra-1"})
+		require.NoError(t, err)
+		assert.True(t, dms.Settings.AuthzPrincipalSettings.Enabled, "the stored RA keeps the switch on")
+	})
+
+	t.Run("delete while authz fails keeps the RA and its principal", func(t *testing.T) {
+		dmsMgr, servers, _ := createRA(t)
+		servers.Authz.FailWhen(func(r *http.Request) bool { return r.Method == http.MethodDelete })
+
+		require.Error(t, dmsMgr.Service.DeleteDMS(ctx, services.DeleteDMSInput{ID: "ra-1"}))
+		servers.Authz.FailWhen(func(*http.Request) bool { return false })
+		_, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "ra-1"})
+		assert.NoError(t, err)
+		assert.NotNil(t, authzPrincipal(t, servers, "dms:ra-1"))
+	})
+
+	t.Run("delete works when the principal is already gone", func(t *testing.T) {
+		dmsMgr, servers, _ := createRA(t)
+		require.NoError(t, servers.Authz.Client.Principals.Delete(ctx, "dms:ra-1"))
+
+		require.NoError(t, dmsMgr.Service.DeleteDMS(ctx, services.DeleteDMSInput{ID: "ra-1"}))
+	})
+}
+
+func TestAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
+	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
+	require.NoError(t, err)
+	ctx := context.Background()
+	ca1, ca2, ca3 := createAuthzTestCA(t, servers, "ca-1"), createAuthzTestCA(t, servers, "ca-2"), createAuthzTestCA(t, servers, "ca-3")
+	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: authzTestSettings(ca1.ID, true)})
+	require.NoError(t, err)
+	before := authzTrustedCA(t, servers, "dms:ra-1")
+	require.NoError(t, servers.Authz.Client.Principals.RevokePolicy(ctx, "dms:ra-1", "policy-b"))
+
+	// While the first update grants policy-b, a second one saves another CA. Then the first one fails.
+	var raced atomic.Bool
+	servers.Authz.FailWhen(func(r *http.Request) bool {
+		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/policies") || raced.Swap(true) {
+			return false
+		}
+		newer := authzTestSettings(ca3.ID, true)
+		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &newer})
+		assert.NoError(t, err)
+		return true
+	})
+	first := authzTestSettings(ca2.ID, true)
+	_, err = dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &first})
+
+	require.Error(t, err)
+	servers.Authz.FailWhen(func(*http.Request) bool { return false })
+	dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "ra-1"})
+	require.NoError(t, err)
+	assert.Equal(t, ca3.ID, dms.Settings.EnrollmentSettings.EnrollmentCA, "the newer update was saved")
+	assert.NotEqual(t, before, authzTrustedCA(t, servers, "dms:ra-1"), "the failed update did not put the old CA back")
+}
+
+func TestAuthzPrincipalSyncReadsEveryGrantPage(t *testing.T) {
+	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
+	require.NoError(t, err)
+	ctx, authz := context.Background(), servers.Authz.Client
+	settings := authzTestSettings(createAuthzTestCA(t, servers, "ra-ca").ID, true)
+	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: settings})
+	require.NoError(t, err)
+
+	// More grants than a page holds, with the wanted policies last.
+	grant := func(policyID string) {
+		require.NoError(t, authz.Principals.GrantPolicy(ctx, "dms:ra-1", &dto.GrantPolicyRequest{PolicyID: policyID, GrantedBy: models.DMSManagerSource}))
+	}
+	for _, policyID := range tests.AuthzTestPolicyIDs {
+		require.NoError(t, authz.Principals.RevokePolicy(ctx, "dms:ra-1", policyID))
+	}
+	for i := range 55 {
+		grant(fmt.Sprintf("obsolete-%02d", i))
+	}
+	for _, policyID := range tests.AuthzTestPolicyIDs {
+		grant(policyID)
+	}
+
+	_, err = dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &settings})
+
+	require.NoError(t, err, "a wanted policy on a later page is not granted again")
+	assert.Equal(t, map[string]string{"policy-a": models.DMSManagerSource, "policy-b": models.DMSManagerSource}, authzGrants(t, servers, "dms:ra-1"), "obsolete grants on every page are revoked")
 }
 
 func TestESTEnroll(t *testing.T) {

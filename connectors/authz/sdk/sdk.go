@@ -76,19 +76,26 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		},
 	}
 
-	client := &Client{
-		httpClient: httpClient,
-		baseURL:    config.BaseURL,
-		headers:    config.CustomHeaders,
-	}
+	return newClient(httpClient, config.BaseURL, config.CustomHeaders), nil
+}
 
-	// Initialize service clients
+// NewClientWithHTTPClient builds a client on an http.Client already configured by the caller, such as sdk.BuildHTTPClient.
+func NewClientWithHTTPClient(httpClient *http.Client, baseURL string) *Client {
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	httpClient.Transport = &contextSourceRoundTripper{transport: transport}
+	return newClient(httpClient, baseURL, nil)
+}
+
+func newClient(httpClient *http.Client, baseURL string, headers map[string]string) *Client {
+	client := &Client{httpClient: httpClient, baseURL: baseURL, headers: headers}
 	client.Authz = newAuthzClient(client)
 	client.Principals = newPrincipalClient(client)
 	client.Policies = newPolicyClient(client)
 	client.Schemas = newSchemaClient(client)
-
-	return client, nil
+	return client
 }
 
 // WithHeader adds a custom header to all requests
@@ -284,7 +291,7 @@ type PrincipalService interface {
 	List(ctx context.Context, queryParams map[string]string) (*dto.ListPrincipalsResponse, error)
 	Update(ctx context.Context, id string, req *dto.UpdatePrincipalRequest) (*dto.PrincipalResponse, error)
 	Delete(ctx context.Context, id string) error
-	GetPolicies(ctx context.Context, id string) (*dto.ListPrincipalPoliciesResponse, error)
+	GetPolicies(ctx context.Context, id string, queryParams map[string]string) (*dto.ListPrincipalPoliciesResponse, error)
 	GrantPolicy(ctx context.Context, id string, req *dto.GrantPolicyRequest) error
 	RevokePolicy(ctx context.Context, id string, policyID string) error
 }
@@ -315,17 +322,21 @@ func (s *principalClient) Get(ctx context.Context, id string) (*dto.PrincipalRes
 	return &result, nil
 }
 
-func (s *principalClient) List(ctx context.Context, queryParams map[string]string) (*dto.ListPrincipalsResponse, error) {
-	path := "/v1/principals"
-	if len(queryParams) > 0 {
-		vals := url.Values{}
-		for k, v := range queryParams {
-			vals.Set(k, v)
-		}
-		path += "?" + vals.Encode()
+// withQuery appends queryParams to path, such as the bookmark of the next page.
+func withQuery(path string, queryParams map[string]string) string {
+	if len(queryParams) == 0 {
+		return path
 	}
+	vals := url.Values{}
+	for k, v := range queryParams {
+		vals.Set(k, v)
+	}
+	return path + "?" + vals.Encode()
+}
+
+func (s *principalClient) List(ctx context.Context, queryParams map[string]string) (*dto.ListPrincipalsResponse, error) {
 	var result dto.ListPrincipalsResponse
-	err := s.client.get(ctx, path, &result)
+	err := s.client.get(ctx, withQuery("/v1/principals", queryParams), &result)
 	if err != nil {
 		return nil, err
 	}
@@ -345,9 +356,9 @@ func (s *principalClient) Delete(ctx context.Context, id string) error {
 	return s.client.delete(ctx, fmt.Sprintf("/v1/principals/%s", url.PathEscape(id)))
 }
 
-func (s *principalClient) GetPolicies(ctx context.Context, id string) (*dto.ListPrincipalPoliciesResponse, error) {
+func (s *principalClient) GetPolicies(ctx context.Context, id string, queryParams map[string]string) (*dto.ListPrincipalPoliciesResponse, error) {
 	var result dto.ListPrincipalPoliciesResponse
-	err := s.client.get(ctx, fmt.Sprintf("/v1/principals/%s/policies", url.PathEscape(id)), &result)
+	err := s.client.get(ctx, withQuery(fmt.Sprintf("/v1/principals/%s/policies", url.PathEscape(id)), queryParams), &result)
 	if err != nil {
 		return nil, err
 	}

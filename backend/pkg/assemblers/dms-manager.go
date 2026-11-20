@@ -3,6 +3,7 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
@@ -10,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/v4/backend/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
@@ -20,8 +22,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
-	service, err := AssembleDMSManagerService(conf, caService, deviceService)
+func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, authz *authzsdk.Client, serviceInfo models.APIServiceInfo) (*services.DMSManagerService, int, error) {
+	service, err := AssembleDMSManagerService(conf, caService, deviceService, authz)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
@@ -45,7 +47,8 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 	return service, port, nil
 }
 
-func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
+// authz is only used when authz_principals is enabled, and then it is required.
+func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, authz *authzsdk.Client) (*services.DMSManagerService, error) {
 	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", conf.OtelConfig)
 
 	lSvc := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
@@ -62,12 +65,22 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
 	}
 
+	if !conf.AuthzPrincipals.Enabled {
+		authz = nil
+	} else if authz == nil || len(conf.AuthzPrincipals.PolicyIDs) == 0 {
+		return nil, fmt.Errorf("authz_principals needs an authz client and authz_principals.policy_ids")
+	}
+	// A repeated id would be granted twice, which authz rejects.
+	conf.AuthzPrincipals.PolicyIDs = slices.Compact(slices.Sorted(slices.Values(conf.AuthzPrincipals.PolicyIDs)))
+
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
 		CAClient:              caService,
 		DevManagerCli:         deviceService,
 		DownstreamCertificate: downCert,
+		Authz:                 authz,
+		AuthzPrincipals:       conf.AuthzPrincipals,
 	})
 
 	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)

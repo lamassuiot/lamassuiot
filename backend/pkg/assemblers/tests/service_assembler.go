@@ -8,9 +8,13 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 	"uuid"
@@ -18,6 +22,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	authzapi "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
+	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -166,6 +175,7 @@ const (
 	VA
 	DMS_MANAGER
 	ALERTS
+	AUTHZ
 )
 
 type TestEventBusConfig struct {
@@ -238,6 +248,7 @@ type TestServer struct {
 	DeviceManager *DeviceManagerTestServer
 	DMSManager    *DMSManagerTestServer
 	Alerts        *AlertsTestServer
+	Authz         *AuthzTestServer
 
 	EventBus      *TestEventBusConfig
 	Storage       *TestStorageEngineConfig
@@ -460,7 +471,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 	}, nil
 }
 
-func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
+func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer, authzTestServer *AuthzTestServer) (*DMSManagerTestServer, error) {
 	key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 	crt, _ := chelpers.GenerateSelfSignedCertificate(key, "downstream")
 	downstreamPath := fmt.Sprintf("/tmp/%s", crt.SerialNumber.String())
@@ -477,6 +488,17 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 	err = os.WriteFile(downstreamKeyPath, []byte(keyPem), 0600)
 	if err != nil {
 		return nil, fmt.Errorf("could not save downstream cert. Exiting: %s", err)
+	}
+
+	var authzClient *authzsdk.Client
+	var authzPrincipals config.DMSAuthzPrincipals
+	if authzTestServer != nil {
+		authzClient = authzTestServer.Client
+		authzPrincipals = config.DMSAuthzPrincipals{
+			Enabled:                  true,
+			PolicyIDs:                append(slices.Clone(AuthzTestPolicyIDs), AuthzTestPolicyIDs[0]), // a repeated id must not break the sync
+			SubjectAttributeMappings: map[string]string{"device_id": "x509.subject.cn"},
+		}
 	}
 
 	svc, port, err := assemblers.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
@@ -499,9 +521,11 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		PublisherEventBus:         eventBus.Config,
 		Storage:                   storageEngine.Config,
 		DownstreamCertificateFile: downstreamCertPath,
+		AuthzPrincipals:           authzPrincipals,
 	},
 		caTestServer.HttpCASDK,
 		deviceManagerTestServer.Service,
+		authzClient,
 		models.APIServiceInfo{
 			Version:   "test",
 			BuildSHA:  "-",
@@ -522,6 +546,67 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 			fmt.Println("TEST CLEANUP DMS MANAGER")
 		},
 	}, nil
+}
+
+// AuthzTestPolicyIDs are the policies the DMS Manager test server grants to the principal of an RA.
+var AuthzTestPolicyIDs = []string{"policy-a", "policy-b"}
+
+type AuthzTestServer struct {
+	Client     *authzsdk.Client // as the DMS Manager sees authz, through FailWhen
+	failWhen   atomic.Pointer[func(*http.Request) bool]
+	BeforeEach func() error
+	AfterSuite func()
+}
+
+// FailWhen makes authz answer 503 to the matching requests until the next BeforeEach.
+func (s *AuthzTestServer) FailWhen(match func(*http.Request) bool) {
+	s.failWhen.Store(&match)
+}
+
+func BuildAuthzTestServer(storageEngine *TestStorageEngineConfig) (*AuthzTestServer, error) {
+	dbConfig := maps.Clone(storageEngine.Config.Config)
+	dbConfig["database"], dbConfig["schema"] = "pki", "authz"
+	authzDB := cconfig.PluggableStorageEngine{LogLevel: cconfig.Info, Provider: cconfig.Postgres, Config: dbConfig}
+
+	_, _, _, _, port, err := authzapi.AssembleAuthzServiceWithHTTPServer(authzconfig.AuthzConfig{
+		Logs:                  cconfig.Logging{Level: cconfig.Info},
+		Server:                cconfig.HttpServer{LogLevel: cconfig.Info, Protocol: cconfig.HTTP},
+		AuthzDB:               authzDB,
+		InsecureSkipJWTVerify: true,
+	}, models.APIServiceInfo{Version: "test", BuildSHA: "-", BuildTime: "-"})
+	if err != nil {
+		return nil, fmt.Errorf("could not assemble Authz Service. Exiting: %s", err)
+	}
+	db, err := authzapi.CreatePostgresDBConnection(chelpers.SetupLogger(cconfig.Info, "Test Case", "Authz DB"), authzDB)
+	if err != nil {
+		return nil, fmt.Errorf("could not connect to the Authz database: %s", err)
+	}
+
+	srv := &AuthzTestServer{}
+	proxy := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", port)})
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if match := srv.failWhen.Load(); match != nil && (*match)(r) {
+			http.Error(w, "injected authz failure", http.StatusServiceUnavailable)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	srv.Client = authzsdk.NewClientWithHTTPClient(sdk.HttpClientWithCustomHeaders(&http.Client{}, "X-Principal-ID", "admin-mode"), front.URL)
+	srv.BeforeEach = func() error {
+		srv.failWhen.Store(nil)
+		if err := db.Exec("TRUNCATE principal_policies, principals, policies CASCADE").Error; err != nil {
+			return fmt.Errorf("could not reset the Authz database: %s", err)
+		}
+		for _, id := range AuthzTestPolicyIDs {
+			rules := []*authzmodels.Rule{{Namespace: "iot", SchemaName: "public", EntityType: "organization", Actions: []string{"read"}}}
+			if _, err := srv.Client.Policies.Create(context.Background(), &dto.CreatePolicyRequest{ID: id, Name: id, Rules: rules}); err != nil {
+				return fmt.Errorf("could not create test policy %s: %s", id, err)
+			}
+		}
+		return nil
+	}
+	srv.AfterSuite = front.Close
+	return srv, nil
 }
 
 func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, kmsTestServer *KMSTestServer, monitor bool) (*VATestServer, error) {
@@ -647,6 +732,16 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		afterSuiteActions = append(afterSuiteActions, deviceManagerTestServer.AfterSuite)
 	}
 
+	if slices.Contains(services, AUTHZ) {
+		authzTestServer, err := BuildAuthzTestServer(storageEngine)
+		if err != nil {
+			return nil, fmt.Errorf("could not build AuthzTestServer: %s", err)
+		}
+		servicesMap[AUTHZ] = authzTestServer
+		beforeEachActions = append(beforeEachActions, authzTestServer.BeforeEach)
+		afterSuiteActions = append(afterSuiteActions, authzTestServer.AfterSuite)
+	}
+
 	if slices.Contains(services, DMS_MANAGER) {
 		deviceTestServerIface, exists := servicesMap[DEVICE_MANAGER]
 		if !exists {
@@ -658,7 +753,8 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 			return nil, fmt.Errorf("could not cast supposed DeviceManagerTestServer. Make sure it was created correctly")
 		}
 
-		dmsManagerTestServer, err := BuildDMSManagerServiceTestServer(storageEngine, eventBus, caTestServer, deviceTestServer)
+		authzTestServer, _ := servicesMap[AUTHZ].(*AuthzTestServer)
+		dmsManagerTestServer, err := BuildDMSManagerServiceTestServer(storageEngine, eventBus, caTestServer, deviceTestServer, authzTestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build DMSManagerTestServer: %s", err)
 		}
@@ -737,6 +833,12 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		DeviceManager: func() *DeviceManagerTestServer {
 			if servicesMap[DEVICE_MANAGER] != nil {
 				return servicesMap[DEVICE_MANAGER].(*DeviceManagerTestServer)
+			}
+			return nil
+		}(),
+		Authz: func() *AuthzTestServer {
+			if servicesMap[AUTHZ] != nil {
+				return servicesMap[AUTHZ].(*AuthzTestServer)
 			}
 			return nil
 		}(),

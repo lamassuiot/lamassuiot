@@ -5,6 +5,7 @@ import (
 
 	lamassu "github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -67,7 +68,21 @@ func main() {
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 
-	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, caSDK, deviceSDK, models.APIServiceInfo{
+	var authzSDK *authzsdk.Client
+	if conf.AuthzPrincipals.Enabled {
+		lAuthzClient := helpers.SetupLogger(conf.AuthzClient.LogLevel, "DMS Manager", "LMS SDK - Authz Client")
+		authzHttpCli, err := sdk.BuildHTTPClient(conf.AuthzClient.HTTPClient, lAuthzClient)
+		if err != nil {
+			log.Fatalf("could not build HTTP Authz Client: %s", err)
+		}
+
+		authzSDK = authzsdk.NewClientWithHTTPClient(
+			sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(authzHttpCli, models.DMSManagerSource), "X-Principal-ID", "admin-mode"),
+			fmt.Sprintf("%s://%s:%d%s", conf.AuthzClient.Protocol, conf.AuthzClient.Hostname, conf.AuthzClient.Port, conf.AuthzClient.BasePath),
+		)
+	}
+
+	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, caSDK, deviceSDK, authzSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,
