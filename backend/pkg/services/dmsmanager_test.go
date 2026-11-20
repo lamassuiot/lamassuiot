@@ -183,6 +183,7 @@ type dmsAuthzEnv struct {
 	repo          *dmsRepo
 	authz         *authzStub
 	ca1, ca2, ca3 *models.CACertificate
+	cas           map[string]*models.CACertificate
 }
 
 func newDMSAuthzEnv(t *testing.T, withAuthz bool) *dmsAuthzEnv {
@@ -204,10 +205,11 @@ func newDMSAuthzEnv(t *testing.T, withAuthz bool) *dmsAuthzEnv {
 		ca2:   newCA("ca-2"),
 		ca3:   newCA("ca-3"),
 	}
+	env.cas = map[string]*models.CACertificate{"ca-1": env.ca1, "ca-2": env.ca2, "ca-3": env.ca3}
 	builder := DMSManagerBuilder{
 		Logger:     logrus.NewEntry(logrus.New()),
 		DMSStorage: env.repo,
-		CAClient:   caStub{cas: map[string]*models.CACertificate{"ca-1": env.ca1, "ca-2": env.ca2, "ca-3": env.ca3}},
+		CAClient:   caStub{cas: env.cas},
 	}
 	if withAuthz {
 		builder.Authz = &authzsdk.Client{Principals: env.authz, Policies: policyStub{known: env.authz.policies}}
@@ -365,17 +367,23 @@ func TestDMSAuthzPrincipalFailedUpdateRestoresThePrincipal(t *testing.T) {
 }
 
 func TestDMSAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	require.NoError(t, env.create("ra-1", "ca-1", true))
-	before := env.trusts("ra-1")
-	env.authz.grants["dms:ra-1"] = env.authz.grants["dms:ra-1"][:1]
-	// While the first update grants the missing policy, a second one saves another CA. Then the first one fails.
-	env.authz.onGrant = func() { require.NoError(t, env.update("ra-1", dmsSettings("ca-3", ptr(true)))) }
+	// The second request saves another CA, or the same one the first request was setting.
+	for _, newerCA := range []string{"ca-3", "ca-2"} {
+		t.Run("newer update to "+newerCA, func(t *testing.T) {
+			env := newDMSAuthzEnv(t, true)
+			require.NoError(t, env.create("ra-1", "ca-1", true))
+			env.authz.grants["dms:ra-1"] = env.authz.grants["dms:ra-1"][:1]
+			// While the first update grants the missing policy, the second one saves. Then the first one fails.
+			env.authz.onGrant = func() { require.NoError(t, env.update("ra-1", dmsSettings(newerCA, ptr(true)))) }
 
-	require.Error(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
+			require.Error(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
 
-	assert.Equal(t, "ca-3", env.repo.dms["ra-1"].Settings.EnrollmentSettings.EnrollmentCA, "the newer update was saved")
-	assert.NotEqual(t, before, env.trusts("ra-1"), "the failed update did not put the old CA back")
+			saved := env.repo.dms["ra-1"].Settings.EnrollmentSettings.EnrollmentCA
+			assert.Equal(t, newerCA, saved, "the newer update was saved")
+			cfg := dmsPrincipalAuthConfig((*x509.Certificate)(env.cas[saved].Certificate.Certificate), nil)
+			assert.Equal(t, pinnedCA(&cfg), env.trusts("ra-1"), "the principal trusts the CA that was saved")
+		})
+	}
 }
 
 func TestDMSAuthzPrincipalDeleteFailsWhenAuthzFails(t *testing.T) {
