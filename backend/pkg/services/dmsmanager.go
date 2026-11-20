@@ -325,13 +325,19 @@ func (svc DMSManagerServiceBackend) syncAuthzPrincipal(ctx context.Context, dms 
 	case err == nil:
 		_, err = svc.authz.Principals.Update(ctx, id, &dto.UpdatePrincipalRequest{Name: &name, Description: &description, AuthConfig: &authConfig})
 		undo = func(cause string) {
+			uctx := context.WithoutCancel(ctx)
+			// Another request that saved in the meantime owns the principal now, and restoring would overwrite its CA.
+			if current, getErr := svc.authz.Principals.Get(uctx, id); getErr == nil && pinnedCA(current.AuthConfig) != pinnedCA(&authConfig) {
+				lFunc.Warnf("authz principal of DMS '%s' was not restored after %s: another request changed it", dms.ID, cause)
+				return
+			}
 			// A principal stored without auth_config comes back as null, which an update would not overwrite.
 			previousConfig := existing.AuthConfig
 			if previousConfig == nil {
 				previousConfig = &authzmodels.AuthConfig{}
 			}
 			restore := &dto.UpdatePrincipalRequest{Name: &existing.Name, Description: &existing.Description, AuthConfig: previousConfig}
-			if _, restoreErr := svc.authz.Principals.Update(context.WithoutCancel(ctx), id, restore); restoreErr != nil {
+			if _, restoreErr := svc.authz.Principals.Update(uctx, id, restore); restoreErr != nil {
 				lFunc.Errorf("could not restore authz principal of DMS '%s' after %s: %s", dms.ID, cause, restoreErr)
 			}
 		}
@@ -440,6 +446,16 @@ func dmsPrincipalAuthConfig(ca *x509.Certificate, mappings map[string]string) au
 		cfg["subject_attribute_mappings"] = m
 	}
 	return cfg
+}
+
+// pinnedCA is the fingerprint of the CA a principal config trusts, empty when it trusts none.
+func pinnedCA(config *authzmodels.AuthConfig) string {
+	if config == nil {
+		return ""
+	}
+	trust, _ := (*config)["ca_trust"].(map[string]any)
+	fingerprint, _ := trust["value"].(string)
+	return fingerprint
 }
 
 func isAuthzNotFound(err error) bool {
