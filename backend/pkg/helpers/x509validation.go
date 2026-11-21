@@ -7,19 +7,22 @@ import (
 )
 
 func ValidateCertificate(ca, cert *x509.Certificate, considerExpiration bool) error {
-	return ValidateCertificates(ca, []*x509.Certificate{cert}, considerExpiration)
+	_, err := ValidateCertificates(ca, []*x509.Certificate{cert}, considerExpiration)
+	return err
 }
 
-func ValidateCertificates(ca *x509.Certificate, certs []*x509.Certificate, considerExpiration bool) error {
+// ValidateCertificates verifies that certs[0] chains up to ca, using the rest of certs as intermediates. It returns
+// the verified chain: certs[0] first and ca last. Certificates of certs that are not part of it are left out.
+func ValidateCertificates(ca *x509.Certificate, certs []*x509.Certificate, considerExpiration bool) ([]*x509.Certificate, error) {
 	if len(certs) == 0 {
-		return fmt.Errorf("no certificates provided for validation")
+		return nil, fmt.Errorf("no certificates provided for validation")
 	}
 
 	leafCert := certs[0]
 
 	// Always reject future-dated certificates.
 	if time.Now().Before(leafCert.NotBefore) {
-		return fmt.Errorf("certificate is not yet valid (NotBefore=%s)", leafCert.NotBefore.UTC().Format(time.RFC3339))
+		return nil, fmt.Errorf("certificate is not yet valid (NotBefore=%s)", leafCert.NotBefore.UTC().Format(time.RFC3339))
 	}
 
 	caPool := x509.NewCertPool()
@@ -42,10 +45,10 @@ func ValidateCertificates(ca *x509.Certificate, certs []*x509.Certificate, consi
 
 	opts.Intermediates = intermediatePool
 
-	_, err := leafCert.Verify(opts)
+	chains, err := leafCert.Verify(opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return chains[0], nil
 }

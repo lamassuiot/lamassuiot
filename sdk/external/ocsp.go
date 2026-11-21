@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
+	"time"
 
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
@@ -57,7 +59,7 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 	httpRequest.Header.Add("Accept", "application/ocsp-response")
 	httpRequest.Header.Add("Host", ocspUrl.Host)
 
-	httpClient := &http.Client{}
+	httpClient := &http.Client{Timeout: revocationRequestTimeout}
 	if serverCertificate == nil {
 		logrus.Warn("using insecure server validation in OCSP request")
 		httpClient.Transport = &http.Transport{
@@ -104,5 +106,34 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 		return nil, fmt.Errorf("could not parse OCSP response: %w", err)
 	}
 
+	if verifyOCSPResponse {
+		if err := checkDelegatedResponder(response, issuer); err != nil {
+			return nil, err
+		}
+	}
+
 	return response, nil
+}
+
+// checkDelegatedResponder enforces RFC 6960 4.2.2.2: a response signed by a certificate other than the issuer must
+// come from a delegated responder carrying the id-kp-OCSPSigning EKU and within its validity period.
+// ocsp.ParseResponse only checks that the responder certificate was signed by the issuer, which any end-entity
+// certificate of that CA satisfies, expired ones included.
+func checkDelegatedResponder(response *ocsp.Response, issuer *x509.Certificate) error {
+	responder := response.Certificate
+	if responder == nil || responder.Equal(issuer) {
+		return nil
+	}
+
+	if !slices.Contains(responder.ExtKeyUsage, x509.ExtKeyUsageOCSPSigning) {
+		return fmt.Errorf("OCSP response signed by %q, which is not the issuer and is not authorized for OCSP signing", responder.Subject.CommonName)
+	}
+
+	now := time.Now()
+	if now.Before(responder.NotBefore) || now.After(responder.NotAfter) {
+		return fmt.Errorf("OCSP response signed by %q, whose certificate is not valid at this time (valid from %s to %s)",
+			responder.Subject.CommonName, responder.NotBefore.UTC().Format(time.RFC3339), responder.NotAfter.UTC().Format(time.RFC3339))
+	}
+
+	return nil
 }
