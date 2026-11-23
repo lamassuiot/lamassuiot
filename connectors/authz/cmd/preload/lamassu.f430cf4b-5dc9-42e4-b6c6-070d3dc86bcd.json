@@ -1,0 +1,13 @@
+{
+  "id": "lamassu.f430cf4b-5dc9-42e4-b6c6-070d3dc86bcd",
+  "name": "Terminal Network - Access",
+  "description": "Lets a principal open the dashboard's experimental browser terminal network (Wisp proxy at /wisp/). Only takes effect where the Terminal Network http schema is loaded.",
+  "http_rules": [
+    {
+      "http_schema_name": "Terminal Network",
+      "actions": [
+        "terminal-network-connect"
+      ]
+    }
+  ]
+}

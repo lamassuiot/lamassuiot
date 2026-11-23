@@ -27,5 +27,13 @@
         "*"
       ]
     }
+  ],
+  "http_rules": [
+    {
+      "http_schema_name": "Terminal Network",
+      "actions": [
+        "*"
+      ]
+    }
   ]
 }
