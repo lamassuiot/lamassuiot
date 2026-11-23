@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Terminal Network",
+    "description": "Network access for the dashboard's experimental browser terminal, served by the Wisp proxy at /wisp/. A browser opens it as a WebSocket, which cannot send an Authorization header, so the route takes the access token from the access_token query parameter.",
+    "base_paths": ["/wisp"],
+    "default_action": "deny",
+    "routes": [
+      {
+        "name": "network-connect",
+        "methods": ["GET"],
+        "path": "/wisp/**",
+        "match_type": "prefix",
+        "action": "terminal-network-connect",
+        "query_token": true
+      }
+    ]
+  }
+]

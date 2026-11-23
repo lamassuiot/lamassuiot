@@ -1244,3 +1244,46 @@ func writeHTTPSchemaTestFile(t *testing.T, content string) string {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	return path
 }
+
+func TestHTTPSchemaRegistry_LoadTerminalNetwork(t *testing.T) {
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+
+	schema, err := registry.Get("Terminal Network")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"/wisp"}, schema.BasePaths)
+	assert.Equal(t, HTTPDefaultActionDeny, schema.DefaultAction)
+	assert.Equal(t, []string{"terminal-network-connect"}, schema.AllActions)
+
+	for _, path := range []string{"/wisp", "/wisp/", "/wisp/anything"} {
+		route := schema.MatchRoute("GET", path)
+		require.NotNil(t, route, path)
+		assert.Equal(t, "terminal-network-connect", route.Action)
+	}
+	assert.Nil(t, schema.MatchRoute("POST", "/wisp/"))
+	assert.Nil(t, schema.MatchRoute("GET", "/wispy"))
+}
+
+func TestHTTPSchemaRegistry_AllowsQueryToken(t *testing.T) {
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+	require.NoError(t, registry.Load("../../examples/wfx/wfx.json"))
+
+	assert.True(t, registry.AllowsQueryToken("GET", "/wisp/"))
+	assert.False(t, registry.AllowsQueryToken("POST", "/wisp/"))
+	assert.False(t, registry.AllowsQueryToken("GET", "/api/wfx/nbi/v1/workflows"))
+	assert.False(t, registry.AllowsQueryToken("GET", "/unknown"))
+}
+
+func TestHTTPSchemaRegistry_QueryTokenRejectedOnSkipAuthzRoute(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema.json")
+	require.NoError(t, os.WriteFile(path, []byte(`[{
+		"name": "bad",
+		"routes": [{"name": "r", "methods": ["GET"], "path": "/x", "match_type": "exact", "action": "a", "skip_authz": true, "query_token": true}]
+	}]`), 0o600))
+
+	err := NewHTTPSchemaRegistry().Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "query token")
+}

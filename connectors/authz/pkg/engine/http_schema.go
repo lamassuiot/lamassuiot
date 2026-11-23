@@ -42,7 +42,13 @@ type HTTPRouteConfig struct {
 	// SkipAuthz allows the route once a subject has been authenticated, without
 	// requiring any policy to grant its action. Authentication (identity
 	// resolution) still runs; only the authorization decision is bypassed.
-	SkipAuthz     bool `json:"skip_authz,omitempty"`
+	SkipAuthz bool `json:"skip_authz,omitempty"`
+	// QueryToken lets a request carry its OIDC access token in the
+	// "access_token" query parameter when it has no Authorization header or
+	// client certificate. It is for routes a browser reaches with a WebSocket,
+	// which cannot set request headers. The token is still validated like a
+	// Bearer token. Leave it off for every other route: URLs end up in logs.
+	QueryToken    bool `json:"query_token,omitempty"`
 	compiledRegex *regexp.Regexp
 }
 
@@ -273,6 +279,17 @@ func (r *HTTPSchemaRegistry) GetAll() map[string]*HTTPSchemaDefinition {
 	return r.schemas
 }
 
+// AllowsQueryToken reports whether a route matching method and path accepts its
+// access token in the query string (HTTPRouteConfig.QueryToken).
+func (r *HTTPSchemaRegistry) AllowsQueryToken(method, path string) bool {
+	for _, schema := range r.schemas {
+		if route := schema.MatchRoute(method, path); route != nil && route.QueryToken {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *HTTPSchemaRegistry) validateAndCompile(def *HTTPSchemaDefinition) error {
 	if def.Name == "" {
 		return fmt.Errorf("name is required")
@@ -350,6 +367,10 @@ func validateAndCompileHTTPRoute(route *HTTPRouteConfig, label string) error {
 		route.compiledRegex = re
 	default:
 		return fmt.Errorf("%s: unknown match_type %q (must be exact, prefix, or regex)", label, route.MatchType)
+	}
+
+	if route.SkipAuthz && route.QueryToken {
+		return fmt.Errorf("%s: skip_authz routes cannot accept a query token", label)
 	}
 
 	if route.SkipAuthz && len(route.Constraints) > 0 {

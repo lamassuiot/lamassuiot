@@ -53,6 +53,15 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 	// 1. Extract auth material from Envoy-forwarded headers.
 	authType, authMaterial, err := extractAuthFromEnvoyHeaders(headers)
 	if err != nil {
+		// Browsers cannot set headers on a WebSocket: routes that opt in
+		// (query_token) take the access token from the query string instead.
+		if ctrl.engine.GetHTTPSchemas().AllowsQueryToken(method, path) {
+			if token := extAuthzQueryToken(rawQuery); token != "" {
+				authType, authMaterial, err = "oidc", "Bearer "+token, nil
+			}
+		}
+	}
+	if err != nil {
 		log.WithError(err).Debug("no valid auth credential in ext_authz request")
 		logExtAuthzDecision(log, start, http.StatusForbidden, false, "no valid auth credential", nil, nil, "", err)
 		c.Status(http.StatusForbidden)
@@ -263,6 +272,15 @@ func extAuthzRawQuery(originalURL string) string {
 		return ""
 	}
 	return parsed.RawQuery
+}
+
+// extAuthzQueryToken returns the "access_token" query parameter of a request.
+func extAuthzQueryToken(rawQuery string) string {
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return ""
+	}
+	return values.Get("access_token")
 }
 
 func extAuthzRequestBody(c *gin.Context) ([]byte, bool, error) {

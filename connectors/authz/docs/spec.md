@@ -851,6 +851,15 @@ A route can set `skip_authz: true` to bypass the authorization decision while st
 - `skip_authz` routes cannot declare `constraints` — constraints are themselves an authorization decision, which contradicts skipping authz.
 - Authentication happens upstream of the HTTP check (Envoy forwards XFCC/Bearer material, which `ExtAuthzController` resolves to a subject before consulting the engine); a request that fails authentication is rejected before `skip_authz` is ever considered.
 
+### Query-string access token (`query_token`)
+
+A browser opens a WebSocket without being able to set request headers, so it cannot send `Authorization`. A route can set `query_token: true` to accept the OIDC access token in the `access_token` query parameter when the request carries neither a Bearer header nor a client certificate. The token is resolved to a subject exactly like a Bearer token, and the route's action still has to be granted by a policy.
+
+- Only routes that opt in (and only for their configured methods and path) read the query; every other route ignores `access_token`. A header or certificate always wins over the query.
+- `skip_authz` routes cannot set `query_token`.
+- URLs end up in logs. The ext_authz controller logs the original URL, so the token is logged as part of the query; keep `query_token` for WebSocket routes and short-lived tokens.
+- Example: `connectors/authz/terminal.json` ("Terminal Network", action `terminal-network-connect`), which guards the dashboard's browser terminal network proxy at `/wisp/`.
+
 #### Static-Value Grants for Dynamic Routes
 
 A policy's `http_rules` entry can restrict a granted action to one literal value of a dynamic request value, via `param_constraints`. It reuses the exact same request sources as route `constraints` (`path_regex_group`, `query`, `header`, `json_body`) — the difference is that `param_constraints` compares against an `equals` literal written into the policy itself, instead of a *subject* attribute that varies per principal. Because it reuses the same `path_regex_group` mechanism, it works on any existing dynamic (regex) route as-is — no named capture groups or schema changes required, just a plain `(...)` group.

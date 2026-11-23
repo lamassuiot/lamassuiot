@@ -128,6 +128,60 @@ func TestExtAuthzCheck_LogsOriginalURLAfterCheckRoute(t *testing.T) {
 	assert.Equal(t, "/api/v1/resource", fields["ext_authz_path"])
 }
 
+func TestExtAuthzCheck_QueryTokenOnlyOnOptedInRoutes(t *testing.T) {
+	router := testExtAuthzRouter(t)
+
+	t.Run("opted-in route accepts access_token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+		req.Header.Set("x-envoy-original-path", "/ws/connect?access_token=good")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "principal-1", rec.Header().Get("X-Principal-ID"))
+	})
+
+	t.Run("opted-in route denies an unknown token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+		req.Header.Set("x-envoy-original-path", "/ws/connect?access_token=bad")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
+	t.Run("opted-in route without a token is denied", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+		req.Header.Set("x-envoy-original-path", "/ws/connect")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
+	t.Run("other routes ignore access_token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+		req.Header.Set("x-envoy-original-path", "/api/v1/resource?access_token=good")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
+	t.Run("a non-matching method ignores access_token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/ext_authz/check", nil)
+		req.Header.Set("x-envoy-original-path", "/ws/connect?access_token=good")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
+	t.Run("the Authorization header wins over the query", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+		req.Header.Set("authorization", "Bearer good")
+		req.Header.Set("x-envoy-original-path", "/ws/connect?access_token=bad")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+}
+
 func testExtAuthzRouter(t *testing.T) *gin.Engine {
 	t.Helper()
 
@@ -147,7 +201,7 @@ func testExtAuthzRouterWithLogger(t *testing.T, logger *logrus.Entry) *gin.Engin
 		HTTPRules: []*models.HTTPRule{
 			{
 				SchemaName: "test-http",
-				Actions:    []string{"resource-read"},
+				Actions:    []string{"resource-read", "ws-connect"},
 			},
 		},
 	}
@@ -174,6 +228,14 @@ func writeExtAuthzHTTPSchema(t *testing.T) string {
 					"path": "/api/v1/resource",
 					"match_type": "exact",
 					"action": "resource-read"
+				},
+				{
+					"name": "ws-connect",
+					"methods": ["GET"],
+					"path": "/ws/connect",
+					"match_type": "exact",
+					"action": "ws-connect",
+					"query_token": true
 				}
 			]
 		}
