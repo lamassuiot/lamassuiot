@@ -694,9 +694,9 @@ stats, err := caClient.GetStats(ctx, services.GetStatsInput{
     },
 })
 
-// Filter certificates by metadata
-stats, err := caClient.GetStats(ctx, services.GetStatsInput{
-    CertificateQueryParameters: &resources.QueryParameters{
+// Certificate stats (GET /v1/certificates/stats), filtered by metadata
+certStats, err := caClient.GetCertificatesStats(ctx, services.GetCertificatesStatsInput{
+    QueryParameters: &resources.QueryParameters{
         Filters: []resources.FilterOption{
             {
                 Field:           "metadata",
@@ -707,8 +707,9 @@ stats, err := caClient.GetStats(ctx, services.GetStatsInput{
     },
 })
 
-// Filter both CAs and certificates independently
-stats, err := caClient.GetStats(ctx, services.GetStatsInput{
+// CA filters and certificate filters go to separate calls: each endpoint
+// applies the read filter of its own entity (RFC-007 Amendment 1)
+caStats, err := caClient.GetStats(ctx, services.GetStatsInput{
     CAQueryParameters: &resources.QueryParameters{
         Filters: []resources.FilterOption{{
             Field:           "metadata",
@@ -716,7 +717,9 @@ stats, err := caClient.GetStats(ctx, services.GetStatsInput{
             Value:           `$.environment == "production"`,
         }},
     },
-    CertificateQueryParameters: &resources.QueryParameters{
+})
+certStats, err := caClient.GetCertificatesStats(ctx, services.GetCertificatesStatsInput{
+    QueryParameters: &resources.QueryParameters{
         Filters: []resources.FilterOption{{
             Field:           "valid_from",
             FilterOperation: resources.DateAfter,
