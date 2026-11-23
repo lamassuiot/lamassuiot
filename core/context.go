@@ -47,7 +47,6 @@ type TenantContext struct {
 	TenantID       string
 	ActorID        string
 	ActorType      string
-	EffectiveRole  models.TenantRole
 	Permissions    []string
 	CorrelationID  string
 	Source         string
@@ -74,11 +73,8 @@ func (tenantContext TenantContext) Validate() error {
 	return nil
 }
 
-func NewValidatedTenantContext(membership models.Membership, tenant models.Tenant, actorID, actorType string, permissions []string, correlationID, source string) (TenantContext, error) {
-	if membership.OrganizationID != tenant.OrganizationID || membership.TenantID != tenant.ID {
-		return TenantContext{}, ErrTenantResourceAccessDenied
-	}
-	if membership.Status != models.MembershipActive || tenant.Status != models.TenantActive {
+func NewValidatedTenantContext(tenant models.Tenant, actorID, actorType string, permissions []string, correlationID, source string) (TenantContext, error) {
+	if tenant.Status != models.TenantActive {
 		return TenantContext{}, ErrTenantResourceAccessDenied
 	}
 	tenantContext := TenantContext{
@@ -86,7 +82,6 @@ func NewValidatedTenantContext(membership models.Membership, tenant models.Tenan
 		TenantID:       tenant.ID,
 		ActorID:        actorID,
 		ActorType:      actorType,
-		EffectiveRole:  membership.Role,
 		Permissions:    append([]string(nil), permissions...),
 		CorrelationID:  correlationID,
 		Source:         source,

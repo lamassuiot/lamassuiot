@@ -30,7 +30,7 @@ type StorageEngine interface {
 	GetEventsStorage() (EventRepository, error)
 	GetSubscriptionsStorage() (SubscriptionsRepository, error)
 	GetKMSStorage() (KMSKeysRepo, error)
-	GetControlPlaneMembershipStorage() (ControlPlaneMembershipRepo, error)
+	GetControlPlaneTenantStorage() (ControlPlaneTenantRepo, error)
 }
 
 // map of available storage engines with config.StorageProvider as key and function to build the storage engine as value

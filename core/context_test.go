@@ -25,7 +25,7 @@ func TestTenantContextValidation(t *testing.T) {
 				ActorType:      "user",
 				Permissions:    []string{"certificates.read"},
 				CorrelationID:  "corr-1",
-				Source:         "oidc-membership",
+				Source:         "oidc",
 				Validated:      true,
 			},
 		},
@@ -58,40 +58,24 @@ func TestTenantContextValidation(t *testing.T) {
 	}
 }
 
-func TestNewValidatedTenantContextRequiresActiveMatchingMembership(t *testing.T) {
+func TestNewValidatedTenantContextRequiresActiveTenant(t *testing.T) {
 	tenant := models.Tenant{
 		ID:             "tenant-1",
 		OrganizationID: "org-1",
 		Status:         models.TenantActive,
 	}
-	membership := models.Membership{
-		TenantID:       "tenant-1",
-		OrganizationID: "org-1",
-		Role:           models.RolePKIAdmin,
-		Status:         models.MembershipActive,
-	}
 
-	tenantContext, err := NewValidatedTenantContext(membership, tenant, "actor-1", "jwt", []string{"read"}, "corr-1", "oidc")
-	if err != nil {
-		t.Fatalf("expected valid tenant context, got %v", err)
-	}
-	if err := tenantContext.Validate(); err != nil {
-		t.Fatalf("expected validated tenant context, got %v", err)
-	}
-	if tenantContext.EffectiveRole != models.RolePKIAdmin {
-		t.Fatalf("expected effective role from active membership, got %q", tenantContext.EffectiveRole)
-	}
+	tenantContext, err := NewValidatedTenantContext(tenant, "actor-1", "jwt", []string{"read"}, "corr-1", "oidc")
+	require.NoError(t, err)
+	require.NoError(t, tenantContext.Validate())
+	require.Equal(t, "tenant-1", tenantContext.TenantID)
+	require.Equal(t, "org-1", tenantContext.OrganizationID)
 
-	membership.Status = models.MembershipSuspended
-	if _, err := NewValidatedTenantContext(membership, tenant, "actor-1", "jwt", nil, "corr-1", "oidc"); err == nil {
-		t.Fatal("expected suspended membership to be rejected")
-	}
-
-	otherTenantMembership := membership
-	otherTenantMembership.Status = models.MembershipActive
-	otherTenantMembership.TenantID = "tenant-2"
-	if _, err := NewValidatedTenantContext(otherTenantMembership, tenant, "actor-1", "jwt", nil, "corr-1", "oidc"); !errors.Is(err, ErrTenantResourceAccessDenied) {
-		t.Fatalf("expected membership of another tenant to be rejected, got %v", err)
+	for _, status := range []models.TenantStatus{models.TenantSuspended, models.TenantDeleted, models.TenantRestoring} {
+		inactiveTenant := tenant
+		inactiveTenant.Status = status
+		_, err := NewValidatedTenantContext(inactiveTenant, "actor-1", "jwt", nil, "corr-1", "oidc")
+		require.ErrorIs(t, err, ErrTenantResourceAccessDenied, status)
 	}
 }
 

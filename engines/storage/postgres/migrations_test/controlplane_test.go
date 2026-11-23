@@ -44,24 +44,14 @@ func migrationTest_ControlPlane_20261023120000_create_controlplane(t *testing.T,
 	if tx.Error != nil {
 		t.Fatalf("failed to insert a tenant: %v", tx.Error)
 	}
-	tx = con.Exec(`INSERT INTO identities (issuer, subject) VALUES ('https://issuer.example', 'subject-1')`)
-	if tx.Error != nil {
-		t.Fatalf("failed to insert an identity: %v", tx.Error)
+
+	for _, table := range []string{"identities", "memberships"} {
+		var exists bool
+		if err := con.Raw("SELECT to_regclass(?) IS NOT NULL", table).Scan(&exists).Error; err != nil {
+			t.Fatalf("failed to check table %s: %v", table, err)
+		}
+		assert.False(t, exists, "the control plane must not have the %s table: memberships belong to Authz", table)
 	}
-
-	tx = con.Exec(`INSERT INTO memberships (id, organization_id, tenant_id, identity_issuer, identity_subject, role, status)
-		VALUES ('membership-cross-org', ?, 'tenant-b', 'https://issuer.example', 'subject-1', 'operator', 'ACTIVE')`, models.DefaultOrganizationID)
-	assert.Error(t, tx.Error, "a membership must not point to a tenant of another organization")
-
-	tx = con.Exec(`INSERT INTO memberships (id, organization_id, tenant_id, identity_issuer, identity_subject, role, status)
-		VALUES ('membership-1', 'org-b', 'tenant-b', 'https://issuer.example', 'subject-1', 'operator', 'ACTIVE')`)
-	if tx.Error != nil {
-		t.Fatalf("failed to insert a membership: %v", tx.Error)
-	}
-
-	tx = con.Exec(`INSERT INTO memberships (id, organization_id, tenant_id, identity_issuer, identity_subject, role, status)
-		VALUES ('membership-2', 'org-b', 'tenant-b', 'https://issuer.example', 'subject-1', 'auditor', 'ACTIVE')`)
-	assert.Error(t, tx.Error, "an identity must have a single membership per tenant")
 
 	tx = con.Exec(`INSERT INTO tenants (id, organization_id, installation_id, name, status, isolation_mode)
 		VALUES ('tenant-provisioning', 'org-b', 'default', 'Provisioning', 'PROVISIONING', 'POOLED')`)

@@ -38,30 +38,6 @@ func TestTenantValidate(t *testing.T) {
 	}
 }
 
-func TestMembershipValidate(t *testing.T) {
-	validMembership := Membership{
-		ID:              "membership-1",
-		OrganizationID:  "org-1",
-		TenantID:        "tenant-1",
-		IdentityIssuer:  "https://issuer.example",
-		IdentitySubject: "subject-1",
-		Role:            RoleTenantAdmin,
-		Status:          MembershipActive,
-	}
-
-	require.NoError(t, validMembership.Validate("org-1", "tenant-1"))
-
-	invalidIdentity := validMembership
-	invalidIdentity.IdentitySubject = ""
-	require.ErrorIs(t, invalidIdentity.Validate("org-1", "tenant-1"), errs.ErrInvalidMembership)
-
-	crossTenant := validMembership
-	require.ErrorIs(t, crossTenant.Validate("org-1", "tenant-2"), errs.ErrInvalidMembership)
-
-	crossOrganization := validMembership
-	require.ErrorIs(t, crossOrganization.Validate("org-2", "tenant-1"), errs.ErrInvalidMembership)
-}
-
 func TestCanTransitionTenantStatus(t *testing.T) {
 	allowed := [][2]TenantStatus{
 		{TenantActive, TenantSuspended},

@@ -50,7 +50,7 @@ func (m *MockStorageEngine) GetKMSStorage() (KMSKeysRepo, error) {
 	return nil, nil
 }
 
-func (m *MockStorageEngine) GetControlPlaneMembershipStorage() (ControlPlaneMembershipRepo, error) {
+func (m *MockStorageEngine) GetControlPlaneTenantStorage() (ControlPlaneTenantRepo, error) {
 	return nil, nil
 }
 

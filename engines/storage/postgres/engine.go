@@ -34,10 +34,10 @@ const (
 
 type PostgresStorageEngine struct {
 	storage.CommonStorageEngine
-	Config                 lconfig.PostgresPSEConfig
-	logger                 *log.Entry
-	controlPlaneDB         *gorm.DB
-	controlPlaneMembership storage.ControlPlaneMembershipRepo
+	Config              lconfig.PostgresPSEConfig
+	logger              *log.Entry
+	controlPlaneDB      *gorm.DB
+	controlPlaneTenants storage.ControlPlaneTenantRepo
 }
 
 func NewStorageEngine(logger *log.Entry, config lconfig.PostgresPSEConfig) (storage.StorageEngine, error) {
@@ -225,15 +225,15 @@ func (s *PostgresStorageEngine) initializeControlPlaneStorage() error {
 		}
 		s.controlPlaneDB = db
 	}
-	if s.controlPlaneMembership == nil {
-		s.controlPlaneMembership = NewControlPlaneMembershipRepository(s.controlPlaneDB)
+	if s.controlPlaneTenants == nil {
+		s.controlPlaneTenants = NewControlPlaneTenantRepository(s.controlPlaneDB)
 	}
 	return nil
 }
 
-func (s *PostgresStorageEngine) GetControlPlaneMembershipStorage() (storage.ControlPlaneMembershipRepo, error) {
+func (s *PostgresStorageEngine) GetControlPlaneTenantStorage() (storage.ControlPlaneTenantRepo, error) {
 	if err := s.initializeControlPlaneStorage(); err != nil {
 		return nil, err
 	}
-	return s.controlPlaneMembership, nil
+	return s.controlPlaneTenants, nil
 }
