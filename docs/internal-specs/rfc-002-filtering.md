@@ -506,17 +506,19 @@ Statistics endpoints return aggregate data (totals, status distributions, engine
 
 | Service | Endpoint | Filter Parameters | What's Computed |
 |---------|----------|------------------|-----------------|
-| **CA Service** | `GET /api/ca/v1/stats` | `ca_filter`, `cert_filter` | CA counts, CA status distribution, CA engine distribution, certificate counts, certificate status distribution, certificates per CA |
+| **CA Service** | `GET /api/ca/v1/stats` | `ca_filter` | CA counts, CA status distribution, CA engine distribution |
+| | `GET /api/ca/v1/certificates/stats` | `filter` | Certificate counts, certificate status distribution |
 | | `GET /api/ca/v1/stats/{id}` | `cert_filter` | Certificate counts and status distribution for specific CA |
 | **KMS** | `GET /api/kms/v1/stats` | `filter` | Key counts, keys per engine, keys per algorithm |
 | **DMS Manager** | `GET /api/dmsmanager/v1/stats` | `filter` | DMS instance counts |
 | **Device Manager** | `GET /api/devmanager/v1/stats` | `filter` | Device counts, device status distribution |
 
-### CA Service Statistics (Dual Filtering)
+### CA Service Statistics
 
-The CA service statistics endpoint accepts two independent filter parameters:
-- `ca_filter` — filters CAs (affects CA totals and distributions)
-- `cert_filter` — filters certificates (affects certificate totals and distributions)
+CA and certificate statistics are separate endpoints, each guarded by the read filter of
+its own entity ([RFC-007 Amendment 1](rfc-007-filtered-stats.md#amendment-1-certificate-statistics-endpoint)):
+- `GET /api/ca/v1/stats?ca_filter=...` — filters CAs (affects CA totals and distributions)
+- `GET /api/ca/v1/certificates/stats?filter=...` — filters certificates (affects certificate totals and distributions)
 
 **Examples:**
 
@@ -525,10 +527,10 @@ The CA service statistics endpoint accepts two independent filter parameters:
 GET /api/ca/v1/stats?ca_filter=engine_id[eq]aws-kms-prod
 
 # Get stats for certificates issued after a date
-GET /api/ca/v1/stats?cert_filter=valid_from[af]2026-01-01T00:00:00Z
+GET /api/ca/v1/certificates/stats?filter=valid_from[af]2026-01-01T00:00:00Z
 
-# Get stats for production CAs and recently issued certificates
-GET /api/ca/v1/stats?ca_filter=metadata[jsonpath]$.environment%20==%20%22production%22&cert_filter=valid_from[af]2025-12-01T00:00:00Z
+# Get stats for production CAs
+GET /api/ca/v1/stats?ca_filter=metadata[jsonpath]$.environment%20==%20%22production%22
 
 # Get certificate stats for a specific CA with metadata filter
 GET /api/ca/v1/stats/my-ca-id?cert_filter=metadata[jsonpath]$.purpose%20==%20%22signing%22
@@ -786,7 +788,7 @@ stats, err := deviceClient.GetDevicesStats(ctx, services.GetDevicesStatsInput{
 #### Compliance Reporting
 ```http
 # Count certificates expiring in the next 30 days
-GET /api/ca/v1/stats?cert_filter=valid_to[bf]2026-03-01T00:00:00Z
+GET /api/ca/v1/certificates/stats?filter=valid_to[bf]2026-03-01T00:00:00Z
 
 # Count production CAs
 GET /api/ca/v1/stats?ca_filter=metadata[jsonpath]$.environment%20==%20%22production%22

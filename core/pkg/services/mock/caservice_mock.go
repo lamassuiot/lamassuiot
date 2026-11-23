@@ -31,6 +31,11 @@ func (m *MockCAService) GetStats(ctx context.Context, input services.GetStatsInp
 	return args.Get(0).(*models.CAStats), args.Error(1)
 }
 
+func (m *MockCAService) GetCertificatesStats(ctx context.Context, input services.GetCertificatesStatsInput) (*models.CertificatesStats, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CertificatesStats), args.Error(1)
+}
+
 func (m *MockCAService) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(map[models.CertificateStatus]int), args.Error(1)

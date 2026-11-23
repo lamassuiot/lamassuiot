@@ -6,6 +6,24 @@
 | **Authors** | Engineering Team |
 | **Focus** | CA Service, DMS Manager, KMS, Device Manager, API Consistency |
 | **Implementation Status** | ✅ Phase 5 Complete (2026-01-30) |
+| **Amended** | 2026-11-23: certificate statistics moved to `GET /v1/certificates/stats` (see [Amendment 1](#amendment-1-certificate-statistics-endpoint)) |
+
+## Amendment 1: Certificate statistics endpoint
+
+**Date**: 2026-11-23. **Supersedes**: the `cert_filter` parameter of `GET /v1/stats` and the `certificates` block of `CAStats` (sections 7.1.1–7.1.4, 7.5.2 and 7.6.1).
+
+**Problem.** `GET /v1/stats` returned CA and certificate counts in one response, but a list route is guarded by the read filter of a single entity (`ca_certificate`). The storage layer applies a filter only to the table it was generated for, so the certificate counts ran unfiltered: a principal allowed to read CAs only saw the count of every certificate.
+
+**Decision.** Each statistics route covers one entity:
+
+| Endpoint | Guard | Filters | Response |
+|----------|-------|---------|----------|
+| `GET /v1/stats` | `ca_certificate` list filter | `ca_filter` | `CAStats` with `cas` only |
+| `GET /v1/certificates/stats` | `certificate` list filter | `filter` (certificate filterable fields; `status` rejected) | `CertificatesStats` |
+
+- `CAStats.certificates`, `GetStatsInput.CertificateQueryParameters` and the `cert_filter` parameter of `GET /v1/stats` are removed (breaking change; the UI moves to the new endpoint).
+- `CAService.GetCertificatesStats` and the SDK method of the same name are added.
+- `GET /v1/stats/{id}` is unchanged by this amendment. It is a resource route on the CA and its certificate counts are not restricted by the certificate read filter; this is tracked separately.
 
 ## 1. Abstract
 
@@ -164,14 +182,14 @@ The service interface includes methods for key CRUD operations and signing/verif
 |----------|------------|----------|
 | `GET /v1/stats` | None | Returns global statistics (backward compatible) |
 | `GET /v1/stats?ca_filter=...` | CA filter expression | Returns statistics for matching CAs only |
-| `GET /v1/stats?cert_filter=...` | Certificate filter expression | Returns statistics for matching certificates only |
-| `GET /v1/stats?ca_filter=...&cert_filter=...` | Both | Returns statistics with both filters applied independently |
+| ~~`GET /v1/stats?cert_filter=...`~~ | Certificate filter expression | Superseded by `GET /v1/certificates/stats?filter=...` ([Amendment 1](#amendment-1-certificate-statistics-endpoint)) |
+| ~~`GET /v1/stats?ca_filter=...&cert_filter=...`~~ | Both | Superseded ([Amendment 1](#amendment-1-certificate-statistics-endpoint)) |
 | `GET /v1/stats/{id}?cert_filter=...` | CA ID + certificate filter | Returns certificate status distribution for the CA, filtered |
 
 **Example Queries**:
 - `GET /v1/stats?ca_filter=engine_id[eq]aws-kms-prod` - Stats for CAs in a specific engine
 - `GET /v1/stats?ca_filter=metadata[jsonpath]$.environment == "production"` - Stats for production CAs
-- `GET /v1/stats?cert_filter=valid_from[after]2026-01-01T00:00:00Z` - Stats for recently issued certificates
+- `GET /v1/certificates/stats?filter=valid_from[after]2026-01-01T00:00:00Z` - Stats for recently issued certificates (was `GET /v1/stats?cert_filter=...` before Amendment 1)
 
 ### 7.2 DMS Manager Changes
 

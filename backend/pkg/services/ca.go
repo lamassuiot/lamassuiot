@@ -103,19 +103,11 @@ func certificateExtensionsFromX509(cert *x509.Certificate) models.CertificateExt
 func (svc *CAServiceBackend) GetStats(ctx context.Context, input services.GetStatsInput) (*models.CAStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	// Validate that status filters are not provided for CA or Certificate query parameters
+	// Validate that status filters are not provided: status is always a distribution
 	if input.CAQueryParameters != nil {
 		for _, filter := range input.CAQueryParameters.Filters {
 			if filter.Field == "status" {
 				lFunc.Errorf("status filter is not allowed in GetStats for CA query parameters")
-				return nil, errs.ErrValidateBadRequest
-			}
-		}
-	}
-	if input.CertificateQueryParameters != nil {
-		for _, filter := range input.CertificateQueryParameters.Filters {
-			if filter.Field == "status" {
-				lFunc.Errorf("status filter is not allowed in GetStats for Certificate query parameters")
 				return nil, errs.ErrValidateBadRequest
 			}
 		}
@@ -163,40 +155,54 @@ func (svc *CAServiceBackend) GetStats(ctx context.Context, input services.GetSta
 		return nil, err
 	}
 
-	lFunc.Debugf("counting total number of certificates")
-	totalCerts, err := svc.certStorage.CountWithFilters(ctx, input.CertificateQueryParameters)
-	if err != nil {
-		lFunc.Errorf("could not count total number of certificates: %s", err)
-		return nil, err
-	}
-
-	// Count certificates by status
-	certStatus := map[models.CertificateStatus]int{}
-	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
-		lFunc.Debugf("counting certificates in %s status", status)
-		// Add status filter to Certificate query parameters
-		statusQueryParams := addStatusFilterToQueryParams(input.CertificateQueryParameters, status)
-		ctr, err := svc.certStorage.CountWithFilters(ctx, statusQueryParams)
-		if err != nil {
-			lFunc.Errorf("could not count certificates in %s status: %s", status, err)
-			return nil, err
-		}
-		lFunc.Debugf("got %d certificates", ctr)
-
-		certStatus[status] = ctr
-	}
-
 	return &models.CAStats{
 		CACertificatesStats: models.CACertificatesStats{
 			TotalCAs:                 totalCAs,
 			CAsDistributionPerEngine: casDistributionPerEngine,
 			CAsStatus:                casStatus,
 		},
-		CertificatesStats: models.CertificatesStats{
-			TotalCertificates:            totalCerts,
-			CertificateDistributionPerCA: map[string]int{},
-			CertificateStatus:            certStatus,
-		},
+	}, nil
+}
+
+// GetCertificatesStats counts certificates, in total and per status. It is served by its
+// own endpoint so the counts run under the certificate read filter.
+func (svc *CAServiceBackend) GetCertificatesStats(ctx context.Context, input services.GetCertificatesStatsInput) (*models.CertificatesStats, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	// Validate that status filters are not provided: status is always a distribution
+	if input.QueryParameters != nil {
+		for _, filter := range input.QueryParameters.Filters {
+			if filter.Field == "status" {
+				lFunc.Errorf("status filter is not allowed in GetCertificatesStats")
+				return nil, errs.ErrValidateBadRequest
+			}
+		}
+	}
+
+	lFunc.Debugf("counting total number of certificates")
+	totalCerts, err := svc.certStorage.CountWithFilters(ctx, input.QueryParameters)
+	if err != nil {
+		lFunc.Errorf("could not count total number of certificates: %s", err)
+		return nil, err
+	}
+
+	certStatus := map[models.CertificateStatus]int{}
+	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
+		lFunc.Debugf("counting certificates in %s status", status)
+		statusQueryParams := addStatusFilterToQueryParams(input.QueryParameters, status)
+		ctr, err := svc.certStorage.CountWithFilters(ctx, statusQueryParams)
+		if err != nil {
+			lFunc.Errorf("could not count certificates in %s status: %s", status, err)
+			return nil, err
+		}
+		lFunc.Debugf("got %d certificates", ctr)
+		certStatus[status] = ctr
+	}
+
+	return &models.CertificatesStats{
+		TotalCertificates:            totalCerts,
+		CertificateDistributionPerCA: map[string]int{},
+		CertificateStatus:            certStatus,
 	}, nil
 }
 

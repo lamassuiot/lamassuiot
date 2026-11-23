@@ -49,47 +49,6 @@ func TestGetStatsFiltered(t *testing.T) {
 		return ca
 	}
 
-	// Helper function to sign a certificate
-	signCertificateWithMetadata := func(t *testing.T, caID string, metadata map[string]any) *models.Certificate {
-		// Generate key for CSR
-		key, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			t.Fatalf("failed generating key: %s", err)
-		}
-
-		// Generate CSR
-		csr, err := chelpers.GenerateCertificateRequest(
-			models.Subject{CommonName: "test-cert"},
-			key,
-		)
-		if err != nil {
-			t.Fatalf("failed generating CSR: %s", err)
-		}
-
-		cert, err := serverTest.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-			CAID:        caID,
-			CertRequest: (*models.X509CertificateRequest)(csr),
-		})
-		if err != nil {
-			t.Fatalf("failed signing certificate: %s", err)
-		}
-
-		// Update metadata after issuance if needed
-		if metadata != nil {
-			cert, err = serverTest.CA.Service.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
-				SerialNumber: cert.SerialNumber,
-				Patches: chelpers.NewPatchBuilder().
-					Add(chelpers.JSONPointerBuilder(), metadata).
-					Build(),
-			})
-			if err != nil {
-				t.Fatalf("failed updating certificate metadata: %s", err)
-			}
-		}
-
-		return cert
-	}
-
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -145,75 +104,11 @@ func TestGetStatsFiltered(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/FilterCertificatesByMetadata",
-			before: func(svc services.CAService) error {
-				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
-				if err != nil {
-					return err
-				}
-				// Sign certificates with different metadata
-				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "server"})
-				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "client"})
-				signCertificateWithMetadata(t, ca.ID, map[string]any{"type": "server"})
-				return nil
-			},
-			run: func(caSDK services.CAService) (*models.CAStats, error) {
-				return caSDK.GetStats(context.Background(), services.GetStatsInput{
-					CertificateQueryParameters: &resources.QueryParameters{
-						Filters: []resources.FilterOption{
-							{
-								Field:           "metadata",
-								FilterOperation: resources.JsonPathExpression,
-								Value:           "$.type == \"server\"",
-							},
-						},
-					},
-				})
-			},
-			resultCheck: func(stats *models.CAStats, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've got stats without error, but got error: %s", err)
-				}
-				// Should only count server certificates
-				if stats.CertificatesStats.TotalCertificates != 2 {
-					return fmt.Errorf("expected 2 server certificates, got %d", stats.CertificatesStats.TotalCertificates)
-				}
-				// CA stats should remain unfiltered (1 CA from initCA)
-				if stats.CACertificatesStats.TotalCAs != 1 {
-					return fmt.Errorf("expected 1 CA, got %d", stats.CACertificatesStats.TotalCAs)
-				}
-				return nil
-			},
-		},
-		{
 			name:   "Err/StatusFilterRejectedForCA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CAStats, error) {
 				return caSDK.GetStats(context.Background(), services.GetStatsInput{
 					CAQueryParameters: &resources.QueryParameters{
-						Filters: []resources.FilterOption{
-							{
-								Field:           "status",
-								FilterOperation: resources.EnumEqual,
-								Value:           string(models.StatusActive),
-							},
-						},
-					},
-				})
-			},
-			resultCheck: func(stats *models.CAStats, err error) error {
-				if err == nil {
-					return fmt.Errorf("should've rejected status filter, but got no error")
-				}
-				return nil
-			},
-		},
-		{
-			name:   "Err/StatusFilterRejectedForCertificate",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CAStats, error) {
-				return caSDK.GetStats(context.Background(), services.GetStatsInput{
-					CertificateQueryParameters: &resources.QueryParameters{
 						Filters: []resources.FilterOption{
 							{
 								Field:           "status",
@@ -256,6 +151,97 @@ func TestGetStatsFiltered(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}
+		})
+	}
+}
+
+// TestGetCertificatesStats covers GET /v1/certificates/stats, which replaced the
+// certificate block of GET /v1/stats so certificate counts run under the certificate
+// list filter instead of the CA one.
+func TestGetCertificatesStats(t *testing.T) {
+	signCertificate := func(t *testing.T, caID string, metadata map[string]any) {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatalf("failed generating key: %s", err)
+		}
+		csr, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test-cert"}, key)
+		if err != nil {
+			t.Fatalf("failed generating CSR: %s", err)
+		}
+		cert, err := serverTest.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+			CAID: caID, CertRequest: (*models.X509CertificateRequest)(csr),
+		})
+		if err != nil {
+			t.Fatalf("failed signing certificate: %s", err)
+		}
+		_, err = serverTest.CA.Service.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+			SerialNumber: cert.SerialNumber,
+			Patches:      chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(), metadata).Build(),
+		})
+		if err != nil {
+			t.Fatalf("failed updating certificate metadata: %s", err)
+		}
+	}
+	metadataFilter := func(field string, op resources.FilterOperation, value string) *resources.QueryParameters {
+		return &resources.QueryParameters{Filters: []resources.FilterOption{{Field: field, FilterOperation: op, Value: value}}}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		params *resources.QueryParameters
+		check  func(t *testing.T, stats *models.CertificatesStats, err error)
+	}{
+		{
+			name: "OK/WithoutFilters",
+			check: func(t *testing.T, stats *models.CertificatesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				// The CA certificate plus the three issued ones.
+				if stats.TotalCertificates != 4 {
+					t.Fatalf("expected 4 certificates, got %d", stats.TotalCertificates)
+				}
+			},
+		},
+		{
+			name:   "OK/FilterByMetadata",
+			params: metadataFilter("metadata", resources.JsonPathExpression, `$.type == "server"`),
+			check: func(t *testing.T, stats *models.CertificatesStats, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				if stats.TotalCertificates != 2 {
+					t.Fatalf("expected 2 server certificates, got %d", stats.TotalCertificates)
+				}
+				if stats.CertificateStatus[models.StatusActive] != 2 {
+					t.Fatalf("expected 2 active server certificates, got %d", stats.CertificateStatus[models.StatusActive])
+				}
+			},
+		},
+		{
+			name:   "Err/StatusFilterRejected",
+			params: metadataFilter("status", resources.EnumEqual, string(models.StatusActive)),
+			check: func(t *testing.T, _ *models.CertificatesStats, err error) {
+				if err == nil {
+					t.Fatalf("should've rejected status filter, but got no error")
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := serverTest.BeforeEach(); err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+			ca, err := initCA(serverTest.CA.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+			signCertificate(t, ca.ID, map[string]any{"type": "server"})
+			signCertificate(t, ca.ID, map[string]any{"type": "client"})
+			signCertificate(t, ca.ID, map[string]any{"type": "server"})
+
+			stats, err := serverTest.CA.HttpCASDK.GetCertificatesStats(context.Background(), services.GetCertificatesStatsInput{QueryParameters: tc.params})
+			tc.check(t, stats, err)
 		})
 	}
 }
