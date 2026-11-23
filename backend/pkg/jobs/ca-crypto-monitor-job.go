@@ -98,6 +98,13 @@ func (svc *CryptoMonitor) updateCAIfNeeded(ca models.CACertificate, now time.Tim
 		return
 	}
 
+	if ca.Certificate.Certificate == nil {
+		if svc.logger != nil {
+			svc.logger.Warnf("skipping CA %s: certificate data is unavailable", ca.ID)
+		}
+		return
+	}
+
 	shouldUpdateMeta, newMetadata := svc.shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
 	if shouldUpdateMeta {
 		svc.service.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{

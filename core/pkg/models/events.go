@@ -69,9 +69,15 @@ const (
 	EventUpdateDeviceGroupKey EventType = "device-group.update"
 	EventDeleteDeviceGroupKey EventType = "device-group.delete"
 
-	EventUpdateVARole EventType = "va.role.update"
-	EventInitCRLRole  EventType = "va.role.crl.init"
-	EventCreateCRL    EventType = "va.role.crl.create"
+	EventUpdateCRLSettings EventType = "va.crl-settings.update"
+	EventInitCRLSettings   EventType = "va.crl-settings.init"
+	// EventFinalizeCRLSettings: the CA was revoked or expired; its final CRL, if any, is published.
+	EventFinalizeCRLSettings EventType = "va.crl-settings.finalize"
+	// EventArchiveCRLSettings: the CA was deleted; its last CRL is still served.
+	EventArchiveCRLSettings EventType = "va.crl-settings.archive"
+	EventDeleteCRLSettings  EventType = "va.crl-settings.delete"
+	// EventCreateCRL keeps its published name: it is part of the event contract consumers already use.
+	EventCreateCRL EventType = "va.role.crl.create"
 
 	EventAnyKey EventType = "any"
 )

@@ -2,12 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
 )
 
@@ -50,6 +52,10 @@ func (ctrl *PolicyController) CreatePolicy(c *gin.Context) {
 				Error:   "Policy already exists",
 				Details: map[string]string{"policyId": policy.ID},
 			})
+			return
+		}
+		if errors.Is(err, engine.ErrPolicySchemaMismatch) {
+			replyBadRequest(c, err)
 			return
 		}
 		replyInternalError(c, "Failed to create policy", err)
@@ -135,6 +141,10 @@ func (ctrl *PolicyController) UpdatePolicy(c *gin.Context) {
 				Error:   "Cannot update system-managed policy",
 				Details: map[string]string{"policyId": policyID},
 			})
+			return
+		}
+		if errors.Is(err, engine.ErrPolicySchemaMismatch) {
+			replyBadRequest(c, err)
 			return
 		}
 		replyInternalError(c, "Failed to update policy", err)

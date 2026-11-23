@@ -22,8 +22,15 @@ type CertificatesRepo interface {
 	SelectAll(ctx context.Context, req StorageListRequest[models.Certificate]) (string, error)
 	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
+	// Insert fails with errs.ErrKeyNotFound if the certificate references a key the KMS does not hold.
 	Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Delete(ctx context.Context, serialNumber string) error
+	// ReleaseKey makes the certificates stop referencing their KMS key, so the KMS can delete it once no
+	// other certificate, nor ACTIVE CRL settings, does. They keep their engine.
+	ReleaseKey(ctx context.Context, serialNumbers []string) error
+	// CRLSettingsHoldingKey returns, sorted, the CA IDs of the ACTIVE CRL settings that have one of the certificates
+	// as signer: they retain its KMS key until they are FINAL, so deleting the key before would fail.
+	CRLSettingsHoldingKey(ctx context.Context, serialNumbers []string) ([]string, error)
 }
 
 type CACertificatesRepo interface {
@@ -42,6 +49,8 @@ type CACertificatesRepo interface {
 	SelectBySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req StorageListRequest[models.CACertificate]) (string, error)
 	SelectByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req StorageListRequest[models.CACertificate]) (string, error)
 
+	// Insert and Update write only CA fields. The referenced certificate must already exist;
+	// certificate changes must be saved through CertificatesRepo.
 	Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
 	Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
 	Delete(ctx context.Context, caID string) error

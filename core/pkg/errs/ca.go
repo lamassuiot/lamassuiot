@@ -16,17 +16,27 @@ var (
 	ErrCAIssuanceExpiration   error = errors.New("issuance expiration greater than CA expiration")
 	ErrCAType                 error = errors.New("CA type inconsistent")
 	ErrCAValidCertAndPrivKey  error = errors.New("CA and the provided key don't match")
+	ErrCANotCA                error = errors.New("certificate is not a CA: basicConstraints cA flag is not set")
 
 	ErrValidateBadRequest error = errors.New("struct validation error")
 
 	ErrCertificateNotFound                   error = errors.New("certificate not found")
+	ErrCertificateAlreadyExists              error = errors.New("certificate already exists")
+	ErrCertificateInUse                      error = errors.New("certificate is in use")
 	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
 	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
 	ErrCertificateIssuerCAExists             error = errors.New("cannot delete certificate: issuer CA still exists")
+	// ErrCAFinalCRLPending: the CA cannot be deleted until the VA issues its final CRL and stops retaining its key.
+	ErrCAFinalCRLPending error = errors.New("final CRL of the CA not issued yet")
+	// ErrCAKeyHeldByCRLSettings: the key of the CA signs the CRLs of another CA, whose ACTIVE CRL settings retain it.
+	ErrCAKeyHeldByCRLSettings error = errors.New("the key of the CA signs the CRLs of another CA")
 
 	ErrCascadeDeleteNotAllowed error = errors.New("cascade delete operations are not allowed by configuration")
 
 	ErrIssuanceProfileNotFound error = errors.New("issuance profile not found")
+
+	// ErrSignAsCANotAllowed: only CA creation and reissue may issue a CA certificate (sign_as_ca=true).
+	ErrSignAsCANotAllowed error = errors.New("sign_as_ca=true is not allowed when signing a certificate: CA certificates are only issued by CA creation or reissue")
 
 	//KMS
 	ErrKeyNotFound error = errors.New("key not found")
@@ -36,6 +46,8 @@ var (
 	// A keyID wins over an alias when resolving an identifier, so such an alias would never
 	// resolve to the key it was set on.
 	ErrKeyAliasCollidesWithKeyID error = errors.New("alias collides with an existing keyID")
+	// Resources such as certificates are bound to the key, so deleting it would leave them unable to sign.
+	ErrKeyInUse error = errors.New("key is in use")
 
 	// CreateCertificate
 	ErrInvalidKeySpec error = errors.New("invalid key spec: exactly one of (Type+Bits) or KeyIdentifier must be provided")

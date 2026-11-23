@@ -3,19 +3,70 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	log "github.com/sirupsen/logrus"
 )
 
-// MigrateSchema applies all pending migrations for the specified schema
+// schemaDependencies lists the schemas that have to be migrated before another one: the certificates of
+// the CA schema reference the keys of the KMS schema.
+var schemaDependencies = map[string][]string{
+	CA_SCHEMA: {KMS_SCHEMA},
+	VA_SCHEMA: {CA_SCHEMA},
+}
+
+// MigrationSchemaOrder returns the Lamassu schemas in the order they are migrated: every schema comes
+// after the ones it depends on.
+func MigrationSchemaOrder() []string {
+	return []string{KMS_SCHEMA, CA_SCHEMA, DEVICE_SCHEMA, DMS_SCHEMA, ALERTS_SCHEMA, VA_SCHEMA}
+}
+
+// OrderForMigration returns schemas ordered for migration: the ones in MigrationSchemaOrder in that
+// order, then the rest as they came.
+func OrderForMigration(schemas []string) []string {
+	order := MigrationSchemaOrder()
+	rank := func(schema string) int {
+		if i := slices.Index(order, schema); i != -1 {
+			return i
+		}
+		return len(order)
+	}
+
+	ordered := slices.Clone(schemas)
+	slices.SortStableFunc(ordered, func(a, b string) int { return rank(a) - rank(b) })
+	return ordered
+}
+
+// MigrateSchema applies all pending migrations for the specified schema, after the ones of the schemas
+// it depends on
 func MigrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema string) error {
+	return migrateSchema(logger, config, schema, map[string]bool{})
+}
+
+// migrateSchema skips the schemas already in migrated, so that a dependency shared by several schemas
+// is migrated only once, and adds the ones it migrates.
+func migrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema string, migrated map[string]bool) error {
+	if migrated[schema] {
+		return nil
+	}
+
+	for _, dependency := range schemaDependencies[schema] {
+		if err := migrateSchema(logger.WithField("schema", dependency), config, dependency, migrated); err != nil {
+			return fmt.Errorf("failed to migrate schema %s, which %s depends on: %w", dependency, schema, err)
+		}
+	}
+
 	logger.Infof("Starting migration for schema: %s", schema)
 
 	psqlCli, err := CreatePostgresDBConnection(logger, config, schema)
 	if err != nil {
 		return fmt.Errorf("could not create postgres connection: %w", err)
 	}
+	if sqlDB, err := psqlCli.DB(); err == nil {
+		defer sqlDB.Close()
+	}
+	migrated[schema] = true
 
 	// Ensure schema exists
 	psqlCli.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema))
@@ -56,20 +107,12 @@ func MigrateDatabase(logger *log.Entry, config lconfig.PostgresPSEConfig, databa
 
 // MigrateAllSchemas applies all pending migrations for all Lamassu schemas in the pki database
 func MigrateAllSchemas(logger *log.Entry, config lconfig.PostgresPSEConfig) error {
-	schemas := []string{
-		"ca",
-		"devicemanager",
-		"dmsmanager",
-		"alerts",
-		"va",
-		"kms",
-	}
-
 	logger.Infof("Starting migration for all schemas in pki database")
 
-	for _, schema := range schemas {
+	migrated := map[string]bool{}
+	for _, schema := range MigrationSchemaOrder() {
 		schemaLogger := logger.WithField("schema", schema)
-		if err := MigrateSchema(schemaLogger, config, schema); err != nil {
+		if err := migrateSchema(schemaLogger, config, schema, migrated); err != nil {
 			return fmt.Errorf("failed to migrate schema %s: %w", schema, err)
 		}
 	}

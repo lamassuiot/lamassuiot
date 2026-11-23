@@ -1244,3 +1244,83 @@ func writeHTTPSchemaTestFile(t *testing.T, content string) string {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	return path
 }
+
+func TestHTTPSchemaRegistry_LoadTerminalNetwork(t *testing.T) {
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+
+	schema, err := registry.Get("Terminal Network")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"/wisp"}, schema.BasePaths)
+	assert.Equal(t, HTTPDefaultActionDeny, schema.DefaultAction)
+	assert.Equal(t, []string{"terminal-network-connect"}, schema.AllActions)
+	// The dashboard's policy builder lists routes by group: a schema without groups would not show.
+	require.Len(t, schema.Groups, 1)
+	assert.Equal(t, "Network", schema.Groups[0].Name)
+	assert.Empty(t, schema.Routes)
+
+	for _, path := range []string{"/wisp", "/wisp/", "/wisp/anything"} {
+		route := schema.MatchRoute("GET", path)
+		require.NotNil(t, route, path)
+		assert.Equal(t, "terminal-network-connect", route.Action)
+	}
+	assert.Nil(t, schema.MatchRoute("POST", "/wisp/"))
+	assert.Nil(t, schema.MatchRoute("GET", "/wispy"))
+}
+
+func TestHTTPSchemaRegistry_AllowsQueryToken(t *testing.T) {
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+	require.NoError(t, registry.Load("../../examples/wfx/wfx.json"))
+
+	assert.True(t, registry.AllowsQueryToken("GET", "/wisp/"))
+	assert.False(t, registry.AllowsQueryToken("POST", "/wisp/"))
+	assert.False(t, registry.AllowsQueryToken("GET", "/api/wfx/nbi/v1/workflows"))
+	assert.False(t, registry.AllowsQueryToken("GET", "/unknown"))
+}
+
+// A route that did not opt into query tokens must not be reachable through one just because
+// another schema's route for the same request did: any schema's route can grant the request.
+func TestHTTPSchemaRegistry_AllowsQueryTokenRequiresEveryMatchingRouteToOptIn(t *testing.T) {
+	other := filepath.Join(t.TempDir(), "other.json")
+	require.NoError(t, os.WriteFile(other, []byte(`[{
+		"name": "Wisp Other",
+		"routes": [{"name": "r", "methods": ["GET"], "path": "/wisp/**", "match_type": "prefix", "action": "wisp-other"}]
+	}]`), 0o600))
+
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+	require.NoError(t, registry.Load(other))
+
+	assert.False(t, registry.AllowsQueryToken("GET", "/wisp/"))
+}
+
+// Overlapping routes that all opted in keep the channel open, and a loaded schema with no
+// route for the request (wfx) has no say in it.
+func TestHTTPSchemaRegistry_AllowsQueryTokenWhenEveryMatchingRouteOptsIn(t *testing.T) {
+	other := filepath.Join(t.TempDir(), "other.json")
+	require.NoError(t, os.WriteFile(other, []byte(`[{
+		"name": "Wisp Other",
+		"routes": [{"name": "r", "methods": ["GET"], "path": "/wisp/**", "match_type": "prefix", "action": "wisp-other", "query_token": true}]
+	}]`), 0o600))
+
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+	require.NoError(t, registry.Load(other))
+	require.NoError(t, registry.Load("../../examples/wfx/wfx.json"))
+
+	assert.True(t, registry.AllowsQueryToken("GET", "/wisp/"))
+}
+
+func TestHTTPSchemaRegistry_QueryTokenRejectedOnSkipAuthzRoute(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema.json")
+	require.NoError(t, os.WriteFile(path, []byte(`[{
+		"name": "bad",
+		"routes": [{"name": "r", "methods": ["GET"], "path": "/x", "match_type": "exact", "action": "a", "skip_authz": true, "query_token": true}]
+	}]`), 0o600))
+
+	err := NewHTTPSchemaRegistry().Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "query token")
+}

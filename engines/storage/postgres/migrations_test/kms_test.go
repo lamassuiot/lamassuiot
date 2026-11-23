@@ -105,6 +105,36 @@ func migrationTest_KMS_20260909084500_kms_key_composite_pk(t *testing.T, logger 
 	assert.Error(t, dup.Error, "the same key_id must not be storable twice in one engine")
 }
 
+func migrationTest_KMS_20261030120100_drop_legacy_key_bindings(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Earlier versions recorded the certificates that use a key in its metadata and never removed them.
+	// The certificates reference their key now, so the stale list goes and the rest of the metadata stays.
+	tx := con.Exec(`INSERT INTO kms_keys
+		(key_id, metadata, "name", algorithm, size, public_key, creation_ts, engine_id, has_private_key)
+		VALUES
+		('legacy-bound', '{"lamassu.io/kms/binded-resources": [{"resource_type":"certificate","resource_id":"aa"}], "owner": "team-a"}', 'Bound', 'RSA', 2048, 'pub', '2024-11-25 10:46:28.914', 'hsm-offline', true),
+		('legacy-plain', '{"owner": "team-b"}', 'Plain', 'RSA', 2048, 'pub', '2024-11-25 10:46:28.914', 'hsm-offline', true);
+	`)
+	if tx.Error != nil {
+		t.Fatalf("failed to insert keys with legacy bindings: %v", tx.Error)
+	}
+
+	ApplyMigration(t, logger, con, kmsDBName)
+
+	metadata := func(keyID string) string {
+		var value string
+		if err := con.Raw(`SELECT metadata::text FROM kms_keys WHERE key_id = ?`, keyID).Scan(&value).Error; err != nil {
+			t.Fatalf("failed to read the metadata of %s: %v", keyID, err)
+		}
+		return value
+	}
+	assert.JSONEq(t, `{"owner": "team-a"}`, metadata("legacy-bound"), "only the legacy bindings are removed")
+	assert.JSONEq(t, `{"owner": "team-b"}`, metadata("legacy-plain"))
+
+	// Rolling back has nothing to restore: the bindings were derived data.
+	RollbackMigration(t, logger, con, kmsDBName, "20261030120100_drop_legacy_key_bindings")
+	assert.JSONEq(t, `{"owner": "team-a"}`, metadata("legacy-bound"))
+}
+
 func TestKMSMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Info, "test", "test")
 	cleanup, con := RunDB(t, logger, kmsDBName)
@@ -124,5 +154,10 @@ func TestKMSMigrations(t *testing.T) {
 	migrationTest_KMS_20260909084500_kms_key_composite_pk(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20260909084500_kms_key_composite_pk")
+	}
+
+	migrationTest_KMS_20261030120100_drop_legacy_key_bindings(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261030120100_drop_legacy_key_bindings")
 	}
 }

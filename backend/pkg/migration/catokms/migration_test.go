@@ -168,6 +168,12 @@ func (m *mockKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key
 	return key, nil
 }
 func (m *mockKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
+func (m *mockKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {
+	return fn()
+}
+func (m *mockKMSStorage) RenameKey(context.Context, string, string, string, func() error) (bool, error) {
+	return false, nil
+}
 
 // controlledKMSStorage wraps mockKMSStorage but fails Insert after failAfter successful calls.
 type controlledKMSStorage struct {
@@ -207,6 +213,15 @@ func (c *controlledKMSStorage) Update(_ context.Context, key *models.Key) (*mode
 	return key, nil
 }
 func (c *controlledKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
+func (c *controlledKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {
+	return fn()
+}
+func (c *controlledKMSStorage) RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, fn func() error) (bool, error) {
+	return c.inner.RenameKey(ctx, engineID, oldKeyID, newKeyID, fn)
+}
+
+// legacyBindingsMetadataKey is where earlier versions recorded the certificates that use a key.
+const legacyBindingsMetadataKey = "lamassu.io/kms/binded-resources"
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -596,16 +611,8 @@ func TestRunMigration_InsertsNewKey(t *testing.T) {
 		t.Error("PublicKey field mismatch")
 	}
 
-	rawBindings, ok := got.Metadata[models.KMSBindResourceKey]
-	if !ok {
-		t.Fatalf("metadata missing key %q", models.KMSBindResourceKey)
-	}
-	bindings, ok := rawBindings.([]models.KMSBindResource)
-	if !ok {
-		t.Fatalf("metadata[%q] has wrong type %T", models.KMSBindResourceKey, rawBindings)
-	}
-	if len(bindings) != 1 || bindings[0].ResourceType != "certificate" || bindings[0].ResourceID != "serial-1" {
-		t.Errorf("unexpected binded-resources: %+v", bindings)
+	if _, ok := got.Metadata[legacyBindingsMetadataKey]; ok {
+		t.Errorf("the certificates reference their key themselves, so the key metadata records none: %+v", got.Metadata)
 	}
 }
 
@@ -703,7 +710,7 @@ func TestRunMigration_Mixed_NewExistingFailed(t *testing.T) {
 	}
 }
 
-func TestRunMigration_MultipleSerials_AllInBindedResources(t *testing.T) {
+func TestRunMigration_MultipleSerials_KeyMetadataStaysEmpty(t *testing.T) {
 	entry := &keyEntry{
 		engineID:   "engine-a",
 		keyID:      "key-abc",
@@ -721,25 +728,8 @@ func TestRunMigration_MultipleSerials_AllInBindedResources(t *testing.T) {
 	if len(kms.inserted) != 1 {
 		t.Fatal("expected exactly 1 insert")
 	}
-	rawBindings := kms.inserted[0].Metadata[models.KMSBindResourceKey]
-	bindings, ok := rawBindings.([]models.KMSBindResource)
-	if !ok {
-		t.Fatalf("wrong binding type %T", rawBindings)
-	}
-	if len(bindings) != 3 {
-		t.Errorf("expected 3 binded-resources, got %d", len(bindings))
-	}
-	bySerial := map[string]bool{}
-	for _, b := range bindings {
-		bySerial[b.ResourceID] = true
-		if b.ResourceType != "certificate" {
-			t.Errorf("unexpected resource_type %q", b.ResourceType)
-		}
-	}
-	for _, sn := range entry.serials {
-		if !bySerial[sn] {
-			t.Errorf("serial %q missing from binded-resources", sn)
-		}
+	if len(kms.inserted[0].Metadata) != 0 {
+		t.Errorf("a key used by several certificates has no metadata of them: %+v", kms.inserted[0].Metadata)
 	}
 }
 

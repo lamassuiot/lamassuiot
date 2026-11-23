@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
 	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
-	beventpub "github.com/lamassuiot/lamassuiot/v4/backend/pkg/middlewares/eventpub"
 )
 
 type policyEventPublisher struct {
@@ -69,4 +69,3 @@ func (p *policyEventPublisher) ListPolicies(ctx context.Context, queryParams *re
 func (p *policyEventPublisher) SearchPolicies(ctx context.Context, query string) ([]*authzmodels.Policy, error) {
 	return p.next.SearchPolicies(ctx, query)
 }
-

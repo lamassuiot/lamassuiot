@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	authz "github.com/lamassuiot/lamassuiot/v4/connectors/authz"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
 )
@@ -178,5 +181,36 @@ func policyWithRepeatedVertexPath(id string) *models.Policy {
 				},
 			},
 		},
+	}
+}
+
+func TestPolicyManager_RejectsUndeclaredViaWhenSchemasAreSet(t *testing.T) {
+	schemas, err := authz.PKISchemas()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := NewPolicyManager(store.NewInMemoryPolicyStore(), WithPolicySchemas(schemas))
+	rule := func(via string) *models.Rule {
+		return &models.Rule{
+			Namespace: "pki", SchemaName: "ca", EntityType: "issuance_profile", Actions: []string{"read"},
+			Relations: []models.RelationRule{{ToSchemaName: "ca", ToEntityType: "ca_certificate", Via: via, Actions: []string{"read"}}},
+		}
+	}
+
+	bad := &models.Policy{ID: "bad-via", Name: "bad", Rules: []*models.Rule{rule("parent")}}
+	if err := manager.CreatePolicy(context.Background(), bad); !errors.Is(err, engine.ErrUndeclaredVia) {
+		t.Fatalf("create: want ErrUndeclaredVia, got %v", err)
+	}
+	if _, err := manager.GetPolicy(context.Background(), "bad-via"); err == nil {
+		t.Fatal("a rejected policy must not be stored")
+	}
+
+	good := &models.Policy{ID: "good-via", Name: "good", Rules: []*models.Rule{rule("profile_id")}}
+	if err := manager.CreatePolicy(context.Background(), good); err != nil {
+		t.Fatalf("create valid: %v", err)
+	}
+	good.Rules = []*models.Rule{rule("parent")}
+	if err := manager.UpdatePolicy(context.Background(), good); !errors.Is(err, engine.ErrUndeclaredVia) {
+		t.Fatalf("update: want ErrUndeclaredVia, got %v", err)
 	}
 }

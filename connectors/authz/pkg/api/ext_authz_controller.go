@@ -25,6 +25,9 @@ type ExtAuthzController struct {
 
 const extAuthzMaxBodyBytes = 1 << 20
 
+// extAuthzQueryTokenParam is the query parameter that carries the access token on query_token routes.
+const extAuthzQueryTokenParam = "access_token"
+
 // NewExtAuthzController creates an ExtAuthzController.
 func NewExtAuthzController(eng *engine.Engine, resolver *service.IdentityResolver, logger *logrus.Entry) *ExtAuthzController {
 	return &ExtAuthzController{engine: eng, resolver: resolver, logger: logger}
@@ -44,14 +47,24 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 
 	log := ctrl.logger.WithFields(logrus.Fields{
 		"ext_authz_method":       method,
-		"ext_authz_incoming_url": incomingURL,
-		"ext_authz_original_url": originalURL,
+		"ext_authz_incoming_url": redactAccessToken(incomingURL),
+		"ext_authz_original_url": redactAccessToken(originalURL),
 		"ext_authz_path":         path,
 		"request_id":             c.GetHeader("x-request-id"),
 	})
 
 	// 1. Extract auth material from Envoy-forwarded headers.
 	authType, authMaterial, err := extractAuthFromEnvoyHeaders(headers)
+	// Browsers cannot set headers on a WebSocket: routes that opt in (query_token) take the
+	// access token from the query string instead. Only when no credential header came at all:
+	// a broken certificate or a non-Bearer Authorization header stays an error.
+	if err != nil && headers["x-forwarded-client-cert"] == "" && headers["authorization"] == "" {
+		if ctrl.engine.GetHTTPSchemas().AllowsQueryToken(method, path) {
+			if token := extAuthzQueryToken(rawQuery); token != "" {
+				authType, authMaterial, err = "oidc", "Bearer "+token, nil
+			}
+		}
+	}
 	if err != nil {
 		log.WithError(err).Debug("no valid auth credential in ext_authz request")
 		logExtAuthzDecision(log, start, http.StatusForbidden, false, "no valid auth credential", nil, nil, "", err)
@@ -263,6 +276,40 @@ func extAuthzRawQuery(originalURL string) string {
 		return ""
 	}
 	return parsed.RawQuery
+}
+
+// redactAccessToken hides the access_token query value of a URL that is about to be logged.
+// Parameter names are decoded as url.ParseQuery decodes them (extAuthzQueryToken), so an
+// encoded name such as access%5Ftoken is hidden too; a name that does not decode is hidden
+// as well. Every other parameter is kept as received.
+func redactAccessToken(rawURL string) string {
+	base, rest, hasQuery := strings.Cut(rawURL, "?")
+	if !hasQuery {
+		return rawURL
+	}
+	query, fragment, hasFragment := strings.Cut(rest, "#")
+	pairs := strings.Split(query, "&")
+	for i, pair := range pairs {
+		key, _, _ := strings.Cut(pair, "=")
+		name, err := url.QueryUnescape(key)
+		if err != nil || name == extAuthzQueryTokenParam {
+			pairs[i] = key + "=REDACTED"
+		}
+	}
+	redacted := base + "?" + strings.Join(pairs, "&")
+	if hasFragment {
+		redacted += "#" + fragment
+	}
+	return redacted
+}
+
+// extAuthzQueryToken returns the "access_token" query parameter of a request.
+func extAuthzQueryToken(rawQuery string) string {
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return ""
+	}
+	return values.Get(extAuthzQueryTokenParam)
 }
 
 func extAuthzRequestBody(c *gin.Context) ([]byte, bool, error) {

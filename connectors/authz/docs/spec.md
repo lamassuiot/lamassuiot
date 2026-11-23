@@ -47,7 +47,7 @@ Example (rule-level + relation-level wildcard):
         "schemaName": "public",
         "entityType": "building"
       },
-      "via": "parent",
+      "via": "organization_id",
       "actions": ["*"],
       "relations": []
     }
@@ -851,6 +851,15 @@ A route can set `skip_authz: true` to bypass the authorization decision while st
 - `skip_authz` routes cannot declare `constraints` — constraints are themselves an authorization decision, which contradicts skipping authz.
 - Authentication happens upstream of the HTTP check (Envoy forwards XFCC/Bearer material, which `ExtAuthzController` resolves to a subject before consulting the engine); a request that fails authentication is rejected before `skip_authz` is ever considered.
 
+#### Query-string access token (`query_token`)
+
+A browser opens a WebSocket without being able to set request headers, so it cannot send `Authorization`. A route can set `query_token: true` to accept the OIDC access token in the `access_token` query parameter when the request carries neither a Bearer header nor a client certificate. The token is resolved to a subject exactly like a Bearer token, and the route's action still has to be granted by a policy.
+
+- Only routes that opt in (and only for their configured methods and path) read the query; every other route ignores `access_token`. When routes of several loaded schemas match the same request, all of them must opt in, since a policy can grant the request through any of them: one that does not opt in closes the query channel for that request. The query is only read when the request carries neither an `Authorization` header nor a client certificate header: a credential header that fails (a certificate header without `Cert`, a non-Bearer `Authorization`) stays an error and is never replaced by the query token.
+- `skip_authz` routes cannot set `query_token`.
+- URLs end up in logs. The ext_authz controller replaces the `access_token` value with `REDACTED` in the URLs it logs (`ext_authz_incoming_url`, `ext_authz_original_url`). Other components that see the request URL (the gateway's access log, the HTTP request logger and tracing of the services in between) are not covered: keep `query_token` for WebSocket routes and short-lived tokens.
+- Example: `connectors/authz/terminal.json` ("Terminal Network", action `terminal-network-connect`), which guards the dashboard's browser terminal network proxy at `/wisp/`.
+
 #### Static-Value Grants for Dynamic Routes
 
 A policy's `http_rules` entry can restrict a granted action to one literal value of a dynamic request value, via `param_constraints`. It reuses the exact same request sources as route `constraints` (`path_regex_group`, `query`, `header`, `json_body`) — the difference is that `param_constraints` compares against an `equals` literal written into the policy itself, instead of a *subject* attribute that varies per principal. Because it reuses the same `path_regex_group` mechanism, it works on any existing dynamic (regex) route as-is — no named capture groups or schema changes required, just a plain `(...)` group.
@@ -1194,7 +1203,7 @@ Policies determine how permissions cascade through entity relationships. The nes
           "schemaName": "public",
           "entityType": "building"
         },
-        "via": "parent",
+        "via": "organization_id",
         "actions": ["read", "write", "delete"],
         "relations": [
           {
@@ -1202,7 +1211,7 @@ Policies determine how permissions cascade through entity relationships. The nes
               "schemaName": "public",
               "entityType": "gateway"
             },
-            "via": "parent",
+            "via": "building_id",
             "actions": ["read", "write", "configure"],
             "relations": [
               {
@@ -1210,7 +1219,7 @@ Policies determine how permissions cascade through entity relationships. The nes
                   "schemaName": "public",
                   "entityType": "device"
                 },
-                "via": "parent",
+                "via": "gateway_id",
                 "actions": ["read", "write", "control"]
               }
             ]
@@ -1230,7 +1239,7 @@ Policies determine how permissions cascade through entity relationships. The nes
           "schemaName": "public",
           "entityType": "gateway"
         },
-        "via": "parent",
+        "via": "building_id",
         "actions": ["read", "write", "configure"],
         "relations": [
           {
@@ -1238,7 +1247,7 @@ Policies determine how permissions cascade through entity relationships. The nes
               "schemaName": "public",
               "entityType": "device"
             },
-            "via": "parent",
+            "via": "gateway_id",
             "actions": ["read", "write", "control"]
           }
         ]
@@ -1256,7 +1265,7 @@ Policies determine how permissions cascade through entity relationships. The nes
           "schemaName": "public",
           "entityType": "device"
         },
-        "via": "parent",
+        "via": "gateway_id",
         "actions": ["read", "write", "control"]
       }
     ]
@@ -1280,7 +1289,7 @@ Each policy defines:
 - **`actions`**: What actions can be performed directly on this entity (supports both atomic and global actions)
 - **`relations`**: Nested array defining how permissions cascade to related entities
   - **`to`**: The target entity as object `{ schemaName, entityType }`
-  - **`via`**: The relation name matching a foreign key defined in the schema (e.g., "organization", "building", "gateway")
+  - **`via`**: The `foreign_key` column (or the relation `name`) that the **target** entity's schema declares towards the rule's entity (e.g., `organization_id` for organization → building, `building_id` for building → gateway, `gateway_id` for gateway → device). A `via` the target schema does not declare is never placed in SQL. `POST`/`PUT /policies` reject it with `400`, as well as a `to` that is not a loaded schema (for a rule with a wildcard `schemaName` or `entityType`, the `via` only has to resolve from one of the schemas the rule matches). A non-wildcard rule that has `relations` must itself match a loaded schema too; otherwise the save is rejected with `400` (e.g. `ca.issuance_profile is not a loaded schema in namespace pki`), so load the entity again or remove the rule's `relations` before saving the policy. A wildcard rule that matches no loaded schema is not checked. For a policy already stored, the relation is skipped, grants nothing and is logged as a warning with the policy ID and the `via`
   - **`actions`**: Which actions are granted on the target entity
   - **`relations`**: Recursive - can nest further to cascade through multiple levels
 
@@ -1295,9 +1304,9 @@ Given: User Alice has `owner_id` set in `organizations` table for organization `
 
 The engine recursively evaluates:
 1. Alice owns `organization:acme-corp` (via `owner_id` column) → can perform `["read", "write", "delete"]`
-2. Follow nested relation `to: { schemaName: "public", entityType: "building" }` `via: "parent"` → Alice gets `["read", "write", "delete"]` on all buildings where `buildings.organization_id = 'acme-corp'`
-3. Continue to nested `to: { schemaName: "public", entityType: "gateway" }` `via: "parent"` → Alice gets `["read", "write", "configure"]` on all gateways where `iot_gateways.building_id` matches those buildings
-4. Continue to nested `to: { schemaName: "public", entityType: "device" }` `via: "parent"` → Alice gets `["read", "write", "control"]` on all devices where `iot_devices.gateway_id` matches those gateways
+2. Follow nested relation `to: { schemaName: "public", entityType: "building" }` `via: "organization_id"` → Alice gets `["read", "write", "delete"]` on all buildings where `buildings.organization_id = 'acme-corp'`
+3. Continue to nested `to: { schemaName: "public", entityType: "gateway" }` `via: "building_id"` → Alice gets `["read", "write", "configure"]` on all gateways where `iot_gateways.building_id` matches those buildings
+4. Continue to nested `to: { schemaName: "public", entityType: "device" }` `via: "gateway_id"` → Alice gets `["read", "write", "control"]` on all devices where `iot_devices.gateway_id` matches those gateways
 
 **Result:** Ownership at the organization level (via `owner_id` foreign key) cascades all the way down through the entire hierarchy automatically.
 

@@ -773,7 +773,7 @@ func TestGetDeviceEvents(t *testing.T) {
 		t.Fatalf("expected 2 events, got %d", len(events))
 	}
 
-	eventTypes := []models.DeviceEventType{events[0].EvenType, events[1].EvenType}
+	eventTypes := []models.DeviceEventType{events[0].EventType, events[1].EventType}
 	if !slices.Contains(eventTypes, models.DeviceEventTypeCreated) {
 		t.Fatalf("expected events to contain CREATED, got %v", eventTypes)
 	}

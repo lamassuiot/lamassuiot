@@ -123,7 +123,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: "^1.27.3"
 
@@ -197,6 +197,7 @@ jobs:
             authz,
             lamassu-db-migration,
             ca-to-kms-migration,
+            upgrade-check,
           ]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
@@ -214,7 +215,7 @@ jobs:
           name: vendor
           path: vendor
       - name: Login to Github Registry
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -238,7 +239,6 @@ jobs:
             vendor=./vendor
           platforms: linux/amd64,linux/arm64
           build-args: |
-            BASE_IMAGE=alpine:3.14
             SHA1VER=${{ env.SHA1VER }}
             VERSION=${{ needs.finalize.outputs.release_version }}
           tags: |
@@ -265,6 +265,7 @@ jobs:
             authz,
             lamassu-db-migration,
             ca-to-kms-migration,
+            upgrade-check,
           ]
     uses: ./.github/workflows/trivy-image-scan.yaml
     with:

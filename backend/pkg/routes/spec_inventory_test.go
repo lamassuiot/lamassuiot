@@ -11,14 +11,14 @@ import (
 func TestEveryOpenAPISpecHasAnAssignedSuite(t *testing.T) {
 	// Adding an API requires an explicit coverage suite rather than silently skipping it.
 	suites := map[string]string{
-		"backend/pkg/specs/ca-openapi.yaml":                      "TestCAOpenAPIContractCoversEveryEndpoint",
-		"backend/pkg/specs/kms-openapi.yaml":                     "TestKMSOpenAPIContractCoversEveryEndpoint",
-		"backend/pkg/specs/va-openapi.yaml":                      "TestVAOpenAPIContractCoversEveryEndpoint",
-		"backend/pkg/specs/device-manager-openapi.yaml":          "TestDeviceManagerOpenAPIContractCoversEveryEndpoint",
-		"backend/pkg/specs/alerts-openapi.yaml":                  "TestRemainingBackendOpenAPIContracts",
-		"backend/pkg/specs/dms-manager-openapi.yaml":             "TestRemainingBackendOpenAPIContracts",
-		"backend/pkg/specs/enroll-reenroll-webhook-openapi.yaml": "TestEnrollmentWebhookEveryOpenAPIOperation (services)",
-		"connectors/authz/pkg/specs/authz-openapi.yaml":          "TestAuthzOpenAPIAndEveryRegisteredGuard (authz API)",
+		"docs/specs/ca-openapi.yaml":                      "TestCAOpenAPIContractCoversEveryEndpoint",
+		"docs/specs/kms-openapi.yaml":                     "TestKMSOpenAPIContractCoversEveryEndpoint",
+		"docs/specs/va-openapi.yaml":                      "TestVAOpenAPIContractCoversEveryEndpoint",
+		"docs/specs/device-manager-openapi.yaml":          "TestDeviceManagerOpenAPIContractCoversEveryEndpoint",
+		"docs/specs/alerts-openapi.yaml":                  "TestRemainingBackendOpenAPIContracts",
+		"docs/specs/dms-manager-openapi.yaml":             "TestRemainingBackendOpenAPIContracts",
+		"docs/specs/enroll-reenroll-webhook-openapi.yaml": "TestEnrollmentWebhookEveryOpenAPIOperation (services)",
+		"docs/specs/authz-openapi.yaml":                   "TestAuthzOpenAPIAndEveryRegisteredGuard (authz API)",
 	}
 	root := "../../.."
 	discovered := map[string]bool{}

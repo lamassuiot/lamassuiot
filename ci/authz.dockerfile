@@ -29,6 +29,7 @@ COPY core core
 COPY shared shared
 COPY sdk sdk
 COPY backend backend
+COPY docs docs
 COPY engines engines
 COPY monolithic monolithic
 COPY connectors connectors
@@ -53,5 +54,6 @@ COPY --from=builder /app/connectors/authz/cmd/preload /etc/lamassuiot/authz/prel
 COPY --from=builder /app/connectors/authz/authz.json /etc/lamassuiot/authz/schemas/authz.json
 COPY --from=builder /app/connectors/authz/pki.json /etc/lamassuiot/authz/schemas/pki.json
 COPY --from=builder /app/connectors/authz/wfx.json /etc/lamassuiot/authz/schemas/http-wfx.json
+COPY --from=builder /app/connectors/authz/terminal.json /etc/lamassuiot/authz/schemas/http-terminal.json
 USER lamassu
 CMD ["/authz"]

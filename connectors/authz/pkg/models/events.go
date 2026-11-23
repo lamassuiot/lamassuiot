@@ -8,11 +8,11 @@ const AuthzSource = "service/authz"
 const OtelTracerName = "github.com/lamassuiot/lamassuiot/v4/connectors/authz"
 
 const (
-	EventCreatePrincipalKey  coremodels.EventType = "authz.principal.create"
-	EventUpdatePrincipalKey  coremodels.EventType = "authz.principal.update"
-	EventDeletePrincipalKey  coremodels.EventType = "authz.principal.delete"
-	EventGrantPolicyKey      coremodels.EventType = "authz.principal.policy.grant"
-	EventRevokePolicyKey     coremodels.EventType = "authz.principal.policy.revoke"
+	EventCreatePrincipalKey coremodels.EventType = "authz.principal.create"
+	EventUpdatePrincipalKey coremodels.EventType = "authz.principal.update"
+	EventDeletePrincipalKey coremodels.EventType = "authz.principal.delete"
+	EventGrantPolicyKey     coremodels.EventType = "authz.principal.policy.grant"
+	EventRevokePolicyKey    coremodels.EventType = "authz.principal.policy.revoke"
 
 	EventCreatePolicyKey coremodels.EventType = "authz.policy.create"
 	EventUpdatePolicyKey coremodels.EventType = "authz.policy.update"

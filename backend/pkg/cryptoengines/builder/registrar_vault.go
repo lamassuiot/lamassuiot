@@ -5,11 +5,9 @@ package builder
 import (
 	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2"
 	vault_subsystem "github.com/lamassuiot/lamassuiot/v4/engines/crypto/vaultkv2/subsystem"
-	log "github.com/sirupsen/logrus"
 )
 
 func init() {
-	log.Info("Registering VaultKV crypto engine")
 	vaultkv2.Register()
 	vault_subsystem.Register()
 }

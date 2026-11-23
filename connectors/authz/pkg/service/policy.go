@@ -24,20 +24,46 @@ func IsSystemPolicy(policyID string) bool {
 
 // PolicyManager manages policy storage and retrieval via a PolicyStore.
 type PolicyManager struct {
-	store store.PolicyStore
+	store   store.PolicyStore
+	schemas *engine.SchemaRegistry
+}
+
+// PolicyManagerOption configures a PolicyManager.
+type PolicyManagerOption func(*PolicyManager)
+
+// WithPolicySchemas makes Create/UpdatePolicy reject relation vias the schemas do not declare
+// (see engine.ValidatePolicyAgainstSchemas). Without it only the policy's structure is validated.
+func WithPolicySchemas(schemas *engine.SchemaRegistry) PolicyManagerOption {
+	return func(pm *PolicyManager) { pm.schemas = schemas }
 }
 
 // NewPolicyManager creates a new PolicyManager backed by the given store.
-func NewPolicyManager(ps store.PolicyStore) *PolicyManager {
-	return &PolicyManager{store: ps}
+func NewPolicyManager(ps store.PolicyStore, opts ...PolicyManagerOption) *PolicyManager {
+	pm := &PolicyManager{store: ps}
+	for _, opt := range opts {
+		opt(pm)
+	}
+	return pm
+}
+
+func (pm *PolicyManager) validate(policy *models.Policy) error {
+	if err := engine.ValidatePolicyStruct(policy); err != nil {
+		return fmt.Errorf("invalid policy: %w", err)
+	}
+	if pm.schemas != nil {
+		if err := engine.ValidatePolicyAgainstSchemas(policy, pm.schemas); err != nil {
+			return fmt.Errorf("invalid policy: %w", err)
+		}
+	}
+	return nil
 }
 
 func (pm *PolicyManager) CreatePolicy(ctx context.Context, policy *models.Policy) error {
 	if policy.ID == "" {
 		policy.ID = uuid.NewV7().String()
 	}
-	if err := engine.ValidatePolicyStruct(policy); err != nil {
-		return fmt.Errorf("invalid policy: %w", err)
+	if err := pm.validate(policy); err != nil {
+		return err
 	}
 	return pm.store.Create(ctx, policy)
 }
@@ -50,8 +76,8 @@ func (pm *PolicyManager) UpdatePolicy(ctx context.Context, policy *models.Policy
 	if IsSystemPolicy(policy.ID) {
 		return fmt.Errorf("system-managed policy %q cannot be updated", policy.ID)
 	}
-	if err := engine.ValidatePolicyStruct(policy); err != nil {
-		return fmt.Errorf("invalid policy: %w", err)
+	if err := pm.validate(policy); err != nil {
+		return err
 	}
 	return pm.store.Update(ctx, policy)
 }

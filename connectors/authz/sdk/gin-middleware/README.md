@@ -81,8 +81,8 @@ inherit document-level security unless the operation overrides it; missing secur
 empty arrays and any empty-object alternative are rejected. Every scheme named in a
 document or operation `security` requirement must be defined in
 `components.securitySchemes`, so a typo cannot pass as authentication. VA's server prefix is
-`/api/va`: public paths are `/ocsp` and `/crl/{ca-ski}`, while role paths include
-`/v1/roles/{ca-ski}`.
+`/api/va`: public paths are `/ocsp` and `/crl/{id}`, while CRL settings paths include
+`/v1/crl-settings/{ca-id}`.
 
 The backend contract tests construct each actual service router, then check:
 

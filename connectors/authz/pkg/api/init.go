@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -50,7 +51,22 @@ func InitializeStorage(ctx context.Context, conf authzconfig.AuthzConfig) error 
 		return err
 	}
 
-	return seedStorage(ctx, conf, principalManager, service.NewPolicyManager(policyStore))
+	policyManager, err := newInitPolicyManager(conf, policyStore)
+	if err != nil {
+		return err
+	}
+
+	return seedStorage(ctx, conf, principalManager, policyManager)
+}
+
+// newInitPolicyManager validates against the same schemas the engine loads in AssembleAuthzService,
+// so init rejects the same preload policies as serve without opening the schema databases.
+func newInitPolicyManager(conf authzconfig.AuthzConfig, policyStore store.PolicyStore) (*service.PolicyManager, error) {
+	schemas, err := engine.LoadSchemaRegistry(conf.Schemas)
+	if err != nil {
+		return nil, err
+	}
+	return service.NewPolicyManager(policyStore, service.WithPolicySchemas(schemas)), nil
 }
 
 // RunMigrateCommand runs a single goose command against the authz database and

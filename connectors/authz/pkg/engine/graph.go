@@ -1,7 +1,11 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
+	"io"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 )
@@ -16,9 +20,8 @@ type GraphNode struct {
 type GraphEdge struct {
 	From               string   // source entity type
 	To                 string   // target entity type
-	Via                string   // relation name (FK in schema)
 	Actions            []string // allowed actions through this edge
-	ForeignKey         string   // FK column name in target table
+	ForeignKey         string   // join column in the target table: the schema relation's foreign_key, enforced or only logical
 	TableName          string   // target table name
 	QualifiedTableName string   // schema-qualified table name (schema.table)
 	PrimaryKey         string   // target primary key
@@ -26,14 +29,34 @@ type GraphEdge struct {
 
 // AuthorizationGraph represents the complete entity relationship graph
 type AuthorizationGraph struct {
-	nodes map[string]*GraphNode
+	nodes  map[string]*GraphNode
+	logger *logrus.Entry
+}
+
+// GraphOption configures an AuthorizationGraph.
+type GraphOption func(*AuthorizationGraph)
+
+// WithGraphLogger sets the logger the graph reports skipped rules and relations to.
+func WithGraphLogger(l *logrus.Entry) GraphOption {
+	return func(g *AuthorizationGraph) {
+		if l != nil {
+			g.logger = l
+		}
+	}
 }
 
 // NewAuthorizationGraph creates a new authorization graph
-func NewAuthorizationGraph() *AuthorizationGraph {
-	return &AuthorizationGraph{
-		nodes: make(map[string]*GraphNode),
+func NewAuthorizationGraph(opts ...GraphOption) *AuthorizationGraph {
+	nop := logrus.New()
+	nop.SetOutput(io.Discard)
+	g := &AuthorizationGraph{
+		nodes:  make(map[string]*GraphNode),
+		logger: logrus.NewEntry(nop),
 	}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 // BuildFromPoliciesAndSchemas constructs the graph from policy and schema definitions
@@ -68,13 +91,15 @@ func (g *AuthorizationGraph) buildPolicyEdges(policies *PolicyRegistry, schemas 
 				}
 				matchedSchemas++
 				concreteRule := concretizeRuleForSchema(rule, schema)
-				if err := g.addRuleEdges(concreteRule.QualifiedEntityType(), concreteRule.Namespace, concreteRule, schemas); err != nil {
+				if err := g.addRuleEdges(policy.ID, concreteRule.QualifiedEntityType(), concreteRule.Namespace, concreteRule, schemas); err != nil {
 					return err
 				}
 			}
 			if matchedSchemas == 0 && (rule.SchemaName == "*" || rule.EntityType == "*") {
-				fmt.Printf("Warning: wildcard rule matched no schemas: namespace=%s schemaName=%s entityType=%s (skipping rule)\n",
-					rule.Namespace, rule.SchemaName, rule.EntityType)
+				g.logger.WithFields(logrus.Fields{
+					"policy_id": policy.ID, "namespace": rule.Namespace,
+					"schema_name": rule.SchemaName, "entity_type": rule.EntityType,
+				}).Warn("wildcard rule matched no schemas (skipping rule)")
 			}
 		}
 	}
@@ -88,54 +113,78 @@ func (g *AuthorizationGraph) addUserOwnershipEdges(schemas *SchemaRegistry) {
 				continue
 			}
 			edge := &GraphEdge{
-				From: schema.QualifiedEntityType(), To: "user", Via: relConfig.ForeignKey,
+				From: schema.QualifiedEntityType(), To: "user",
 				ForeignKey: relConfig.ForeignKey, TableName: schema.TableName,
 				QualifiedTableName: schema.QualifiedTableName(), PrimaryKey: schema.PrimaryKeys[0],
 			}
 			qualifiedType := schema.QualifiedEntityType()
+			key := edgeKey(edge.To, edge.ForeignKey)
 			if g.nodes[qualifiedType] != nil {
-				g.nodes[qualifiedType].Relations[relConfig.ForeignKey] = edge
+				g.nodes[qualifiedType].Relations[key] = edge
 			}
 			if g.nodes[schema.EntityType] != nil {
-				g.nodes[schema.EntityType].Relations[relConfig.ForeignKey] = edge
+				g.nodes[schema.EntityType].Relations[key] = edge
 			}
 		}
 	}
 }
 
 // addRuleEdges adds edges from a policy's relations
-func (g *AuthorizationGraph) addRuleEdges(entityType string, namespace string, rule *models.Rule, schemas *SchemaRegistry) error {
-	return g.addRelationEdges(entityType, namespace, rule.Relations, schemas)
+func (g *AuthorizationGraph) addRuleEdges(policyID string, entityType string, namespace string, rule *models.Rule, schemas *SchemaRegistry) error {
+	return g.addRelationEdges(policyID, entityType, namespace, rule.Relations, schemas)
 }
 
 // addRelationEdges recursively adds edges from relation policies
-func (g *AuthorizationGraph) addRelationEdges(fromEntity string, fromNamespace string, relations []models.RelationRule, schemas *SchemaRegistry) error {
+func (g *AuthorizationGraph) addRelationEdges(policyID string, fromEntity string, fromNamespace string, relations []models.RelationRule, schemas *SchemaRegistry) error {
 	for _, rel := range relations {
 		targetEntityType := rel.QualifiedTo()
 		targetSchema := findSchemaForRelation(fromNamespace, targetEntityType, schemas)
 		if targetSchema == nil {
 			return fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, targetEntityType)
 		}
+
+		// Resolve via against the schema instead of using the policy's string as a JOIN column;
+		// a relation the schema doesn't declare grants nothing and is skipped, not fatal.
+		foreignKey, err := resolveRelationForeignKey(fromEntity, fromNamespace, rel.Via, targetSchema, schemas)
+		if errors.Is(err, ErrUndeclaredVia) {
+			g.logger.WithFields(logrus.Fields{
+				"policy_id": policyID, "from": fromEntity, "to": targetEntityType, "via": rel.Via,
+			}).Warnf("skipping relation that grants nothing: %v", err)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+
 		edge := &GraphEdge{
-			From: fromEntity, To: targetEntityType, Via: rel.Via,
-			Actions: rel.Actions, ForeignKey: rel.Via,
+			From: fromEntity, To: targetEntityType,
+			Actions: rel.Actions, ForeignKey: foreignKey,
 			TableName: targetSchema.TableName, QualifiedTableName: targetSchema.QualifiedTableName(),
 			PrimaryKey: targetSchema.PrimaryKeys[0],
 		}
 		if g.nodes[fromEntity] != nil {
-			if existingEdge, exists := g.nodes[fromEntity].Relations[rel.Via]; exists {
+			// Keyed by the resolved join column, so every via spelling of one relation shares this edge.
+			key := edgeKey(edge.To, edge.ForeignKey)
+			if existingEdge, exists := g.nodes[fromEntity].Relations[key]; exists {
 				mergeEdgeActions(existingEdge, rel.Actions)
 			} else {
-				g.nodes[fromEntity].Relations[rel.Via] = edge
+				g.nodes[fromEntity].Relations[key] = edge
 			}
 		}
 		if len(rel.Relations) > 0 {
-			if err := g.addRelationEdges(targetEntityType, fromNamespace, rel.Relations, schemas); err != nil {
+			if err := g.addRelationEdges(policyID, targetEntityType, fromNamespace, rel.Relations, schemas); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// edgeKey identifies an edge within its source node by target and join column, which together fix
+// the JOIN filter.go emits. The column alone is not unique: several targets can declare the same
+// column towards one entity, and an ownership column to user can share its name with a relation's.
+func edgeKey(to, foreignKey string) string {
+	return to + "|" + foreignKey
 }
 
 func findSchemaForRelation(namespace, entityType string, schemas *SchemaRegistry) *SchemaDefinition {
@@ -145,6 +194,24 @@ func findSchemaForRelation(namespace, entityType string, schemas *SchemaRegistry
 		}
 	}
 	return nil
+}
+
+// ErrUndeclaredVia is returned when a relation's via names no relation declared by the schemas.
+var ErrUndeclaredVia = errors.New("relation via is not declared by the schema")
+
+// resolveRelationForeignKey returns the schema's own foreign key for via (a relation name or its FK
+// column) declared by the target schema, the only direction the JOIN in filter.go can express.
+func resolveRelationForeignKey(fromEntity, fromNamespace, via string, targetSchema *SchemaDefinition, schemas *SchemaRegistry) (string, error) {
+	fromSchema := findSchemaForRelation(fromNamespace, fromEntity, schemas)
+	if fromSchema == nil {
+		return "", fmt.Errorf("schema not found for namespace=%s, entityType=%s", fromNamespace, fromEntity)
+	}
+	for _, relConfig := range targetSchema.Relations {
+		if (relConfig.ForeignKey == via || relConfig.Name == via) && relConfig.TargetEntity == fromSchema.EntityType {
+			return relConfig.ForeignKey, nil
+		}
+	}
+	return "", fmt.Errorf("%w: %q between %s and %s", ErrUndeclaredVia, via, fromEntity, targetSchema.QualifiedEntityType())
 }
 
 func mergeEdgeActions(edge *GraphEdge, newActions []string) {

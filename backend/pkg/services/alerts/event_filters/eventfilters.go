@@ -1,18 +1,29 @@
 package eventfilters
 
 import (
+	"sync"
+
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 )
 
-var eventFilters = make(map[models.ConditionType]func(c models.SubscriptionCondition, event cloudevents.Event) (bool, error))
+var (
+	eventFiltersMu sync.RWMutex
+	eventFilters   = make(map[models.ConditionType]func(c models.SubscriptionCondition, event cloudevents.Event) (bool, error))
+)
 
 func RegisterEventFilter(name models.ConditionType, filter func(c models.SubscriptionCondition, event cloudevents.Event) (bool, error)) {
+	eventFiltersMu.Lock()
+	defer eventFiltersMu.Unlock()
+
 	eventFilters[name] = filter
 }
 
 func EvalFilter(s models.SubscriptionCondition, event cloudevents.Event) (bool, error) {
+	eventFiltersMu.RLock()
 	filter, ok := eventFilters[s.Type]
+	eventFiltersMu.RUnlock()
+
 	if !ok {
 		return false, nil
 	}

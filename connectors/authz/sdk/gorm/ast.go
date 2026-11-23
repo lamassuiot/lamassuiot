@@ -144,17 +144,23 @@ func findJoinPositions(upper string) []int {
 	return positions
 }
 
-// extractTableName returns the unqualified table name from a fragment such as
-// "schema.table", "schema.table AS alias", or "table".
+// extractTableName returns the name a fragment such as "schema.table", "table" or
+// "schema.view AS table" exposes to the rest of the query: the alias when there is one,
+// otherwise the unqualified table name. An entity read through one of its view_tables is
+// aliased to its canonical table name, which is what the statement it restricts is matched against.
 func extractTableName(s string) string {
-	s = strings.TrimSpace(s)
-	if idx := strings.IndexAny(s, " \t\r\n"); idx != -1 {
-		s = s[:idx]
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return ""
 	}
-	if idx := strings.LastIndex(s, "."); idx != -1 {
-		s = s[idx+1:]
+	name := fields[0]
+	if len(fields) >= 3 && strings.EqualFold(fields[1], "AS") {
+		name = fields[2]
 	}
-	return s
+	if idx := strings.LastIndex(name, "."); idx != -1 {
+		name = name[idx+1:]
+	}
+	return name
 }
 
 func isIdentChar(c byte) bool {

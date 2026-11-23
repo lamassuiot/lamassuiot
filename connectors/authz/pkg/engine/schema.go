@@ -21,6 +21,7 @@ type SchemaDefinition struct {
 
 	EntityType    string            `json:"entity_type"`
 	TableName     string            `json:"table_name"`
+	ViewTables    []string          `json:"view_tables,omitempty"` // Views over TableName that expose the entity (same rows, derived columns); the engine reads the first
 	SchemaName    string            `json:"schema_name,omitempty"` // PostgreSQL schema name (defaults to "public" if not specified)
 	Relations     []RelationConfig  `json:"relations"`
 	AtomicActions []string          `json:"atomic_actions"`          // Actions that require an entity key (read, write, delete, etc.)
@@ -35,6 +36,7 @@ type SchemaDefinition struct {
 type schemaJSON struct {
 	EntityType    string            `json:"entity_type"`
 	TableName     string            `json:"table_name"`
+	ViewTables    []string          `json:"view_tables,omitempty"`
 	SchemaName    string            `json:"schema_name,omitempty"`
 	PrimaryKey    json.RawMessage   `json:"primary_key"`
 	Relations     []RelationConfig  `json:"relations"`
@@ -156,6 +158,7 @@ func (r *SchemaRegistry) LoadJSON(data []byte, configSchemaName string) error {
 		schemas[i] = SchemaDefinition{
 			EntityType:    raw.EntityType,
 			TableName:     raw.TableName,
+			ViewTables:    raw.ViewTables,
 			SchemaName:    raw.SchemaName,
 			Relations:     raw.Relations,
 			AtomicActions: raw.AtomicActions,
@@ -275,6 +278,21 @@ func (r *SchemaRegistry) validateSchema(schema *SchemaDefinition) error {
 		seen[col] = true
 	}
 
+	// Validate view tables: each one names a distinct view over the table
+	views := make(map[string]bool, len(schema.ViewTables))
+	for _, view := range schema.ViewTables {
+		if view == "" {
+			return fmt.Errorf("viewTables must not contain empty names")
+		}
+		if view == schema.TableName {
+			return fmt.Errorf("viewTables must not contain the table %q itself", view)
+		}
+		if views[view] {
+			return fmt.Errorf("viewTables contains duplicate view %q", view)
+		}
+		views[view] = true
+	}
+
 	// Validate relations
 	for i, rel := range schema.Relations {
 		if rel.Name == "" {
@@ -348,16 +366,32 @@ func (s *SchemaDefinition) NamespacedType() string {
 	return fmt.Sprintf("%s.%s.%s", s.ConfigSchema, s.SchemaName, s.EntityType)
 }
 
-// QualifiedTableName returns the fully qualified table name (schema.table) for use in
-// FROM and JOIN clauses. Do NOT use this for qualifying column references in WHERE/ON
+// QualifiedTableName returns the fully qualified relation (schema.table) the entity is read
+// from — its first view table when it declares view tables, otherwise its TableName — for use
+// in FROM and JOIN clauses. Do NOT use this for qualifying column references in WHERE/ON
 // expressions — PostgreSQL does not support the three-part schema.table.column syntax.
 // Use ColumnQualifier() for that purpose.
 func (s *SchemaDefinition) QualifiedTableName() string {
+	table := s.TableName
+	if len(s.ViewTables) > 0 {
+		table = s.ViewTables[0]
+	}
 	if s.SchemaName == "" || s.SchemaName == "public" {
 		// For public schema or empty, just return table name (PostgreSQL default)
-		return s.TableName
+		return table
 	}
-	return fmt.Sprintf("%s.%s", s.SchemaName, s.TableName)
+	return fmt.Sprintf("%s.%s", s.SchemaName, table)
+}
+
+// FromClause returns the FROM target for a query on the entity itself. An entity read
+// through a view table is aliased to its TableName, so ColumnQualifier() references stay
+// valid and the authz GORM plugin matches the SQL against statements that read the entity
+// as its table or as any of its views aliased to the table ("certificates_view AS certificates").
+func (s *SchemaDefinition) FromClause() string {
+	if len(s.ViewTables) == 0 {
+		return s.QualifiedTableName()
+	}
+	return fmt.Sprintf("%s AS %s", s.QualifiedTableName(), s.TableName)
 }
 
 // ColumnQualifier returns the table name to use when qualifying column references in

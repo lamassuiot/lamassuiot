@@ -46,10 +46,13 @@ type Certificate struct {
 	RevocationReason    RevocationReason      `json:"revocation_reason" gorm:"serializer:text"`
 	Type                CertificateType       `json:"type"`
 	EngineID            string                `json:"engine_id"`
-	// KeyID is the ID of the certificate's key in the KMS, empty when the KMS does not hold it.
-	// With EngineID it identifies the key.
-	KeyID string `json:"key_id"`
-	IsCA  bool   `json:"is_ca"`
+	// KeyID is the ID of the certificate's key in the KMS, empty when the KMS does not hold it (stored as
+	// NULL, which the foreign key does not check). With EngineID it identifies the key, and the database
+	// keeps the KMS from deleting it while the certificate references it.
+	KeyID string `json:"key_id" gorm:"serializer:nullstring"`
+	// HasPrivateKey is derived at read time from the KMS through certificates_view; it is not a stored column.
+	HasPrivateKey bool `json:"has_private_key" gorm:"->"`
+	IsCA          bool `json:"is_ca"`
 }
 
 type CertificateExtensions struct {
@@ -127,13 +130,4 @@ type CAAttachedToDevice struct {
 		RAID string `json:"ra_id"`
 	} `json:"authorized_by"`
 	DeviceID string `json:"device_id"`
-}
-
-const (
-	KMSBindResourceKey = "lamassu.io/kms/binded-resources"
-)
-
-type KMSBindResource struct {
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
 }

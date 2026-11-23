@@ -16,6 +16,7 @@ var CertificateFilterableFields = map[string]FilterFieldType{
 	"extensions.key_usage":          StringArrayFilterFieldType,
 	"extensions.extended_key_usage": StringArrayFilterFieldType,
 	"is_ca":                         EnumFilterFieldType,
+	"has_private_key":               EnumFilterFieldType,
 }
 
 var CAFilterableFields = map[string]FilterFieldType{
@@ -36,6 +37,7 @@ var CAFilterableFields = map[string]FilterFieldType{
 	"extensions.key_usage":          StringArrayFilterFieldType,
 	"extensions.extended_key_usage": StringArrayFilterFieldType,
 	"is_ca":                         EnumFilterFieldType,
+	"has_private_key":               EnumFilterFieldType,
 }
 
 var KMSFilterableFields = map[string]FilterFieldType{
@@ -55,6 +57,12 @@ var KMSFilterableFields = map[string]FilterFieldType{
 var IssuanceProfileFilterableFields = map[string]FilterFieldType{
 	"id":   StringFilterFieldType,
 	"name": StringFilterFieldType,
+}
+
+var CRLSettingsFilterableFields = map[string]FilterFieldType{
+	"ca_id":      StringFilterFieldType,
+	"status":     StringFilterFieldType,
+	"legacy_ski": StringFilterFieldType,
 }
 
 var DMSFilterableFields = map[string]FilterFieldType{

@@ -46,11 +46,9 @@ func (e *Engine) Logger() *logrus.Entry {
 // dbs: map of config schema name (e.g., "pki", "iot") -> database connection
 // schemaPaths: map of config schema name -> schema file path
 func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...EngineOption) (*Engine, error) {
-	schemas := NewSchemaRegistry()
-	for configSchemaName, schemaPath := range schemaPaths {
-		if err := schemas.Load(schemaPath, configSchemaName); err != nil {
-			return nil, fmt.Errorf("failed to load schema %s from %s: %w", configSchemaName, schemaPath, err)
-		}
+	schemas, err := LoadSchemaRegistry(schemaPaths)
+	if err != nil {
+		return nil, err
 	}
 
 	e := &Engine{
@@ -67,6 +65,18 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 	e.logger.WithFields(logrus.Fields{"schema_count": len(schemas.GetAll())}).Debug("engine schemas loaded")
 
 	return e, nil
+}
+
+// LoadSchemaRegistry loads the schema files keyed by config namespace, as NewEngine does. Use it
+// where policies must be validated against the schemas without building an engine.
+func LoadSchemaRegistry(schemaPaths map[string]string) (*SchemaRegistry, error) {
+	schemas := NewSchemaRegistry()
+	for configSchemaName, schemaPath := range schemaPaths {
+		if err := schemas.Load(schemaPath, configSchemaName); err != nil {
+			return nil, fmt.Errorf("failed to load schema %s from %s: %w", configSchemaName, schemaPath, err)
+		}
+	}
+	return schemas, nil
 }
 
 const engineTracer = "github.com/lamassuiot/lamassuiot/v4/connectors/authz/engine"
@@ -146,7 +156,7 @@ func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, 
 		span.End()
 	}()
 	log := helpers.ConfigureLogger(ctx, e.logger)
-	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
+	filterGenerator, err := NewFilterGenerator(e.schemas, policies, WithGraphLogger(e.logger))
 	if err != nil {
 		return false, fmt.Errorf("failed to build authorization graph: %w", err)
 	}
@@ -170,7 +180,7 @@ func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, 
 		return false, fmt.Errorf("failed to get database connection: %w", err)
 	}
 	var exists int
-	query := db.WithContext(ctx).Table(schema.QualifiedTableName())
+	query := db.WithContext(ctx).Table(schema.FromClause())
 	for _, join := range result.Joins {
 		query = query.Joins(join)
 	}
@@ -219,7 +229,7 @@ func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, na
 		return "", fmt.Errorf("entity type '%s' does not belong to namespace '%s'", entityType, namespace)
 	}
 
-	filterGenerator, err := NewFilterGenerator(e.schemas, policies)
+	filterGenerator, err := NewFilterGenerator(e.schemas, policies, WithGraphLogger(e.logger))
 	if err != nil {
 		return "", fmt.Errorf("failed to build authorization graph: %w", err)
 	}

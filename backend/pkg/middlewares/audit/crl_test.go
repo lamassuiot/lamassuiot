@@ -33,10 +33,20 @@ func crlAuditEventChecker(event models.EventType, expectations []func(*svcmock.M
 	assertions(mockCloudEventPub, mockCRLService)
 }
 
+// crlReturns builds the values a mocked method returns: its output first and its error last, with nothing in between
+// but the extra results some methods have (the CRL FinalizeCRLSettings issues).
+func crlReturns(method string, output any, err error) []any {
+	m, _ := reflect.TypeOf(&svcmock.MockVAService{}).MethodByName(method)
+	ret := make([]any, m.Type.NumOut())
+	ret[0] = output
+	ret[len(ret)-1] = err
+	return ret
+}
+
 func crlAuditWithoutErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockVAService)) {
 	expectations := []func(*svcmock.MockVAService){
 		func(mockCRLService *svcmock.MockVAService) {
-			mockCRLService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, nil)
+			mockCRLService.On(method, mock.Anything, mock.Anything).Return(crlReturns(method, expectedOutput, nil)...)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -44,7 +54,7 @@ func crlAuditWithoutErrors[E any, O any](t *testing.T, method string, input E, e
 	operation := func(crlMiddleware services.CRLService) {
 		m := reflect.ValueOf(crlMiddleware).MethodByName(method)
 		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
-		assert.Nil(t, r[1].Interface())
+		assert.Nil(t, r[len(r)-1].Interface())
 	}
 
 	assertions := func(mockCloudEventPub *CloudEventPublisherMock, mockCRLService *svcmock.MockVAService) {
@@ -58,7 +68,7 @@ func crlAuditWithoutErrors[E any, O any](t *testing.T, method string, input E, e
 func crlAuditWithErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockVAService)) {
 	expectations := []func(*svcmock.MockVAService){
 		func(mockCRLService *svcmock.MockVAService) {
-			mockCRLService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, errors.New("some error"))
+			mockCRLService.On(method, mock.Anything, mock.Anything).Return(crlReturns(method, expectedOutput, errors.New("some error"))...)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -66,7 +76,7 @@ func crlAuditWithErrors[E any, O any](t *testing.T, method string, input E, even
 	operation := func(crlMiddleware services.CRLService) {
 		m := reflect.ValueOf(crlMiddleware).MethodByName(method)
 		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
-		assert.NotNil(t, r[1].Interface())
+		assert.NotNil(t, r[len(r)-1].Interface())
 	}
 
 	assertions := func(mockCloudEventPub *CloudEventPublisherMock, mockCRLService *svcmock.MockVAService) {
@@ -83,15 +93,15 @@ func TestCRLAuditEventPublisher(t *testing.T) {
 		test func(t *testing.T)
 	}{
 		{
-			name: "UpdateVARole with errors - Audit event produced",
+			name: "UpdateCRLSettings with errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithErrors(t, "UpdateVARole", services.UpdateVARoleInput{}, models.EventUpdateVARole, &models.VARole{})
+				crlAuditWithErrors(t, "UpdateCRLSettings", services.UpdateCRLSettingsInput{}, models.EventUpdateCRLSettings, &models.CRLSettings{})
 			},
 		},
 		{
-			name: "UpdateVARole without errors - Audit event produced",
+			name: "UpdateCRLSettings without errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithoutErrors(t, "UpdateVARole", services.UpdateVARoleInput{}, models.EventUpdateVARole, &models.VARole{})
+				crlAuditWithoutErrors(t, "UpdateCRLSettings", services.UpdateCRLSettingsInput{}, models.EventUpdateCRLSettings, &models.CRLSettings{})
 			},
 		},
 		{
@@ -107,20 +117,60 @@ func TestCRLAuditEventPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "InitCRLRole with errors - Audit event produced",
+			name: "FinalizeCRLSettings with errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithErrors(t, "InitCRLRole", "", models.EventInitCRLRole, &models.VARole{})
+				crlAuditWithErrors(t, "FinalizeCRLSettings", services.FinalizeCRLSettingsInput{}, models.EventFinalizeCRLSettings, &models.CRLSettings{})
 			},
 		},
 		{
-			name: "InitCRLRole without errors - Audit event produced",
+			name: "FinalizeCRLSettings without errors - Audit event produced",
 			test: func(t *testing.T) {
-				crlAuditWithoutErrors(t, "InitCRLRole", "", models.EventInitCRLRole, &models.VARole{})
+				crlAuditWithoutErrors(t, "FinalizeCRLSettings", services.FinalizeCRLSettingsInput{}, models.EventFinalizeCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
+			name: "ArchiveCRLSettings with errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithErrors(t, "ArchiveCRLSettings", services.ArchiveCRLSettingsInput{}, models.EventArchiveCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
+			name: "ArchiveCRLSettings without errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithoutErrors(t, "ArchiveCRLSettings", services.ArchiveCRLSettingsInput{}, models.EventArchiveCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
+			name: "InitCRLSettings with errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithErrors(t, "InitCRLSettings", "", models.EventInitCRLSettings, &models.CRLSettings{})
+			},
+		},
+		{
+			name: "InitCRLSettings without errors - Audit event produced",
+			test: func(t *testing.T) {
+				crlAuditWithoutErrors(t, "InitCRLSettings", "", models.EventInitCRLSettings, &models.CRLSettings{})
 			},
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, tc.test)
+	}
+}
+
+func TestCRLAuditEventPublisherDeleteCRLSettings(t *testing.T) {
+	for _, serviceErr := range []error{nil, errors.New("some error")} {
+		next := new(svcmock.MockVAService)
+		next.On("DeleteCRLSettings", mock.Anything, mock.Anything).Return(serviceErr)
+		pub := new(CloudEventPublisherMock)
+		pub.On("PublishCloudEvent", mock.Anything, mock.Anything)
+
+		err := NewCRLAuditEventPublisher(AuditPublisher{ICloudEventPublisher: pub})(next).
+			DeleteCRLSettings(context.Background(), services.DeleteCRLSettingsInput{CAID: "ca-1"})
+
+		assert.Equal(t, serviceErr, err)
+		next.AssertExpectations(t)
+		pub.AssertExpectations(t)
 	}
 }

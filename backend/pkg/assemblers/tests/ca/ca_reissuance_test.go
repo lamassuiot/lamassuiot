@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
@@ -139,6 +140,44 @@ func TestReissueCAService(t *testing.T) {
 					return fmt.Errorf("expected ErrCAExpired error but got none")
 				}
 				return fmt.Errorf("expected ErrCAExpired but got: %s", err)
+			},
+		},
+		{
+			name: "OK/ReissueCA_KeepsUserMetadata",
+			before: func(caSDK services.CAService) (string, error) {
+				ca, err := createTestCA(caSDK, "RootCA-Reissue-Metadata", false)
+				if err != nil {
+					return "", err
+				}
+				_, err = caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
+					CAID: ca.ID,
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder("owner"), "team-a").
+						Build(),
+				})
+				if err != nil {
+					return "", err
+				}
+				return ca.ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
+				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+					CAID: caID,
+				})
+			},
+			resultCheck: func(caSDK services.CAService, originalCA *models.CACertificate, reissuedCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error: %s", err)
+				}
+				if reissuedCA.Metadata["owner"] != "team-a" {
+					return fmt.Errorf("user metadata lost on reissue: expected owner=team-a, got %v", reissuedCA.Metadata["owner"])
+				}
+				if reissuedCA.Metadata[models.CAMetadataReissuedFromKey] != originalCA.Certificate.SerialNumber {
+					return fmt.Errorf("missing or incorrect reissued-from metadata: expected %s, got %v",
+						originalCA.Certificate.SerialNumber,
+						reissuedCA.Metadata[models.CAMetadataReissuedFromKey])
+				}
+				return nil
 			},
 		},
 		{

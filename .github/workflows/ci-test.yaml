@@ -10,7 +10,7 @@ on:
       - main
       - v4
   workflow_dispatch:
-  
+
 jobs:
   setup:
     name: Set up tests
@@ -21,11 +21,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # Saves the Go module and build caches once, so every test job restores them instead of racing to create them
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
@@ -44,14 +44,15 @@ jobs:
   test:
     needs: setup
     strategy:
+      fail-fast: false
       max-parallel: 5
       matrix:
-        module: 
+        module:
           - path: core
             tag: core
           - path: sdk
             tag: sdk
-          - path: shared/subsystems 
+          - path: shared/subsystems
             tag: shared-subsystems
           - path: shared/aws
             tag: shared-aws
@@ -61,10 +62,16 @@ jobs:
             tag: crypto-aws
           - path: engines/crypto/filesystem
             tag: crypto-filesystem
+          - path: engines/crypto/software
+            tag: crypto-software
           - path: engines/crypto/vaultkv2
             tag: crypto-vaultkv2
           - path: engines/crypto/azure
             tag: crypto-azure
+          - path: engines/fs-storage/localfs
+            tag: fs-storage-localfs
+          - path: engines/fs-storage/s3
+            tag: fs-storage-s3
           - path: engines/eventbus/amqp
             tag: eventbus-amqp
           - path: engines/eventbus/aws
@@ -77,7 +84,7 @@ jobs:
             tag: connector-authz
           - path: monolithic
             tag: monolithic
-          
+
     name: ${{ matrix.module.path }}
     runs-on: ubuntu-latest
     permissions:
@@ -86,14 +93,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         run: go mod download
 
@@ -110,6 +117,15 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: ${{ matrix.module.tag }}
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.module.tag }}
+          path: ${{ matrix.module.path }}/coverage.txt
+          if-no-files-found: error
+          retention-days: 7
+          
   test-pkcs11:
     needs: setup
     name: engines/crypto/pkcs11
@@ -119,13 +135,15 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
-      
+
       - name: Install PKCS11 Proxy Dependencies
         # v3 maps CKA_LABEL to NetHSM labels (max 32 bytes); Lamassu uses 64-byte key digests.
         run: |
@@ -150,9 +168,18 @@ jobs:
           verbose: true
           flags: crypto-pkcs11
 
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-crypto-pkcs11
+          path: engines/crypto/pkcs11/coverage.txt
+          if-no-files-found: error
+          retention-days: 7
+          
   test-backend-assemblers:
     needs: setup
     strategy:
+      fail-fast: false
       max-parallel: 5
       matrix:
         module:
@@ -182,14 +209,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         run: go mod download
 
@@ -207,6 +234,14 @@ jobs:
           verbose: true
           flags: ${{ matrix.module.tag }}
 
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.module.tag }}
+          path: ${{ matrix.module.path }}/coverage.txt
+          if-no-files-found: error
+          retention-days: 7
+          
   test-backend-rest:
     needs: setup
     name: backend (excluding assemblers/tests)
@@ -217,14 +252,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
- 
+
       - name: Install Dependencies
         run: go mod download
 
@@ -242,17 +277,26 @@ jobs:
           verbose: true
           flags: backend-rest
 
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-backend-rest
+          path: backend/coverage.txt
+          if-no-files-found: error
+          retention-days: 7
+
   codecov-notify:
     name: Codecov notifications
-    needs: [test, test-pkcs11, test-backend-assemblers, test-backend-rest]
+    needs: [lint, test, test-pkcs11, test-backend-assemblers, test-backend-rest]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # Uploads are held by Codecov (codecov.notify.manual_trigger) until every test job has finished
       - name: Send Codecov notifications
@@ -262,3 +306,130 @@ jobs:
           run_command: send-notifications
           fail_ci_if_error: true
           verbose: true
+
+  codecov-watchdog:
+    name: Codecov result watchdog
+    needs: [codecov-notify]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: read
+      statuses: read
+    env:
+      # Codecov associates pull_request uploads with the PR head commit. Push
+      # and workflow_dispatch runs use the workflow commit directly.
+      CODECOV_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOTIFY_RESULT: ${{ needs.codecov-notify.result }}
+      POLL_SECONDS: 20
+      MAX_ATTEMPTS: 30
+      MAX_API_FAILURES: 5
+    steps:
+      # manual_trigger keeps Codecov statuses pending until codecov-notify completes.
+      # Keep polling so a permanently stalled Codecov result fails this required check.
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Wait for Codecov result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash .github/codecov-watchdog.sh
+        
+  sonarqube:
+    name: SonarQube
+    # Fork pull requests do not receive repository secrets, so SONAR_TOKEN is unavailable.
+    if: >-
+      ${{ always() &&
+          (github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs:
+      - test
+      - test-pkcs11
+      - test-backend-assemblers
+      - test-backend-rest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: Download coverage artifacts
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-*
+          path: coverage-reports
+          merge-multiple: false
+
+      - name: Validate coverage artifact download
+        if: steps.download.outcome == 'failure'
+        run: |
+          echo "::error::Failed to download coverage artifacts; SonarQube analysis will not run."
+          exit 1
+          
+      - name: List downloaded coverage reports
+        run: |
+          if [[ -d coverage-reports ]]; then
+            reports=$(find coverage-reports -type f -name "coverage.txt")
+          fi
+
+          if [[ -n "${reports:-}" ]]; then
+            echo "Coverage reports downloaded:"
+            echo "$reports"
+          else
+            echo "::warning::No coverage reports were downloaded; SonarQube analysis will run without coverage data."
+          fi
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
+        with:
+          args: -Dsonar.host.url=https://sonarcloud.io
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  lint:
+    name: Go lint
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: '^1.27.3'
+          cache-dependency-path: "**/*.sum"
+
+      - name: Check formatting
+        run: |
+          files=$(gofmt -l \
+            ./connectors/authz \
+            ./engines/crypto \
+            ./engines/fs-storage \
+            ./backend/pkg/jobs)
+          if [[ -n "$files" ]]; then
+            echo "The following Go files are not formatted:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./connectors/authz/... ./engines/crypto/... ./engines/fs-storage/... ./backend/pkg/jobs
+
+      - name: Check Codecov watchdog scripts
+        run: |
+          shellcheck .github/codecov-watchdog.sh .github/test-codecov-watchdog.sh
+          bash .github/test-codecov-watchdog.sh
