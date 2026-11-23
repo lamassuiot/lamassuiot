@@ -182,6 +182,52 @@ func TestExtAuthzCheck_QueryTokenOnlyOnOptedInRoutes(t *testing.T) {
 	})
 }
 
+func TestExtAuthzCheck_NeverLogsTheQueryAccessToken(t *testing.T) {
+	cases := map[string]struct {
+		target   string
+		original string
+		status   int
+	}{
+		"allowed, original path header": {"/ext_authz/check", "/ws/connect?access_token=good", http.StatusOK},
+		"denied, unknown token":         {"/ext_authz/check", "/ws/connect?access_token=bad", http.StatusForbidden},
+		"allowed, path after check":     {"/ext_authz/check/ws/connect?access_token=good", "", http.StatusOK},
+		"token among other parameters":  {"/ext_authz/check", "/ws/connect?x=1&access_token=good&y=2#f", http.StatusOK},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := logrus.New()
+			logger.SetOutput(&buf)
+			logger.SetLevel(logrus.TraceLevel)
+			logger.SetFormatter(&logrus.JSONFormatter{})
+			router := testExtAuthzRouterWithLogger(t, logrus.NewEntry(logger))
+
+			req := httptest.NewRequest(http.MethodGet, tc.target, nil)
+			if tc.original != "" {
+				req.Header.Set("x-envoy-original-path", tc.original)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			// The decision still uses the real token.
+			require.Equal(t, tc.status, rec.Code)
+			logs := buf.String()
+			require.NotEmpty(t, logs)
+			assert.NotContains(t, logs, "access_token=good")
+			assert.NotContains(t, logs, "access_token=bad")
+			assert.Contains(t, logs, "access_token=REDACTED")
+		})
+	}
+}
+
+func TestRedactAccessToken(t *testing.T) {
+	assert.Equal(t, "/ws/connect?access_token=REDACTED", redactAccessToken("/ws/connect?access_token=abc.def-ghi"))
+	assert.Equal(t, "/p?a=1&access_token=REDACTED&b=2", redactAccessToken("/p?a=1&access_token=secret&b=2"))
+	assert.Equal(t, "/p?access_token=REDACTED#frag", redactAccessToken("/p?access_token=secret#frag"))
+	assert.Equal(t, "/p?other_access_token=keep&limit=10", redactAccessToken("/p?other_access_token=keep&limit=10"))
+	assert.Equal(t, "/api/v1/resource", redactAccessToken("/api/v1/resource"))
+}
+
 func testExtAuthzRouter(t *testing.T) *gin.Engine {
 	t.Helper()
 

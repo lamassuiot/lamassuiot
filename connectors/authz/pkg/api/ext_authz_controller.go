@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +25,9 @@ type ExtAuthzController struct {
 }
 
 const extAuthzMaxBodyBytes = 1 << 20
+
+// extAuthzQueryTokenParam is the query parameter that carries the access token on query_token routes.
+const extAuthzQueryTokenParam = "access_token"
 
 // NewExtAuthzController creates an ExtAuthzController.
 func NewExtAuthzController(eng *engine.Engine, resolver *service.IdentityResolver, logger *logrus.Entry) *ExtAuthzController {
@@ -44,8 +48,8 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 
 	log := ctrl.logger.WithFields(logrus.Fields{
 		"ext_authz_method":       method,
-		"ext_authz_incoming_url": incomingURL,
-		"ext_authz_original_url": originalURL,
+		"ext_authz_incoming_url": redactAccessToken(incomingURL),
+		"ext_authz_original_url": redactAccessToken(originalURL),
 		"ext_authz_path":         path,
 		"request_id":             c.GetHeader("x-request-id"),
 	})
@@ -274,13 +278,20 @@ func extAuthzRawQuery(originalURL string) string {
 	return parsed.RawQuery
 }
 
+var accessTokenParam = regexp.MustCompile(`([?&]` + extAuthzQueryTokenParam + `=)[^&#]*`)
+
+// redactAccessToken hides the access_token query value of a URL that is about to be logged.
+func redactAccessToken(rawURL string) string {
+	return accessTokenParam.ReplaceAllString(rawURL, "${1}REDACTED")
+}
+
 // extAuthzQueryToken returns the "access_token" query parameter of a request.
 func extAuthzQueryToken(rawQuery string) string {
 	values, err := url.ParseQuery(rawQuery)
 	if err != nil {
 		return ""
 	}
-	return values.Get("access_token")
+	return values.Get(extAuthzQueryTokenParam)
 }
 
 func extAuthzRequestBody(c *gin.Context) ([]byte, bool, error) {

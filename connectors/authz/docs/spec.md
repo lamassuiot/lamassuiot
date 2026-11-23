@@ -857,7 +857,7 @@ A browser opens a WebSocket without being able to set request headers, so it can
 
 - Only routes that opt in (and only for their configured methods and path) read the query; every other route ignores `access_token`. A header or certificate always wins over the query.
 - `skip_authz` routes cannot set `query_token`.
-- URLs end up in logs. The ext_authz controller logs the original URL, so the token is logged as part of the query; keep `query_token` for WebSocket routes and short-lived tokens.
+- URLs end up in logs. The ext_authz controller replaces the `access_token` value with `REDACTED` in the URLs it logs (`ext_authz_incoming_url`, `ext_authz_original_url`). Other components that see the request URL (the gateway's access log, the HTTP request logger and tracing of the services in between) are not covered: keep `query_token` for WebSocket routes and short-lived tokens.
 - Example: `connectors/authz/terminal.json` ("Terminal Network", action `terminal-network-connect`), which guards the dashboard's browser terminal network proxy at `/wisp/`.
 
 #### Static-Value Grants for Dynamic Routes
