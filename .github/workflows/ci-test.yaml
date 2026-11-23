@@ -25,7 +25,7 @@ jobs:
 
       # Saves the Go module and build caches once, so every test job restores them instead of racing to create them
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
@@ -96,7 +96,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
@@ -139,7 +139,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3' # The Go version to download (if necessary) and use.
           cache-dependency-path: "**/*.sum"
@@ -212,7 +212,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
@@ -255,7 +255,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
  
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
@@ -389,7 +389,7 @@ jobs:
           fi
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         with:
           args: -Dsonar.host.url=https://sonarcloud.io
         env:
@@ -408,7 +408,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '^1.27.3'
           cache-dependency-path: "**/*.sum"
