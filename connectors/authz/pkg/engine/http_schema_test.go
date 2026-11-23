@@ -1296,6 +1296,23 @@ func TestHTTPSchemaRegistry_AllowsQueryTokenRequiresEveryMatchingRouteToOptIn(t 
 	assert.False(t, registry.AllowsQueryToken("GET", "/wisp/"))
 }
 
+// Overlapping routes that all opted in keep the channel open, and a loaded schema with no
+// route for the request (wfx) has no say in it.
+func TestHTTPSchemaRegistry_AllowsQueryTokenWhenEveryMatchingRouteOptsIn(t *testing.T) {
+	other := filepath.Join(t.TempDir(), "other.json")
+	require.NoError(t, os.WriteFile(other, []byte(`[{
+		"name": "Wisp Other",
+		"routes": [{"name": "r", "methods": ["GET"], "path": "/wisp/**", "match_type": "prefix", "action": "wisp-other", "query_token": true}]
+	}]`), 0o600))
+
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+	require.NoError(t, registry.Load(other))
+	require.NoError(t, registry.Load("../../examples/wfx/wfx.json"))
+
+	assert.True(t, registry.AllowsQueryToken("GET", "/wisp/"))
+}
+
 func TestHTTPSchemaRegistry_QueryTokenRejectedOnSkipAuthzRoute(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "schema.json")
 	require.NoError(t, os.WriteFile(path, []byte(`[{
