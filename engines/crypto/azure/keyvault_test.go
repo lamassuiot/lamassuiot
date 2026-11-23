@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines/legacy"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	lazure "github.com/lamassuiot/lamassuiot/v4/shared/azure"
 	"github.com/sirupsen/logrus"
@@ -74,6 +75,14 @@ func TestAzureKeyVaultCryptoEngine(t *testing.T) {
 		// RenameKey is intentionally omitted: Azure Key Vault key names are
 		// immutable. The method documents this limitation and returns an error.
 		{"RenameKey_ReturnsError", testRenameKeyReturnsError},
+	}
+
+	// The same engine, through the Backend contract (legacy adapter).
+	for _, bt := range cryptoengines.SharedBackendTests() {
+		table = append(table, struct {
+			name     string
+			function func(t *testing.T, engine cryptoengines.CryptoEngine)
+		}{"Backend/" + bt.Name, func(t *testing.T, engine cryptoengines.CryptoEngine) { bt.Fn(t, legacy.Wrap(engine)) }})
 	}
 
 	for _, tt := range table {

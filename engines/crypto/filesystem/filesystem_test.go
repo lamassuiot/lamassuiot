@@ -6,6 +6,7 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines/legacy"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 )
 
@@ -47,6 +48,14 @@ func TestVaultCryptoEngine(t *testing.T) {
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
 		{"RenameKey", cryptoengines.SharedRenameKey},
+	}
+
+	// The same engine, through the Backend contract (legacy adapter).
+	for _, bt := range cryptoengines.SharedBackendTests() {
+		table = append(table, struct {
+			name     string
+			function func(t *testing.T, engine cryptoengines.CryptoEngine)
+		}{"Backend/" + bt.Name, func(t *testing.T, engine cryptoengines.CryptoEngine) { bt.Fn(t, legacy.Wrap(engine)) }})
 	}
 
 	for _, tt := range table {

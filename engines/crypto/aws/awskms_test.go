@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines/legacy"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -89,6 +90,17 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		{"RenameKey", cryptoengines.SharedRenameKey},
 		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
 		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
+	}
+
+	// The same engine, through the Backend contract (legacy adapter).
+	for _, bt := range cryptoengines.SharedBackendTests() {
+		if bt.Name == "Destroy" {
+			continue // DeleteKey is not supported by this engine
+		}
+		table = append(table, struct {
+			name     string
+			function func(t *testing.T, engine cryptoengines.CryptoEngine)
+		}{"Backend/" + bt.Name, func(t *testing.T, engine cryptoengines.CryptoEngine) { bt.Fn(t, legacy.Wrap(engine)) }})
 	}
 
 	for _, tt := range table {

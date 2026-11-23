@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -17,13 +16,14 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines/legacy"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/kmip"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
 )
 
@@ -38,6 +38,7 @@ type KMSServiceBackend struct {
 	service               services.KMSService
 	kmsStorage            storage.KMSKeysRepo
 	cryptoEngines         map[string]*cryptoengines.CryptoEngine
+	backends              map[string]cryptoengines.Backend
 	defaultCryptoEngine   *cryptoengines.CryptoEngine
 	defaultCryptoEngineID string
 	logger                *logrus.Entry
@@ -55,11 +56,19 @@ func NewKMSService(builder KMSServiceBuilder) (services.KMSService, error) {
 	kmsValidator = validator.New()
 
 	engines := map[string]*cryptoengines.CryptoEngine{}
+	backends := map[string]cryptoengines.Backend{}
 	var defaultCryptoEngine *cryptoengines.CryptoEngine
 	var defaultCryptoEngineID string
 
 	for engineID, engineInstance := range builder.CryptoEngines {
 		engines[engineID] = &engineInstance.Service
+		// Every key operation goes through the Backend contract. An engine that implements it is used as
+		// is; any other is wrapped by the legacy adapter.
+		if backend, ok := engineInstance.Service.(cryptoengines.Backend); ok {
+			backends[engineID] = backend
+		} else {
+			backends[engineID] = legacy.Wrap(engineInstance.Service)
+		}
 		if engineInstance.Default {
 			defaultCryptoEngine = &engineInstance.Service
 			defaultCryptoEngineID = engineID
@@ -72,6 +81,7 @@ func NewKMSService(builder KMSServiceBuilder) (services.KMSService, error) {
 
 	svc := &KMSServiceBackend{
 		cryptoEngines:         engines,
+		backends:              backends,
 		defaultCryptoEngine:   defaultCryptoEngine,
 		defaultCryptoEngineID: defaultCryptoEngineID,
 		kmsStorage:            builder.KMSStorage,
@@ -172,69 +182,6 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 		err = errors.New("unsupported algorithm")
 	}
 	return
-}
-
-// Helper to get engine and signer
-func (svc *KMSServiceBackend) getEngineAndSigner(ctx context.Context, engineID, keyID string) (*cryptoengines.CryptoEngine, crypto.Signer, error) {
-	engine, ok := svc.cryptoEngines[engineID]
-	if !ok {
-		return nil, nil, errors.New("engine not found")
-	}
-
-	engineInstance := *engine
-
-	signer, err := engineInstance.GetPrivateKeyByID(ctx, keyID)
-	if err != nil || signer == nil {
-		return nil, nil, errors.New("could not get signing key")
-	}
-	return engine, signer, nil
-}
-
-// Common setup for KMS operations (SignMessage and VerifySignature)
-type kmsOperationSetup struct {
-	Hash   crypto.Hash
-	IsRSA  bool
-	IsPSS  bool
-	Signer crypto.Signer
-	Engine *cryptoengines.CryptoEngine
-}
-
-func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input any) (*kmsOperationSetup, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	// Validate input struct
-	err := kmsValidator.Struct(input)
-	if err != nil {
-		lFunc.Errorf("%s struct validation error: %s", operationName, err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	key, err := svc.GetKey(ctx, services.GetKeyInput{
-		Identifier: identifier,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse algorithm
-	hash, isRSA, isPSS, err := parseAlgorithm(algorithm)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get engine and signer
-	engine, signer, err := svc.getEngineAndSigner(ctx, key.EngineID, key.KeyID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &kmsOperationSetup{
-		Hash:   hash,
-		IsRSA:  isRSA,
-		IsPSS:  isPSS,
-		Signer: signer,
-		Engine: engine,
-	}, nil
 }
 
 // Helper to calculate digest
@@ -451,68 +398,46 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	var engine *cryptoengines.CryptoEngine
-	engineID := ""
-	var ok bool
-
-	if input.EngineID == "" {
-		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+	engineID := input.EngineID
+	if engineID == "" {
 		engineID = svc.defaultCryptoEngineID
-	} else {
-		engine, ok = svc.cryptoEngines[input.EngineID]
-		engineID = input.EngineID
 	}
-
+	backend, ok := svc.backends[engineID]
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
 		return nil, fmt.Errorf("crypto engine not found")
 	}
 
-	engineInstance := *engine
-
-	var (
-		keyID  string
-		signer crypto.Signer
-	)
-
-	err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+	err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineID)
 	if err != nil {
 		lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
 		return nil, err
 	}
 
-	switch input.Algorithm {
-	case "RSA":
-		bits := input.Size
-		keyID, signer, err = engineInstance.CreateRSAPrivateKey(ctx, bits)
-		if err != nil {
-			lFunc.Errorf("error creating RSA private key: %s", err)
-			return nil, errors.New("failed to create RSA private key")
-		}
-	case "ECDSA":
-		var curve elliptic.Curve
-		switch input.Size {
-		case 224:
-			curve = elliptic.P224()
-		case 256:
-			curve = elliptic.P256()
-		case 384:
-			curve = elliptic.P384()
-		case 521:
-			curve = elliptic.P521()
-		default:
-			lFunc.Error("invalid ECDSA key size")
-			return nil, errors.New("invalid ECDSA key size")
-		}
-		keyID, signer, err = engineInstance.CreateECDSAPrivateKey(ctx, curve)
-		if err != nil {
-			lFunc.Errorf("error creating ECDSA private key: %s", err)
-			return nil, err
-		}
-	default:
+	alg, ok := kmipAlgorithm(input.Algorithm)
+	if !ok {
 		lFunc.Errorf("unsupported algorithm: %s", input.Algorithm)
 		return nil, errors.New("unknown or unsupported algorithm")
 	}
+	if alg == kmip.ECDSA && !slices.Contains([]int{224, 256, 384, 521}, input.Size) {
+		lFunc.Error("invalid ECDSA key size")
+		return nil, errors.New("invalid ECDSA key size")
+	}
+
+	handle, err := backend.Generate(ctx, cryptoengines.GenerateSpec{ObjectType: kmip.PrivateKey, Algorithm: alg, Length: input.Size})
+	if err != nil {
+		lFunc.Errorf("error creating %s private key: %s", input.Algorithm, err)
+		if alg == kmip.RSA {
+			return nil, errors.New("failed to create RSA private key")
+		}
+		return nil, err
+	}
+	signer, ok := handle.(cryptoengines.Signer)
+	if !ok {
+		lFunc.Errorf("engine %s returned a private key that cannot sign", engineID)
+		return nil, errors.New("unknown or unsupported algorithm")
+	}
+	keyID := handle.Ref().KeyID
 
 	publicKey := signer.Public()
 	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
@@ -562,64 +487,47 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	// Check if EngineID is provided, otherwise use default
-	var engine *cryptoengines.CryptoEngine
-	engineID := ""
-	var ok bool
-
-	if input.EngineID == "" {
-		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+	engineID := input.EngineID
+	if engineID == "" {
 		engineID = svc.defaultCryptoEngineID
-	} else {
-		engine, ok = svc.cryptoEngines[input.EngineID]
-		engineID = input.EngineID
 	}
-
+	backend, ok := svc.backends[engineID]
 	if !ok {
 		lFunc.Errorf("engine with id %s not found", engineID)
 		return nil, fmt.Errorf("crypto engine not found")
 	}
 
-	engineInstance := *engine
-
 	var (
-		keyID     string
-		signer    crypto.Signer
 		algorithm string
 		size      int
 	)
-
 	switch k := input.PrivateKey.(type) {
 	case *rsa.PrivateKey:
-		size = k.N.BitLen()
-		algorithm = "RSA"
-
-		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
-		if err != nil {
-			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
-			return nil, err
-		}
-
-		keyID, signer, err = engineInstance.ImportRSAPrivateKey(ctx, k)
+		algorithm, size = "RSA", k.N.BitLen()
 	case *ecdsa.PrivateKey:
-		size = k.Params().BitSize
-		algorithm = "ECDSA"
-
-		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
-		if err != nil {
-			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
-			return nil, err
-		}
-
-		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(ctx, k)
+		algorithm, size = "ECDSA", k.Params().BitSize
 	default:
 		lFunc.Errorf("unsupported private key type")
 		return nil, errors.New("unsupported private key type")
 	}
+
+	err = svc.checkKeySpecEngineCompliance(algorithm, size, engineID)
+	if err != nil {
+		lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+		return nil, err
+	}
+
+	handle, err := backend.Import(ctx, cryptoengines.ImportSpec{ObjectType: kmip.PrivateKey, Private: input.PrivateKey})
 	if err != nil {
 		lFunc.Errorf("failed to import private key: %s", err)
 		return nil, errors.New("failed to import private key")
 	}
+	signer, ok := handle.(cryptoengines.Signer)
+	if !ok {
+		lFunc.Errorf("engine %s returned a private key that cannot sign", engineID)
+		return nil, errors.New("failed to import private key")
+	}
+	keyID := handle.Ref().KeyID
 
 	publicKey := signer.Public()
 	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
@@ -660,19 +568,25 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
 }
 
-func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size int, engine cryptoengines.CryptoEngine) error {
-	engineConfig := engine.GetEngineConfig()
-	for _, spec := range engineConfig.SupportedKeyTypes {
-		if spec.Type.String() == keyType {
-			if slices.Contains(spec.Sizes, size) {
-				return nil
-			} else {
-				return fmt.Errorf("key size %d is not supported for key type %s in engine %s", size, keyType, engineConfig.Provider)
-			}
-		}
+// checkKeySpecEngineCompliance checks that the engine can create keys of that type and size.
+func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size int, engineID string) error {
+	provider := ""
+	if engine, ok := svc.cryptoEngines[engineID]; ok {
+		provider = (*engine).GetEngineConfig().Provider
+	}
+	caps := svc.backends[engineID].Capabilities()
+
+	alg, ok := kmipAlgorithm(keyType)
+	if ok && caps.Supports(kmip.OpCreateKeyPair, alg, size) {
+		return nil
+	}
+	if ok && slices.ContainsFunc(caps.Items, func(c cryptoengines.Capability) bool {
+		return c.Operation == kmip.OpCreateKeyPair && c.Algorithm == alg
+	}) {
+		return fmt.Errorf("key size %d is not supported for key type %s in engine %s", size, keyType, provider)
 	}
 
-	return fmt.Errorf("key type %s is not supported in engine %s", keyType, engineConfig.Provider)
+	return fmt.Errorf("key type %s is not supported in engine %s", keyType, provider)
 }
 
 func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {
@@ -849,13 +763,13 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 		return err
 	}
 
-	engine, ok := svc.cryptoEngines[key.EngineID]
+	backend, ok := svc.backends[key.EngineID]
 	if !ok {
 		return fmt.Errorf("engine with id %s not found", key.EngineID)
 	}
-	engineInstance := *engine
+	ref := keyRef(key)
 
-	_, err = engineInstance.GetPrivateKeyByID(ctx, key.KeyID)
+	_, err = backend.Load(ctx, ref)
 	if err != nil {
 		lFunc.Errorf("could not get key from engine: %s", err)
 		return fmt.Errorf("key not found")
@@ -864,7 +778,7 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 	// The engine copy is only deleted once the row is: a key a certificate references keeps both.
 	lFunc.Debugf("deleting key %s (engine %s)", key.KeyID, key.EngineID)
 	err = svc.kmsStorage.DeleteWith(ctx, key.KeyID, key.EngineID, func() error {
-		return engineInstance.DeleteKey(ctx, key.KeyID)
+		return backend.Destroy(ctx, ref)
 	})
 	if errors.Is(err, errs.ErrKeyInUse) {
 		lFunc.Infof("key %s (engine %s) is in use, not deleting it", key.KeyID, key.EngineID)
@@ -878,119 +792,4 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 	lFunc.Infof("key %s deleted successfully", key.KeyID)
 
 	return nil
-}
-
-func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	// Setup common KMS operation components
-	setup, err := svc.initKMSKeyOperation(ctx, input.Identifier, input.Algorithm, "SignMessage", input)
-	if err != nil {
-		return nil, err
-	}
-
-	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
-	if err != nil {
-		lFunc.Errorf("calculate digest error: %s", err)
-		return nil, err
-	}
-
-	entropy := software.NewLamassuEntropy(ctx)
-
-	var signature []byte
-	if setup.IsRSA {
-		if digest == nil {
-			return nil, errors.New("digest is nil")
-		}
-		if setup.IsPSS {
-			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: setup.Hash}
-			signature, err = setup.Signer.Sign(entropy, digest, opts)
-			if err != nil {
-				lFunc.Errorf("RSA-PSS Sign error: %s", err)
-				return nil, err
-			}
-		} else {
-			signature, err = setup.Signer.Sign(entropy, digest, setup.Hash)
-			if err != nil {
-				lFunc.Errorf("RSA Sign error: %s", err)
-				return nil, err
-			}
-		}
-	} else {
-		if digest == nil {
-			return nil, errors.New("digest is nil")
-		}
-
-		signature, err = setup.Signer.Sign(entropy, digest, setup.Hash)
-		if err != nil {
-			lFunc.Errorf("ECDSA Sign error: %s", err)
-			return nil, err
-		}
-	}
-
-	return &models.MessageSignature{
-		Signature: signature,
-	}, nil
-}
-
-func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	// Setup common KMS operation components
-	setup, err := svc.initKMSKeyOperation(ctx, input.Identifier, input.Algorithm, "VerifySignature", input)
-	if err != nil {
-		return nil, err
-	}
-
-	publicKey := setup.Signer.Public()
-
-	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
-	if err != nil {
-		lFunc.Errorf("calculate digest error: %s", err)
-		return nil, err
-	}
-
-	if setup.IsRSA {
-		pub, ok := publicKey.(*rsa.PublicKey)
-		if !ok {
-			return nil, errors.New("key is not RSA key")
-		}
-		if setup.IsPSS {
-			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: setup.Hash}
-			err = rsa.VerifyPSS(pub, setup.Hash, digest, input.Signature, opts)
-			if err != nil {
-				lFunc.Errorf("RSA-PSS verify error: %s", err)
-				return &models.MessageValidation{
-					Valid: false,
-				}, nil
-			}
-			return &models.MessageValidation{
-				Valid: true,
-			}, nil
-		} else {
-			err = rsa.VerifyPKCS1v15(pub, setup.Hash, digest, input.Signature)
-			if err != nil {
-				lFunc.Errorf("RSA verify error: %s", err)
-				return &models.MessageValidation{
-					Valid: false,
-				}, nil
-			}
-			return &models.MessageValidation{
-				Valid: true,
-			}, nil
-		}
-	} else {
-		pub, ok := publicKey.(*ecdsa.PublicKey)
-		if !ok {
-			return nil, errors.New("key is not ECDSA key")
-		}
-		if !ecdsa.VerifyASN1(pub, digest, input.Signature) {
-			return &models.MessageValidation{
-				Valid: false,
-			}, nil
-		}
-		return &models.MessageValidation{
-			Valid: true,
-		}, nil
-	}
 }
