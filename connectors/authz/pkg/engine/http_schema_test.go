@@ -1280,6 +1280,22 @@ func TestHTTPSchemaRegistry_AllowsQueryToken(t *testing.T) {
 	assert.False(t, registry.AllowsQueryToken("GET", "/unknown"))
 }
 
+// A route that did not opt into query tokens must not be reachable through one just because
+// another schema's route for the same request did: any schema's route can grant the request.
+func TestHTTPSchemaRegistry_AllowsQueryTokenRequiresEveryMatchingRouteToOptIn(t *testing.T) {
+	other := filepath.Join(t.TempDir(), "other.json")
+	require.NoError(t, os.WriteFile(other, []byte(`[{
+		"name": "Wisp Other",
+		"routes": [{"name": "r", "methods": ["GET"], "path": "/wisp/**", "match_type": "prefix", "action": "wisp-other"}]
+	}]`), 0o600))
+
+	registry := NewHTTPSchemaRegistry()
+	require.NoError(t, registry.Load("../../terminal.json"))
+	require.NoError(t, registry.Load(other))
+
+	assert.False(t, registry.AllowsQueryToken("GET", "/wisp/"))
+}
+
 func TestHTTPSchemaRegistry_QueryTokenRejectedOnSkipAuthzRoute(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "schema.json")
 	require.NoError(t, os.WriteFile(path, []byte(`[{

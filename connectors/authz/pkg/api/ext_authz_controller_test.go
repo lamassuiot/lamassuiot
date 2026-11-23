@@ -182,6 +182,46 @@ func TestExtAuthzCheck_QueryTokenOnlyOnOptedInRoutes(t *testing.T) {
 	})
 }
 
+// A request granted only through a schema whose route did not opt into query tokens must not
+// accept one, even if another schema's route for the same request did opt in.
+func TestExtAuthzCheck_QueryTokenNotAcceptedForOverlappingRouteThatDidNotOptIn(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	other := filepath.Join(t.TempDir(), "other-http-schema.json")
+	require.NoError(t, os.WriteFile(other, []byte(`[{
+		"name": "other-http",
+		"routes": [{"name": "ws-other", "methods": ["GET"], "path": "/ws/connect", "match_type": "exact", "action": "ws-other"}]
+	}]`), 0o600))
+	eng, err := engine.NewEngine(nil, nil, engine.WithHTTPSchemas([]string{writeExtAuthzHTTPSchema(t), other}))
+	require.NoError(t, err)
+
+	// The principal is granted the overlapping route only, not the opted-in ws-connect.
+	policy := &models.Policy{
+		ID:        "policy-1",
+		Name:      "Policy 1",
+		HTTPRules: []*models.HTTPRule{{SchemaName: "other-http", Actions: []string{"ws-other"}}},
+	}
+	resolver := service.NewIdentityResolver(testPrincipalMatcher{}, testGrantStore{}, testPolicyLoader{policy: policy})
+	router := gin.New()
+	router.Any("/ext_authz/check", NewExtAuthzController(eng, resolver, logrus.NewEntry(logrus.New())).Check)
+
+	t.Run("the Bearer header is granted through the overlapping route", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+		req.Header.Set("authorization", "Bearer good")
+		req.Header.Set("x-envoy-original-path", "/ws/connect")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("the query token is not", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+		req.Header.Set("x-envoy-original-path", "/ws/connect?access_token=good")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+}
+
 // The query token is only a fallback for requests that carry no credential header at all: a
 // broken client certificate or a non-Bearer Authorization header must stay an error, not be
 // replaced by another identity from the query.

@@ -279,15 +279,23 @@ func (r *HTTPSchemaRegistry) GetAll() map[string]*HTTPSchemaDefinition {
 	return r.schemas
 }
 
-// AllowsQueryToken reports whether a route matching method and path accepts its
-// access token in the query string (HTTPRouteConfig.QueryToken).
+// AllowsQueryToken reports whether a request for method and path may carry its access
+// token in the query string (HTTPRouteConfig.QueryToken). Every loaded schema's matching
+// route must opt in: authorization can grant the request through any schema's route, so a
+// single route that did not opt in closes the channel for the request.
 func (r *HTTPSchemaRegistry) AllowsQueryToken(method, path string) bool {
+	matched := false
 	for _, schema := range r.schemas {
-		if route := schema.MatchRoute(method, path); route != nil && route.QueryToken {
-			return true
+		route := schema.MatchRoute(method, path)
+		if route == nil {
+			continue
 		}
+		if !route.QueryToken {
+			return false
+		}
+		matched = true
 	}
-	return false
+	return matched
 }
 
 func (r *HTTPSchemaRegistry) validateAndCompile(def *HTTPSchemaDefinition) error {
