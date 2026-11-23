@@ -47,10 +47,8 @@ func (cli *httpCAClient) GetStats(ctx context.Context, input services.GetStatsIn
 		return nil, err
 	}
 
-	// Encode both CA and Certificate query parameters with their respective prefixes
 	query := r.URL.Query()
 	query = encodeQueryParamsWithPrefix(query, input.CAQueryParameters, "ca_filter")
-	query = encodeQueryParamsWithPrefix(query, input.CertificateQueryParameters, "cert_filter")
 	r.URL.RawQuery = query.Encode()
 
 	r.Header.Add("Content-Type", "application/json")
@@ -74,6 +72,14 @@ func (cli *httpCAClient) GetStats(ctx context.Context, input services.GetStatsIn
 	}
 
 	return stats, nil
+}
+
+func (cli *httpCAClient) GetCertificatesStats(ctx context.Context, input services.GetCertificatesStatsInput) (*models.CertificatesStats, error) {
+	stats, err := cli.get[models.CertificatesStats](ctx, "/v1/certificates/stats", input.QueryParameters, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+	return &stats, nil
 }
 
 func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {

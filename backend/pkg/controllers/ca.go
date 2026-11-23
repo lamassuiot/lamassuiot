@@ -71,21 +71,14 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
-	// Parse ca_filter and cert_filter query parameters separately
 	caQueryParams, err := FilterQueryWithPrefix(ctx.Request, resources.CAFilterableFields, "ca_filter")
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-	certQueryParams, err := FilterQueryWithPrefix(ctx.Request, resources.CertificateFilterableFields, "cert_filter")
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
 	stats, err := r.svc.GetStats(ctx.Request.Context(), services.GetStatsInput{
-		CAQueryParameters:          caQueryParams,
-		CertificateQueryParameters: certQueryParams,
+		CAQueryParameters: caQueryParams,
 	})
 	if err != nil {
 		switch err {
@@ -95,6 +88,29 @@ func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
+
+func (r *caHttpRoutes) GetCertificatesStats(ctx *gin.Context) {
+	queryParams, err := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	stats, err := r.svc.GetCertificatesStats(ctx.Request.Context(), services.GetCertificatesStatsInput{
+		QueryParameters: queryParams,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
 		return
 	}
 
@@ -472,7 +488,7 @@ func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.ReissueCA(ctx, services.ReissueCAInput{
+	ca, err := r.svc.ReissueCA(ctx.Request.Context(), services.ReissueCAInput{
 		CAID:              params.ID,
 		IssuanceProfile:   requestBody.Profile,
 		IssuanceProfileID: requestBody.ProfileID,

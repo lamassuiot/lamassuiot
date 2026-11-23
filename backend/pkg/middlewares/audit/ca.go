@@ -29,6 +29,10 @@ func (mw CAAuditEventPublisher) GetStats(ctx context.Context, input services.Get
 	return mw.next.GetStats(ctx, input)
 }
 
+func (mw CAAuditEventPublisher) GetCertificatesStats(ctx context.Context, input services.GetCertificatesStatsInput) (*models.CertificatesStats, error) {
+	return mw.next.GetCertificatesStats(ctx, input)
+}
+
 func (mw CAAuditEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	return mw.next.GetStatsByCAID(ctx, input)
 }

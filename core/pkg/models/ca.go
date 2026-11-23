@@ -87,9 +87,11 @@ type CACertificate struct {
 	ProfileID               string         `json:"profile_id"`
 }
 
+// CAStats are the CA statistics. Certificate statistics are served separately
+// (CertificatesStats, GET /v1/certificates/stats) so each is computed under the read
+// filter of its own entity.
 type CAStats struct {
 	CACertificatesStats CACertificatesStats `json:"cas"`
-	CertificatesStats   CertificatesStats   `json:"certificates"`
 }
 type CACertificatesStats struct {
 	TotalCAs                 int                       `json:"total"`

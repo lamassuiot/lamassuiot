@@ -742,6 +742,32 @@ paths:
                 $ref: '#/components/schemas/GetCertificatesResponse'
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /certificates/stats:
+    get:
+      tags: [Stats]
+      summary: Get certificate statistics
+      description: >-
+        Total number of certificates and their status distribution, restricted to the
+        certificates the caller may read. Accepts certificate filters, except `status`,
+        which is always returned as a distribution.
+      operationId: getCertificatesStats
+      x-authz:
+        namespace: pki
+        schema_name: ca
+        entity_type: certificate
+        check: filter
+      parameters:
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Certificate statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificatesStats'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /certificates/{sn}:
     get:
       tags: [Certificates]
@@ -935,13 +961,18 @@ paths:
   /stats:
     get:
       tags: [Stats]
-      summary: Get CA and certificate statistics
+      summary: Get CA statistics
+      description: >-
+        CA statistics restricted to the CAs the caller may read. Certificate statistics
+        are served by `GET /certificates/stats`.
       operationId: getStats
       x-authz:
         namespace: pki
         schema_name: ca
         entity_type: ca_certificate
         check: filter
+      parameters:
+        - $ref: '#/components/parameters/CAFilter'
       responses:
         '200':
           description: CA statistics
@@ -949,12 +980,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CAStats'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /stats/{id}:
     get:
       tags: [Stats]
-      summary: Get statistics for a CA
+      summary: Get certificate status distribution for a CA
+      description: >-
+        Number of certificates issued by the CA, per status. Accepts certificate filters
+        through `cert_filter`, except `status`, which is always returned as a distribution.
       operationId: getStatsByCA
       x-authz:
         namespace: pki
@@ -963,13 +998,15 @@ paths:
         action: read
       parameters:
         - $ref: '#/components/parameters/CAId'
+        - $ref: '#/components/parameters/CertFilter'
       responses:
         '200':
-          description: Statistics for the CA
+          description: Certificate count per status for the CA
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CAStats'
+                $ref: '#/components/schemas/CertificateStatusDistribution'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /profiles:
@@ -1143,6 +1180,36 @@ components:
       schema:
         type: string
       description: "Filter expression using field[operand]value, e.g. status[eq]=ACTIVE"
+
+    CAFilter:
+      name: ca_filter
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+      description: >-
+        CA filter expression using field[operand]value; repeat the parameter to combine
+        conditions. `status` is not accepted.
+      example: ["engine_id[eq]aws-kms-prod"]
+
+    CertFilter:
+      name: cert_filter
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+      description: >-
+        Certificate filter expression using field[operand]value; repeat the parameter to
+        combine conditions. `status` is not accepted.
+      example: ["valid_from[af]2026-01-01T00:00:00Z"]
 
   responses:
     BadRequest:
@@ -1608,8 +1675,6 @@ components:
       properties:
         cas:
           $ref: '#/components/schemas/CACertificatesStats'
-        certificates:
-          $ref: '#/components/schemas/CertificatesStats'
 
     CACertificatesStats:
       type: object
@@ -1624,6 +1689,16 @@ components:
           type: object
           additionalProperties:
             type: integer
+
+    CertificateStatusDistribution:
+      type: object
+      description: Number of certificates per status.
+      additionalProperties:
+        type: integer
+      example:
+        ACTIVE: 12
+        EXPIRED: 3
+        REVOKED: 1
 
     CertificatesStats:
       type: object
