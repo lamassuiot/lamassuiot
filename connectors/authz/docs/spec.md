@@ -851,7 +851,7 @@ A route can set `skip_authz: true` to bypass the authorization decision while st
 - `skip_authz` routes cannot declare `constraints` — constraints are themselves an authorization decision, which contradicts skipping authz.
 - Authentication happens upstream of the HTTP check (Envoy forwards XFCC/Bearer material, which `ExtAuthzController` resolves to a subject before consulting the engine); a request that fails authentication is rejected before `skip_authz` is ever considered.
 
-### Query-string access token (`query_token`)
+#### Query-string access token (`query_token`)
 
 A browser opens a WebSocket without being able to set request headers, so it cannot send `Authorization`. A route can set `query_token: true` to accept the OIDC access token in the `access_token` query parameter when the request carries neither a Bearer header nor a client certificate. The token is resolved to a subject exactly like a Bearer token, and the route's action still has to be granted by a policy.
 
