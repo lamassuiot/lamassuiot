@@ -39,6 +39,9 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	corsConfig.AllowHeaders = []string{"*"}
 
 	router := gin.New()
+	// Make the *gin.Context resolve request-context values (e.g. the authz list
+	// filter) when a handler passes it where a context.Context is expected.
+	router.ContextWithFallback = true
 	router.Use(
 		cors.New(corsConfig),
 		otelgin.Middleware("gin-server"),

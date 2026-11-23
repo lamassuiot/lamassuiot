@@ -37,7 +37,7 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 		return
 	}
 
-	stats, err := r.svc.GetDevicesStats(ctx, services.GetDevicesStatsInput{
+	stats, err := r.svc.GetDevicesStats(ctx.Request.Context(), services.GetDevicesStatsInput{
 		QueryParameters: queryParams,
 	})
 
@@ -435,7 +435,7 @@ func (r *devManagerHttpRoutes) CreateDeviceGroup(ctx *gin.Context) {
 		return
 	}
 
-	group, err := r.svc.CreateDeviceGroup(ctx, services.CreateDeviceGroupInput{
+	group, err := r.svc.CreateDeviceGroup(ctx.Request.Context(), services.CreateDeviceGroupInput{
 		ID:          requestBody.ID,
 		Name:        requestBody.Name,
 		Description: requestBody.Description,
@@ -487,7 +487,7 @@ func (r *devManagerHttpRoutes) UpdateDeviceGroup(ctx *gin.Context) {
 		return
 	}
 
-	group, err := r.svc.UpdateDeviceGroup(ctx, services.UpdateDeviceGroupInput{
+	group, err := r.svc.UpdateDeviceGroup(ctx.Request.Context(), services.UpdateDeviceGroupInput{
 		ID:          params.ID,
 		Name:        requestBody.Name,
 		Description: requestBody.Description,
@@ -526,7 +526,7 @@ func (r *devManagerHttpRoutes) DeleteDeviceGroup(ctx *gin.Context) {
 		return
 	}
 
-	err := r.svc.DeleteDeviceGroup(ctx, services.DeleteDeviceGroupInput{
+	err := r.svc.DeleteDeviceGroup(ctx.Request.Context(), services.DeleteDeviceGroupInput{
 		ID: params.ID,
 	})
 
@@ -556,7 +556,7 @@ func (r *devManagerHttpRoutes) GetDeviceGroupByID(ctx *gin.Context) {
 		return
 	}
 
-	group, err := r.svc.GetDeviceGroupByID(ctx, services.GetDeviceGroupByIDInput{
+	group, err := r.svc.GetDeviceGroupByID(ctx.Request.Context(), services.GetDeviceGroupByIDInput{
 		ID: params.ID,
 	})
 
@@ -584,7 +584,7 @@ func (r *devManagerHttpRoutes) GetAllDeviceGroups(ctx *gin.Context) {
 	}
 
 	groups := []models.DeviceGroup{}
-	nextBookmark, err := r.svc.GetDeviceGroups(ctx, services.GetDeviceGroupsInput{
+	nextBookmark, err := r.svc.GetDeviceGroups(ctx.Request.Context(), services.GetDeviceGroupsInput{
 		ListInput: resources.ListInput[models.DeviceGroup]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
@@ -629,7 +629,7 @@ func (r *devManagerHttpRoutes) GetDevicesByGroup(ctx *gin.Context) {
 	}
 
 	devices := []models.Device{}
-	nextBookmark, err := r.svc.GetDevicesByGroup(ctx, services.GetDevicesByGroupInput{
+	nextBookmark, err := r.svc.GetDevicesByGroup(ctx.Request.Context(), services.GetDevicesByGroupInput{
 		GroupID: params.GroupID,
 		ListInput: resources.ListInput[models.Device]{
 			QueryParameters: queryParams,
@@ -669,7 +669,7 @@ func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 		return
 	}
 
-	stats, err := r.svc.GetDeviceGroupStats(ctx, services.GetDeviceGroupStatsInput{
+	stats, err := r.svc.GetDeviceGroupStats(ctx.Request.Context(), services.GetDeviceGroupStatsInput{
 		GroupID: params.GroupID,
 	})
 
