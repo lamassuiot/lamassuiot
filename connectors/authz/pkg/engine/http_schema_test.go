@@ -1255,6 +1255,10 @@ func TestHTTPSchemaRegistry_LoadTerminalNetwork(t *testing.T) {
 	assert.Equal(t, []string{"/wisp"}, schema.BasePaths)
 	assert.Equal(t, HTTPDefaultActionDeny, schema.DefaultAction)
 	assert.Equal(t, []string{"terminal-network-connect"}, schema.AllActions)
+	// The dashboard's policy builder lists routes by group: a schema without groups would not show.
+	require.Len(t, schema.Groups, 1)
+	assert.Equal(t, "Network", schema.Groups[0].Name)
+	assert.Empty(t, schema.Routes)
 
 	for _, path := range []string{"/wisp", "/wisp/", "/wisp/anything"} {
 		route := schema.MatchRoute("GET", path)
