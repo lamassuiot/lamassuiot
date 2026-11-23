@@ -182,6 +182,28 @@ func TestExtAuthzCheck_QueryTokenOnlyOnOptedInRoutes(t *testing.T) {
 	})
 }
 
+// The query token is only a fallback for requests that carry no credential header at all: a
+// broken client certificate or a non-Bearer Authorization header must stay an error, not be
+// replaced by another identity from the query.
+func TestExtAuthzCheck_QueryTokenDoesNotReplaceAPresentCredential(t *testing.T) {
+	router := testExtAuthzRouter(t)
+	cases := map[string]struct{ header, value string }{
+		"client certificate header without Cert": {"x-forwarded-client-cert", `Hash=abc;Subject="CN=device"`},
+		"non-Bearer Authorization header":        {"authorization", "Basic dXNlcjpwYXNz"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/ext_authz/check", nil)
+			req.Header.Set(tc.header, tc.value)
+			req.Header.Set("x-envoy-original-path", "/ws/connect?access_token=good")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusForbidden, rec.Code)
+			assert.Empty(t, rec.Header().Get("X-Principal-ID"))
+		})
+	}
+}
+
 func TestExtAuthzCheck_NeverLogsTheQueryAccessToken(t *testing.T) {
 	cases := map[string]struct {
 		target   string

@@ -855,7 +855,7 @@ A route can set `skip_authz: true` to bypass the authorization decision while st
 
 A browser opens a WebSocket without being able to set request headers, so it cannot send `Authorization`. A route can set `query_token: true` to accept the OIDC access token in the `access_token` query parameter when the request carries neither a Bearer header nor a client certificate. The token is resolved to a subject exactly like a Bearer token, and the route's action still has to be granted by a policy.
 
-- Only routes that opt in (and only for their configured methods and path) read the query; every other route ignores `access_token`. A header or certificate always wins over the query.
+- Only routes that opt in (and only for their configured methods and path) read the query; every other route ignores `access_token`. The query is only read when the request carries neither an `Authorization` header nor a client certificate header: a credential header that fails (a certificate header without `Cert`, a non-Bearer `Authorization`) stays an error and is never replaced by the query token.
 - `skip_authz` routes cannot set `query_token`.
 - URLs end up in logs. The ext_authz controller replaces the `access_token` value with `REDACTED` in the URLs it logs (`ext_authz_incoming_url`, `ext_authz_original_url`). Other components that see the request URL (the gateway's access log, the HTTP request logger and tracing of the services in between) are not covered: keep `query_token` for WebSocket routes and short-lived tokens.
 - Example: `connectors/authz/terminal.json` ("Terminal Network", action `terminal-network-connect`), which guards the dashboard's browser terminal network proxy at `/wisp/`.

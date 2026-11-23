@@ -55,9 +55,10 @@ func (ctrl *ExtAuthzController) Check(c *gin.Context) {
 
 	// 1. Extract auth material from Envoy-forwarded headers.
 	authType, authMaterial, err := extractAuthFromEnvoyHeaders(headers)
-	if err != nil {
-		// Browsers cannot set headers on a WebSocket: routes that opt in
-		// (query_token) take the access token from the query string instead.
+	// Browsers cannot set headers on a WebSocket: routes that opt in (query_token) take the
+	// access token from the query string instead. Only when no credential header came at all:
+	// a broken certificate or a non-Bearer Authorization header stays an error.
+	if err != nil && headers["x-forwarded-client-cert"] == "" && headers["authorization"] == "" {
 		if ctrl.engine.GetHTTPSchemas().AllowsQueryToken(method, path) {
 			if token := extAuthzQueryToken(rawQuery); token != "" {
 				authType, authMaterial, err = "oidc", "Bearer "+token, nil
