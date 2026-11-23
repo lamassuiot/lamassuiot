@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
@@ -278,11 +277,29 @@ func extAuthzRawQuery(originalURL string) string {
 	return parsed.RawQuery
 }
 
-var accessTokenParam = regexp.MustCompile(`([?&]` + extAuthzQueryTokenParam + `=)[^&#]*`)
-
 // redactAccessToken hides the access_token query value of a URL that is about to be logged.
+// Parameter names are decoded as url.ParseQuery decodes them (extAuthzQueryToken), so an
+// encoded name such as access%5Ftoken is hidden too; a name that does not decode is hidden
+// as well. Every other parameter is kept as received.
 func redactAccessToken(rawURL string) string {
-	return accessTokenParam.ReplaceAllString(rawURL, "${1}REDACTED")
+	base, rest, hasQuery := strings.Cut(rawURL, "?")
+	if !hasQuery {
+		return rawURL
+	}
+	query, fragment, hasFragment := strings.Cut(rest, "#")
+	pairs := strings.Split(query, "&")
+	for i, pair := range pairs {
+		key, _, _ := strings.Cut(pair, "=")
+		name, err := url.QueryUnescape(key)
+		if err != nil || name == extAuthzQueryTokenParam {
+			pairs[i] = key + "=REDACTED"
+		}
+	}
+	redacted := base + "?" + strings.Join(pairs, "&")
+	if hasFragment {
+		redacted += "#" + fragment
+	}
+	return redacted
 }
 
 // extAuthzQueryToken returns the "access_token" query parameter of a request.

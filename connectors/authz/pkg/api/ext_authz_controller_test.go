@@ -188,10 +188,12 @@ func TestExtAuthzCheck_NeverLogsTheQueryAccessToken(t *testing.T) {
 		original string
 		status   int
 	}{
-		"allowed, original path header": {"/ext_authz/check", "/ws/connect?access_token=good", http.StatusOK},
-		"denied, unknown token":         {"/ext_authz/check", "/ws/connect?access_token=bad", http.StatusForbidden},
-		"allowed, path after check":     {"/ext_authz/check/ws/connect?access_token=good", "", http.StatusOK},
-		"token among other parameters":  {"/ext_authz/check", "/ws/connect?x=1&access_token=good&y=2#f", http.StatusOK},
+		"allowed, original path header":  {"/ext_authz/check", "/ws/connect?access_token=good", http.StatusOK},
+		"denied, unknown token":          {"/ext_authz/check", "/ws/connect?access_token=bad", http.StatusForbidden},
+		"allowed, path after check":      {"/ext_authz/check/ws/connect?access_token=good", "", http.StatusOK},
+		"token among other parameters":   {"/ext_authz/check", "/ws/connect?x=1&access_token=good&y=2#f", http.StatusOK},
+		"percent-encoded parameter name": {"/ext_authz/check", "/ws/connect?access%5Ftoken=good", http.StatusOK},
+		"encoded name after check path":  {"/ext_authz/check/ws/connect?%61ccess_token=good", "", http.StatusOK},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -213,9 +215,9 @@ func TestExtAuthzCheck_NeverLogsTheQueryAccessToken(t *testing.T) {
 			require.Equal(t, tc.status, rec.Code)
 			logs := buf.String()
 			require.NotEmpty(t, logs)
-			assert.NotContains(t, logs, "access_token=good")
-			assert.NotContains(t, logs, "access_token=bad")
-			assert.Contains(t, logs, "access_token=REDACTED")
+			assert.NotContains(t, logs, "token=good")
+			assert.NotContains(t, logs, "token=bad")
+			assert.Contains(t, logs, "=REDACTED")
 		})
 	}
 }
@@ -226,6 +228,11 @@ func TestRedactAccessToken(t *testing.T) {
 	assert.Equal(t, "/p?access_token=REDACTED#frag", redactAccessToken("/p?access_token=secret#frag"))
 	assert.Equal(t, "/p?other_access_token=keep&limit=10", redactAccessToken("/p?other_access_token=keep&limit=10"))
 	assert.Equal(t, "/api/v1/resource", redactAccessToken("/api/v1/resource"))
+	assert.Equal(t, "/p?access%5Ftoken=REDACTED", redactAccessToken("/p?access%5Ftoken=secret"))
+	assert.Equal(t, "/p?%61ccess_token=REDACTED&b=2", redactAccessToken("/p?%61ccess_token=secret&b=2"))
+	assert.Equal(t, "/p?access_token=REDACTED&access_token=REDACTED", redactAccessToken("/p?access_token=one&access_token=two"))
+	assert.Equal(t, "/p?a=1&bad%zz=REDACTED", redactAccessToken("/p?a=1&bad%zz=maybe-secret"))
+	assert.Equal(t, "/p?x=1&access_token=REDACTED", redactAccessToken("/p?x=1&access_token"))
 }
 
 func testExtAuthzRouter(t *testing.T) *gin.Engine {
