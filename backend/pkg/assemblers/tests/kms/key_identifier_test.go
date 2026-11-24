@@ -57,12 +57,13 @@ func TestKeyIdentifiers(t *testing.T) {
 			field, value string
 			op           resources.FilterOperation
 			wantAtLeast  string
+			exact        bool
 		}{
-			"id equals":             {"id", single.ID, resources.StringEqual, single.ID},
-			"id contains":           {"id", single.ID[9:23], resources.StringContains, single.ID},
-			"id contains, any case": {"id", strings.ToUpper(single.ID[9:23]), resources.StringContainsIgnoreCase, single.ID},
-			"digest equals":         {"digest", single.Digest, resources.StringEqual, single.ID},
-			"digest contains":       {"digest", single.Digest[:16], resources.StringContains, single.ID},
+			"id equals":             {"id", single.ID, resources.StringEqual, single.ID, true},
+			"id contains":           {"id", single.ID[9:23], resources.StringContains, single.ID, false},
+			"id contains, any case": {"id", strings.ToUpper(single.ID[9:23]), resources.StringContainsIgnoreCase, single.ID, false},
+			"digest equals":         {"digest", single.Digest, resources.StringEqual, single.ID, true},
+			"digest contains":       {"digest", single.Digest[:16], resources.StringContains, single.ID, false},
 		} {
 			t.Run(name, func(t *testing.T) {
 				var found []string
@@ -73,6 +74,12 @@ func TestKeyIdentifiers(t *testing.T) {
 				}})
 				require.NoError(t, err)
 				require.Contains(t, found, tc.wantAtLeast)
+				// a filter that the server ignores returns every key: the others must be left out
+				require.NotContains(t, found, copies["filesystem-1"].ID)
+				require.NotContains(t, found, copies["vault-1"].ID)
+				if tc.exact {
+					require.Equal(t, []string{tc.wantAtLeast}, found)
+				}
 			})
 		}
 	})
